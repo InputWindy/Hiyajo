@@ -20,7 +20,6 @@ These are **application-layer systems** — the project owns them, not the engin
 |--------|-------------------|
 | `FGCSystem` | `Source/Game/System/GC/GCSystem.h` |
 | `FResourceSystem` | `Source/Game/System/Resource/ResourceSystem.h` |
-| `FWorkerPoolSystem` | `Source/Game/System/WorkerPool/WorkerPoolSystem.h` |
 | `FScriptSystem` | `Source/Game/System/Script/ScriptSystem.h` |
 
 They are auto-discovered by codegen from `Source/Game/System/` and registered in the generated `<Game>App.cpp`.

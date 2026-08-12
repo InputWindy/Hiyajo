@@ -37,4 +37,4 @@ Use engine Tools (`object_reflect_codegen`); do not edit `Maho/Source/Generated/
 ## Built-in systems
 
 Accurate table: [`Maho/Plugins/README.md`](../../Maho/Plugins/README.md)  
-(`FPlatformSystem`, `FRenderSystem`, `FGCSystem`, `FResourceSystem`, `FWorkerPoolSystem`, `FScriptSystem`).
+(`FPlatformSystem`, `FRenderSystem`, `FGCSystem`, `FResourceSystem`, `FScriptSystem`).
