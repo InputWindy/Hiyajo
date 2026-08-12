@@ -56,6 +56,9 @@ public:
 	void SerializeString(std::string& S);
 	void SerializeBytes(std::vector<std::uint8_t>& B);
 
+	/** Raw POD array — caller is responsible for allocating before Loading. */
+	void SerializeData(void* Data, std::size_t Size) { SerializeBytes(Data, Size); }
+
 	// ── Convenience operator ──
 
 	FArchive& operator<<(std::uint8_t& V)  { SerializeRaw(V); return *this; }
