@@ -110,6 +110,7 @@ enum class ERHIResourceState : std::uint16_t
 	UniformBuffer,
 	ShaderResource,
 	UnorderedAccess,
+	IndirectArgument,
 	RenderTarget,
 	DepthWrite,
 	CopySrc,

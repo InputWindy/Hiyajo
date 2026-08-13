@@ -26,6 +26,8 @@ namespace
 		return VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
 	case ERHIResourceState::UnorderedAccess:
 		return VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
+	case ERHIResourceState::IndirectArgument:
+		return VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT;
 	case ERHIResourceState::RenderTarget:
 		return VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
 	case ERHIResourceState::DepthWrite:
@@ -54,6 +56,8 @@ namespace
 		return VK_ACCESS_SHADER_READ_BIT;
 	case ERHIResourceState::UnorderedAccess:
 		return VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+	case ERHIResourceState::IndirectArgument:
+		return VK_ACCESS_INDIRECT_COMMAND_READ_BIT;
 	case ERHIResourceState::RenderTarget:
 		return VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
 	case ERHIResourceState::DepthWrite:
