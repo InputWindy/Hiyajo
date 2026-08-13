@@ -10,7 +10,5 @@ UE source-study books are **not** in this repository anymore.
 | [CODING_STANDARDS.md](CODING_STANDARDS.md) | C++ style (source of truth) |
 | [DESIGN_JOURNAL.md](DESIGN_JOURNAL.md) | Progress, intent, pitfalls |
 | [引擎架构设计.html](引擎架构设计.html) | Architecture overview |
-| [ObjectReflectAPI.html](ObjectReflectAPI.html) | Reflect API |
-| [LuaAPI.html](LuaAPI.html) | Lua API |
 
 Repo map: [`../../AGENTS.md`](../../AGENTS.md).

@@ -11,8 +11,6 @@ After the repo-root [`AGENTS.md`](../../AGENTS.md), use this folder for **engine
 | [`CODING_STANDARDS.md`](CODING_STANDARDS.md) | Full C++ style + **Client/ThreadedServer/Exporter** transfer paradigm |
 | [`DESIGN_JOURNAL.md`](DESIGN_JOURNAL.md) | Subsystem status, design intent, pitfalls |
 | [`引擎架构设计.html`](引擎架构设计.html) | Architecture overview (verify against current `Extension` / RHI code if stale) |
-| [`ObjectReflectAPI.html`](ObjectReflectAPI.html) | Reflect C++ API |
-| [`LuaAPI.html`](LuaAPI.html) | Lua `maho.*` API |
 
 Module contracts live next to code (`Maho/Source/Public/**/CONTRACT.md`). Editor UI is **project-owned** (`Source/Editor/CONTRACT.md` in the game), not an engine module.
 
@@ -29,10 +27,6 @@ Module contracts live next to code (`Maho/Source/Public/**/CONTRACT.md`). Editor
 ### Understand “how far is RHI / GC / Extensions?”
 
 Open [`DESIGN_JOURNAL.md`](DESIGN_JOURNAL.md), then the module `CONTRACT.md`.
-
-### Regenerate reflection / Lua bindings
-
-Use engine Tools (`object_reflect_codegen`); do not edit `Maho/Source/Generated/` by hand.
 
 ## Built-in systems
 

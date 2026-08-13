@@ -15,66 +15,25 @@ list(APPEND CMAKE_MODULE_PATH "${MAHO_ENGINE_BUILD_CMAKE_DIR}")
 include(MahoDependencies)
 include(MahoHelpers)
 
-set(MAHO_GENERATED_DIR "${MAHO_ROOT}/Intermediate/Generated")
-
-# Engine repo root (Tools/python + object_reflect_codegen.py).
-# Installer layout: Tools/python/python.exe ; venv: Tools/python/Scripts/python.exe
+# Engine repo root + local Python (used by plugin scan tooling).
 get_filename_component(_MAHO_ENGINE_ROOT_FOR_CODEGEN "${MAHO_ROOT}/.." ABSOLUTE)
-set(_MAHO_OBJECT_REFLECT_CODEGEN_PY "${_MAHO_ENGINE_ROOT_FOR_CODEGEN}/Tools/object_reflect_codegen.py")
 set(_MAHO_LOCAL_PYTHON "${_MAHO_ENGINE_ROOT_FOR_CODEGEN}/Tools/python/python.exe")
 if(NOT EXISTS "${_MAHO_LOCAL_PYTHON}")
 	set(_MAHO_LOCAL_PYTHON "${_MAHO_ENGINE_ROOT_FOR_CODEGEN}/Tools/python/Scripts/python.exe")
 endif()
-set(_MAHO_GEN_OBJECT_H "${MAHO_GENERATED_DIR}/ObjectReflectTypes.gen.h")
-set(_MAHO_GEN_OBJECT_CPP "${MAHO_GENERATED_DIR}/ObjectReflectTypes.gen.cpp")
-
-# Build-time FObject reflection codegen.
-if(NOT EXISTS "${_MAHO_LOCAL_PYTHON}")
-	message(FATAL_ERROR
-		"Maho: engine-local Python missing under Tools/python (or Scripts).\n"
-		"  Tried:\n"
-		"    ${_MAHO_ENGINE_ROOT_FOR_CODEGEN}/Tools/python/python.exe\n"
-		"    ${_MAHO_ENGINE_ROOT_FOR_CODEGEN}/Tools/python/Scripts/python.exe\n"
-		"Run setup.bat in the Maho engine root, then re-configure.")
-endif()
-if(NOT EXISTS "${_MAHO_OBJECT_REFLECT_CODEGEN_PY}")
-	message(FATAL_ERROR "Maho: missing ${_MAHO_OBJECT_REFLECT_CODEGEN_PY}")
-endif()
-
-execute_process(
-	COMMAND "${_MAHO_LOCAL_PYTHON}" "${_MAHO_OBJECT_REFLECT_CODEGEN_PY}"
-	WORKING_DIRECTORY "${_MAHO_ENGINE_ROOT_FOR_CODEGEN}"
-	RESULT_VARIABLE _MAHO_CODEGEN_RC
-	OUTPUT_VARIABLE _MAHO_CODEGEN_OUT
-	ERROR_VARIABLE _MAHO_CODEGEN_ERR
-)
-if(NOT _MAHO_CODEGEN_RC EQUAL 0)
-	message(FATAL_ERROR
-		"Maho object reflect codegen failed (exit ${_MAHO_CODEGEN_RC}):\n"
-		"${_MAHO_CODEGEN_OUT}${_MAHO_CODEGEN_ERR}")
-endif()
-message(STATUS "Maho: object reflect codegen OK")
 
 maho_collect_sources(MAHO_SOURCES "${MAHO_SOURCE_DIR}")
 
-# Drop anything under Intermediate/Generated from the glob — added explicitly below.
+# Drop anything under Intermediate/Generated from the glob.
 set(_MAHO_SOURCES_FILTERED "")
 foreach(_src IN LISTS MAHO_SOURCES)
 	string(FIND "${_src}" "/Intermediate/Generated/" _maho_gen_pos)
 	string(FIND "${_src}" "\\Intermediate\\Generated\\" _maho_gen_pos_win)
 	if(_maho_gen_pos EQUAL -1 AND _maho_gen_pos_win EQUAL -1)
 		list(APPEND _MAHO_SOURCES_FILTERED "${_src}")
-endif()
+	endif()
 endforeach()
 set(MAHO_SOURCES "${_MAHO_SOURCES_FILTERED}")
-
-# Generated sources stay out of MAHO_SOURCES so they don't appear in VS filters.
-# They are added to the target via target_sources later.
-set(MAHO_GEN_SOURCES
-
-
-
-)
 list(REMOVE_DUPLICATES MAHO_SOURCES)
 
 if(MAHO_SOURCES STREQUAL "")
@@ -98,14 +57,6 @@ endif()
 
 add_library(Maho::Engine ALIAS Maho)
 
-# Regenerate FObject reflection tables on every Maho build.
-add_custom_command(TARGET Maho PRE_BUILD
-	COMMAND "${_MAHO_LOCAL_PYTHON}" "${_MAHO_OBJECT_REFLECT_CODEGEN_PY}"
-	WORKING_DIRECTORY "${_MAHO_ENGINE_ROOT_FOR_CODEGEN}"
-	COMMENT "Maho: regenerate ObjectReflectTypes"
-	VERBATIM
-)
-
 if(NOT MAHO_VMA_INCLUDE_DIR)
 	message(FATAL_ERROR "Maho: VMA include dir was not set (MahoDependencies.cmake)")
 endif()
@@ -113,7 +64,6 @@ endif()
 target_include_directories(Maho
 	PUBLIC
 		"${MAHO_PUBLIC_DIR}"
-		"${MAHO_GENERATED_DIR}"
 		"${MAHO_GLM_INCLUDE_DIR}"
 	PRIVATE
 		"${MAHO_PRIVATE_DIR}"
