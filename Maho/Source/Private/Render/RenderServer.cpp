@@ -12,6 +12,10 @@
 #include "Render/TextureRenderProxy.h"
 #include "Render/UI/ImGuiDrawDataRing.h"
 
+#if defined(MAHO_WITH_IMGUI)
+#	include <imgui.h>
+#endif
+
 #include <algorithm>
 #include <utility>
 
@@ -565,6 +569,22 @@ void FRenderServer::Render(std::uint64_t FrameIndex)
 	Packet.bSubmitImGuiViewports = false;
 	if (ImGui.IsInitialized())
 	{
+#if defined(MAHO_WITH_IMGUI)
+		// Composite the game view fullscreen when a render feature registered one.
+		// Editor (when present) overlays its DockSpace panels on top of this background.
+		if (GameViewImGuiTexture.IsValid() && GameViewWidth > 0 && GameViewHeight > 0)
+		{
+			ImGuiViewport* Viewport = ImGui::GetMainViewport();
+			ImGui::SetNextWindowPos(Viewport->Pos);
+			ImGui::SetNextWindowSize(Viewport->Size);
+			ImGui::Begin("##GameView", nullptr,
+				ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoInputs |
+				ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoBackground |
+				ImGuiWindowFlags_NoSavedSettings);
+			ImGui::Image(reinterpret_cast<ImTextureID>(GameViewImGuiTexture.Id), Viewport->Size);
+			ImGui::End();
+		}
+#endif
 		ImGui.EndFrame();
 		if (ImGuiDrawDataRing)
 		{
