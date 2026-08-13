@@ -1,7 +1,7 @@
 #pragma once
 
 #include <Core/Export.h>
-#include <Core/ECS/System.h>
+#include <Core/Extension/World/ECS/System.h>
 
 #include <memory>
 #include <string>

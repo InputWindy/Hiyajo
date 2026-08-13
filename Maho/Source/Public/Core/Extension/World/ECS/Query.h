@@ -1,8 +1,8 @@
 #pragma once
 
-#include <Core/ECS/Archetype.h>
-#include <Core/ECS/ComponentType.h>
-#include <Core/ECS/EntityHandle.h>
+#include <Core/Extension/World/ECS/Archetype.h>
+#include <Core/Extension/World/ECS/ComponentType.h>
+#include <Core/Extension/World/ECS/EntityHandle.h>
 
 #include <cstddef>
 #include <vector>

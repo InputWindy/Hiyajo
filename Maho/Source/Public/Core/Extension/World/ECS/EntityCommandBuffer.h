@@ -1,9 +1,9 @@
 #pragma once
 
 #include <Core/Export.h>
-#include <Core/ECS/ComponentType.h>
-#include <Core/ECS/EntityHandle.h>
-#include <Core/ECS/System.h>
+#include <Core/Extension/World/ECS/ComponentType.h>
+#include <Core/Extension/World/ECS/EntityHandle.h>
+#include <Core/Extension/World/ECS/System.h>
 
 #include <cstdint>
 #include <cstring>

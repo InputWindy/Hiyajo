@@ -1,4 +1,4 @@
-#include <Core/ECS/ComponentType.h>
+#include <Core/Extension/World/ECS/ComponentType.h>
 
 namespace Maho
 {

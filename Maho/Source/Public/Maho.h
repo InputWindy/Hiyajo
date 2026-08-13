@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 // Umbrella header for game projects linking Maho.
 // Entry point: also #include <EntryPoint.h> in exactly one game .cpp.
@@ -37,7 +37,7 @@
 #include <Core/Server/ThreadedServer.h>
 #include <Core/Server/ServerTask.h>
 #include <Core/Server/TaskContext.h>
-#include <Core/ECS/DOTS.h>
+#include <Core/Extension/World/ECS/DOTS.h>
 #include <Render/UI/ImGuiSystem.h>
 #include <Render/UI/ImGuiTheme.h>
 

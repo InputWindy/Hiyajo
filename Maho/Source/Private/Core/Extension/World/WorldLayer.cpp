@@ -5,7 +5,7 @@
 
 #include <Core/Application/App.h>
 #include <Core/System/Log.h>
-#include <Core/ECS/Query.h>
+#include <Core/Extension/World/ECS/Query.h>
 
 #include <utility>
 

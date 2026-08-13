@@ -1,6 +1,6 @@
-#include <Core/ECS/SystemGroup.h>
-#include <Core/ECS/EntityCommandBuffer.h>
-#include <Core/ECS/World.h>
+#include <Core/Extension/World/ECS/SystemGroup.h>
+#include <Core/Extension/World/ECS/EntityCommandBuffer.h>
+#include <Core/Extension/World/ECS/World.h>
 
 #include <algorithm>
 #include <unordered_map>

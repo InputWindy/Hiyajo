@@ -1,8 +1,8 @@
 #pragma once
 
 #include <Core/Export.h>
-#include <Core/ECS/EntityManager.h>
-#include <Core/ECS/Query.h>
+#include <Core/Extension/World/ECS/EntityManager.h>
+#include <Core/Extension/World/ECS/Query.h>
 
 #include <cstdint>
 #include <vector>

@@ -1,8 +1,8 @@
 #pragma once
 
 #include <Core/Export.h>
-#include <Core/ECS/ComponentType.h>
-#include <Core/ECS/EntityHandle.h>
+#include <Core/Extension/World/ECS/ComponentType.h>
+#include <Core/Extension/World/ECS/EntityHandle.h>
 
 #include <cassert>
 #include <cstddef>

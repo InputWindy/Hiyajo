@@ -1,15 +1,15 @@
 #pragma once
 
-#include <Core/ECS/ComponentType.h>
-#include <Core/ECS/EntityHandle.h>
-#include <Core/ECS/Chunk.h>
-#include <Core/ECS/Archetype.h>
-#include <Core/ECS/EntityManager.h>
-#include <Core/ECS/Query.h>
-#include <Core/ECS/System.h>
-#include <Core/ECS/SystemGroup.h>
-#include <Core/ECS/EntityCommandBuffer.h>
-#include <Core/ECS/World.h>
+#include <Core/Extension/World/ECS/ComponentType.h>
+#include <Core/Extension/World/ECS/EntityHandle.h>
+#include <Core/Extension/World/ECS/Chunk.h>
+#include <Core/Extension/World/ECS/Archetype.h>
+#include <Core/Extension/World/ECS/EntityManager.h>
+#include <Core/Extension/World/ECS/Query.h>
+#include <Core/Extension/World/ECS/System.h>
+#include <Core/Extension/World/ECS/SystemGroup.h>
+#include <Core/Extension/World/ECS/EntityCommandBuffer.h>
+#include <Core/Extension/World/ECS/World.h>
 
 /**
  * Convenience macro to register a data component type.

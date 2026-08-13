@@ -1,7 +1,7 @@
 #pragma once
 
-#include <Core/ECS/World.h>
-#include <Core/ECS/SystemGroup.h>
+#include <Core/Extension/World/ECS/World.h>
+#include <Core/Extension/World/ECS/SystemGroup.h>
 #include <Core/Export.h>
 #include <Core/Sequencer/EngineExtension.h>
 #include <Core/Sequencer/EngineStage.h>

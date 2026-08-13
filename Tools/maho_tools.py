@@ -1140,7 +1140,7 @@ def _full_class_name(info: dict[str, str]) -> str:
 
 def scan_game_extensions(source_game_dir: Path) -> list[dict[str, str]]:
 	"""
-	Scan Source/Game/ for IEngineExtension / FLayer subclasses.
+	Scan Source/ (Game/ + Editor/) for IEngineExtension / FLayer subclasses.
 	Returns list of dicts: {class, namespace, header, priority}.
 	Priority: Editor subdir → Overlay, else → Layer.
 	"""
@@ -1154,8 +1154,8 @@ def scan_game_extensions(source_game_dir: Path) -> list[dict[str, str]]:
 		for info in results:
 			full_cls = _full_class_name(info)
 			# Priority heuristic: System/ → System, Editor/Script → Overlay, else → Layer
-			is_system = "/System/" in rel
-			is_overlay = "/Editor/" in rel or "/Script/" in rel
+			is_system = "System" in rel
+			is_overlay = "Editor" in rel or "Script" in rel
 			if is_system:
 				priority = "System"
 			elif is_overlay:
@@ -1221,9 +1221,9 @@ def generate_game_app_cpp(cproject_path: Path, *, log: Any = print) -> Path:
 			seen_headers.add(header)
 			headers.append(header)
 
-	# ── Auto‑scan game extensions & render features ──
-	game_exts = scan_game_extensions(project_dir / "Source" / "Game")
-	render_features = scan_render_features(project_dir / "Source" / "Render")
+		# ── Auto‑scan game extensions & render features ──
+		game_exts = scan_game_extensions(project_dir / "Source")
+		render_features = scan_render_features(project_dir / "Source" / "Render")
 
 	# Build include lines (deduplicated)
 	include_set: dict[str, str] = {}  # header → include form

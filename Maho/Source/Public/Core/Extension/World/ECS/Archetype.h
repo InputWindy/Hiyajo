@@ -1,7 +1,7 @@
 #pragma once
 
 #include <Core/Export.h>
-#include <Core/ECS/Chunk.h>
+#include <Core/Extension/World/ECS/Chunk.h>
 
 #include <cstddef>
 #include <vector>

@@ -1,4 +1,4 @@
-#include <Core/ECS/Archetype.h>
+#include <Core/Extension/World/ECS/Archetype.h>
 
 #include <algorithm>
 
