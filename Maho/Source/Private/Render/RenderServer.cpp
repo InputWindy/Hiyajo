@@ -401,6 +401,9 @@ void FRenderServer::BuildAndExecuteGraph(const FRenderFramePacket& Packet)
 		ERenderPipelineStage::EndFrame,
 	};
 
+	FFrameContext& FrameCtx = FrameContexts[static_cast<std::size_t>(Packet.FrameIndex % 3)];
+	FrameCtx.FrameIndex = Packet.FrameIndex;
+
 	// Build type -> feature map + feature -> slice map (gather order matches Features order).
 	std::unordered_map<std::type_index, IRenderFeature*> TypeMap;
 	std::unordered_map<IRenderFeature*, const IGameContextSlice*> SliceMap;
@@ -449,11 +452,7 @@ void FRenderServer::BuildAndExecuteGraph(const FRenderFramePacket& Packet)
 			std::size_t PassCountBefore = GraphBuilder.GetPassCount();
 			if (Slice)
 			{
-				Feature->ExecuteStage(Stage, *Slice, GraphBuilder);
-			}
-			else
-			{
-				// Feature registered but no slice gathered this frame (e.g. first frame) — skip.
+				Feature->ExecuteStage(Stage, *Slice, FrameCtx, GraphBuilder);
 			}
 			if (GraphBuilder.GetPassCount() > PassCountBefore)
 			{

@@ -225,6 +225,7 @@ private:
 
 	std::uint64_t CurrentFrameIndex = 0;
 	FGameFrameContext PendingFrameContext;
+	FFrameContext FrameContexts[3];
 
 	float ClearColorR = 0.08f;
 	float ClearColorG = 0.10f;

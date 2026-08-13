@@ -91,6 +91,16 @@ struct MAHO_API FGameFrameContext
 	FGameFrameContext& operator=(const FGameFrameContext&) = delete;
 };
 
+/**
+ * Per-frame render context (render-side working state, 3-slot ring on FRenderServer).
+ * Features use it to index their per-frame resources (FrameIndex % N) and to
+ * access transient per-frame allocations. The FRDGBuilder stays per-stage.
+ */
+struct MAHO_API FFrameContext
+{
+	std::uint64_t FrameIndex = 0;
+};
+
 // ── IRenderFeature ────────────────────────────────────────────────────
 
 class MAHO_API IRenderFeature
@@ -113,13 +123,16 @@ public:
 	/**
 	 * Render thread: execute a stage. MySlice is the slice this feature
 	 * gathered on the game thread (cast it back to your concrete type).
+	 * FrameCtx is the per-frame ring slot; GraphBuilder is per-stage.
 	 */
 	virtual void ExecuteStage(ERenderPipelineStage Stage,
 	                          const IGameContextSlice& MySlice,
+	                          FFrameContext& FrameCtx,
 	                          FRDGBuilder& GraphBuilder)
 	{
 		(void)Stage;
 		(void)MySlice;
+		(void)FrameCtx;
 		(void)GraphBuilder;
 	}
 
@@ -216,10 +229,11 @@ public:
 	/** Render thread: cast the slice back and forward to the typed hook. */
 	void ExecuteStage(ERenderPipelineStage Stage,
 	                  const IGameContextSlice& MySlice,
+	                  FFrameContext& FrameCtx,
 	                  FRDGBuilder& GraphBuilder) override
 	{
 		const auto& Slice = static_cast<const TContext&>(MySlice);
-		static_cast<TDerived*>(this)->ExecuteStage(Stage, Slice, GraphBuilder);
+		static_cast<TDerived*>(this)->ExecuteStage(Stage, Slice, FrameCtx, GraphBuilder);
 	}
 };
 
