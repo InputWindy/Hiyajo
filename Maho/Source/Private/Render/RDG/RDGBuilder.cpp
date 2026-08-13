@@ -458,7 +458,11 @@ void FRDGBuilder::Execute()
 
 		Cmd->End();
 
-		if (Pass->GetType() == ERDGPassType::Compute)
+		// Cross-queue ordering: when the compute queue falls back to the graphics
+		// family, submit compute passes on the graphics queue so they serialize
+		// with raster passes (indirect draw reads compute-written buffers).
+		const bool bComputeOnGraphics = RHI->GetComputeQueue().IsNativeFallback();
+		if (Pass->GetType() == ERDGPassType::Compute && !bComputeOnGraphics)
 			RHI->GetComputeQueue().Submit(&Cmd, 1, nullptr, 0, nullptr, 0, nullptr);
 		else
 			RHI->GetGraphicsQueue().Submit(&Cmd, 1, nullptr, 0, nullptr, 0, nullptr);
