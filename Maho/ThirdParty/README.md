@@ -15,6 +15,7 @@ Small in-repo assets and optional vendored single-headers. Large C++ libraries a
 | ImGuiFileDialog | FetchContent | v0.6.7 |
 | IconFontCppHeaders | FetchContent | main |
 | Lua / sol2 / refl-cpp | FetchContent (or optional local override) | see CMake |
+| GLM | FetchContent (or optional local override) | 1.0.1 |
 
 First configure needs network. CMake caches downloads under the build tree (`_deps/`).
 

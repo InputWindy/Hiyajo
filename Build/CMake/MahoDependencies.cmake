@@ -422,6 +422,27 @@ endif()
 unset(_MAHO_VENDORED_REFL)
 
 # -----------------------------------------------------------------------------
+# GLM (OpenGL Mathematics) — header-only math library for ECS transforms / render math.
+# Prefer vendored tree; FetchContent only if missing (needs network).
+# -----------------------------------------------------------------------------
+set(_MAHO_VENDORED_GLM "${_MAHO_REPO_ROOT}/Maho/ThirdParty/glm")
+if(EXISTS "${_MAHO_VENDORED_GLM}/glm/glm.hpp")
+	set(MAHO_GLM_INCLUDE_DIR "${_MAHO_VENDORED_GLM}" CACHE INTERNAL "glm include directory")
+	message(STATUS "Maho: glm (vendored) at ${MAHO_GLM_INCLUDE_DIR}")
+else()
+	FetchContent_Declare(
+		glm
+		GIT_REPOSITORY https://github.com/g-truc/glm.git
+		GIT_TAG 1.0.1
+		GIT_SHALLOW TRUE
+	)
+	maho_fetchcontent_populate_or_reuse(glm glm/glm.hpp)
+	set(MAHO_GLM_INCLUDE_DIR "${glm_SOURCE_DIR}" CACHE INTERNAL "glm include directory")
+	message(STATUS "Maho: glm (FetchContent) at ${MAHO_GLM_INCLUDE_DIR}")
+endif()
+unset(_MAHO_VENDORED_GLM)
+
+# -----------------------------------------------------------------------------
 # Vulkan Memory Allocator (GPUOpen) — header-only; VMA_IMPLEMENTATION in one Maho .cpp
 # Prefer vendored tree; FetchContent only if missing (needs network).
 # -----------------------------------------------------------------------------
