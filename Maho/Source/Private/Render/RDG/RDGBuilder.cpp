@@ -160,14 +160,28 @@ void FRDGBuilder::UploadBuffer(FRDGBuffer* DstBuffer, const void* Data, std::siz
 {
 	if (Data == nullptr || Size == 0) return;
 
+	// Staging buffer (host-visible), CPU writes, then a Copy pass uploads to the destination.
+	FRHIBufferDesc StageDesc;
+	StageDesc.Size = Size;
+	StageDesc.Usage = ERHIBufferUsage::TransferSrc;
+	StageDesc.MemoryUsage = ERHIMemoryUsage::CPUToGPU;
+	FRHIBuffer* Staging = RHI->CreateBuffer(StageDesc);
+	if (!Staging)
+	{
+		MAHO_CORE_ERROR("FRDGBuilder::UploadBuffer: staging create failed ({} bytes)", Size);
+		return;
+	}
+	RHI->UpdateBuffer(Staging, 0, Size, Data);
+	UploadStagingBuffers.push_back(Staging);
+
 	auto& Params = AllocateParameters();
 	Params.Writes.push_back({DstBuffer, ERHIResourceState::CopyDst});
 
-	auto ExecuteFn = [DstBuffer, Size](FRHICommandList& Cmd)
+	auto ExecuteFn = [Staging, DstBuffer, Size](FRHICommandList& Cmd)
 	{
 		if (FRHIBuffer* RHIBuf = DstBuffer->GetRHI())
 		{
-			Cmd.FillBuffer(RHIBuf, 0, Size, 0);
+			Cmd.CopyBuffer(Staging, 0, RHIBuf, 0, Size);
 		}
 	};
 
@@ -451,6 +465,13 @@ void FRDGBuilder::Execute()
 
 		RHI->DestroyCommandList(Cmd);
 	}
+
+	// Upload staging buffers are one-shot — destroy after all copies are submitted.
+	for (FRHIBuffer* Staging : UploadStagingBuffers)
+	{
+		RHI->DestroyBuffer(Staging);
+	}
+	UploadStagingBuffers.clear();
 }
 
 } // namespace Maho

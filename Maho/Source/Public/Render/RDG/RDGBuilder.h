@@ -130,6 +130,9 @@ private:
 	std::unordered_map<std::string, FRDGResource*> ExportedResources;
 	FRDGTransientPool TransientPool;
 
+	/** Staging buffers created by UploadBuffer; destroyed after Execute. */
+	std::vector<FRHIBuffer*> UploadStagingBuffers;
+
 	struct FCompiledPass
 	{
 		FRDGPass* Pass;
