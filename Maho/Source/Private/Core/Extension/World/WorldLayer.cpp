@@ -2,6 +2,7 @@
 #include <Core/Extension/World/Components/TransformComponent.h>
 #include <Core/Extension/World/Components/ScriptComponent.h>
 #include <Core/Extension/Script/ScriptSystem.h>
+#include <Core/Extension/Render/Render.h>
 
 #include <Core/Application/App.h>
 #include <Core/System/Log.h>
@@ -154,6 +155,15 @@ bool FWorldLayer::ExecuteStage(Maho::EEngineStage Stage)
 		{
 			RootGroup.OnPreRender(World);
 			DispatchScriptStage(Stage, 0.0f);
+			// Gather render feature contexts from the world and hand them to the render thread.
+			if (Maho::GApp)
+			{
+				if (auto* RenderSystem = Maho::GApp->GetExtension<Maho::FRenderSystem>())
+				{
+					RenderSystem->GetRenderServer().SubmitFrameContext(
+						RenderSystem->GetRenderServer().GatherContexts(World));
+				}
+			}
 		}
 		break;
 

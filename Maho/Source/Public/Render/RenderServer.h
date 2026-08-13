@@ -74,13 +74,13 @@ public:
 	void SetClearColor(float R, float G, float B, float A);
 
 	/**
-	 * Game thread: replace the pending scene snapshot consumed by the next Render().
-	 * Value-copied into FRenderFramePacket — not Import/Export.
+	 * Game thread: gather every registered feature's context slice from the
+	 * ECS world into an FGameFrameContext, consumed by the next Render().
 	 */
-	void SubmitSceneUpdate(FSceneUpdatePacket Packet);
+	[[nodiscard]] FGameFrameContext GatherContexts(FWorld& World);
 
-	/** Render thread: scene snapshot for the frame currently executing. */
-	[[nodiscard]] const FSceneUpdatePacket& GetCurrentScene() const { return CurrentScene; }
+	/** Game thread: replace the pending frame context consumed by the next Render(). */
+	void SubmitFrameContext(FGameFrameContext FrameContext);
 
 	/**
 	 * Client (Game): non-blocking resource → proxy upload.
@@ -224,8 +224,7 @@ private:
 	std::vector<FPendingDestroy> PendingAnimationDestroys;
 
 	std::uint64_t CurrentFrameIndex = 0;
-	FSceneUpdatePacket CurrentScene;
-	FSceneUpdatePacket PendingScene;
+	FGameFrameContext PendingFrameContext;
 
 	float ClearColorR = 0.08f;
 	float ClearColorG = 0.10f;

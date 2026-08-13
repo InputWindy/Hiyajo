@@ -7,13 +7,17 @@
 
 #include <cstdint>
 #include <functional>
+#include <memory>
+#include <type_traits>
 #include <typeindex>
+#include <vector>
 
 namespace Maho
 {
 
 class FRenderServer;
 class FRDGBuilder;
+class FWorld;
 
 // ── Compile-time Feature dependency slot ──────────────────────────────
 
@@ -61,6 +65,32 @@ struct TResolveFeatureDependsPack<T, std::void_t<typename T::FDependsPack>>
 	using Type = typename T::FDependsPack;
 };
 
+// ── Game context slice (type-erased per-feature frame data) ────────────
+
+/**
+ * Base for a feature's per-frame game context slice.
+ * Each feature defines its own slice (data + Gather from the ECS world);
+ * FRenderSystem gathers all slices on the game thread and moves them
+ * to the render thread as FGameFrameContext.
+ */
+class MAHO_API IGameContextSlice
+{
+public:
+	virtual ~IGameContextSlice() = default;
+};
+
+/** One frame's assembled context: one slice per render feature. */
+struct MAHO_API FGameFrameContext
+{
+	std::vector<std::unique_ptr<IGameContextSlice>> Slices;
+
+	FGameFrameContext() = default;
+	FGameFrameContext(FGameFrameContext&&) = default;
+	FGameFrameContext& operator=(FGameFrameContext&&) = default;
+	FGameFrameContext(const FGameFrameContext&) = delete;
+	FGameFrameContext& operator=(const FGameFrameContext&) = delete;
+};
+
 // ── IRenderFeature ────────────────────────────────────────────────────
 
 class MAHO_API IRenderFeature
@@ -73,10 +103,23 @@ public:
 	virtual bool OnRegister(FRenderServer& RenderServer) { (void)RenderServer; return true; }
 	virtual void OnUnregister(FRenderServer& RenderServer) { (void)RenderServer; }
 
-	/** Stage is an explicit parameter — aligned with IEngineExtension::ExecuteStage. */
-	virtual void ExecuteStage(ERenderPipelineStage Stage, FRDGBuilder& GraphBuilder)
+	/**
+	 * Game thread: gather this feature's per-frame data from the ECS world
+	 * into its own context slice. FRenderSystem calls this for every feature
+	 * each frame; the returned slice is moved to the render thread.
+	 */
+	[[nodiscard]] virtual std::unique_ptr<IGameContextSlice> GatherContext(FWorld& World) = 0;
+
+	/**
+	 * Render thread: execute a stage. MySlice is the slice this feature
+	 * gathered on the game thread (cast it back to your concrete type).
+	 */
+	virtual void ExecuteStage(ERenderPipelineStage Stage,
+	                          const IGameContextSlice& MySlice,
+	                          FRDGBuilder& GraphBuilder)
 	{
 		(void)Stage;
+		(void)MySlice;
 		(void)GraphBuilder;
 	}
 
@@ -145,6 +188,39 @@ class MAHO_API FRenderFeature : public TRenderFeatureBase<FRenderFeature>
 {
 public:
 	explicit FRenderFeature(const char* InName) : TRenderFeatureBase<FRenderFeature>(InName) {}
+};
+
+// ── Context-carrying feature (reduces per-feature boilerplate) ─────────
+
+/**
+ * CRTP feature that owns a concrete context slice type.
+ * TContext must derive from IGameContextSlice and expose Gather(FWorld&).
+ * The derived feature only implements ExecuteStage(Stage, TContext&, GB).
+ */
+template <typename TDerived, typename TContext>
+class TRenderFeatureWithContext : public TRenderFeatureBase<TDerived>
+{
+	static_assert(std::is_base_of_v<IGameContextSlice, TContext>,
+	              "TContext must derive from IGameContextSlice");
+
+public:
+	using TRenderFeatureBase<TDerived>::TRenderFeatureBase;
+
+	[[nodiscard]] std::unique_ptr<IGameContextSlice> GatherContext(FWorld& World) override
+	{
+		auto Slice = std::make_unique<TContext>();
+		Slice->Gather(World);
+		return Slice;
+	}
+
+	/** Render thread: cast the slice back and forward to the typed hook. */
+	void ExecuteStage(ERenderPipelineStage Stage,
+	                  const IGameContextSlice& MySlice,
+	                  FRDGBuilder& GraphBuilder) override
+	{
+		const auto& Slice = static_cast<const TContext&>(MySlice);
+		static_cast<TDerived*>(this)->ExecuteStage(Stage, Slice, GraphBuilder);
+	}
 };
 
 } // namespace Maho

@@ -9,6 +9,7 @@
 
 #include <Core/System/Log.h>
 
+#include <memory>
 #include <type_traits>
 #include <utility>
 
@@ -36,10 +37,12 @@ inline void EnqueueRenderCommandTagged(TFunc&& Func)
 		return;
 	}
 
+	// std::function requires a copyable callable; wrap the (possibly move-only)
+	// user function in a shared_ptr so the inner lambda stays copyable.
 	Server->Enqueue(
-		[Function = std::forward<TFunc>(Func)](FThreadedServer& Base) mutable
+		[Function = std::make_shared<std::decay_t<TFunc>>(std::forward<TFunc>(Func))](FThreadedServer& Base) mutable
 		{
-			Function(static_cast<FRenderServer&>(Base));
+			(*Function)(static_cast<FRenderServer&>(Base));
 		});
 }
 

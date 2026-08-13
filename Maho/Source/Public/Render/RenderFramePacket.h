@@ -2,6 +2,7 @@
 
 #include <Render/SceneUpdatePacket.h>
 #include <Render/ResourceSnapshots.h>
+#include <Render/Sequencer/RenderFeature.h>
 
 #include <cstdint>
 
@@ -21,7 +22,7 @@ struct FRenderFramePacket
 	int FramebufferWidth = 0;
 	int FramebufferHeight = 0;
 	bool bResizeFramebuffer = false;
-	FSceneUpdatePacket Scene;
+	FGameFrameContext FrameContext;
 };
 
 } // namespace Maho

@@ -79,9 +79,20 @@ void FRenderServer::SetClearColor(float R, float G, float B, float A)
 	ClearColorA = A;
 }
 
-void FRenderServer::SubmitSceneUpdate(FSceneUpdatePacket Packet)
+FGameFrameContext FRenderServer::GatherContexts(FWorld& World)
 {
-	PendingScene = std::move(Packet);
+	FGameFrameContext Frame;
+	Frame.Slices.reserve(Features.size());
+	for (auto& F : Features)
+	{
+		Frame.Slices.push_back(F->GatherContext(World));
+	}
+	return Frame;
+}
+
+void FRenderServer::SubmitFrameContext(FGameFrameContext FrameContext)
+{
+	PendingFrameContext = std::move(FrameContext);
 }
 
 FTextureProxyRegistry& FRenderServer::GetTextureProxyRegistry()
@@ -390,11 +401,16 @@ void FRenderServer::BuildAndExecuteGraph(const FRenderFramePacket& Packet)
 		ERenderPipelineStage::EndFrame,
 	};
 
-	// Build type -> feature map
+	// Build type -> feature map + feature -> slice map (gather order matches Features order).
 	std::unordered_map<std::type_index, IRenderFeature*> TypeMap;
-	for (auto& F : Features)
+	std::unordered_map<IRenderFeature*, const IGameContextSlice*> SliceMap;
+	for (std::size_t I = 0; I < Features.size(); ++I)
 	{
-		TypeMap[std::type_index(typeid(*F))] = F.get();
+		TypeMap[std::type_index(typeid(*Features[I]))] = Features[I].get();
+		if (I < Packet.FrameContext.Slices.size())
+		{
+			SliceMap[Features[I].get()] = Packet.FrameContext.Slices[I].get();
+		}
 	}
 
 	for (ERenderPipelineStage Stage : PipelineStages)
@@ -423,8 +439,22 @@ void FRenderServer::BuildAndExecuteGraph(const FRenderFramePacket& Packet)
 
 		for (auto* Feature : Sorted)
 		{
+			const IGameContextSlice* Slice = nullptr;
+			auto SliceIt = SliceMap.find(Feature);
+			if (SliceIt != SliceMap.end())
+			{
+				Slice = SliceIt->second;
+			}
+
 			std::size_t PassCountBefore = GraphBuilder.GetPassCount();
-			Feature->ExecuteStage(Stage, GraphBuilder);
+			if (Slice)
+			{
+				Feature->ExecuteStage(Stage, *Slice, GraphBuilder);
+			}
+			else
+			{
+				// Feature registered but no slice gathered this frame (e.g. first frame) — skip.
+			}
 			if (GraphBuilder.GetPassCount() > PassCountBefore)
 			{
 				bHasPasses = true;
@@ -520,7 +550,6 @@ void FRenderServer::ProcessPendingResourceTransfers()
 void FRenderServer::ExecuteFrame(FRenderFramePacket Packet)
 {
 	CurrentFrameIndex = Packet.FrameIndex;
-	CurrentScene = std::move(Packet.Scene);
 
 	if (Packet.bResizeFramebuffer && Packet.FramebufferWidth > 0 && Packet.FramebufferHeight > 0)
 	{
@@ -547,8 +576,8 @@ void FRenderServer::Render(std::uint64_t FrameIndex)
 	Packet.ClearColorG = ClearColorG;
 	Packet.ClearColorB = ClearColorB;
 	Packet.ClearColorA = ClearColorA;
-	Packet.Scene = std::move(PendingScene);
-	PendingScene = FSceneUpdatePacket{};
+	Packet.FrameContext = std::move(PendingFrameContext);
+	PendingFrameContext = FGameFrameContext{};
 
 	int Width = LastFramebufferWidth;
 	int Height = LastFramebufferHeight;
