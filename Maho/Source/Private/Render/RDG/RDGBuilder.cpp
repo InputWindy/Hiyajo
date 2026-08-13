@@ -360,9 +360,9 @@ void FRDGBuilder::DeriveBarriers()
 	// (e.g. a viewport texture rendered as RenderTarget, then sampled by ImGui).
 	for (const auto& [Res, FinalState] : CurrentStates)
 	{
-		if (Res->IsExternal() && Res->CurrentState != FinalState && Res->CurrentState != ERHIResourceState::Common)
+		if (Res->IsExternal() && Res->CurrentState != FinalState)
 		{
-			FinalTransitions.push_back({Res, Res->CurrentState});
+			FinalTransitions.push_back({Res, FinalState, Res->CurrentState});
 		}
 	}
 }
@@ -488,17 +488,17 @@ void FRDGBuilder::Execute()
 		if (Cmd)
 		{
 			Cmd->Begin();
-			for (const auto& [Res, Target] : FinalTransitions)
+			for (const auto& [Res, OldState, NewState] : FinalTransitions)
 			{
 				if (auto* Buf = dynamic_cast<FRDGBuffer*>(Res))
 				{
 					if (auto* RHIBuf = Buf->GetRHI())
-						Cmd->TransitionBuffer(RHIBuf, Res->CurrentState, Target);
+						Cmd->TransitionBuffer(RHIBuf, OldState, NewState);
 				}
 				else if (auto* Tex = dynamic_cast<FRDGTexture*>(Res))
 				{
 					if (auto* RHITex = Tex->GetRHI())
-						Cmd->TransitionTexture(RHITex, Res->CurrentState, Target);
+						Cmd->TransitionTexture(RHITex, OldState, NewState);
 				}
 			}
 			Cmd->End();

@@ -10,6 +10,7 @@
 #include <functional>
 #include <memory>
 #include <string>
+#include <tuple>
 #include <typeindex>
 #include <unordered_map>
 #include <vector>
@@ -131,7 +132,7 @@ private:
 	FRDGTransientPool TransientPool;
 
 	/** External resources that need a final transition back to their initial state. */
-	std::vector<std::pair<FRDGResource*, ERHIResourceState>> FinalTransitions;
+	std::vector<std::tuple<FRDGResource*, ERHIResourceState, ERHIResourceState>> FinalTransitions;
 
 	/** Staging buffers created by UploadBuffer; destroyed after Execute. */
 	std::vector<FRHIBuffer*> UploadStagingBuffers;
