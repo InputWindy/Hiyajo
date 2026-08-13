@@ -74,10 +74,18 @@ struct TComponentQuery
 	{
 		for (auto& View : Views)
 		{
-			// If OptionalMask is set, skip chunks whose archetype does not contain it
+			// With<>: skip chunks whose archetype lacks the optional mask.
 			if (OptionalMask.any())
 			{
 				if ((View.Chunk->Mask & OptionalMask) != OptionalMask)
+				{
+					continue;
+				}
+			}
+			// Not<>: skip chunks whose archetype contains any excluded component.
+			if (ExcludedMask.any())
+			{
+				if ((View.Chunk->Mask & ExcludedMask).any())
 				{
 					continue;
 				}
