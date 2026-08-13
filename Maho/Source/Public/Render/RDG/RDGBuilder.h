@@ -130,6 +130,9 @@ private:
 	std::unordered_map<std::string, FRDGResource*> ExportedResources;
 	FRDGTransientPool TransientPool;
 
+	/** External resources that need a final transition back to their initial state. */
+	std::vector<std::pair<FRDGResource*, ERHIResourceState>> FinalTransitions;
+
 	/** Staging buffers created by UploadBuffer; destroyed after Execute. */
 	std::vector<FRHIBuffer*> UploadStagingBuffers;
 

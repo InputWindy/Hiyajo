@@ -317,6 +317,7 @@ void FRDGBuilder::SortPasses()
 void FRDGBuilder::DeriveBarriers()
 {
 	CompiledPasses.clear();
+	FinalTransitions.clear();
 	std::unordered_map<FRDGResource*, ERHIResourceState> CurrentStates;
 
 	for (FRDGPass* Pass : Passes)
@@ -353,6 +354,16 @@ void FRDGBuilder::DeriveBarriers()
 		}
 
 		CompiledPasses.push_back(std::move(CP));
+	}
+
+	// Final transitions: external resources must return to their initial state
+	// (e.g. a viewport texture rendered as RenderTarget, then sampled by ImGui).
+	for (const auto& [Res, FinalState] : CurrentStates)
+	{
+		if (Res->IsExternal() && Res->CurrentState != FinalState && Res->CurrentState != ERHIResourceState::Common)
+		{
+			FinalTransitions.push_back({Res, Res->CurrentState});
+		}
 	}
 }
 
@@ -468,6 +479,32 @@ void FRDGBuilder::Execute()
 			RHI->GetGraphicsQueue().Submit(&Cmd, 1, nullptr, 0, nullptr, 0, nullptr);
 
 		RHI->DestroyCommandList(Cmd);
+	}
+
+	// Apply final transitions (external resources back to initial state).
+	if (!FinalTransitions.empty())
+	{
+		FRHICommandList* Cmd = RHI->CreateCommandList(ERHICommandListType::Graphics);
+		if (Cmd)
+		{
+			Cmd->Begin();
+			for (const auto& [Res, Target] : FinalTransitions)
+			{
+				if (auto* Buf = dynamic_cast<FRDGBuffer*>(Res))
+				{
+					if (auto* RHIBuf = Buf->GetRHI())
+						Cmd->TransitionBuffer(RHIBuf, Res->CurrentState, Target);
+				}
+				else if (auto* Tex = dynamic_cast<FRDGTexture*>(Res))
+				{
+					if (auto* RHITex = Tex->GetRHI())
+						Cmd->TransitionTexture(RHITex, Res->CurrentState, Target);
+				}
+			}
+			Cmd->End();
+			RHI->GetGraphicsQueue().Submit(&Cmd, 1, nullptr, 0, nullptr, 0, nullptr);
+			RHI->DestroyCommandList(Cmd);
+		}
 	}
 
 	// Upload staging buffers are one-shot — destroy after all copies are submitted.
