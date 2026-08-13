@@ -119,6 +119,7 @@ target_include_directories(Maho
 		"${MAHO_PRIVATE_DIR}"
 		"${MAHO_NLOHMANN_JSON_INCLUDE_DIR}"
 		"${MAHO_VMA_INCLUDE_DIR}"
+		"${MAHO_SOL2_INCLUDE_DIR}"
 )
 
 # PUBLIC: game code uses MAHO_* macros that expand to spdlog calls.
@@ -131,6 +132,7 @@ target_link_libraries(Maho
 	PRIVATE
 		glfw
 		Threads::Threads
+		lua
 )
 
 if(MAHO_HAS_LIBKTX)
@@ -139,6 +141,16 @@ if(MAHO_HAS_LIBKTX)
 endif()
 if(MAHO_HAS_OPENIMAGEIO)
 	target_compile_definitions(Maho PRIVATE MAHO_WITH_OPENIMAGEIO=1)
+endif()
+
+# Assimp — model decode for the engine resource codec (MeshModelCodec).
+if(TARGET assimp)
+	target_link_libraries(Maho PRIVATE assimp)
+	target_compile_definitions(Maho PRIVATE MAHO_WITH_ASSIMP=1)
+	target_include_directories(Maho PRIVATE
+		"${assimp_SOURCE_DIR}/include"
+		"${assimp_BINARY_DIR}/include"
+	)
 endif()
 if(MAHO_HAS_GLSLANG)
 	target_link_libraries(Maho PRIVATE glslang OSDependent SPIRV)

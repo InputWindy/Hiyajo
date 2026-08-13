@@ -1,4 +1,4 @@
-﻿#include <Core/Extension/Script/LuaComponentBindings.h>
+﻿#include "Core/Extension/Script/LuaComponentBindings.h"
 
 #include <Core/Extension/World/Components/TransformComponent.h>
 

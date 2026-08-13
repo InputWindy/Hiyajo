@@ -1,5 +1,5 @@
 ﻿#include <Core/Extension/Script/ScriptSystem.h>
-#include <Core/Extension/Script/LuaComponentBindings.h>
+#include "Core/Extension/Script/LuaComponentBindings.h"
 #include <Core/Extension/World/Components/TransformComponent.h>
 
 #include <Core/Application/App.h>

@@ -31,8 +31,11 @@ namespace
 
 } // namespace
 
+namespace Maho
+{
+
 FWorldLayer::FWorldLayer(std::string InWorldName)
-	: Maho::FLayer("WorldLayer")
+	: FLayer("WorldLayer")
 	, WorldName(std::move(InWorldName))
 {
 }
@@ -176,3 +179,5 @@ bool FWorldLayer::ExecuteStage(Maho::EEngineStage Stage)
 	}
 	return true;
 }
+
+} // namespace Maho

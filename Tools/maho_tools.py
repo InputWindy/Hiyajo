@@ -1149,8 +1149,8 @@ def scan_game_extensions(source_game_dir: Path) -> list[dict[str, str]]:
 
 	exts: list[dict[str, str]] = []
 	for header_path in sorted(source_game_dir.rglob("*.h")):
-		rel = header_path.relative_to(source_game_dir.parent).as_posix()
-		results = _scan_header_for_class(header_path, r"\b(?:IEngineExtension|FLayer)\b")
+		rel = header_path.relative_to(source_game_dir).as_posix()
+		results = _scan_header_for_class(header_path, r"\b(?:IEngineExtension|FLayer|FWorldLayer)\b")
 		for info in results:
 			full_cls = _full_class_name(info)
 			# Priority heuristic: System/ → System, Editor/Script → Overlay, else → Layer
@@ -1221,9 +1221,9 @@ def generate_game_app_cpp(cproject_path: Path, *, log: Any = print) -> Path:
 			seen_headers.add(header)
 			headers.append(header)
 
-		# ── Auto‑scan game extensions & render features ──
-		game_exts = scan_game_extensions(project_dir / "Source")
-		render_features = scan_render_features(project_dir / "Source" / "Render")
+	# ── Auto‑scan game extensions & render features ──
+	game_exts = scan_game_extensions(project_dir / "Source")
+	render_features = scan_render_features(project_dir / "Source" / "Render")
 
 	# Build include lines (deduplicated)
 	include_set: dict[str, str] = {}  # header → include form
@@ -1275,13 +1275,15 @@ def generate_game_app_cpp(cproject_path: Path, *, log: Any = print) -> Path:
 			"",
 			"\t\tRegisterExtension<Maho::FPlatformSystem>(EExtensionPriority::System);",
 			"\t\tRegisterExtension<Maho::FRenderSystem>(EExtensionPriority::System);",
+			"\t\tRegisterExtension<Maho::FResourceSystem>(EExtensionPriority::System);",
+			"\t\tRegisterExtension<Maho::FScriptSystem>(EExtensionPriority::Overlay);",
 			"",
 		]
 	)
 
 	# ── Game‑scanned extensions ──
-	editor_exts = [e for e in game_exts if "/Editor/" in e["header"]]
-	script_exts = [e for e in game_exts if "/Script/" in e["header"]]
+	editor_exts = [e for e in game_exts if e["header"].startswith("Editor/")]
+	script_exts = [e for e in game_exts if "Script/" in e["header"]]
 	layer_exts  = [e for e in game_exts if e not in editor_exts and e not in script_exts]
 
 	if layer_exts:
