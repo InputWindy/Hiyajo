@@ -68,6 +68,9 @@ public:
 
 	void WaitBeforeImGuiNewFrame(std::uint64_t FrameIndex);
 
+	/** Current frame index on the render thread (for per-frame ring buffers). */
+	[[nodiscard]] std::uint64_t GetCurrentFrameIndex() const { return CurrentFrameIndex; }
+
 	void SetClearColor(float R, float G, float B, float A);
 
 	/**
