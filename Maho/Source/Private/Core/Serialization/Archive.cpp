@@ -52,6 +52,26 @@ void FArchive::SerializeBytes(void* Ptr, std::size_t Count)
 	}
 }
 
+void FArchive::SerializeRaw(std::int8_t& V)
+{
+	SerializeBytes(&V, sizeof(V));
+}
+
+void FArchive::SerializeRaw(std::int16_t& V)
+{
+	SerializeBytes(&V, sizeof(V));
+}
+
+void FArchive::SerializeRaw(std::int32_t& V)
+{
+	SerializeBytes(&V, sizeof(V));
+}
+
+void FArchive::SerializeRaw(std::int64_t& V)
+{
+	SerializeBytes(&V, sizeof(V));
+}
+
 void FArchive::SerializeRaw(std::uint8_t& V)
 {
 	SerializeBytes(&V, sizeof(V));
@@ -72,7 +92,7 @@ void FArchive::SerializeRaw(std::uint64_t& V)
 	SerializeBytes(&V, sizeof(V));
 }
 
-void FArchive::SerializeRaw(std::int32_t& V)
+void FArchive::SerializeRaw(char& V)
 {
 	SerializeBytes(&V, sizeof(V));
 }
@@ -111,23 +131,6 @@ void FArchive::SerializeString(std::string& S)
 		SerializeRaw(Len);
 		S.resize(Len);
 		SerializeBytes(S.data(), Len);
-	}
-}
-
-void FArchive::SerializeBytes(std::vector<std::uint8_t>& B)
-{
-	if (IsSaving())
-	{
-		std::uint32_t Len = static_cast<std::uint32_t>(B.size());
-		SerializeRaw(Len);
-		SerializeBytes(B.data(), Len);
-	}
-	else
-	{
-		std::uint32_t Len = 0;
-		SerializeRaw(Len);
-		B.resize(Len);
-		SerializeBytes(B.data(), Len);
 	}
 }
 

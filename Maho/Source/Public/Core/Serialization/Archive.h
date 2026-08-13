@@ -11,6 +11,7 @@
 #include <cstdint>
 #include <cstring>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 namespace Maho
@@ -41,34 +42,63 @@ public:
 	[[nodiscard]] bool IsSaving() const { return Mode == EArchiveMode::Saving; }
 	[[nodiscard]] bool IsLoading() const { return Mode == EArchiveMode::Loading; }
 
-	// ── Raw bytes ──
+	// ── Raw POD primitives ──
 
 	void SerializeBytes(void* Ptr, std::size_t Count);
+
+	void SerializeRaw(std::int8_t& V);
+	void SerializeRaw(std::int16_t& V);
+	void SerializeRaw(std::int32_t& V);
+	void SerializeRaw(std::int64_t& V);
 	void SerializeRaw(std::uint8_t& V);
 	void SerializeRaw(std::uint16_t& V);
 	void SerializeRaw(std::uint32_t& V);
 	void SerializeRaw(std::uint64_t& V);
-	void SerializeRaw(std::int32_t& V);
+	void SerializeRaw(char& V);
 	void SerializeRaw(float& V);
 	void SerializeRaw(double& V);
 	void SerializeRaw(bool& V);
 
+	// ── std types ──
+
 	void SerializeString(std::string& S);
-	void SerializeBytes(std::vector<std::uint8_t>& B);
 
 	/** Raw POD array — caller is responsible for allocating before Loading. */
 	void SerializeData(void* Data, std::size_t Size) { SerializeBytes(Data, Size); }
 
 	// ── Convenience operator ──
 
+	FArchive& operator<<(std::int8_t& V)  { SerializeRaw(V); return *this; }
+	FArchive& operator<<(std::int16_t& V) { SerializeRaw(V); return *this; }
+	FArchive& operator<<(std::int32_t& V) { SerializeRaw(V); return *this; }
+	FArchive& operator<<(std::int64_t& V) { SerializeRaw(V); return *this; }
 	FArchive& operator<<(std::uint8_t& V)  { SerializeRaw(V); return *this; }
 	FArchive& operator<<(std::uint16_t& V) { SerializeRaw(V); return *this; }
 	FArchive& operator<<(std::uint32_t& V) { SerializeRaw(V); return *this; }
 	FArchive& operator<<(std::uint64_t& V) { SerializeRaw(V); return *this; }
-	FArchive& operator<<(std::int32_t& V)  { SerializeRaw(V); return *this; }
+	FArchive& operator<<(char& V)          { SerializeRaw(V); return *this; }
 	FArchive& operator<<(float& V)         { SerializeRaw(V); return *this; }
 	FArchive& operator<<(double& V)        { SerializeRaw(V); return *this; }
 	FArchive& operator<<(bool& V)          { SerializeRaw(V); return *this; }
+
+	FArchive& operator<<(std::string& S) { SerializeString(S); return *this; }
+
+	/**
+	 * Generic POD vector: uint32 count + raw element bytes.
+	 * T must be trivially copyable. Non-POD vectors need per-element handling.
+	 */
+	template <typename T>
+	FArchive& operator<<(std::vector<T>& V)
+	{
+		static_assert(std::is_trivially_copyable_v<T>, "FArchive vector<T> requires trivially copyable T");
+		std::uint32_t Count = IsSaving() ? static_cast<std::uint32_t>(V.size()) : 0;
+		SerializeRaw(Count);
+		if (IsLoading())
+			V.resize(Count);
+		if (Count > 0)
+			SerializeData(V.data(), Count * sizeof(T));
+		return *this;
+	}
 
 	// ── Query ──
 
