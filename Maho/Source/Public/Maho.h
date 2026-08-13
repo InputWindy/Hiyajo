@@ -37,6 +37,7 @@
 #include <Core/Server/ThreadedServer.h>
 #include <Core/Server/ServerTask.h>
 #include <Core/Server/TaskContext.h>
+#include <Core/ECS/DOTS.h>
 #include <Render/UI/ImGuiSystem.h>
 #include <Render/UI/ImGuiTheme.h>
 
