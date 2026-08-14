@@ -15,9 +15,9 @@ namespace Maho
  * Pure world scaffold. Owns the ECS world (pure data) + the root system group
  * (driver skeleton), and maps engine stages to SystemGroup lifecycle hooks.
  *
- * Concrete world components, script stage dispatch, and any other project
- * gameplay logic belong in the game project: subclass FWorldLayer and override
- * RegisterSystems / SpawnInitialEntities / OnStageDispatched.
+ * Concrete world components, systems, and any other project gameplay logic
+ * belong in the game project: subclass FWorldLayer and override
+ * RegisterSystems / SpawnInitialEntities.
  */
 class MAHO_API FWorldLayer : public FLayer
 {
@@ -36,13 +36,6 @@ protected:
 
 	/** Spawn initial entities (camera, demo actors, etc.) during Attach. */
 	virtual void SpawnInitialEntities(FWorld& World) {}
-
-	/** Project hook: called after the RootGroup tick for a stage. */
-	virtual void OnStageDispatched(EEngineStage Stage, float DeltaTime)
-	{
-		(void)Stage;
-		(void)DeltaTime;
-	}
 
 	std::string WorldName;
 	FWorld World;

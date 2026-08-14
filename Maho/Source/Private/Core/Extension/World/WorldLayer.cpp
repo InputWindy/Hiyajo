@@ -48,15 +48,11 @@ bool FWorldLayer::ExecuteStage(Maho::EEngineStage Stage)
 		if (bWorldReady)
 		{
 			RootGroup.OnBeginFrame(World);
-			OnStageDispatched(Stage, 0.0f);
 		}
 		break;
 
 	case Maho::EEngineStage::ProcessInput:
-		if (bWorldReady)
-		{
-			OnStageDispatched(Stage, 0.0f);
-		}
+		// No ECS system hook for ProcessInput; game logic handles it via other means.
 		break;
 
 	case Maho::EEngineStage::FixedUpdate:
@@ -64,7 +60,6 @@ bool FWorldLayer::ExecuteStage(Maho::EEngineStage Stage)
 		{
 			const float FixedDt = Maho::GApp->GetFixedDeltaSeconds();
 			RootGroup.OnFixedUpdate(FixedDt, World);
-			OnStageDispatched(Stage, FixedDt);
 		}
 		break;
 
@@ -73,7 +68,6 @@ bool FWorldLayer::ExecuteStage(Maho::EEngineStage Stage)
 		{
 			const float Dt = Maho::GApp->GetDeltaSeconds();
 			RootGroup.OnUpdate(Dt, World);
-			OnStageDispatched(Stage, Dt);
 			World.GetEntityManager().EndFrame();
 		}
 		break;
@@ -83,7 +77,6 @@ bool FWorldLayer::ExecuteStage(Maho::EEngineStage Stage)
 		{
 			const float Dt = Maho::GApp->GetDeltaSeconds();
 			RootGroup.OnLateUpdate(Dt, World);
-			OnStageDispatched(Stage, Dt);
 		}
 		break;
 
@@ -91,7 +84,6 @@ bool FWorldLayer::ExecuteStage(Maho::EEngineStage Stage)
 		if (bWorldReady)
 		{
 			RootGroup.OnEndFrame(World);
-			OnStageDispatched(Stage, 0.0f);
 		}
 		break;
 
@@ -99,14 +91,13 @@ bool FWorldLayer::ExecuteStage(Maho::EEngineStage Stage)
 		if (bWorldReady)
 		{
 			RootGroup.OnPreRender(World);
-			OnStageDispatched(Stage, 0.0f);
 			// Gather render feature contexts from the world and hand them to the render thread.
 			if (Maho::GApp)
 			{
-					if (auto* RenderSystem = Maho::GApp->GetExtension<Maho::FRenderSystem>())
-					{
-						RenderSystem->SubmitFrameContext(RenderSystem->GatherContexts(World));
-					}
+				if (auto* RenderSystem = Maho::GApp->GetExtension<Maho::FRenderSystem>())
+				{
+					RenderSystem->SubmitFrameContext(RenderSystem->GatherContexts(World));
+				}
 			}
 		}
 		break;
@@ -115,7 +106,6 @@ bool FWorldLayer::ExecuteStage(Maho::EEngineStage Stage)
 		if (bWorldReady)
 		{
 			RootGroup.OnPostRender(World);
-			OnStageDispatched(Stage, 0.0f);
 		}
 		break;
 
