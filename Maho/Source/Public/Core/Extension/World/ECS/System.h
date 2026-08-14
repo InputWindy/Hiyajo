@@ -1,8 +1,8 @@
 #pragma once
 
+#include <Core/Misc/Export.h>
+#include <Core/Engine/EngineStage.h>
 #include <Core/Extension/World/ECS/ComponentType.h>
-
-#include <string>
 
 namespace Maho
 {
@@ -10,48 +10,32 @@ namespace Maho
 class FWorld;
 
 /**
- * ECS System base with multi-stage lifecycle.
+ * ECS System base.
  *
- * Override any combination of the virtual hooks below;
- * GetName() is the only pure virtual.
+ * A system responds to engine stages through a single hook:
+ *   virtual bool ExecuteStage(EEngineStage Stage, float DeltaTime, FWorld& World)
  *
- * Execution order across the frame:
- *   OnCreate -> OnBeginFrame -> OnFixedUpdate*N -> OnUpdate -> OnLateUpdate
- *   -> OnEndFrame -> OnPreRender -> OnPostRender -> OnDestroy
+ * The owning FSystemGroup passes the FWorld reference and the stage DeltaTime
+ * as parameters — systems hold no world pointer and perform no global lookups.
  */
-class ISystem
+class MAHO_API ISystem
 {
 public:
 	virtual ~ISystem() = default;
 
 	[[nodiscard]] virtual const char* GetName() const = 0;
 
-	/** Called once after the system is registered (Attach stage). */
-	virtual void OnCreate(FWorld& World) {}
-
-	/** Called once before the system is destroyed (Detach / Shutdown). */
-	virtual void OnDestroy(FWorld& World) {}
-
-	/** Called at the start of every frame. */
-	virtual void OnBeginFrame(FWorld& World) {}
-
-	/** Fixed-timestep update (may be called 0..N times per frame). */
-	virtual void OnFixedUpdate(float DeltaTime, FWorld& World) {}
-
-	/** Main per-frame update. */
-	virtual void OnUpdate(float DeltaTime, FWorld& World) {}
-
-	/** Called after Update, before rendering. */
-	virtual void OnLateUpdate(float DeltaTime, FWorld& World) {}
-
-	/** Called at the end of the frame (after LateUpdate). */
-	virtual void OnEndFrame(FWorld& World) {}
-
-	/** Called before render submission. Use for render data gathering. */
-	virtual void OnPreRender(FWorld& World) {}
-
-	/** Called after rendering completes. */
-	virtual void OnPostRender(FWorld& World) {}
+	/**
+	 * Drive one engine stage. DeltaTime is the frame delta for Update/LateUpdate
+	 * and the fixed delta for FixedUpdate (0 otherwise). World is the ECS world.
+	 */
+	virtual bool ExecuteStage(EEngineStage Stage, float DeltaTime, FWorld& World)
+	{
+		(void)Stage;
+		(void)DeltaTime;
+		(void)World;
+		return true;
+	}
 };
 
 /**

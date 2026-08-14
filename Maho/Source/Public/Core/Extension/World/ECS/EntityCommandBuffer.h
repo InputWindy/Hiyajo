@@ -21,7 +21,8 @@ class FEntityManager;
  * Thread-safe deferred command recorder.
  *
  * Each system/job gets its own ECB instance. Commands are recorded
- * during OnUpdate and played back serially on the main thread via Playback().
+ * during ExecuteStage(EEngineStage::Update) and played back serially on the
+ * main thread via Playback().
  *
  * Automatic ECB Systems:
  *   FBeginSimECBSystem  — plays back the "begin" ECB before the simulation group
@@ -161,8 +162,8 @@ private:
 /**
  * Standard ECB system that plays back an ECB before/after a system group.
  *
- * Only OnUpdate performs actual work (ECB playback);
- * all other lifecycle hooks are no-ops.
+ * ExecuteStage performs actual work only for EEngineStage::Update
+ * (ECB playback); all other stages are no-ops.
  */
 class MAHO_API FECBSystem : public ISystem
 {
@@ -171,15 +172,7 @@ public:
 
 	const char* GetName() const override { return Name.c_str(); }
 
-	void OnCreate(FWorld& World) override {}
-	void OnDestroy(FWorld& World) override {}
-	void OnBeginFrame(FWorld& World) override {}
-	void OnFixedUpdate(float DeltaTime, FWorld& World) override {}
-	void OnUpdate(float DeltaTime, FWorld& World) override;
-	void OnLateUpdate(float DeltaTime, FWorld& World) override {}
-	void OnEndFrame(FWorld& World) override {}
-	void OnPreRender(FWorld& World) override {}
-	void OnPostRender(FWorld& World) override {}
+	bool ExecuteStage(EEngineStage Stage, float DeltaTime, FWorld& World) override;
 
 private:
 	FEntityCommandBuffer& ECB;

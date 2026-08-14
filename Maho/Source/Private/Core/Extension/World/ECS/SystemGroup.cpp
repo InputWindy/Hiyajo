@@ -20,9 +20,14 @@ FECBSystem::FECBSystem(FEntityCommandBuffer& InECB, const char* InName)
 {
 }
 
-void FECBSystem::OnUpdate(float DeltaTime, FWorld& World)
+bool FECBSystem::ExecuteStage(EEngineStage Stage, float DeltaTime, FWorld& World)
 {
-	ECB.Playback(World.GetEntityManager());
+	(void)DeltaTime;
+	if (Stage == EEngineStage::Update)
+	{
+		ECB.Playback(World.GetEntityManager());
+	}
+	return true;
 }
 
 // --- FSystemGroup ---
@@ -38,6 +43,11 @@ FSystemGroup::FSystemGroup(const char* InName)
 
 	BeginECBSystem = std::make_unique<FECBSystem>(*BeginECB, BeginName.c_str());
 	EndECBSystem = std::make_unique<FECBSystem>(*EndECB, EndName.c_str());
+
+	// Begin plays before children, End after children. AddSystem/AddGroup insert
+	// before EndECBSystem so it always stays last.
+	Systems.push_back(BeginECBSystem.get());
+	Systems.push_back(EndECBSystem.get());
 }
 
 FSystemGroup::~FSystemGroup() = default;
@@ -49,14 +59,21 @@ bool FSystemGroup::ExecuteStage(EEngineStage Stage)
 	case EEngineStage::Attach:
 		if (!bWorldReady)
 		{
-			// Build the system tree: Initialization → Simulation.
-			auto* SimGroup = AddGroup<FSimulationSystemGroup>();
-			RegisterSystems(*SimGroup);
-			SpawnInitialEntities(World);
+			if (IsRootGroup())
+			{
+				// Build the system tree: Initialization → Simulation.
+				auto* SimGroup = AddGroup<FSimulationSystemGroup>();
+				RegisterSystems(*SimGroup);
+				SpawnInitialEntities(World);
+			}
 
-			OnCreate(World);
+			ExecuteStage(Stage, 0.0f, World);
+
 			bWorldReady = true;
-			MAHO_INFO("FSystemGroup: ECS world ready (\"{}\")", Name);
+			if (IsRootGroup())
+			{
+				MAHO_INFO("FSystemGroup: ECS world ready (\"{}\")", Name);
+			}
 		}
 		return true;
 
@@ -64,125 +81,61 @@ bool FSystemGroup::ExecuteStage(EEngineStage Stage)
 	case EEngineStage::Shutdown:
 		if (bWorldReady)
 		{
-			OnDestroy(World);
+			ExecuteStage(Stage, 0.0f, World);
 			bWorldReady = false;
 		}
 		return true;
 
-	case EEngineStage::BeginFrame:
-		if (bWorldReady)
-		{
-			OnBeginFrame(World);
-		}
-		return true;
-
-	case EEngineStage::ProcessInput:
-		// No ISystem hook for ProcessInput.
-		return true;
-
-	case EEngineStage::FixedUpdate:
-		if (bWorldReady && GApp)
-		{
-			OnFixedUpdate(GApp->GetFixedDeltaSeconds(), World);
-		}
-		return true;
-
-	case EEngineStage::Update:
-		if (bWorldReady && GApp)
-		{
-			OnUpdate(GApp->GetDeltaSeconds(), World);
-			World.GetEntityManager().EndFrame();
-		}
-		return true;
-
-	case EEngineStage::LateUpdate:
-		if (bWorldReady && GApp)
-		{
-			OnLateUpdate(GApp->GetDeltaSeconds(), World);
-		}
-		return true;
-
-	case EEngineStage::EndFrame:
-		if (bWorldReady)
-		{
-			OnEndFrame(World);
-		}
-		return true;
-
-	case EEngineStage::PreRender:
-		if (bWorldReady)
-		{
-			OnPreRender(World);
-		}
-		return true;
-
-	case EEngineStage::PostRender:
-		if (bWorldReady)
-		{
-			OnPostRender(World);
-		}
-		return true;
-
 	default:
+		if (bWorldReady)
+		{
+			float Dt = 0.0f;
+			if (GApp)
+			{
+				if (Stage == EEngineStage::FixedUpdate)
+				{
+					Dt = GApp->GetFixedDeltaSeconds();
+				}
+				else if (Stage == EEngineStage::Update || Stage == EEngineStage::LateUpdate)
+				{
+					Dt = GApp->GetDeltaSeconds();
+				}
+			}
+
+			ExecuteStage(Stage, Dt, World);
+
+			if (Stage == EEngineStage::Update && IsRootGroup())
+			{
+				World.GetEntityManager().EndFrame();
+			}
+		}
 		return true;
 	}
 }
 
-// --- FSystemGroup lifecycle ---
-
-void FSystemGroup::OnCreate(FWorld& World)
+bool FSystemGroup::ExecuteStage(EEngineStage Stage, float DeltaTime, FWorld& World)
 {
-	DispatchNoDT(World, &ISystem::OnCreate);
-}
-
-void FSystemGroup::OnDestroy(FWorld& World)
-{
-	DispatchNoDT(World, &ISystem::OnDestroy);
-}
-
-void FSystemGroup::OnBeginFrame(FWorld& World)
-{
-	DispatchNoDT(World, &ISystem::OnBeginFrame);
-}
-
-void FSystemGroup::OnFixedUpdate(float DeltaTime, FWorld& World)
-{
-	DispatchWithDT(World, DeltaTime, &ISystem::OnFixedUpdate);
-}
-
-void FSystemGroup::OnUpdate(float DeltaTime, FWorld& World)
-{
-	if (BeginECBSystem)
+	for (ISystem* Sys : Systems)
 	{
-		BeginECBSystem->OnUpdate(DeltaTime, World);
+		if (Sys)
+		{
+			Sys->ExecuteStage(Stage, DeltaTime, World);
+		}
 	}
+	return true;
+}
 
-	DispatchWithDT(World, DeltaTime, &ISystem::OnUpdate);
-
+void FSystemGroup::InsertBeforeEnd(ISystem* InSystem)
+{
 	if (EndECBSystem)
 	{
-		EndECBSystem->OnUpdate(DeltaTime, World);
+		auto It = std::find(Systems.begin(), Systems.end(), EndECBSystem.get());
+		Systems.insert(It, InSystem);
 	}
-}
-
-void FSystemGroup::OnLateUpdate(float DeltaTime, FWorld& World)
-{
-	DispatchWithDT(World, DeltaTime, &ISystem::OnLateUpdate);
-}
-
-void FSystemGroup::OnEndFrame(FWorld& World)
-{
-	DispatchNoDT(World, &ISystem::OnEndFrame);
-}
-
-void FSystemGroup::OnPreRender(FWorld& World)
-{
-	DispatchNoDT(World, &ISystem::OnPreRender);
-}
-
-void FSystemGroup::OnPostRender(FWorld& World)
-{
-	DispatchNoDT(World, &ISystem::OnPostRender);
+	else
+	{
+		Systems.push_back(InSystem);
+	}
 }
 
 void FSystemGroup::UpdateBeforeByName(const char* A, const char* B)

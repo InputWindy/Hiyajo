@@ -8,6 +8,8 @@
 
 #include <memory>
 #include <string>
+#include <type_traits>
+#include <utility>
 #include <vector>
 
 namespace Maho
@@ -25,9 +27,9 @@ class FEntityCommandBuffer;
  *          ├─ FMovementSystem
  *          └─ FDeathSystem
  *
- * The root group doubles as the engine extension: it owns the FWorld (pure data)
- * and maps EEngineStage to the ISystem lifecycle hooks, recursively driving all
- * nested groups + systems. Each group automatically creates Begin/End ECB systems.
+ * The root group owns the FWorld (pure data) and dispatches EEngineStage
+ * recursively through ExecuteStage. Each group automatically creates Begin/End
+ * ECB systems ordered first/last in its Systems list.
  */
 class MAHO_API FSystemGroup : public ISystem, public IEngineExtension
 {
@@ -37,12 +39,13 @@ public:
 
 	const char* GetName() const override { return Name.c_str(); }
 
-	// ── IEngineExtension ───────────────────────────────────────────
-
-	/** Map engine stages to the ISystem lifecycle hooks (drives the whole tree). */
+	// ── IEngineExtension entry (the engine drives the root group) ──
 	bool ExecuteStage(EEngineStage Stage) override;
 
-	// ── World access ───────────────────────────────────────────────
+	// ── ISystem dispatch (parent group drives children) ────────────
+	bool ExecuteStage(EEngineStage Stage, float DeltaTime, FWorld& World) override;
+
+	// ── World access (the root group owns the world data) ──────────
 
 	[[nodiscard]] FWorld& GetWorld() { return World; }
 	[[nodiscard]] const FWorld& GetWorld() const { return World; }
@@ -55,18 +58,6 @@ public:
 	/** Spawn initial entities (camera, demo actors, etc.) during Attach. */
 	virtual void SpawnInitialEntities(FWorld& World) { (void)World; }
 
-	// ── Multi-stage lifecycle ──────────────────────────────────────
-
-	void OnCreate(FWorld& World) override;
-	void OnDestroy(FWorld& World) override;
-	void OnBeginFrame(FWorld& World) override;
-	void OnFixedUpdate(float DeltaTime, FWorld& World) override;
-	void OnUpdate(float DeltaTime, FWorld& World) override;
-	void OnLateUpdate(float DeltaTime, FWorld& World) override;
-	void OnEndFrame(FWorld& World) override;
-	void OnPreRender(FWorld& World) override;
-	void OnPostRender(FWorld& World) override;
-
 	// ── System registration ────────────────────────────────────────
 	template <typename T, typename... Args>
 	T* AddSystem(Args&&... InArgs)
@@ -75,7 +66,7 @@ public:
 		auto Sys = std::make_unique<T>(std::forward<Args>(InArgs)...);
 		T* Ptr = Sys.get();
 		OwnedChildren.push_back(std::move(Sys));
-		Systems.push_back(Ptr);
+		InsertBeforeEnd(Ptr);
 		return Ptr;
 	}
 
@@ -88,6 +79,7 @@ public:
 		T* Ptr = Grp.get();
 		OwnedGroups.push_back(std::move(Grp));
 		Groups.push_back(Ptr);
+		InsertBeforeEnd(Ptr);
 		return Ptr;
 	}
 
@@ -117,32 +109,11 @@ public:
 protected:
 	void UpdateBeforeByName(const char* A, const char* B);
 
-private:
-	template <typename TMethod>
-	void DispatchNoDT(FWorld& World, TMethod Method)
-	{
-		for (FSystemGroup* Sub : Groups)
-		{
-			if (Sub) { (Sub->*Method)(World); }
-		}
-		for (ISystem* Sys : Systems)
-		{
-			if (Sys) { (Sys->*Method)(World); }
-		}
-	}
+	/** True when this group is the root that owns the world + builds the tree. */
+	[[nodiscard]] virtual bool IsRootGroup() const { return false; }
 
-	template <typename TMethod>
-	void DispatchWithDT(FWorld& World, float DeltaTime, TMethod Method)
-	{
-		for (FSystemGroup* Sub : Groups)
-		{
-			if (Sub) { (Sub->*Method)(DeltaTime, World); }
-		}
-		for (ISystem* Sys : Systems)
-		{
-			if (Sys) { (Sys->*Method)(DeltaTime, World); }
-		}
-	}
+private:
+	void InsertBeforeEnd(ISystem* InSystem);
 
 	std::string Name;
 
@@ -170,6 +141,9 @@ class MAHO_API FInitializationSystemGroup : public FSystemGroup
 public:
 	FInitializationSystemGroup() : FSystemGroup("InitializationSystemGroup") {}
 	static const char* StaticName() { return "InitializationSystemGroup"; }
+
+protected:
+	[[nodiscard]] bool IsRootGroup() const override { return true; }
 };
 
 class MAHO_API FSimulationSystemGroup : public FSystemGroup
