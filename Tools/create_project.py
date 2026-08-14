@@ -6,6 +6,7 @@ from __future__ import annotations
 import shutil
 import sys
 import threading
+import time
 import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
@@ -22,6 +23,7 @@ from maho_tools import (  # noqa: E402
 	is_valid_project_name,
 	list_engine_plugins,
 	open_in_file_manager,
+	_kill_process,
 )
 
 
@@ -61,6 +63,8 @@ class CreateProjectApp(tk.Tk):
 		self._plugin_vars: dict[str, tk.BooleanVar] = {}
 		self._plugin_widgets: dict[str, ttk.Checkbutton] = {}
 		self._locked: set[str] = set()
+		self._status_start = 0.0
+		self._status_running = False
 
 		self._build()
 		self.protocol("WM_DELETE_WINDOW", self._on_close_request)
@@ -169,6 +173,14 @@ class CreateProjectApp(tk.Tk):
 		self.btn_create.pack(side=tk.RIGHT, padx=(8, 0))
 		# Close stays enabled during create so the user can abort.
 		ttk.Button(btns, text="Close", command=self._on_close_request).pack(side=tk.RIGHT)
+
+		status_frame = ttk.Frame(frm)
+		status_frame.grid(row=12, column=0, columnspan=3, sticky="ew", **pad)
+		status_frame.columnconfigure(0, weight=1)
+		self.progress = ttk.Progressbar(status_frame, mode="indeterminate")
+		self.progress.grid(row=0, column=0, sticky="ew")
+		self.lbl_status = ttk.Label(status_frame, text="", anchor="w")
+		self.lbl_status.grid(row=0, column=1, padx=(8, 0))
 
 		self._busy_widgets = [
 			ent_name,
@@ -329,6 +341,24 @@ class CreateProjectApp(tk.Tk):
 		self.txt_log.delete("1.0", tk.END)
 		self.txt_log.configure(state=tk.DISABLED)
 
+	def _start_status_timer(self) -> None:
+		self._status_start = time.monotonic()
+		self._status_running = True
+		self.progress.start(12)
+		self._tick_status()
+
+	def _tick_status(self) -> None:
+		if not self._status_running:
+			return
+		elapsed = int(time.monotonic() - self._status_start)
+		self.lbl_status.configure(text=f"… working ({elapsed}s)")
+		self.after(1000, self._tick_status)
+
+	def _stop_status_timer(self) -> None:
+		self._status_running = False
+		self.progress.stop()
+		self.lbl_status.configure(text="")
+
 	def _browse_parent(self) -> None:
 		path = filedialog.askdirectory(initialdir=self.var_parent.get() or str(Path.home()))
 		if path:
@@ -342,11 +372,7 @@ class CreateProjectApp(tk.Tk):
 
 	def _kill_active_proc(self) -> None:
 		if self._proc_holder:
-			proc = self._proc_holder[0]
-			try:
-				proc.kill()
-			except OSError:
-				pass
+			_kill_process(self._proc_holder[0])
 
 	def _delete_project_dir(self, project_dir: Path | None) -> None:
 		if project_dir is None or not project_dir.exists():
@@ -377,6 +403,7 @@ class CreateProjectApp(tk.Tk):
 		self.log_line("[Maho] Abort requested — stopping and deleting project…")
 
 	def _finish_create_ui(self, *, aborted: bool) -> None:
+		self._stop_status_timer()
 		if aborted and self._close_after_abort:
 			self.destroy()
 			return
@@ -462,6 +489,7 @@ class CreateProjectApp(tk.Tk):
 		self._proc_holder.clear()
 		self._project_dir = None
 		self._set_creating(True)
+		self._start_status_timer()
 		self.log_line(f"[Maho] Creating project '{name}' …")
 
 		def work() -> None:

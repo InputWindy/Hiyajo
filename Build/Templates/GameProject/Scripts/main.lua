@@ -1,5 +1,5 @@
 -- Maho game script entry (loaded as Scripts/main.lua on engine init).
--- Optional globals called from FAppBase/FGameApp:
+-- Optional globals called from the engine:
 --   OnUpdate(dt)
 --   OnFixedUpdate(fixedDt)
 

@@ -68,7 +68,6 @@ add_executable({{PROJECT_NAME}} ${GAME_SOURCES})
 target_include_directories({{PROJECT_NAME}} PRIVATE
 	"${GAME_SOURCE_DIR}"
 	"${MAHO_ENGINE_ROOT}/Maho/Source/Private"
-	"${MAHO_ENGINE_ROOT}/Maho/ThirdParty/nlohmann"
 )
 target_link_libraries({{PROJECT_NAME}} PRIVATE Maho::Engine Maho::Modules)
 target_compile_features({{PROJECT_NAME}} PRIVATE cxx_std_20)

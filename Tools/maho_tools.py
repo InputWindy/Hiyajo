@@ -178,6 +178,19 @@ def run_command(
 
 
 def _kill_process(proc: subprocess.Popen[Any]) -> None:
+	if proc.poll() is not None:
+		return
+	if sys.platform == "win32":
+		# Kill the whole tree — a lone proc.kill() leaves child git/clone processes
+		# holding the stdout pipe, so callers block on read() forever.
+		try:
+			subprocess.run(
+				["taskkill", "/F", "/T", "/PID", str(proc.pid)],
+				**_subprocess_no_window_kwargs(),
+				check=False,
+			)
+		except OSError:
+			pass
 	try:
 		proc.kill()
 	except OSError:
