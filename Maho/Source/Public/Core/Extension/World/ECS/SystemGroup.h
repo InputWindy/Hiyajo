@@ -27,9 +27,10 @@ class FEntityCommandBuffer;
  *          ├─ FMovementSystem
  *          └─ FDeathSystem
  *
- * The root group owns the FWorld (pure data) and dispatches EEngineStage
- * recursively through ExecuteStage. Each group automatically creates Begin/End
- * ECB systems ordered first/last in its Systems list.
+ * The root group owns the FWorld (pure data) and dispatches lifecycle
+ * EEngineStage values through ExecuteStage; the per-frame game world is driven
+ * by the public BeginFrame / Tick / EndFrame methods. Each group automatically
+ * creates Begin/End ECB systems ordered first/last in its Systems list.
  */
 class MAHO_API FSystemGroup : public ISystem, public IEngineExtension
 {
@@ -41,6 +42,11 @@ public:
 
 	// ── IEngineExtension entry (the engine drives the root group) ──
 	bool ExecuteStage(EEngineStage Stage) override;
+
+	// ── Game world frame (driven by FGameApp, not by ExecuteStage) ──
+	void BeginFrame();
+	void Tick();
+	void EndFrame();
 
 	// ── ISystem dispatch (parent group drives children) ────────────
 	void OnCreate(FWorld& InWorld) override

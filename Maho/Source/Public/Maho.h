@@ -8,8 +8,8 @@
 //   #include <Maho.h>
 //   #include <EntryPoint.h>
 //
-//   class FMyGameApp : public Maho::FApp;
-//   Maho::FApp* Maho::CreateApplication() { return new FMyGameApp(); }
+//   class FMyGameApp : public Maho::FGameApp;
+//   Maho::FAppBase* Maho::CreateApplication() { return new FMyGameApp(); }
 // ```
 #include <Core/Misc/Export.h>
 #include <Core/Misc/Log.h>
@@ -25,6 +25,7 @@
 #include <Core/Misc/Paths.h>
 #include <Core/Engine/EngineExtension.h>
 #include <Core/App.h>
+#include <Core/Engine/GameApp.h>
 #include <Core/Extension/Platform/Platform.h>
 #include <Core/Extension/Resource/ResourceSystem.h>
 #include <Core/Extension/Script/ScriptSystem.h>

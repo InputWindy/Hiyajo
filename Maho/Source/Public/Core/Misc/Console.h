@@ -11,7 +11,7 @@ namespace Maho
 
 /**
  * CVar registry (UE IConsoleManager subset). Process-wide variable storage;
- * FApp owns a facade — FConsole::Get() resolves via GApp.
+ * FAppBase owns a facade — FConsole::Get() resolves via GApp.
  *
  * Cross-module string access:
  *   FConsole::Get().GetInt("maho.Window.Width");

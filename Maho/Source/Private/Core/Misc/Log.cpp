@@ -222,7 +222,7 @@ std::shared_ptr<spdlog::logger>& FLog::GetActiveCoreLogger()
 	FLog& Log = GApp->GetLog();
 	if (!Log.CoreLogger)
 	{
-		throw std::runtime_error("FLog: core logger not initialized (FApp::Initialize)");
+		throw std::runtime_error("FLog: core logger not initialized (FAppBase::Initialize)");
 	}
 	return Log.CoreLogger;
 }
@@ -232,7 +232,7 @@ std::shared_ptr<spdlog::logger>& FLog::GetActiveClientLogger()
 	FLog& Log = GApp->GetLog();
 	if (!Log.ClientLogger)
 	{
-		throw std::runtime_error("FLog: client logger not initialized (FApp::Initialize)");
+		throw std::runtime_error("FLog: client logger not initialized (FAppBase::Initialize)");
 	}
 	return Log.ClientLogger;
 }

@@ -35,7 +35,7 @@ static TAutoConsoleVariable GCVarMaxDeltaSeconds(
 	0.25f,
 	"Clamp frame delta seconds after hitch / debugger pause");
 
-void BootstrapAppLogging(FApp& App)
+void BootstrapAppLogging(FAppBase& App)
 {
 	FLogConfig LogConfig;
 	LogConfig.CoreLoggerName = "Maho";
@@ -46,7 +46,7 @@ void BootstrapAppLogging(FApp& App)
 	App.GetLog().Initialize(LogConfig);
 }
 
-void ApplyAppLoggingFromConfig(FApp& App, const FConfig& Config)
+void ApplyAppLoggingFromConfig(FAppBase& App, const FConfig& Config)
 {
 	FLogConfig LogConfig;
 	LogConfig.CoreLoggerName = "Maho";
@@ -58,7 +58,7 @@ void ApplyAppLoggingFromConfig(FApp& App, const FConfig& Config)
 	App.GetLog().Initialize(LogConfig);
 }
 
-void ShutdownAppLogging(FApp& App)
+void ShutdownAppLogging(FAppBase& App)
 {
 	for (const FTimerDataPackage& Report : App.GetTimer().QueryAll())
 	{
@@ -70,7 +70,7 @@ void ShutdownAppLogging(FApp& App)
 	App.GetLog().Shutdown();
 }
 
-int LoadProjectEngineIni(FApp& App, FConfig& Config)
+int LoadProjectEngineIni(FAppBase& App, FConfig& Config)
 {
 	const std::string IniPath = Config.ProjectConfigDir + "/DefaultEngine.ini";
 	const int Applied = App.GetConsole().LoadConsoleVariablesFromIni(IniPath);
@@ -154,29 +154,29 @@ void TopoSortPeers(
 
 	if (OutOrder.size() != Count)
 	{
-		MAHO_CORE_ERROR("FApp: TDependsPack cycle detected; falling back to registration order");
+		MAHO_CORE_ERROR("FAppBase: TDependsPack cycle detected; falling back to registration order");
 		OutOrder = StableOrder;
 	}
 }
 
 } // namespace
 
-bool FApp::InvokeStage(IEngineExtension& Extension, EEngineStage Stage)
+bool FAppBase::InvokeStage(IEngineExtension& Extension, EEngineStage Stage)
 {
 	Extension.SetCurrentStage(Stage);
 	return Extension.ExecuteStage(Stage);
 }
 
-FApp* GApp = nullptr;
+FAppBase* GApp = nullptr;
 
-FApp::FApp()
+FAppBase::FAppBase()
 {
 	GApp = this;
 	BootstrapAppLogging(*this);
-	MAHO_CORE_INFO("FApp core services ready (Log, Console, Timer)");
+	MAHO_CORE_INFO("FAppBase core services ready (Log, Console, Timer)");
 }
 
-FApp::~FApp()
+FAppBase::~FAppBase()
 {
 	ClearExtensions();
 	if (Log.IsInitialized())
@@ -189,32 +189,32 @@ FApp::~FApp()
 	}
 }
 
-void FApp::Configure(FConfig& /*OutConfig*/)
+void FAppBase::Configure(FConfig& /*OutConfig*/)
 {
 }
 
-bool FApp::PreInitialize()
-{
-	return true;
-}
-
-bool FApp::PostInitialize()
+bool FAppBase::PreInitialize()
 {
 	return true;
 }
 
-void FApp::OnRequestExit()
+bool FAppBase::PostInitialize()
+{
+	return true;
+}
+
+void FAppBase::OnRequestExit()
 {
 	if (AppState != EAppState::Running)
 	{
 		return;
 	}
 
-	MAHO_CORE_INFO("FApp::OnRequestExit — leaving Game loop");
+	MAHO_CORE_INFO("FAppBase::OnRequestExit — leaving Game loop");
 	AppState = EAppState::WaitForExit;
 }
 
-std::vector<IEngineExtension*> FApp::SnapshotExtensions() const
+std::vector<IEngineExtension*> FAppBase::SnapshotExtensions() const
 {
 	std::vector<IEngineExtension*> Out;
 	Out.reserve(Extensions.size());
@@ -228,7 +228,7 @@ std::vector<IEngineExtension*> FApp::SnapshotExtensions() const
 	return Out;
 }
 
-std::vector<FExtensionDepEdgeView> FApp::SnapshotExtensionDeps(EEngineStage Stage) const
+std::vector<FExtensionDepEdgeView> FAppBase::SnapshotExtensionDeps(EEngineStage Stage) const
 {
 	std::vector<FExtensionDepEdgeView> Out;
 	const auto StageIndex = static_cast<std::size_t>(Stage);
@@ -264,7 +264,7 @@ std::vector<FExtensionDepEdgeView> FApp::SnapshotExtensionDeps(EEngineStage Stag
 	return Out;
 }
 
-bool FApp::RunExtensionInitFamily(IEngineExtension& Extension)
+bool FAppBase::RunExtensionInitFamily(IEngineExtension& Extension)
 {
 	static constexpr EEngineStage InitStages[] =
 	{
@@ -278,7 +278,7 @@ bool FApp::RunExtensionInitFamily(IEngineExtension& Extension)
 		if (!InvokeStage(Extension, Stage))
 		{
 			MAHO_CORE_ERROR(
-				"FApp: extension '{}' failed at {}",
+				"FAppBase: extension '{}' failed at {}",
 				Extension.GetName() ? Extension.GetName() : "?",
 				static_cast<int>(Stage));
 			return false;
@@ -287,12 +287,12 @@ bool FApp::RunExtensionInitFamily(IEngineExtension& Extension)
 	return true;
 }
 
-void FApp::RunExtensionAttach(IEngineExtension& Extension)
+void FAppBase::RunExtensionAttach(IEngineExtension& Extension)
 {
 	InvokeStage(Extension, EEngineStage::Attach);
 }
 
-void FApp::RegisterExtensionInternal(
+void FAppBase::RegisterExtensionInternal(
 	std::unique_ptr<IEngineExtension> Extension,
 	std::type_index TypeKey,
 	EExtensionPriority Priority)
@@ -316,7 +316,7 @@ void FApp::RegisterExtensionInternal(
 	if (ExtensionsByType.find(TypeKey) != ExtensionsByType.end())
 	{
 		MAHO_CORE_ERROR(
-			"FApp::RegisterExtension: duplicate type for '{}'",
+			"FAppBase::RegisterExtension: duplicate type for '{}'",
 			Raw->GetName() ? Raw->GetName() : "?");
 		return;
 	}
@@ -336,7 +336,17 @@ void FApp::RegisterExtensionInternal(
 	}
 }
 
-void FApp::RequestRemoveExtension(IEngineExtension* Extension)
+IEngineExtension& FAppBase::RegisterExtensionInstance(
+	std::unique_ptr<IEngineExtension> Extension,
+	std::type_index TypeKey,
+	EExtensionPriority Priority)
+{
+	IEngineExtension& Ref = *Extension;
+	RegisterExtensionInternal(std::move(Extension), TypeKey, Priority);
+	return Ref;
+}
+
+void FAppBase::RequestRemoveExtension(IEngineExtension* Extension)
 {
 	if (!Extension)
 	{
@@ -345,7 +355,7 @@ void FApp::RequestRemoveExtension(IEngineExtension* Extension)
 	PendingRemove.push_back(Extension);
 }
 
-void FApp::ClearExtensions()
+void FAppBase::ClearExtensions()
 {
 	for (auto It = Extensions.rbegin(); It != Extensions.rend(); ++It)
 	{
@@ -369,7 +379,7 @@ void FApp::ClearExtensions()
 	bLifecycleStarted = false;
 }
 
-void FApp::EraseExtension(IEngineExtension* Extension)
+void FAppBase::EraseExtension(IEngineExtension* Extension)
 {
 	if (!Extension)
 	{
@@ -389,7 +399,7 @@ void FApp::EraseExtension(IEngineExtension* Extension)
 		Extensions.end());
 }
 
-void FApp::FlushPendingMounts()
+void FAppBase::FlushPendingMounts()
 {
 	for (IEngineExtension* Remove : PendingRemove)
 	{
@@ -428,7 +438,7 @@ void FApp::FlushPendingMounts()
 		if (ExtensionsByType.find(TypeKey) != ExtensionsByType.end())
 		{
 			MAHO_CORE_ERROR(
-				"FApp::FlushPendingMounts: duplicate '{}'",
+				"FAppBase::FlushPendingMounts: duplicate '{}'",
 				Raw->GetName() ? Raw->GetName() : "?");
 			Add.reset();
 			continue;
@@ -444,7 +454,7 @@ void FApp::FlushPendingMounts()
 	PendingAddPriorities.clear();
 }
 
-void FApp::DetachRuntimeMountedExtensions()
+void FAppBase::DetachRuntimeMountedExtensions()
 {
 	if (RuntimeMounted.empty())
 	{
@@ -480,7 +490,7 @@ void FApp::DetachRuntimeMountedExtensions()
 	}
 }
 
-void FApp::AssertExtensionDepsPresent(EEngineStage Stage) const
+void FAppBase::AssertExtensionDepsPresent(EEngineStage Stage) const
 {
 	const auto StageIndex = static_cast<std::size_t>(Stage);
 	const auto& Deps = ExtensionDeps[StageIndex];
@@ -510,7 +520,7 @@ void FApp::AssertExtensionDepsPresent(EEngineStage Stage) const
 			std::snprintf(
 				Buffer,
 				sizeof(Buffer),
-				"FApp: extension '%s' missing required dependency '%s' for EEngineStage(%d)",
+				"FAppBase: extension '%s' missing required dependency '%s' for EEngineStage(%d)",
 				SelfName ? SelfName : "?",
 				Edge.Type.name(),
 				static_cast<int>(Stage));
@@ -519,7 +529,7 @@ void FApp::AssertExtensionDepsPresent(EEngineStage Stage) const
 	}
 }
 
-void FApp::RebuildStageOrder(EEngineStage Stage)
+void FAppBase::RebuildStageOrder(EEngineStage Stage)
 {
 	AssertExtensionDepsPresent(Stage);
 
@@ -551,7 +561,19 @@ void FApp::RebuildStageOrder(EEngineStage Stage)
 	}
 }
 
-bool FApp::InitRegisteredExtensions()
+void FAppBase::DispatchStageToExtensions(EEngineStage Stage)
+{
+	RebuildStageOrder(Stage);
+	for (IEngineExtension* Extension : StageOrder)
+	{
+		if (Extension)
+		{
+			InvokeStage(*Extension, Stage);
+		}
+	}
+}
+
+bool FAppBase::InitRegisteredExtensions()
 {
 	RebuildStageOrder(EEngineStage::Init);
 
@@ -577,7 +599,7 @@ bool FApp::InitRegisteredExtensions()
 			if (!InvokeStage(*Extension, Stage))
 			{
 				MAHO_CORE_ERROR(
-					"FApp: extension '{}' failed at {}",
+					"FAppBase: extension '{}' failed at {}",
 					Extension->GetName() ? Extension->GetName() : "?",
 					static_cast<int>(Stage));
 				return false;
@@ -587,9 +609,9 @@ bool FApp::InitRegisteredExtensions()
 	return true;
 }
 
-void FApp::AttachRegisteredExtensions()
+void FAppBase::AttachRegisteredExtensions()
 {
-	RebuildStageOrder(EEngineStage::BeginFrame);
+	RebuildStageOrder(EEngineStage::Attach);
 	for (IEngineExtension* Extension : StageOrder)
 	{
 		if (Extension)
@@ -599,7 +621,7 @@ void FApp::AttachRegisteredExtensions()
 	}
 }
 
-void FApp::ShutdownRegisteredExtensions()
+void FAppBase::ShutdownRegisteredExtensions()
 {
 	RebuildStageOrder(EEngineStage::Shutdown);
 	for (IEngineExtension* Extension : StageOrder)
@@ -614,7 +636,7 @@ void FApp::ShutdownRegisteredExtensions()
 	}
 }
 
-bool FApp::Initialize()
+bool FAppBase::Initialize()
 {
 	Configure(Config);
 	FPaths::Initialize(Config);
@@ -641,7 +663,7 @@ bool FApp::Initialize()
 
 	if (!PreInitialize())
 	{
-		MAHO_CORE_ERROR("FApp::PreInitialize failed");
+		MAHO_CORE_ERROR("FAppBase::PreInitialize failed");
 		ClearExtensions();
 		ShutdownAppLogging(*this);
 		return false;
@@ -659,7 +681,7 @@ bool FApp::Initialize()
 
 	if (!PostInitialize())
 	{
-		MAHO_CORE_ERROR("FApp::PostInitialize failed");
+		MAHO_CORE_ERROR("FAppBase::PostInitialize failed");
 		ShutdownRegisteredExtensions();
 		Extensions.clear();
 		ExtensionsByType.clear();
@@ -679,7 +701,7 @@ bool FApp::Initialize()
 	return true;
 }
 
-void FApp::Shutdown()
+void FAppBase::Shutdown()
 {
 	// Runtime mounts: Attach…Detach only — auto-Detach if never explicitly removed.
 	DetachRuntimeMountedExtensions();
@@ -700,7 +722,7 @@ void FApp::Shutdown()
 	bLifecycleStarted = false;
 }
 
-void FApp::UpdateAppState()
+void FAppBase::UpdateAppState()
 {
 	const double NowSeconds = std::chrono::duration<double>(
 		std::chrono::steady_clock::now().time_since_epoch()).count();
@@ -743,41 +765,7 @@ void FApp::UpdateAppState()
 	}
 }
 
-void FApp::Tick()
-{
-	UpdateAppState();
-
-	auto TickGroup = [this](EEngineStage Stage)
-	{
-		for (IEngineExtension* Extension : StageOrder)
-		{
-			if (Extension)
-			{
-				InvokeStage(*Extension, Stage);
-			}
-		}
-	};
-
-	FlushPendingMounts();
-	RebuildStageOrder(EEngineStage::BeginFrame);
-
-	static constexpr EEngineStage Stages[] =
-	{
-		EEngineStage::BeginFrame,
-		EEngineStage::Tick,
-		EEngineStage::EndFrame,
-		EEngineStage::PreRender,
-		EEngineStage::Render,
-		EEngineStage::PostRender,
-	};
-
-	for (EEngineStage Stage : Stages)
-	{
-		TickGroup(Stage);
-	}
-}
-
-void FApp::Run()
+void FAppBase::Run()
 {
 	if (!Initialize())
 	{
@@ -785,14 +773,16 @@ void FApp::Run()
 	}
 
 	AppState = EAppState::Running;
-	MAHO_CORE_INFO("FApp: Game loop start (TickGroups + RenderServer)");
+	MAHO_CORE_INFO("FAppBase: Game loop start (FAppBase::Tick)");
 
 	while (AppState == EAppState::Running)
 	{
+		UpdateAppState();
+		FlushPendingMounts();
 		Tick();
 	}
 
-	MAHO_CORE_INFO("FApp: Game loop end (state={})", static_cast<int>(AppState));
+	MAHO_CORE_INFO("FAppBase: Game loop end (state={})", static_cast<int>(AppState));
 	Shutdown();
 	ShutdownAppLogging(*this);
 	AppState = EAppState::Stopped;

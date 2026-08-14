@@ -60,7 +60,7 @@ public:
  * Variadic depends pack — inherit beside IEngineExtension.
  * Example:
  *   class FFoo : public IEngineExtension, public TDependsPack<
- *     TDependsOn<EEngineStage::BeginFrame, TTypeList<FBar>>,
+ *     TDependsOn<EEngineStage::Tick, TTypeList<FBar>>,
  *     TDependsOn<EEngineStage::Shutdown, TTypeList<FBar>, EExtensionDepStrength::Weak>>
  */
 template <typename... TSlots>
@@ -161,10 +161,10 @@ struct TFindDependsList
 	using Type = typename TFindInDependsPack<typename TResolveDependsPack<T>::Type, StageKey>::Type;
 };
 
-/** Edge Dep → Self when TTo's BeginFrame depends slot contains Dep. */
+/** Edge Dep → Self when TTo's Tick depends slot contains Dep. */
 template <typename TFrom, typename TTo>
 struct THasFrameEdge
-	: TContains<typename TFindDependsList<TTo, EEngineStage::BeginFrame>::Type, TFrom>
+	: TContains<typename TFindDependsList<TTo, EEngineStage::Tick>::Type, TFrom>
 {
 };
 
@@ -197,7 +197,7 @@ private:
 	static constexpr bool bInPath = TContains_v<TPath, TNode>;
 	using FDeps = typename TFilterDepsInNodes<
 		TNodes,
-		typename TFindDependsList<TNode, EEngineStage::BeginFrame>::Type>::Type;
+		typename TFindDependsList<TNode, EEngineStage::Tick>::Type>::Type;
 	using FNewPath = typename TCons<TNode, TPath>::Type;
 
 public:
@@ -232,7 +232,7 @@ constexpr void TAssertFrameAcyclic()
 {
 	static_assert(
 		TIsFrameAcyclic_v<TNodes>,
-		"TDependsPack frame graph has a cycle (Dep -> Self via BeginFrame slot)");
+					"TDependsPack frame graph has a cycle (Dep -> Self via Tick slot)");
 }
 
 } // namespace Maho

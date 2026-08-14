@@ -7,7 +7,7 @@ namespace Maho
 
 /**
  * Unified fatal path (tier A): stderr + Saved/Logs/Fatal.log + flush spdlog if live, then abort.
- * Safe before FApp/Log exist. Do not call from ordinary gameplay — use for contract failures only.
+ * Safe before FAppBase/Log exist. Do not call from ordinary gameplay — use for contract failures only.
  */
 [[noreturn]] MAHO_API void ReportFatal(const char* Message);
 

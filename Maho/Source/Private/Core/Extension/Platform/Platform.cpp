@@ -54,10 +54,10 @@ bool FPlatformSystem::ExecuteStage(EEngineStage Stage)
 			MAHO_CORE_INFO("Platform window headless; auto-exit after {} frames", AutoExitFrameCount);
 		}
 
-		AppRequestExitHandle = OnRequestExit.AddRaw(GApp, &FApp::OnRequestExit);
+		AppRequestExitHandle = OnRequestExit.AddRaw(GApp, &FAppBase::OnRequestExit);
 		return true;
 	}
-	case EEngineStage::BeginFrame:
+	case EEngineStage::Tick:
 	{
 		bool bShouldRequestExit = false;
 

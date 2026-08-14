@@ -299,7 +299,6 @@ bool FResourceSystem::ExecuteStage(EEngineStage Stage)
 			return false;
 		}
 		return true;
-	case EEngineStage::BeginFrame:
 	case EEngineStage::Tick:
 		ProcessReadyIO();
 		TickSavePackage();

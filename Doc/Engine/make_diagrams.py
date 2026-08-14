@@ -78,7 +78,7 @@ def fig_engine_arch():
     bracket(ax, 0.3, 4.2, 15.4, 4.2, "Maho Engine DLL (Maho.dll)    Infrastructure — every game needs these", BLUE, 10)
 
     # Engine core row (top of engine block)
-    box(ax, 0.6, 6.8, 3.0, 1.3, PANEL, BLUE, "FApp\nExtension Framework\nBoot / Stage 管线", INK, 9.5, True)
+    box(ax, 0.6, 6.8, 3.0, 1.3, PANEL, BLUE, "FAppBase\nExtension Framework\nBoot / Stage 管线", INK, 9.5, True)
     box(ax, 3.8, 6.8, 3.0, 1.3, PANEL, GREEN, "FPlatformSystem\nWindow · Input · File\nTimer · Paths", INK, 9.5, True)
     box(ax, 7.0, 6.8, 3.0, 1.3, PANEL, VIOLET, "FRenderSystem\nRender Thread\nFRenderServer · Upload", INK, 9.5, True)
     box(ax, 10.2, 6.8, 3.0, 1.3, PANEL, ORANGE, "FImGuiSystem\nVulkan Backend\nDockSpace · Viewport", INK, 9.5, True)
@@ -118,7 +118,7 @@ def fig_project_arch():
                  fontweight="bold", color=INK, loc="center", pad=10)
 
     # ═══ TOP: Game Thread ═══
-    bracket(ax, 0.3, 8.0, 11.8, 4.2, "GAME THREAD    (主线程, FApp::Tick → ExecuteStage)", GREEN, 10)
+    bracket(ax, 0.3, 8.0, 11.8, 4.2, "GAME THREAD    (主线程, FAppBase::Tick → ExecuteStage)", GREEN, 10)
 
     # Systems row
     box(ax, 0.6, 10.7, 2.5, 1.2, "#16283f", BLUE, "GCSystem\nUObject 池 + GC", INK, 9.5, True)
@@ -171,7 +171,7 @@ def fig_project_arch():
     # ═══ RIGHT: Engine DLL label ═══
     ax.text(12.6, 6.6, "● Maho Engine DLL", color=BLUE, fontsize=9.5, fontweight="bold")
     box(ax, 12.5, 4.5, 3.1, 2.0, "#16283f", BLUE,
-        "FApp · Platform\nRender · ImGui\nRHI  · RDG · Shader\nThreadedServer",
+        "FAppBase · Platform\nRender · ImGui\nRHI  · RDG · Shader\nThreadedServer",
         INK, 9, True)
 
     fig.tight_layout()

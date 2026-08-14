@@ -9,10 +9,10 @@
 namespace Maho
 {
 
-class FApp;
+class FAppBase;
 
 /**
- * Ordering band for FApp RebuildOrder (System before Layer before Overlay).
+ * Ordering band for FAppBase RebuildOrder (System before Layer before Overlay).
  * System = in-engine feature systems; Module (DLL plugins) typically use Overlay/Layer.
  */
 enum class EExtensionPriority : std::uint8_t
@@ -24,7 +24,7 @@ enum class EExtensionPriority : std::uint8_t
 
 /**
  * Engine feature extension.
- * Ordering edges live on TDependsPack; FApp drives all stages via ExecuteStage.
+ * Ordering edges live on TDependsPack; FAppBase drives all stages via ExecuteStage.
  */
 class MAHO_API IEngineExtension
 {
@@ -56,7 +56,7 @@ public:
 	[[nodiscard]] EEngineStage GetCurrentStage() const { return CurrentStage; }
 
 private:
-	friend class FApp;
+	friend class FAppBase;
 
 	void SetPriority(EExtensionPriority InPriority) { Priority = InPriority; }
 	void SetCurrentStage(EEngineStage Stage) { CurrentStage = Stage; }

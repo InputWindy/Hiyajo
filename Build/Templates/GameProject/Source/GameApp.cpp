@@ -3,7 +3,7 @@
 
 #include <memory>
 
-class {{APP_CLASS}} : public Maho::FApp
+class {{APP_CLASS}} : public Maho::FGameApp
 {
 protected:
 	virtual void Configure(Maho::FConfig& OutConfig) override
@@ -23,10 +23,14 @@ protected:
 
 	virtual bool PreInitialize() override
 	{
+		if (!Maho::FGameApp::PreInitialize())
+		{
+			return false;
+		}
+
 		using Maho::EExtensionPriority;
 
 		RegisterExtension<Maho::FPlatformSystem>(EExtensionPriority::System);
-		RegisterExtension<Maho::FRenderSystem>(EExtensionPriority::System);
 		RegisterExtension<Maho::FResourceSystem>(EExtensionPriority::System);
 		RegisterExtension<Maho::FScriptSystem>(EExtensionPriority::Overlay);
 
@@ -45,7 +49,7 @@ protected:
 	}
 };
 
-Maho::FApp* Maho::CreateApplication()
+Maho::FAppBase* Maho::CreateApplication()
 {
 	return new {{APP_CLASS}}();
 }

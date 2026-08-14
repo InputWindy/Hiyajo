@@ -66,24 +66,28 @@ bool FRenderSystem::ExecuteStage(EEngineStage Stage)
 		}
 		return true;
 	}
-	case EEngineStage::BeginFrame:
-		if (GApp && GetImGui().IsInitialized())
-		{
-			WaitBeforeImGuiNewFrame(GApp->GetFrameIndex());
-			GetImGui().BeginFrame();
-		}
-		return true;
-	case EEngineStage::Render:
-		if (GApp)
-		{
-			Render(GApp->GetFrameIndex());
-		}
-		return true;
 	case EEngineStage::Shutdown:
 		TearDown();
 		return true;
 	default:
 		return true;
+	}
+}
+
+void FRenderSystem::BeginFrame()
+{
+	if (GApp && GetImGui().IsInitialized())
+	{
+		WaitBeforeImGuiNewFrame(GApp->GetFrameIndex());
+		GetImGui().BeginFrame();
+	}
+}
+
+void FRenderSystem::RenderFrame()
+{
+	if (GApp)
+	{
+		Render(GApp->GetFrameIndex());
 	}
 }
 

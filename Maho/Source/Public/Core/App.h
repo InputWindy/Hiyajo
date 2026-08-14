@@ -44,14 +44,14 @@ struct FExtensionDepEdgeView
  * Window / RHI / Script / WorkerPool live as IEngineExtension (access via GetExtension<T>).
  * Main-thread TickGroups over a single Extensions list ordered by Priority then depends.
  */
-class MAHO_API FApp
+class MAHO_API FAppBase
 {
 public:
-	FApp();
-	virtual ~FApp();
+	FAppBase();
+	virtual ~FAppBase();
 
-	FApp(const FApp&) = delete;
-	FApp& operator=(const FApp&) = delete;
+	FAppBase(const FAppBase&) = delete;
+	FAppBase& operator=(const FAppBase&) = delete;
 
 	void Run();
 
@@ -80,7 +80,7 @@ public:
 	template <typename T>
 	[[nodiscard]] const T* GetExtension() const
 	{
-		return const_cast<FApp*>(this)->GetExtension<T>();
+		return const_cast<FAppBase*>(this)->GetExtension<T>();
 	}
 
 	/** Exit from window close (ShouldClose) or headless auto-exit. */
@@ -107,9 +107,21 @@ protected:
 		return Ref;
 	}
 
+	/** Register a pre-built extension instance under an explicit type key. */
+	IEngineExtension& RegisterExtensionInstance(
+		std::unique_ptr<IEngineExtension> Extension,
+		std::type_index TypeKey,
+		EExtensionPriority Priority);
+
 	virtual void Configure(FConfig& OutConfig);
 	virtual bool PreInitialize();
 	virtual bool PostInitialize();
+
+	/** Per-frame application hook. The world/render framing is owned by subclasses. */
+	virtual void Tick() = 0;
+
+	/** Dispatch one stage to every registered extension in dependency order. */
+	void DispatchStageToExtensions(EEngineStage Stage);
 
 	void ClearExtensions();
 	void RequestRemoveExtension(IEngineExtension* Extension);
@@ -173,7 +185,6 @@ private:
 	bool Initialize();
 	void Shutdown();
 	void UpdateAppState();
-	void Tick();
 
 	void FlushPendingMounts();
 
@@ -213,8 +224,8 @@ private:
 	std::uint64_t FrameIndex = 0;
 };
 
-MAHO_API extern FApp* GApp;
+MAHO_API extern FAppBase* GApp;
 
-FApp* CreateApplication();
+FAppBase* CreateApplication();
 
 } // namespace Maho

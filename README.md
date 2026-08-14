@@ -12,7 +12,7 @@ Only **infrastructure that every game needs**, regardless of genre or rendering 
 
 | Module | Role | Why it stays |
 |--------|------|-------------|
-| `FApp` + Extension Framework | Application lifecycle, plugin registry | Every game needs boot/shutdown orchestration |
+| `FAppBase` + Extension Framework | Application lifecycle, plugin registry | Every game needs boot/shutdown orchestration |
 | `FPlatformSystem` | Window creation, input, file I/O, timers | Platform abstraction is infrastructure, not game logic |
 | `FRenderSystem` / `FRenderServer` | Render thread orchestration, async GPU upload | Engine must perceive rendering exists (even if empty) |
 | **RHI** (`FRHI*`) | Vulkan backend: resources, queues, command lists | GPU abstraction layer — no game should touch `vulkan.h` |
@@ -203,7 +203,7 @@ Maho/                              # Engine repo root
 ├── Maho/                          # Engine DLL sources
 │   ├── Source/Public/              # Public API
 │   │   ├── Core/
-│   │   │   ├── App.h               # FApp — application lifecycle
+│   │   │   ├── App.h               # FAppBase — application lifecycle
 │   │   │   ├── Engine.h            # FEngine
 │   │   │   ├── Extension/          # IEngineExtension, FLayer, EExtensionPriority
 │   │   │   ├── Server/             # FThreadedServer, TAsyncTransferServer

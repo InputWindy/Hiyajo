@@ -106,7 +106,7 @@ private:
 
 /**
  * Time the enclosing scope under a category on the App-owned FTimer.
- * Example: MAHO_SCOPED_TIMER("Engine", "FApp::Tick");
+ * Example: MAHO_SCOPED_TIMER("Engine", "FAppBase::Tick");
  */
 #define MAHO_SCOPED_TIMER(CategoryName, ScopeName) \
 	::Maho::FScopedTimer MAHO_TIMER_CONCAT(_MahoScopedTimer_, __LINE__)(CategoryName, ScopeName)

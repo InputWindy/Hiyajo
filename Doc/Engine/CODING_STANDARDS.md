@@ -33,7 +33,7 @@ Use Allman for `if` / `for` / `while` / `switch` / functions / classes / namespa
 ## Naming
 
 - `UObject` and subclasses: `U` prefix (`UObject`, `UPackage`, `UResource`, …)
-- Other types: `F` prefix (`FApp`, `FConfig`, `FObjectRef`, `FRHIResourceManager`, …)
+- Other types: `F` prefix (`FAppBase`, `FConfig`, `FObjectRef`, `FRHIResourceManager`, …)
 - Interfaces: `I` prefix (`IRHI`, `IEngineExtension`)
 - Enums: `E` prefix (`ERHIQueueType`, `ERHIResourceType`, `EExtensionPriority`)
 - `bool` members/locals: `b` prefix (`bInitialized`)
@@ -69,7 +69,7 @@ Allowed: unrelated English uses that are not a type-tag API (e.g. log string `"r
 - Pointers/refs: `Type* Ptr`, `Type& Ref` (`*` / `&` with the type)
 - Public headers under `Source/Public` (`Core/`, `Render/`, …) — **no** extra `Public/Maho/` nest
 - Do not abuse `using namespace` in headers
-- Game entry: `#include <Maho.h>` + `#include <EntryPoint.h>`, subclass `Maho::FApp`, implement `CreateApplication()`
+- Game entry: `#include <Maho.h>` + `#include <EntryPoint.h>`, subclass `Maho::FAppBase`, implement `CreateApplication()`
 
 ## Include form
 

@@ -82,49 +82,54 @@ bool FSystemGroup::ExecuteStage(EEngineStage Stage)
 		}
 		return true;
 
-	case EEngineStage::BeginFrame:
-		if (bWorldReady)
-		{
-			OnBeginFrame(World);
-		}
-		return true;
-
-	case EEngineStage::Tick:
-		if (bWorldReady)
-		{
-			OnProcessInput(World);
-
-			float FixedDt = 0.0f;
-			float Dt = 0.0f;
-			if (GApp)
-			{
-				FixedDt = GApp->GetFixedDeltaSeconds();
-				Dt = GApp->GetDeltaSeconds();
-			}
-
-			for (int Step = 0; GApp && Step < GApp->GetFixedStepsRemaining(); ++Step)
-			{
-				OnFixedUpdate(FixedDt, World);
-			}
-			OnUpdate(Dt, World);
-			OnLateUpdate(Dt, World);
-
-			if (IsRootGroup())
-			{
-				World.GetEntityManager().EndFrame();
-			}
-		}
-		return true;
-
-	case EEngineStage::EndFrame:
-		if (bWorldReady)
-		{
-			OnEndFrame(World);
-		}
-		return true;
-
 	default:
 		return true;
+	}
+}
+
+void FSystemGroup::BeginFrame()
+{
+	if (bWorldReady)
+	{
+		OnBeginFrame(World);
+	}
+}
+
+void FSystemGroup::Tick()
+{
+	if (!bWorldReady)
+	{
+		return;
+	}
+
+	OnProcessInput(World);
+
+	float FixedDt = 0.0f;
+	float Dt = 0.0f;
+	if (GApp)
+	{
+		FixedDt = GApp->GetFixedDeltaSeconds();
+		Dt = GApp->GetDeltaSeconds();
+	}
+
+	for (int Step = 0; GApp && Step < GApp->GetFixedStepsRemaining(); ++Step)
+	{
+		OnFixedUpdate(FixedDt, World);
+	}
+	OnUpdate(Dt, World);
+	OnLateUpdate(Dt, World);
+
+	if (IsRootGroup())
+	{
+		World.GetEntityManager().EndFrame();
+	}
+}
+
+void FSystemGroup::EndFrame()
+{
+	if (bWorldReady)
+	{
+		OnEndFrame(World);
 	}
 }
 

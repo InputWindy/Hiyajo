@@ -109,7 +109,7 @@ Editor chrome (`FEditorLayer`, `FEditorUIRegistry`, `FAgentChatClient`) lives in
 - **Law:** game `Source/Editor/CONTRACT.md`
 - Shell owns geometry / DockSpace; registry owns contributions + Catalog separators
 - Temporary Details = `DockPanel` + `bTransient` + `OpenDockPanel` — **not** Modal
-- Access: `TryGetEditorUIRegistry(FApp&)` or `GetExtension<FEditorLayer>()->GetUIRegistry()`
+- Access: `TryGetEditorUIRegistry(FAppBase&)` or `GetExtension<FEditorLayer>()->GetUIRegistry()`
 - Runtime game HUD is **out of scope** (future `FGameUI`)
 
 ---

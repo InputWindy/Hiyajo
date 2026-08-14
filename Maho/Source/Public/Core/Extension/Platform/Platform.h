@@ -19,8 +19,8 @@ MAHO_DECLARE_MULTICAST_DELEGATE(FOnRequestExit);
 /**
  * Built-in platform window / headless clock extension.
  * Sole owner of the main FPlatformWindow. Shutdown after FRenderSystem (TearDown needs the window).
- * BeginFrame: PollEvents / ShouldClose / headless auto-exit (before FRenderSystem ImGui NewFrame).
- * Exit requests Broadcast OnRequestExit (FApp binds in Init).
+ * Tick: PollEvents / ShouldClose / headless auto-exit.
+ * Exit requests Broadcast OnRequestExit (FAppBase binds in Init).
  */
 class MAHO_API FPlatformSystem final
 	: public IEngineExtension

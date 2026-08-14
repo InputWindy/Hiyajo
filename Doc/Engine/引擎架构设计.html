@@ -128,7 +128,7 @@ footer { color: var(--muted); font-size: 13px; padding: 0 36px 40px; }
 <header>
 	<h1>Maho 引擎架构设计</h1>
 	<div class="subtitle">
-		以 <code>FApp</code> 无意识 stage 管线为中枢：
+		以 <code>FAppBase</code> 无意识 stage 管线为中枢：
 		<span class="pill pill-mod">Module = Stage 本体</span>
 		<span class="pill pill-lay">Layer = Post 多播插入</span>
 		· 资源 / GC / 包系统。
@@ -155,8 +155,8 @@ footer { color: var(--muted); font-size: 13px; padding: 0 36px 40px; }
 		<pre class="mermaid">
 flowchart TB
   EP["EntryPoint main"] --> CA["CreateApplication"]
-  CA --> GameApp["FMyGameApp : FApp"]
-  EP --> Run["FApp.Run 唯一生命周期入口"]
+  CA --> GameApp["FMyGameApp : FAppBase"]
+  EP --> Run["FAppBase.Run 唯一生命周期入口"]
   Run --> Boot["Initialize"]
   Run --> Loop["RunMainLoop"]
   Run --> Shut["Shutdown"]
@@ -173,7 +173,7 @@ flowchart TB
 			<thead><tr><th>组件</th><th>职责</th><th>不负责</th></tr></thead>
 			<tbody>
 				<tr>
-					<td><code>FApp</code></td>
+					<td><code>FAppBase</code></td>
 					<td>stage 调度、<code>RegisterModule</code> / <code>GetModule&lt;T&gt;</code>、Layer 寿命与 Post 绑定</td>
 					<td>子系统业务语义；不再持有 Render/GC 等特化成员</td>
 				</tr>
@@ -197,7 +197,7 @@ flowchart TB
 		<div class="note">
 			对外生命周期只暴露 <code>void Run()</code>。<code>Initialize</code> / <code>Shutdown</code> / <code>ExecuteStage</code> 均为 private。
 			游戏通过 <code>Configure</code> / <code>PostInitialize</code> / <code>PreShutdown</code>（protected）与 <code>PushLayer</code> 接入，不 override Tick 虚钩。
-			已删除 <code>FLayerStack</code>：栈语义由 <code>FApp::LayerBindings</code> + Post 绑定顺序承担。
+			已删除 <code>FLayerStack</code>：栈语义由 <code>FAppBase::LayerBindings</code> + Post 绑定顺序承担。
 		</div>
 	</div>
 </section>
@@ -237,7 +237,7 @@ flowchart LR
 		<pre class="mermaid">
 sequenceDiagram
   participant Main as EntryPoint
-  participant App as FApp
+  participant App as FAppBase
   participant Mods as EngineModules
   participant Game as FMyGameApp
   participant Lay as Layers
@@ -264,7 +264,7 @@ sequenceDiagram
 		</pre>
 		<div class="note">
 			<code>EntryPoint</code> 仍只调 <code>App-&gt;Run()</code>，不拆 Initialize/Shutdown。
-			<code>FApp</code> 是空流水线：默认 Module / Layer 由游戏 <code>RegisterModules</code> / <code>PostInitialize</code> 组装（可调用 <code>RegisterEngineModules</code>）。
+			<code>FAppBase</code> 是空流水线：默认 Module / Layer 由游戏 <code>RegisterModules</code> / <code>PostInitialize</code> 组装（可调用 <code>RegisterEngineModules</code>）。
 		</div>
 	</div>
 </section>
@@ -294,7 +294,7 @@ flowchart TB
 				<tr><td><code>FWorkerModule</code></td><td>Resource</td><td><code>WorkerPool::Initialize</code></td><td>—</td></tr>
 			</tbody>
 		</table>
-		<p class="note">Lua 不在 Module DAG：游戏 Push <code>FScriptLayer</code>；<code>FScriptSystem</code> 与 <code>FLog</code> / <code>FConsole</code> / <code>FTimer</code> 同级由 <code>FApp</code> 托管，经 <code>GApp</code> / <code>GetScriptSystem()</code> 访问。默认引擎 Module 用 <code>RegisterEngineModules(*this)</code> 由游戏主动拉取。</p>
+		<p class="note">Lua 不在 Module DAG：游戏 Push <code>FScriptLayer</code>；<code>FScriptSystem</code> 与 <code>FLog</code> / <code>FConsole</code> / <code>FTimer</code> 同级由 <code>FAppBase</code> 托管，经 <code>GApp</code> / <code>GetScriptSystem()</code> 访问。默认引擎 Module 用 <code>RegisterEngineModules(*this)</code> 由游戏主动拉取。</p>
 		<ul>
 			<li>访问：<code>App.GetModule&lt;FRenderSystemModule&gt;()-&gt;GetServer()</code>，无 <code>GetRenderServer</code> 等特化 getter。</li>
 			<li>拓扑并列节点按 <b>注册顺序</b> 出队，保证启动序稳定。</li>
@@ -307,7 +307,7 @@ flowchart TB
 	<div class="body">
 		<pre class="mermaid">
 sequenceDiagram
-  participant App as FApp
+  participant App as FAppBase
   participant Plat as Platform
   participant ImGui as ImGui
   participant GC as GC
@@ -359,7 +359,7 @@ sequenceDiagram
 		<pre class="mermaid">
 sequenceDiagram
   participant Game as FMyGameApp
-  participant App as FApp
+  participant App as FAppBase
   participant L as FWorldLayer
   participant D as PostStageDelegates
 
@@ -389,7 +389,7 @@ sequenceDiagram
 	<div class="body">
 		<pre class="mermaid">
 flowchart TB
-  subgraph Mods["FApp Modules"]
+  subgraph Mods["FAppBase Modules"]
     GCMod["FGCSystemModule"]
     ResMod["FResourceSystemModule"]
   end
@@ -410,7 +410,7 @@ flowchart TB
 		<h3>对象生命周期时序</h3>
 		<pre class="mermaid">
 sequenceDiagram
-  participant App as FApp
+  participant App as FAppBase
   participant GCMod as FGCSystemModule
   participant ResMod as FResourceSystemModule
   participant RM as ResourceManager
@@ -467,7 +467,7 @@ flowchart LR
 		<table>
 			<thead><tr><th>内容</th><th>路径</th></tr></thead>
 			<tbody>
-				<tr><td>FApp 管线</td><td><code>Maho/Source/Public/Maho/Core/Application/App.h</code>、<code>Private/Core/App.cpp</code></td></tr>
+				<tr><td>FAppBase 管线</td><td><code>Maho/Source/Public/Maho/Core/Application/App.h</code>、<code>Private/Core/App.cpp</code></td></tr>
 				<tr><td>IModule / EModuleStage</td><td><code>Maho/Source/Public/Maho/Core/Module.h</code></td></tr>
 				<tr><td>引擎 Modules</td><td><code>Maho/Source/Public/Maho/Core/Modules/</code></td></tr>
 				<tr><td>FLayer / FScriptLayer</td><td><code>Maho/Source/Public/Maho/Core/Layer.h</code>、<code>Maho/Script/ScriptLayer.h</code></td></tr>
