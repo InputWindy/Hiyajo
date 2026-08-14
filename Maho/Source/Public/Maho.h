@@ -28,7 +28,7 @@
 #include <Core/Extension/Platform/Platform.h>
 #include <Core/Extension/Resource/ResourceSystem.h>
 #include <Core/Extension/Script/ScriptSystem.h>
-#include <Core/Extension/World/WorldLayer.h>
+#include <Core/Extension/World/ECS/SystemGroup.h>
 #include <Core/Extension/Platform/PlatformWindow.h>
 #include <Render/RHI/RHI.h>
 #include <Render/RHI/RHIServer.h>

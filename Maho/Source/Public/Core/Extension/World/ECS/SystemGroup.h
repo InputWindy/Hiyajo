@@ -1,7 +1,10 @@
 #pragma once
 
 #include <Core/Misc/Export.h>
+#include <Core/Engine/EngineExtension.h>
+#include <Core/Engine/EngineStage.h>
 #include <Core/Extension/World/ECS/System.h>
+#include <Core/Extension/World/ECS/World.h>
 
 #include <memory>
 #include <string>
@@ -22,16 +25,35 @@ class FEntityCommandBuffer;
  *          ├─ FMovementSystem
  *          └─ FDeathSystem
  *
- * Each group automatically creates Begin/End ECB systems.
- * Execution is depth-first: parent OnUpdate recursively calls children.
+ * The root group doubles as the engine extension: it owns the FWorld (pure data)
+ * and maps EEngineStage to the ISystem lifecycle hooks, recursively driving all
+ * nested groups + systems. Each group automatically creates Begin/End ECB systems.
  */
-class MAHO_API FSystemGroup : public ISystem
+class MAHO_API FSystemGroup : public ISystem, public IEngineExtension
 {
 public:
 	explicit FSystemGroup(const char* InName);
 	virtual ~FSystemGroup();
 
 	const char* GetName() const override { return Name.c_str(); }
+
+	// ── IEngineExtension ───────────────────────────────────────────
+
+	/** Map engine stages to the ISystem lifecycle hooks (drives the whole tree). */
+	bool ExecuteStage(EEngineStage Stage) override;
+
+	// ── World access ───────────────────────────────────────────────
+
+	[[nodiscard]] FWorld& GetWorld() { return World; }
+	[[nodiscard]] const FWorld& GetWorld() const { return World; }
+
+	// ── Project hooks ──────────────────────────────────────────────
+
+	/** Register game systems into the simulation group during Attach. */
+	virtual void RegisterSystems(FSystemGroup& SimGroup) { (void)SimGroup; }
+
+	/** Spawn initial entities (camera, demo actors, etc.) during Attach. */
+	virtual void SpawnInitialEntities(FWorld& World) { (void)World; }
 
 	// ── Multi-stage lifecycle ──────────────────────────────────────
 
@@ -123,6 +145,10 @@ private:
 	}
 
 	std::string Name;
+
+	/** World data owned by the root group (pure data, no tick interface). */
+	FWorld World;
+	bool bWorldReady = false;
 
 	std::vector<ISystem*> Systems;
 	std::vector<FSystemGroup*> Groups;

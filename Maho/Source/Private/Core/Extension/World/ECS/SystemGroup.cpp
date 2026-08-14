@@ -2,6 +2,9 @@
 #include <Core/Extension/World/ECS/EntityCommandBuffer.h>
 #include <Core/Extension/World/ECS/World.h>
 
+#include <Core/App.h>
+#include <Core/Misc/Log.h>
+
 #include <algorithm>
 #include <unordered_map>
 #include <unordered_set>
@@ -38,6 +41,92 @@ FSystemGroup::FSystemGroup(const char* InName)
 }
 
 FSystemGroup::~FSystemGroup() = default;
+
+bool FSystemGroup::ExecuteStage(EEngineStage Stage)
+{
+	switch (Stage)
+	{
+	case EEngineStage::Attach:
+		if (!bWorldReady)
+		{
+			// Build the system tree: Initialization → Simulation.
+			auto* SimGroup = AddGroup<FSimulationSystemGroup>();
+			RegisterSystems(*SimGroup);
+			SpawnInitialEntities(World);
+
+			OnCreate(World);
+			bWorldReady = true;
+			MAHO_INFO("FSystemGroup: ECS world ready (\"{}\")", Name);
+		}
+		return true;
+
+	case EEngineStage::Detach:
+	case EEngineStage::Shutdown:
+		if (bWorldReady)
+		{
+			OnDestroy(World);
+			bWorldReady = false;
+		}
+		return true;
+
+	case EEngineStage::BeginFrame:
+		if (bWorldReady)
+		{
+			OnBeginFrame(World);
+		}
+		return true;
+
+	case EEngineStage::ProcessInput:
+		// No ISystem hook for ProcessInput.
+		return true;
+
+	case EEngineStage::FixedUpdate:
+		if (bWorldReady && GApp)
+		{
+			OnFixedUpdate(GApp->GetFixedDeltaSeconds(), World);
+		}
+		return true;
+
+	case EEngineStage::Update:
+		if (bWorldReady && GApp)
+		{
+			OnUpdate(GApp->GetDeltaSeconds(), World);
+			World.GetEntityManager().EndFrame();
+		}
+		return true;
+
+	case EEngineStage::LateUpdate:
+		if (bWorldReady && GApp)
+		{
+			OnLateUpdate(GApp->GetDeltaSeconds(), World);
+		}
+		return true;
+
+	case EEngineStage::EndFrame:
+		if (bWorldReady)
+		{
+			OnEndFrame(World);
+		}
+		return true;
+
+	case EEngineStage::PreRender:
+		if (bWorldReady)
+		{
+			OnPreRender(World);
+		}
+		return true;
+
+	case EEngineStage::PostRender:
+		if (bWorldReady)
+		{
+			OnPostRender(World);
+		}
+		return true;
+
+	default:
+		return true;
+	}
+}
 
 // --- FSystemGroup lifecycle ---
 
