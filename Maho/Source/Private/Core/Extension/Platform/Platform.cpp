@@ -1,6 +1,6 @@
 ﻿#include <Core/Extension/Platform/Platform.h>
 
-#include <Core/App.h>
+#include <Core/EngineBase.h>
 #include <Core/Misc/Console.h>
 #include <Core/Misc/Log.h>
 
@@ -25,12 +25,12 @@ bool FPlatformSystem::ExecuteStage(EEngineStage Stage)
 	{
 	case EEngineStage::Init:
 	{
-		if (!GApp)
+		if (!GEngine)
 		{
-			MAHO_CORE_ERROR("FPlatformSystem: GApp missing at Init");
+			MAHO_CORE_ERROR("FPlatformSystem: GEngine missing at Init");
 			return false;
 		}
-		const FConfig& Config = GApp->GetConfig();
+		const FConfig& Config = GEngine->GetConfig();
 		FPlatformWindowDesc PlatformDesc;
 		PlatformDesc.Platform = Config.Platform;
 		PlatformDesc.Title = Config.ApplicationName.empty() ? "Maho" : Config.ApplicationName;
@@ -54,7 +54,7 @@ bool FPlatformSystem::ExecuteStage(EEngineStage Stage)
 			MAHO_CORE_INFO("Platform window headless; auto-exit after {} frames", AutoExitFrameCount);
 		}
 
-		AppRequestExitHandle = OnRequestExit.AddRaw(GApp, &FAppBase::OnRequestExit);
+		AppRequestExitHandle = OnRequestExit.AddRaw(GEngine, &FEngineBase::OnRequestExit);
 		return true;
 	}
 	case EEngineStage::Tick:
@@ -70,7 +70,7 @@ bool FPlatformSystem::ExecuteStage(EEngineStage Stage)
 			}
 		}
 
-		if (bAutoExitAfterFrames && GApp && GApp->GetFrameIndex() >= AutoExitFrameCount)
+		if (bAutoExitAfterFrames && GEngine && GEngine->GetFrameIndex() >= AutoExitFrameCount)
 		{
 			bShouldRequestExit = true;
 		}

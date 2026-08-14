@@ -4,13 +4,13 @@
  * Platform entry point for Maho game executables.
  * Include this header in exactly one .cpp of the game project.
  *
- * FAppBase ctor assigns Maho::GApp. MAHO_* / CVar / Timer resolve through GApp.
+ * FEngineBase ctor assigns Maho::GEngine. MAHO_* / CVar / Timer resolve through GEngine.
  *
  * On Windows the game is typically linked as a GUI app (WIN32_EXECUTABLE) so no
  * console black box appears; MAHO_LOG lines go to the editor Output Log instead.
  */
 
-#include <Core/App.h>
+#include <Core/EngineBase.h>
 #include <Core/Misc/Fatal.h>
 
 #include <cstdio>
@@ -27,13 +27,13 @@ int MahoMain(int Argc, char** Argv)
 
 	Maho::InstallFatalHandlers();
 
-	Maho::FAppBase* App = nullptr;
+	Maho::FEngineBase* App = nullptr;
 	try
 	{
-		App = Maho::CreateApplication();
+		App = Maho::CreateEngine();
 		if (!App)
 		{
-			Maho::ReportFatal("CreateApplication returned null");
+			Maho::ReportFatal("CreateEngine returned null");
 		}
 
 		App->Run();

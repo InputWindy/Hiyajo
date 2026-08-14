@@ -3,7 +3,7 @@
 #define SOL_ALL_SAFETIES_ON 1
 #include <sol/sol.hpp>
 
-#include <Core/App.h>
+#include <Core/EngineBase.h>
 #include <Core/Misc/Console.h>
 #include <Core/Misc/Log.h>
 
@@ -99,12 +99,12 @@ bool FScriptSystem::ExecuteStage(EEngineStage Stage)
 	{
 	case EEngineStage::Init:
 	{
-		if (!GApp)
+		if (!GEngine)
 		{
-			MAHO_CORE_ERROR("FScriptSystem: GApp missing at Init");
+			MAHO_CORE_ERROR("FScriptSystem: GEngine missing at Init");
 			return false;
 		}
-		const std::string& ScriptsDir = GApp->GetConfig().ProjectScriptsDir;
+		const std::string& ScriptsDir = GEngine->GetConfig().ProjectScriptsDir;
 		if (!InitializeLua(ScriptsDir.empty() ? "Scripts" : ScriptsDir))
 		{
 			MAHO_CORE_ERROR("FScriptSystem: InitializeLua failed");
@@ -128,13 +128,13 @@ bool FScriptSystem::ExecuteStage(EEngineStage Stage)
 		return true;
 	}
 	case EEngineStage::Tick:
-		if (GApp)
+		if (GEngine)
 		{
-			for (int Step = 0; Step < GApp->GetFixedStepsRemaining(); ++Step)
+			for (int Step = 0; Step < GEngine->GetFixedStepsRemaining(); ++Step)
 			{
-				(void)Call("OnFixedUpdate", GApp->GetFixedDeltaSeconds());
+				(void)Call("OnFixedUpdate", GEngine->GetFixedDeltaSeconds());
 			}
-			(void)Call("OnUpdate", GApp->GetDeltaSeconds());
+			(void)Call("OnUpdate", GEngine->GetDeltaSeconds());
 		}
 		return true;
 	case EEngineStage::Shutdown:

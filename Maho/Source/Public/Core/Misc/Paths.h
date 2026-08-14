@@ -31,7 +31,7 @@ struct FPathMount
  *   /Game/Maps/Demo.Demo             → same disk file as /Game/Maps/Demo
  *   UResource'/Game/Maps/Demo.Demo'  → class-qualified soft ref (parse-only)
  *
- * Call Initialize after FAppBase::Configure. Default mounts: /Game, /Engine.
+ * Call Initialize after FEngineBase::Configure. Default mounts: /Game, /Engine.
  */
 class MAHO_API FPaths
 {

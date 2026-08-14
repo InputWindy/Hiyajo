@@ -1,7 +1,7 @@
 ﻿#include <Core/Extension/Resource/ResourceIO.h>
 #include <Core/Extension/Resource/ResourceServer.h>
 
-#include <Core/App.h>
+#include <Core/EngineBase.h>
 #include <Core/Misc/Json.h>
 #include <Core/Misc/Log.h>
 #include <Core/Misc/Paths.h>
@@ -896,8 +896,8 @@ namespace Detail
 
 FResourceSystem* GetResourceSystem()
 {
-	if (!GApp) return nullptr;
-	return GApp->GetExtension<FResourceSystem>();
+	if (!GEngine) return nullptr;
+	return GEngine->GetExtension<FResourceSystem>();
 }
 
 } // namespace Detail

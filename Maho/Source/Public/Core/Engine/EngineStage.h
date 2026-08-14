@@ -8,7 +8,7 @@ namespace Maho
 /**
  * Unified lifecycle stages for IEngineExtension.
  * Boot: PreInit → Init → PostInit → Attach.
- * Per-frame marker: Tick (FAppBase::Tick()).
+ * Per-frame marker: Tick (FEngineBase::Tick()).
  * Exit / unmount: PrepareExit → Detach → Shutdown.
  *
  * Game-world sub-stages (ProcessInput / FixedUpdate / Update / LateUpdate)

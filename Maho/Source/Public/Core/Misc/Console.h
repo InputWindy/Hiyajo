@@ -11,7 +11,7 @@ namespace Maho
 
 /**
  * CVar registry (UE IConsoleManager subset). Process-wide variable storage;
- * FAppBase owns a facade — FConsole::Get() resolves via GApp.
+ * FEngineBase owns a facade — FConsole::Get() resolves via GEngine.
  *
  * Cross-module string access:
  *   FConsole::Get().GetInt("maho.Window.Width");
@@ -26,7 +26,7 @@ public:
 	FConsole& operator=(const FConsole&) = delete;
 
 	/**
-	 * App-owned manager when GApp is set; otherwise a pre-App fallback
+	 * App-owned manager when GEngine is set; otherwise a pre-App fallback
 	 * (static TAutoConsoleVariable registration before main).
 	 */
 	[[nodiscard]] static FConsole& Get();

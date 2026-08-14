@@ -1,6 +1,6 @@
 ﻿#include <Core/Misc/Console.h>
 
-#include <Core/App.h>
+#include <Core/EngineBase.h>
 #include <Core/Misc/ConfigFile.h>
 #include <Core/Engine/Engine.h>
 #include <Core/Misc/Log.h>
@@ -471,9 +471,9 @@ bool SetByNameFromString(const char* Name, const char* Value, EConsoleVariableSe
 
 FConsole& FConsole::Get()
 {
-	if (GApp)
+	if (GEngine)
 	{
-		return GApp->GetConsole();
+		return GEngine->GetConsole();
 	}
 	static FConsole PreAppFallback;
 	return PreAppFallback;

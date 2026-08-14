@@ -1,6 +1,6 @@
 #include <Core/Misc/Fatal.h>
 
-#include <Core/App.h>
+#include <Core/EngineBase.h>
 #include <Core/Misc/Log.h>
 
 #include <chrono>
@@ -65,12 +65,12 @@ void AppendFatalLogFile(const char* Message)
 
 void LogCriticalIfLive(const char* Message)
 {
-	if (!GApp)
+	if (!GEngine)
 	{
 		return;
 	}
 
-	FLog& Log = GApp->GetLog();
+	FLog& Log = GEngine->GetLog();
 	if (!Log.IsInitialized())
 	{
 		return;

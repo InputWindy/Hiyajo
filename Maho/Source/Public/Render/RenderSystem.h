@@ -36,7 +36,7 @@ struct FImGuiDrawDataRing;
  * Render extension + render thread worker.
  *
  * Game thread interacts with this class through the IEngineExtension stage
- * interface (Init / Shutdown) plus the FGameApp-driven BeginFrame / RenderFrame
+ * interface (Init / Shutdown) plus the FGameEngine-driven BeginFrame / RenderFrame
  * frame methods. It also owns the MahoRender worker thread (FThreadedServer)
  * which builds and executes the per-frame FRDGBuilder graph, dispatching
  * registered IRenderFeatures.
@@ -60,7 +60,7 @@ public:
 	[[nodiscard]] const char* GetName() const override { return "Render"; }
 	bool ExecuteStage(EEngineStage Stage) override;
 
-	// ── Render world frame (driven by FGameApp) ──
+	// ── Render world frame (driven by FGameEngine) ──
 	void BeginFrame();
 	void RenderFrame();
 

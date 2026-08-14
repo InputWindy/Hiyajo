@@ -1,6 +1,6 @@
 #include <Core/Misc/Timer.h>
 
-#include <Core/App.h>
+#include <Core/EngineBase.h>
 
 #include <sstream>
 #include <utility>
@@ -29,12 +29,12 @@ std::string FTimerDataPackage::Serialize() const
 
 FTimer* FTimer::TryGet()
 {
-	return GApp ? &GApp->GetTimer() : nullptr;
+	return GEngine ? &GEngine->GetTimer() : nullptr;
 }
 
 FTimer& FTimer::Get()
 {
-	return GApp->GetTimer();
+	return GEngine->GetTimer();
 }
 
 void FTimer::Record(const char* CategoryName, const char* ScopeName, double ElapsedMilliseconds)

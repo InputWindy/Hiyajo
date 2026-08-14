@@ -2,7 +2,7 @@
 #include <Core/Extension/World/ECS/EntityCommandBuffer.h>
 #include <Core/Extension/World/ECS/World.h>
 
-#include <Core/App.h>
+#include <Core/EngineBase.h>
 #include <Core/Misc/Log.h>
 
 #include <algorithm>
@@ -106,13 +106,13 @@ void FSystemGroup::Tick()
 
 	float FixedDt = 0.0f;
 	float Dt = 0.0f;
-	if (GApp)
+	if (GEngine)
 	{
-		FixedDt = GApp->GetFixedDeltaSeconds();
-		Dt = GApp->GetDeltaSeconds();
+		FixedDt = GEngine->GetFixedDeltaSeconds();
+		Dt = GEngine->GetDeltaSeconds();
 	}
 
-	for (int Step = 0; GApp && Step < GApp->GetFixedStepsRemaining(); ++Step)
+	for (int Step = 0; GEngine && Step < GEngine->GetFixedStepsRemaining(); ++Step)
 	{
 		OnFixedUpdate(FixedDt, World);
 	}

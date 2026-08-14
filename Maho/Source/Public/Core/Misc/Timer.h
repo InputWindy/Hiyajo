@@ -43,7 +43,7 @@ struct MAHO_API FTimerDataPackage
 
 /**
  * App-owned multi-category timer.
- * MAHO_SCOPED_TIMER resolves via GApp->GetTimer().
+ * MAHO_SCOPED_TIMER resolves via GEngine->GetTimer().
  */
 class MAHO_API FTimer
 {
@@ -106,7 +106,7 @@ private:
 
 /**
  * Time the enclosing scope under a category on the App-owned FTimer.
- * Example: MAHO_SCOPED_TIMER("Engine", "FAppBase::Tick");
+ * Example: MAHO_SCOPED_TIMER("Engine", "FEngineBase::Tick");
  */
 #define MAHO_SCOPED_TIMER(CategoryName, ScopeName) \
 	::Maho::FScopedTimer MAHO_TIMER_CONCAT(_MahoScopedTimer_, __LINE__)(CategoryName, ScopeName)

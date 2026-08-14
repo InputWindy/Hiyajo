@@ -1,4 +1,4 @@
-#include <Core/Engine/GameApp.h>
+#include <Core/Engine/GameEngine.h>
 
 #include <Core/Misc/Log.h>
 
@@ -8,14 +8,14 @@
 namespace Maho
 {
 
-bool FGameApp::PreInitialize()
+bool FGameEngine::PreInitialize()
 {
 	RegisterExtension<FRenderSystem>(EExtensionPriority::System);
 
 	std::unique_ptr<FSystemGroup> World(CreateWorld());
 	if (!World)
 	{
-		MAHO_CORE_ERROR("FGameApp: CreateWorld() returned null");
+		MAHO_CORE_ERROR("FGameEngine: CreateWorld() returned null");
 		return false;
 	}
 
@@ -27,7 +27,7 @@ bool FGameApp::PreInitialize()
 	return true;
 }
 
-void FGameApp::Tick()
+void FGameEngine::Tick()
 {
 	FRenderSystem* Render = GetExtension<FRenderSystem>();
 	FSystemGroup* World = GetExtension<FSystemGroup>();

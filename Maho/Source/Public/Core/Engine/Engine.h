@@ -9,7 +9,7 @@ namespace Maho
 {
 
 /**
- * App / module configuration owned by FAppBase (not a separate FEngine instance).
+ * App / module configuration owned by FEngineBase (not a separate FEngine instance).
  * Paths may be relative until FPaths::Initialize absolutizes them from project/engine roots.
  */
 struct FConfig

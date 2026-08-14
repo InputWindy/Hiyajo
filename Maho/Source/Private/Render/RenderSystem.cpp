@@ -2,7 +2,7 @@
 #include <Render/RenderCommand.h>
 #include <Render/RDG/RDGBuilder.h>
 
-#include <Core/App.h>
+#include <Core/EngineBase.h>
 #include <Core/Misc/Console.h>
 #include <Core/Misc/Log.h>
 #include "Render/UI/ImGuiDrawDataRing.h"
@@ -36,7 +36,7 @@ namespace Detail
 
 FRenderSystem* GetRenderSystem()
 {
-	return GApp ? GApp->GetExtension<FRenderSystem>() : nullptr;
+	return GEngine ? GEngine->GetExtension<FRenderSystem>() : nullptr;
 }
 
 } // namespace Detail
@@ -47,19 +47,19 @@ bool FRenderSystem::ExecuteStage(EEngineStage Stage)
 	{
 	case EEngineStage::Init:
 	{
-		if (!GApp)
+		if (!GEngine)
 		{
-			MAHO_CORE_ERROR("FRenderSystem: GApp missing at Init");
+			MAHO_CORE_ERROR("FRenderSystem: GEngine missing at Init");
 			return false;
 		}
-		FPlatformSystem* Platform = GApp->GetExtension<FPlatformSystem>();
+		FPlatformSystem* Platform = GEngine->GetExtension<FPlatformSystem>();
 		FPlatformWindow* Window = Platform ? Platform->GetWindow() : nullptr;
 		if (!Window)
 		{
 			MAHO_CORE_ERROR("FRenderSystem: no platform window at Init");
 			return false;
 		}
-		if (!Boot(*Window, GApp->GetConfig()))
+		if (!Boot(*Window, GEngine->GetConfig()))
 		{
 			MAHO_CORE_ERROR("FRenderSystem: RenderServer.Boot failed");
 			return false;
@@ -76,18 +76,18 @@ bool FRenderSystem::ExecuteStage(EEngineStage Stage)
 
 void FRenderSystem::BeginFrame()
 {
-	if (GApp && GetImGui().IsInitialized())
+	if (GEngine && GetImGui().IsInitialized())
 	{
-		WaitBeforeImGuiNewFrame(GApp->GetFrameIndex());
+		WaitBeforeImGuiNewFrame(GEngine->GetFrameIndex());
 		GetImGui().BeginFrame();
 	}
 }
 
 void FRenderSystem::RenderFrame()
 {
-	if (GApp)
+	if (GEngine)
 	{
-		Render(GApp->GetFrameIndex());
+		Render(GEngine->GetFrameIndex());
 	}
 }
 

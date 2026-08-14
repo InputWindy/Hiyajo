@@ -46,7 +46,7 @@ struct FCapturedLogLine
 };
 
 /**
- * App-owned spdlog facade. MAHO_* macros resolve via GApp->GetLog().
+ * App-owned spdlog facade. MAHO_* macros resolve via GEngine->GetLog().
  */
 class MAHO_API FLog
 {
@@ -72,7 +72,7 @@ public:
 	 */
 	void DrainCapturedLines(std::vector<FCapturedLogLine>& Out);
 
-	/** Macro helpers — forward to GApp->GetLog(). */
+	/** Macro helpers — forward to GEngine->GetLog(). */
 	[[nodiscard]] static std::shared_ptr<spdlog::logger>& GetActiveCoreLogger();
 	[[nodiscard]] static std::shared_ptr<spdlog::logger>& GetActiveClientLogger();
 

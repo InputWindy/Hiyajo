@@ -44,14 +44,14 @@ struct FExtensionDepEdgeView
  * Window / RHI / Script / WorkerPool live as IEngineExtension (access via GetExtension<T>).
  * Main-thread TickGroups over a single Extensions list ordered by Priority then depends.
  */
-class MAHO_API FAppBase
+class MAHO_API FEngineBase
 {
 public:
-	FAppBase();
-	virtual ~FAppBase();
+	FEngineBase();
+	virtual ~FEngineBase();
 
-	FAppBase(const FAppBase&) = delete;
-	FAppBase& operator=(const FAppBase&) = delete;
+	FEngineBase(const FEngineBase&) = delete;
+	FEngineBase& operator=(const FEngineBase&) = delete;
 
 	void Run();
 
@@ -80,7 +80,7 @@ public:
 	template <typename T>
 	[[nodiscard]] const T* GetExtension() const
 	{
-		return const_cast<FAppBase*>(this)->GetExtension<T>();
+		return const_cast<FEngineBase*>(this)->GetExtension<T>();
 	}
 
 	/** Exit from window close (ShouldClose) or headless auto-exit. */
@@ -224,8 +224,8 @@ private:
 	std::uint64_t FrameIndex = 0;
 };
 
-MAHO_API extern FAppBase* GApp;
+MAHO_API extern FEngineBase* GEngine;
 
-FAppBase* CreateApplication();
+FEngineBase* CreateEngine();
 
 } // namespace Maho

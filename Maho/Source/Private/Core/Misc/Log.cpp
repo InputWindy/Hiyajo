@@ -1,6 +1,6 @@
 ﻿#include <Core/Misc/Log.h>
 
-#include <Core/App.h>
+#include <Core/EngineBase.h>
 #include <Core/Misc/Console.h>
 
 #include <algorithm>
@@ -219,20 +219,20 @@ void FLog::DrainCapturedLines(std::vector<FCapturedLogLine>& Out)
 
 std::shared_ptr<spdlog::logger>& FLog::GetActiveCoreLogger()
 {
-	FLog& Log = GApp->GetLog();
+	FLog& Log = GEngine->GetLog();
 	if (!Log.CoreLogger)
 	{
-		throw std::runtime_error("FLog: core logger not initialized (FAppBase::Initialize)");
+		throw std::runtime_error("FLog: core logger not initialized (FEngineBase::Initialize)");
 	}
 	return Log.CoreLogger;
 }
 
 std::shared_ptr<spdlog::logger>& FLog::GetActiveClientLogger()
 {
-	FLog& Log = GApp->GetLog();
+	FLog& Log = GEngine->GetLog();
 	if (!Log.ClientLogger)
 	{
-		throw std::runtime_error("FLog: client logger not initialized (FAppBase::Initialize)");
+		throw std::runtime_error("FLog: client logger not initialized (FEngineBase::Initialize)");
 	}
 	return Log.ClientLogger;
 }
