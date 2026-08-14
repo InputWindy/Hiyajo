@@ -764,10 +764,7 @@ void FApp::Tick()
 	static constexpr EEngineStage Stages[] =
 	{
 		EEngineStage::BeginFrame,
-		EEngineStage::ProcessInput,
-		EEngineStage::FixedUpdate,
-		EEngineStage::Update,
-		EEngineStage::LateUpdate,
+		EEngineStage::Tick,
 		EEngineStage::EndFrame,
 		EEngineStage::PreRender,
 		EEngineStage::Render,
@@ -776,14 +773,6 @@ void FApp::Tick()
 
 	for (EEngineStage Stage : Stages)
 	{
-		if (Stage == EEngineStage::FixedUpdate)
-		{
-			for (int Step = 0; Step < FixedStepsRemaining; ++Step)
-			{
-				TickGroup(Stage);
-			}
-			continue;
-		}
 		TickGroup(Stage);
 	}
 }

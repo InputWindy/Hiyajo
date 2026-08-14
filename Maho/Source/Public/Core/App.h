@@ -65,6 +65,7 @@ public:
 	[[nodiscard]] std::uint64_t GetFrameIndex() const { return FrameIndex; }
 	[[nodiscard]] float GetDeltaSeconds() const { return DeltaSeconds; }
 	[[nodiscard]] float GetFixedDeltaSeconds() const { return FixedDeltaSeconds; }
+	[[nodiscard]] int GetFixedStepsRemaining() const { return FixedStepsRemaining; }
 
 	[[nodiscard]] EAppState GetState() const { return AppState; }
 

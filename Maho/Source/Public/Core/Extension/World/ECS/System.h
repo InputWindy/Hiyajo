@@ -12,11 +12,11 @@ class FWorld;
 /**
  * ECS System base.
  *
- * A system responds to engine stages through a single hook:
- *   virtual bool ExecuteStage(EEngineStage Stage, float DeltaTime, FWorld& World)
- *
- * The owning FSystemGroup passes the FWorld reference and the stage DeltaTime
- * as parameters — systems hold no world pointer and perform no global lookups.
+ * A system reacts to the game world's fine-grained sub-stages through
+ * OnCreate / OnDestroy / OnBeginFrame / OnProcessInput / OnFixedUpdate /
+ * OnUpdate / OnLateUpdate / OnEndFrame hooks. The owning FSystemGroup passes
+ * the FWorld reference (and DeltaTime where relevant) as parameters — systems
+ * hold no world pointer and perform no global lookups.
  */
 class MAHO_API ISystem
 {
@@ -25,17 +25,14 @@ public:
 
 	[[nodiscard]] virtual const char* GetName() const = 0;
 
-	/**
-	 * Drive one engine stage. DeltaTime is the frame delta for Update/LateUpdate
-	 * and the fixed delta for FixedUpdate (0 otherwise). World is the ECS world.
-	 */
-	virtual bool ExecuteStage(EEngineStage Stage, float DeltaTime, FWorld& World)
-	{
-		(void)Stage;
-		(void)DeltaTime;
-		(void)World;
-		return true;
-	}
+	virtual void OnCreate(FWorld& World) { (void)World; }
+	virtual void OnDestroy(FWorld& World) { (void)World; }
+	virtual void OnBeginFrame(FWorld& World) { (void)World; }
+	virtual void OnProcessInput(FWorld& World) { (void)World; }
+	virtual void OnFixedUpdate(float DeltaTime, FWorld& World) { (void)DeltaTime; (void)World; }
+	virtual void OnUpdate(float DeltaTime, FWorld& World) { (void)DeltaTime; (void)World; }
+	virtual void OnLateUpdate(float DeltaTime, FWorld& World) { (void)DeltaTime; (void)World; }
+	virtual void OnEndFrame(FWorld& World) { (void)World; }
 };
 
 /**

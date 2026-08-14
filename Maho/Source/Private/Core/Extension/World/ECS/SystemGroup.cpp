@@ -20,14 +20,10 @@ FECBSystem::FECBSystem(FEntityCommandBuffer& InECB, const char* InName)
 {
 }
 
-bool FECBSystem::ExecuteStage(EEngineStage Stage, float DeltaTime, FWorld& World)
+void FECBSystem::OnUpdate(float DeltaTime, FWorld& World)
 {
 	(void)DeltaTime;
-	if (Stage == EEngineStage::Update)
-	{
-		ECB.Playback(World.GetEntityManager());
-	}
-	return true;
+	ECB.Playback(World.GetEntityManager());
 }
 
 // --- FSystemGroup ---
@@ -67,7 +63,7 @@ bool FSystemGroup::ExecuteStage(EEngineStage Stage)
 				SpawnInitialEntities(World);
 			}
 
-			ExecuteStage(Stage, 0.0f, World);
+			OnCreate(World);
 
 			bWorldReady = true;
 			if (IsRootGroup())
@@ -81,48 +77,55 @@ bool FSystemGroup::ExecuteStage(EEngineStage Stage)
 	case EEngineStage::Shutdown:
 		if (bWorldReady)
 		{
-			ExecuteStage(Stage, 0.0f, World);
+			OnDestroy(World);
 			bWorldReady = false;
 		}
 		return true;
 
-	default:
+	case EEngineStage::BeginFrame:
 		if (bWorldReady)
 		{
+			OnBeginFrame(World);
+		}
+		return true;
+
+	case EEngineStage::Tick:
+		if (bWorldReady)
+		{
+			OnProcessInput(World);
+
+			float FixedDt = 0.0f;
 			float Dt = 0.0f;
 			if (GApp)
 			{
-				if (Stage == EEngineStage::FixedUpdate)
-				{
-					Dt = GApp->GetFixedDeltaSeconds();
-				}
-				else if (Stage == EEngineStage::Update || Stage == EEngineStage::LateUpdate)
-				{
-					Dt = GApp->GetDeltaSeconds();
-				}
+				FixedDt = GApp->GetFixedDeltaSeconds();
+				Dt = GApp->GetDeltaSeconds();
 			}
 
-			ExecuteStage(Stage, Dt, World);
+			for (int Step = 0; GApp && Step < GApp->GetFixedStepsRemaining(); ++Step)
+			{
+				OnFixedUpdate(FixedDt, World);
+			}
+			OnUpdate(Dt, World);
+			OnLateUpdate(Dt, World);
 
-			if (Stage == EEngineStage::Update && IsRootGroup())
+			if (IsRootGroup())
 			{
 				World.GetEntityManager().EndFrame();
 			}
 		}
 		return true;
-	}
-}
 
-bool FSystemGroup::ExecuteStage(EEngineStage Stage, float DeltaTime, FWorld& World)
-{
-	for (ISystem* Sys : Systems)
-	{
-		if (Sys)
+	case EEngineStage::EndFrame:
+		if (bWorldReady)
 		{
-			Sys->ExecuteStage(Stage, DeltaTime, World);
+			OnEndFrame(World);
 		}
+		return true;
+
+	default:
+		return true;
 	}
-	return true;
 }
 
 void FSystemGroup::InsertBeforeEnd(ISystem* InSystem)

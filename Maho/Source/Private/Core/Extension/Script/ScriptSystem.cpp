@@ -127,16 +127,14 @@ bool FScriptSystem::ExecuteStage(EEngineStage Stage)
 		}
 		return true;
 	}
-	case EEngineStage::Update:
+	case EEngineStage::Tick:
 		if (GApp)
 		{
+			for (int Step = 0; Step < GApp->GetFixedStepsRemaining(); ++Step)
+			{
+				(void)Call("OnFixedUpdate", GApp->GetFixedDeltaSeconds());
+			}
 			(void)Call("OnUpdate", GApp->GetDeltaSeconds());
-		}
-		return true;
-	case EEngineStage::FixedUpdate:
-		if (GApp)
-		{
-			(void)Call("OnFixedUpdate", GApp->GetFixedDeltaSeconds());
 		}
 		return true;
 	case EEngineStage::Shutdown:

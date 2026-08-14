@@ -6,10 +6,13 @@ namespace Maho
 {
 
 /**
- * Unified lifecycle + per-frame stages for IEngineExtension.
+ * Unified lifecycle + coarse per-frame stages for IEngineExtension.
  * Boot: PreInit → Init → PostInit → Attach.
- * Tick: BeginFrame … PostRender.
+ * Tick: BeginFrame → Tick → EndFrame → PreRender → Render → PostRender.
  * Exit / unmount: PrepareExit → Detach → Shutdown.
+ *
+ * Game-world sub-stages (ProcessInput / FixedUpdate / Update / LateUpdate)
+ * are not engine stages — they are ISystem hooks driven by FSystemGroup::Tick.
  */
 enum class EEngineStage : std::uint8_t
 {
@@ -18,10 +21,7 @@ enum class EEngineStage : std::uint8_t
 	PostInit,
 	Attach,
 	BeginFrame,
-	ProcessInput,
-	FixedUpdate,
-	Update,
-	LateUpdate,
+	Tick,
 	EndFrame,
 	PreRender,
 	Render,

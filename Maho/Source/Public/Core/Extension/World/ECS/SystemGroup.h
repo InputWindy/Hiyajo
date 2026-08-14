@@ -43,7 +43,93 @@ public:
 	bool ExecuteStage(EEngineStage Stage) override;
 
 	// ── ISystem dispatch (parent group drives children) ────────────
-	bool ExecuteStage(EEngineStage Stage, float DeltaTime, FWorld& World) override;
+	void OnCreate(FWorld& InWorld) override
+	{
+		for (ISystem* S : Systems)
+		{
+			if (S)
+			{
+				S->OnCreate(InWorld);
+			}
+		}
+	}
+
+	void OnDestroy(FWorld& InWorld) override
+	{
+		for (ISystem* S : Systems)
+		{
+			if (S)
+			{
+				S->OnDestroy(InWorld);
+			}
+		}
+	}
+
+	void OnBeginFrame(FWorld& InWorld) override
+	{
+		for (ISystem* S : Systems)
+		{
+			if (S)
+			{
+				S->OnBeginFrame(InWorld);
+			}
+		}
+	}
+
+	void OnProcessInput(FWorld& InWorld) override
+	{
+		for (ISystem* S : Systems)
+		{
+			if (S)
+			{
+				S->OnProcessInput(InWorld);
+			}
+		}
+	}
+
+	void OnFixedUpdate(float DeltaTime, FWorld& InWorld) override
+	{
+		for (ISystem* S : Systems)
+		{
+			if (S)
+			{
+				S->OnFixedUpdate(DeltaTime, InWorld);
+			}
+		}
+	}
+
+	void OnUpdate(float DeltaTime, FWorld& InWorld) override
+	{
+		for (ISystem* S : Systems)
+		{
+			if (S)
+			{
+				S->OnUpdate(DeltaTime, InWorld);
+			}
+		}
+	}
+
+	void OnLateUpdate(float DeltaTime, FWorld& InWorld) override
+	{
+		for (ISystem* S : Systems)
+		{
+			if (S)
+			{
+				S->OnLateUpdate(DeltaTime, InWorld);
+			}
+		}
+	}
+
+	void OnEndFrame(FWorld& InWorld) override
+	{
+		for (ISystem* S : Systems)
+		{
+			if (S)
+			{
+				S->OnEndFrame(InWorld);
+			}
+		}
+	}
 
 	// ── World access (the root group owns the world data) ──────────
 
