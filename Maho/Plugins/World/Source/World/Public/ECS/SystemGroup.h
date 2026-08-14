@@ -43,7 +43,7 @@ public:
 	// ── IEngineExtension entry (the engine drives the root group) ──
 	bool ExecuteStage(EEngineStage Stage) override;
 
-	// ── Game world frame (driven by FGameEngine, not by ExecuteStage) ──
+	// ── Game world frame (driven by FGameClientEngine / FGameServerEngine, not by ExecuteStage) ──
 	void BeginFrame();
 	void Tick();
 	void EndFrame();

@@ -11,23 +11,24 @@ namespace Maho
 {
 
 /**
- * Game application shell: FEngineBase plus the two "world" extensions.
+ * Game client application shell: FEngineBase plus the two "world" extensions
+ * (game world + render world). Use for windowed clients that render.
  *
  * PreInitialize registers FRenderSystem and the root FSystemGroup returned by
  * CreateWorld(). Tick() drives the render world begin, the game world frame,
  * the per-frame extension Tick dispatch (editor / script / platform), the
  * world→render gather, and finally the render world render.
  *
- * Projects subclass FGameEngine, override CreateWorld() to return their
+ * Projects subclass FGameClientEngine, override CreateWorld() to return their
  * FInitializationSystemGroup-derived world layer, and register remaining
- * extensions in PreInitialize before/after calling FGameEngine::PreInitialize.
+ * extensions in PreInitialize before/after calling FGameClientEngine::PreInitialize.
  *
  * Header-only on purpose: the concrete extension types live in the Render and
  * World plugin DLLs, so the game EXE (which links every plugin through
  * Maho::Modules) instantiates these methods instead of Maho.dll importing
  * plugin symbols.
  */
-class FGameEngine : public FEngineBase
+class FGameClientEngine : public FEngineBase
 {
 protected:
 	bool PreInitialize() override
@@ -37,7 +38,7 @@ protected:
 		std::unique_ptr<FSystemGroup> World(CreateWorld());
 		if (!World)
 		{
-			MAHO_CORE_ERROR("FGameEngine: CreateWorld() returned null");
+			MAHO_CORE_ERROR("FGameClientEngine: CreateWorld() returned null");
 			return false;
 		}
 

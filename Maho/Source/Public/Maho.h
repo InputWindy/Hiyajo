@@ -8,7 +8,7 @@
 //   #include <Maho.h>
 //   #include <EntryPoint.h>
 //
-//   class FMyGameApp : public Maho::FGameEngine;
+//   class FMyGameApp : public Maho::FGameClientEngine;
 //   Maho::FEngineBase* Maho::CreateEngine() { return new FMyGameApp(); }
 // ```
 #include <Core/Misc/Export.h>
@@ -25,7 +25,9 @@
 #include <Core/Misc/Paths.h>
 #include <Core/Engine/EngineExtension.h>
 #include <Core/EngineBase.h>
-#include <Core/Engine/GameEngine.h>
+#include <Core/Engine/GameClientEngine.h>
+#include <Core/Engine/GameServerEngine.h>
+#include <Core/Engine/NullEngine.h>
 #include <Core/Server/ThreadedServer.h>
 #include <Core/Server/ServerTask.h>
 #include <Core/Server/TaskContext.h>

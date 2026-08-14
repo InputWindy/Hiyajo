@@ -82,7 +82,7 @@
 
 - `Maho.h` — 引擎聚合头（统一 include 核心 public 头）。
 - `Core/` 下按功能分模块，各模块文档位于对应聚合头同级目录：
-  - `Core/Engine/` — `FEngineBase` / `FGameEngine` / `IEngineExtension` / 引擎 stage。
+  - `Core/Engine/` — `FEngineBase` / `FGameClientEngine` / `FGameServerEngine` / `FNullEngine` / `IEngineExtension` / 引擎 stage。
   - `Core/Misc/` — `Log` / `Json` / `Paths` / `Delegate` / `TypeList` 等基础设施。
   - `Core/Server/` — 线程 / 异步服务器（`TAsyncTransferServer` 等）。
 
