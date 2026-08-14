@@ -2,7 +2,7 @@
 #include <Core/Extension/World/Components/TransformComponent.h>
 #include <Core/Extension/World/Components/ScriptComponent.h>
 #include <Core/Extension/Script/ScriptSystem.h>
-#include <Core/Extension/Render/Render.h>
+#include <Render/RenderSystem.h>
 
 #include <Core/Application/App.h>
 #include <Core/System/Log.h>

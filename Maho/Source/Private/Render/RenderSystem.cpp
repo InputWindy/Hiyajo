@@ -3,7 +3,6 @@
 #include <Render/RDG/RDGBuilder.h>
 
 #include <Core/Application/App.h>
-#include <Core/Extension/Render/Render.h>
 #include <Core/System/Console.h>
 #include <Core/System/Log.h>
 #include "Render/UI/ImGuiDrawDataRing.h"
