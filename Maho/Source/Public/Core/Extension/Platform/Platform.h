@@ -1,11 +1,11 @@
 #pragma once
 
-#include <Core/Delegate.h>
-#include <Core/DependsPack.h>
-#include <Core/Export.h>
-#include <Core/Sequencer/EngineExtension.h>
-#include <Core/System/PlatformWindow.h>
-#include <Core/TypeList.h>
+#include <Core/Misc/Delegate.h>
+#include <Core/Misc/DependsPack.h>
+#include <Core/Misc/Export.h>
+#include <Core/Engine/EngineExtension.h>
+#include <Core/Extension/Platform/PlatformWindow.h>
+#include <Core/Misc/TypeList.h>
 
 #include <cstdint>
 

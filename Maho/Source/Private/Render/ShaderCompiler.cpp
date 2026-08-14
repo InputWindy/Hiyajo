@@ -1,6 +1,6 @@
 #include <Render/Shader/ShaderCompiler.h>
 
-#include <Core/System/Log.h>
+#include <Core/Misc/Log.h>
 
 #ifdef MAHO_WITH_GLSLANG
 #include <glslang/Public/ShaderLang.h>

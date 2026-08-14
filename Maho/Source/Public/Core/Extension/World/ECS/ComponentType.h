@@ -1,6 +1,6 @@
 #pragma once
 
-#include <Core/Export.h>
+#include <Core/Misc/Export.h>
 #include <bitset>
 #include <cstddef>
 #include <cstdint>

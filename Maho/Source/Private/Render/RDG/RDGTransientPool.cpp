@@ -1,6 +1,6 @@
 #include <Render/RDG/RDGTransientPool.h>
 
-#include <Core/System/Log.h>
+#include <Core/Misc/Log.h>
 #include <Render/RHI/RHI.h>
 
 namespace Maho

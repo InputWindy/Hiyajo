@@ -1,6 +1,6 @@
 #pragma once
 
-#include <Core/Export.h>
+#include <Core/Misc/Export.h>
 #include <Render/RDG/RDGPass.h>
 #include <Render/RDG/RDGResources.h>
 #include <Render/RDG/RDGTransientPool.h>

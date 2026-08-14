@@ -1,6 +1,6 @@
 #include <Core/Server/ThreadedServer.h>
 
-#include <Core/System/Log.h>
+#include <Core/Misc/Log.h>
 
 #include <condition_variable>
 #include <cstdint>

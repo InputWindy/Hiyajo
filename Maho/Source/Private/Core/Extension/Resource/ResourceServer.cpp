@@ -1,7 +1,7 @@
 #include <Core/Extension/Resource/ResourceServer.h>
 
-#include <Core/System/Log.h>
-#include <Core/System/Utf8Path.h>
+#include <Core/Misc/Log.h>
+#include <Core/Misc/Utf8Path.h>
 
 #include <filesystem>
 #include <fstream>

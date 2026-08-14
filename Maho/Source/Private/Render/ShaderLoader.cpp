@@ -1,7 +1,7 @@
 #include <Render/Shader/ShaderLoader.h>
 
-#include <Core/System/Log.h>
-#include <Core/System/Paths.h>
+#include <Core/Misc/Log.h>
+#include <Core/Misc/Paths.h>
 #include <Render/Shader/ShaderCache.h>
 
 #include <algorithm>

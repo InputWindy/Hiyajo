@@ -1,8 +1,8 @@
 #pragma once
 
-#include <Core/Export.h>
+#include <Core/Misc/Export.h>
 #include <Core/Server/ThreadedServer.h>
-#include <Core/System/PlatformWindow.h>
+#include <Core/Extension/Platform/PlatformWindow.h>
 #include <Render/RHI/RHI.h>
 
 #include <condition_variable>

@@ -1,18 +1,18 @@
 ﻿#pragma once
 
-#include <Core/Engine.h>
-#include <Core/Export.h>
-#include <Core/DependsPack.h>
-#include <Core/Sequencer/EngineExtension.h>
-#include <Core/TypeList.h>
+#include <Core/Engine/Engine.h>
+#include <Core/Misc/Export.h>
+#include <Core/Misc/DependsPack.h>
+#include <Core/Engine/EngineExtension.h>
+#include <Core/Misc/TypeList.h>
 #include <Core/Extension/Platform/Platform.h>
 #include <Core/Server/ThreadedServer.h>
 #include <Core/Server/TransferHandle.h>
-#include <Core/System/PlatformWindow.h>
+#include <Core/Extension/Platform/PlatformWindow.h>
 #include <Render/RenderFramePacket.h>
 #include <Render/RHI/RHIServer.h>
 #include <Render/RDG/RDGBuilder.h>
-#include <Render/Sequencer/RenderFeature.h>
+#include <Render/RenderFeature.h>
 #include <Render/RenderPipelineStage.h>
 #include <Render/UI/ImGuiSystem.h>
 

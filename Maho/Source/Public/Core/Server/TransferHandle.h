@@ -11,7 +11,7 @@
  * CatalogKey / SoftPath / Proxy stay on the client or in server registries — never on this ticket.
  */
 
-#include <Core/Export.h>
+#include <Core/Misc/Export.h>
 
 #include <cstdint>
 

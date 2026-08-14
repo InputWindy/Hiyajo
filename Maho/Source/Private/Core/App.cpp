@@ -1,11 +1,11 @@
-﻿#include <Core/Application/App.h>
+﻿#include <Core/App.h>
 
-#include <Core/System/Console.h>
-#include <Core/System/Fatal.h>
-#include <Core/System/Log.h>
-#include <Core/System/Paths.h>
-#include <Core/System/Timer.h>
-#include <Core/Sequencer/EngineStage.h>
+#include <Core/Misc/Console.h>
+#include <Core/Misc/Fatal.h>
+#include <Core/Misc/Log.h>
+#include <Core/Misc/Paths.h>
+#include <Core/Misc/Timer.h>
+#include <Core/Engine/EngineStage.h>
 
 #include <algorithm>
 #include <chrono>

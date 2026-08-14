@@ -1,7 +1,7 @@
 #define VMA_IMPLEMENTATION
 #include "Render/RHI/VulkanMemory.h"
 
-#include <Core/System/Log.h>
+#include <Core/Misc/Log.h>
 
 namespace Maho
 {

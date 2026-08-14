@@ -7,7 +7,7 @@
 
 #include <Render/RenderSystem.h>
 
-#include <Core/System/Log.h>
+#include <Core/Misc/Log.h>
 
 #include <memory>
 #include <type_traits>

@@ -2,8 +2,8 @@
 
 #include "Render/RHI/VulkanResources.h"
 
-#include <Core/System/Console.h>
-#include <Core/System/Log.h>
+#include <Core/Misc/Console.h>
+#include <Core/Misc/Log.h>
 
 #if defined(_WIN32)
 #	include <windows.h>

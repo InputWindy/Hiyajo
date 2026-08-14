@@ -1,11 +1,11 @@
 ﻿#include <Core/Extension/Resource/ResourceIO.h>
 #include <Core/Extension/Resource/ResourceServer.h>
 
-#include <Core/Application/App.h>
-#include <Core/Json.h>
-#include <Core/System/Log.h>
-#include <Core/System/Paths.h>
-#include <Core/System/Utf8Path.h>
+#include <Core/App.h>
+#include <Core/Misc/Json.h>
+#include <Core/Misc/Log.h>
+#include <Core/Misc/Paths.h>
+#include <Core/Misc/Utf8Path.h>
 
 #include <cctype>
 #include <filesystem>

@@ -1,6 +1,6 @@
 ﻿#pragma once
 
-#include <Render/Sequencer/RenderFeature.h>
+#include <Render/RenderFeature.h>
 
 #include <cstdint>
 

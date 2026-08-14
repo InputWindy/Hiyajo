@@ -20,7 +20,7 @@
  *       auto Result = Server->RetrieveResult(Handle);
  */
 
-#include <Core/Export.h>
+#include <Core/Misc/Export.h>
 #include <Core/Server/ThreadedServer.h>
 #include <Core/Server/TransferHandle.h>
 

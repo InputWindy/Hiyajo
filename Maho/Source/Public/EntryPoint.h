@@ -10,8 +10,8 @@
  * console black box appears; MAHO_LOG lines go to the editor Output Log instead.
  */
 
-#include <Core/Application/App.h>
-#include <Core/System/Fatal.h>
+#include <Core/App.h>
+#include <Core/Misc/Fatal.h>
 
 #include <cstdio>
 #include <exception>

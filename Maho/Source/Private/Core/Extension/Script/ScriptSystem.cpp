@@ -3,9 +3,9 @@
 #define SOL_ALL_SAFETIES_ON 1
 #include <sol/sol.hpp>
 
-#include <Core/Application/App.h>
-#include <Core/System/Console.h>
-#include <Core/System/Log.h>
+#include <Core/App.h>
+#include <Core/Misc/Console.h>
+#include <Core/Misc/Log.h>
 
 #include <filesystem>
 

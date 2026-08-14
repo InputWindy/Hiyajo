@@ -1,8 +1,8 @@
 #include <Core/Extension/World/WorldLayer.h>
 #include <Render/RenderSystem.h>
 
-#include <Core/Application/App.h>
-#include <Core/System/Log.h>
+#include <Core/App.h>
+#include <Core/Misc/Log.h>
 
 #include <utility>
 

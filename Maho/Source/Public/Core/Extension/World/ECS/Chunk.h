@@ -1,6 +1,6 @@
 #pragma once
 
-#include <Core/Export.h>
+#include <Core/Misc/Export.h>
 #include <Core/Extension/World/ECS/ComponentType.h>
 #include <Core/Extension/World/ECS/EntityHandle.h>
 

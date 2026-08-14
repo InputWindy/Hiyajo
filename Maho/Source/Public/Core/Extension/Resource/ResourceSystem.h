@@ -8,15 +8,15 @@
  * Asset paths are plain std::string. Catalog is unordered_map<string, Ref<FResource>>.
  */
 
-#include <Core/DependsPack.h>
-#include <Core/Export.h>
-#include <Core/Json.h>
-#include <Core/Sequencer/EngineExtension.h>
-#include <Core/Serialization/Archive.h>
+#include <Core/Misc/DependsPack.h>
+#include <Core/Misc/Export.h>
+#include <Core/Misc/Json.h>
+#include <Core/Engine/EngineExtension.h>
+#include <Core/Misc/Archive.h>
 #include <Core/Server/TransferHandle.h>
-#include <Core/System/RefCounted.h>
-#include <Core/TypeList.h>
-#include <Core/Concurrent/AsyncTask.h>
+#include <Core/Misc/RefCounted.h>
+#include <Core/Misc/TypeList.h>
+#include <Core/Misc/AsyncTask.h>
 
 #include <atomic>
 #include <cstdint>

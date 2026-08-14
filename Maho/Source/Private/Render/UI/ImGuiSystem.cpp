@@ -1,9 +1,9 @@
 #include <Render/UI/ImGuiSystem.h>
 
-#include <Core/System/Console.h>
-#include <Core/System/Log.h>
-#include <Core/System/PlatformWindow.h>
-#include <Core/System/Utf8Path.h>
+#include <Core/Misc/Console.h>
+#include <Core/Misc/Log.h>
+#include <Core/Extension/Platform/PlatformWindow.h>
+#include <Core/Misc/Utf8Path.h>
 #include <Render/RHI/RHIResourceManager.h>
 #include <Render/RHI/RHIServer.h>
 #include <Render/UI/ImGuiTheme.h>

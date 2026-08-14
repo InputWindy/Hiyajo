@@ -1,7 +1,7 @@
 #pragma once
 
 // Dear ImGui build config for Maho (selected via IMGUI_USER_CONFIG).
-#include <Core/Export.h>
+#include <Core/Misc/Export.h>
 
 #define IMGUI_API MAHO_API
 #define USE_IMGUI_API
