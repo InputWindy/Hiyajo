@@ -70,16 +70,9 @@ if(MAHO_HAS_OPENIMAGEIO)
 	target_compile_definitions(Maho PRIVATE MAHO_WITH_OPENIMAGEIO=1)
 endif()
 
-# Assimp — model decode for the engine resource codec (MeshModelCodec).
-if(TARGET assimp)
-	target_link_libraries(Maho PRIVATE assimp)
-	target_compile_definitions(Maho PRIVATE MAHO_WITH_ASSIMP=1)
-	target_include_directories(Maho PRIVATE
-		"${assimp_SOURCE_DIR}/include"
-		"${assimp_BINARY_DIR}/include"
-	)
-endif()
-
+# zlib — FCompression (package / BulkData). zlibstatic is provided by the
+# project's Assimp fetch (bundled zlib), so engine-only workspaces degrade
+# FCompression gracefully; game projects always have it.
 if(TARGET zlibstatic)
 	target_link_libraries(Maho PRIVATE zlibstatic)
 	target_compile_definitions(Maho PRIVATE MAHO_WITH_ZLIB=1)

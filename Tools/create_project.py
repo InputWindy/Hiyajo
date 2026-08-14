@@ -3,10 +3,8 @@
 
 from __future__ import annotations
 
-import shutil
 import sys
 import threading
-import time
 import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
@@ -16,14 +14,11 @@ sys.path.insert(0, str(TOOLS_DIR))
 
 from maho_tools import (  # noqa: E402
 	ENGINE_ROOT,
-	OperationCancelled,
 	create_project,
-	generate_from_cproject,
 	install_windows_cproject_association,
 	is_valid_project_name,
 	list_engine_plugins,
 	open_in_file_manager,
-	_kill_process,
 )
 
 
@@ -41,33 +36,23 @@ class CreateProjectApp(tk.Tk):
 	def __init__(self) -> None:
 		super().__init__()
 		self.title("Maho — New Project")
-		self.geometry("720x720")
-		self.minsize(640, 560)
+		self.geometry("720x640")
+		self.minsize(640, 520)
 		self.resizable(True, True)
 
 		self.var_name = tk.StringVar(value="MyGame")
 		self.var_parent = tk.StringVar(value=str(Path.home() / "Documents" / "MahoProjects"))
 		self.var_engine = tk.StringVar(value=str(ENGINE_ROOT))
 		self.var_author = tk.StringVar(value="")
-		self.var_desc = tk.StringVar(value="")
-		self.var_gen_sln = tk.BooleanVar(value=True)
 		self.var_open_folder = tk.BooleanVar(value=True)
 		self._associate_busy = False
-		self._creating = False
-		self._close_after_abort = False
-		self._cancel_event = threading.Event()
-		self._proc_holder: list = []
-		self._project_dir: Path | None = None
-		self._busy_widgets: list[tk.Misc] = []
 		self._plugins: list[dict] = []
 		self._plugin_vars: dict[str, tk.BooleanVar] = {}
 		self._plugin_widgets: dict[str, ttk.Checkbutton] = {}
 		self._locked: set[str] = set()
-		self._status_start = 0.0
-		self._status_running = False
 
 		self._build()
-		self.protocol("WM_DELETE_WINDOW", self._on_close_request)
+		self.protocol("WM_DELETE_WINDOW", self.destroy)
 		self.log_line("[Maho] UI ready.")
 		# Defer registry work so the window paints first; run off the UI thread.
 		self.after(100, self._auto_associate_cproject_async)
@@ -82,24 +67,18 @@ class CreateProjectApp(tk.Tk):
 		)
 
 		ttk.Label(frm, text="Project Name").grid(row=1, column=0, sticky="w", **pad)
-		ent_name = ttk.Entry(frm, textvariable=self.var_name)
-		ent_name.grid(row=1, column=1, columnspan=2, sticky="ew", **pad)
+		ttk.Entry(frm, textvariable=self.var_name).grid(row=1, column=1, columnspan=2, sticky="ew", **pad)
 
 		ttk.Label(frm, text="Parent Folder").grid(row=2, column=0, sticky="w", **pad)
-		ent_parent = ttk.Entry(frm, textvariable=self.var_parent)
-		ent_parent.grid(row=2, column=1, sticky="ew", **pad)
-		btn_browse_parent = ttk.Button(frm, text="Browse…", command=self._browse_parent)
-		btn_browse_parent.grid(row=2, column=2, sticky="e", **pad)
+		ttk.Entry(frm, textvariable=self.var_parent).grid(row=2, column=1, sticky="ew", **pad)
+		ttk.Button(frm, text="Browse…", command=self._browse_parent).grid(row=2, column=2, sticky="e", **pad)
 
 		ttk.Label(frm, text="Engine Root").grid(row=3, column=0, sticky="w", **pad)
-		ent_engine = ttk.Entry(frm, textvariable=self.var_engine)
-		ent_engine.grid(row=3, column=1, sticky="ew", **pad)
-		btn_browse_engine = ttk.Button(frm, text="Browse…", command=self._browse_engine)
-		btn_browse_engine.grid(row=3, column=2, sticky="e", **pad)
+		ttk.Entry(frm, textvariable=self.var_engine).grid(row=3, column=1, sticky="ew", **pad)
+		ttk.Button(frm, text="Browse…", command=self._browse_engine).grid(row=3, column=2, sticky="e", **pad)
 
 		ttk.Label(frm, text="Author").grid(row=4, column=0, sticky="w", **pad)
-		ent_author = ttk.Entry(frm, textvariable=self.var_author)
-		ent_author.grid(row=4, column=1, columnspan=2, sticky="ew", **pad)
+		ttk.Entry(frm, textvariable=self.var_author).grid(row=4, column=1, columnspan=2, sticky="ew", **pad)
 
 		ttk.Label(frm, text="Description").grid(row=5, column=0, sticky="nw", **pad)
 		self.txt_desc = tk.Text(frm, height=3, wrap=tk.WORD)
@@ -133,15 +112,12 @@ class CreateProjectApp(tk.Tk):
 
 		opts = ttk.Frame(frm)
 		opts.grid(row=8, column=0, columnspan=3, sticky="w", **pad)
-		chk_sln = ttk.Checkbutton(opts, text="Generate .sln after create", variable=self.var_gen_sln)
-		chk_sln.pack(side=tk.LEFT, padx=(0, 16))
-		chk_open = ttk.Checkbutton(opts, text="Open project folder", variable=self.var_open_folder)
-		chk_open.pack(side=tk.LEFT)
+		ttk.Checkbutton(opts, text="Open project folder", variable=self.var_open_folder).pack(side=tk.LEFT)
 
 		hint = (
 			"Creates Parent/Name/ with Name.cproject (JSON, like .uproject).\n"
-			"Double-click the .cproject to regenerate Name.sln beside it, then open the .sln in VS.\n"
-			"Requires engine Setup.bat (local Tools/python) beforehand."
+			"Double-click the .cproject to generate Name.sln beside it (first run downloads\n"
+			"third-party into Intermediate/). Requires engine Setup.bat beforehand."
 		)
 		ttk.Label(frm, text=hint, foreground="#555").grid(row=9, column=0, columnspan=3, sticky="w", **pad)
 
@@ -165,38 +141,10 @@ class CreateProjectApp(tk.Tk):
 
 		btns = ttk.Frame(frm)
 		btns.grid(row=11, column=0, columnspan=3, sticky="ew", **pad)
-		self.btn_associate = ttk.Button(btns, text="Re-associate .cproject", command=self._associate_async)
-		self.btn_associate.pack(side=tk.LEFT)
 		self.btn_clear_log = ttk.Button(btns, text="Clear Log", command=self._clear_log)
-		self.btn_clear_log.pack(side=tk.LEFT, padx=(8, 0))
-		self.btn_create = ttk.Button(btns, text="Create Project", command=self._create)
-		self.btn_create.pack(side=tk.RIGHT, padx=(8, 0))
-		# Close stays enabled during create so the user can abort.
-		ttk.Button(btns, text="Close", command=self._on_close_request).pack(side=tk.RIGHT)
-
-		status_frame = ttk.Frame(frm)
-		status_frame.grid(row=12, column=0, columnspan=3, sticky="ew", **pad)
-		status_frame.columnconfigure(0, weight=1)
-		self.progress = ttk.Progressbar(status_frame, mode="indeterminate")
-		self.progress.grid(row=0, column=0, sticky="ew")
-		self.lbl_status = ttk.Label(status_frame, text="", anchor="w")
-		self.lbl_status.grid(row=0, column=1, padx=(8, 0))
-
-		self._busy_widgets = [
-			ent_name,
-			ent_parent,
-			btn_browse_parent,
-			ent_engine,
-			btn_browse_engine,
-			ent_author,
-			self.txt_desc,
-			self.cmb_template,
-			chk_sln,
-			chk_open,
-			self.btn_associate,
-			self.btn_clear_log,
-			self.btn_create,
-		]
+		self.btn_clear_log.pack(side=tk.LEFT)
+		ttk.Button(btns, text="Create Project", command=self._create).pack(side=tk.RIGHT, padx=(8, 0))
+		ttk.Button(btns, text="Close", command=self.destroy).pack(side=tk.RIGHT)
 
 		frm.columnconfigure(1, weight=1)
 		frm.rowconfigure(5, weight=1)
@@ -254,7 +202,6 @@ class CreateProjectApp(tk.Tk):
 			cb.pack(anchor="w", fill=tk.X)
 			self._plugin_vars[p["Name"]] = var
 			self._plugin_widgets[p["Name"]] = cb
-			self._busy_widgets.append(cb)
 		self._apply_template()
 
 	def _on_template_change(self, _event=None) -> None:
@@ -307,18 +254,6 @@ class CreateProjectApp(tk.Tk):
 				dep_var.set(False)
 				self._uncheck_dependents(p["Name"])
 
-	def _set_creating(self, busy: bool) -> None:
-		self._creating = busy
-		state = tk.DISABLED if busy else tk.NORMAL
-		for w in self._busy_widgets:
-			try:
-				w.configure(state=state)
-			except tk.TclError:
-				pass
-		# Log stays read-only (append_log toggles NORMAL briefly).
-		if not busy:
-			self.txt_log.configure(state=tk.DISABLED)
-
 	def append_log(self, text: str) -> None:
 		def _do() -> None:
 			self.txt_log.configure(state=tk.NORMAL)
@@ -335,29 +270,9 @@ class CreateProjectApp(tk.Tk):
 		self.append_log(message if message.endswith("\n") else message + "\n")
 
 	def _clear_log(self) -> None:
-		if self._creating:
-			return
 		self.txt_log.configure(state=tk.NORMAL)
 		self.txt_log.delete("1.0", tk.END)
 		self.txt_log.configure(state=tk.DISABLED)
-
-	def _start_status_timer(self) -> None:
-		self._status_start = time.monotonic()
-		self._status_running = True
-		self.progress.start(12)
-		self._tick_status()
-
-	def _tick_status(self) -> None:
-		if not self._status_running:
-			return
-		elapsed = int(time.monotonic() - self._status_start)
-		self.lbl_status.configure(text=f"… working ({elapsed}s)")
-		self.after(1000, self._tick_status)
-
-	def _stop_status_timer(self) -> None:
-		self._status_running = False
-		self.progress.stop()
-		self.lbl_status.configure(text="")
 
 	def _browse_parent(self) -> None:
 		path = filedialog.askdirectory(initialdir=self.var_parent.get() or str(Path.home()))
@@ -370,68 +285,12 @@ class CreateProjectApp(tk.Tk):
 			self.var_engine.set(path)
 			self._reload_plugins()
 
-	def _kill_active_proc(self) -> None:
-		if self._proc_holder:
-			_kill_process(self._proc_holder[0])
-
-	def _delete_project_dir(self, project_dir: Path | None) -> None:
-		if project_dir is None or not project_dir.exists():
-			return
-		try:
-			shutil.rmtree(project_dir, ignore_errors=False)
-			self.log_line(f"[Maho] Deleted incomplete project: {project_dir}")
-		except Exception as ex:  # noqa: BLE001
-			self.log_line(f"[Maho] Failed to delete {project_dir}: {ex}")
-
-	def _on_close_request(self) -> None:
-		if not self._creating:
-			self.destroy()
-			return
-
-		ok = messagebox.askyesno(
-			"Maho",
-			"Project creation is still running.\n\n"
-			"Abort creation and delete the target project folder?",
-			icon=messagebox.WARNING,
-		)
-		if not ok:
-			return
-
-		self._close_after_abort = True
-		self._cancel_event.set()
-		self._kill_active_proc()
-		self.log_line("[Maho] Abort requested — stopping and deleting project…")
-
-	def _finish_create_ui(self, *, aborted: bool) -> None:
-		self._stop_status_timer()
-		if aborted and self._close_after_abort:
-			self.destroy()
-			return
-		self._set_creating(False)
-		self._close_after_abort = False
-		self._project_dir = None
-
-	def _run_associate(self, *, show_dialog: bool) -> None:
-		"""Runs on a worker thread — do not touch Tk widgets except via after/log_line."""
+	def _run_associate(self) -> None:
+		"""Runs on a worker thread — do not touch Tk widgets except via log_line."""
 		try:
 			install_windows_cproject_association(log=self.log_line)
-			if show_dialog:
-				self.after(
-					0,
-					lambda: messagebox.showinfo(
-						"Maho",
-						"Associated .cproject for the current Windows user:\n"
-						"  • Double-click → generate .sln\n"
-						"  • Right-click → 选择链接引擎…\n\n"
-						"If Explorer still asks which app to use, close all Explorer\n"
-						"windows once, or sign out/in.",
-					),
-				)
 		except Exception as ex:  # noqa: BLE001
-			err = str(ex)
-			self.log_line(f"[Maho] Associate failed: {err}")
-			if show_dialog:
-				self.after(0, lambda e=err: messagebox.showerror("Maho", e))
+			self.log_line(f"[Maho] Associate failed: {ex}")
 		finally:
 			self._associate_busy = False
 
@@ -442,28 +301,14 @@ class CreateProjectApp(tk.Tk):
 			return
 		self._associate_busy = True
 		self.log_line("[Maho] Registering .cproject association (background)…")
-		threading.Thread(target=self._run_associate, kwargs={"show_dialog": False}, daemon=True).start()
-
-	def _associate_async(self) -> None:
-		if self._creating:
-			return
-		if self._associate_busy:
-			self.log_line("[Maho] Association already running…")
-			return
-		self._associate_busy = True
-		self.log_line("[Maho] Re-associating .cproject…")
-		threading.Thread(target=self._run_associate, kwargs={"show_dialog": True}, daemon=True).start()
+		threading.Thread(target=self._run_associate, daemon=True).start()
 
 	def _create(self) -> None:
-		if self._creating:
-			return
-
 		name = self.var_name.get().strip()
 		parent = Path(self.var_parent.get().strip())
 		engine = Path(self.var_engine.get().strip())
 		author = self.var_author.get().strip()
 		desc = self.txt_desc.get("1.0", tk.END).strip()
-		want_sln = self.var_gen_sln.get()
 		want_open = self.var_open_folder.get()
 		checked_plugins = sorted(n for n, v in self._plugin_vars.items() if v.get())
 
@@ -484,77 +329,28 @@ class CreateProjectApp(tk.Tk):
 			)
 			return
 
-		self._cancel_event.clear()
-		self._close_after_abort = False
-		self._proc_holder.clear()
-		self._project_dir = None
-		self._set_creating(True)
-		self._start_status_timer()
 		self.log_line(f"[Maho] Creating project '{name}' …")
-
-		def work() -> None:
-			project_dir: Path | None = None
-			aborted = False
-			try:
-				if self._cancel_event.is_set():
-					raise OperationCancelled("Cancelled")
-
-				cproject = create_project(
-					name,
-					parent,
-					engine,
-					description=desc,
-					author=author,
-					plugins=checked_plugins,
-					template=self._selected_template_key(),
-				)
-				project_dir = cproject.parent
-				self._project_dir = project_dir
-				self.log_line(f"[Maho] Wrote {cproject}")
-
-				if self._cancel_event.is_set():
-					raise OperationCancelled("Cancelled")
-
-				sln_msg = ""
-				if want_sln:
-					self.log_line("[Maho] Generating .sln (cmake; may take a moment)…")
-					sln = generate_from_cproject(
-						cproject,
-						log=self.log_line,
-						cancel_event=self._cancel_event,
-						proc_holder=self._proc_holder,
-					)
-					sln_msg = f"\nSLN: {sln}"
-					self.log_line(f"[Maho] SLN: {sln}")
-
-				if self._cancel_event.is_set():
-					raise OperationCancelled("Cancelled")
-
-				if want_open:
-					open_in_file_manager(cproject.parent)
-				self.log_line("[Maho] Project create finished successfully.")
-
-				def done_ok() -> None:
-					self._finish_create_ui(aborted=False)
-					messagebox.showinfo("Maho", f"Project created:\n{cproject}{sln_msg}")
-
-				self.after(0, done_ok)
-			except OperationCancelled:
-				aborted = True
-				self.log_line("[Maho] Creation aborted by user.")
-				self._delete_project_dir(project_dir or self._project_dir)
-				self.after(0, lambda: self._finish_create_ui(aborted=True))
-			except Exception as ex:  # noqa: BLE001
-				err = str(ex)
-				self.log_line(f"[ERROR] {err}")
-
-				def done_err(e: str = err) -> None:
-					self._finish_create_ui(aborted=False)
-					messagebox.showerror("Maho", e)
-
-				self.after(0, done_err)
-
-		threading.Thread(target=work, daemon=True).start()
+		try:
+			cproject = create_project(
+				name,
+				parent,
+				engine,
+				description=desc,
+				author=author,
+				plugins=checked_plugins,
+				template=self._selected_template_key(),
+			)
+		except Exception as ex:  # noqa: BLE001
+			messagebox.showerror("Maho", str(ex))
+			return
+		self.log_line(f"[Maho] Wrote {cproject}")
+		if want_open:
+			open_in_file_manager(cproject.parent)
+		self.log_line("[Maho] Project create finished successfully.")
+		messagebox.showinfo(
+			"Maho",
+			f"Project created:\n{cproject}\n\nDouble-click {cproject.name} to generate the .sln\n(first run downloads third-party into Intermediate/).",
+		)
 
 
 def main() -> int:

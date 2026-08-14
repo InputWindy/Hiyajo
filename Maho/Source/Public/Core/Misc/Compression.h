@@ -2,7 +2,7 @@
 
 /**
  * Thin zlib wrappers for package / BulkData compression.
- * Linked against Assimp's zlibstatic when MAHO_WITH_ASSIMP is enabled.
+ * Linked against zlibstatic (project's Assimp bundled zlib) when MAHO_WITH_ZLIB.
  */
 
 #include <Core/Misc/Export.h>

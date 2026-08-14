@@ -495,6 +495,57 @@ def run_cmake_generate(
 	run_command(cmd, log=log, cancel_event=cancel_event, proc_holder=proc_holder)
 
 
+def _pid_alive(pid: int) -> bool:
+	"""Best-effort liveness check for a stale lock owner."""
+	if pid <= 0:
+		return False
+	if sys.platform != "win32":
+		try:
+			os.kill(pid, 0)
+			return True
+		except OSError:
+			return False
+	try:
+		import ctypes
+
+		PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+		handle = ctypes.windll.kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+		if not handle:
+			return False
+		ctypes.windll.kernel32.CloseHandle(handle)
+		return True
+	except Exception:
+		return True
+
+
+class _GenerateLock:
+	"""Prevent two cmake generates from racing on the same project Intermediate."""
+
+	def __init__(self, intermediate: Path) -> None:
+		self._path = intermediate / ".generate.lock"
+
+	def acquire(self) -> None:
+		self._path.parent.mkdir(parents=True, exist_ok=True)
+		if self._path.exists():
+			try:
+				owner = int(self._path.read_text(encoding="utf-8").strip() or "0")
+			except (OSError, ValueError):
+				owner = 0
+			if _pid_alive(owner):
+				raise RuntimeError(
+					f"Another generate is already running for this project "
+					f"(lock: {self._path}).\nWait for it to finish, or delete the lock file "
+					f"if it is stale."
+				)
+		self._path.write_text(str(os.getpid()), encoding="utf-8")
+
+	def release(self) -> None:
+		try:
+			self._path.unlink(missing_ok=True)
+		except OSError:
+			pass
+
+
 def generate_from_cproject(
 	cproject_path: Path,
 	*,
@@ -513,20 +564,25 @@ def generate_from_cproject(
 	log(f"[Maho] Dir     : {project_dir}")
 	log(f"[Maho] Engine  : {engine_root}")
 
-	run_cmake_generate(
-		project_dir,
-		intermediate,
-		engine_root=engine_root,
-		cproject=cproject_path,
-		log=log,
-		cancel_event=cancel_event,
-		proc_holder=proc_holder,
-	)
-	if cancel_event is not None and cancel_event.is_set():
-		raise OperationCancelled("Cancelled")
-	sln = emit_sibling_sln(intermediate, project_dir, project_name)
-	log(f"[Maho] Solution: {sln}")
-	return sln
+	lock = _GenerateLock(intermediate)
+	lock.acquire()
+	try:
+		run_cmake_generate(
+			project_dir,
+			intermediate,
+			engine_root=engine_root,
+			cproject=cproject_path,
+			log=log,
+			cancel_event=cancel_event,
+			proc_holder=proc_holder,
+		)
+		if cancel_event is not None and cancel_event.is_set():
+			raise OperationCancelled("Cancelled")
+		sln = emit_sibling_sln(intermediate, project_dir, project_name)
+		log(f"[Maho] Solution: {sln}")
+		return sln
+	finally:
+		lock.release()
 
 
 def generate_engine_workspace(
