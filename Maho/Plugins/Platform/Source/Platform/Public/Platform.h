@@ -1,31 +1,27 @@
 #pragma once
 
 #include <Core/Misc/Delegate.h>
-#include <Core/Misc/DependsPack.h>
 #include "PlatformApi.h"
 #include <Core/Engine/EngineExtension.h>
 #include "PlatformWindow.h"
-#include <Core/Misc/TypeList.h>
 
 #include <cstdint>
 
 namespace Maho
 {
 
-class FRenderSystem;
-
 MAHO_DECLARE_MULTICAST_DELEGATE(FOnRequestExit);
 
 /**
  * Built-in platform window / headless clock extension.
- * Sole owner of the main FPlatformWindow. Shutdown after FRenderSystem (TearDown needs the window).
+ * Sole owner of the main FPlatformWindow. Shutdown order is auto-derived from
+ * Render's Init dependency (Init mirror — shuts down after FRenderSystem,
+ * whose TearDown needs the window).
  * Tick: PollEvents / ShouldClose / headless auto-exit.
  * Exit requests Broadcast OnRequestExit (FEngineBase binds in Init).
  */
 class MAHO_PLATFORM_API FPlatformSystem final
 	: public IEngineExtension
-	, public TDependsPack<
-		TDependsOn<EEngineStage::Shutdown, TTypeList<FRenderSystem>, EExtensionDepStrength::Weak>>
 {
 public:
 	[[nodiscard]] FPlatformWindow* GetWindow() { return PlatformWindow.get(); }

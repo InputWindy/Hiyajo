@@ -15,6 +15,11 @@ namespace Maho
  * Strength of a TDependsOn slot.
  * Strong (default): missing peer → ReportFatal.
  * Weak: missing peer is treated as already finished (silent skip). Only Detach / PrepareExit / Shutdown.
+ *
+ * Shutdown ordering is normally NOT declared by hand: FEngineBase auto-derives
+ * the teardown order as the mirror of the forward lifecycle (PreInit / Init /
+ * PostInit / Attach — a forward edge A→B becomes a Shutdown edge B→A, Weak).
+ * Declare a Shutdown slot only to override the mirror.
  */
 enum class EExtensionDepStrength : std::uint8_t
 {
@@ -58,10 +63,12 @@ public:
 
 /**
  * Variadic depends pack — inherit beside IEngineExtension.
+ * Declare forward (PreInit / Init / PostInit / Attach / Tick) edges only;
+ * Shutdown ordering is auto-derived as the reverse of the forward lifecycle.
  * Example:
  *   class FFoo : public IEngineExtension, public TDependsPack<
  *     TDependsOn<EEngineStage::Tick, TTypeList<FBar>>,
- *     TDependsOn<EEngineStage::Shutdown, TTypeList<FBar>, EExtensionDepStrength::Weak>>
+ *     TDependsOn<EEngineStage::Init, TTypeList<FBar>>>
  */
 template <typename... TSlots>
 struct TDependsPack

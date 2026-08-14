@@ -536,6 +536,34 @@ void FEngineBase::RebuildStageOrder(EEngineStage Stage)
 	const auto StageIndex = static_cast<std::size_t>(Stage);
 	const auto& Deps = ExtensionDeps[StageIndex];
 
+	// Shutdown mirrors the forward lifecycle implicitly: a forward edge A→B
+	// ("B completes before A") becomes a Shutdown edge B→A ("B shuts down after
+	// A"), always Weak (soft). Users only declare forward deps; the teardown
+	// order is auto-derived. Explicit Shutdown slots still apply on top.
+	std::unordered_map<std::type_index, std::vector<FExtensionStageDep>> EffectiveDeps = Deps;
+	if (Stage == EEngineStage::Shutdown)
+	{
+		static constexpr EEngineStage ForwardStages[] =
+		{
+			EEngineStage::PreInit,
+			EEngineStage::Init,
+			EEngineStage::PostInit,
+			EEngineStage::Attach,
+		};
+		for (EEngineStage ForwardStage : ForwardStages)
+		{
+			const auto& ForwardDeps = ExtensionDeps[static_cast<std::size_t>(ForwardStage)];
+			for (const auto& [SelfType, Edges] : ForwardDeps)
+			{
+				for (const FExtensionStageDep& Edge : Edges)
+				{
+					EffectiveDeps[Edge.Type].push_back(
+						FExtensionStageDep{SelfType, EExtensionDepStrength::Weak});
+				}
+			}
+		}
+	}
+
 	std::vector<IEngineExtension*> Bands[3];
 	for (std::unique_ptr<IEngineExtension>& Extension : Extensions)
 	{
@@ -556,7 +584,7 @@ void FEngineBase::RebuildStageOrder(EEngineStage Stage)
 	for (int Band = 0; Band < 3; ++Band)
 	{
 		std::vector<IEngineExtension*> Sorted;
-		TopoSortPeers(Bands[Band], Deps, Sorted);
+		TopoSortPeers(Bands[Band], EffectiveDeps, Sorted);
 		StageOrder.insert(StageOrder.end(), Sorted.begin(), Sorted.end());
 	}
 }
