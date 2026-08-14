@@ -1,7 +1,7 @@
 # Requires -Version 5.0
 param(
 	[Parameter(Mandatory = $true)]
-	[ValidateSet("package", "clean")]
+	[ValidateSet("package")]
 	[string] $Action,
 
 	[Parameter(Mandatory = $true)]
@@ -55,31 +55,3 @@ if ($Action -eq "package") {
 	exit $p.ExitCode
 }
 
-# clean — console CLI via maho_python.bat
-$mahoPython = Join-Path $engine "Tools\maho_python.bat"
-if (-not (Test-Path -LiteralPath $mahoPython)) {
-	Write-Error "Missing $mahoPython"
-	exit 1
-}
-
-$cleanPy = Join-Path $engine "Tools\clean.py"
-if (-not (Test-Path -LiteralPath $cleanPy)) {
-	Write-Error "Missing clean script: $cleanPy"
-	exit 1
-}
-
-function Quote-Arg([string] $Value) {
-	if ($Value -match '[\s"]') {
-		return '"' + ($Value -replace '"', '\"') + '"'
-	}
-	return $Value
-}
-
-$scriptArgs = @($cleanPy, $projectDir)
-if ($PassThrough) {
-	$scriptArgs += $PassThrough
-}
-$quoted = ($scriptArgs | ForEach-Object { Quote-Arg $_ }) -join " "
-$cmdline = "`"$mahoPython`" $quoted"
-cmd.exe /c $cmdline
-exit $LASTEXITCODE

@@ -1,4 +1,4 @@
-# Shared helpers for create_project.py / generateProject.py / package.py / clean.py
+# Shared helpers for create_project.py / generateProject.py / package.py
 from __future__ import annotations
 
 import json
@@ -674,110 +674,6 @@ def install_windows_cproject_association(*, log: Any = print) -> None:
 	log("[Maho] Removed legacy Catty.CProject association if present.")
 
 
-# Entire trees wiped by clean (including any README/.gitkeep inside).
-_WIPE_DIR_NAMES = (
-	"Intermediate",
-	"Binaries",
-	"Packaged",
-	"Cached",
-	"Saved",
-	"out",
-	"cmake-build-debug",
-	"cmake-build-release",
-	".vs",
-)
-
-_DELETE_NAME_GLOBS = (
-	"*.sln",
-	"*.vcxproj",
-	"*.vcxproj.filters",
-	"*.vcxproj.user",
-	"CMakeUserPresets.json",
-	"compile_commands.json",
-)
-
-
-def _rm_tree(path: Path) -> bool:
-	if not path.exists():
-		return False
-	try:
-		if path.is_file() or path.is_symlink():
-			path.unlink(missing_ok=True)
-		else:
-			shutil.rmtree(path, ignore_errors=True)
-			if path.exists():
-				# Windows file locks: best-effort second pass via cmd
-				if sys.platform == "win32":
-					subprocess.call(
-						["cmd", "/c", "rmdir", "/s", "/q", str(path)],
-						shell=False,
-						**_subprocess_no_window_kwargs(),
-					)
-		return not path.exists()
-	except OSError:
-		return False
-
-
-def _iter_pycache(root: Path):
-	if not root.is_dir():
-		return
-	for p in root.rglob("__pycache__"):
-		yield p
-	for p in root.rglob("*.pyc"):
-		yield p
-
-
-def collect_clean_targets(project_dir: Path) -> list[Path]:
-	"""Paths that are safe to delete (generated / local only)."""
-	project_dir = project_dir.resolve()
-	targets: list[Path] = []
-
-	for name in _WIPE_DIR_NAMES:
-		# Never delete tracked Build/ tooling (Windows case-insensitive).
-		if name.lower() == "build":
-			continue
-		p = project_dir / name
-		if p.exists():
-			targets.append(p)
-
-	for pattern in _DELETE_NAME_GLOBS:
-		for p in project_dir.glob(pattern):
-			targets.append(p)
-
-	for p in _iter_pycache(project_dir / "Tools"):
-		targets.append(p)
-
-	# De-dupe while preserving order
-	seen: set[Path] = set()
-	unique: list[Path] = []
-	for t in targets:
-		rp = t.resolve() if t.exists() else t
-		if rp in seen:
-			continue
-		seen.add(rp)
-		unique.append(t)
-	return unique
-
-
-def clean_project_tree(project_dir: Path, *, dry_run: bool = False) -> list[Path]:
-	"""
-	Fully remove generated/temp trees under project_dir (no README placeholders left behind).
-	Does not touch Maho/Test0/Build/Tools/Doc/source.
-	"""
-	project_dir = project_dir.resolve()
-	targets = collect_clean_targets(project_dir)
-	if dry_run:
-		return targets
-
-	removed: list[Path] = []
-	for t in targets:
-		ok = _rm_tree(t)
-		if ok or not t.exists():
-			removed.append(t)
-		else:
-			print(f"[WARN] Still locked (skipped): {t}")
-
-	return removed
 
 
 # ---------------------------------------------------------------------------

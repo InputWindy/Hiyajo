@@ -65,7 +65,7 @@ __pycache__/
 *.dwo
 
 # Reflect / Lua codegen (Tools/reflect_codegen.py).
-# All C++/JSON outputs live under Maho/Source/Generated/ — wiped by clean.bat.
+# All C++/JSON outputs live under Maho/Source/Generated/ — wiped by git clean -dxf.
 *.gen.h
 *.gen.cpp
 *.gen.json

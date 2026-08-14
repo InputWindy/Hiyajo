@@ -13,7 +13,6 @@ Engine-local tooling. Root only exposes thin user-facing `.bat` launchers.
 | `generateProject.py` / `generateProject.bat` | `.cproject` / workspace → sibling `.sln` |
 | `package_ui.py` / `package.bat` | Packaging UI (logs in window; abort via Close) |
 | `package.py` | Headless CLI package |
-| `clean.py` | Wipe generated/temp files (`clean.bat` at engine root) |
 | `scan_plugins.py` / `scan_plugins.bat` | Scan `.cplugin` → module DAG / build-order JSON |
 | `maho_tools.py` | Shared helpers |
 
