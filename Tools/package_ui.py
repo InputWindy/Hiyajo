@@ -347,7 +347,7 @@ class PackageApp(tk.Tk):
 				project_dir = cproject.parent
 				label = read_cproject(cproject).get("ProjectName", cproject.stem)
 			else:
-				if regen or not (ENGINE_ROOT / "Intermediate" / "CMakeCache.txt").is_file():
+				if regen or not (ENGINE_ROOT / "Maho" / "Intermediate" / "CMakeCache.txt").is_file():
 					self.log_line("[Maho] Generating engine workspace…")
 					generate_engine_workspace(
 						ENGINE_ROOT,

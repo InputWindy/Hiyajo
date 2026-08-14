@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.20)
 
 # Engine workspace entry (kept under Build/ so repo root stays clean).
-# generateProject.bat → cmake -S Build -B Intermediate
+# generateProject.bat → cmake -S Build -B Maho/Intermediate
 
 get_filename_component(MAHO_WORKSPACE_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/.." ABSOLUTE)
 

@@ -12,7 +12,7 @@
       "description": "Source is Build/; intermediates and binaries live under the repo root.",
       "generator": "Visual Studio 17 2022",
       "architecture": "x64",
-      "binaryDir": "${sourceDir}/../Intermediate",
+      "binaryDir": "${sourceDir}/../Maho/Intermediate",
       "cacheVariables": {
         "MAHO_BUILD_SHARED": "ON"
       }

@@ -1,5 +1,6 @@
 # UE-style generated / local dirs (fully disposable; recreate on generate/build)
 /Intermediate/
+/Maho/Intermediate/
 /Binaries/
 /Packaged/
 /Cached/
@@ -69,11 +70,3 @@ __pycache__/
 *.gen.cpp
 *.gen.json
 /Maho/Source/Generated/
-
-# Large UI libs are FetchContent'd — do not re-vendor into git.
-/Maho/ThirdParty/imgui/
-/Maho/ThirdParty/ImGuizmo/
-/Maho/ThirdParty/imgui-node-editor/
-/Maho/ThirdParty/implot/
-/Maho/ThirdParty/ImGuiFileDialog/
-/Maho/ThirdParty/IconFontCppHeaders/

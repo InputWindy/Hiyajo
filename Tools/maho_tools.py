@@ -490,7 +490,7 @@ def generate_engine_workspace(
 	source_dir = engine_root / "Build"
 	if not (source_dir / "CMakeLists.txt").is_file():
 		raise FileNotFoundError(f"Engine CMake entry missing: {source_dir / 'CMakeLists.txt'}")
-	intermediate = engine_root / "Intermediate"
+	intermediate = engine_root / "Maho" / "Intermediate"
 	run_cmake_generate(
 		source_dir,
 		intermediate,
