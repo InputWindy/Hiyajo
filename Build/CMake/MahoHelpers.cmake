@@ -239,7 +239,14 @@ function(maho_add_plugin_modules)
 		)
 		# Also on MahoModules so game EXE always sees plugin Public (Generated App includes).
 		target_include_directories(MahoModules INTERFACE "${_MOD_SOURCE_DIR}/Public")
+		# ImGui's IMGUI_USER_CONFIG (UI/ImGuiConfig.h) lives under the Render plugin Public root.
+		if(TARGET imgui)
+			target_include_directories(imgui PUBLIC "${_MOD_SOURCE_DIR}/Public")
+		endif()
 		target_link_libraries(${_MOD_TARGET} PUBLIC ${_MAHO_PM_ENGINE_TARGET})
+		if(TARGET glfw)
+			target_link_libraries(${_MOD_TARGET} PRIVATE glfw)
+		endif()
 		target_compile_features(${_MOD_TARGET} PUBLIC cxx_std_20)
 
 		if(_MOD_DEP_COUNT GREATER 0)

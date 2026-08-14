@@ -230,3 +230,32 @@ else()
 		PYTHON_EXE "${_MAHO_LOCAL_PYTHON}"
 	)
 endif()
+
+# Per-plugin third-party wiring. Plugin DLLs compile their own TUs, so Maho's
+# PRIVATE third-party includes/links are not visible to them.
+if(TARGET Script)
+	target_link_libraries(Script PRIVATE lua)
+	target_include_directories(Script PRIVATE "${MAHO_SOL2_INCLUDE_DIR}")
+endif()
+
+if(TARGET Render)
+	target_include_directories(Render PRIVATE
+		"${MAHO_VMA_INCLUDE_DIR}"
+		"${MAHO_NLOHMANN_JSON_INCLUDE_DIR}"
+	)
+	if(WIN32)
+		target_compile_definitions(Render PRIVATE VK_USE_PLATFORM_WIN32_KHR=1)
+	endif()
+	if(MAHO_HAS_GLSLANG)
+		target_link_libraries(Render PRIVATE glslang OSDependent SPIRV)
+		target_compile_definitions(Render PRIVATE MAHO_WITH_GLSLANG=1)
+		target_include_directories(Render PRIVATE
+			"${glslang_SOURCE_DIR}"
+			"${glslang_BINARY_DIR}"
+		)
+		if(MAHO_HAS_SPIRV_TOOLS)
+			target_link_libraries(Render PRIVATE SPIRV-Tools-opt SPIRV-Tools)
+			target_compile_definitions(Render PRIVATE MAHO_WITH_SPIRV_TOOLS=1)
+		endif()
+	endif()
+endif()

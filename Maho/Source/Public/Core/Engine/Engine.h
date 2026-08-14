@@ -1,12 +1,18 @@
 #pragma once
 
 #include <Core/Misc/Export.h>
-#include <Core/Extension/Platform/PlatformWindow.h>
 
+#include <cstdint>
 #include <string>
 
 namespace Maho
 {
+
+/** Selects which OS/window backend FPlatformWindowFactory creates. */
+enum class EPlatform : std::uint8_t
+{
+	Glfw = 0,
+};
 
 /**
  * App / module configuration owned by FEngineBase (not a separate FEngine instance).

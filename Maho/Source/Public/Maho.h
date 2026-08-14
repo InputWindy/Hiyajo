@@ -26,24 +26,10 @@
 #include <Core/Engine/EngineExtension.h>
 #include <Core/EngineBase.h>
 #include <Core/Engine/GameEngine.h>
-#include <Core/Extension/Platform/Platform.h>
-#include <Core/Extension/Resource/ResourceSystem.h>
-#include <Core/Extension/Script/ScriptSystem.h>
-#include <Core/Extension/World/ECS/SystemGroup.h>
-#include <Core/Extension/Platform/PlatformWindow.h>
-#include <Render/RHI/RHI.h>
-#include <Render/RHI/RHIServer.h>
-#include <Render/RenderSystem.h>
-#include <Render/RenderPipelineStage.h>
-#include <Render/RenderFeature.h>
 #include <Core/Server/ThreadedServer.h>
 #include <Core/Server/ServerTask.h>
 #include <Core/Server/TaskContext.h>
-#include <Core/Extension/World/ECS/DOTS.h>
-#include <Render/UI/ImGuiSystem.h>
-#include <Render/UI/ImGuiTheme.h>
 
 #if defined(MAHO_WITH_IMGUI)
 #	include <imgui.h>
-#	include <Render/UI/ImGuiExtensions.h>
 #endif

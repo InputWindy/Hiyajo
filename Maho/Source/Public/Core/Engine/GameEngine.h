@@ -1,9 +1,11 @@
 #pragma once
 
 #include <Core/EngineBase.h>
-#include <Core/Misc/Export.h>
-#include <Core/Extension/World/ECS/SystemGroup.h>
-#include <Render/RenderSystem.h>
+#include <ECS/SystemGroup.h>
+#include <RenderSystem.h>
+
+#include <memory>
+#include <typeindex>
 
 namespace Maho
 {
@@ -19,12 +21,64 @@ namespace Maho
  * Projects subclass FGameEngine, override CreateWorld() to return their
  * FInitializationSystemGroup-derived world layer, and register remaining
  * extensions in PreInitialize before/after calling FGameEngine::PreInitialize.
+ *
+ * Header-only on purpose: the concrete extension types live in the Render and
+ * World plugin DLLs, so the game EXE (which links every plugin through
+ * Maho::Modules) instantiates these methods instead of Maho.dll importing
+ * plugin symbols.
  */
-class MAHO_API FGameEngine : public FEngineBase
+class FGameEngine : public FEngineBase
 {
 protected:
-	bool PreInitialize() override;
-	void Tick() override;
+	bool PreInitialize() override
+	{
+		RegisterExtension<FRenderSystem>(EExtensionPriority::System);
+
+		std::unique_ptr<FSystemGroup> World(CreateWorld());
+		if (!World)
+		{
+			MAHO_CORE_ERROR("FGameEngine: CreateWorld() returned null");
+			return false;
+		}
+
+		RegisterExtensionInstance(
+			std::unique_ptr<IEngineExtension>(World.release()),
+			std::type_index(typeid(FSystemGroup)),
+			EExtensionPriority::Layer);
+
+		return true;
+	}
+
+	void Tick() override
+	{
+		FRenderSystem* Render = GetExtension<FRenderSystem>();
+		FSystemGroup* World = GetExtension<FSystemGroup>();
+
+		if (Render)
+		{
+			Render->BeginFrame();
+		}
+
+		if (World)
+		{
+			World->BeginFrame();
+			World->Tick();
+			World->EndFrame();
+		}
+
+		// Editor / script / platform / resource per-frame hooks.
+		DispatchStageToExtensions(EEngineStage::Tick);
+
+		if (Render && World)
+		{
+			Render->SubmitFrameContext(Render->GatherContexts(World->GetWorld()));
+		}
+
+		if (Render)
+		{
+			Render->RenderFrame();
+		}
+	}
 
 	/** Create the root system group that owns the game world. */
 	[[nodiscard]] virtual FSystemGroup* CreateWorld()

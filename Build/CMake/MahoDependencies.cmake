@@ -66,7 +66,11 @@ set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(GLFW_INSTALL OFF CACHE BOOL "" FORCE)
 
 set(_MAHO_BUILD_SHARED_LIBS_SAVED "${BUILD_SHARED_LIBS}")
-set(BUILD_SHARED_LIBS OFF)
+if(MAHO_BUILD_SHARED)
+	set(BUILD_SHARED_LIBS ON)
+else()
+	set(BUILD_SHARED_LIBS OFF)
+endif()
 
 FetchContent_Declare(
 	glfw
@@ -258,7 +262,8 @@ target_include_directories(imgui
 	PUBLIC
 		"${MAHO_IMGUI_SOURCE_DIR}"
 		"${MAHO_IMGUI_SOURCE_DIR}/backends"
-		# IMGUI_USER_CONFIG resolves to Render/UI/ImGuiConfig.h under this include root.
+		# IMGUI_USER_CONFIG resolves to UI/ImGuiConfig.h under the Render plugin
+		# Public include root (added by maho_add_plugin_modules).
 		"${_MAHO_PUBLIC_HEADERS}"
 		"${MAHO_IMGUIZMO_SOURCE_DIR}"
 		"${MAHO_IMGUI_NODE_EDITOR_SOURCE_DIR}"
@@ -269,7 +274,7 @@ target_include_directories(imgui
 
 target_compile_definitions(imgui
 	PUBLIC
-		IMGUI_USER_CONFIG="Render/UI/ImGuiConfig.h"
+		IMGUI_USER_CONFIG="UI/ImGuiConfig.h"
 		MAHO_WITH_IMGUI=1
 		MAHO_WITH_IMGUI_EXTENSIONS=1
 		USE_IMGUI_API=1

@@ -1,0 +1,18 @@
+{
+	"FileVersion": 1,
+	"FriendlyName": "Platform",
+	"Description": "OS window + input extension (GLFW + platform window).",
+	"Category": "Engine",
+	"EnabledByDefault": true,
+	"Modules": [
+		{
+			"Name": "Platform",
+			"Type": "Runtime",
+			"Extension": {
+				"Class": "Maho::FPlatformSystem",
+				"Header": "Platform.h",
+				"Priority": "System"
+			}
+		}
+	]
+}
