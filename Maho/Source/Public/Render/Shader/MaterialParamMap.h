@@ -1,7 +1,6 @@
 ﻿#pragma once
 
 #include <Core/Export.h>
-#include <Render/ResourceSnapshots.h>
 
 #include <cstdint>
 #include <functional>

@@ -1,5 +1,4 @@
 ﻿#include <Core/Extension/Resource/ResourceIO.h>
-#include <Core/Extension/Resource/ResourceCasset.h>
 #include <Core/Extension/Resource/ResourceServer.h>
 
 #include <Core/Application/App.h>
@@ -16,6 +15,17 @@
 
 namespace Maho
 {
+
+FResource::FResource(
+	std::string InName,
+	EAssetType InType,
+	std::string InSourcePath)
+	: Name(std::move(InName))
+	, Type(InType)
+	, SourcePath(std::move(InSourcePath))
+	, LoadState(EAssetLoadState::Pending)
+{
+}
 
 FResourceSystem::FResourceSystem()
 	: Server(std::make_unique<FResourceServer>())
@@ -140,6 +150,38 @@ bool FResourceSystem::RegisterResource(Ref<FResource> Resource, const std::strin
 	Pkg->Objects.push_back(Resource.Get());
 	Catalog[Key] = std::move(Resource);
 	return true;
+}
+
+void FResourceSystem::RegisterResourceFactory(EAssetType Type, FResourceFactory Factory)
+{
+	if (!Factory) return;
+	ResourceFactories[Type] = std::move(Factory);
+}
+
+FResourceSystem::FResourceFactory FResourceSystem::GetResourceFactory(EAssetType Type) const
+{
+	const auto It = ResourceFactories.find(Type);
+	if (It == ResourceFactories.end()) return {};
+	return It->second;
+}
+
+void FResourceSystem::RegisterPackageCodec(FPackageCodec Codec)
+{
+	PackageCodec = std::move(Codec);
+	bHasPackageCodec = true;
+}
+
+const FPackageCodec* FResourceSystem::GetPackageCodec() const
+{
+	return bHasPackageCodec ? &PackageCodec : nullptr;
+}
+
+bool FResourceSystem::Import(
+	std::unique_ptr<IResourceImporter> Importer,
+	FResourceImportConfig Config,
+	std::string& OutAssetPath)
+{
+	return EnqueueImport(std::move(Importer), std::move(Config), OutAssetPath);
 }
 
 bool FResourceSystem::RegisterOwnedResource(const std::string& PackagePath, FResource* Resource)
@@ -322,8 +364,8 @@ void FResourceSystem::ProcessReadyIO()
 			continue;
 		}
 
-		const bool bOk = Pending.Importer
-			&& Pending.Importer->ApplyBulkData(*this, Pending.Config, Bulk);
+		if (Pending.Importer)
+			(void)Pending.Importer->ApplyBulkData(*this, Pending.Config, Bulk);
 		ReleaseBulkLoad(Pending.Handle);
 		++Applied;
 	}
@@ -392,6 +434,7 @@ bool FResourceSystem::EnqueueImport(
 
 bool FResourceSystem::TryLoad(const std::string& AssetPath, bool bAsync)
 {
+	(void)bAsync;
 	if (AssetPath.empty()) return false;
 
 	// Already loaded
@@ -400,12 +443,7 @@ bool FResourceSystem::TryLoad(const std::string& AssetPath, bool bAsync)
 	const std::string Filename = FPaths::ConvertPackageNameToFilename(AssetPath);
 	if (Filename.empty()) return false;
 
-	FResourceImportConfig Config;
-	Config.PackagePath = AssetPath;
-	Config.SourcePath = Filename;
-	Config.Mode = bAsync ? EResourceIOMode::Async : EResourceIOMode::Sync;
-	std::string OutAssetPath;
-	return Import<FCassetPackageImporter>(std::move(Config), OutAssetPath);
+	return !LoadPackage(Filename).empty();
 }
 
 bool FResourceSystem::SavePackage(
@@ -480,9 +518,10 @@ bool FResourceSystem::EnqueueSavePackage(
 	AsyncSave.FileBytes = std::make_shared<std::vector<std::uint8_t>>();
 	AsyncSave.bOk = std::make_shared<std::atomic<bool>>(false);
 
-	if (!ResourceCasset::BuildPackageDocument(Pkg, Pkg.Objects, AsyncSave.Document))
+	const FPackageCodec* Codec = GetPackageCodec();
+	if (!Codec || !Codec->Encode(Pkg, Pkg.Objects, *AsyncSave.FileBytes))
 	{
-		MAHO_CORE_ERROR("FResourceSystem::EnqueueSavePackage: BuildPackageDocument failed");
+		MAHO_CORE_ERROR("FResourceSystem::EnqueueSavePackage: package codec encode failed");
 		AsyncSave = {};
 		return false;
 	}
@@ -491,27 +530,18 @@ bool FResourceSystem::EnqueueSavePackage(
 	AsyncSave.StatusText = "Compressing...";
 	Pkg.FilePath = OutPath;
 
-	auto Document = std::make_shared<std::vector<std::uint8_t>>(std::move(AsyncSave.Document));
-	AsyncSave.Document.clear();
 	auto FileBytes = AsyncSave.FileBytes;
 	auto bOk = AsyncSave.bOk;
 	const std::string WritePath = OutPath;
 
-	AsyncSave.Task = FAsyncTask::LaunchNew([Document, FileBytes, bOk, WritePath]()
+	AsyncSave.Task = FAsyncTask::LaunchNew([FileBytes, bOk, WritePath]()
 	{
-		std::vector<std::uint8_t> LocalFile;
-		if (!ResourceCasset::WrapDocumentToMcasFile(*Document, LocalFile))
-		{
-			bOk->store(false, std::memory_order_release);
-			return;
-		}
 		std::ofstream Out(PathFromUtf8(WritePath), std::ios::binary | std::ios::trunc);
-		if (!Out || !Out.write(reinterpret_cast<const char*>(LocalFile.data()), static_cast<std::streamsize>(LocalFile.size())))
+		if (!Out || !Out.write(reinterpret_cast<const char*>(FileBytes->data()), static_cast<std::streamsize>(FileBytes->size())))
 		{
 			bOk->store(false, std::memory_order_release);
 			return;
 		}
-		*FileBytes = std::move(LocalFile);
 		bOk->store(true, std::memory_order_release);
 	});
 	AsyncSave.bCompressStarted = true;
@@ -637,9 +667,10 @@ bool FResourceSystem::SavePackageInternal(
 	}
 
 	std::vector<std::uint8_t> FileBytes;
-	if (!ResourceCasset::EncodePackageFile(Pkg, Pkg.Objects, FileBytes))
+	const FPackageCodec* Codec = GetPackageCodec();
+	if (!Codec || !Codec->Encode(Pkg, Pkg.Objects, FileBytes))
 	{
-		MAHO_CORE_ERROR("FResourceSystem::SavePackage: EncodePackageFile failed for '{}'", PkgKey);
+		MAHO_CORE_ERROR("FResourceSystem::SavePackage: package codec encode failed for '{}'", PkgKey);
 		SavingPackageNames.erase(PkgKey);
 		return false;
 	}
@@ -713,80 +744,34 @@ std::string FResourceSystem::LoadPackageInternal(
 namespace
 {
 
-template <typename TResource>
-[[nodiscard]] TResource* CreateTypedResource(
-	FResourceSystem& Manager,
-	const std::string& PackagePath,
-	const std::string& ObjectName,
-	EAssetType Type,
-	const std::string& ImportSource)
+bool ApplyCpuPayload(FResource& Resource, const std::vector<std::uint8_t>& CpuBytes)
 {
-	auto Res = std::make_unique<TResource>(ObjectName, Type, ImportSource);
-	TResource* Raw = Res.get();
-	Manager.RegisterResource(Ref<FResource>(Res.release()), PackagePath);
-	return Raw;
+	FArchive Ar(EArchiveMode::Loading, CpuBytes.data(), CpuBytes.size());
+	Resource.Serialize(Ar);
+	if (Ar.IsError()) return false;
+
+	Resource.MarkCpuReady();
+	return true;
 }
 
 FResource* CreateResourceFromParsed(
 	FResourceSystem& Manager,
 	const std::string& PackageName,
-	const ResourceCasset::FCassetParsedObject& Entry)
+	const FPackageDocumentObject& Entry)
 {
 	if (Entry.Name.empty()) return nullptr;
 
-	FResource* Created = nullptr;
-	switch (Entry.Type)
-	{
-	case EAssetType::Texture2D:
-		Created = CreateTypedResource<FTexture2D>(Manager, PackageName, Entry.Name, EAssetType::Texture2D, Entry.ImportSource);
-		break;
-	case EAssetType::Texture3D:
-		Created = CreateTypedResource<FTexture3D>(Manager, PackageName, Entry.Name, Entry.Type, Entry.ImportSource);
-		break;
-	case EAssetType::TextureCube:
-		Created = CreateTypedResource<FTextureCube>(Manager, PackageName, Entry.Name, Entry.Type, Entry.ImportSource);
-		break;
-	case EAssetType::TextureCubeArray:
-		Created = CreateTypedResource<FTextureCubeArray>(Manager, PackageName, Entry.Name, Entry.Type, Entry.ImportSource);
-		break;
-	case EAssetType::Texture2DArray:
-		Created = CreateTypedResource<FTexture2DArray>(Manager, PackageName, Entry.Name, Entry.Type, Entry.ImportSource);
-		break;
-	case EAssetType::Mesh:
-		Created = CreateTypedResource<FStaticMesh>(Manager, PackageName, Entry.Name, Entry.Type, Entry.ImportSource);
-		break;
-	case EAssetType::Material:
-		Created = CreateTypedResource<FMaterial>(Manager, PackageName, Entry.Name, Entry.Type, Entry.ImportSource);
-		break;
-	case EAssetType::Skeleton:
-		Created = CreateTypedResource<FSkeleton>(Manager, PackageName, Entry.Name, Entry.Type, Entry.ImportSource);
-		break;
-	case EAssetType::Animation:
-		Created = CreateTypedResource<FAnimation>(Manager, PackageName, Entry.Name, Entry.Type, Entry.ImportSource);
-		break;
-	case EAssetType::AnimationGraph:
-		Created = CreateTypedResource<FAnimationGraph>(Manager, PackageName, Entry.Name, Entry.Type, Entry.ImportSource);
-		break;
-	case EAssetType::Prefab:
-		Created = CreateTypedResource<FPrefab>(Manager, PackageName, Entry.Name, Entry.Type, Entry.ImportSource);
-		break;
-	// Level and World are ECS-owned; not created as FResource
-	case EAssetType::Level:
-	case EAssetType::World:
-		MAHO_CORE_WARN("FResourceSystem: {} asset '{}' not supported as FResource (use ECS)",
-			Entry.Type == EAssetType::Level ? "Level" : "World", Entry.Name);
-		return nullptr;
-	default:
-		MAHO_CORE_ERROR("FResourceSystem: unsupported casset type {} for '{}'",
-			static_cast<int>(Entry.Type), Entry.Name);
-		return nullptr;
-	}
+	FResourceSystem::FResourceFactory Factory = Manager.GetResourceFactory(Entry.Type);
+	if (!Factory) return nullptr;
 
+	FResource* Created = Factory(Entry.Name, Entry.Type, Entry.ImportSource);
 	if (!Created) return nullptr;
 
-	if ((Entry.RecordFlags & ResourceCasset::kRecordHasCpu) != 0)
+	(void)Manager.RegisterResource(Ref<FResource>(Created), PackageName);
+
+	if (!Entry.CpuBytes.empty())
 	{
-		if (!ResourceCasset::ApplyCpuPayload(*Created, Entry.CpuBytes))
+		if (!ApplyCpuPayload(*Created, Entry.CpuBytes))
 		{
 			Manager.UnregisterResource(Created);
 			return nullptr;
@@ -812,14 +797,22 @@ std::string FResourceSystem::LoadPackageFromBinary(
 	if (LoadingFilePaths.find(NormalizedFile) == LoadingFilePaths.end())
 		LoadingFilePaths.insert(NormalizedFile);
 
-	ResourceCasset::FCassetParsedPackage Parsed;
-	if (!ResourceCasset::DecodePackageFile(FileBytes, FileSize, Parsed))
+	const FPackageCodec* Codec = GetPackageCodec();
+	if (!Codec)
+	{
+		MAHO_CORE_ERROR("FResourceSystem::LoadPackageFromBinary: no package codec registered for '{}'", FilePath);
+		LoadingFilePaths.erase(NormalizedFile);
+		return {};
+	}
+
+	FPackageDocument Parsed;
+	if (!Codec->Decode(FileBytes, FileSize, Parsed))
 	{
 		LoadingFilePaths.erase(NormalizedFile);
 		return {};
 	}
 
-	for (const ResourceCasset::FCassetDependency& Dep : Parsed.Dependencies)
+	for (const FPackageDocument::FDependency& Dep : Parsed.Dependencies)
 	{
 		const std::string DepName = NormalizePackageName(Dep.PackageName);
 		if (!DepName.empty() && Packages.find(DepName) != Packages.end())
@@ -839,9 +832,9 @@ std::string FResourceSystem::LoadPackageFromBinary(
 		PackageName = FilePath;
 
 	FResourcePackage* Pkg = FindOrCreatePackage(PackageName, FilePath);
-	Pkg->Flags = Parsed.PackageFlags;
+	Pkg->Flags = Parsed.Flags;
 
-	for (const ResourceCasset::FCassetParsedObject& Entry : Parsed.Objects)
+	for (const FPackageDocumentObject& Entry : Parsed.Objects)
 	{
 		FResource* Created = CreateResourceFromParsed(*this, PackageName, Entry);
 		if (!Created)

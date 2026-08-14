@@ -2,7 +2,7 @@
 
 #include <Core/Export.h>
 #include <Render/RHI/RHIEnums.h>
-#include <Render/ShaderCompiler.h>
+#include <Render/Shader/ShaderCompiler.h>
 
 #include <string>
 #include <unordered_map>

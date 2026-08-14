@@ -1,8 +1,8 @@
-#include <Render/ShaderLoader.h>
+#include <Render/Shader/ShaderLoader.h>
 
 #include <Core/System/Log.h>
 #include <Core/System/Paths.h>
-#include <Render/ShaderCache.h>
+#include <Render/Shader/ShaderCache.h>
 
 #include <algorithm>
 #include <cctype>

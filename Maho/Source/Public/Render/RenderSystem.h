@@ -6,7 +6,6 @@
 #include <Core/Sequencer/EngineExtension.h>
 #include <Core/TypeList.h>
 #include <Core/Extension/Platform/Platform.h>
-#include <Render/ResourceSnapshots.h>
 #include <Core/Server/ThreadedServer.h>
 #include <Core/Server/TransferHandle.h>
 #include <Core/System/PlatformWindow.h>
@@ -19,7 +18,6 @@
 
 #include <cstdint>
 #include <memory>
-#include <mutex>
 #include <queue>
 #include <string>
 #include <type_traits>
@@ -33,14 +31,6 @@ namespace Maho
 
 class FVulkanRHI;
 struct FImGuiDrawDataRing;
-class FTextureProxyRegistry;
-class FMeshProxyRegistry;
-class FSkeletonProxyRegistry;
-class FAnimationProxyRegistry;
-
-/** Tag — specializations provide Submit in RenderSystem.cpp. */
-template <typename TResource>
-struct TRenderResourceExporter;
 
 /**
  * Render extension + render thread worker.
@@ -100,26 +90,6 @@ public:
 	/** Game thread: replace the pending frame context consumed by the next Render(). */
 	void SubmitFrameContext(FGameFrameContext FrameContext);
 
-	/**
-	 * Client (Game): non-blocking resource → proxy upload.
-	 * Requires TRenderResourceExporter<TResource> specialization (Texture/Mesh/Skeleton/Animation).
-	 * Template bodies + explicit instantiations live in RenderSystem.cpp.
-	 */
-	template <typename TResource>
-	FTransferHandle QueueResourceUpload(const TResource& Resource);
-
-	template <typename TResource>
-	FTransferHandle RequestResourceDestroy(const TResource& Resource);
-
-	[[nodiscard]] FTextureProxyRegistry& GetTextureProxyRegistry();
-	[[nodiscard]] const FTextureProxyRegistry& GetTextureProxyRegistry() const;
-	[[nodiscard]] FMeshProxyRegistry& GetMeshProxyRegistry();
-	[[nodiscard]] const FMeshProxyRegistry& GetMeshProxyRegistry() const;
-	[[nodiscard]] FSkeletonProxyRegistry& GetSkeletonProxyRegistry();
-	[[nodiscard]] const FSkeletonProxyRegistry& GetSkeletonProxyRegistry() const;
-	[[nodiscard]] FAnimationProxyRegistry& GetAnimationProxyRegistry();
-	[[nodiscard]] const FAnimationProxyRegistry& GetAnimationProxyRegistry() const;
-
 	[[nodiscard]] FImGuiSystem& GetImGui() { return ImGui; }
 	[[nodiscard]] const FImGuiSystem& GetImGui() const { return ImGui; }
 
@@ -171,51 +141,14 @@ public:
 		return Ref;
 	}
 
-	// Used by TRenderResourceExporter specializations (Game thread).
-	void PushPendingTextureUpload(FTextureCpuSnapshot Snapshot, FTransferHandle Handle);
-	void PushPendingTextureDestroy(std::string CatalogKey, FTransferHandle Handle);
-	void PushPendingMeshUpload(FMeshCpuSnapshot Snapshot, FTransferHandle Handle);
-	void PushPendingMeshDestroy(std::string CatalogKey, FTransferHandle Handle);
-	void PushPendingSkeletonUpload(FSkeletonCpuSnapshot Snapshot, FTransferHandle Handle);
-	void PushPendingSkeletonDestroy(std::string CatalogKey, FTransferHandle Handle);
-	void PushPendingAnimationUpload(FAnimationCpuSnapshot Snapshot, FTransferHandle Handle);
-	void PushPendingAnimationDestroy(std::string CatalogKey, FTransferHandle Handle);
-
 protected:
 	[[nodiscard]] const char* GetServerThreadName() const override { return "MahoRender"; }
 	[[nodiscard]] const char* GetServerLogName() const override { return "RenderServer"; }
 
 private:
-	struct FPendingTextureUpload
-	{
-		FTextureCpuSnapshot Snapshot;
-		FTransferHandle Handle;
-	};
-	struct FPendingMeshUpload
-	{
-		FMeshCpuSnapshot Snapshot;
-		FTransferHandle Handle;
-	};
-	struct FPendingSkeletonUpload
-	{
-		FSkeletonCpuSnapshot Snapshot;
-		FTransferHandle Handle;
-	};
-	struct FPendingAnimationUpload
-	{
-		FAnimationCpuSnapshot Snapshot;
-		FTransferHandle Handle;
-	};
-	struct FPendingDestroy
-	{
-		std::string CatalogKey;
-		FTransferHandle Handle;
-	};
-
 	void SyncFramebufferSize();
 	[[nodiscard]] int GetMaxFramesInFlight() const;
 	void BuildAndExecuteGraph(const FRenderFramePacket& Packet);
-	void ProcessPendingResourceTransfers();
 	[[nodiscard]] std::vector<IRenderFeature*> SortFeaturesForStage(
 		std::vector<IRenderFeature*>& Participants,
 		std::unordered_map<std::type_index, IRenderFeature*>& TypeMap,
@@ -225,21 +158,7 @@ private:
 	FPlatformWindow* BoundWindow = nullptr;
 	FImGuiSystem ImGui;
 	std::unique_ptr<FImGuiDrawDataRing> ImGuiDrawDataRing;
-	std::unique_ptr<FTextureProxyRegistry> TextureProxies;
-	std::unique_ptr<FMeshProxyRegistry> MeshProxies;
-	std::unique_ptr<FSkeletonProxyRegistry> SkeletonProxies;
-	std::unique_ptr<FAnimationProxyRegistry> AnimationProxies;
 	std::vector<std::unique_ptr<IRenderFeature>> Features;
-
-	std::mutex PendingUploadMutex;
-	std::vector<FPendingTextureUpload> PendingTextureUploads;
-	std::vector<FPendingDestroy> PendingTextureDestroys;
-	std::vector<FPendingMeshUpload> PendingMeshUploads;
-	std::vector<FPendingDestroy> PendingMeshDestroys;
-	std::vector<FPendingSkeletonUpload> PendingSkeletonUploads;
-	std::vector<FPendingDestroy> PendingSkeletonDestroys;
-	std::vector<FPendingAnimationUpload> PendingAnimationUploads;
-	std::vector<FPendingDestroy> PendingAnimationDestroys;
 
 	std::uint64_t CurrentFrameIndex = 0;
 	FGameFrameContext PendingFrameContext;

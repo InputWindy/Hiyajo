@@ -1,6 +1,4 @@
-﻿#include <Core/Extension/Resource/ResourceServer.h>
-#include <Core/Extension/Resource/MeshModelCodec.h>
-#include <Core/Extension/Resource/TextureImageCodec.h>
+#include <Core/Extension/Resource/ResourceServer.h>
 
 #include <Core/System/Log.h>
 #include <Core/System/Utf8Path.h>
@@ -65,41 +63,6 @@ FResourceLoadResult FResourceServer::ExecuteRequest(const FResourceLoadRequest& 
 				{
 					bSuccess = true;
 					MAHO_CORE_INFO("Resource BulkData ready: path=\"{}\" bytes={}", Request.Path, Bytes.size());
-
-					if (MeshModelCodec::MatchesModelSourcePath(Request.Path))
-					{
-						auto Model = std::make_shared<FPreparedModelImport>();
-						if (MeshModelCodec::PrepareModelImport(Bytes.data(), Bytes.size(), Request.Path, *Model))
-						{
-							Result.PreparedKind = EResourceBulkPreparedKind::Model;
-							Result.Prepared = std::move(Model);
-						}
-						else
-						{
-							MAHO_CORE_ERROR("Resource BulkData model prepare failed: path=\"{}\"", Request.Path);
-							bSuccess = false;
-							Bytes.clear();
-						}
-					}
-					else
-					{
-						const std::string Ext = TextureImageCodec::GetExtensionLower(Request.Path);
-						if (TextureImageCodec::IsRasterExtension(Ext) || TextureImageCodec::IsKtx2Extension(Ext))
-						{
-							auto Image = std::make_shared<FDecodedImage>();
-							if (TextureImageCodec::DecodeFromMemory(Bytes.data(), Bytes.size(), Request.Path, *Image))
-							{
-								Result.PreparedKind = EResourceBulkPreparedKind::TextureImage;
-								Result.Prepared = std::move(Image);
-							}
-							else
-							{
-								MAHO_CORE_ERROR("Resource BulkData texture prepare failed: path=\"{}\"", Request.Path);
-								bSuccess = false;
-								Bytes.clear();
-							}
-						}
-					}
 				}
 			}
 		}

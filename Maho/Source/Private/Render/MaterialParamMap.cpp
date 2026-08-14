@@ -1,5 +1,4 @@
-#include <Render/MaterialParamMap.h>
-#include <Render/ResourceSnapshots.h>
+#include <Render/Shader/MaterialParamMap.h>
 
 #include <algorithm>
 #include <cctype>

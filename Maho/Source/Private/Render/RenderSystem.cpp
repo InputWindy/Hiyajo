@@ -6,10 +6,6 @@
 #include <Core/Extension/Render/Render.h>
 #include <Core/System/Console.h>
 #include <Core/System/Log.h>
-#include "Render/AnimationRenderProxy.h"
-#include "Render/MeshRenderProxy.h"
-#include "Render/SkeletonRenderProxy.h"
-#include "Render/TextureRenderProxy.h"
 #include "Render/UI/ImGuiDrawDataRing.h"
 
 #if defined(MAHO_WITH_IMGUI)
@@ -94,10 +90,6 @@ bool FRenderSystem::ExecuteStage(EEngineStage Stage)
 
 FRenderSystem::FRenderSystem()
 	: ImGuiDrawDataRing(std::make_unique<FImGuiDrawDataRing>())
-	, TextureProxies(std::make_unique<FTextureProxyRegistry>())
-	, MeshProxies(std::make_unique<FMeshProxyRegistry>())
-	, SkeletonProxies(std::make_unique<FSkeletonProxyRegistry>())
-	, AnimationProxies(std::make_unique<FAnimationProxyRegistry>())
 {
 }
 
@@ -136,94 +128,6 @@ void FRenderSystem::SubmitFrameContext(FGameFrameContext FrameContext)
 	PendingFrameContext = std::move(FrameContext);
 }
 
-FTextureProxyRegistry& FRenderSystem::GetTextureProxyRegistry()
-{
-	return *TextureProxies;
-}
-
-const FTextureProxyRegistry& FRenderSystem::GetTextureProxyRegistry() const
-{
-	return *TextureProxies;
-}
-
-FMeshProxyRegistry& FRenderSystem::GetMeshProxyRegistry()
-{
-	return *MeshProxies;
-}
-
-const FMeshProxyRegistry& FRenderSystem::GetMeshProxyRegistry() const
-{
-	return *MeshProxies;
-}
-
-FSkeletonProxyRegistry& FRenderSystem::GetSkeletonProxyRegistry()
-{
-	return *SkeletonProxies;
-}
-
-const FSkeletonProxyRegistry& FRenderSystem::GetSkeletonProxyRegistry() const
-{
-	return *SkeletonProxies;
-}
-
-FAnimationProxyRegistry& FRenderSystem::GetAnimationProxyRegistry()
-{
-	return *AnimationProxies;
-}
-
-const FAnimationProxyRegistry& FRenderSystem::GetAnimationProxyRegistry() const
-{
-	return *AnimationProxies;
-}
-
-void FRenderSystem::PushPendingTextureUpload(FTextureCpuSnapshot Snapshot, FTransferHandle Handle)
-{
-	std::lock_guard<std::mutex> Lock(PendingUploadMutex);
-	PendingTextureUploads.push_back(FPendingTextureUpload{ std::move(Snapshot), Handle });
-}
-
-void FRenderSystem::PushPendingTextureDestroy(std::string CatalogKey, FTransferHandle Handle)
-{
-	std::lock_guard<std::mutex> Lock(PendingUploadMutex);
-	PendingTextureDestroys.push_back(FPendingDestroy{ std::move(CatalogKey), Handle });
-}
-
-void FRenderSystem::PushPendingMeshUpload(FMeshCpuSnapshot Snapshot, FTransferHandle Handle)
-{
-	std::lock_guard<std::mutex> Lock(PendingUploadMutex);
-	PendingMeshUploads.push_back(FPendingMeshUpload{ std::move(Snapshot), Handle });
-}
-
-void FRenderSystem::PushPendingMeshDestroy(std::string CatalogKey, FTransferHandle Handle)
-{
-	std::lock_guard<std::mutex> Lock(PendingUploadMutex);
-	PendingMeshDestroys.push_back(FPendingDestroy{ std::move(CatalogKey), Handle });
-}
-
-void FRenderSystem::PushPendingSkeletonUpload(FSkeletonCpuSnapshot Snapshot, FTransferHandle Handle)
-{
-	std::lock_guard<std::mutex> Lock(PendingUploadMutex);
-	PendingSkeletonUploads.push_back(FPendingSkeletonUpload{ std::move(Snapshot), Handle });
-}
-
-void FRenderSystem::PushPendingSkeletonDestroy(std::string CatalogKey, FTransferHandle Handle)
-{
-	std::lock_guard<std::mutex> Lock(PendingUploadMutex);
-	PendingSkeletonDestroys.push_back(FPendingDestroy{ std::move(CatalogKey), Handle });
-}
-
-void FRenderSystem::PushPendingAnimationUpload(FAnimationCpuSnapshot Snapshot, FTransferHandle Handle)
-{
-	std::lock_guard<std::mutex> Lock(PendingUploadMutex);
-	PendingAnimationUploads.push_back(FPendingAnimationUpload{ std::move(Snapshot), Handle });
-}
-
-void FRenderSystem::PushPendingAnimationDestroy(std::string CatalogKey, FTransferHandle Handle)
-{
-	std::lock_guard<std::mutex> Lock(PendingUploadMutex);
-	PendingAnimationDestroys.push_back(FPendingDestroy{ std::move(CatalogKey), Handle });
-}
-
 bool FRenderSystem::Boot(FPlatformWindow& InWindow, const FConfig& Config)
 {
 	BoundWindow = &InWindow;
@@ -255,11 +159,6 @@ bool FRenderSystem::Boot(FPlatformWindow& InWindow, const FConfig& Config)
 		BoundWindow = nullptr;
 		return false;
 	}
-
-	TextureProxies->EnsureDefaultPlaceholder(RHIServer);
-	MeshProxies->EnsureDefaultPlaceholder(RHIServer);
-	SkeletonProxies->EnsureDefaultPlaceholder(RHIServer);
-	AnimationProxies->EnsureDefaultPlaceholder();
 
 	if (InWindow.HasOsWindow())
 	{
@@ -306,23 +205,6 @@ void FRenderSystem::TearDown()
 	GameViewWidth = 0;
 	GameViewHeight = 0;
 
-	if (AnimationProxies)
-	{
-		AnimationProxies->DestroyAll(RHIServer);
-	}
-	if (SkeletonProxies && RHIServer.IsInitialized())
-	{
-		SkeletonProxies->DestroyAll(RHIServer);
-	}
-	if (MeshProxies && RHIServer.IsInitialized())
-	{
-		MeshProxies->DestroyAll(RHIServer);
-	}
-	if (TextureProxies && RHIServer.IsInitialized())
-	{
-		TextureProxies->DestroyAll(RHIServer);
-	}
-
 	if (RHIServer.IsInitialized())
 	{
 		RHIServer.Flush();
@@ -340,18 +222,6 @@ void FRenderSystem::TearDown()
 	if (ImGuiDrawDataRing)
 	{
 		ImGuiDrawDataRing->ReleaseAll();
-	}
-
-	{
-		std::lock_guard<std::mutex> Lock(PendingUploadMutex);
-		PendingTextureUploads.clear();
-		PendingTextureDestroys.clear();
-		PendingMeshUploads.clear();
-		PendingMeshDestroys.clear();
-		PendingSkeletonUploads.clear();
-		PendingSkeletonDestroys.clear();
-		PendingAnimationUploads.clear();
-		PendingAnimationDestroys.clear();
 	}
 
 	if (IsInitialized())
@@ -523,68 +393,6 @@ void FRenderSystem::BuildAndExecuteGraph(const FRenderFramePacket& Packet)
 	FrameGraph.Execute();
 }
 
-void FRenderSystem::ProcessPendingResourceTransfers()
-{
-	std::vector<FPendingTextureUpload> TextureUploads;
-	std::vector<FPendingDestroy> TextureDestroys;
-	std::vector<FPendingMeshUpload> MeshUploads;
-	std::vector<FPendingDestroy> MeshDestroys;
-	std::vector<FPendingSkeletonUpload> SkeletonUploads;
-	std::vector<FPendingDestroy> SkeletonDestroys;
-	std::vector<FPendingAnimationUpload> AnimationUploads;
-	std::vector<FPendingDestroy> AnimationDestroys;
-	{
-		std::lock_guard<std::mutex> Lock(PendingUploadMutex);
-		TextureUploads.swap(PendingTextureUploads);
-		TextureDestroys.swap(PendingTextureDestroys);
-		MeshUploads.swap(PendingMeshUploads);
-		MeshDestroys.swap(PendingMeshDestroys);
-		SkeletonUploads.swap(PendingSkeletonUploads);
-		SkeletonDestroys.swap(PendingSkeletonDestroys);
-		AnimationUploads.swap(PendingAnimationUploads);
-		AnimationDestroys.swap(PendingAnimationDestroys);
-	}
-
-	for (FPendingDestroy& Item : TextureDestroys)
-	{
-		TextureProxies->Destroy(RHIServer, Item.CatalogKey, Item.Handle);
-	}
-	for (FPendingTextureUpload& Item : TextureUploads)
-	{
-		TextureProxies->BeginUpload(RHIServer, std::move(Item.Snapshot), Item.Handle);
-	}
-	TextureProxies->PollInFlight(RHIServer);
-
-	for (FPendingDestroy& Item : MeshDestroys)
-	{
-		MeshProxies->Destroy(RHIServer, Item.CatalogKey, Item.Handle);
-	}
-	for (FPendingMeshUpload& Item : MeshUploads)
-	{
-		MeshProxies->BeginUpload(RHIServer, std::move(Item.Snapshot), Item.Handle);
-	}
-	MeshProxies->PollInFlight(RHIServer);
-
-	for (FPendingDestroy& Item : SkeletonDestroys)
-	{
-		SkeletonProxies->Destroy(RHIServer, Item.CatalogKey, Item.Handle);
-	}
-	for (FPendingSkeletonUpload& Item : SkeletonUploads)
-	{
-		SkeletonProxies->BeginUpload(RHIServer, std::move(Item.Snapshot), Item.Handle);
-	}
-	SkeletonProxies->PollInFlight(RHIServer);
-
-	for (FPendingDestroy& Item : AnimationDestroys)
-	{
-		AnimationProxies->Destroy(RHIServer, Item.CatalogKey, Item.Handle);
-	}
-	for (FPendingAnimationUpload& Item : AnimationUploads)
-	{
-		AnimationProxies->BeginUpload(RHIServer, std::move(Item.Snapshot), Item.Handle);
-	}
-}
-
 void FRenderSystem::ExecuteFrame(FRenderFramePacket Packet)
 {
 	CurrentFrameIndex = Packet.FrameIndex;
@@ -596,7 +404,6 @@ void FRenderSystem::ExecuteFrame(FRenderFramePacket Packet)
 		RHIServer.RequestResize(Packet.FramebufferWidth, Packet.FramebufferHeight);
 	}
 
-	ProcessPendingResourceTransfers();
 	BuildAndExecuteGraph(Packet);
 }
 

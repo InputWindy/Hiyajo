@@ -1,8 +1,8 @@
-#include <Render/ShaderCache.h>
+#include <Render/Shader/ShaderCache.h>
 
 #include <Core/System/Log.h>
 #include <Core/System/Paths.h>
-#include <Render/ShaderCompiler.h>
+#include <Render/Shader/ShaderCompiler.h>
 
 #include <nlohmann/json.hpp>
 

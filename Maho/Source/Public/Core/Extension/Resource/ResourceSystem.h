@@ -17,7 +17,6 @@
 #include <Core/System/RefCounted.h>
 #include <Core/TypeList.h>
 #include <Core/Concurrent/AsyncTask.h>
-#include <Render/ResourceSnapshots.h>
 
 #include <atomic>
 #include <cstdint>
@@ -32,22 +31,6 @@ namespace Maho
 {
 
 // ── Shared enums ───────────────────────────────────────────────
-
-enum class EModelAxis : std::uint8_t
-{
-	X = 0,
-	Y = 1,
-	Z = 2,
-	NegativeX = 3,
-	NegativeY = 4,
-	NegativeZ = 5,
-};
-
-enum class EModelHandedness : std::uint8_t
-{
-	Left = 0,
-	Right = 1,
-};
 
 class FResourceSystem;
 
@@ -137,242 +120,6 @@ protected:
 	std::uint64_t ContentGeneration = 0;
 };
 
-// ── Texture types ──────────────────────────────────────────────
-
-class MAHO_API FTexture : public FResource
-{
-public:
-	FTexture(
-		std::string InName,
-		EAssetType InType,
-		std::string InSourcePath);
-
-	[[nodiscard]] ETextureDimension GetDimension() const { return Dimension; }
-	[[nodiscard]] ETexturePixelFormat GetPixelFormat() const { return PixelFormat; }
-	[[nodiscard]] std::uint32_t GetWidth() const { return Width; }
-	[[nodiscard]] std::uint32_t GetHeight() const { return Height; }
-	[[nodiscard]] std::uint32_t GetDepth() const { return Depth; }
-	[[nodiscard]] std::uint32_t GetArrayLayers() const { return ArrayLayers; }
-	[[nodiscard]] std::uint32_t GetMipCount() const { return MipCount; }
-	[[nodiscard]] bool IsSRGB() const { return bSRGB; }
-	[[nodiscard]] const std::vector<std::uint8_t>& GetPixels() const { return Pixels; }
-	[[nodiscard]] std::vector<std::uint8_t>& GetPixelsMutable() { return Pixels; }
-
-	[[nodiscard]] const std::vector<std::uint8_t>& GetSerializedSourceBytes() const { return SerializedSourceBytes; }
-	[[nodiscard]] const std::string& GetSerializedSourceHint() const { return SerializedSourceHint; }
-	[[nodiscard]] bool HasSerializedSource() const { return !SerializedSourceBytes.empty(); }
-	void SetSerializedSource(std::string Hint, std::vector<std::uint8_t> Bytes);
-	void ClearSerializedSource();
-
-	void SetCpuImage(
-		ETextureDimension InDimension,
-		ETexturePixelFormat InFormat,
-		std::uint32_t InWidth,
-		std::uint32_t InHeight,
-		std::uint32_t InDepth,
-		std::uint32_t InArrayLayers,
-		std::uint32_t InMipCount,
-		bool bInSRGB,
-		std::vector<std::uint8_t> InPixels);
-
-	void Serialize(FArchive& Ar) override;
-
-protected:
-	ETextureDimension Dimension = ETextureDimension::Tex2D;
-	ETexturePixelFormat PixelFormat = ETexturePixelFormat::Unknown;
-	std::uint32_t Width = 0;
-	std::uint32_t Height = 0;
-	std::uint32_t Depth = 1;
-	std::uint32_t ArrayLayers = 1;
-	std::uint32_t MipCount = 1;
-	bool bSRGB = true;
-	std::vector<std::uint8_t> Pixels;
-	std::string SerializedSourceHint;
-	std::vector<std::uint8_t> SerializedSourceBytes;
-};
-
-class MAHO_API FTexture2D : public FTexture
-{
-public:
-	FTexture2D(std::string InName, EAssetType InType, std::string InSourcePath);
-};
-
-class MAHO_API FTexture3D : public FTexture
-{
-public:
-	FTexture3D(std::string InName, EAssetType InType, std::string InSourcePath);
-};
-
-class MAHO_API FTextureCube : public FTexture
-{
-public:
-	FTextureCube(std::string InName, EAssetType InType, std::string InSourcePath);
-};
-
-class MAHO_API FTextureCubeArray : public FTexture
-{
-public:
-	FTextureCubeArray(std::string InName, EAssetType InType, std::string InSourcePath);
-};
-
-class MAHO_API FTexture2DArray : public FTexture
-{
-public:
-	FTexture2DArray(std::string InName, EAssetType InType, std::string InSourcePath);
-};
-
-// ── Material ───────────────────────────────────────────────────
-
-class MAHO_API FMaterial : public FResource
-{
-public:
-	FMaterial(std::string InName, EAssetType InType, std::string InSourcePath);
-
-	[[nodiscard]] const std::string& GetBaseColorTexture() const { return BaseColorPath; }
-	void SetBaseColorTexture(std::string Path) { BaseColorPath = std::move(Path); }
-	[[nodiscard]] const std::string& GetNormalTexture() const { return NormalPath; }
-	void SetNormalTexture(std::string Path) { NormalPath = std::move(Path); }
-	[[nodiscard]] const std::string& GetMetallicRoughnessTexture() const { return MetallicRoughnessPath; }
-	void SetMetallicRoughnessTexture(std::string Path) { MetallicRoughnessPath = std::move(Path); }
-	[[nodiscard]] const std::string& GetOcclusionTexture() const { return OcclusionPath; }
-	void SetOcclusionTexture(std::string Path) { OcclusionPath = std::move(Path); }
-	[[nodiscard]] const std::string& GetEmissiveTexture() const { return EmissivePath; }
-	void SetEmissiveTexture(std::string Path) { EmissivePath = std::move(Path); }
-
-	[[nodiscard]] std::vector<std::string> GetReferencePaths() const override;
-
-	void Serialize(FArchive& Ar) override;
-
-	float BaseColorFactor[4] = {1.f, 1.f, 1.f, 1.f};
-	float MetallicFactor = 0.f;
-	float RoughnessFactor = 1.f;
-	float EmissiveFactor[3] = {0.f, 0.f, 0.f};
-
-protected:
-	std::string BaseColorPath;
-	std::string NormalPath;
-	std::string MetallicRoughnessPath;
-	std::string OcclusionPath;
-	std::string EmissivePath;
-};
-
-// ── Static Mesh ────────────────────────────────────────────────
-
-class MAHO_API FStaticMesh : public FResource
-{
-public:
-	FStaticMesh(std::string InName, EAssetType InType, std::string InSourcePath);
-
-	[[nodiscard]] const std::string& GetMaterial() const { return MaterialPath; }
-	void SetMaterial(std::string Path) { MaterialPath = std::move(Path); }
-	[[nodiscard]] const std::vector<float>& GetPositions() const { return Positions; }
-	[[nodiscard]] const std::vector<float>& GetNormals() const { return Normals; }
-	[[nodiscard]] const std::vector<float>& GetUVs() const { return UVs; }
-	[[nodiscard]] const std::vector<std::uint32_t>& GetIndices() const { return Indices; }
-
-	void SetCpuGeometry(
-		std::vector<float> InPositions,
-		std::vector<float> InNormals,
-		std::vector<float> InUVs,
-		std::vector<std::uint32_t> InIndices);
-
-	[[nodiscard]] std::vector<std::string> GetReferencePaths() const override;
-
-	void Serialize(FArchive& Ar) override;
-
-protected:
-	std::string MaterialPath;
-	std::vector<float> Positions;
-	std::vector<float> Normals;
-	std::vector<float> UVs;
-	std::vector<std::uint32_t> Indices;
-};
-
-// ── Skeleton / Animation ───────────────────────────────────────
-
-struct FSkeletonBone
-{
-	std::string Name;
-	std::int32_t ParentIndex = -1;
-	float BindLocal[16] = {
-		1, 0, 0, 0,
-		0, 1, 0, 0,
-		0, 0, 1, 0,
-		0, 0, 0, 1};
-};
-
-struct FAnimationTrack
-{
-	std::string TargetBoneName;
-	std::vector<FAnimationKey> Keys;
-};
-
-class MAHO_API FSkeleton : public FResource
-{
-public:
-	FSkeleton(std::string InName, EAssetType InType, std::string InSourcePath);
-
-	[[nodiscard]] const std::vector<FSkeletonBone>& GetBones() const { return Bones; }
-	void SetBones(std::vector<FSkeletonBone> InBones);
-
-	void Serialize(FArchive& Ar) override;
-
-protected:
-	std::vector<FSkeletonBone> Bones;
-};
-
-class MAHO_API FAnimation : public FResource
-{
-public:
-	FAnimation(std::string InName, EAssetType InType, std::string InSourcePath);
-
-	[[nodiscard]] const std::string& GetSkeleton() const { return SkeletonPath; }
-	void SetSkeleton(std::string Path);
-	[[nodiscard]] float GetDurationSeconds() const { return DurationSeconds; }
-	void SetDurationSeconds(float Seconds);
-	[[nodiscard]] const std::vector<FAnimationTrack>& GetTracks() const { return Tracks; }
-	void SetTracks(std::vector<FAnimationTrack> InTracks);
-
-	[[nodiscard]] std::vector<std::string> GetReferencePaths() const override;
-
-	void Serialize(FArchive& Ar) override;
-
-protected:
-	std::string SkeletonPath;
-	float DurationSeconds = 0.f;
-	std::vector<FAnimationTrack> Tracks;
-};
-
-// ── AnimationGraph / Prefab ────────────────────────────────────
-
-class MAHO_API FAnimationGraph : public FResource
-{
-public:
-	FAnimationGraph(std::string InName, EAssetType InType, std::string InSourcePath);
-
-	[[nodiscard]] const std::string& GetDocumentJson() const { return DocumentJson; }
-	void SetDocumentJson(std::string Json) { DocumentJson = std::move(Json); }
-
-	void Serialize(FArchive& Ar) override;
-
-protected:
-	std::string DocumentJson;
-};
-
-class MAHO_API FPrefab : public FResource
-{
-public:
-	FPrefab(std::string InName, EAssetType InType, std::string InSourcePath);
-
-	[[nodiscard]] const std::string& GetDocumentJson() const { return DocumentJson; }
-	void SetDocumentJson(std::string Json) { DocumentJson = std::move(Json); }
-
-	void Serialize(FArchive& Ar) override;
-
-protected:
-	std::string DocumentJson;
-};
-
 // ── BulkData / IO types ────────────────────────────────────────
 
 enum class EResourceBulkPreparedKind : std::uint8_t
@@ -421,6 +168,41 @@ struct FResourcePackage
 	std::vector<FResource*> Objects;
 };
 
+// ── Generic package codec hook ─────────────────────────────────
+// Concrete binary package formats (e.g. .casset) live in the game project.
+// The core resource system only moves FResource objects and opaque documents
+// through the registered FPackageCodec.
+
+struct FPackageDocumentObject
+{
+	std::string Name;
+	EAssetType Type = EAssetType::Unknown;
+	std::string ImportSource;
+	std::vector<std::string> Refs;
+	std::vector<std::uint8_t> CpuBytes;
+};
+
+struct FPackageDocument
+{
+	std::string Name;
+	std::uint32_t Flags = 0;
+	std::vector<FPackageDocumentObject> Objects;
+
+	struct FDependency
+	{
+		std::string PackageName;
+		std::string FilePath;
+	};
+	std::vector<FDependency> Dependencies;
+};
+
+struct FPackageCodec
+{
+	std::function<bool(const FResourcePackage&, const std::vector<FResource*>&, std::vector<std::uint8_t>&)> Encode;
+	std::function<bool(const std::uint8_t*, std::size_t, FPackageDocument&)> Decode;
+	std::function<bool(const std::uint8_t*, std::size_t)> IsBinary;
+};
+
 // ── FResourceSystem ────────────────────────────────────────────
 
 class MAHO_API IResourceImporter;
@@ -454,6 +236,12 @@ public:
 	template <typename TImporter>
 	[[nodiscard]] bool Import(FResourceImportConfig Config, std::string& OutAssetPath);
 
+	/** Project constructs a concrete importer and passes ownership here. */
+	[[nodiscard]] bool Import(
+		std::unique_ptr<IResourceImporter> Importer,
+		FResourceImportConfig Config,
+		std::string& OutAssetPath);
+
 	template <typename TExporter>
 	[[nodiscard]] bool Export(FResourceExportConfig Config, const std::string& SourcePath);
 
@@ -473,10 +261,23 @@ public:
 	/** Remove a resource from the catalog by pointer. Used for import rollback. */
 	bool UnregisterResource(FResource* Resource);
 
+	using FResourceFactory = std::function<FResource*(const std::string& Name, EAssetType Type, const std::string& SourcePath)>;
+	void RegisterResourceFactory(EAssetType Type, FResourceFactory Factory);
+	[[nodiscard]] FResourceFactory GetResourceFactory(EAssetType Type) const;
+
+	void RegisterPackageCodec(FPackageCodec Codec);
+	[[nodiscard]] const FPackageCodec* GetPackageCodec() const;
+
+	/** Hydrate a package from an in-memory binary document using the registered codec. */
+	[[nodiscard]] std::string LoadPackageFromBinary(
+		const std::string& FilePath,
+		const std::uint8_t* FileBytes,
+		std::size_t FileSize,
+		std::unordered_set<std::string>& LoadingFilePaths);
+
 private:
 	template <typename TResource>
 	friend class TResourceImporter;
-	friend class FCassetPackageImporter;
 	friend class FResource;
 	friend class FEditorLayer;
 
@@ -551,11 +352,6 @@ private:
 	[[nodiscard]] std::string LoadPackageInternal(
 		const std::string& FilePath,
 		std::unordered_set<std::string>& LoadingFilePaths);
-	[[nodiscard]] std::string LoadPackageFromBinary(
-		const std::string& FilePath,
-		const std::uint8_t* FileBytes,
-		std::size_t FileSize,
-		std::unordered_set<std::string>& LoadingFilePaths);
 
 	/** Replicate UPackage model: loaded per-package collections. */
 	std::unordered_map<std::string, std::unique_ptr<FResourcePackage>> Packages;
@@ -564,6 +360,11 @@ private:
 
 	/** Catalog: "PackagePath/ObjectName" → Ref<FResource>. */
 	std::unordered_map<std::string, Ref<FResource>> Catalog;
+
+	std::unordered_map<EAssetType, FResourceFactory> ResourceFactories;
+
+	FPackageCodec PackageCodec;
+	bool bHasPackageCodec = false;
 
 	std::unordered_map<std::string, FPendingIO> PendingIO;
 	bool bAcceptingNewWork = true;

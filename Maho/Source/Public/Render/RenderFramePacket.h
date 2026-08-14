@@ -1,7 +1,5 @@
 ﻿#pragma once
 
-#include <Render/SceneUpdatePacket.h>
-#include <Render/ResourceSnapshots.h>
 #include <Render/Sequencer/RenderFeature.h>
 
 #include <cstdint>

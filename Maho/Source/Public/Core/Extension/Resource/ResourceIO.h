@@ -40,18 +40,6 @@ public:
 	[[nodiscard]] virtual bool Export(FResourceExportConfig Config, const FResource& Resource) = 0;
 };
 
-/** .casset package hydrate (MCAS binary BulkData -> LoadPackageFromBinary). */
-class MAHO_API FCassetPackageImporter final : public IResourceImporter
-{
-public:
-	[[nodiscard]] EAssetType GetType() const override { return EAssetType::Data; }
-	[[nodiscard]] bool MatchesSourcePath(const std::string& SourcePath) const override;
-	[[nodiscard]] bool ApplyBulkData(
-		FResourceSystem& Manager,
-		FResourceImportConfig& Config,
-		FResourceBulkData& Bulk) override;
-};
-
 template <typename TResource>
 struct TResourceIOTraits
 {
@@ -115,66 +103,8 @@ public:
 };
 
 // ── IO Traits specializations ──────────────────────────────────
-
-template <>
-struct MAHO_API TResourceIOTraits<FTexture2D>
-{
-	static constexpr EAssetType GetType() { return EAssetType::Texture2D; }
-	static constexpr const char* TypeNames[] = { "Texture2D", "Texture", "FTexture2D", "FTexture" };
-	[[nodiscard]] static bool MatchesSourcePath(const std::string& SourcePath);
-	[[nodiscard]] static bool ImportSource(FResourceImportConfig& Config, FResourceBulkData& Bulk, FTexture2D& Resource, FResourceSystem* Manager = nullptr);
-	[[nodiscard]] static bool ExportSource(FResourceExportConfig& Config, const FTexture2D& Resource);
-};
-
-template <>
-struct MAHO_API TResourceIOTraits<FTexture3D>
-{
-	static constexpr EAssetType GetType() { return EAssetType::Texture3D; }
-	static constexpr const char* TypeNames[] = { "Texture3D", "FTexture3D" };
-	[[nodiscard]] static bool MatchesSourcePath(const std::string& SourcePath);
-	[[nodiscard]] static bool ImportSource(FResourceImportConfig& Config, FResourceBulkData& Bulk, FTexture3D& Resource, FResourceSystem* Manager = nullptr);
-	[[nodiscard]] static bool ExportSource(FResourceExportConfig& Config, const FTexture3D& Resource);
-};
-
-template <>
-struct MAHO_API TResourceIOTraits<FTextureCube>
-{
-	static constexpr EAssetType GetType() { return EAssetType::TextureCube; }
-	static constexpr const char* TypeNames[] = { "TextureCube", "FTextureCube", "Cubemap" };
-	[[nodiscard]] static bool MatchesSourcePath(const std::string& SourcePath);
-	[[nodiscard]] static bool ImportSource(FResourceImportConfig& Config, FResourceBulkData& Bulk, FTextureCube& Resource, FResourceSystem* Manager = nullptr);
-	[[nodiscard]] static bool ExportSource(FResourceExportConfig& Config, const FTextureCube& Resource);
-};
-
-template <>
-struct MAHO_API TResourceIOTraits<FTextureCubeArray>
-{
-	static constexpr EAssetType GetType() { return EAssetType::TextureCubeArray; }
-	static constexpr const char* TypeNames[] = { "TextureCubeArray", "FTextureCubeArray" };
-	[[nodiscard]] static bool MatchesSourcePath(const std::string& SourcePath);
-	[[nodiscard]] static bool ImportSource(FResourceImportConfig& Config, FResourceBulkData& Bulk, FTextureCubeArray& Resource, FResourceSystem* Manager = nullptr);
-	[[nodiscard]] static bool ExportSource(FResourceExportConfig& Config, const FTextureCubeArray& Resource);
-};
-
-template <>
-struct MAHO_API TResourceIOTraits<FTexture2DArray>
-{
-	static constexpr EAssetType GetType() { return EAssetType::Texture2DArray; }
-	static constexpr const char* TypeNames[] = { "Texture2DArray", "FTexture2DArray" };
-	[[nodiscard]] static bool MatchesSourcePath(const std::string& SourcePath);
-	[[nodiscard]] static bool ImportSource(FResourceImportConfig& Config, FResourceBulkData& Bulk, FTexture2DArray& Resource, FResourceSystem* Manager = nullptr);
-	[[nodiscard]] static bool ExportSource(FResourceExportConfig& Config, const FTexture2DArray& Resource);
-};
-
-template <>
-struct MAHO_API TResourceIOTraits<FPrefab>
-{
-	static constexpr EAssetType GetType() { return EAssetType::Prefab; }
-	static constexpr const char* TypeNames[] = { "Prefab", "FPrefab", "Model", "MeshScene" };
-	[[nodiscard]] static bool MatchesSourcePath(const std::string& SourcePath);
-	[[nodiscard]] static bool ImportSource(FResourceImportConfig& Config, FResourceBulkData& Bulk, FPrefab& Resource, FResourceSystem* Manager = nullptr);
-	[[nodiscard]] static bool ExportSource(FResourceExportConfig& Config, const FPrefab& Resource);
-};
+// Concrete asset types live in the game project and specialize
+// TResourceIOTraits<TResource> there (see game Source/Resource/ResourceIOTraits.h).
 
 template <typename TImporter>
 	bool FResourceSystem::Import(FResourceImportConfig Config, std::string& OutAssetPath)

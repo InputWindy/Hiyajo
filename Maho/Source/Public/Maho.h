@@ -35,7 +35,6 @@
 #include <Render/RHI/RHIServer.h>
 #include <Render/RenderSystem.h>
 #include <Render/RenderPipelineStage.h>
-#include <Render/SceneUpdatePacket.h>
 #include <Render/Sequencer/RenderFeature.h>
 #include <Core/Server/ThreadedServer.h>
 #include <Core/Server/ServerTask.h>
