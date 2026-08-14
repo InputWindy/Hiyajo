@@ -70,8 +70,7 @@ def ensure_engine_python() -> None:
 	raise SystemExit(2)
 
 
-# Enforce on every import of maho_tools (all tool entry scripts go through here,
-# except reflect_codegen which imports this module for the same check).
+# Enforce on every import of maho_tools (all tool entry scripts go through here).
 ensure_engine_python()
 
 
@@ -688,11 +687,6 @@ _WIPE_DIR_NAMES = (
 	".vs",
 )
 
-# Extra wipe paths relative to the clean root (engine tree).
-_WIPE_RELATIVE_PATHS = (
-	Path("Maho") / "Source" / "Generated",
-)
-
 _DELETE_NAME_GLOBS = (
 	"*.sln",
 	"*.vcxproj",
@@ -743,11 +737,6 @@ def collect_clean_targets(project_dir: Path) -> list[Path]:
 		if name.lower() == "build":
 			continue
 		p = project_dir / name
-		if p.exists():
-			targets.append(p)
-
-	for rel in _WIPE_RELATIVE_PATHS:
-		p = project_dir / rel
 		if p.exists():
 			targets.append(p)
 

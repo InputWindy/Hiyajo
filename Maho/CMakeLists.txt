@@ -16,25 +16,13 @@ include(MahoDependencies)
 include(MahoHelpers)
 
 # Engine repo root + local Python (used by plugin scan tooling).
-get_filename_component(_MAHO_ENGINE_ROOT_FOR_CODEGEN "${MAHO_ROOT}/.." ABSOLUTE)
-set(_MAHO_LOCAL_PYTHON "${_MAHO_ENGINE_ROOT_FOR_CODEGEN}/Tools/python/python.exe")
+get_filename_component(_MAHO_ENGINE_ROOT "${MAHO_ROOT}/.." ABSOLUTE)
+set(_MAHO_LOCAL_PYTHON "${_MAHO_ENGINE_ROOT}/Tools/python/python.exe")
 if(NOT EXISTS "${_MAHO_LOCAL_PYTHON}")
-	set(_MAHO_LOCAL_PYTHON "${_MAHO_ENGINE_ROOT_FOR_CODEGEN}/Tools/python/Scripts/python.exe")
+	set(_MAHO_LOCAL_PYTHON "${_MAHO_ENGINE_ROOT}/Tools/python/Scripts/python.exe")
 endif()
 
 maho_collect_sources(MAHO_SOURCES "${MAHO_SOURCE_DIR}")
-
-# Drop anything under Intermediate/Generated from the glob.
-set(_MAHO_SOURCES_FILTERED "")
-foreach(_src IN LISTS MAHO_SOURCES)
-	string(FIND "${_src}" "/Intermediate/Generated/" _maho_gen_pos)
-	string(FIND "${_src}" "\\Intermediate\\Generated\\" _maho_gen_pos_win)
-	if(_maho_gen_pos EQUAL -1 AND _maho_gen_pos_win EQUAL -1)
-		list(APPEND _MAHO_SOURCES_FILTERED "${_src}")
-	endif()
-endforeach()
-set(MAHO_SOURCES "${_MAHO_SOURCES_FILTERED}")
-list(REMOVE_DUPLICATES MAHO_SOURCES)
 
 if(MAHO_SOURCES STREQUAL "")
 	message(FATAL_ERROR "Maho: no sources found under ${MAHO_SOURCE_DIR}")
@@ -156,7 +144,6 @@ target_compile_definitions(Maho
 	PUBLIC
 		MAHO_WITH_VULKAN=1
 		MAHO_WITH_LUA=1
-		MAHO_WITH_REFLECT=1
 		MAHO_PLATFORM_${MAHO_PLATFORM_NAME}=1
 )
 
@@ -166,7 +153,7 @@ if(WIN32)
 endif()
 
 # Absolute engine root for locating Tools/AgentBridge at runtime (dev builds).
-file(TO_CMAKE_PATH "${_MAHO_ENGINE_ROOT_FOR_CODEGEN}" _MAHO_ENGINE_ROOT_PATH)
+file(TO_CMAKE_PATH "${_MAHO_ENGINE_ROOT}" _MAHO_ENGINE_ROOT_PATH)
 string(REPLACE "\\" "/" _MAHO_ENGINE_ROOT_FWD "${_MAHO_ENGINE_ROOT_PATH}")
 target_compile_definitions(Maho PRIVATE "MAHO_ENGINE_ROOT=\"${_MAHO_ENGINE_ROOT_FWD}\"")
 
@@ -187,8 +174,6 @@ endif()
 
 maho_set_output_dirs(Maho)
 maho_source_group_mirrors("${MAHO_SOURCE_DIR}" ${MAHO_SOURCES})
-# Generated codegen files: compiled but not shown in VS source tree.
-target_sources(Maho PRIVATE ${MAHO_GEN_SOURCES})
 set_target_properties(Maho PROPERTIES
 	FOLDER "Engine"
 	OUTPUT_NAME "Maho"
@@ -229,7 +214,7 @@ maho_install_runtime_target(Maho)
 maho_install_directory("${MAHO_SHADERS_DIR}" "Engine/Shaders")
 maho_install_directory("${MAHO_PLUGINS_DIR}" "Engine/Plugins")
 
-set(_MAHO_SCAN_PLUGINS_PY "${_MAHO_ENGINE_ROOT_FOR_CODEGEN}/Tools/scan_plugins.py")
+set(_MAHO_SCAN_PLUGINS_PY "${_MAHO_ENGINE_ROOT}/Tools/scan_plugins.py")
 if(MAHO_CPROJECT)
 	maho_add_plugin_modules(
 		CPROJECT "${MAHO_CPROJECT}"

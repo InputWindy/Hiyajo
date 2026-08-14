@@ -87,7 +87,6 @@ def main(argv: list[str]) -> int:
 		removed = clean_project_tree(root, dry_run=False)
 		print(f"[Maho] Removed {len(removed)} path(s).")
 		print("[Maho] Kept: source, Build/, Tools/, Doc/, bats, configs.")
-		print("[Maho] Note: Maho/Intermediate/Generated (reflect/Lua codegen) is wiped; rebuild regenerates it.")
 		return 0
 	except Exception as ex:  # noqa: BLE001
 		print(f"[ERROR] {ex}")
