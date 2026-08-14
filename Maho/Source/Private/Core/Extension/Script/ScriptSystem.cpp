@@ -8,8 +8,6 @@
 #include <Core/System/Log.h>
 
 #include <filesystem>
-#include <unordered_map>
-#include <utility>
 
 namespace Maho
 {
@@ -81,18 +79,11 @@ void RegisterCoreBindings(sol::state& Lua)
 	return (fs::path(ScriptsDirectory) / Path).string();
 }
 
-[[nodiscard]] std::uint32_t PackEntityKey(FEntityHandle Handle)
-{
-	return (static_cast<std::uint32_t>(Handle.Index) << 8) | static_cast<std::uint32_t>(Handle.Generation);
-}
-
 } // namespace
 
 struct FScriptSystem::FImpl
 {
 	sol::state Lua;
-	std::unordered_map<std::string, sol::table> ScriptPrototypes;
-	std::unordered_map<std::uint32_t, sol::table> EntityInstances;
 };
 
 FScriptSystem::FScriptSystem() = default;
@@ -310,126 +301,6 @@ bool FScriptSystem::Call(const char* FunctionName, float Arg0)
 		return false;
 	}
 	return true;
-}
-
-void FScriptSystem::DispatchEntityScript(FEntityHandle Handle, const char* ScriptPath, void* TransformUserData, float DeltaTime, const char* HookName)
-{
-	if (!bLuaInitialized || !Impl || !ScriptPath || ScriptPath[0] == '\0' || !HookName || HookName[0] == '\0')
-	{
-		return;
-	}
-
-	const std::string Resolved = ResolveScriptPath(ScriptsDirectory, ScriptPath);
-
-	// 1. Load / cache script prototype (script returns a table of hooks).
-	sol::table Prototype;
-	auto ProtoIt = Impl->ScriptPrototypes.find(Resolved);
-	if (ProtoIt == Impl->ScriptPrototypes.end())
-	{
-		sol::protected_function_result Result = Impl->Lua.safe_script_file(Resolved);
-		if (!Result.valid())
-		{
-			const sol::error Error = Result;
-			MAHO_CORE_ERROR("FScriptSystem::DispatchEntityScript('{}'): {}", Resolved, Error.what());
-			return;
-		}
-		if (Result.return_count() < 1)
-		{
-			MAHO_CORE_ERROR("FScriptSystem::DispatchEntityScript('{}'): script must return a table", Resolved);
-			return;
-		}
-		sol::object Returned = Result[0];
-		if (!Returned.is<sol::table>())
-		{
-			MAHO_CORE_ERROR("FScriptSystem::DispatchEntityScript('{}'): script must return a table", Resolved);
-			return;
-		}
-		Prototype = Returned.as<sol::table>();
-		Impl->ScriptPrototypes[Resolved] = Prototype;
-	}
-	else
-	{
-		Prototype = ProtoIt->second;
-	}
-
-	// 2. Get or create per-entity instance (prototype as metatable __index).
-	const std::uint32_t Key = PackEntityKey(Handle);
-	sol::table Instance;
-	auto InstIt = Impl->EntityInstances.find(Key);
-	if (InstIt == Impl->EntityInstances.end())
-	{
-		Instance = Impl->Lua.create_table_with();
-		sol::table Metatable = Impl->Lua.create_table_with();
-		Metatable["__index"] = Prototype;
-		Instance[sol::metatable_key] = Metatable;
-		Impl->EntityInstances[Key] = Instance;
-
-		sol::protected_function OnBegin = Instance["OnBegin"];
-		if (OnBegin.valid())
-		{
-			sol::protected_function_result Result = OnBegin(Instance, DeltaTime);
-			if (!Result.valid())
-			{
-				const sol::error Error = Result;
-				MAHO_CORE_ERROR("FScriptSystem::OnBegin('{}'): {}", Resolved, Error.what());
-			}
-		}
-	}
-	else
-	{
-		Instance = InstIt->second;
-	}
-
-	// 3. Mount components (opaque pointer-backed lightuserdata; refresh each dispatch).
-	if (TransformUserData)
-	{
-		Instance["Transform"] = TransformUserData;
-	}
-	else
-	{
-		Instance["Transform"] = sol::nil;
-	}
-
-	// 4. Stage hook.
-	sol::protected_function Hook = Instance[HookName];
-	if (Hook.valid())
-	{
-		sol::protected_function_result Result = Hook(Instance, DeltaTime);
-		if (!Result.valid())
-		{
-			const sol::error Error = Result;
-			MAHO_CORE_ERROR("FScriptSystem::{}({}): {}", HookName, Resolved, Error.what());
-		}
-	}
-}
-
-void FScriptSystem::DestroyEntityScript(FEntityHandle Handle)
-{
-	if (!bLuaInitialized || !Impl)
-	{
-		return;
-	}
-
-	const std::uint32_t Key = PackEntityKey(Handle);
-	auto It = Impl->EntityInstances.find(Key);
-	if (It == Impl->EntityInstances.end())
-	{
-		return;
-	}
-
-	sol::table Instance = It->second;
-	sol::protected_function OnDestroy = Instance["OnDestroy"];
-	if (OnDestroy.valid())
-	{
-		sol::protected_function_result Result = OnDestroy(Instance);
-		if (!Result.valid())
-		{
-			const sol::error Error = Result;
-			MAHO_CORE_ERROR("FScriptSystem::OnDestroy: {}", Error.what());
-		}
-	}
-
-	Impl->EntityInstances.erase(It);
 }
 
 } // namespace Maho

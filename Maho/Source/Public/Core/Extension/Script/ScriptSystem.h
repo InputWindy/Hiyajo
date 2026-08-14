@@ -5,7 +5,6 @@
 #include <Core/Export.h>
 #include <Core/Sequencer/EngineExtension.h>
 #include <Core/TypeList.h>
-#include <Core/Extension/World/ECS/EntityHandle.h>
 #include <Core/Extension/Resource/ResourceSystem.h>
 
 #include <memory>
@@ -32,7 +31,9 @@ public:
 };
 
 /**
- * Lua VM extension (sol2 + Lua 5.4). Init after Resource so BindLua / reflect see a live catalog.
+ * Pure Lua VM extension (sol2 + Lua 5.4). No ECS entity / component / transform
+ * knowledge — entity-script dispatch lives in the game project.
+ * Init after Resource so BindLua / reflect see a live catalog.
  * Runs on the game thread only — do not Call from worker / render threads.
  *
  * Built-in bindings (table `maho`):
@@ -90,23 +91,6 @@ public:
 
 	/** Call a global Lua function with one float (e.g. OnUpdate / OnFixedUpdate). */
 	[[nodiscard]] bool Call(const char* FunctionName, float Arg0);
-
-	/**
-	 * Dispatch one engine stage to an entity's script.
-	 * Loads/caches prototype by path, instantiates per-entity table,
-	 * mounts TransformUserData as opaque lightuserdata (may be null),
-	 * then calls HookName(instance, dt) if present.
-	 * OnBegin(instance, dt) fires on first dispatch.
-	 */
-	void DispatchEntityScript(
-		FEntityHandle Handle,
-		const char* ScriptPath,
-		void* TransformUserData,
-		float DeltaTime,
-		const char* HookName);
-
-	/** Release the per-entity instance (OnDestroy hook, then erase). */
-	void DestroyEntityScript(FEntityHandle Handle);
 
 private:
 	const char* GetName() const override { return "Script"; }
