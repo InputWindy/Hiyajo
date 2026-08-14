@@ -10,16 +10,14 @@
 
 namespace Maho
 {
-class FScriptSystem;
-class FTransformComponent;
 
 /**
- * Owns the ECS world (pure data) + the root system group (driver skeleton).
- * Maps engine stages to SystemGroup lifecycle hooks, and dispatches the
- * matching script stage hook to entities carrying FScriptComponent.
+ * Pure world scaffold. Owns the ECS world (pure data) + the root system group
+ * (driver skeleton), and maps engine stages to SystemGroup lifecycle hooks.
  *
- * Game projects subclass this and override RegisterSystems / SpawnInitialEntities
- * to inject their own systems and initial entities.
+ * Concrete world components, script stage dispatch, and any other project
+ * gameplay logic belong in the game project: subclass FWorldLayer and override
+ * RegisterSystems / SpawnInitialEntities / OnStageDispatched.
  */
 class MAHO_API FWorldLayer : public FLayer
 {
@@ -39,14 +37,18 @@ protected:
 	/** Spawn initial entities (camera, demo actors, etc.) during Attach. */
 	virtual void SpawnInitialEntities(FWorld& World) {}
 
+	/** Project hook: called after the RootGroup tick for a stage. */
+	virtual void OnStageDispatched(EEngineStage Stage, float DeltaTime)
+	{
+		(void)Stage;
+		(void)DeltaTime;
+	}
+
 	std::string WorldName;
 	FWorld World;
 	FInitializationSystemGroup RootGroup;
 
 private:
-	/** Dispatch one EEngineStage to every entity with a script component. */
-	void DispatchScriptStage(EEngineStage Stage, float DeltaTime);
-
 	bool bWorldReady = false;
 };
 

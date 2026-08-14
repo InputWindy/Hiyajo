@@ -1,36 +1,10 @@
 #include <Core/Extension/World/WorldLayer.h>
-#include <Core/Extension/World/Components/TransformComponent.h>
-#include <Core/Extension/World/Components/ScriptComponent.h>
-#include <Core/Extension/Script/ScriptSystem.h>
 #include <Render/RenderSystem.h>
 
 #include <Core/Application/App.h>
 #include <Core/System/Log.h>
-#include <Core/Extension/World/ECS/Query.h>
 
 #include <utility>
-
-namespace
-{
-
-/** EEngineStage → per-entity script hook name (nullptr = no hook for this stage). */
-[[nodiscard]] const char* GetScriptHookForStage(Maho::EEngineStage Stage)
-{
-	switch (Stage)
-	{
-	case Maho::EEngineStage::BeginFrame: return "OnBeginFrame";
-	case Maho::EEngineStage::ProcessInput: return "OnProcessInput";
-	case Maho::EEngineStage::FixedUpdate: return "OnFixedUpdate";
-	case Maho::EEngineStage::Update: return "OnUpdate";
-	case Maho::EEngineStage::LateUpdate: return "OnLateUpdate";
-	case Maho::EEngineStage::EndFrame: return "OnEndFrame";
-	case Maho::EEngineStage::PreRender: return "OnPreRender";
-	case Maho::EEngineStage::PostRender: return "OnPostRender";
-	default: return nullptr;
-	}
-}
-
-} // namespace
 
 namespace Maho
 {
@@ -39,35 +13,6 @@ FWorldLayer::FWorldLayer(std::string InWorldName)
 	: FLayer("WorldLayer")
 	, WorldName(std::move(InWorldName))
 {
-}
-
-void FWorldLayer::DispatchScriptStage(Maho::EEngineStage Stage, float DeltaTime)
-{
-	const char* Hook = GetScriptHookForStage(Stage);
-	if (!Hook)
-	{
-		return;
-	}
-
-	Maho::FScriptSystem* Script = Maho::GApp ? Maho::GApp->GetExtension<Maho::FScriptSystem>() : nullptr;
-	if (!Script || !Script->IsLuaInitialized())
-	{
-		return;
-	}
-
-	auto Query = World.Query<Maho::FScriptComponent>();
-	Query.ForEach([&](Maho::FEntityHandle Handle, Maho::FScriptComponent& Component)
-	{
-		if (!Component.bEnabled || !Component.IsValid())
-		{
-			return;
-		}
-
-		Maho::FTransformComponent* Transform =
-			World.GetEntityManager().GetComponent<Maho::FTransformComponent>(Handle);
-
-		Script->DispatchEntityScript(Handle, Component.ScriptPath, Transform, DeltaTime, Hook);
-	});
 }
 
 bool FWorldLayer::ExecuteStage(Maho::EEngineStage Stage)
@@ -103,14 +48,14 @@ bool FWorldLayer::ExecuteStage(Maho::EEngineStage Stage)
 		if (bWorldReady)
 		{
 			RootGroup.OnBeginFrame(World);
-			DispatchScriptStage(Stage, 0.0f);
+			OnStageDispatched(Stage, 0.0f);
 		}
 		break;
 
 	case Maho::EEngineStage::ProcessInput:
 		if (bWorldReady)
 		{
-			DispatchScriptStage(Stage, 0.0f);
+			OnStageDispatched(Stage, 0.0f);
 		}
 		break;
 
@@ -119,7 +64,7 @@ bool FWorldLayer::ExecuteStage(Maho::EEngineStage Stage)
 		{
 			const float FixedDt = Maho::GApp->GetFixedDeltaSeconds();
 			RootGroup.OnFixedUpdate(FixedDt, World);
-			DispatchScriptStage(Stage, FixedDt);
+			OnStageDispatched(Stage, FixedDt);
 		}
 		break;
 
@@ -128,7 +73,7 @@ bool FWorldLayer::ExecuteStage(Maho::EEngineStage Stage)
 		{
 			const float Dt = Maho::GApp->GetDeltaSeconds();
 			RootGroup.OnUpdate(Dt, World);
-			DispatchScriptStage(Stage, Dt);
+			OnStageDispatched(Stage, Dt);
 			World.GetEntityManager().EndFrame();
 		}
 		break;
@@ -138,7 +83,7 @@ bool FWorldLayer::ExecuteStage(Maho::EEngineStage Stage)
 		{
 			const float Dt = Maho::GApp->GetDeltaSeconds();
 			RootGroup.OnLateUpdate(Dt, World);
-			DispatchScriptStage(Stage, Dt);
+			OnStageDispatched(Stage, Dt);
 		}
 		break;
 
@@ -146,7 +91,7 @@ bool FWorldLayer::ExecuteStage(Maho::EEngineStage Stage)
 		if (bWorldReady)
 		{
 			RootGroup.OnEndFrame(World);
-			DispatchScriptStage(Stage, 0.0f);
+			OnStageDispatched(Stage, 0.0f);
 		}
 		break;
 
@@ -154,7 +99,7 @@ bool FWorldLayer::ExecuteStage(Maho::EEngineStage Stage)
 		if (bWorldReady)
 		{
 			RootGroup.OnPreRender(World);
-			DispatchScriptStage(Stage, 0.0f);
+			OnStageDispatched(Stage, 0.0f);
 			// Gather render feature contexts from the world and hand them to the render thread.
 			if (Maho::GApp)
 			{
@@ -170,7 +115,7 @@ bool FWorldLayer::ExecuteStage(Maho::EEngineStage Stage)
 		if (bWorldReady)
 		{
 			RootGroup.OnPostRender(World);
-			DispatchScriptStage(Stage, 0.0f);
+			OnStageDispatched(Stage, 0.0f);
 		}
 		break;
 

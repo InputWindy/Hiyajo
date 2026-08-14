@@ -16,7 +16,6 @@ namespace Maho
 {
 
 class FScriptSystem;
-class FTransformComponent;
 
 /**
  * Types that can register themselves into the Lua VM.
@@ -95,13 +94,14 @@ public:
 	/**
 	 * Dispatch one engine stage to an entity's script.
 	 * Loads/caches prototype by path, instantiates per-entity table,
-	 * mounts Transform (may be null), then calls HookName(instance, dt)
-	 * if present. OnBegin(instance, dt) fires on first dispatch.
+	 * mounts TransformUserData as opaque lightuserdata (may be null),
+	 * then calls HookName(instance, dt) if present.
+	 * OnBegin(instance, dt) fires on first dispatch.
 	 */
 	void DispatchEntityScript(
 		FEntityHandle Handle,
 		const char* ScriptPath,
-		FTransformComponent* Transform,
+		void* TransformUserData,
 		float DeltaTime,
 		const char* HookName);
 

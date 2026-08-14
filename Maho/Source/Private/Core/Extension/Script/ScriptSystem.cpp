@@ -1,6 +1,7 @@
 ﻿#include <Core/Extension/Script/ScriptSystem.h>
-#include "Core/Extension/Script/LuaComponentBindings.h"
-#include <Core/Extension/World/Components/TransformComponent.h>
+
+#define SOL_ALL_SAFETIES_ON 1
+#include <sol/sol.hpp>
 
 #include <Core/Application/App.h>
 #include <Core/System/Console.h>
@@ -184,7 +185,6 @@ bool FScriptSystem::InitializeLua(const std::string& InScriptsDirectory)
 	Impl->Lua["package"]["path"] = PackagePath;
 
 	RegisterCoreBindings(Impl->Lua);
-	RegisterLuaComponentBindings(Impl->Lua);
 
 	bLuaInitialized = true;
 	MAHO_CORE_INFO("FScriptSystem Lua initialized (Scripts='{}')", ScriptsDirectory);
@@ -312,7 +312,7 @@ bool FScriptSystem::Call(const char* FunctionName, float Arg0)
 	return true;
 }
 
-void FScriptSystem::DispatchEntityScript(FEntityHandle Handle, const char* ScriptPath, FTransformComponent* Transform, float DeltaTime, const char* HookName)
+void FScriptSystem::DispatchEntityScript(FEntityHandle Handle, const char* ScriptPath, void* TransformUserData, float DeltaTime, const char* HookName)
 {
 	if (!bLuaInitialized || !Impl || !ScriptPath || ScriptPath[0] == '\0' || !HookName || HookName[0] == '\0')
 	{
@@ -380,10 +380,10 @@ void FScriptSystem::DispatchEntityScript(FEntityHandle Handle, const char* Scrip
 		Instance = InstIt->second;
 	}
 
-	// 3. Mount components (pointer-backed; refresh each dispatch).
-	if (Transform)
+	// 3. Mount components (opaque pointer-backed lightuserdata; refresh each dispatch).
+	if (TransformUserData)
 	{
-		Instance["Transform"] = Transform;
+		Instance["Transform"] = TransformUserData;
 	}
 	else
 	{
