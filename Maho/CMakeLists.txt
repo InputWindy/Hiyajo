@@ -14,6 +14,7 @@ endif()
 list(APPEND CMAKE_MODULE_PATH "${MAHO_ENGINE_BUILD_CMAKE_DIR}")
 include(MahoDependencies)
 include(MahoHelpers)
+include(Maho.cmake)
 
 # Engine repo root + local Python (used by plugin scan tooling).
 get_filename_component(_MAHO_ENGINE_ROOT "${MAHO_ROOT}/.." ABSOLUTE)

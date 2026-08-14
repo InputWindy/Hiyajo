@@ -75,79 +75,11 @@ find_package(Threads REQUIRED)
 get_filename_component(_MAHO_REPO_ROOT "${CMAKE_CURRENT_LIST_DIR}/../.." ABSOLUTE)
 get_filename_component(_MAHO_PUBLIC_HEADERS "${_MAHO_REPO_ROOT}/Maho/Source/Public" ABSOLUTE)
 
-# Include as <nlohmann/json.hpp> (vendored single-header under Maho/ThirdParty/nlohmann).
-set(_MAHO_VENDORED_NLOHMANN_JSON "${_MAHO_REPO_ROOT}/Maho/ThirdParty/nlohmann")
-if(EXISTS "${_MAHO_VENDORED_NLOHMANN_JSON}/json.hpp")
-	set(MAHO_NLOHMANN_JSON_INCLUDE_DIR "${_MAHO_REPO_ROOT}/Maho/ThirdParty" CACHE INTERNAL "nlohmann/json include root")
-	message(STATUS "Maho: nlohmann/json (vendored) at ${_MAHO_VENDORED_NLOHMANN_JSON}")
-else()
-	FetchContent_Declare(
-		nlohmann_json
-		GIT_REPOSITORY https://github.com/nlohmann/json.git
-		GIT_TAG v3.11.3
-		GIT_SHALLOW TRUE
-	)
-	FetchContent_MakeAvailable(nlohmann_json)
-	# single_include/nlohmann/json.hpp layout from the repo.
-	set(MAHO_NLOHMANN_JSON_INCLUDE_DIR "${nlohmann_json_SOURCE_DIR}/single_include" CACHE INTERNAL "nlohmann/json include root")
-	message(STATUS "Maho: nlohmann/json (FetchContent) at ${MAHO_NLOHMANN_JSON_INCLUDE_DIR}")
-endif()
-unset(_MAHO_VENDORED_NLOHMANN_JSON)
+# nlohmann/json + glm live in Maho/Maho.cmake (FetchContent → build Intermediate).
 
-# ---------------------------------------------------------------------------
-# Dear ImGui + extensions now live in Maho/Plugins/Render/Render.cmake and are
-# compiled into the Render plugin, not Maho.dll. glfw stays central because
-# Render's imgui backends link it.
-# ---------------------------------------------------------------------------
-
-# Engine fonts / editor assets stay in-repo (copied next to the binary at build).
-set(_MAHO_TP "${_MAHO_REPO_ROOT}/Maho/ThirdParty")
-set(MAHO_ENGINE_FONTS_DIR "${_MAHO_TP}/fonts" CACHE INTERNAL "Engine icon/UI fonts")
-set(MAHO_ENGINE_EDITOR_DIR "${_MAHO_TP}/editor" CACHE INTERNAL "Engine editor assets (wallpaper, …)")
-
-# ---------------------------------------------------------------------------
-# refl-cpp (header-only) — optional / legacy; FObject reflection uses ObjectReflect.h + codegen.
-# ---------------------------------------------------------------------------
-set(_MAHO_VENDORED_REFL "${_MAHO_REPO_ROOT}/Maho/ThirdParty/refl-cpp")
-if(EXISTS "${_MAHO_VENDORED_REFL}/include/refl.hpp")
-	set(MAHO_REFL_INCLUDE_DIR "${_MAHO_VENDORED_REFL}/include" CACHE INTERNAL "refl-cpp include directory")
-	message(STATUS "Maho: refl-cpp (vendored) at ${MAHO_REFL_INCLUDE_DIR}")
-elseif(EXISTS "${_MAHO_VENDORED_REFL}/refl.hpp")
-	set(MAHO_REFL_INCLUDE_DIR "${_MAHO_VENDORED_REFL}" CACHE INTERNAL "refl-cpp include directory")
-	message(STATUS "Maho: refl-cpp (vendored flat) at ${MAHO_REFL_INCLUDE_DIR}")
-else()
-	FetchContent_Declare(
-		refl_cpp
-		GIT_REPOSITORY https://github.com/veselink1/refl-cpp.git
-		GIT_TAG v0.12.4
-		GIT_SHALLOW TRUE
-	)
-	maho_fetchcontent_populate_or_reuse(refl_cpp include/refl.hpp)
-	set(MAHO_REFL_INCLUDE_DIR "${refl_cpp_SOURCE_DIR}/include" CACHE INTERNAL "refl-cpp include directory")
-	message(STATUS "Maho: refl-cpp (FetchContent) at ${MAHO_REFL_INCLUDE_DIR}")
-endif()
-unset(_MAHO_VENDORED_REFL)
-
-# -----------------------------------------------------------------------------
-# GLM (OpenGL Mathematics) — header-only math library for ECS transforms / render math.
-# Prefer vendored tree; FetchContent only if missing (needs network).
-# -----------------------------------------------------------------------------
-set(_MAHO_VENDORED_GLM "${_MAHO_REPO_ROOT}/Maho/ThirdParty/glm")
-if(EXISTS "${_MAHO_VENDORED_GLM}/glm/glm.hpp")
-	set(MAHO_GLM_INCLUDE_DIR "${_MAHO_VENDORED_GLM}" CACHE INTERNAL "glm include directory")
-	message(STATUS "Maho: glm (vendored) at ${MAHO_GLM_INCLUDE_DIR}")
-else()
-	FetchContent_Declare(
-		glm
-		GIT_REPOSITORY https://github.com/g-truc/glm.git
-		GIT_TAG 1.0.1
-		GIT_SHALLOW TRUE
-	)
-	maho_fetchcontent_populate_or_reuse(glm glm/glm.hpp)
-	set(MAHO_GLM_INCLUDE_DIR "${glm_SOURCE_DIR}" CACHE INTERNAL "glm include directory")
-	message(STATUS "Maho: glm (FetchContent) at ${MAHO_GLM_INCLUDE_DIR}")
-endif()
-unset(_MAHO_VENDORED_GLM)
+# Engine fonts / editor assets live under Maho/Content (copied next to the binary).
+set(MAHO_ENGINE_FONTS_DIR "${_MAHO_REPO_ROOT}/Maho/Content/Fonts" CACHE INTERNAL "Engine icon/UI fonts")
+set(MAHO_ENGINE_EDITOR_DIR "${_MAHO_REPO_ROOT}/Maho/Content/Editor" CACHE INTERNAL "Engine editor assets (wallpaper, …)")
 
 # -----------------------------------------------------------------------------
 # KTX-Software (libktx) — KTX2 Import/Export for UTexture* (Game CPU path)
