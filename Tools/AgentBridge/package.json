@@ -14,6 +14,7 @@
     "eval:remote:minimal": "node evals/run-remote-minimal-evals.mjs",
     "eval:deepseek": "node evals/run-deepseek-evals.mjs",
     "smoke:remote": "node evals/smoke-remote.mjs",
+    "smoke:maho-cpp": "node evals/smoke-maho-cpp.mjs",
     "smoke:deepseek": "node evals/smoke-deepseek.mjs",
     "world:fake": "node scripts/run-fake-world.mjs",
     "start": "node server.mjs",

@@ -114,6 +114,28 @@ Editor chrome (`FEditorLayer`, `FEditorUIRegistry`, `FAgentChatClient`) lives in
 
 ---
 
+## World Adapter service (`Maho/WorldAdapter/`)
+
+**Status (2026-08):** Agent Core v0.4.2 ships an optional Windows loopback
+service library, standalone harness, strict Protocol v1 validation, bounded
+command queue, Stub Backend, CTest suite, and Node/C++ conformance smoke.
+
+- **Done:** typed owning DTOs; direct Node golden-fixture coverage; Minimal
+  World Profile; main-thread backend pump; queued/executing timeout semantics;
+  bounded LRU request-ID idempotency; authoritative revision; loopback Winsock
+  HTTP with optional bearer token; startup rollback and idempotent shutdown.
+- **Not done:** real `FWorld`, game/editor registration, production entities or
+  Transform, undo, dry-run, atomic batches, Render/RHI/resources/physics.
+- **Pitfalls:** `FStubWorldBackend` is harness/test scaffolding, never a real
+  world. Normal Maho builds and games must not auto-start the service. Keep all
+  Maho builds serial with `--parallel 1` in this worktree.
+- **Next:** v0.5 may add a separately opt-in real-world Backend on the owning
+  world thread without weakening Protocol v1 validation or transport limits.
+
+Design and usage: [`WORLD_ADAPTER_SERVICE.md`](WORLD_ADAPTER_SERVICE.md)
+
+---
+
 ## How to update this journal
 
 When you finish a meaningful slice: update **Status / Done / Not done / Pitfalls / Next** for that section, and mirror a one-line Status in the module `CONTRACT.md`.

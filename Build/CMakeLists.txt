@@ -25,8 +25,23 @@ maho_ensure_workspace_dirs()
 maho_warn_if_not_intermediate_binary_dir()
 
 option(MAHO_BUILD_SHARED "Build Maho engine as a shared library (DLL)" ON)
+option(MAHO_BUILD_WORLD_ADAPTER "Build the optional Maho World Adapter service" OFF)
+option(MAHO_BUILD_WORLD_ADAPTER_TESTS "Build the optional Maho World Adapter tests" OFF)
+
+if(MAHO_BUILD_WORLD_ADAPTER_TESTS)
+	set(MAHO_BUILD_WORLD_ADAPTER ON CACHE BOOL
+		"Build the optional Maho World Adapter service" FORCE)
+	enable_testing()
+endif()
 
 add_subdirectory("${MAHO_WORKSPACE_ROOT}/Maho" "${CMAKE_BINARY_DIR}/Maho")
+
+if(MAHO_BUILD_WORLD_ADAPTER)
+	add_subdirectory(
+		"${MAHO_WORKSPACE_ROOT}/Maho/WorldAdapter"
+		"${CMAKE_BINARY_DIR}/MahoWorldAdapter"
+	)
+endif()
 
 # Optional in-tree sample game (may be absent when using external .cproject games).
 if(EXISTS "${MAHO_WORKSPACE_ROOT}/Test0/CMakeLists.txt")

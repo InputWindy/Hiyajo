@@ -2,8 +2,7 @@
 
 AgentBridge is a loopback-only Node.js service used by the existing Maho editor
 Agent panel. It preserves the legacy chat API and Agent Protocol v1 while
-providing Agent Core v0.4.1 with a selectable, capability-negotiated
-`WorldAdapter`.
+providing Agent Core with a selectable, capability-negotiated `WorldAdapter`.
 
 Agent Core v0.4.1 adds **World Adapter Capability Negotiation and the Minimal
 World Profile** on top of the v0.4 remote protocol. It keeps the v0.3 Generic AI Provider architecture: real model
@@ -11,9 +10,11 @@ planning is not coupled to Cursor SDK, and MockProvider, DeepSeek, generic
 OpenAI-compatible Chat Completions, and the optional CursorProvider implement
 one internal Provider contract.
 
-Agent Core does **not** connect to the C++ game world in this version. It does
-not expose shell commands, file tools, Lua execution, C++ reflection, pointers,
-WebSockets, rendering, physics, or multiplayer features.
+Maho v0.4.2 adds an optional standalone C++ World Adapter Harness for protocol
+and transport conformance. Its in-memory Stub Backend does **not** connect to
+the real C++ game world. Agent Core does not expose shell commands, file tools,
+Lua execution, C++ reflection, pointers, WebSockets, rendering, physics, or
+multiplayer features.
 
 ## Architecture
 
@@ -33,6 +34,7 @@ natural language
   -> WorldAdapterFactory
        -> MockWorldAdapter -> MockWorld + UndoJournal
        -> RemoteWorldAdapter -> Maho World Adapter Protocol v1
+            -> optional C++ Harness -> bounded queue -> Stub Backend
   -> authoritative ToolResult + ChangeSet
   -> HTTP response + JSONL audit log
 ```
@@ -144,6 +146,41 @@ records.
 
 See [World Adapter Architecture](docs/WORLD_ADAPTER_ARCHITECTURE.md) and
 [Maho World Adapter Protocol v1](docs/MAHO_WORLD_ADAPTER_PROTOCOL_V1.md).
+
+## Maho C++ World Adapter Harness
+
+The optional v0.4.2 harness is built from the repository root. It is a protocol
+and lifecycle integration process, not MyGame and not a real `FWorld`:
+
+```powershell
+cmake -S Build -B Intermediate `
+  -G "Visual Studio 17 2022" -A x64 `
+  -DCMAKE_GENERATOR_INSTANCE="C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools" `
+  -DMAHO_BUILD_SHARED=ON `
+  -DMAHO_BUILD_WORLD_ADAPTER=ON `
+  -DMAHO_BUILD_WORLD_ADAPTER_TESTS=ON
+cmake --build Intermediate --config Debug --parallel 1
+ctest --test-dir Intermediate -C Debug --output-on-failure
+```
+
+Run the cross-language smoke against the real harness executable:
+
+```powershell
+cd Tools\AgentBridge
+$env:MAHO_WORLD_ADAPTER_HARNESS = "C:\path\to\Binaries\Win64\Debug\MahoWorldAdapterHarness.exe"
+npm run smoke:maho-cpp
+```
+
+The smoke starts the harness on a random IPv4 loopback port, exercises the
+existing `RemoteWorldAdapter`, closes the process even after a failure, and
+checks that the port was released. It never selects a Provider and has no fake
+server or MockWorld fallback. If bearer authentication is required, set the
+same `MAHO_WORLD_AUTH_TOKEN` for the harness and Node adapter; it is never
+printed in the ready line.
+
+See [Maho World Adapter Service](../../Doc/Engine/WORLD_ADAPTER_SERVICE.md) for
+the C++ targets, DTO validation, queue/thread model, timeout and idempotency
+semantics, shutdown order, dependencies, and platform limits.
 
 ## Run
 
@@ -318,6 +355,7 @@ are rejected without bypassing the existing JSON Schemas.
 | `MAHO_WORLD_BASE_URL` | `http://127.0.0.1:8770` | Credential-free remote base URL |
 | `MAHO_WORLD_TIMEOUT_MS` | `5000` | Per-remote-world-request timeout |
 | `MAHO_WORLD_AUTH_TOKEN` | empty | Optional bearer token; required for non-loopback |
+| `MAHO_WORLD_ADAPTER_HARNESS` | empty | Executable path required by `npm run smoke:maho-cpp` |
 | `MAHO_WORLD_ALLOW_NON_LOOPBACK` | `0` | Set to `1` only with a bearer token |
 | `CURSOR_API_KEY` | empty | Cursor SDK key; absence selects Mock mode |
 | `MAHO_AI_PROVIDER` | selection rules above | `mock`, `deepseek`, `openai-compatible`, or `cursor` |
@@ -352,6 +390,10 @@ These commands are offline and never make a real model request:
 ```powershell
 npm test
 npm run eval
+npm run eval:remote
+npm run eval:remote:minimal
+npm run smoke:remote
+npm run smoke:maho-cpp  # requires the built C++ Harness path
 ```
 
 These commands are explicit, optional real DeepSeek network operations and may
@@ -443,7 +485,8 @@ Invoke-RestMethod -Method Post -Uri "$base/shutdown" `
   the Minimal World Profile has no undo.
 - MockWorldAdapter uses an in-memory UndoJournal internally; RemoteWorldAdapter
   retains only opaque undo tokens returned by the remote world.
-- Agent Core v0.4.1 does not include a production C++ adapter or game integration.
+- The v0.4.2 C++ Harness uses a Stub Backend and is not production `FWorld` or
+  game integration.
 - Session state and reference context are not persisted.
 - Provider finalization is limited to one text-only request; it cannot produce
   another executable ToolCall.
