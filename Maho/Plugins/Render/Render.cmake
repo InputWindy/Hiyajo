@@ -171,7 +171,7 @@ target_link_libraries(imgui
 	PUBLIC
 		Vulkan::Vulkan
 	PRIVATE
-		glfw
+		Platform
 )
 
 target_compile_features(imgui PUBLIC cxx_std_20)

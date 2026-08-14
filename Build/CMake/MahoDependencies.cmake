@@ -59,35 +59,7 @@ if(TARGET spdlog)
 	set_target_properties(spdlog PROPERTIES FOLDER "ThirdParty")
 endif()
 
-# GLFW (window / input / time; CLIENT_API=NO_API for future Vulkan surfaces)
-set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
-set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
-set(GLFW_INSTALL OFF CACHE BOOL "" FORCE)
-
-set(_MAHO_BUILD_SHARED_LIBS_SAVED "${BUILD_SHARED_LIBS}")
-if(MAHO_BUILD_SHARED)
-	set(BUILD_SHARED_LIBS ON)
-else()
-	set(BUILD_SHARED_LIBS OFF)
-endif()
-
-FetchContent_Declare(
-	glfw
-	GIT_REPOSITORY https://github.com/glfw/glfw.git
-	GIT_TAG 3.4
-	GIT_SHALLOW TRUE
-)
-
-FetchContent_MakeAvailable(glfw)
-
-set(BUILD_SHARED_LIBS "${_MAHO_BUILD_SHARED_LIBS_SAVED}")
-unset(_MAHO_BUILD_SHARED_LIBS_SAVED)
-
-# GLFW's own CMake uses FOLDER "GLFW3"; keep all GLFW targets under ThirdParty in the .sln.
-if(TARGET glfw)
-	set_target_properties(glfw PROPERTIES FOLDER "ThirdParty")
-endif()
+# GLFW lives in the Platform plugin (Maho/Plugins/Platform/Platform.cmake).
 if(TARGET update_mappings)
 	set_target_properties(update_mappings PROPERTIES FOLDER "ThirdParty")
 endif()
