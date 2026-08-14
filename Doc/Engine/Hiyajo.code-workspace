@@ -1,10 +1,12 @@
 {
-	"folders": [
-		{
-			"path": "../.."
-		},
-		{
-			"path": "../../../Hiyajo-project"
-		}
-	]
+    "folders": [
+        {
+            "name": "Hiyajo",
+            "path": "../.."
+        },
+        {
+            "name": "Hiyajo-project",
+            "path": "../../../Hiyajo-project"
+        }
+    ]
 }

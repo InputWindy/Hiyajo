@@ -16,7 +16,7 @@ wscript //nologo "%VBS%" %*
 set "ERR=%ERRORLEVEL%"
 if not "%ERR%"=="0" (
 	echo [ERROR] Failed to launch package UI ^(exit %ERR%^).
-	echo         Run setup.bat first if Tools\python is missing.
+	echo         Run Setup.bat first if Tools\python is missing.
 	pause
 	exit /b %ERR%
 )

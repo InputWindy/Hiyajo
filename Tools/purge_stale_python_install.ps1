@@ -1,5 +1,5 @@
 # Purge a stale/broken per-user python.org Windows install of a given version.
-# Used by setup.bat before silent TargetDir install.
+# Used by Setup.bat before silent TargetDir install.
 # Does NOT touch Miniconda / other distributions.
 #
 # Usage:
@@ -93,7 +93,7 @@ if ($orphanHkLm.Count -gt 0)
 		Write-Host "[Maho]     - $n"
 	}
 	Write-Host "[Maho]   These require Admin to uninstall (Settings -> Apps)."
-	Write-Host "[Maho]   If silent TargetDir install still fails, setup.bat uses another Python minor or venv."
+	Write-Host "[Maho]   If silent TargetDir install still fails, Setup.bat uses another Python minor or venv."
 }
 
 Write-Host "[Maho] Stale-registration purge finished."

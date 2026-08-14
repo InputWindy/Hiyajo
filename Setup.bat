@@ -4,8 +4,8 @@ cd /d "%~dp0"
 
 rem Bootstrap Maho local Python (not added to PATH).
 rem Usage:
-rem   setup.bat           install / repair Tools\python junction
-rem   setup.bat --force   wipe and recreate
+rem   Setup.bat           install / repair Tools\python junction
+rem   Setup.bat --force   wipe and recreate
 rem
 rem Why NOT install python.org into the engine tree:
 rem   The Windows installer registers TargetDir in HKCU/ARP. If that path is
@@ -20,7 +20,7 @@ rem
 rem Bootstrap order:
 rem   1) venv from any host Python with tkinter  — no Burn/MSI registration
 rem   2) else python.org installer into tooling  — after purging ghost ARP
-rem Renaming the engine folder: re-run setup.bat only to recreate the junction.
+rem Renaming the engine folder: re-run Setup.bat only to recreate the junction.
 
 set "ROOT=%~dp0"
 set "PY_LINK=%ROOT%Tools\python"
@@ -136,7 +136,7 @@ call :resolve_home_python
 if not defined LOCAL_PY (
 	echo [Maho] Installer left no python.exe — see %INSTALL_LOG%
 	echo [Maho] Often HKLM leftovers of the same version force Modify mode.
-	echo [Maho] Fix: Settings -^> Apps, uninstall broken "Python %PY_VER%", then setup.bat --force
+	echo [Maho] Fix: Settings -^> Apps, uninstall broken "Python %PY_VER%", then Setup.bat --force
 	goto :fail_no_python
 )
 "%LOCAL_PY%" -c "import tkinter, sys; print(sys.version.split()[0])" 2>nul
@@ -184,8 +184,8 @@ echo  Real  : %PY_HOME%
 echo  Link  : %PY_LINK%
 echo  Exe   : %LOCAL_PY%
 echo  Note  : Files live under LocalAppData. Renaming the engine folder is OK;
-echo          re-run setup.bat afterwards only to recreate Tools\python junction.
-echo  Next  : Run createProject.bat
+echo          re-run Setup.bat afterwards only to recreate Tools\python junction.
+echo  Next  : Run CreateProject.bat
 echo ======================================================================
 set "STATUS=OK"
 set "ERR=0"

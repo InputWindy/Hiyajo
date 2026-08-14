@@ -15,7 +15,7 @@ script = tools & "\package_ui.py"
 
 If pyw = "" Then
 	MsgBox "Local Python not found." & vbCrLf & vbCrLf & _
-		"Run setup.bat first in:" & vbCrLf & root, 16, "Maho"
+		"Run Setup.bat first in:" & vbCrLf & root, 16, "Maho"
 	WScript.Quit 1
 End If
 

@@ -39,7 +39,7 @@ if (-not (Test-Path -LiteralPath $localPy)) {
 	$localPy = Join-Path $engine "Tools\python\Scripts\python.exe"
 }
 if (-not (Test-Path -LiteralPath $localPy)) {
-	Write-Error "Engine local Python missing under Tools\python (or Scripts).`nRun setup.bat in the Maho engine root first."
+	Write-Error "Engine local Python missing under Tools\python (or Scripts).`nRun Setup.bat in the Maho engine root first."
 	exit 1
 }
 

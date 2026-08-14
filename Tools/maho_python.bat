@@ -10,7 +10,7 @@ if not exist "%MAHO_PYTHON%" set "MAHO_PYTHON=%MAHO_TOOLS%python\Scripts\python.
 
 if not exist "%MAHO_PYTHON%" (
 	echo [ERROR] Local Python not found under Tools\python
-	echo [ERROR] From the Maho engine root, run setup.bat first.
+	echo [ERROR] From the Maho engine root, run Setup.bat first.
 	echo [ERROR] Do not use a system-installed Python for Maho tools.
 	exit /b 1
 )

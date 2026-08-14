@@ -14,8 +14,8 @@ Root bats（用户入口）→ `Tools/maho_python.bat`：
 
 | Bat | Role |
 |-----|------|
-| `setup.bat` | installs `Tools/python` |
-| `createProject.bat` | `Tools/create_project.py` |
+| `Setup.bat` | installs `Tools/python` |
+| `CreateProject.bat` | `Tools/create_project.py` |
 
 Internal（`Tools/`）：`generateProject.bat` / `package.bat` / `object_reflect_codegen.bat` 等。
 

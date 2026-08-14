@@ -1,5 +1,5 @@
 # Run via Tools/maho_python.bat (or Tools/*.bat) — engine Tools/python only.
-"""Maho new-project UI (createProject.bat). Logs go to the UI, not a console window."""
+"""Maho new-project UI (CreateProject.bat). Logs go to the UI, not a console window."""
 
 from __future__ import annotations
 
@@ -96,7 +96,7 @@ class CreateProjectApp(tk.Tk):
 		hint = (
 			"Creates Parent/Name/ with Name.cproject (JSON, like .uproject).\n"
 			"Double-click the .cproject to regenerate Name.sln beside it, then open the .sln in VS.\n"
-			"Requires engine setup.bat (local Tools/python) beforehand."
+			"Requires engine Setup.bat (local Tools/python) beforehand."
 		)
 		ttk.Label(frm, text=hint, foreground="#555").grid(row=7, column=0, columnspan=3, sticky="w", **pad)
 
@@ -304,7 +304,7 @@ class CreateProjectApp(tk.Tk):
 		if not (py_root / "python.exe").is_file() and not (py_root / "Scripts" / "python.exe").is_file():
 			messagebox.showerror(
 				"Maho",
-				f"Engine local Python missing.\nRun setup.bat in:\n{engine}",
+				f"Engine local Python missing.\nRun Setup.bat in:\n{engine}",
 			)
 			return
 

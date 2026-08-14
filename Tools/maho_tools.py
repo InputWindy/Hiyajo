@@ -21,7 +21,7 @@ ENGINE_PYTHON_DIR = (ENGINE_ROOT / "Tools" / "python").resolve()
 
 def ensure_engine_python() -> None:
 	"""
-	Require the Maho-managed interpreter (setup.bat), not an arbitrary system Python.
+	Require the Maho-managed interpreter (Setup.bat), not an arbitrary system Python.
 	Real files live under %LOCALAPPDATA%\\Maho\\python\\tooling\\; Tools\\python is a junction.
 	Set MAHO_ALLOW_SYSTEM_PYTHON=1 only for emergency debugging.
 	"""
@@ -49,7 +49,7 @@ def ensure_engine_python() -> None:
 		f"  (junction → %LOCALAPPDATA%\\Maho\\python\\tooling)\n\n"
 		f"Current interpreter:\n  {exe}\n\n"
 		"Fix:\n"
-		"  1) Run setup.bat in the Maho engine root\n"
+		"  1) Run Setup.bat in the Maho engine root\n"
 		"  2) Launch via *.bat / Tools\\maho_python.bat / Tools\\maho_pythonw.bat\n"
 	)
 	try:
