@@ -1,9 +1,10 @@
 #include <Maho.h>
 #include <EntryPoint.h>
+{{PLUGIN_INCLUDES}}
 
 #include <memory>
 
-class {{APP_CLASS}} : public Maho::FGameApp
+class {{APP_CLASS}} : public {{ENGINE_BASE_CLASS}}
 {
 protected:
 	virtual void Configure(Maho::FConfig& OutConfig) override
@@ -23,33 +24,19 @@ protected:
 
 	virtual bool PreInitialize() override
 	{
-		if (!Maho::FGameApp::PreInitialize())
+		if (!{{ENGINE_BASE_CLASS}}::PreInitialize())
 		{
 			return false;
 		}
 
 		using Maho::EExtensionPriority;
+{{EXTENSION_REGISTRATIONS}}
 
-		RegisterExtension<Maho::FPlatformSystem>(EExtensionPriority::System);
-		RegisterExtension<Maho::FResourceSystem>(EExtensionPriority::System);
-		RegisterExtension<Maho::FScriptSystem>(EExtensionPriority::Overlay);
-
-		return true;
-	}
-
-	virtual bool PostInitialize() override
-	{
-		auto* RenderSystem = GetExtension<Maho::FRenderSystem>();
-		if (RenderSystem)
-		{
-			auto& Server = RenderSystem->GetRenderServer();
-			Server.RegisterFeature<Maho::FTriangleBasePassFeature>();
-		}
 		return true;
 	}
 };
 
-Maho::FAppBase* Maho::CreateApplication()
+Maho::FEngineBase* Maho::CreateEngine()
 {
 	return new {{APP_CLASS}}();
 }

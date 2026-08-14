@@ -20,16 +20,27 @@ from maho_tools import (  # noqa: E402
 	generate_from_cproject,
 	install_windows_cproject_association,
 	is_valid_project_name,
+	list_engine_plugins,
 	open_in_file_manager,
 )
+
+
+# Project templates: label → plugins the template requires (transitive deps
+# are added automatically and locked). Order matches the combobox list.
+ENGINE_TEMPLATES = [
+	{"key": "client", "label": "游戏客户端 (Client)", "required": ["World", "Render"]},
+	{"key": "server", "label": "游戏服务器 (Server)", "required": ["World"]},
+	{"key": "null", "label": "空引擎 (Null)", "required": []},
+]
+DEFAULT_TEMPLATE_LABEL = "游戏客户端 (Client)"
 
 
 class CreateProjectApp(tk.Tk):
 	def __init__(self) -> None:
 		super().__init__()
 		self.title("Maho — New Project")
-		self.geometry("720x620")
-		self.minsize(640, 520)
+		self.geometry("720x720")
+		self.minsize(640, 560)
 		self.resizable(True, True)
 
 		self.var_name = tk.StringVar(value="MyGame")
@@ -46,6 +57,10 @@ class CreateProjectApp(tk.Tk):
 		self._proc_holder: list = []
 		self._project_dir: Path | None = None
 		self._busy_widgets: list[tk.Misc] = []
+		self._plugins: list[dict] = []
+		self._plugin_vars: dict[str, tk.BooleanVar] = {}
+		self._plugin_widgets: dict[str, ttk.Checkbutton] = {}
+		self._locked: set[str] = set()
 
 		self._build()
 		self.protocol("WM_DELETE_WINDOW", self._on_close_request)
@@ -86,8 +101,34 @@ class CreateProjectApp(tk.Tk):
 		self.txt_desc = tk.Text(frm, height=3, wrap=tk.WORD)
 		self.txt_desc.grid(row=5, column=1, columnspan=2, sticky="nsew", **pad)
 
+		ttk.Label(frm, text="Project Template").grid(row=6, column=0, sticky="w", **pad)
+		self.cmb_template = ttk.Combobox(
+			frm,
+			state="readonly",
+			values=[t["label"] for t in ENGINE_TEMPLATES],
+		)
+		self.cmb_template.grid(row=6, column=1, columnspan=2, sticky="ew", **pad)
+		self.cmb_template.bind("<<ComboboxSelected>>", self._on_template_change)
+		self.cmb_template.set(DEFAULT_TEMPLATE_LABEL)
+
+		ttk.Label(frm, text="Plugins").grid(row=7, column=0, sticky="nw", **pad)
+		plugin_frame = ttk.Frame(frm)
+		plugin_frame.grid(row=7, column=1, columnspan=2, sticky="nsew", **pad)
+		plugin_frame.columnconfigure(0, weight=1)
+		plugin_frame.rowconfigure(0, weight=1)
+		canvas = tk.Canvas(plugin_frame, borderwidth=0, highlightthickness=0, height=110)
+		plugin_scroll = ttk.Scrollbar(plugin_frame, orient=tk.VERTICAL, command=canvas.yview)
+		canvas.configure(yscrollcommand=plugin_scroll.set)
+		canvas.grid(row=0, column=0, sticky="nsew")
+		plugin_scroll.grid(row=0, column=1, sticky="ns")
+		self.plugin_inner = ttk.Frame(canvas)
+		self.plugin_inner.bind(
+			"<Configure>", lambda _e: canvas.configure(scrollregion=canvas.bbox("all"))
+		)
+		canvas.create_window((0, 0), window=self.plugin_inner, anchor="nw")
+
 		opts = ttk.Frame(frm)
-		opts.grid(row=6, column=0, columnspan=3, sticky="w", **pad)
+		opts.grid(row=8, column=0, columnspan=3, sticky="w", **pad)
 		chk_sln = ttk.Checkbutton(opts, text="Generate .sln after create", variable=self.var_gen_sln)
 		chk_sln.pack(side=tk.LEFT, padx=(0, 16))
 		chk_open = ttk.Checkbutton(opts, text="Open project folder", variable=self.var_open_folder)
@@ -98,11 +139,11 @@ class CreateProjectApp(tk.Tk):
 			"Double-click the .cproject to regenerate Name.sln beside it, then open the .sln in VS.\n"
 			"Requires engine Setup.bat (local Tools/python) beforehand."
 		)
-		ttk.Label(frm, text=hint, foreground="#555").grid(row=7, column=0, columnspan=3, sticky="w", **pad)
+		ttk.Label(frm, text=hint, foreground="#555").grid(row=9, column=0, columnspan=3, sticky="w", **pad)
 
-		ttk.Label(frm, text="Log").grid(row=8, column=0, sticky="nw", **pad)
+		ttk.Label(frm, text="Log").grid(row=10, column=0, sticky="nw", **pad)
 		log_frame = ttk.Frame(frm)
-		log_frame.grid(row=8, column=1, columnspan=2, sticky="nsew", **pad)
+		log_frame.grid(row=10, column=1, columnspan=2, sticky="nsew", **pad)
 		self.txt_log = tk.Text(
 			log_frame,
 			height=10,
@@ -119,7 +160,7 @@ class CreateProjectApp(tk.Tk):
 		scroll.pack(side=tk.RIGHT, fill=tk.Y)
 
 		btns = ttk.Frame(frm)
-		btns.grid(row=9, column=0, columnspan=3, sticky="ew", **pad)
+		btns.grid(row=11, column=0, columnspan=3, sticky="ew", **pad)
 		self.btn_associate = ttk.Button(btns, text="Re-associate .cproject", command=self._associate_async)
 		self.btn_associate.pack(side=tk.LEFT)
 		self.btn_clear_log = ttk.Button(btns, text="Clear Log", command=self._clear_log)
@@ -137,6 +178,7 @@ class CreateProjectApp(tk.Tk):
 			btn_browse_engine,
 			ent_author,
 			self.txt_desc,
+			self.cmb_template,
 			chk_sln,
 			chk_open,
 			self.btn_associate,
@@ -146,7 +188,112 @@ class CreateProjectApp(tk.Tk):
 
 		frm.columnconfigure(1, weight=1)
 		frm.rowconfigure(5, weight=1)
-		frm.rowconfigure(8, weight=2)
+		frm.rowconfigure(7, weight=2)
+		frm.rowconfigure(10, weight=2)
+
+		self._reload_plugins()
+
+	def _selected_template_key(self) -> str:
+		label = self.cmb_template.get()
+		for t in ENGINE_TEMPLATES:
+			if t["label"] == label:
+				return t["key"]
+		return "client"
+
+	def _deps_of(self, name: str) -> list[str]:
+		for p in self._plugins:
+			if p["Name"] == name:
+				return p["Dependencies"]
+		return []
+
+	def _required_closure(self, required: list[str]) -> set[str]:
+		"""Template required plugins plus their transitive dependencies."""
+		closure = set(required)
+		changed = True
+		while changed:
+			changed = False
+			for p in self._plugins:
+				if p["Name"] not in closure:
+					continue
+				for dep in p["Dependencies"]:
+					if dep not in closure:
+						closure.add(dep)
+						changed = True
+		return closure
+
+	def _reload_plugins(self) -> None:
+		for child in self.plugin_inner.winfo_children():
+			child.destroy()
+		engine = Path(self.var_engine.get().strip())
+		self._plugins = list_engine_plugins(engine)
+		self._plugin_vars = {}
+		self._plugin_widgets = {}
+		for p in self._plugins:
+			var = tk.BooleanVar(value=False)
+			text = p["Name"]
+			if p["Description"]:
+				text += f"  —  {p['Description']}"
+			cb = ttk.Checkbutton(
+				self.plugin_inner,
+				text=text,
+				variable=var,
+				command=lambda n=p["Name"]: self._toggle_plugin(n),
+			)
+			cb.pack(anchor="w", fill=tk.X)
+			self._plugin_vars[p["Name"]] = var
+			self._plugin_widgets[p["Name"]] = cb
+			self._busy_widgets.append(cb)
+		self._apply_template()
+
+	def _on_template_change(self, _event=None) -> None:
+		self._apply_template()
+
+	def _apply_template(self) -> None:
+		label = self.cmb_template.get()
+		required: list[str] = []
+		for t in ENGINE_TEMPLATES:
+			if t["label"] == label:
+				required = t["required"]
+				break
+		self._locked = self._required_closure(required)
+		for name, var in self._plugin_vars.items():
+			cb = self._plugin_widgets[name]
+			if name in self._locked:
+				var.set(True)
+				cb.configure(state=tk.DISABLED)
+			else:
+				cb.configure(state=tk.NORMAL)
+				var.set(False)
+
+	def _toggle_plugin(self, name: str) -> None:
+		var = self._plugin_vars[name]
+		if name in self._locked:
+			var.set(True)
+			return
+		if var.get():
+			self._check_deps(name)
+		else:
+			self._uncheck_dependents(name)
+
+	def _check_deps(self, name: str) -> None:
+		for dep in self._deps_of(name):
+			dep_var = self._plugin_vars.get(dep)
+			if dep_var is None or dep in self._locked:
+				continue
+			if not dep_var.get():
+				dep_var.set(True)
+				self._check_deps(dep)
+
+	def _uncheck_dependents(self, name: str) -> None:
+		for p in self._plugins:
+			if name not in p["Dependencies"]:
+				continue
+			dep_var = self._plugin_vars.get(p["Name"])
+			if dep_var is None or p["Name"] in self._locked:
+				continue
+			if dep_var.get():
+				dep_var.set(False)
+				self._uncheck_dependents(p["Name"])
 
 	def _set_creating(self, busy: bool) -> None:
 		self._creating = busy
@@ -191,6 +338,7 @@ class CreateProjectApp(tk.Tk):
 		path = filedialog.askdirectory(initialdir=self.var_engine.get() or str(ENGINE_ROOT))
 		if path:
 			self.var_engine.set(path)
+			self._reload_plugins()
 
 	def _kill_active_proc(self) -> None:
 		if self._proc_holder:
@@ -290,6 +438,7 @@ class CreateProjectApp(tk.Tk):
 		desc = self.txt_desc.get("1.0", tk.END).strip()
 		want_sln = self.var_gen_sln.get()
 		want_open = self.var_open_folder.get()
+		checked_plugins = sorted(n for n, v in self._plugin_vars.items() if v.get())
 
 		if not is_valid_project_name(name):
 			messagebox.showerror("Maho", "Invalid project name.\nUse Letter + A-Z a-z 0-9 _ -")
@@ -322,7 +471,15 @@ class CreateProjectApp(tk.Tk):
 				if self._cancel_event.is_set():
 					raise OperationCancelled("Cancelled")
 
-				cproject = create_project(name, parent, engine, description=desc, author=author)
+				cproject = create_project(
+					name,
+					parent,
+					engine,
+					description=desc,
+					author=author,
+					plugins=checked_plugins,
+					template=self._selected_template_key(),
+				)
 				project_dir = cproject.parent
 				self._project_dir = project_dir
 				self.log_line(f"[Maho] Wrote {cproject}")

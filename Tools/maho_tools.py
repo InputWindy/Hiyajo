@@ -274,6 +274,8 @@ def create_project(
 	engine_root: Path,
 	description: str = "",
 	author: str = "",
+	plugins: list[str] | None = None,
+	template: str = "client",
 ) -> Path:
 	if not is_valid_project_name(project_name):
 		raise ValueError(
@@ -288,15 +290,49 @@ def create_project(
 
 	project_dir.mkdir(parents=True, exist_ok=True)
 	ident = project_cpp_ident(project_name)
+
+	tmpl = ENGINE_TEMPLATES.get(template, ENGINE_TEMPLATES["client"])
+	engine_base_class = tmpl["BaseClass"]
+	handled = tmpl["Handled"]
+
+	engine_plugins = list_engine_plugins(engine_root)
+	plugin_meta = {p["Name"]: p for p in engine_plugins}
+	if plugins is None:
+		plugin_names = [p["Name"] for p in engine_plugins if p["EnabledByDefault"]]
+	else:
+		plugin_names = list(plugins)
+
+	# Register every selected plugin the engine template does NOT handle itself.
+	plugin_includes: list[str] = []
+	extension_regs: list[str] = []
+	for name in sorted(plugin_names):
+		if name in handled:
+			continue
+		meta = plugin_meta.get(name)
+		if meta is None or meta.get("Extension") is None:
+			continue
+		header = meta["Extension"]["Header"]
+		cls = meta["Extension"]["Class"]
+		prio = _PRIORITY_ENUM.get(meta["Extension"]["Priority"], "EExtensionPriority::System")
+		plugin_includes.append(f"#include <{header}>")
+		extension_regs.append(f"\t\tRegisterExtension<{cls}>({prio});")
+
 	mapping = {
 		"PROJECT_NAME": project_name,
 		"PROJECT_IDENT": ident,
 		"APP_CLASS": f"F{ident}App",
+		"ENGINE_BASE_CLASS": engine_base_class,
+		"PLUGIN_INCLUDES": "\n".join(plugin_includes),
+		"EXTENSION_REGISTRATIONS": "\n".join(extension_regs),
 		"DESCRIPTION": description,
 		"AUTHOR": author,
 	}
 	copy_template(project_dir, mapping)
 
+	if plugins is None:
+		plugin_entries = default_engine_plugin_entries(engine_root)
+	else:
+		plugin_entries = [{"Name": name, "Enabled": True} for name in plugins]
 	cproject = {
 		"FileVersion": CPROJECT_VERSION,
 		"EngineAssociation": "Maho",
@@ -304,13 +340,14 @@ def create_project(
 		"ProjectName": project_name,
 		"Description": description,
 		"Author": author,
+		"EngineTemplate": template,
 		"Modules": [
 			{
 				"Name": project_name,
 				"Type": "Runtime",
 			}
 		],
-		"Plugins": default_engine_plugin_entries(engine_root),
+		"Plugins": plugin_entries,
 	}
 	cproject_path = project_dir / f"{project_name}.cproject"
 	write_cproject(cproject_path, cproject)
@@ -882,6 +919,62 @@ def default_engine_plugin_entries(engine_root: Path | None = None) -> list[dict[
 		names.append(cplugin_path.parent.name)
 	names.sort()
 	return [{"Name": name, "Enabled": True} for name in names]
+
+
+def list_engine_plugins(engine_root: Path | None = None) -> list[dict[str, Any]]:
+	"""
+	Enumerate engine plugins for the CreateProject UI.
+
+	Returns [{Name, Dependencies, FriendlyName, Description, EnabledByDefault,
+	Extension}] in stable name order. Extension is the first module's
+	{Class, Header, Priority} (None when the module declares no extension).
+	"""
+	root = (engine_root or ENGINE_ROOT).resolve() / "Maho" / "Plugins"
+	if not root.is_dir():
+		return []
+	out: list[dict[str, Any]] = []
+	for cplugin_path in discover_cplugin_files([root]):
+		data = read_cplugin(cplugin_path)
+		name = cplugin_path.parent.name
+		deps: list[str] = []
+		extension: dict[str, str] | None = None
+		for mod in data.get("Modules", []):
+			for dep in mod.get("Dependencies", []) or []:
+				if dep not in deps:
+					deps.append(dep)
+			if extension is None and mod.get("Extension"):
+				extension = {
+					"Class": mod["Extension"]["Class"],
+					"Header": mod["Extension"]["Header"],
+					"Priority": mod["Extension"]["Priority"],
+				}
+		out.append(
+			{
+				"Name": name,
+				"Dependencies": deps,
+				"FriendlyName": data.get("FriendlyName", name),
+				"Description": data.get("Description", ""),
+				"EnabledByDefault": bool(data.get("EnabledByDefault", True)),
+				"Extension": extension,
+			}
+		)
+	out.sort(key=lambda p: p["Name"])
+	return out
+
+
+# Engine template → C++ base class + plugins the engine template already
+# registers itself (the project must NOT re-register those).
+ENGINE_TEMPLATES: dict[str, dict[str, Any]] = {
+	"client": {"BaseClass": "Maho::FGameClientEngine", "Handled": {"World", "Render"}},
+	"server": {"BaseClass": "Maho::FGameServerEngine", "Handled": {"World"}},
+	"null": {"BaseClass": "Maho::FNullEngine", "Handled": set()},
+}
+
+_PRIORITY_ENUM: dict[str, str] = {
+	"System": "EExtensionPriority::System",
+	"Layer": "EExtensionPriority::Layer",
+	"Overlay": "EExtensionPriority::Overlay",
+}
 
 
 def scan_plugin_modules(
