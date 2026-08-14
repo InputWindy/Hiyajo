@@ -1,4 +1,5 @@
 #include <Core/System/ConfigFile.h>
+#include <Core/System/Utf8Path.h>
 
 #include <cctype>
 #include <fstream>
@@ -59,7 +60,7 @@ bool FConfigFile::Load(const std::string& FilePath)
 	SectionKeyOrder.clear();
 	SourcePath = FilePath;
 
-	std::ifstream Input(FilePath);
+	std::ifstream Input(PathFromUtf8(FilePath));
 	if (!Input)
 	{
 		return false;

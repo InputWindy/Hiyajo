@@ -15,7 +15,7 @@
 namespace Maho
 {
 
-class FRenderServer;
+class FRenderSystem;
 class FRDGBuilder;
 class FWorld;
 
@@ -92,7 +92,7 @@ struct MAHO_API FGameFrameContext
 };
 
 /**
- * Per-frame render context (render-side working state, 3-slot ring on FRenderServer).
+ * Per-frame render context (render-side working state, 3-slot ring on FRenderSystem).
  * Features use it to index their per-frame resources (FrameIndex % N) and to
  * access transient per-frame allocations. The FRDGBuilder stays per-stage.
  */
@@ -110,8 +110,8 @@ public:
 
 	[[nodiscard]] virtual const char* GetName() const = 0;
 
-	virtual bool OnRegister(FRenderServer& RenderServer) { (void)RenderServer; return true; }
-	virtual void OnUnregister(FRenderServer& RenderServer) { (void)RenderServer; }
+	virtual bool OnRegister(FRenderSystem& RenderSystem) { (void)RenderSystem; return true; }
+	virtual void OnUnregister(FRenderSystem& RenderSystem) { (void)RenderSystem; }
 
 	/**
 	 * Game thread: gather this feature's per-frame data from the ECS world

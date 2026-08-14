@@ -1,4 +1,4 @@
-﻿#include <Render/RenderServer.h>
+﻿#include <Render/RenderSystem.h>
 #include <Render/RenderCommand.h>
 #include <Render/RDG/RDGBuilder.h>
 
@@ -31,7 +31,7 @@ static TAutoConsoleVariable GCVarMaxFramesInFlight(
 	"Max Game frames submitted to RHI before waiting (1..3)");
 
 static_assert(
-	FRenderServer::MaxFramesInFlightCap == ImGuiDrawDataRingSlotCount,
+	FRenderSystem::MaxFramesInFlightCap == ImGuiDrawDataRingSlotCount,
 	"ImGui draw-data ring slot count must match MaxFramesInFlightCap");
 
 } // namespace
@@ -39,19 +39,60 @@ static_assert(
 namespace Detail
 {
 
-FRenderServer* GetRenderServer()
+FRenderSystem* GetRenderSystem()
 {
-	if (!GApp)
-	{
-		return nullptr;
-	}
-	FRenderSystem* System = GApp->GetExtension<FRenderSystem>();
-	return System ? &System->GetRenderServer() : nullptr;
+	return GApp ? GApp->GetExtension<FRenderSystem>() : nullptr;
 }
 
 } // namespace Detail
 
-FRenderServer::FRenderServer()
+bool FRenderSystem::ExecuteStage(EEngineStage Stage)
+{
+	switch (Stage)
+	{
+	case EEngineStage::Init:
+	{
+		if (!GApp)
+		{
+			MAHO_CORE_ERROR("FRenderSystem: GApp missing at Init");
+			return false;
+		}
+		FPlatformSystem* Platform = GApp->GetExtension<FPlatformSystem>();
+		FPlatformWindow* Window = Platform ? Platform->GetWindow() : nullptr;
+		if (!Window)
+		{
+			MAHO_CORE_ERROR("FRenderSystem: no platform window at Init");
+			return false;
+		}
+		if (!Boot(*Window, GApp->GetConfig()))
+		{
+			MAHO_CORE_ERROR("FRenderSystem: RenderServer.Boot failed");
+			return false;
+		}
+		return true;
+	}
+	case EEngineStage::BeginFrame:
+		if (GApp && GetImGui().IsInitialized())
+		{
+			WaitBeforeImGuiNewFrame(GApp->GetFrameIndex());
+			GetImGui().BeginFrame();
+		}
+		return true;
+	case EEngineStage::Render:
+		if (GApp)
+		{
+			Render(GApp->GetFrameIndex());
+		}
+		return true;
+	case EEngineStage::Shutdown:
+		TearDown();
+		return true;
+	default:
+		return true;
+	}
+}
+
+FRenderSystem::FRenderSystem()
 	: ImGuiDrawDataRing(std::make_unique<FImGuiDrawDataRing>())
 	, TextureProxies(std::make_unique<FTextureProxyRegistry>())
 	, MeshProxies(std::make_unique<FMeshProxyRegistry>())
@@ -60,18 +101,18 @@ FRenderServer::FRenderServer()
 {
 }
 
-FRenderServer::~FRenderServer()
+FRenderSystem::~FRenderSystem()
 {
 	TearDown();
 }
 
-int FRenderServer::GetMaxFramesInFlight() const
+int FRenderSystem::GetMaxFramesInFlight() const
 {
 	const int Requested = GCVarMaxFramesInFlight.GetValue();
 	return (std::clamp)(Requested, 1, MaxFramesInFlightCap);
 }
 
-void FRenderServer::SetClearColor(float R, float G, float B, float A)
+void FRenderSystem::SetClearColor(float R, float G, float B, float A)
 {
 	ClearColorR = R;
 	ClearColorG = G;
@@ -79,7 +120,7 @@ void FRenderServer::SetClearColor(float R, float G, float B, float A)
 	ClearColorA = A;
 }
 
-FGameFrameContext FRenderServer::GatherContexts(FWorld& World)
+FGameFrameContext FRenderSystem::GatherContexts(FWorld& World)
 {
 	FGameFrameContext Frame;
 	Frame.Slices.reserve(Features.size());
@@ -90,100 +131,100 @@ FGameFrameContext FRenderServer::GatherContexts(FWorld& World)
 	return Frame;
 }
 
-void FRenderServer::SubmitFrameContext(FGameFrameContext FrameContext)
+void FRenderSystem::SubmitFrameContext(FGameFrameContext FrameContext)
 {
 	PendingFrameContext = std::move(FrameContext);
 }
 
-FTextureProxyRegistry& FRenderServer::GetTextureProxyRegistry()
+FTextureProxyRegistry& FRenderSystem::GetTextureProxyRegistry()
 {
 	return *TextureProxies;
 }
 
-const FTextureProxyRegistry& FRenderServer::GetTextureProxyRegistry() const
+const FTextureProxyRegistry& FRenderSystem::GetTextureProxyRegistry() const
 {
 	return *TextureProxies;
 }
 
-FMeshProxyRegistry& FRenderServer::GetMeshProxyRegistry()
+FMeshProxyRegistry& FRenderSystem::GetMeshProxyRegistry()
 {
 	return *MeshProxies;
 }
 
-const FMeshProxyRegistry& FRenderServer::GetMeshProxyRegistry() const
+const FMeshProxyRegistry& FRenderSystem::GetMeshProxyRegistry() const
 {
 	return *MeshProxies;
 }
 
-FSkeletonProxyRegistry& FRenderServer::GetSkeletonProxyRegistry()
+FSkeletonProxyRegistry& FRenderSystem::GetSkeletonProxyRegistry()
 {
 	return *SkeletonProxies;
 }
 
-const FSkeletonProxyRegistry& FRenderServer::GetSkeletonProxyRegistry() const
+const FSkeletonProxyRegistry& FRenderSystem::GetSkeletonProxyRegistry() const
 {
 	return *SkeletonProxies;
 }
 
-FAnimationProxyRegistry& FRenderServer::GetAnimationProxyRegistry()
+FAnimationProxyRegistry& FRenderSystem::GetAnimationProxyRegistry()
 {
 	return *AnimationProxies;
 }
 
-const FAnimationProxyRegistry& FRenderServer::GetAnimationProxyRegistry() const
+const FAnimationProxyRegistry& FRenderSystem::GetAnimationProxyRegistry() const
 {
 	return *AnimationProxies;
 }
 
-void FRenderServer::PushPendingTextureUpload(FTextureCpuSnapshot Snapshot, FTransferHandle Handle)
+void FRenderSystem::PushPendingTextureUpload(FTextureCpuSnapshot Snapshot, FTransferHandle Handle)
 {
 	std::lock_guard<std::mutex> Lock(PendingUploadMutex);
 	PendingTextureUploads.push_back(FPendingTextureUpload{ std::move(Snapshot), Handle });
 }
 
-void FRenderServer::PushPendingTextureDestroy(std::string CatalogKey, FTransferHandle Handle)
+void FRenderSystem::PushPendingTextureDestroy(std::string CatalogKey, FTransferHandle Handle)
 {
 	std::lock_guard<std::mutex> Lock(PendingUploadMutex);
 	PendingTextureDestroys.push_back(FPendingDestroy{ std::move(CatalogKey), Handle });
 }
 
-void FRenderServer::PushPendingMeshUpload(FMeshCpuSnapshot Snapshot, FTransferHandle Handle)
+void FRenderSystem::PushPendingMeshUpload(FMeshCpuSnapshot Snapshot, FTransferHandle Handle)
 {
 	std::lock_guard<std::mutex> Lock(PendingUploadMutex);
 	PendingMeshUploads.push_back(FPendingMeshUpload{ std::move(Snapshot), Handle });
 }
 
-void FRenderServer::PushPendingMeshDestroy(std::string CatalogKey, FTransferHandle Handle)
+void FRenderSystem::PushPendingMeshDestroy(std::string CatalogKey, FTransferHandle Handle)
 {
 	std::lock_guard<std::mutex> Lock(PendingUploadMutex);
 	PendingMeshDestroys.push_back(FPendingDestroy{ std::move(CatalogKey), Handle });
 }
 
-void FRenderServer::PushPendingSkeletonUpload(FSkeletonCpuSnapshot Snapshot, FTransferHandle Handle)
+void FRenderSystem::PushPendingSkeletonUpload(FSkeletonCpuSnapshot Snapshot, FTransferHandle Handle)
 {
 	std::lock_guard<std::mutex> Lock(PendingUploadMutex);
 	PendingSkeletonUploads.push_back(FPendingSkeletonUpload{ std::move(Snapshot), Handle });
 }
 
-void FRenderServer::PushPendingSkeletonDestroy(std::string CatalogKey, FTransferHandle Handle)
+void FRenderSystem::PushPendingSkeletonDestroy(std::string CatalogKey, FTransferHandle Handle)
 {
 	std::lock_guard<std::mutex> Lock(PendingUploadMutex);
 	PendingSkeletonDestroys.push_back(FPendingDestroy{ std::move(CatalogKey), Handle });
 }
 
-void FRenderServer::PushPendingAnimationUpload(FAnimationCpuSnapshot Snapshot, FTransferHandle Handle)
+void FRenderSystem::PushPendingAnimationUpload(FAnimationCpuSnapshot Snapshot, FTransferHandle Handle)
 {
 	std::lock_guard<std::mutex> Lock(PendingUploadMutex);
 	PendingAnimationUploads.push_back(FPendingAnimationUpload{ std::move(Snapshot), Handle });
 }
 
-void FRenderServer::PushPendingAnimationDestroy(std::string CatalogKey, FTransferHandle Handle)
+void FRenderSystem::PushPendingAnimationDestroy(std::string CatalogKey, FTransferHandle Handle)
 {
 	std::lock_guard<std::mutex> Lock(PendingUploadMutex);
 	PendingAnimationDestroys.push_back(FPendingDestroy{ std::move(CatalogKey), Handle });
 }
 
-bool FRenderServer::Boot(FPlatformWindow& InWindow, const FConfig& Config)
+bool FRenderSystem::Boot(FPlatformWindow& InWindow, const FConfig& Config)
 {
 	BoundWindow = &InWindow;
 	ClearColorR = Config.ClearColorR;
@@ -241,7 +282,7 @@ bool FRenderServer::Boot(FPlatformWindow& InWindow, const FConfig& Config)
 	return true;
 }
 
-void FRenderServer::TearDown()
+void FRenderSystem::TearDown()
 {
 	if (IsInitialized())
 	{
@@ -324,7 +365,7 @@ void FRenderServer::TearDown()
 	CurrentFrameIndex = 0;
 }
 
-void FRenderServer::WaitBeforeImGuiNewFrame(std::uint64_t FrameIndex)
+void FRenderSystem::WaitBeforeImGuiNewFrame(std::uint64_t FrameIndex)
 {
 	if (FrameIndex > 1)
 	{
@@ -332,7 +373,7 @@ void FRenderServer::WaitBeforeImGuiNewFrame(std::uint64_t FrameIndex)
 	}
 }
 
-std::vector<IRenderFeature*> FRenderServer::SortFeaturesForStage(
+std::vector<IRenderFeature*> FRenderSystem::SortFeaturesForStage(
 	std::vector<IRenderFeature*>& Participants,
 	std::unordered_map<std::type_index, IRenderFeature*>& TypeMap,
 	ERenderPipelineStage Stage)
@@ -381,14 +422,14 @@ std::vector<IRenderFeature*> FRenderServer::SortFeaturesForStage(
 
 	if (Sorted.size() != Participants.size())
 	{
-		MAHO_CORE_WARN("FRenderServer: circular feature dependency in stage, falling back to declaration order");
+		MAHO_CORE_WARN("FRenderSystem: circular feature dependency in stage, falling back to declaration order");
 		return Participants;
 	}
 
 	return Sorted;
 }
 
-void FRenderServer::BuildAndExecuteGraph(const FRenderFramePacket& Packet)
+void FRenderSystem::BuildAndExecuteGraph(const FRenderFramePacket& Packet)
 {
 	static constexpr ERenderPipelineStage PipelineStages[] =
 	{
@@ -416,6 +457,10 @@ void FRenderServer::BuildAndExecuteGraph(const FRenderFramePacket& Packet)
 		}
 	}
 
+	// Build one graph for the whole frame — all features across all stages
+	// declare passes into it, so the RDG can sort/optimize globally.
+	FrameGraph.Reset(&RHIServer);
+
 	for (ERenderPipelineStage Stage : PipelineStages)
 	{
 		// Collect participants for this stage
@@ -436,10 +481,6 @@ void FRenderServer::BuildAndExecuteGraph(const FRenderFramePacket& Packet)
 		// Sort by dependency graph
 		std::vector<IRenderFeature*> Sorted = SortFeaturesForStage(Participants, TypeMap, Stage);
 
-		// Build render graph for this stage
-		FRDGBuilder GraphBuilder(RHIServer.GetRHI());
-		bool bHasPasses = false;
-
 		for (auto* Feature : Sorted)
 		{
 			const IGameContextSlice* Slice = nullptr;
@@ -449,42 +490,40 @@ void FRenderServer::BuildAndExecuteGraph(const FRenderFramePacket& Packet)
 				Slice = SliceIt->second;
 			}
 
-			std::size_t PassCountBefore = GraphBuilder.GetPassCount();
 			if (Slice)
 			{
-				Feature->ExecuteStage(Stage, *Slice, FrameCtx, GraphBuilder);
-			}
-			if (GraphBuilder.GetPassCount() > PassCountBefore)
-			{
-				bHasPasses = true;
+				Feature->ExecuteStage(Stage, *Slice, FrameCtx, FrameGraph);
 			}
 		}
+	}
 
-		if (bHasPasses)
+	// Frame finalize: ImGui composite + swapchain present, expressed as the
+	// graph's terminal step. The internal multi-submit stays hidden behind
+	// FrameGraph.Execute().
+	FrameGraph.SetFrameFinalize([this,
+		ClearR = Packet.ClearColorR, ClearG = Packet.ClearColorG,
+		ClearB = Packet.ClearColorB, ClearA = Packet.ClearColorA,
+		ImGuiSlot = Packet.ImGuiSlotIndex, bSubmitImGui = Packet.bSubmitImGui,
+		bSubmitViewports = Packet.bSubmitImGuiViewports,
+		FrameIndex = Packet.FrameIndex]()
+	{
+		RHIServer.SubmitBeginMainPass(ClearR, ClearG, ClearB, ClearA);
+		if (bSubmitImGui && ImGuiSlot >= 0 && ImGuiDrawDataRing)
 		{
-			GraphBuilder.Compile();
-			GraphBuilder.Execute();
+			RHIServer.SubmitRenderUI(*ImGuiDrawDataRing, ImGuiSlot);
 		}
-	}
+		if (bSubmitViewports)
+		{
+			RHIServer.SubmitRenderPlatformWindows();
+		}
+		RHIServer.SubmitEndFrameAndFence(FrameIndex);
+	});
 
-	// Built-in: swapchain present + ImGui
-	RHIServer.SubmitBeginMainPass(
-		Packet.ClearColorR,
-		Packet.ClearColorG,
-		Packet.ClearColorB,
-		Packet.ClearColorA);
-	if (Packet.bSubmitImGui && Packet.ImGuiSlotIndex >= 0 && ImGuiDrawDataRing)
-	{
-		RHIServer.SubmitRenderUI(*ImGuiDrawDataRing, Packet.ImGuiSlotIndex);
-	}
-	if (Packet.bSubmitImGuiViewports)
-	{
-		RHIServer.SubmitRenderPlatformWindows();
-	}
-	RHIServer.SubmitEndFrameAndFence(Packet.FrameIndex);
+	FrameGraph.Compile();
+	FrameGraph.Execute();
 }
 
-void FRenderServer::ProcessPendingResourceTransfers()
+void FRenderSystem::ProcessPendingResourceTransfers()
 {
 	std::vector<FPendingTextureUpload> TextureUploads;
 	std::vector<FPendingDestroy> TextureDestroys;
@@ -546,7 +585,7 @@ void FRenderServer::ProcessPendingResourceTransfers()
 	}
 }
 
-void FRenderServer::ExecuteFrame(FRenderFramePacket Packet)
+void FRenderSystem::ExecuteFrame(FRenderFramePacket Packet)
 {
 	CurrentFrameIndex = Packet.FrameIndex;
 
@@ -561,7 +600,7 @@ void FRenderServer::ExecuteFrame(FRenderFramePacket Packet)
 	BuildAndExecuteGraph(Packet);
 }
 
-void FRenderServer::Render(std::uint64_t FrameIndex)
+void FRenderSystem::Render(std::uint64_t FrameIndex)
 {
 	const int MaxInFlight = GetMaxFramesInFlight();
 	if (FrameIndex > static_cast<std::uint64_t>(MaxInFlight))
@@ -625,13 +664,13 @@ void FRenderServer::Render(std::uint64_t FrameIndex)
 	}
 
 	ENQUEUE_RENDER_COMMAND(RenderFrame)(
-		[Packet = std::move(Packet)](FRenderServer& Server) mutable
+		[Packet = std::move(Packet)](FRenderSystem& Server) mutable
 		{
 			Server.ExecuteFrame(std::move(Packet));
 		});
 }
 
-void FRenderServer::SyncFramebufferSize()
+void FRenderSystem::SyncFramebufferSize()
 {
 	// Framebuffer sync is performed on Game in Render() into FRenderFramePacket.
 }

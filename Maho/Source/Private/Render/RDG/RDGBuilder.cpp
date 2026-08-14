@@ -2,6 +2,7 @@
 
 #include <Core/System/Log.h>
 #include <Render/RHI/RHI.h>
+#include <Render/RHI/RHIServer.h>
 
 #include <algorithm>
 #include <cstring>
@@ -19,6 +20,24 @@ FRDGBuilder::~FRDGBuilder()
 {
 }
 
+void FRDGBuilder::Reset(FRHIServer* InRHIServer)
+{
+	RHIServer = InRHIServer;
+	RHI = InRHIServer ? InRHIServer->GetRHI() : nullptr;
+
+	OwnedResources.clear();
+	ParameterPool.clear();
+	OwnedPasses.clear();
+	Passes.clear();
+	NamedResources.clear();
+	ExportedResources.clear();
+	FinalTransitions.clear();
+	FrameFinalize = nullptr;
+	CompiledPasses.clear();
+	Lifetimes.clear();
+	TransientPool.Reset();
+}
+
 // Resource Registration
 
 FRDGBuffer* FRDGBuilder::RegisterExternalBuffer(
@@ -26,6 +45,23 @@ FRDGBuffer* FRDGBuilder::RegisterExternalBuffer(
 	ERHIResourceState InitialState,
 	const char* Name)
 {
+	// Re-registering the same named external buffer within a frame returns the
+	// existing FRDGBuffer (single graph node for one physical buffer).
+	if (Name != nullptr)
+	{
+		auto It = NamedResources.find(Name);
+		if (It != NamedResources.end())
+		{
+			if (auto* Existing = dynamic_cast<FRDGBuffer*>(It->second))
+			{
+				if (Existing->GetRHI() == Buffer)
+				{
+					return Existing;
+				}
+			}
+		}
+	}
+
 	auto* Res = new FRDGBuffer(Name, Buffer->GetDesc(), true, false);
 	Res->SetRHI(Buffer);
 	Res->CurrentState = InitialState;
@@ -39,6 +75,21 @@ FRDGTexture* FRDGBuilder::RegisterExternalTexture(
 	ERHIResourceState InitialState,
 	const char* Name)
 {
+	if (Name != nullptr)
+	{
+		auto It = NamedResources.find(Name);
+		if (It != NamedResources.end())
+		{
+			if (auto* Existing = dynamic_cast<FRDGTexture*>(It->second))
+			{
+				if (Existing->GetRHI() == Texture)
+				{
+					return Existing;
+				}
+			}
+		}
+	}
+
 	auto* Res = new FRDGTexture(Name, Texture->GetDesc(), true, false);
 	Res->SetRHI(Texture);
 	Res->CurrentState = InitialState;
@@ -158,26 +209,36 @@ void FRDGBuilder::Write(FRDGPass& Pass, FRDGResource* Resource, ERHIResourceStat
 
 void FRDGBuilder::UploadBuffer(FRDGBuffer* DstBuffer, const void* Data, std::size_t Size)
 {
-	if (Data == nullptr || Size == 0) return;
+	if (Data == nullptr || Size == 0 || DstBuffer == nullptr) return;
 
-	// Direct CPU write into a host-visible destination (no staging / no copy,
-	// so there is no buffer lifetime race with the GPU).
-	FRHIBuffer* RHIBuf = DstBuffer->GetRHI();
-	if (RHIBuf)
-	{
-		RHI->UpdateBuffer(RHIBuf, 0, Size, Data);
-	}
+	// Own the payload on the CPU until Execute; the pass writes it into the
+	// host-visible destination in graph order (no immediate RHI call here).
+	auto Staging = std::make_shared<std::vector<std::uint8_t>>(
+		static_cast<const std::uint8_t*>(Data),
+		static_cast<const std::uint8_t*>(Data) + Size);
 
-	// Declare the write so the RDG derives consumer barriers.
 	auto& Params = AllocateParameters();
 	Params.Writes.push_back({DstBuffer, ERHIResourceState::CopyDst});
-	AddComputePass("Upload", Params, [](FRHICommandList& /*Cmd*/) {});
+
+	IRHI* RHI = this->RHI;
+	AddComputePass("Upload", Params, [DstBuffer, Staging, RHI](FRHICommandList& /*Cmd*/)
+	{
+		if (RHI != nullptr && DstBuffer->GetRHI() != nullptr)
+		{
+			RHI->UpdateBuffer(DstBuffer->GetRHI(), 0, Staging->size(), Staging->data());
+		}
+	});
 }
 
 FRDGResource* FRDGBuilder::GetResource(const char* Name) const
 {
 	auto It = NamedResources.find(Name);
 	return It != NamedResources.end() ? It->second : nullptr;
+}
+
+void FRDGBuilder::SetFrameFinalize(std::function<void()> Func)
+{
+	FrameFinalize = std::move(Func);
 }
 
 // Compile
@@ -188,7 +249,6 @@ void FRDGBuilder::Compile()
 	TransientPool.Reset();
 	if (Passes.empty()) return;
 	CollectResourceLifetimes();
-	AllocateTransientResources();
 	SortPasses();
 	DeriveBarriers();
 }
@@ -389,7 +449,37 @@ void FRDGBuilder::BuildRenderingAttachments(
 
 void FRDGBuilder::Execute()
 {
-	if (CompiledPasses.empty()) return;
+	if (RHIServer != nullptr)
+	{
+		// Pass recording runs on the RHI thread (single RHI access point).
+		RHIServer->Enqueue([this](FThreadedServer& /*Server*/)
+		{
+			ExecutePassesAndTransitions();
+		});
+		RHIServer->Flush();
+	}
+	else
+	{
+		// Fallback: no RHI thread — run inline.
+		ExecutePassesAndTransitions();
+	}
+
+	// Terminal step (ImGui + present) is triggered from the render thread; it
+	// enqueues Submit* work onto the same RHI thread queue, ordered after the
+	// pass execution above by FIFO.
+	RunFrameFinalize();
+}
+
+void FRDGBuilder::ExecutePassesAndTransitions()
+{
+	if (CompiledPasses.empty())
+	{
+		return;
+	}
+
+	// Transient resources are allocated on the RHI thread (single RHI access
+	// point); lifetimes were computed during Compile on the render thread.
+	AllocateTransientResources();
 
 	for (FCompiledPass& CP : CompiledPasses)
 	{
@@ -493,7 +583,16 @@ void FRDGBuilder::Execute()
 		}
 	}
 
-	// Upload buffers are written directly (host-visible); no staging cleanup needed.
+	// Upload passes wrote their payloads directly during Execute (host-visible);
+	// payload memory is owned by the pass lambdas and freed on the next Reset().
+}
+
+void FRDGBuilder::RunFrameFinalize()
+{
+	if (FrameFinalize)
+	{
+		FrameFinalize();
+	}
 }
 
 } // namespace Maho

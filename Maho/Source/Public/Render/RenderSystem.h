@@ -2,12 +2,17 @@
 
 #include <Core/Engine.h>
 #include <Core/Export.h>
+#include <Core/DependsPack.h>
+#include <Core/Sequencer/EngineExtension.h>
+#include <Core/TypeList.h>
+#include <Core/Extension/Platform/Platform.h>
 #include <Render/ResourceSnapshots.h>
 #include <Core/Server/ThreadedServer.h>
 #include <Core/Server/TransferHandle.h>
 #include <Core/System/PlatformWindow.h>
 #include <Render/RenderFramePacket.h>
 #include <Render/RHI/RHIServer.h>
+#include <Render/RDG/RDGBuilder.h>
 #include <Render/Sequencer/RenderFeature.h>
 #include <Render/RenderPipelineStage.h>
 #include <Render/UI/ImGuiSystem.h>
@@ -33,24 +38,37 @@ class FMeshProxyRegistry;
 class FSkeletonProxyRegistry;
 class FAnimationProxyRegistry;
 
-/** Tag — specializations provide Submit in RenderServer.cpp. */
+/** Tag — specializations provide Submit in RenderSystem.cpp. */
 template <typename TResource>
 struct TRenderResourceExporter;
 
 /**
- * MahoRender worker (FThreadedServer). Owned by FRenderSystem (Game).
- * Game submits work via ENQUEUE_RENDER_COMMAND; this server records/submits to FRHIServer.
+ * Render extension + render thread worker.
+ *
+ * Game thread interacts with this class through the IEngineExtension stage
+ * interface (Init / BeginFrame / Render / Shutdown). It also owns the
+ * MahoRender worker thread (FThreadedServer) which builds and executes the
+ * per-frame FRDGBuilder graph, dispatching registered IRenderFeatures.
  */
-class MAHO_API FRenderServer final : public FThreadedServer
+class MAHO_API FRenderSystem final
+	: public IEngineExtension
+	, public TDependsPack<
+		TDependsOn<EEngineStage::Init, TTypeList<FPlatformSystem>>,
+		TDependsOn<EEngineStage::BeginFrame, TTypeList<FPlatformSystem>>>
+	, public FThreadedServer
 {
 public:
 	static constexpr int MaxFramesInFlightCap = 3;
 
-	FRenderServer();
-	~FRenderServer() override;
+	FRenderSystem();
+	~FRenderSystem() override;
 
-	FRenderServer(const FRenderServer&) = delete;
-	FRenderServer& operator=(const FRenderServer&) = delete;
+	FRenderSystem(const FRenderSystem&) = delete;
+	FRenderSystem& operator=(const FRenderSystem&) = delete;
+
+	// ── IEngineExtension ──
+	[[nodiscard]] const char* GetName() const override { return "Render"; }
+	bool ExecuteStage(EEngineStage Stage) override;
 
 	/** Start MahoRender + RHI worker, RHI (from Window), optional ImGui. */
 	[[nodiscard]] bool Boot(FPlatformWindow& InWindow, const FConfig& Config);
@@ -85,7 +103,7 @@ public:
 	/**
 	 * Client (Game): non-blocking resource → proxy upload.
 	 * Requires TRenderResourceExporter<TResource> specialization (Texture/Mesh/Skeleton/Animation).
-	 * Template bodies + explicit instantiations live in RenderServer.cpp.
+	 * Template bodies + explicit instantiations live in RenderSystem.cpp.
 	 */
 	template <typename TResource>
 	FTransferHandle QueueResourceUpload(const TResource& Resource);
@@ -141,12 +159,12 @@ public:
 		{
 			if (!Feature->OnRegister(*this))
 			{
-				MAHO_CORE_ERROR("FRenderServer: OnRegister failed for '{}'", Feature->GetName());
+				MAHO_CORE_ERROR("FRenderSystem: OnRegister failed for '{}'", Feature->GetName());
 			}
 		}
 		else
 		{
-			MAHO_CORE_WARN("FRenderServer: RHI not ready when registering '{}' — OnRegister deferred to first frame", Feature->GetName());
+							MAHO_CORE_WARN("FRenderSystem: RHI not ready when registering '{}' — OnRegister deferred to first frame", Feature->GetName());
 		}
 
 		Features.push_back(std::move(Feature));
@@ -226,6 +244,9 @@ private:
 	std::uint64_t CurrentFrameIndex = 0;
 	FGameFrameContext PendingFrameContext;
 	FFrameContext FrameContexts[3];
+
+	/** Per-frame render graph — reset and reused every frame by all features. */
+	FRDGBuilder FrameGraph;
 
 	float ClearColorR = 0.08f;
 	float ClearColorG = 0.10f;

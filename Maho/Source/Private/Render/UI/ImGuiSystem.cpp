@@ -348,7 +348,7 @@ void LoadEditorFonts(ImGuiIO& IO, const std::string& ConfigDirectory)
 
 FImGuiSystem::~FImGuiSystem()
 {
-	// Prefer Shutdown(RHIServer) from FRenderServer so Vulkan backends die before the device.
+	// Prefer Shutdown(RHIServer) from FRenderSystem so Vulkan backends die before the device.
 }
 
 bool FImGuiSystem::Initialize(

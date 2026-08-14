@@ -18,7 +18,7 @@ struct FImGuiDrawDataRing;
 /**
  * RHI worker thread (MahoRHI). Owns FRHI and executes Submit* on the server queue.
  * Short fixed pipeline — not an extensible Extension/DependsPack system.
- * Owned by FRenderServer.
+ * Owned by FRenderSystem.
  */
 class MAHO_API FRHIServer final : public FThreadedServer
 {
@@ -41,7 +41,7 @@ public:
 	void ShutdownRHI();
 
 	void SubmitBeginMainPass(float R, float G, float B, float A);
-	/** SlotIndex from FImGuiDrawDataRing::CaptureFromImGui; ring owned by FRenderServer. */
+	/** SlotIndex from FImGuiDrawDataRing::CaptureFromImGui; ring owned by FRenderSystem. */
 	void SubmitRenderUI(FImGuiDrawDataRing& Ring, int SlotIndex);
 	/** Secondary ImGui viewports: ImGui::RenderPlatformWindowsDefault on MahoRHI. */
 	void SubmitRenderPlatformWindows();

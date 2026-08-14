@@ -33,7 +33,7 @@
 #include <Core/System/PlatformWindow.h>
 #include <Render/RHI/RHI.h>
 #include <Render/RHI/RHIServer.h>
-#include <Render/RenderServer.h>
+#include <Render/RenderSystem.h>
 #include <Render/RenderPipelineStage.h>
 #include <Render/SceneUpdatePacket.h>
 #include <Render/Sequencer/RenderFeature.h>

@@ -41,7 +41,7 @@ struct FConfig
 	bool bCreateMainWindow = true;
 	bool bResizableWindow = true;
 
-	/** Clear color used by FRenderServer default clear (Boot caches from config). */
+	/** Clear color used by FRenderSystem default clear (Boot caches from config). */
 	float ClearColorR = 0.08f;
 	float ClearColorG = 0.10f;
 	float ClearColorB = 0.16f;

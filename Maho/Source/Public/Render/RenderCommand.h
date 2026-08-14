@@ -1,11 +1,11 @@
 #pragma once
 
 /**
- * UE-style enqueue onto FRenderServer (MahoRender).
- * Usage: ENQUEUE_RENDER_COMMAND(MyCmd)([](FRenderServer& RenderServer) { ... });
+ * UE-style enqueue onto FRenderSystem (MahoRender).
+ * Usage: ENQUEUE_RENDER_COMMAND(MyCmd)([](FRenderSystem& RenderSystem) { ... });
  */
 
-#include <Render/RenderServer.h>
+#include <Render/RenderSystem.h>
 
 #include <Core/System/Log.h>
 
@@ -18,7 +18,7 @@ namespace Maho
 namespace Detail
 {
 
-[[nodiscard]] FRenderServer* GetRenderServer();
+[[nodiscard]] FRenderSystem* GetRenderSystem();
 
 /** Unique tag per call site (__COUNTER__); TypeName is documentation only. */
 template <int UniqueId>
@@ -30,10 +30,10 @@ template <typename TTag, typename TFunc>
 inline void EnqueueRenderCommandTagged(TFunc&& Func)
 {
 	(void)sizeof(TTag);
-	FRenderServer* Server = GetRenderServer();
+	FRenderSystem* Server = GetRenderSystem();
 	if (!Server || !Server->IsInitialized())
 	{
-		MAHO_CORE_ERROR("ENQUEUE_RENDER_COMMAND: FRenderServer unavailable");
+		MAHO_CORE_ERROR("ENQUEUE_RENDER_COMMAND: FRenderSystem unavailable");
 		return;
 	}
 
@@ -42,7 +42,7 @@ inline void EnqueueRenderCommandTagged(TFunc&& Func)
 	Server->Enqueue(
 		[Function = std::make_shared<std::decay_t<TFunc>>(std::forward<TFunc>(Func))](FThreadedServer& Base) mutable
 		{
-			(*Function)(static_cast<FRenderServer&>(Base));
+			(*Function)(static_cast<FRenderSystem&>(Base));
 		});
 }
 

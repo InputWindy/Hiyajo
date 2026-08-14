@@ -27,7 +27,7 @@ struct FImGuiTextureHandle
 
 /**
  * Dear ImGui lifecycle helper (GLFW + Vulkan backends).
- * Call BeginFrame after PollEvents (Game); build UI in TickGroups; EndFrame inside FRenderServer KickRHI.
+ * Call BeginFrame after PollEvents (Game); build UI in TickGroups; EndFrame inside FRenderSystem Render.
  */
 class MAHO_API FImGuiSystem
 {

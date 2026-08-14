@@ -472,7 +472,15 @@ bool DecodePackageFile(
 		Uncompressed = std::move(Compressed);
 	}
 
-	ParseUncompressedDocument(Uncompressed, OutPackage);
+	try
+	{
+		ParseUncompressedDocument(Uncompressed, OutPackage);
+	}
+	catch (const std::exception& Ex)
+	{
+		MAHO_CORE_ERROR("ResourceCasset: document parse failed: {}", Ex.what());
+		return false;
+	}
 	return true;
 }
 

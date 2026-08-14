@@ -19,6 +19,7 @@ namespace Maho
 {
 
 class IRHI;
+class FRHIServer;
 class FRDGBuffer;
 class FRDGTexture;
 
@@ -56,10 +57,18 @@ class MAHO_API FRDGBuilder
 public:
 	using FAccessPair = FRDGPassParameters::FAccessPair;
 
+	FRDGBuilder() = default;
 	explicit FRDGBuilder(IRHI* InRHI);
 	~FRDGBuilder();
 	FRDGBuilder(const FRDGBuilder&) = delete;
 	FRDGBuilder& operator=(const FRDGBuilder&) = delete;
+
+	/**
+	 * Reuse this builder for a new frame: set the RHI (via its owning server)
+	 * and clear all per-frame state (passes, resources, barriers). Transient
+	 * pool slots are released for reuse but their backing Vk resources persist.
+	 */
+	void Reset(FRHIServer* InRHIServer);
 
 	// -- Resource registration --
 
@@ -108,6 +117,15 @@ public:
 
 	void UploadBuffer(FRDGBuffer* DstBuffer, const void* Data, std::size_t Size);
 
+	// -- Frame finalize (terminal step, runs after all passes + transitions) --
+
+	/**
+	 * Optional per-frame terminal step (e.g. ImGui composite + swapchain
+	 * present). Executed once at the end of Execute(), after every graph pass
+	 * and after final external-resource transitions. Cleared on Reset().
+	 */
+	void SetFrameFinalize(std::function<void()> Func);
+
 	// -- Compilation & execution --
 
 	void Compile();
@@ -119,6 +137,7 @@ public:
 	[[nodiscard]] std::size_t GetPassCount() const { return Passes.size(); }
 
 private:
+	FRHIServer* RHIServer = nullptr;
 	IRHI* RHI = nullptr;
 
 	std::vector<std::unique_ptr<FRDGResource>> OwnedResources;
@@ -134,8 +153,8 @@ private:
 	/** External resources that need a final transition back to their initial state. */
 	std::vector<std::tuple<FRDGResource*, ERHIResourceState, ERHIResourceState>> FinalTransitions;
 
-	/** Staging buffers created by UploadBuffer; destroyed after Execute. */
-	std::vector<FRHIBuffer*> UploadStagingBuffers;
+	/** Terminal per-frame step (ImGui + present); runs last in Execute(). */
+	std::function<void()> FrameFinalize;
 
 	struct FCompiledPass
 	{
@@ -160,9 +179,14 @@ private:
 	std::unordered_map<FRDGResource*, FResourceLifetime> Lifetimes;
 
 	void BuildRenderingAttachments(const FRDGPassParameters* Params,
-	                               std::vector<FRHIRenderingAttachmentInfo>& OutColor,
-	                               FRHIRenderingAttachmentInfo& OutDepth,
-	                               std::uint32_t& OutWidth, std::uint32_t& OutHeight);
+		                               std::vector<FRHIRenderingAttachmentInfo>& OutColor,
+		                               FRHIRenderingAttachmentInfo& OutDepth,
+		                               std::uint32_t& OutWidth, std::uint32_t& OutHeight);
+
+	// -- Execute helpers (run on the RHI thread) --
+
+	void ExecutePassesAndTransitions();
+	void RunFrameFinalize();
 };
 
 } // namespace Maho

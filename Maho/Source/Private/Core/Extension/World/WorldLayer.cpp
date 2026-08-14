@@ -158,11 +158,10 @@ bool FWorldLayer::ExecuteStage(Maho::EEngineStage Stage)
 			// Gather render feature contexts from the world and hand them to the render thread.
 			if (Maho::GApp)
 			{
-				if (auto* RenderSystem = Maho::GApp->GetExtension<Maho::FRenderSystem>())
-				{
-					RenderSystem->GetRenderServer().SubmitFrameContext(
-						RenderSystem->GetRenderServer().GatherContexts(World));
-				}
+					if (auto* RenderSystem = Maho::GApp->GetExtension<Maho::FRenderSystem>())
+					{
+						RenderSystem->SubmitFrameContext(RenderSystem->GatherContexts(World));
+					}
 			}
 		}
 		break;

@@ -8,7 +8,7 @@
 namespace Maho
 {
 
-/** Must match FRenderServer::MaxFramesInFlightCap. */
+/** Must match FRenderSystem::MaxFramesInFlightCap. */
 inline constexpr int ImGuiDrawDataRingSlotCount = 3;
 
 struct FImGuiFrameSlot
