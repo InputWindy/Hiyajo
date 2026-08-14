@@ -83,6 +83,26 @@ function(maho_set_output_dirs TARGET_NAME)
 	)
 endfunction()
 
+# Redirect a plugin target's binaries to the plugin's own Binaries/ dir and
+# compile PDBs to the plugin's own Intermediate/ dir. Overrides the workspace
+# output dirs set earlier by maho_set_output_dirs (including per-config variants).
+function(maho_set_plugin_output_dirs TARGET_NAME PLUGIN_DIR)
+	file(MAKE_DIRECTORY "${PLUGIN_DIR}/Binaries" "${PLUGIN_DIR}/Intermediate")
+	foreach(_maho_out RUNTIME LIBRARY ARCHIVE)
+		set_target_properties(${TARGET_NAME} PROPERTIES
+			${_maho_out}_OUTPUT_DIRECTORY "${PLUGIN_DIR}/Binaries"
+			${_maho_out}_OUTPUT_DIRECTORY_DEBUG "${PLUGIN_DIR}/Binaries"
+			${_maho_out}_OUTPUT_DIRECTORY_RELEASE "${PLUGIN_DIR}/Binaries"
+			${_maho_out}_OUTPUT_DIRECTORY_RELWITHDEBINFO "${PLUGIN_DIR}/Binaries"
+			${_maho_out}_OUTPUT_DIRECTORY_MINSIZEREL "${PLUGIN_DIR}/Binaries"
+		)
+	endforeach()
+	set_target_properties(${TARGET_NAME} PROPERTIES
+		COMPILE_PDB_OUTPUT_DIRECTORY "${PLUGIN_DIR}/Intermediate"
+		PDB_OUTPUT_DIRECTORY "${PLUGIN_DIR}/Binaries"
+	)
+endfunction()
+
 function(maho_copy_shaders TARGET_NAME SHADER_ROOT DEST_SUBDIR)
 	if(NOT IS_DIRECTORY "${SHADER_ROOT}")
 		return()
@@ -239,10 +259,6 @@ function(maho_add_plugin_modules)
 		)
 		# Also on MahoModules so game EXE always sees plugin Public (Generated App includes).
 		target_include_directories(MahoModules INTERFACE "${_MOD_SOURCE_DIR}/Public")
-		# ImGui's IMGUI_USER_CONFIG (UI/ImGuiConfig.h) lives under the Render plugin Public root.
-		if(TARGET imgui)
-			target_include_directories(imgui PUBLIC "${_MOD_SOURCE_DIR}/Public")
-		endif()
 		target_link_libraries(${_MOD_TARGET} PUBLIC ${_MAHO_PM_ENGINE_TARGET})
 		if(TARGET glfw)
 			target_link_libraries(${_MOD_TARGET} PRIVATE glfw)
@@ -276,6 +292,27 @@ function(maho_add_plugin_modules)
 			FOLDER "Plugins/${_MOD_PLUGIN}"
 			OUTPUT_NAME "${_MOD_NAME}"
 		)
+
+		# Per-plugin self-contained CMake: <PluginDir>/<Name>.cmake may wire
+		# plugin-owned third-party deps and plugin-local output dirs.
+		get_filename_component(_MOD_PLUGIN_DIR "${_MOD_CPLUGIN}" DIRECTORY)
+		get_filename_component(_MOD_CPLUGIN_STEM "${_MOD_CPLUGIN}" NAME_WLE)
+		set(_MOD_ENGINE_TARGET "${_MAHO_PM_ENGINE_TARGET}")
+		if(EXISTS "${_MOD_PLUGIN_DIR}/${_MOD_CPLUGIN_STEM}.cmake")
+			include("${_MOD_PLUGIN_DIR}/${_MOD_CPLUGIN_STEM}.cmake")
+		endif()
+
+		# Keep a runtime copy next to the engine/game EXE as well; plugin-local
+		# Binaries/ is the plugin's own copy, not the EXE's DLL search dir.
+		if(MAHO_BUILD_SHARED)
+			add_custom_command(TARGET ${_MOD_TARGET} POST_BUILD
+				COMMAND ${CMAKE_COMMAND} -E copy_if_different
+					"$<TARGET_FILE:${_MOD_TARGET}>"
+					"$<TARGET_FILE_DIR:${_MAHO_PM_ENGINE_TARGET}>"
+				COMMENT "Copy ${_MOD_NAME} next to ${_MAHO_PM_ENGINE_TARGET}"
+				VERBATIM
+			)
+		endif()
 
 		maho_install_runtime_target(${_MOD_TARGET})
 		target_link_libraries(MahoModules INTERFACE ${_MOD_TARGET})

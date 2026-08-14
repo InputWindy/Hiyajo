@@ -28,10 +28,6 @@ if(MAHO_SOURCES STREQUAL "")
 	message(FATAL_ERROR "Maho: no sources found under ${MAHO_SOURCE_DIR}")
 endif()
 
-if(NOT TARGET imgui)
-	message(FATAL_ERROR "Maho: imgui ThirdParty target was not created (MahoDependencies.cmake)")
-endif()
-
 
 if(MAHO_BUILD_SHARED)
 	add_library(Maho SHARED ${MAHO_SOURCES})
@@ -45,10 +41,6 @@ endif()
 
 add_library(Maho::Engine ALIAS Maho)
 
-if(NOT MAHO_VMA_INCLUDE_DIR)
-	message(FATAL_ERROR "Maho: VMA include dir was not set (MahoDependencies.cmake)")
-endif()
-
 target_include_directories(Maho
 	PUBLIC
 		"${MAHO_PUBLIC_DIR}"
@@ -56,21 +48,17 @@ target_include_directories(Maho
 	PRIVATE
 		"${MAHO_PRIVATE_DIR}"
 		"${MAHO_NLOHMANN_JSON_INCLUDE_DIR}"
-		"${MAHO_VMA_INCLUDE_DIR}"
-		"${MAHO_SOL2_INCLUDE_DIR}"
 )
 
 # PUBLIC: game code uses MAHO_* macros that expand to spdlog calls.
 # Header-only avoids duplicating a static spdlog into both Maho.dll and the game EXE.
-# ImGui: separate ThirdParty static lib; Maho.dll consumes headers + links all TUs (WHOLEARCHIVE).
+# ImGui moved to the Render plugin; Maho.dll no longer links glfw/imgui.
 target_link_libraries(Maho
 	PUBLIC
 		spdlog::spdlog_header_only
 		Vulkan::Vulkan
 	PRIVATE
-		glfw
 		Threads::Threads
-		lua
 )
 
 if(MAHO_HAS_LIBKTX)
@@ -90,19 +78,6 @@ if(TARGET assimp)
 		"${assimp_BINARY_DIR}/include"
 	)
 endif()
-if(MAHO_HAS_GLSLANG)
-	target_link_libraries(Maho PRIVATE glslang OSDependent SPIRV)
-	target_compile_definitions(Maho PRIVATE MAHO_WITH_GLSLANG=1)
-	target_include_directories(Maho PRIVATE
-		"${glslang_SOURCE_DIR}"
-		"${glslang_BINARY_DIR}"
-	)
-	# SPIRV-Tools (optimizer) — optional.
-	if(MAHO_HAS_SPIRV_TOOLS)
-		target_link_libraries(Maho PRIVATE SPIRV-Tools-opt SPIRV-Tools)
-		target_compile_definitions(Maho PRIVATE MAHO_WITH_SPIRV_TOOLS=1)
-endif()
-endif()
 
 if(TARGET zlibstatic)
 	target_link_libraries(Maho PRIVATE zlibstatic)
@@ -113,37 +88,9 @@ if(TARGET zlibstatic)
 	)
 endif()
 
-# Re-export ImGui include paths / defs so game TUs can #include <imgui.h> against Maho.dll.
-target_include_directories(Maho
-	PUBLIC
-		$<TARGET_PROPERTY:imgui,INTERFACE_INCLUDE_DIRECTORIES>
-)
-target_compile_definitions(Maho
-	PUBLIC
-		$<TARGET_PROPERTY:imgui,INTERFACE_COMPILE_DEFINITIONS>
-)
-
-# Pull every imgui TU into Maho.dll (demo / widgets otherwise dropped by the linker).
-# Do not also target_link_libraries(imgui) on MSVC shared — that + WHOLEARCHIVE duplicates.
-add_dependencies(Maho imgui)
-if(MAHO_BUILD_SHARED)
-	if(MSVC)
-		target_link_options(Maho PRIVATE "/WHOLEARCHIVE:$<TARGET_FILE:imgui>")
-	else()
-		target_link_libraries(Maho PRIVATE
-			"-Wl,--whole-archive"
-			imgui
-			"-Wl,--no-whole-archive"
-		)
-endif()
-else()
-	target_link_libraries(Maho PRIVATE imgui)
-endif()
-
 target_compile_definitions(Maho
 	PUBLIC
 		MAHO_WITH_VULKAN=1
-		MAHO_WITH_LUA=1
 		MAHO_PLATFORM_${MAHO_PLATFORM_NAME}=1
 )
 
@@ -222,40 +169,11 @@ if(MAHO_CPROJECT)
 		SCAN_SCRIPT "${_MAHO_SCAN_PLUGINS_PY}"
 		PYTHON_EXE "${_MAHO_LOCAL_PYTHON}"
 	)
-else()
-	maho_add_plugin_modules(
-		PLUGINS_DIR "${MAHO_PLUGINS_DIR}"
-		ENGINE_TARGET Maho
-		SCAN_SCRIPT "${_MAHO_SCAN_PLUGINS_PY}"
-		PYTHON_EXE "${_MAHO_LOCAL_PYTHON}"
-	)
-endif()
-
-# Per-plugin third-party wiring. Plugin DLLs compile their own TUs, so Maho's
-# PRIVATE third-party includes/links are not visible to them.
-if(TARGET Script)
-	target_link_libraries(Script PRIVATE lua)
-	target_include_directories(Script PRIVATE "${MAHO_SOL2_INCLUDE_DIR}")
-endif()
-
-if(TARGET Render)
-	target_include_directories(Render PRIVATE
-		"${MAHO_VMA_INCLUDE_DIR}"
-		"${MAHO_NLOHMANN_JSON_INCLUDE_DIR}"
-	)
-	if(WIN32)
-		target_compile_definitions(Render PRIVATE VK_USE_PLATFORM_WIN32_KHR=1)
-	endif()
-	if(MAHO_HAS_GLSLANG)
-		target_link_libraries(Render PRIVATE glslang OSDependent SPIRV)
-		target_compile_definitions(Render PRIVATE MAHO_WITH_GLSLANG=1)
-		target_include_directories(Render PRIVATE
-			"${glslang_SOURCE_DIR}"
-			"${glslang_BINARY_DIR}"
+	else()
+		maho_add_plugin_modules(
+			PLUGINS_DIR "${MAHO_PLUGINS_DIR}"
+			ENGINE_TARGET Maho
+			SCAN_SCRIPT "${_MAHO_SCAN_PLUGINS_PY}"
+			PYTHON_EXE "${_MAHO_LOCAL_PYTHON}"
 		)
-		if(MAHO_HAS_SPIRV_TOOLS)
-			target_link_libraries(Render PRIVATE SPIRV-Tools-opt SPIRV-Tools)
-			target_compile_definitions(Render PRIVATE MAHO_WITH_SPIRV_TOOLS=1)
-		endif()
 	endif()
-endif()

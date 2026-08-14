@@ -384,6 +384,32 @@ void FPaths::Initialize(FConfig& InOutConfig)
 	RegisterMountPoint("/Game", ProjectContentDir);
 	RegisterMountPoint("/Engine", EngineContentDir);
 
+	// Mount each engine plugin's Content/ as its own virtual root (/Plugin/<Name>/).
+	{
+		const fs::path PluginsDir = fs::path(EngineDir) / "Maho" / "Plugins";
+		std::error_code PluginError;
+		if (fs::is_directory(PluginsDir, PluginError) && !PluginError)
+		{
+			for (const fs::directory_entry& Entry : fs::directory_iterator(PluginsDir, PluginError))
+			{
+				if (PluginError)
+				{
+					break;
+				}
+				if (!Entry.is_directory(PluginError) || PluginError)
+				{
+					continue;
+				}
+				const fs::path ContentDir = Entry.path() / "Content";
+				if (fs::is_directory(ContentDir, PluginError) && !PluginError)
+				{
+					const std::string PluginName = PathToUtf8(Entry.path().filename());
+					RegisterMountPoint("/Plugin/" + PluginName, PathToUtf8(ContentDir));
+				}
+			}
+		}
+	}
+
 	bInitialized = true;
 }
 

@@ -14,7 +14,8 @@ Small in-repo assets and optional vendored single-headers. Large C++ libraries a
 | ImPlot | FetchContent | v0.16 |
 | ImGuiFileDialog | FetchContent | v0.6.7 |
 | IconFontCppHeaders | FetchContent | main |
-| Lua / sol2 / refl-cpp | FetchContent (or optional local override) | see CMake |
+| Lua / sol2 | Plugin-owned: `Maho/Plugins/Script/ThirdParty/` (or FetchContent in `Script.cmake`) | see Script.cmake |
+| refl-cpp | FetchContent (or optional local override) | see CMake |
 | GLM | FetchContent (or optional local override) | 1.0.1 |
 
 First configure needs network. CMake caches downloads under the build tree (`_deps/`).
@@ -25,4 +26,5 @@ First configure needs network. CMake caches downloads under the build tree (`_de
 |------|--------|
 | `fonts/` | UI + icon TTFs copied to `Engine/Fonts` at build (`Inter`, `Roboto`, `fa-solid-900`). |
 | `nlohmann/json.hpp` | Optional single-header vendor; else FetchContent nlohmann/json v3.11.3. |
-| `lua/`, `sol2/`, `refl-cpp/` | Optional local overrides; else FetchContent. |
+| `lua/`, `sol2/` | Moved to `Maho/Plugins/Script/ThirdParty/` (plugin-owned). |
+| `refl-cpp/` | Optional local override; else FetchContent. |
