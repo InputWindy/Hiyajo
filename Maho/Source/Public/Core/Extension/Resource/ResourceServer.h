@@ -25,8 +25,6 @@ struct FResourceLoadResult
 {
 	std::string SourcePath;
 	std::vector<std::uint8_t> Bytes;
-	EResourceBulkPreparedKind PreparedKind = EResourceBulkPreparedKind::None;
-	std::shared_ptr<void> Prepared;
 };
 
 class MAHO_API FResourceServer : public TAsyncTransferServer<FResourceLoadRequest, FResourceLoadResult>

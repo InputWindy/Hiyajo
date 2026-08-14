@@ -122,19 +122,10 @@ protected:
 
 // ── BulkData / IO types ────────────────────────────────────────
 
-enum class EResourceBulkPreparedKind : std::uint8_t
-{
-	None = 0,
-	Model = 1,
-	TextureImage = 2,
-};
-
 struct FResourceBulkData
 {
 	std::string SourcePath;
 	std::vector<std::uint8_t> Bytes;
-	EResourceBulkPreparedKind PreparedKind = EResourceBulkPreparedKind::None;
-	std::shared_ptr<void> Prepared;
 };
 
 enum class EResourceIOMode : std::uint8_t

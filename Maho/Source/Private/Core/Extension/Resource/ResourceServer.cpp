@@ -80,13 +80,11 @@ bool FResourceServer::TryTakeBulkData(FTransferHandle Handle, FResourceBulkData&
 		return false;
 
 	FResourceLoadResult Result = RetrieveResult(Handle);
-	if (Result.Bytes.empty() && Result.PreparedKind == EResourceBulkPreparedKind::None)
+	if (Result.Bytes.empty())
 		return false;
 
 	OutBulk.SourcePath = std::move(Result.SourcePath);
 	OutBulk.Bytes = std::move(Result.Bytes);
-	OutBulk.PreparedKind = Result.PreparedKind;
-	OutBulk.Prepared = std::move(Result.Prepared);
 	return true;
 }
 
