@@ -5,7 +5,7 @@
  *
  * DOTS-aligned: FResource is a plain C++ base class (virtual dtor for OOP dispatch).
  * No UObject, no FObjectRef, no FSoftObjectPath, no GC pool, no MAHO_OBJECT macros.
- * Asset paths are plain std::string. Catalog is unordered_map<string, Ref<FResource>>.
+ * Asset paths are plain std::string. Catalog is unordered_map<string, TRef<FResource>>.
  */
 
 #include <Core/Misc/DependsPack.h>
@@ -80,19 +80,49 @@ public:
 
 	virtual ~FResource() = default;
 
-	[[nodiscard]] const std::string& GetName() const { return Name; }
-	void SetName(std::string InName) { Name = std::move(InName); }
+	[[nodiscard]] const std::string& GetName() const
+	{
+		return Name;
+	}
+	void SetName(std::string InName)
+	{
+		Name = std::move(InName);
+	}
 
-	[[nodiscard]] EAssetType GetType() const { return Type; }
-	[[nodiscard]] const std::string& GetSourcePath() const { return SourcePath; }
-	[[nodiscard]] EAssetLoadState GetLoadState() const { return LoadState; }
+	[[nodiscard]] EAssetType GetType() const
+	{
+		return Type;
+	}
+	[[nodiscard]] const std::string& GetSourcePath() const
+	{
+		return SourcePath;
+	}
+	[[nodiscard]] EAssetLoadState GetLoadState() const
+	{
+		return LoadState;
+	}
 
-	void MarkCpuReady() { LoadState = EAssetLoadState::Ready; bDirty = false; }
-	void MarkDirty() { bDirty = true; }
-	void ClearDirty() { bDirty = false; }
-	[[nodiscard]] bool IsDirty() const { return bDirty; }
+	void MarkCpuReady()
+	{
+		LoadState = EAssetLoadState::Ready; bDirty = false;
+	}
+	void MarkDirty()
+	{
+		bDirty = true;
+	}
+	void ClearDirty()
+	{
+		bDirty = false;
+	}
+	[[nodiscard]] bool IsDirty() const
+	{
+		return bDirty;
+	}
 
-	[[nodiscard]] std::uint64_t GetContentGeneration() const { return ContentGeneration; }
+	[[nodiscard]] std::uint64_t GetContentGeneration() const
+	{
+		return ContentGeneration;
+	}
 
 	/**
 	 * Return asset paths (std::string) that this asset depends on.
@@ -107,7 +137,10 @@ public:
 	 * Bidirectional binary serialization via FArchive (UE-compatible pattern).
 	 * Each subclass overrides this to save/load its CPU fields.
 	 */
-	virtual void Serialize(FArchive& Ar) { Ar.SerializeString(Name); Ar.SerializeString(SourcePath); }
+	virtual void Serialize(FArchive& Ar)
+	{
+		Ar.SerializeString(Name); Ar.SerializeString(SourcePath);
+	}
 
 protected:
 	friend class FResourceSystem;
@@ -212,13 +245,15 @@ public:
 
 	/** Find a loaded asset by path (e.g. "/Game/Textures/T_Base"). */
 	template <typename T = FResource>
-	[[nodiscard]] Ref<T> Find(const std::string& AssetPath) const
+	[[nodiscard]] TRef<T> Find(const std::string& AssetPath) const
 	{
 		std::string Key = NormalizeResourceVirtualPath(AssetPath);
 		auto It = Catalog.find(Key);
 		if (It == Catalog.end())
-			return Ref<T>();
-		return Ref<T>(static_cast<T*>(It->second.Get()));
+		{
+			return TRef<T>();
+		}
+		return TRef<T>(static_cast<T*>(It->second.Get()));
 	}
 
 	/** Load package from disk. Returns true if already cached or load started. */
@@ -247,7 +282,7 @@ public:
 		const std::string& ObjectName);
 
 	/** Register a new resource (takes ownership via Ref). Used by codecs/importers. */
-	[[nodiscard]] bool RegisterResource(Ref<FResource> Resource, const std::string& PackagePath = {});
+	[[nodiscard]] bool RegisterResource(TRef<FResource> Resource, const std::string& PackagePath = {});
 
 	/** Remove a resource from the catalog by pointer. Used for import rollback. */
 	bool UnregisterResource(FResource* Resource);
@@ -278,7 +313,10 @@ private:
 
 	[[nodiscard]] bool IsInitialized() const;
 
-	const char* GetName() const override { return "Resource"; }
+	const char* GetName() const override
+	{
+		return "Resource";
+	}
 	bool ExecuteStage(EEngineStage Stage) override;
 	[[nodiscard]] bool IsIdle() const override;
 
@@ -349,8 +387,8 @@ private:
 
 	std::unique_ptr<FResourceServer> Server;
 
-	/** Catalog: "PackagePath/ObjectName" → Ref<FResource>. */
-	std::unordered_map<std::string, Ref<FResource>> Catalog;
+	/** Catalog: "PackagePath/ObjectName" → TRef<FResource>. */
+	std::unordered_map<std::string, TRef<FResource>> Catalog;
 
 	std::unordered_map<EAssetType, FResourceFactory> ResourceFactories;
 

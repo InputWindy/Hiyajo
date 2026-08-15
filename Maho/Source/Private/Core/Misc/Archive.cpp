@@ -31,7 +31,10 @@ FArchive::FArchive(EArchiveMode InMode, const std::uint8_t* Data, std::size_t Si
 
 void FArchive::SerializeBytes(void* Ptr, std::size_t Count)
 {
-	if (bError || Count == 0) return;
+	if (bError || Count == 0)
+	{
+		return;
+	}
 
 	if (IsSaving())
 	{

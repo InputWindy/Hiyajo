@@ -39,19 +39,43 @@ public:
 	FRDGPass& operator=(const FRDGPass&) = delete;
 	~FRDGPass() = default;
 
-	[[nodiscard]] const char* GetName() const { return Name; }
-	[[nodiscard]] ERDGPassType GetType() const { return Type; }
+	[[nodiscard]] const char* GetName() const
+	{
+		return Name;
+	}
+	[[nodiscard]] ERDGPassType GetType() const
+	{
+		return Type;
+	}
 
 	void AddRead(FRDGResource* Resource, ERHIResourceState State);
 	void AddWrite(FRDGResource* Resource, ERHIResourceState State);
-	[[nodiscard]] const std::vector<FRDGResourceAccess>& GetReads() const { return Reads; }
-	[[nodiscard]] const std::vector<FRDGResourceAccess>& GetWrites() const { return Writes; }
+	[[nodiscard]] const std::vector<FRDGResourceAccess>& GetReads() const
+	{
+		return Reads;
+	}
+	[[nodiscard]] const std::vector<FRDGResourceAccess>& GetWrites() const
+	{
+		return Writes;
+	}
 
-	void SetExecute(FExecuteFunc InExecute) { Execute = std::move(InExecute); }
-	[[nodiscard]] FExecuteFunc& GetExecute() { return Execute; }
+	void SetExecute(FExecuteFunc InExecute)
+	{
+		Execute = std::move(InExecute);
+	}
+	[[nodiscard]] FExecuteFunc& GetExecute()
+	{
+		return Execute;
+	}
 
-	void SetParameters(const FRDGPassParameters* InParams) { Parameters = InParams; }
-	[[nodiscard]] const FRDGPassParameters* GetParameters() const { return Parameters; }
+	void SetParameters(const FRDGPassParameters* InParams)
+	{
+		Parameters = InParams;
+	}
+	[[nodiscard]] const FRDGPassParameters* GetParameters() const
+	{
+		return Parameters;
+	}
 
 private:
 	friend class FRDGBuilder;

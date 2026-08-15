@@ -22,9 +22,18 @@ public:
 	FRDGResource& operator=(FRDGResource&&) = default;
 	virtual ~FRDGResource() = default;
 
-	[[nodiscard]] const char* GetName() const { return Name; }
-	[[nodiscard]] bool IsExternal() const { return bExternal; }
-	[[nodiscard]] bool IsTransient() const { return bTransient; }
+	[[nodiscard]] const char* GetName() const
+	{
+		return Name;
+	}
+	[[nodiscard]] bool IsExternal() const
+	{
+		return bExternal;
+	}
+	[[nodiscard]] bool IsTransient() const
+	{
+		return bTransient;
+	}
 
 	// Barrier tracking (populated during Compile)
 	ERHIResourceState CurrentState = ERHIResourceState::Common;
@@ -48,9 +57,18 @@ class MAHO_RENDER_API FRDGBuffer final : public FRDGResource
 public:
 	FRDGBuffer(const char* Name, const FRHIBufferDesc& InDesc,
 	           bool bInExternal, bool bInTransient);
-	[[nodiscard]] const FRHIBufferDesc& GetDesc() const { return Desc; }
-	[[nodiscard]] FRHIBuffer* GetRHI() const { return Handle; }
-	void SetRHI(FRHIBuffer* InRHI) { Handle = InRHI; }
+	[[nodiscard]] const FRHIBufferDesc& GetDesc() const
+	{
+		return Desc;
+	}
+	[[nodiscard]] FRHIBuffer* GetRHI() const
+	{
+		return Handle;
+	}
+	void SetRHI(FRHIBuffer* InRHI)
+	{
+		Handle = InRHI;
+	}
 
 private:
 	FRHIBufferDesc Desc;
@@ -62,9 +80,18 @@ class MAHO_RENDER_API FRDGTexture final : public FRDGResource
 public:
 	FRDGTexture(const char* Name, const FRHITextureDesc& InDesc,
 	            bool bInExternal, bool bInTransient);
-	[[nodiscard]] const FRHITextureDesc& GetDesc() const { return Desc; }
-	[[nodiscard]] FRHITexture* GetRHI() const { return Handle; }
-	void SetRHI(FRHITexture* InRHI) { Handle = InRHI; }
+	[[nodiscard]] const FRHITextureDesc& GetDesc() const
+	{
+		return Desc;
+	}
+	[[nodiscard]] FRHITexture* GetRHI() const
+	{
+		return Handle;
+	}
+	void SetRHI(FRHITexture* InRHI)
+	{
+		Handle = InRHI;
+	}
 
 private:
 	FRHITextureDesc Desc;

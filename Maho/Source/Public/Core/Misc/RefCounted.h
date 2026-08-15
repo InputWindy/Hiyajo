@@ -2,7 +2,7 @@
 
 /**
  * Intrusive reference counting base class (UE-style TRefCounted).
- * T must derive from TRefCounted<T>. Use Ref<T> smart pointer to manage.
+ * T must derive from TRefCounted<T>. Use TRef<T> smart pointer to manage.
  */
 
 #include <Core/Misc/Export.h>
@@ -14,7 +14,7 @@ namespace Maho
 {
 
 template <typename T>
-class Ref;
+class TRef;
 
 template <typename T>
 class TRefCounted
@@ -26,10 +26,13 @@ public:
 	TRefCounted(const TRefCounted&) = delete;
 	TRefCounted& operator=(const TRefCounted&) = delete;
 
-	[[nodiscard]] std::uint32_t GetRefCount() const { return RefCount.load(std::memory_order_acquire); }
+	[[nodiscard]] std::uint32_t GetRefCount() const
+	{
+		return RefCount.load(std::memory_order_acquire);
+	}
 
 private:
-	friend class Ref<T>;
+	friend class TRef<T>;
 
 	std::uint32_t AddRef() const
 	{
@@ -54,73 +57,121 @@ private:
  * T must derive from TRefCounted<T>.
  */
 template <typename T>
-class Ref
+class TRef
 {
 public:
-	Ref() = default;
-	Ref(std::nullptr_t) : Ptr(nullptr) {}
-
-	explicit Ref(T* InPtr) : Ptr(InPtr)
+	TRef() = default;
+	TRef(std::nullptr_t)
+		: Ptr(nullptr)
 	{
-		if (Ptr)
-			Ptr->AddRef();
 	}
 
-	Ref(const Ref& Other) : Ptr(Other.Ptr)
+	explicit TRef(T* InPtr)
+		: Ptr(InPtr)
 	{
 		if (Ptr)
+		{
 			Ptr->AddRef();
+		}
 	}
 
-	Ref(Ref&& Other) noexcept : Ptr(Other.Ptr)
+	TRef(const TRef& Other)
+		: Ptr(Other.Ptr)
+	{
+		if (Ptr)
+		{
+			Ptr->AddRef();
+		}
+	}
+
+	TRef(TRef&& Other) noexcept
+		: Ptr(Other.Ptr)
 	{
 		Other.Ptr = nullptr;
 	}
 
-	~Ref()
+	~TRef()
 	{
 		if (Ptr)
+		{
 			Ptr->Release();
+		}
 	}
 
-	Ref& operator=(const Ref& Other)
+	TRef& operator=(const TRef& Other)
 	{
 		if (this != &Other)
 		{
-			if (Ptr) Ptr->Release();
+			if (Ptr)
+			{
+				Ptr->Release();
+			}
 			Ptr = Other.Ptr;
-			if (Ptr) Ptr->AddRef();
+			if (Ptr)
+			{
+				Ptr->AddRef();
+			}
 		}
 		return *this;
 	}
 
-	Ref& operator=(Ref&& Other) noexcept
+	TRef& operator=(TRef&& Other) noexcept
 	{
 		if (this != &Other)
 		{
-			if (Ptr) Ptr->Release();
+			if (Ptr)
+			{
+				Ptr->Release();
+			}
 			Ptr = Other.Ptr;
 			Other.Ptr = nullptr;
 		}
 		return *this;
 	}
 
-	Ref& operator=(T* InPtr)
+	TRef& operator=(T* InPtr)
 	{
-		if (Ptr) Ptr->Release();
+		if (Ptr)
+		{
+			Ptr->Release();
+		}
 		Ptr = InPtr;
-		if (Ptr) Ptr->AddRef();
+		if (Ptr)
+		{
+			Ptr->AddRef();
+		}
 		return *this;
 	}
 
-	[[nodiscard]] T* Get() const { return Ptr; }
-	[[nodiscard]] T* operator->() const { return Ptr; }
-	[[nodiscard]] T& operator*() const { return *Ptr; }
-	[[nodiscard]] bool IsValid() const { return Ptr != nullptr; }
-	[[nodiscard]] explicit operator bool() const { return Ptr != nullptr; }
+	[[nodiscard]] T* Get() const
+	{
+		return Ptr;
+	}
+	[[nodiscard]] T* operator->() const
+	{
+		return Ptr;
+	}
+	[[nodiscard]] T& operator*() const
+	{
+		return *Ptr;
+	}
+	[[nodiscard]] bool IsValid() const
+	{
+		return Ptr != nullptr;
+	}
+	[[nodiscard]] explicit operator bool() const
+	{
+		return Ptr != nullptr;
+	}
 
-	[[nodiscard]] bool operator==(const Ref& Other) const { return Ptr == Other.Ptr; }
-	[[nodiscard]] bool operator!=(const Ref& Other) const { return Ptr != Other.Ptr; }
+	[[nodiscard]] bool operator==(const TRef& Other) const
+	{
+		return Ptr == Other.Ptr;
+	}
+	[[nodiscard]] bool operator!=(const TRef& Other) const
+	{
+		return Ptr != Other.Ptr;
+	}
 
 private:
 	T* Ptr = nullptr;

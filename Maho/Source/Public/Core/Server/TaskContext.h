@@ -25,7 +25,10 @@ struct FTaskContextId
 	std::uint32_t Index = 0;
 	std::uint32_t Generation = 0;
 
-	[[nodiscard]] bool IsValid() const { return Generation != 0; }
+	[[nodiscard]] bool IsValid() const
+	{
+		return Generation != 0;
+	}
 
 	bool operator==(const FTaskContextId& Other) const
 	{

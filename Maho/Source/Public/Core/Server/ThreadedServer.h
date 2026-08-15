@@ -47,7 +47,10 @@ public:
 	bool Initialize();
 	void Shutdown();
 
-	[[nodiscard]] bool IsInitialized() const { return bInitialized; }
+	[[nodiscard]] bool IsInitialized() const
+	{
+		return bInitialized;
+	}
 	[[nodiscard]] bool IsRunning() const;
 
 	/**
@@ -86,8 +89,13 @@ protected:
 	[[nodiscard]] virtual const char* GetServerThreadName() const = 0;
 	[[nodiscard]] virtual const char* GetServerLogName() const = 0;
 
-	virtual bool OnInitialize() { return true; }
-	virtual void OnShutdown() {}
+	virtual bool OnInitialize()
+	{
+		return true;
+	}
+	virtual void OnShutdown()
+	{
+	}
 
 private:
 	/** Recycle a server-owned context after its task completes. */

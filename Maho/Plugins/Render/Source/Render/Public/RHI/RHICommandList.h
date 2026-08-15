@@ -31,7 +31,10 @@ public:
 	[[nodiscard]] virtual ERHIQueueType GetType() const = 0;
 
 	/** True when logical Transfer/Compute shares a non-dedicated native queue. Debug/logging only. */
-	[[nodiscard]] virtual bool IsNativeFallback() const { return false; }
+	[[nodiscard]] virtual bool IsNativeFallback() const
+	{
+		return false;
+	}
 
 	virtual void Submit(
 		FRHICommandList* const* CmdLists,

@@ -1,10 +1,11 @@
 ﻿#pragma once
 
-#include "ResourceApi.h"
 /**
  * Explicit Importer / Exporter types for FResourceSystem::Import / Export.
  * DOTS-aligned: no UObject, no FObjectRef, no FSoftObjectPath, no GC.
  */
+
+#include "ResourceApi.h"
 
 #include <ResourceSystem.h>
 
@@ -17,6 +18,7 @@
 namespace Maho
 {
 
+/** Imports a source asset (mesh/texture/etc.) into FResourceBulkData. */
 class MAHO_RESOURCE_API IResourceImporter
 {
 public:
@@ -31,6 +33,7 @@ public:
 		FResourceBulkData& Bulk) = 0;
 };
 
+/** Exports an in-memory FResource back to a source format. */
 class MAHO_RESOURCE_API IResourceExporter
 {
 public:
@@ -55,7 +58,10 @@ public:
 
 	using FTraits = TResourceIOTraits<TResource>;
 
-	[[nodiscard]] EAssetType GetType() const override { return FTraits::GetType(); }
+	[[nodiscard]] EAssetType GetType() const override
+	{
+		return FTraits::GetType();
+	}
 	[[nodiscard]] bool MatchesSourcePath(const std::string& SourcePath) const override
 	{
 		return FTraits::MatchesSourcePath(SourcePath);
@@ -67,7 +73,9 @@ public:
 		FResourceBulkData& Bulk) override
 	{
 		if (Config.TypeHint == EAssetType::Unknown)
+		{
 			Config.TypeHint = FTraits::GetType();
+		}
 		return Manager.ApplyTypedBulkData<TResource>(Config, Bulk);
 	}
 };
@@ -80,7 +88,10 @@ public:
 
 	using FTraits = TResourceIOTraits<TResource>;
 
-	[[nodiscard]] EAssetType GetType() const override { return FTraits::GetType(); }
+	[[nodiscard]] EAssetType GetType() const override
+	{
+		return FTraits::GetType();
+	}
 	[[nodiscard]] bool CanExport(const FResource& Resource) const override
 	{
 		return dynamic_cast<const TResource*>(&Resource) != nullptr;
@@ -118,19 +129,28 @@ bool FResourceSystem::ApplyTypedBulkData(FResourceImportConfig& Config, FResourc
 {
 	using FTraits = TResourceIOTraits<TResource>;
 
-	if (!IsInitialized() || !bAcceptingNewWork) return false;
+	if (!IsInitialized() || !bAcceptingNewWork)
+	{
+		return false;
+	}
 
 	Config.SourcePath = NormalizeSourcePath(std::move(Config.SourcePath));
 	Config.PackagePath = NormalizePackageName(std::move(Config.PackagePath));
 	if (Config.ObjectName.empty() && !Config.SourcePath.empty())
+	{
 		Config.ObjectName = MakeObjectNameFromSource(Config.SourcePath);
+	}
 
 	if (Config.PackagePath.empty() || Config.ObjectName.empty() || Config.SourcePath.empty())
+	{
 		return false;
+	}
 
 	EAssetType Type = Config.TypeHint;
 	if (Type == EAssetType::Unknown)
+	{
 		Type = FTraits::GetType();
+	}
 
 	const std::string Key = MakeAssetCatalogKey(Config.PackagePath, Config.ObjectName);
 	if (Catalog.find(Key) != Catalog.end())
@@ -141,7 +161,7 @@ bool FResourceSystem::ApplyTypedBulkData(FResourceImportConfig& Config, FResourc
 
 	auto Resource = std::make_unique<TResource>(Config.ObjectName, Type, Config.SourcePath);
 	TResource* Raw = Resource.get();
-	Catalog[Key] = Ref<FResource>(Resource.release());
+	Catalog[Key] = TRef<FResource>(Resource.release());
 	RegisterOwnedResource(Config.PackagePath, Raw);
 
 	Raw->LoadState = EAssetLoadState::Pending;
@@ -159,14 +179,22 @@ bool FResourceSystem::ApplyTypedBulkData(FResourceImportConfig& Config, FResourc
 template <typename TExporter>
 bool FResourceSystem::Export(FResourceExportConfig Config, const std::string& SourcePath)
 {
-	if (!IsInitialized() || !bAcceptingNewWork) return false;
+	if (!IsInitialized() || !bAcceptingNewWork)
+	{
+		return false;
+	}
 
 			auto Resource = Find<FResource>(SourcePath);
-	if (!Resource) return false;
+	if (!Resource)
+	{
+		return false;
+	}
 
 	TExporter Exporter;
 	if (!Exporter.CanExport(*Resource) || !Exporter.Export(std::move(Config), *Resource))
+	{
 		return false;
+	}
 
 	return true;
 }

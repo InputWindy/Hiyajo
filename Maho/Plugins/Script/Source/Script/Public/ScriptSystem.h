@@ -61,8 +61,14 @@ public:
 	FScriptSystem(const FScriptSystem&) = delete;
 	FScriptSystem& operator=(const FScriptSystem&) = delete;
 
-	[[nodiscard]] bool IsLuaInitialized() const { return bLuaInitialized; }
-	[[nodiscard]] const std::string& GetScriptsDirectory() const { return ScriptsDirectory; }
+	[[nodiscard]] bool IsLuaInitialized() const
+	{
+		return bLuaInitialized;
+	}
+	[[nodiscard]] const std::string& GetScriptsDirectory() const
+	{
+		return ScriptsDirectory;
+	}
 
 	/**
 	 * Opaque pointer to the engine sol::state (cast in .cpp that includes sol).
@@ -70,8 +76,14 @@ public:
 	 */
 	[[nodiscard]] void* TryGetLuaState();
 
-	[[nodiscard]] FOnLuaReady& GetOnLuaReady() { return OnLuaReady; }
-	[[nodiscard]] const FOnLuaReady& GetOnLuaReady() const { return OnLuaReady; }
+	[[nodiscard]] FOnLuaReady& GetOnLuaReady()
+	{
+		return OnLuaReady;
+	}
+	[[nodiscard]] const FOnLuaReady& GetOnLuaReady() const
+	{
+		return OnLuaReady;
+	}
 
 	/**
 	 * Forward to Bindable.BindLua(*this). If Lua is not ready yet, queues until Init.
@@ -93,7 +105,10 @@ public:
 	[[nodiscard]] bool Call(const char* FunctionName, float Arg0);
 
 private:
-	const char* GetName() const override { return "Script"; }
+	const char* GetName() const override
+	{
+		return "Script";
+	}
 	bool ExecuteStage(EEngineStage Stage) override;
 
 	[[nodiscard]] bool InitializeLua(const std::string& ScriptsDirectory);

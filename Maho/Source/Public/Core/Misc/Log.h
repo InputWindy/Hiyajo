@@ -61,10 +61,19 @@ public:
 	void Initialize(const FLogConfig& Config);
 	void Shutdown();
 
-	[[nodiscard]] bool IsInitialized() const { return bInitialized; }
+	[[nodiscard]] bool IsInitialized() const
+	{
+		return bInitialized;
+	}
 
-	[[nodiscard]] std::shared_ptr<spdlog::logger>& GetCoreLogger() { return CoreLogger; }
-	[[nodiscard]] std::shared_ptr<spdlog::logger>& GetClientLogger() { return ClientLogger; }
+	[[nodiscard]] std::shared_ptr<spdlog::logger>& GetCoreLogger()
+	{
+		return CoreLogger;
+	}
+	[[nodiscard]] std::shared_ptr<spdlog::logger>& GetClientLogger()
+	{
+		return ClientLogger;
+	}
 
 	/**
 	 * Move pending editor-capture lines into Out (clears the ring).

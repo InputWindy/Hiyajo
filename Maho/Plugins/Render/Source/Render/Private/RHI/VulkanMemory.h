@@ -20,8 +20,14 @@ public:
 	bool Initialize(VkInstance Instance, VkPhysicalDevice PhysicalDevice, VkDevice Device);
 	void Shutdown();
 
-	[[nodiscard]] VmaAllocator GetAllocator() const { return Allocator; }
-	[[nodiscard]] bool IsValid() const { return Allocator != nullptr; }
+	[[nodiscard]] VmaAllocator GetAllocator() const
+	{
+		return Allocator;
+	}
+	[[nodiscard]] bool IsValid() const
+	{
+		return Allocator != nullptr;
+	}
 
 	[[nodiscard]] bool CreateBuffer(
 		const VkBufferCreateInfo& BufferInfo,

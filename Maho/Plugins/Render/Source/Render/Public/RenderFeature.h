@@ -38,18 +38,26 @@ struct TFeatureDependsPack
 	static constexpr void ForEachSlot(TVisitor&& Visitor)
 	{
 		if constexpr (sizeof...(TSlots) > 0)
+		{
 			(Visitor(TSlots::Key, static_cast<typename TSlots::FDependsList*>(nullptr)), ...);
+		}
 		else
+		{
 			(void)Visitor;
+		}
 	}
 
 	template <ERenderPipelineStage Stage>
 	static constexpr bool ParticipatesIn()
 	{
 		if constexpr (sizeof...(TSlots) > 0)
+		{
 			return ((TSlots::Key == Stage) || ...);
+		}
 		else
+		{
 			return false;
+		}
 	}
 };
 
@@ -110,8 +118,14 @@ public:
 
 	[[nodiscard]] virtual const char* GetName() const = 0;
 
-	virtual bool OnRegister(FRenderSystem& RenderSystem) { (void)RenderSystem; return true; }
-	virtual void OnUnregister(FRenderSystem& RenderSystem) { (void)RenderSystem; }
+	virtual bool OnRegister(FRenderSystem& RenderSystem)
+	{
+		(void)RenderSystem; return true;
+	}
+	virtual void OnUnregister(FRenderSystem& RenderSystem)
+	{
+		(void)RenderSystem;
+	}
 
 	/**
 	 * Game thread: gather this feature's per-frame data from the ECS world
@@ -152,14 +166,21 @@ public:
 	{
 	}
 
-	[[nodiscard]] const char* GetName() const override { return Name; }
+	[[nodiscard]] const char* GetName() const override
+	{
+		return Name;
+	}
 
 	[[nodiscard]] bool ParticipatesInStage(ERenderPipelineStage Stage) const override
 	{
 		using Pack = typename TResolveFeatureDependsPack<TDerived>::Type;
 		bool bFound = false;
-		Pack::ForEachSlot([&](auto Key, auto*) {
-			if (Key == Stage) bFound = true;
+		Pack::ForEachSlot([&](auto Key, auto*)
+		{
+			if (Key == Stage)
+			{
+				bFound = true;
+			}
 		});
 		return bFound;
 	}
@@ -168,7 +189,8 @@ public:
 	                     const std::function<void(const std::type_index&)>& Visitor) const override
 	{
 		using Pack = typename TResolveFeatureDependsPack<TDerived>::Type;
-		Pack::ForEachSlot([&](auto Key, auto* DepsList) {
+		Pack::ForEachSlot([&](auto Key, auto* DepsList)
+		{
 			if (Key == Stage)
 			{
 				TDispatchDepList(DepsList, Visitor);
@@ -200,7 +222,9 @@ private:
 class MAHO_RENDER_API FRenderFeature : public TRenderFeatureBase<FRenderFeature>
 {
 public:
-	explicit FRenderFeature(const char* InName) : TRenderFeatureBase<FRenderFeature>(InName) {}
+	explicit FRenderFeature(const char* InName) : TRenderFeatureBase<FRenderFeature>(InName)
+	{
+	}
 };
 
 // ── Context-carrying feature (reduces per-feature boilerplate) ─────────

@@ -38,7 +38,7 @@ public:
 	explicit FSystemGroup(const char* InName);
 	virtual ~FSystemGroup();
 
-	const char* GetName() const override { return Name.c_str(); }
+	const char* GetName() const override;
 
 	// ── IEngineExtension entry (the engine drives the root group) ──
 	bool ExecuteStage(EEngineStage Stage) override;
@@ -49,106 +49,27 @@ public:
 	void EndFrame();
 
 	// ── ISystem dispatch (parent group drives children) ────────────
-	void OnCreate(FWorld& InWorld) override
-	{
-		for (ISystem* S : Systems)
-		{
-			if (S)
-			{
-				S->OnCreate(InWorld);
-			}
-		}
-	}
-
-	void OnDestroy(FWorld& InWorld) override
-	{
-		for (ISystem* S : Systems)
-		{
-			if (S)
-			{
-				S->OnDestroy(InWorld);
-			}
-		}
-	}
-
-	void OnBeginFrame(FWorld& InWorld) override
-	{
-		for (ISystem* S : Systems)
-		{
-			if (S)
-			{
-				S->OnBeginFrame(InWorld);
-			}
-		}
-	}
-
-	void OnProcessInput(FWorld& InWorld) override
-	{
-		for (ISystem* S : Systems)
-		{
-			if (S)
-			{
-				S->OnProcessInput(InWorld);
-			}
-		}
-	}
-
-	void OnFixedUpdate(float DeltaTime, FWorld& InWorld) override
-	{
-		for (ISystem* S : Systems)
-		{
-			if (S)
-			{
-				S->OnFixedUpdate(DeltaTime, InWorld);
-			}
-		}
-	}
-
-	void OnUpdate(float DeltaTime, FWorld& InWorld) override
-	{
-		for (ISystem* S : Systems)
-		{
-			if (S)
-			{
-				S->OnUpdate(DeltaTime, InWorld);
-			}
-		}
-	}
-
-	void OnLateUpdate(float DeltaTime, FWorld& InWorld) override
-	{
-		for (ISystem* S : Systems)
-		{
-			if (S)
-			{
-				S->OnLateUpdate(DeltaTime, InWorld);
-			}
-		}
-	}
-
-	void OnEndFrame(FWorld& InWorld) override
-	{
-		for (ISystem* S : Systems)
-		{
-			if (S)
-			{
-				S->OnEndFrame(InWorld);
-			}
-		}
-	}
+	void OnCreate(FWorld& InWorld) override;
+	void OnDestroy(FWorld& InWorld) override;
+	void OnBeginFrame(FWorld& InWorld) override;
+	void OnProcessInput(FWorld& InWorld) override;
+	void OnFixedUpdate(float DeltaTime, FWorld& InWorld) override;
+	void OnUpdate(float DeltaTime, FWorld& InWorld) override;
+	void OnLateUpdate(float DeltaTime, FWorld& InWorld) override;
+	void OnEndFrame(FWorld& InWorld) override;
 
 	// ── World access (the root group owns the world data) ──────────
 
-	[[nodiscard]] FWorld& GetWorld() { return World; }
-	[[nodiscard]] const FWorld& GetWorld() const { return World; }
+	[[nodiscard]] FWorld& GetWorld();
+	[[nodiscard]] const FWorld& GetWorld() const;
 
 	// ── Project hooks ──────────────────────────────────────────────
 
 	/** Register game systems into the simulation group during Attach. */
-	virtual void RegisterSystems(FSystemGroup& SimGroup) { (void)SimGroup; }
+	virtual void RegisterSystems(FSystemGroup& SimGroup);
 
 	/** Spawn initial entities (camera, demo actors, etc.) during Attach. */
-	virtual void SpawnInitialEntities(FWorld& World) { (void)World; }
+	virtual void SpawnInitialEntities(FWorld& World);
 
 	// ── System registration ────────────────────────────────────────
 	template <typename T, typename... Args>
@@ -190,19 +111,19 @@ public:
 	}
 
 	/** Access the Begin ECB for this group. */
-	FEntityCommandBuffer& GetBeginECB() { return *BeginECB; }
+	FEntityCommandBuffer& GetBeginECB();
 
 	/** Access the End ECB for this group. */
-	FEntityCommandBuffer& GetEndECB() { return *EndECB; }
+	FEntityCommandBuffer& GetEndECB();
 
 	/** Static name helper: override in subclasses. */
-	static const char* StaticName() { return "SystemGroup"; }
+	static const char* StaticName();
 
 protected:
 	void UpdateBeforeByName(const char* A, const char* B);
 
 	/** True when this group is the root that owns the world + builds the tree. */
-	[[nodiscard]] virtual bool IsRootGroup() const { return false; }
+	[[nodiscard]] virtual bool IsRootGroup() const;
 
 private:
 	void InsertBeforeEnd(ISystem* InSystem);
@@ -228,28 +149,32 @@ private:
 /**
  * Built-in system groups matching Unity DOTS conventions.
  */
+
+/** Root group: initialization systems run here first. */
 class MAHO_WORLD_API FInitializationSystemGroup : public FSystemGroup
 {
 public:
-	FInitializationSystemGroup() : FSystemGroup("InitializationSystemGroup") {}
-	static const char* StaticName() { return "InitializationSystemGroup"; }
+	FInitializationSystemGroup();
+	static const char* StaticName();
 
 protected:
-	[[nodiscard]] bool IsRootGroup() const override { return true; }
+	[[nodiscard]] bool IsRootGroup() const override;
 };
 
+/** Simulation group: fixed/update gameplay systems. */
 class MAHO_WORLD_API FSimulationSystemGroup : public FSystemGroup
 {
 public:
-	FSimulationSystemGroup() : FSystemGroup("SimulationSystemGroup") {}
-	static const char* StaticName() { return "SimulationSystemGroup"; }
+	FSimulationSystemGroup();
+	static const char* StaticName();
 };
 
+/** Presentation group: late-frame systems (camera, animation, rendering prep). */
 class MAHO_WORLD_API FPresentationSystemGroup : public FSystemGroup
 {
 public:
-	FPresentationSystemGroup() : FSystemGroup("PresentationSystemGroup") {}
-	static const char* StaticName() { return "PresentationSystemGroup"; }
+	FPresentationSystemGroup();
+	static const char* StaticName();
 };
 
 } // namespace Maho

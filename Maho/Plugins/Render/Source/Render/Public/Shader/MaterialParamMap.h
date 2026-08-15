@@ -40,7 +40,10 @@ public:
 
 	void ForEach(std::function<void(const std::string&, const FMaterialParamValue&)> Fn) const;
 
-	[[nodiscard]] bool IsEmpty() const { return Values.empty(); }
+	[[nodiscard]] bool IsEmpty() const
+	{
+		return Values.empty();
+	}
 
 private:
 	std::unordered_map<std::string, FMaterialParamValue, FCaseInsensitiveHash, FCaseInsensitiveEqual> Values;

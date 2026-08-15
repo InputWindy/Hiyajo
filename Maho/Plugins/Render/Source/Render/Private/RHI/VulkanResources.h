@@ -22,9 +22,18 @@ public:
 
 	~FVulkanBuffer() override;
 
-	[[nodiscard]] const FRHIBufferDesc& GetDesc() const override { return Desc; }
-	[[nodiscard]] VkBuffer GetVkBuffer() const { return Buffer; }
-	[[nodiscard]] VmaAllocation GetAllocation() const { return Allocation; }
+	[[nodiscard]] const FRHIBufferDesc& GetDesc() const override
+	{
+		return Desc;
+	}
+	[[nodiscard]] VkBuffer GetVkBuffer() const
+	{
+		return Buffer;
+	}
+	[[nodiscard]] VmaAllocation GetAllocation() const
+	{
+		return Allocation;
+	}
 
 private:
 	friend class FVulkanStructuredBuffer;
@@ -46,9 +55,18 @@ public:
 
 	~FVulkanStructuredBuffer() override;
 
-	[[nodiscard]] const FRHIStructuredBufferDesc& GetDesc() const override { return Desc; }
-	[[nodiscard]] FRHIBuffer* GetUnderlyingBuffer() override { return UnderlyingBuffer; }
-	[[nodiscard]] VkBuffer GetVkBuffer() const { return UnderlyingBuffer ? UnderlyingBuffer->GetVkBuffer() : VK_NULL_HANDLE; }
+	[[nodiscard]] const FRHIStructuredBufferDesc& GetDesc() const override
+	{
+		return Desc;
+	}
+	[[nodiscard]] FRHIBuffer* GetUnderlyingBuffer() override
+	{
+		return UnderlyingBuffer;
+	}
+	[[nodiscard]] VkBuffer GetVkBuffer() const
+	{
+		return UnderlyingBuffer ? UnderlyingBuffer->GetVkBuffer() : VK_NULL_HANDLE;
+	}
 
 private:
 	FRHIStructuredBufferDesc Desc{};
@@ -66,7 +84,10 @@ public:
 
 	~FVulkanBufferView() override;
 
-	[[nodiscard]] VkBufferView GetVkBufferView() const { return View; }
+	[[nodiscard]] VkBufferView GetVkBufferView() const
+	{
+		return View;
+	}
 
 private:
 	VkDevice Device = VK_NULL_HANDLE;
@@ -86,8 +107,14 @@ public:
 
 	~FVulkanTexture() override;
 
-	[[nodiscard]] const FRHITextureDesc& GetDesc() const override { return Desc; }
-	[[nodiscard]] VkImage GetVkImage() const { return Image; }
+	[[nodiscard]] const FRHITextureDesc& GetDesc() const override
+	{
+		return Desc;
+	}
+	[[nodiscard]] VkImage GetVkImage() const
+	{
+		return Image;
+	}
 
 private:
 	FRHITextureDesc Desc{};
@@ -108,8 +135,14 @@ public:
 
 	~FVulkanSampler() override;
 
-	[[nodiscard]] const FRHISamplerDesc& GetDesc() const override { return Desc; }
-	[[nodiscard]] VkSampler GetVkSampler() const { return Sampler; }
+	[[nodiscard]] const FRHISamplerDesc& GetDesc() const override
+	{
+		return Desc;
+	}
+	[[nodiscard]] VkSampler GetVkSampler() const
+	{
+		return Sampler;
+	}
 
 private:
 	FRHISamplerDesc Desc{};
@@ -128,7 +161,10 @@ public:
 
 	~FVulkanShaderModule() override;
 
-	[[nodiscard]] VkShaderModule GetVkShaderModule() const { return Module; }
+	[[nodiscard]] VkShaderModule GetVkShaderModule() const
+	{
+		return Module;
+	}
 
 private:
 	VkDevice Device = VK_NULL_HANDLE;
@@ -147,8 +183,14 @@ public:
 
 	~FVulkanGraphicsPipeline() override;
 
-	[[nodiscard]] VkPipeline GetVkPipeline() const { return Pipeline; }
-	[[nodiscard]] VkPipelineLayout GetVkPipelineLayout() const { return Layout; }
+	[[nodiscard]] VkPipeline GetVkPipeline() const
+	{
+		return Pipeline;
+	}
+	[[nodiscard]] VkPipelineLayout GetVkPipelineLayout() const
+	{
+		return Layout;
+	}
 
 private:
 	VkDevice Device = VK_NULL_HANDLE;
@@ -168,8 +210,14 @@ public:
 
 	~FVulkanComputePipeline() override;
 
-	[[nodiscard]] VkPipeline GetVkPipeline() const { return Pipeline; }
-	[[nodiscard]] VkPipelineLayout GetVkPipelineLayout() const { return Layout; }
+	[[nodiscard]] VkPipeline GetVkPipeline() const
+	{
+		return Pipeline;
+	}
+	[[nodiscard]] VkPipelineLayout GetVkPipelineLayout() const
+	{
+		return Layout;
+	}
 
 private:
 	VkDevice Device = VK_NULL_HANDLE;
@@ -188,7 +236,10 @@ public:
 
 	~FVulkanFence() override;
 
-	[[nodiscard]] VkFence GetVkFence() const { return Fence; }
+	[[nodiscard]] VkFence GetVkFence() const
+	{
+		return Fence;
+	}
 
 private:
 	VkDevice Device = VK_NULL_HANDLE;
@@ -206,7 +257,10 @@ public:
 
 	~FVulkanSemaphore() override;
 
-	[[nodiscard]] VkSemaphore GetVkSemaphore() const { return Semaphore; }
+	[[nodiscard]] VkSemaphore GetVkSemaphore() const
+	{
+		return Semaphore;
+	}
 
 private:
 	VkDevice Device = VK_NULL_HANDLE;
@@ -224,7 +278,10 @@ public:
 
 	~FVulkanQueryPool() override;
 
-	[[nodiscard]] VkQueryPool GetVkQueryPool() const { return Pool; }
+	[[nodiscard]] VkQueryPool GetVkQueryPool() const
+	{
+		return Pool;
+	}
 
 private:
 	VkDevice Device = VK_NULL_HANDLE;
@@ -242,7 +299,10 @@ public:
 
 	~FVulkanTextureView() override;
 
-	[[nodiscard]] VkImageView GetVkImageView() const { return View; }
+	[[nodiscard]] VkImageView GetVkImageView() const
+	{
+		return View;
+	}
 
 private:
 	VkDevice Device = VK_NULL_HANDLE;
@@ -260,7 +320,10 @@ public:
 
 	~FVulkanDescriptorSetLayout() override;
 
-	[[nodiscard]] VkDescriptorSetLayout GetVkLayout() const { return Layout; }
+	[[nodiscard]] VkDescriptorSetLayout GetVkLayout() const
+	{
+		return Layout;
+	}
 
 private:
 	VkDevice Device = VK_NULL_HANDLE;
@@ -278,7 +341,10 @@ public:
 
 	~FVulkanPipelineLayout() override;
 
-	[[nodiscard]] VkPipelineLayout GetVkLayout() const { return Layout; }
+	[[nodiscard]] VkPipelineLayout GetVkLayout() const
+	{
+		return Layout;
+	}
 
 private:
 	VkDevice Device = VK_NULL_HANDLE;
@@ -296,7 +362,10 @@ public:
 
 	~FVulkanDescriptorPool() override;
 
-	[[nodiscard]] VkDescriptorPool GetVkPool() const { return Pool; }
+	[[nodiscard]] VkDescriptorPool GetVkPool() const
+	{
+		return Pool;
+	}
 
 private:
 	VkDevice Device = VK_NULL_HANDLE;
@@ -311,7 +380,10 @@ public:
 	{
 	}
 
-	[[nodiscard]] VkDescriptorSet GetVkSet() const { return Set; }
+	[[nodiscard]] VkDescriptorSet GetVkSet() const
+	{
+		return Set;
+	}
 
 private:
 	VkDescriptorSet Set = VK_NULL_HANDLE;
@@ -328,7 +400,10 @@ public:
 
 	~FVulkanRenderPass() override;
 
-	[[nodiscard]] VkRenderPass GetVkPass() const { return Pass; }
+	[[nodiscard]] VkRenderPass GetVkPass() const
+	{
+		return Pass;
+	}
 
 private:
 	VkDevice Device = VK_NULL_HANDLE;
@@ -346,7 +421,10 @@ public:
 
 	~FVulkanFramebuffer() override;
 
-	[[nodiscard]] VkFramebuffer GetVkFramebuffer() const { return FB; }
+	[[nodiscard]] VkFramebuffer GetVkFramebuffer() const
+	{
+		return FB;
+	}
 
 private:
 	VkDevice Device = VK_NULL_HANDLE;

@@ -48,6 +48,174 @@ FSystemGroup::FSystemGroup(const char* InName)
 
 FSystemGroup::~FSystemGroup() = default;
 
+const char* FSystemGroup::GetName() const
+{
+	return Name.c_str();
+}
+
+void FSystemGroup::OnCreate(FWorld& InWorld)
+{
+	for (ISystem* S : Systems)
+	{
+		if (S)
+		{
+			S->OnCreate(InWorld);
+		}
+	}
+}
+
+void FSystemGroup::OnDestroy(FWorld& InWorld)
+{
+	for (ISystem* S : Systems)
+	{
+		if (S)
+		{
+			S->OnDestroy(InWorld);
+		}
+	}
+}
+
+void FSystemGroup::OnBeginFrame(FWorld& InWorld)
+{
+	for (ISystem* S : Systems)
+	{
+		if (S)
+		{
+			S->OnBeginFrame(InWorld);
+		}
+	}
+}
+
+void FSystemGroup::OnProcessInput(FWorld& InWorld)
+{
+	for (ISystem* S : Systems)
+	{
+		if (S)
+		{
+			S->OnProcessInput(InWorld);
+		}
+	}
+}
+
+void FSystemGroup::OnFixedUpdate(float DeltaTime, FWorld& InWorld)
+{
+	for (ISystem* S : Systems)
+	{
+		if (S)
+		{
+			S->OnFixedUpdate(DeltaTime, InWorld);
+		}
+	}
+}
+
+void FSystemGroup::OnUpdate(float DeltaTime, FWorld& InWorld)
+{
+	for (ISystem* S : Systems)
+	{
+		if (S)
+		{
+			S->OnUpdate(DeltaTime, InWorld);
+		}
+	}
+}
+
+void FSystemGroup::OnLateUpdate(float DeltaTime, FWorld& InWorld)
+{
+	for (ISystem* S : Systems)
+	{
+		if (S)
+		{
+			S->OnLateUpdate(DeltaTime, InWorld);
+		}
+	}
+}
+
+void FSystemGroup::OnEndFrame(FWorld& InWorld)
+{
+	for (ISystem* S : Systems)
+	{
+		if (S)
+		{
+			S->OnEndFrame(InWorld);
+		}
+	}
+}
+
+FWorld& FSystemGroup::GetWorld()
+{
+	return World;
+}
+
+const FWorld& FSystemGroup::GetWorld() const
+{
+	return World;
+}
+
+void FSystemGroup::RegisterSystems(FSystemGroup& SimGroup)
+{
+	(void)SimGroup;
+}
+
+void FSystemGroup::SpawnInitialEntities(FWorld& InWorld)
+{
+	(void)InWorld;
+}
+
+FEntityCommandBuffer& FSystemGroup::GetBeginECB()
+{
+	return *BeginECB;
+}
+
+FEntityCommandBuffer& FSystemGroup::GetEndECB()
+{
+	return *EndECB;
+}
+
+const char* FSystemGroup::StaticName()
+{
+	return "SystemGroup";
+}
+
+bool FSystemGroup::IsRootGroup() const
+{
+	return false;
+}
+
+FInitializationSystemGroup::FInitializationSystemGroup()
+	: FSystemGroup("InitializationSystemGroup")
+{
+}
+
+const char* FInitializationSystemGroup::StaticName()
+{
+	return "InitializationSystemGroup";
+}
+
+bool FInitializationSystemGroup::IsRootGroup() const
+{
+	return true;
+}
+
+FSimulationSystemGroup::FSimulationSystemGroup()
+	: FSystemGroup("SimulationSystemGroup")
+{
+}
+
+const char* FSimulationSystemGroup::StaticName()
+{
+	return "SimulationSystemGroup";
+}
+
+FPresentationSystemGroup::FPresentationSystemGroup()
+	: FSystemGroup("PresentationSystemGroup")
+{
+}
+
+const char* FPresentationSystemGroup::StaticName()
+{
+	return "PresentationSystemGroup";
+}
+
 bool FSystemGroup::ExecuteStage(EEngineStage Stage)
 {
 	switch (Stage)

@@ -48,11 +48,15 @@ public:
 	[[nodiscard]] FTransferHandle Submit(TRequest Request)
 	{
 		if (!IsInitialized())
+		{
 			return {};
+		}
 
 		FTransferHandle Handle = AllocateTransferHandle(ETransferState::InProgress);
 		if (!Handle.IsValid())
+		{
 			return {};
+		}
 
 		{
 			std::lock_guard<std::mutex> Lock(ResultMutex);
@@ -84,12 +88,16 @@ public:
 	[[nodiscard]] TResult RetrieveResult(FTransferHandle Handle)
 	{
 		if (!Handle.IsValid() || !Handle.HasSucceeded())
+		{
 			return TResult{};
+		}
 
 		std::lock_guard<std::mutex> Lock(ResultMutex);
 		auto It = PendingResults.find(Handle.Id);
 		if (It == PendingResults.end() || !It->second.bReady)
+		{
 			return TResult{};
+		}
 
 		TResult Result = std::move(It->second.Result);
 		PendingResults.erase(It);
@@ -99,7 +107,9 @@ public:
 	void Flush(FTransferHandle Handle)
 	{
 		if (!Handle.IsValid())
+		{
 			return;
+		}
 
 		std::unique_lock<std::mutex> Lock(ResultMutex);
 		ResultCv.wait(Lock, [this, Handle]()
@@ -112,7 +122,9 @@ public:
 	void Release(FTransferHandle Handle)
 	{
 		if (!Handle.IsValid())
+		{
 			return;
+		}
 
 		{
 			std::lock_guard<std::mutex> Lock(ResultMutex);

@@ -21,8 +21,14 @@ struct FImGuiTextureHandle
 {
 	void* Id = nullptr;
 
-	[[nodiscard]] bool IsValid() const { return Id != nullptr; }
-	void Reset() { Id = nullptr; }
+	[[nodiscard]] bool IsValid() const
+	{
+		return Id != nullptr;
+	}
+	void Reset()
+	{
+		Id = nullptr;
+	}
 };
 
 /**
@@ -51,7 +57,10 @@ public:
 	/** Flushes the RHI server and tears down GLFW/Vulkan backends. */
 	void Shutdown(FRHIServer& RHIServer);
 
-	[[nodiscard]] bool IsInitialized() const { return bInitialized; }
+	[[nodiscard]] bool IsInitialized() const
+	{
+		return bInitialized;
+	}
 
 	/** ImGui_Impl*_NewFrame + ImGui::NewFrame. */
 	void BeginFrame();

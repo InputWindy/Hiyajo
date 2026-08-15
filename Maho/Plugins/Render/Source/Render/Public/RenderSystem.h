@@ -57,7 +57,10 @@ public:
 	FRenderSystem& operator=(const FRenderSystem&) = delete;
 
 	// ── IEngineExtension ──
-	[[nodiscard]] const char* GetName() const override { return "Render"; }
+	[[nodiscard]] const char* GetName() const override
+	{
+		return "Render";
+	}
 	bool ExecuteStage(EEngineStage Stage) override;
 
 	// ── Render world frame (driven by FGameClientEngine) ──
@@ -81,7 +84,10 @@ public:
 	void WaitBeforeImGuiNewFrame(std::uint64_t FrameIndex);
 
 	/** Current frame index on the render thread (for per-frame ring buffers). */
-	[[nodiscard]] std::uint64_t GetCurrentFrameIndex() const { return CurrentFrameIndex; }
+	[[nodiscard]] std::uint64_t GetCurrentFrameIndex() const
+	{
+		return CurrentFrameIndex;
+	}
 
 	void SetClearColor(float R, float G, float B, float A);
 
@@ -94,33 +100,78 @@ public:
 	/** Game thread: replace the pending frame context consumed by the next Render(). */
 	void SubmitFrameContext(FGameFrameContext FrameContext);
 
-	[[nodiscard]] FImGuiSystem& GetImGui() { return ImGui; }
-	[[nodiscard]] const FImGuiSystem& GetImGui() const { return ImGui; }
+	[[nodiscard]] FImGuiSystem& GetImGui()
+	{
+		return ImGui;
+	}
+	[[nodiscard]] const FImGuiSystem& GetImGui() const
+	{
+		return ImGui;
+	}
 
-	[[nodiscard]] FRHIServer& GetRHIServer() { return RHIServer; }
-	[[nodiscard]] const FRHIServer& GetRHIServer() const { return RHIServer; }
+	[[nodiscard]] FRHIServer& GetRHIServer()
+	{
+		return RHIServer;
+	}
+	[[nodiscard]] const FRHIServer& GetRHIServer() const
+	{
+		return RHIServer;
+	}
 
-	[[nodiscard]] bool HasRHI() const { return RHIServer.HasRHI(); }
-	[[nodiscard]] FVulkanRHI* GetVulkanRHI() const { return RHIServer.GetVulkanRHI(); }
+	[[nodiscard]] bool HasRHI() const
+	{
+		return RHIServer.HasRHI();
+	}
+	[[nodiscard]] FVulkanRHI* GetVulkanRHI() const
+	{
+		return RHIServer.GetVulkanRHI();
+	}
 
-	void SetImGuiEnabled(bool bEnabled) { bImGuiEnabled = bEnabled; }
-	[[nodiscard]] bool IsImGuiEnabled() const { return bImGuiEnabled; }
+	void SetImGuiEnabled(bool bEnabled)
+	{
+		bImGuiEnabled = bEnabled;
+	}
+	[[nodiscard]] bool IsImGuiEnabled() const
+	{
+		return bImGuiEnabled;
+	}
 
 	/** Game/editor view color target bound for ImGui::Image (set by render features). */
-	void SetGameViewImGuiTexture(FImGuiTextureHandle Handle) { GameViewImGuiTexture = Handle; }
-	[[nodiscard]] FImGuiTextureHandle GetGameViewImGuiTexture() const { return GameViewImGuiTexture; }
-	[[nodiscard]] std::uint32_t GetGameViewWidth() const { return GameViewWidth; }
-	[[nodiscard]] std::uint32_t GetGameViewHeight() const { return GameViewHeight; }
+	void SetGameViewImGuiTexture(FImGuiTextureHandle Handle)
+	{
+		GameViewImGuiTexture = Handle;
+	}
+	[[nodiscard]] FImGuiTextureHandle GetGameViewImGuiTexture() const
+	{
+		return GameViewImGuiTexture;
+	}
+	[[nodiscard]] std::uint32_t GetGameViewWidth() const
+	{
+		return GameViewWidth;
+	}
+	[[nodiscard]] std::uint32_t GetGameViewHeight() const
+	{
+		return GameViewHeight;
+	}
 	void SetGameViewExtent(std::uint32_t Width, std::uint32_t Height)
 	{
 		GameViewWidth = Width;
 		GameViewHeight = Height;
 	}
 
-	void RequestResize(int Width, int Height) { RHIServer.RequestResize(Width, Height); }
+	void RequestResize(int Width, int Height)
+	{
+		RHIServer.RequestResize(Width, Height);
+	}
 
-	[[nodiscard]] FPlatformWindow* GetBoundWindow() { return BoundWindow; }
-	[[nodiscard]] const FPlatformWindow* GetBoundWindow() const { return BoundWindow; }
+	[[nodiscard]] FPlatformWindow* GetBoundWindow()
+	{
+		return BoundWindow;
+	}
+	[[nodiscard]] const FPlatformWindow* GetBoundWindow() const
+	{
+		return BoundWindow;
+	}
 
 	template <typename T, typename... TArgs>
 	T& RegisterFeature(TArgs&&... Args)
@@ -146,8 +197,14 @@ public:
 	}
 
 protected:
-	[[nodiscard]] const char* GetServerThreadName() const override { return "MahoRender"; }
-	[[nodiscard]] const char* GetServerLogName() const override { return "RenderServer"; }
+	[[nodiscard]] const char* GetServerThreadName() const override
+	{
+		return "MahoRender";
+	}
+	[[nodiscard]] const char* GetServerLogName() const override
+	{
+		return "RenderServer";
+	}
 
 private:
 	void SyncFramebufferSize();

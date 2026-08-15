@@ -53,10 +53,22 @@ public:
 	{
 	}
 
-	[[nodiscard]] const std::string& GetName() const override { return Name; }
-	[[nodiscard]] const std::string& GetHelp() const override { return Help; }
-	[[nodiscard]] EConsoleVariableFlags GetFlags() const override { return Flags; }
-	[[nodiscard]] EConsoleVariableSetBy GetSetBy() const override { return SetBy; }
+	[[nodiscard]] const std::string& GetName() const override
+	{
+		return Name;
+	}
+	[[nodiscard]] const std::string& GetHelp() const override
+	{
+		return Help;
+	}
+	[[nodiscard]] EConsoleVariableFlags GetFlags() const override
+	{
+		return Flags;
+	}
+	[[nodiscard]] EConsoleVariableSetBy GetSetBy() const override
+	{
+		return SetBy;
+	}
 
 	[[nodiscard]] FDelegateHandle AddOnChangedCallback(FConsoleVariableChanged Callback) override
 	{
@@ -100,11 +112,26 @@ public:
 	{
 	}
 
-	[[nodiscard]] EConsoleVariableType GetType() const override { return EConsoleVariableType::Bool; }
-	[[nodiscard]] bool GetBool() const override { return Value; }
-	[[nodiscard]] int GetInt() const override { return Value ? 1 : 0; }
-	[[nodiscard]] float GetFloat() const override { return Value ? 1.0f : 0.0f; }
-	[[nodiscard]] std::string GetString() const override { return Value ? "1" : "0"; }
+	[[nodiscard]] EConsoleVariableType GetType() const override
+	{
+		return EConsoleVariableType::Bool;
+	}
+	[[nodiscard]] bool GetBool() const override
+	{
+		return Value;
+	}
+	[[nodiscard]] int GetInt() const override
+	{
+		return Value ? 1 : 0;
+	}
+	[[nodiscard]] float GetFloat() const override
+	{
+		return Value ? 1.0f : 0.0f;
+	}
+	[[nodiscard]] std::string GetString() const override
+	{
+		return Value ? "1" : "0";
+	}
 
 	bool Set(bool InValue, EConsoleVariableSetBy InSetBy) override
 	{
@@ -117,8 +144,14 @@ public:
 		return true;
 	}
 
-	bool Set(int InValue, EConsoleVariableSetBy InSetBy) override { return Set(InValue != 0, InSetBy); }
-	bool Set(float InValue, EConsoleVariableSetBy InSetBy) override { return Set(InValue != 0.0f, InSetBy); }
+	bool Set(int InValue, EConsoleVariableSetBy InSetBy) override
+	{
+		return Set(InValue != 0, InSetBy);
+	}
+	bool Set(float InValue, EConsoleVariableSetBy InSetBy) override
+	{
+		return Set(InValue != 0.0f, InSetBy);
+	}
 	bool Set(const std::string& InValue, EConsoleVariableSetBy InSetBy) override
 	{
 		return SetFromString(InValue, InSetBy);
@@ -147,13 +180,31 @@ public:
 	{
 	}
 
-	[[nodiscard]] EConsoleVariableType GetType() const override { return EConsoleVariableType::Int; }
-	[[nodiscard]] bool GetBool() const override { return Value != 0; }
-	[[nodiscard]] int GetInt() const override { return Value; }
-	[[nodiscard]] float GetFloat() const override { return static_cast<float>(Value); }
-	[[nodiscard]] std::string GetString() const override { return std::to_string(Value); }
+	[[nodiscard]] EConsoleVariableType GetType() const override
+	{
+		return EConsoleVariableType::Int;
+	}
+	[[nodiscard]] bool GetBool() const override
+	{
+		return Value != 0;
+	}
+	[[nodiscard]] int GetInt() const override
+	{
+		return Value;
+	}
+	[[nodiscard]] float GetFloat() const override
+	{
+		return static_cast<float>(Value);
+	}
+	[[nodiscard]] std::string GetString() const override
+	{
+		return std::to_string(Value);
+	}
 
-	bool Set(bool InValue, EConsoleVariableSetBy InSetBy) override { return Set(InValue ? 1 : 0, InSetBy); }
+	bool Set(bool InValue, EConsoleVariableSetBy InSetBy) override
+	{
+		return Set(InValue ? 1 : 0, InSetBy);
+	}
 
 	bool Set(int InValue, EConsoleVariableSetBy InSetBy) override
 	{
@@ -201,11 +252,26 @@ public:
 	{
 	}
 
-	[[nodiscard]] EConsoleVariableType GetType() const override { return EConsoleVariableType::Float; }
-	[[nodiscard]] bool GetBool() const override { return Value != 0.0f; }
-	[[nodiscard]] int GetInt() const override { return static_cast<int>(Value); }
-	[[nodiscard]] float GetFloat() const override { return Value; }
-	[[nodiscard]] std::string GetString() const override { return std::to_string(Value); }
+	[[nodiscard]] EConsoleVariableType GetType() const override
+	{
+		return EConsoleVariableType::Float;
+	}
+	[[nodiscard]] bool GetBool() const override
+	{
+		return Value != 0.0f;
+	}
+	[[nodiscard]] int GetInt() const override
+	{
+		return static_cast<int>(Value);
+	}
+	[[nodiscard]] float GetFloat() const override
+	{
+		return Value;
+	}
+	[[nodiscard]] std::string GetString() const override
+	{
+		return std::to_string(Value);
+	}
 
 	bool Set(bool InValue, EConsoleVariableSetBy InSetBy) override
 	{
@@ -258,7 +324,10 @@ public:
 	{
 	}
 
-	[[nodiscard]] EConsoleVariableType GetType() const override { return EConsoleVariableType::String; }
+	[[nodiscard]] EConsoleVariableType GetType() const override
+	{
+		return EConsoleVariableType::String;
+	}
 
 	[[nodiscard]] bool GetBool() const override
 	{
@@ -290,7 +359,10 @@ public:
 		}
 	}
 
-	[[nodiscard]] std::string GetString() const override { return Value; }
+	[[nodiscard]] std::string GetString() const override
+	{
+		return Value;
+	}
 
 	bool Set(bool InValue, EConsoleVariableSetBy InSetBy) override
 	{

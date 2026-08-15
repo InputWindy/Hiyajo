@@ -35,15 +35,12 @@ public:
 
 	// ─── EntityManager access ─────────────────────────────────────
 
-	[[nodiscard]] FEntityManager& GetEntityManager() { return Manager; }
-	[[nodiscard]] const FEntityManager& GetEntityManager() const { return Manager; }
+	[[nodiscard]] FEntityManager& GetEntityManager();
+	[[nodiscard]] const FEntityManager& GetEntityManager() const;
 
 	// ─── Convenience: direct entity manipulation ──────────────────
 
-	FEntityHandle CreateEntity()
-	{
-		return Manager.CreateEntity();
-	}
+	FEntityHandle CreateEntity();
 
 	template <typename T>
 	void SetComponent(FEntityHandle Handle, const T& Value)

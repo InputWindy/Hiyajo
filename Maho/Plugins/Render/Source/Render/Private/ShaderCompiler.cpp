@@ -236,12 +236,18 @@ FShaderCompileResult FShaderCompiler::CompileStage(
 		if (VerPos != std::string::npos)
 		{
 			std::size_t InsertPos = SourceCopy.find('\n', VerPos);
-			if (InsertPos != std::string::npos) InsertPos = InsertPos + 1;
+			if (InsertPos != std::string::npos)
+			{
+				InsertPos = InsertPos + 1;
+			}
 			// Skip any #extension lines after #version
 			while (InsertPos < SourceCopy.size() && SourceCopy.compare(InsertPos, 10, "#extension") == 0)
 			{
 				std::size_t NL = SourceCopy.find('\n', InsertPos);
-				if (NL == std::string::npos) break;
+				if (NL == std::string::npos)
+				{
+					break;
+				}
 				InsertPos = NL + 1;
 			}
 			SourceCopy.insert(InsertPos, Preamble);

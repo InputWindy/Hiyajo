@@ -25,10 +25,22 @@ public:
 		bNativeFallback = bInNativeFallback;
 	}
 
-	[[nodiscard]] ERHIQueueType GetType() const override { return LogicalType; }
-	[[nodiscard]] bool IsNativeFallback() const override { return bNativeFallback; }
-	[[nodiscard]] VkQueue GetVkQueue() const { return NativeQueue; }
-	[[nodiscard]] std::uint32_t GetFamilyIndex() const { return FamilyIndex; }
+	[[nodiscard]] ERHIQueueType GetType() const override
+	{
+		return LogicalType;
+	}
+	[[nodiscard]] bool IsNativeFallback() const override
+	{
+		return bNativeFallback;
+	}
+	[[nodiscard]] VkQueue GetVkQueue() const
+	{
+		return NativeQueue;
+	}
+	[[nodiscard]] std::uint32_t GetFamilyIndex() const
+	{
+		return FamilyIndex;
+	}
 
 	virtual void Submit(
 		FRHICommandList* const* CmdLists,
@@ -59,9 +71,18 @@ public:
 
 	~FVulkanCommandList() override;
 
-	[[nodiscard]] ERHICommandListType GetType() const override { return Type; }
-	[[nodiscard]] VkCommandBuffer GetVkCommandBuffer() const { return Buffer; }
-	[[nodiscard]] VkCommandPool GetVkCommandPool() const { return Pool; }
+	[[nodiscard]] ERHICommandListType GetType() const override
+	{
+		return Type;
+	}
+	[[nodiscard]] VkCommandBuffer GetVkCommandBuffer() const
+	{
+		return Buffer;
+	}
+	[[nodiscard]] VkCommandPool GetVkCommandPool() const
+	{
+		return Pool;
+	}
 
 	virtual void Begin() override;
 	virtual void End() override;

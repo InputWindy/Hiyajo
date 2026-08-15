@@ -25,14 +25,38 @@ public:
 
 	[[nodiscard]] virtual const char* GetName() const = 0;
 
-	virtual void OnCreate(FWorld& World) { (void)World; }
-	virtual void OnDestroy(FWorld& World) { (void)World; }
-	virtual void OnBeginFrame(FWorld& World) { (void)World; }
-	virtual void OnProcessInput(FWorld& World) { (void)World; }
-	virtual void OnFixedUpdate(float DeltaTime, FWorld& World) { (void)DeltaTime; (void)World; }
-	virtual void OnUpdate(float DeltaTime, FWorld& World) { (void)DeltaTime; (void)World; }
-	virtual void OnLateUpdate(float DeltaTime, FWorld& World) { (void)DeltaTime; (void)World; }
-	virtual void OnEndFrame(FWorld& World) { (void)World; }
+	virtual void OnCreate(FWorld& World)
+	{
+		(void)World;
+	}
+	virtual void OnDestroy(FWorld& World)
+	{
+		(void)World;
+	}
+	virtual void OnBeginFrame(FWorld& World)
+	{
+		(void)World;
+	}
+	virtual void OnProcessInput(FWorld& World)
+	{
+		(void)World;
+	}
+	virtual void OnFixedUpdate(float DeltaTime, FWorld& World)
+	{
+		(void)DeltaTime; (void)World;
+	}
+	virtual void OnUpdate(float DeltaTime, FWorld& World)
+	{
+		(void)DeltaTime; (void)World;
+	}
+	virtual void OnLateUpdate(float DeltaTime, FWorld& World)
+	{
+		(void)DeltaTime; (void)World;
+	}
+	virtual void OnEndFrame(FWorld& World)
+	{
+		(void)World;
+	}
 };
 
 /**
@@ -42,13 +66,19 @@ public:
 template <typename... Ts>
 struct TReadsComponent
 {
-	static auto GetMask() { return MakeComponentMask<Ts...>(); }
+	static auto GetMask()
+	{
+		return MakeComponentMask<Ts...>();
+	}
 };
 
 template <typename... Ts>
 struct TWritesComponent
 {
-	static auto GetMask() { return MakeComponentMask<Ts...>(); }
+	static auto GetMask()
+	{
+		return MakeComponentMask<Ts...>();
+	}
 };
 
 } // namespace Maho

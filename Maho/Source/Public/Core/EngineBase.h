@@ -55,19 +55,49 @@ public:
 
 	void Run();
 
-	[[nodiscard]] FConfig& GetConfig() { return Config; }
-	[[nodiscard]] const FConfig& GetConfig() const { return Config; }
+	[[nodiscard]] FConfig& GetConfig()
+	{
+		return Config;
+	}
+	[[nodiscard]] const FConfig& GetConfig() const
+	{
+		return Config;
+	}
 
-	[[nodiscard]] FLog& GetLog() { return Log; }
-	[[nodiscard]] FConsole& GetConsole() { return Console; }
-	[[nodiscard]] FTimer& GetTimer() { return Timer; }
+	[[nodiscard]] FLog& GetLog()
+	{
+		return Log;
+	}
+	[[nodiscard]] FConsole& GetConsole()
+	{
+		return Console;
+	}
+	[[nodiscard]] FTimer& GetTimer()
+	{
+		return Timer;
+	}
 
-	[[nodiscard]] std::uint64_t GetFrameIndex() const { return FrameIndex; }
-	[[nodiscard]] float GetDeltaSeconds() const { return DeltaSeconds; }
-	[[nodiscard]] float GetFixedDeltaSeconds() const { return FixedDeltaSeconds; }
-	[[nodiscard]] int GetFixedStepsRemaining() const { return FixedStepsRemaining; }
+	[[nodiscard]] std::uint64_t GetFrameIndex() const
+	{
+		return FrameIndex;
+	}
+	[[nodiscard]] float GetDeltaSeconds() const
+	{
+		return DeltaSeconds;
+	}
+	[[nodiscard]] float GetFixedDeltaSeconds() const
+	{
+		return FixedDeltaSeconds;
+	}
+	[[nodiscard]] int GetFixedStepsRemaining() const
+	{
+		return FixedStepsRemaining;
+	}
 
-	[[nodiscard]] EAppState GetState() const { return AppState; }
+	[[nodiscard]] EAppState GetState() const
+	{
+		return AppState;
+	}
 
 	template <typename T>
 	[[nodiscard]] T* GetExtension()

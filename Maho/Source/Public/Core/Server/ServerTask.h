@@ -46,7 +46,10 @@ public:
 
 	virtual void Execute(FThreadedServer& Server) = 0;
 
-	[[nodiscard]] FTaskContextId GetContextId() const { return ContextId; }
+	[[nodiscard]] FTaskContextId GetContextId() const
+	{
+		return ContextId;
+	}
 
 protected:
 	FTaskContextId ContextId{};

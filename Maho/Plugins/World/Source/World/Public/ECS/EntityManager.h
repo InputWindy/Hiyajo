@@ -206,8 +206,14 @@ public:
 
 	// ─── Statistics ───
 
-	[[nodiscard]] std::size_t GetEntityCount() const { return EntityCount; }
-	[[nodiscard]] std::size_t GetArchetypeCount() const { return Archetypes.size(); }
+	[[nodiscard]] std::size_t GetEntityCount() const
+	{
+		return EntityCount;
+	}
+	[[nodiscard]] std::size_t GetArchetypeCount() const
+	{
+		return Archetypes.size();
+	}
 
 	/** Get the component mask for a given entity. */
 	[[nodiscard]] ComponentMaskType GetComponentMask(FEntityHandle Handle) const

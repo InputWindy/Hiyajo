@@ -13,6 +13,7 @@ class FShaderCache;
 
 // ─── Shader loader: parse .shader to extract Properties / SubShader / Pass ───
 
+/** One parsed shader pass (entry points + preprocessed GLSL + render state). */
 struct FShaderPassSource
 {
 	std::string PassName;
@@ -24,6 +25,7 @@ struct FShaderPassSource
 	std::uint32_t VaryingCount = 0;
 };
 
+/** A parsed .shader file: material properties + global render state + passes. */
 struct FShaderFile
 {
 	std::string ShaderPath;
@@ -32,6 +34,7 @@ struct FShaderFile
 	FShaderRenderState GlobalRenderState;
 };
 
+/** Static parser for Unity-style .shader source (Properties / SubShader / Pass). */
 class MAHO_RENDER_API FShaderParser
 {
 public:
@@ -71,12 +74,14 @@ private:
 
 // ─── Legacy (existing code) ───
 
+/** Compiled vertex + fragment pair for one shader path. */
 struct FShaderPackage
 {
 	FShaderCompileResult Vertex;
 	FShaderCompileResult Fragment;
 };
 
+/** Loads and compiles .shader files through the cache, resolving includes. */
 class MAHO_RENDER_API FShaderLoader
 {
 public:

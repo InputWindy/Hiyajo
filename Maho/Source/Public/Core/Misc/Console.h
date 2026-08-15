@@ -57,7 +57,10 @@ public:
 
 	/** Find by name (case-insensitive). nullptr if not registered yet (check early-set queue separately). */
 	[[nodiscard]] IConsoleVariable* Find(const char* Name) const;
-	[[nodiscard]] IConsoleVariable* Find(const std::string& Name) const { return Find(Name.c_str()); }
+	[[nodiscard]] IConsoleVariable* Find(const std::string& Name) const
+	{
+		return Find(Name.c_str());
+	}
 
 	/** Typed getters by name — safe across DLL/EXE without the defining header. */
 	[[nodiscard]] bool GetBool(const char* Name, bool DefaultValue = false) const;
@@ -125,7 +128,10 @@ public:
 		EConsoleVariableFlags Flags = EConsoleVariableFlags::Default);
 
 	[[nodiscard]] T GetValue() const;
-	[[nodiscard]] IConsoleVariable& AsVariable() const { return *Variable; }
+	[[nodiscard]] IConsoleVariable& AsVariable() const
+	{
+		return *Variable;
+	}
 
 private:
 	IConsoleVariable* Variable = nullptr;

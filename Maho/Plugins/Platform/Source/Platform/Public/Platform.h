@@ -24,17 +24,38 @@ class MAHO_PLATFORM_API FPlatformSystem final
 	: public IEngineExtension
 {
 public:
-	[[nodiscard]] FPlatformWindow* GetWindow() { return PlatformWindow.get(); }
-	[[nodiscard]] const FPlatformWindow* GetWindow() const { return PlatformWindow.get(); }
+	[[nodiscard]] FPlatformWindow* GetWindow()
+	{
+		return PlatformWindow.get();
+	}
+	[[nodiscard]] const FPlatformWindow* GetWindow() const
+	{
+		return PlatformWindow.get();
+	}
 
-	[[nodiscard]] FOnRequestExit& GetOnRequestExit() { return OnRequestExit; }
-	[[nodiscard]] const FOnRequestExit& GetOnRequestExit() const { return OnRequestExit; }
+	[[nodiscard]] FOnRequestExit& GetOnRequestExit()
+	{
+		return OnRequestExit;
+	}
+	[[nodiscard]] const FOnRequestExit& GetOnRequestExit() const
+	{
+		return OnRequestExit;
+	}
 
-	[[nodiscard]] bool IsHeadlessAutoExit() const { return bAutoExitAfterFrames; }
-	[[nodiscard]] std::uint64_t GetAutoExitFrameCount() const { return AutoExitFrameCount; }
+	[[nodiscard]] bool IsHeadlessAutoExit() const
+	{
+		return bAutoExitAfterFrames;
+	}
+	[[nodiscard]] std::uint64_t GetAutoExitFrameCount() const
+	{
+		return AutoExitFrameCount;
+	}
 
 private:
-	const char* GetName() const override { return "Platform"; }
+	const char* GetName() const override
+	{
+		return "Platform";
+	}
 
 	bool ExecuteStage(EEngineStage Stage) override;
 

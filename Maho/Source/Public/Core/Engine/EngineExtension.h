@@ -33,7 +33,10 @@ public:
 
 	[[nodiscard]] virtual const char* GetName() const = 0;
 
-	[[nodiscard]] EExtensionPriority GetPriority() const { return Priority; }
+	[[nodiscard]] EExtensionPriority GetPriority() const
+	{
+		return Priority;
+	}
 
 	/**
 	 * Lifecycle + frame body. Init-family may return false to abort startup.
@@ -53,13 +56,22 @@ public:
 		return true;
 	}
 
-	[[nodiscard]] EEngineStage GetCurrentStage() const { return CurrentStage; }
+	[[nodiscard]] EEngineStage GetCurrentStage() const
+	{
+		return CurrentStage;
+	}
 
 private:
 	friend class FEngineBase;
 
-	void SetPriority(EExtensionPriority InPriority) { Priority = InPriority; }
-	void SetCurrentStage(EEngineStage Stage) { CurrentStage = Stage; }
+	void SetPriority(EExtensionPriority InPriority)
+	{
+		Priority = InPriority;
+	}
+	void SetCurrentStage(EEngineStage Stage)
+	{
+		CurrentStage = Stage;
+	}
 
 	EExtensionPriority Priority = EExtensionPriority::System;
 	EEngineStage CurrentStage = EEngineStage::COUNT;
@@ -81,8 +93,14 @@ public:
 	FLayer(const FLayer&) = delete;
 	FLayer& operator=(const FLayer&) = delete;
 
-	[[nodiscard]] const char* GetName() const override { return Name.c_str(); }
-	[[nodiscard]] const std::string& GetNameString() const { return Name; }
+	[[nodiscard]] const char* GetName() const override
+	{
+		return Name.c_str();
+	}
+	[[nodiscard]] const std::string& GetNameString() const
+	{
+		return Name;
+	}
 
 protected:
 	std::string Name;

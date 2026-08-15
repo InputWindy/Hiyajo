@@ -257,7 +257,8 @@ std::vector<IRenderFeature*> FRenderSystem::SortFeaturesForStage(
 	for (auto* F : Participants)
 	{
 		InDegree.try_emplace(F, 0);
-		F->ForEachStageDep(Stage, [&](const std::type_index& DepType) {
+		F->ForEachStageDep(Stage, [&](const std::type_index& DepType)
+		{
 			auto It = TypeMap.find(DepType);
 			if (It != TypeMap.end() && It->second->ParticipatesInStage(Stage))
 			{

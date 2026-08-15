@@ -71,13 +71,19 @@ public:
 	 * Platform-native handle for WSI (HWND on Win32).
 	 * Returns nullptr when unavailable / headless.
 	 */
-	[[nodiscard]] virtual void* GetNativeHandle() const { return nullptr; }
+	[[nodiscard]] virtual void* GetNativeHandle() const
+	{
+		return nullptr;
+	}
 
 	/**
 	 * Toolkit window handle for backends (GLFWwindow* when EPlatform::Glfw).
 	 * Returns nullptr when unavailable / headless.
 	 */
-	[[nodiscard]] virtual void* GetToolkitWindowHandle() const { return nullptr; }
+	[[nodiscard]] virtual void* GetToolkitWindowHandle() const
+	{
+		return nullptr;
+	}
 
 	/** Drain OS event queue. */
 	virtual void PollEvents() = 0;
@@ -89,10 +95,7 @@ public:
 	 * Drain OS file-drop paths queued since the last call (e.g. GLFW drop callback).
 	 * Empty by default for backends that do not support drops.
 	 */
-	virtual void DrainDroppedFilePaths(std::vector<std::string>& OutPaths)
-	{
-		OutPaths.clear();
-	}
+	virtual void DrainDroppedFilePaths(std::vector<std::string>& OutPaths);
 
 protected:
 	FPlatformWindow() = default;

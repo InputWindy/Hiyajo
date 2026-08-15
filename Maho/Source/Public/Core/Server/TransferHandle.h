@@ -30,11 +30,23 @@ struct MAHO_API FTransferHandle
 	std::uint64_t Id = 0;
 	std::uint32_t Generation = 0;
 
-	[[nodiscard]] bool IsValid() const { return Id != 0; }
+	[[nodiscard]] bool IsValid() const
+	{
+		return Id != 0;
+	}
 	[[nodiscard]] ETransferState GetState() const;
-	[[nodiscard]] bool IsInProgress() const { return GetState() == ETransferState::InProgress; }
-	[[nodiscard]] bool HasFailed() const { return GetState() == ETransferState::Failed; }
-	[[nodiscard]] bool HasSucceeded() const { return GetState() == ETransferState::Succeeded; }
+	[[nodiscard]] bool IsInProgress() const
+	{
+		return GetState() == ETransferState::InProgress;
+	}
+	[[nodiscard]] bool HasFailed() const
+	{
+		return GetState() == ETransferState::Failed;
+	}
+	[[nodiscard]] bool HasSucceeded() const
+	{
+		return GetState() == ETransferState::Succeeded;
+	}
 };
 
 /** Allocate a ticket in the process-wide transfer table (used by ThreadedServer façades). */

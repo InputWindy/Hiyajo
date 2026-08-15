@@ -39,8 +39,14 @@ public:
 	/** As loading: reads from Data[0..Size). Caller owns the buffer. */
 	FArchive(EArchiveMode Mode, const std::uint8_t* Data, std::size_t Size);
 
-	[[nodiscard]] bool IsSaving() const { return Mode == EArchiveMode::Saving; }
-	[[nodiscard]] bool IsLoading() const { return Mode == EArchiveMode::Loading; }
+	[[nodiscard]] bool IsSaving() const
+	{
+		return Mode == EArchiveMode::Saving;
+	}
+	[[nodiscard]] bool IsLoading() const
+	{
+		return Mode == EArchiveMode::Loading;
+	}
 
 	// ── Raw POD primitives ──
 
@@ -64,24 +70,79 @@ public:
 	void SerializeString(std::string& S);
 
 	/** Raw POD array — caller is responsible for allocating before Loading. */
-	void SerializeData(void* Data, std::size_t Size) { SerializeBytes(Data, Size); }
+	void SerializeData(void* Data, std::size_t Size)
+	{
+		SerializeBytes(Data, Size);
+	}
 
 	// ── Convenience operator ──
 
-	FArchive& operator<<(std::int8_t& V)  { SerializeRaw(V); return *this; }
-	FArchive& operator<<(std::int16_t& V) { SerializeRaw(V); return *this; }
-	FArchive& operator<<(std::int32_t& V) { SerializeRaw(V); return *this; }
-	FArchive& operator<<(std::int64_t& V) { SerializeRaw(V); return *this; }
-	FArchive& operator<<(std::uint8_t& V)  { SerializeRaw(V); return *this; }
-	FArchive& operator<<(std::uint16_t& V) { SerializeRaw(V); return *this; }
-	FArchive& operator<<(std::uint32_t& V) { SerializeRaw(V); return *this; }
-	FArchive& operator<<(std::uint64_t& V) { SerializeRaw(V); return *this; }
-	FArchive& operator<<(char& V)          { SerializeRaw(V); return *this; }
-	FArchive& operator<<(float& V)         { SerializeRaw(V); return *this; }
-	FArchive& operator<<(double& V)        { SerializeRaw(V); return *this; }
-	FArchive& operator<<(bool& V)          { SerializeRaw(V); return *this; }
+	FArchive& operator<<(std::int8_t& V)
+	{
+		SerializeRaw(V);
+		return *this;
+	}
+	FArchive& operator<<(std::int16_t& V)
+	{
+		SerializeRaw(V);
+		return *this;
+	}
+	FArchive& operator<<(std::int32_t& V)
+	{
+		SerializeRaw(V);
+		return *this;
+	}
+	FArchive& operator<<(std::int64_t& V)
+	{
+		SerializeRaw(V);
+		return *this;
+	}
+	FArchive& operator<<(std::uint8_t& V)
+	{
+		SerializeRaw(V);
+		return *this;
+	}
+	FArchive& operator<<(std::uint16_t& V)
+	{
+		SerializeRaw(V);
+		return *this;
+	}
+	FArchive& operator<<(std::uint32_t& V)
+	{
+		SerializeRaw(V);
+		return *this;
+	}
+	FArchive& operator<<(std::uint64_t& V)
+	{
+		SerializeRaw(V);
+		return *this;
+	}
+	FArchive& operator<<(char& V)
+	{
+		SerializeRaw(V);
+		return *this;
+	}
+	FArchive& operator<<(float& V)
+	{
+		SerializeRaw(V);
+		return *this;
+	}
+	FArchive& operator<<(double& V)
+	{
+		SerializeRaw(V);
+		return *this;
+	}
+	FArchive& operator<<(bool& V)
+	{
+		SerializeRaw(V);
+		return *this;
+	}
 
-	FArchive& operator<<(std::string& S) { SerializeString(S); return *this; }
+	FArchive& operator<<(std::string& S)
+	{
+		SerializeString(S);
+		return *this;
+	}
 
 	/**
 	 * Generic POD vector: uint32 count + raw element bytes.
@@ -94,23 +155,42 @@ public:
 		std::uint32_t Count = IsSaving() ? static_cast<std::uint32_t>(V.size()) : 0;
 		SerializeRaw(Count);
 		if (IsLoading())
+		{
 			V.resize(Count);
+		}
 		if (Count > 0)
+		{
 			SerializeData(V.data(), Count * sizeof(T));
+		}
 		return *this;
 	}
 
 	// ── Query ──
 
 	[[nodiscard]] std::size_t Tell() const;
-	[[nodiscard]] bool IsError() const { return bError; }
+	[[nodiscard]] bool IsError() const
+	{
+		return bError;
+	}
 
 	// ── Extension points (reserved, no-op for now) ──
 
-	[[nodiscard]] std::uint32_t GetVersion() const { return ArchiveVersion; }
-	void SetVersion(std::uint32_t V) { ArchiveVersion = V; }
-	[[nodiscard]] bool IsCooking() const { return false; }
-	[[nodiscard]] bool IsNet() const { return false; }
+	[[nodiscard]] std::uint32_t GetVersion() const
+	{
+		return ArchiveVersion;
+	}
+	void SetVersion(std::uint32_t V)
+	{
+		ArchiveVersion = V;
+	}
+	[[nodiscard]] bool IsCooking() const
+	{
+		return false;
+	}
+	[[nodiscard]] bool IsNet() const
+	{
+		return false;
+	}
 
 private:
 	EArchiveMode Mode;

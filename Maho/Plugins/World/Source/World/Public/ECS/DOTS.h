@@ -1,5 +1,10 @@
 #pragma once
 
+/**
+ * DOTS-aligned ECS umbrella: components, archetypes, queries, systems, groups,
+ * command buffers, and the world. Include this to use the whole ECS module.
+ */
+
 #include <ECS/ComponentType.h>
 #include <ECS/EntityHandle.h>
 #include <ECS/Chunk.h>

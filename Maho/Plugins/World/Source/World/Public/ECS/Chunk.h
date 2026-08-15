@@ -51,8 +51,14 @@ struct MAHO_WORLD_API FChunk
 
 	~FChunk();
 
-	[[nodiscard]] bool IsFull() const { return Count >= MaxCount; }
-	[[nodiscard]] bool IsEmpty() const { return Count == 0; }
+	[[nodiscard]] bool IsFull() const
+	{
+		return Count >= MaxCount;
+	}
+	[[nodiscard]] bool IsEmpty() const
+	{
+		return Count == 0;
+	}
 
 	/**
 	 * Raw pointer to component column for a given type index.
@@ -79,8 +85,14 @@ struct MAHO_WORLD_API FChunk
 		return reinterpret_cast<const T*>(static_cast<const char*>(GetComponentColumn(GetComponentTypeId<T>())) + Row * sizeof(T));
 	}
 
-	[[nodiscard]] FEntityRow* GetEntityRows() { return reinterpret_cast<FEntityRow*>(Data); }
-	[[nodiscard]] const FEntityRow* GetEntityRows() const { return reinterpret_cast<const FEntityRow*>(Data); }
+	[[nodiscard]] FEntityRow* GetEntityRows()
+	{
+		return reinterpret_cast<FEntityRow*>(Data);
+	}
+	[[nodiscard]] const FEntityRow* GetEntityRows() const
+	{
+		return reinterpret_cast<const FEntityRow*>(Data);
+	}
 
 	ComponentMaskType Mask;
 	std::vector<std::size_t> ComponentSizes;     // byte sizes per type index (0 = tag)

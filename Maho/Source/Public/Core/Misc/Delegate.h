@@ -66,11 +66,23 @@ struct FDelegateHandle
 {
 	std::uint64_t Id = 0;
 
-	[[nodiscard]] bool IsValid() const { return Id != 0; }
-	void Reset() { Id = 0; }
+	[[nodiscard]] bool IsValid() const
+	{
+		return Id != 0;
+	}
+	void Reset()
+	{
+		Id = 0;
+	}
 
-	[[nodiscard]] bool operator==(const FDelegateHandle& Other) const { return Id == Other.Id; }
-	[[nodiscard]] bool operator!=(const FDelegateHandle& Other) const { return Id != Other.Id; }
+	[[nodiscard]] bool operator==(const FDelegateHandle& Other) const
+	{
+		return Id == Other.Id;
+	}
+	[[nodiscard]] bool operator!=(const FDelegateHandle& Other) const
+	{
+		return Id != Other.Id;
+	}
 };
 
 namespace DelegatePrivate

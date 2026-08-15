@@ -19,7 +19,10 @@ struct TChunkView
 {
 	FChunk* Chunk = nullptr;
 
-	[[nodiscard]] std::size_t Count() const { return Chunk ? Chunk->Count : 0; }
+	[[nodiscard]] std::size_t Count() const
+	{
+		return Chunk ? Chunk->Count : 0;
+	}
 
 	template <typename F>
 	void ForEach(F&& Func)

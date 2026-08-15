@@ -29,9 +29,15 @@ public:
 	FRHIServer(const FRHIServer&) = delete;
 	FRHIServer& operator=(const FRHIServer&) = delete;
 
-	[[nodiscard]] bool HasRHI() const { return static_cast<bool>(RHI); }
+	[[nodiscard]] bool HasRHI() const
+	{
+		return static_cast<bool>(RHI);
+	}
 	[[nodiscard]] FVulkanRHI* GetVulkanRHI() const;
-	[[nodiscard]] IRHI* GetRHI() const { return RHI.get(); }
+	[[nodiscard]] IRHI* GetRHI() const
+	{
+		return RHI.get();
+	}
 
 	void WaitForRenderFrame(std::uint64_t FrameIndex);
 	void SignalRenderFrameComplete(std::uint64_t FrameIndex);
@@ -49,8 +55,14 @@ public:
 	void RequestResize(int Width, int Height);
 
 protected:
-	[[nodiscard]] const char* GetServerThreadName() const override { return "MahoRHI"; }
-	[[nodiscard]] const char* GetServerLogName() const override { return "RHIServer"; }
+	[[nodiscard]] const char* GetServerThreadName() const override
+	{
+		return "MahoRHI";
+	}
+	[[nodiscard]] const char* GetServerLogName() const override
+	{
+		return "RHIServer";
+	}
 
 	bool OnInitialize() override;
 	void OnShutdown() override;

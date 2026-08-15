@@ -187,7 +187,10 @@ public:
 	const FShaderPassCompiled* FindPassByHash(std::uint64_t BytecodeHash) const;
 
 	/** All passes for per‑stage iteration. */
-	const std::vector<FShaderPassCompiled>& GetAllPasses() const { return Passes; }
+	const std::vector<FShaderPassCompiled>& GetAllPasses() const
+	{
+		return Passes;
+	}
 
 private:
 	std::vector<FShaderPassCompiled> Passes;

@@ -14,6 +14,28 @@ FResourceServer::~FResourceServer()
 	Shutdown();
 }
 
+FTransferHandle FResourceServer::RequestLoad(std::string Path)
+{
+	FResourceLoadRequest Req;
+	Req.Path = std::move(Path);
+	return Submit(std::move(Req));
+}
+
+const char* FResourceServer::GetServerThreadName() const
+{
+	return "MahoResourceThread";
+}
+
+const char* FResourceServer::GetServerLogName() const
+{
+	return "ResourceServer";
+}
+
+bool FResourceServer::OnInitialize()
+{
+	return true;
+}
+
 void FResourceServer::OnShutdown()
 {
 	TAsyncTransferServer::OnShutdown();
@@ -69,7 +91,9 @@ FResourceLoadResult FResourceServer::ExecuteRequest(const FResourceLoadRequest& 
 	}
 
 	if (!bSuccess)
+	{
 		Bytes.clear();
+	}
 	Result.Bytes = std::move(Bytes);
 	return Result;
 }
@@ -77,11 +101,15 @@ FResourceLoadResult FResourceServer::ExecuteRequest(const FResourceLoadRequest& 
 bool FResourceServer::TryTakeBulkData(FTransferHandle Handle, FResourceBulkData& OutBulk)
 {
 	if (!Handle.IsValid() || !Handle.HasSucceeded())
+	{
 		return false;
+	}
 
 	FResourceLoadResult Result = RetrieveResult(Handle);
 	if (Result.Bytes.empty())
+	{
 		return false;
+	}
 
 	OutBulk.SourcePath = std::move(Result.SourcePath);
 	OutBulk.Bytes = std::move(Result.Bytes);

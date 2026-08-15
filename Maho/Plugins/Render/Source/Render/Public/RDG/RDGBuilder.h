@@ -134,7 +134,10 @@ public:
 	// -- Queries --
 
 	[[nodiscard]] FRDGResource* GetResource(const char* Name) const;
-	[[nodiscard]] std::size_t GetPassCount() const { return Passes.size(); }
+	[[nodiscard]] std::size_t GetPassCount() const
+	{
+		return Passes.size();
+	}
 
 private:
 	FRHIServer* RHIServer = nullptr;

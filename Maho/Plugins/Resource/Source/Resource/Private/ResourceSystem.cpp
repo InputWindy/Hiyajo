@@ -46,10 +46,15 @@ std::string FResourceSystem::NormalizePackageName(std::string Name)
 {
 	for (char& Ch : Name)
 	{
-		if (Ch == '\\') Ch = '/';
+		if (Ch == '\\')
+		{
+			Ch = '/';
+		}
 	}
 	while (Name.size() >= 2 && Name[0] == '.' && Name[1] == '/')
+	{
 		Name.erase(0, 2);
+	}
 	return Name;
 }
 
@@ -57,13 +62,18 @@ std::string FResourceSystem::NormalizeSourcePath(std::string Path)
 {
 	for (char& Ch : Path)
 	{
-		if (Ch == '\\') Ch = '/';
+		if (Ch == '\\')
+		{
+			Ch = '/';
+		}
 	}
 #if defined(_WIN32)
 	AsciiToLowerInPlace(Path);
 #endif
 	while (Path.size() >= 2 && Path[0] == '.' && Path[1] == '/')
+	{
 		Path.erase(0, 2);
+	}
 	return Path;
 }
 
@@ -73,7 +83,10 @@ std::string FResourceSystem::MakeObjectNameFromSource(const std::string& SourceP
 	const std::size_t Start = (Slash == std::string::npos) ? 0 : Slash + 1;
 	std::string Stem = SourcePath.substr(Start);
 	const std::size_t Dot = Stem.find_last_of('.');
-	if (Dot != std::string::npos) Stem.resize(Dot);
+	if (Dot != std::string::npos)
+	{
+		Stem.resize(Dot);
+	}
 	return Stem.empty() ? std::string("Resource") : Stem;
 }
 
@@ -87,17 +100,25 @@ std::string FResourceSystem::NormalizeResourceVirtualPath(const std::string& Vir
 	std::string Path = VirtualPath;
 	for (char& Ch : Path)
 	{
-		if (Ch == '\\') Ch = '/';
+		if (Ch == '\\')
+		{
+			Ch = '/';
+		}
 	}
 	const std::size_t LastSlash = Path.find_last_of('/');
 	if (LastSlash != std::string::npos && LastSlash > 0 && LastSlash + 1 < Path.size())
+	{
 		Path[LastSlash] = '.';
+	}
 	return Path;
 }
 
 bool FResourceSystem::Initialize()
 {
-	if (IsInitialized()) return true;
+	if (IsInitialized())
+	{
+		return true;
+	}
 
 	if (!Server->Initialize())
 	{
@@ -114,7 +135,10 @@ FResourcePackage* FResourceSystem::FindOrCreatePackage(const std::string& Packag
 {
 	std::string Normalized = NormalizePackageName(PackagePath);
 	auto It = Packages.find(Normalized);
-	if (It != Packages.end()) return It->second.get();
+	if (It != Packages.end())
+	{
+		return It->second.get();
+	}
 
 	auto Pkg = std::make_unique<FResourcePackage>();
 	Pkg->Name = Normalized;
@@ -124,7 +148,7 @@ FResourcePackage* FResourceSystem::FindOrCreatePackage(const std::string& Packag
 	return Raw;
 }
 
-bool FResourceSystem::RegisterResource(Ref<FResource> Resource, const std::string& PackagePath)
+bool FResourceSystem::RegisterResource(TRef<FResource> Resource, const std::string& PackagePath)
 {
 	if (!bAcceptingNewWork)
 	{
@@ -154,14 +178,20 @@ bool FResourceSystem::RegisterResource(Ref<FResource> Resource, const std::strin
 
 void FResourceSystem::RegisterResourceFactory(EAssetType Type, FResourceFactory Factory)
 {
-	if (!Factory) return;
+	if (!Factory)
+	{
+		return;
+	}
 	ResourceFactories[Type] = std::move(Factory);
 }
 
 FResourceSystem::FResourceFactory FResourceSystem::GetResourceFactory(EAssetType Type) const
 {
 	const auto It = ResourceFactories.find(Type);
-	if (It == ResourceFactories.end()) return {};
+	if (It == ResourceFactories.end())
+	{
+		return {};
+	}
 	return It->second;
 }
 
@@ -186,7 +216,10 @@ bool FResourceSystem::Import(
 
 bool FResourceSystem::RegisterOwnedResource(const std::string& PackagePath, FResource* Resource)
 {
-	if (!Resource) return false;
+	if (!Resource)
+	{
+		return false;
+	}
 
 	std::string PkgPath = NormalizePackageName(PackagePath);
 	FResourcePackage* Pkg = FindOrCreatePackage(PkgPath);
@@ -199,7 +232,10 @@ bool FResourceSystem::RegisterOwnedResource(const std::string& PackagePath, FRes
 
 bool FResourceSystem::UnregisterResource(FResource* Resource)
 {
-	if (!Resource) return false;
+	if (!Resource)
+	{
+		return false;
+	}
 
 	CancelPendingImport(Resource);
 
@@ -221,14 +257,20 @@ void FResourceSystem::AbortFailedImport(FResource& Resource)
 
 void FResourceSystem::CancelPendingImport(FResource* Resource)
 {
-	if (!Resource) return;
+	if (!Resource)
+	{
+		return;
+	}
 
 	const std::string Key = MakeAssetCatalogKey(
 		NormalizePackageName(Resource->GetName()),
 		Resource->GetName());
 
 	const auto It = PendingIO.find(Key);
-	if (It == PendingIO.end()) return;
+	if (It == PendingIO.end())
+	{
+		return;
+	}
 
 	ReleaseBulkLoad(It->second.Handle);
 	PendingIO.erase(It);
@@ -237,11 +279,16 @@ void FResourceSystem::CancelPendingImport(FResource* Resource)
 void FResourceSystem::ForEachRegisteredResource(
 	const std::function<void(const std::string& CatalogKey, FResource& Resource)>& Fn) const
 {
-	if (!Fn) return;
+	if (!Fn)
+	{
+		return;
+	}
 	for (const auto& Pair : Catalog)
 	{
 		if (Pair.second)
+		{
 			Fn(Pair.first, *Pair.second);
+		}
 	}
 }
 
@@ -251,16 +298,23 @@ void FResourceSystem::UnregisterResourcesInPackage(const std::string& PackagePat
 	for (auto It = Catalog.begin(); It != Catalog.end();)
 	{
 		if (It->first.find(Key) == 0)
+		{
 			It = Catalog.erase(It);
+		}
 		else
+		{
 			++It;
+		}
 	}
 	Packages.erase(Key);
 }
 
 void FResourceSystem::PrepareForExit()
 {
-	if (!IsInitialized()) return;
+	if (!IsInitialized())
+	{
+		return;
+	}
 
 	bAcceptingNewWork = false;
 	if (AsyncSave.Task)
@@ -271,7 +325,9 @@ void FResourceSystem::PrepareForExit()
 	FlushAll();
 
 	for (auto& Pair : PendingIO)
+	{
 		ReleaseBulkLoad(Pair.second.Handle);
+	}
 	PendingIO.clear();
 
 	Catalog.clear();
@@ -280,7 +336,10 @@ void FResourceSystem::PrepareForExit()
 
 bool FResourceSystem::IsIdle() const
 {
-	if (!IsInitialized()) return true;
+	if (!IsInitialized())
+	{
+		return true;
+	}
 	return !bAcceptingNewWork
 		&& Catalog.empty()
 		&& PendingIO.empty()
@@ -307,7 +366,10 @@ bool FResourceSystem::ExecuteStage(EEngineStage Stage)
 		PrepareForExit();
 		return true;
 	case EEngineStage::Shutdown:
-		if (IsInitialized()) Shutdown();
+		if (IsInitialized())
+		{
+			Shutdown();
+		}
 		return true;
 	default:
 		return true;
@@ -316,18 +378,26 @@ bool FResourceSystem::ExecuteStage(EEngineStage Stage)
 
 void FResourceSystem::Shutdown()
 {
-	if (!IsInitialized()) return;
+	if (!IsInitialized())
+	{
+		return;
+	}
 	PrepareForExit();
 
 	if (Server->IsInitialized())
+	{
 		Server->Shutdown();
+	}
 
 	MAHO_CORE_INFO("FResourceSystem shut down");
 }
 
 void FResourceSystem::ProcessReadyIO()
 {
-	if (!HasActiveServer() || PendingIO.empty()) return;
+	if (!HasActiveServer() || PendingIO.empty())
+	{
+		return;
+	}
 
 	std::vector<std::string> ReadyKeys;
 	ReadyKeys.reserve(PendingIO.size());
@@ -335,17 +405,25 @@ void FResourceSystem::ProcessReadyIO()
 	{
 		const FTransferHandle Handle = Pair.second.Handle;
 		if (!Handle.IsValid() || Handle.HasFailed() || Handle.HasSucceeded())
+		{
 			ReadyKeys.push_back(Pair.first);
+		}
 	}
 
 	constexpr std::size_t kMaxAppliesPerTick = 1;
 	std::size_t Applied = 0;
 	for (const std::string& Key : ReadyKeys)
 	{
-		if (Applied >= kMaxAppliesPerTick) break;
+		if (Applied >= kMaxAppliesPerTick)
+		{
+			break;
+		}
 
 		const auto It = PendingIO.find(Key);
-		if (It == PendingIO.end()) continue;
+		if (It == PendingIO.end())
+		{
+			continue;
+		}
 
 		FPendingIO Pending = std::move(It->second);
 		PendingIO.erase(It);
@@ -364,7 +442,9 @@ void FResourceSystem::ProcessReadyIO()
 		}
 
 		if (Pending.Importer)
+		{
 			(void)Pending.Importer->ApplyBulkData(*this, Pending.Config, Bulk);
+		}
 		ReleaseBulkLoad(Pending.Handle);
 		++Applied;
 	}
@@ -377,19 +457,27 @@ bool FResourceSystem::HasActiveServer() const
 
 FTransferHandle FResourceSystem::RequestBulkLoad(const std::string& SourcePath)
 {
-	if (!HasActiveServer()) return {};
+	if (!HasActiveServer())
+	{
+		return {};
+	}
 	return Server->RequestLoad(SourcePath);
 }
 
 void FResourceSystem::ReleaseBulkLoad(FTransferHandle Handle)
 {
 	if (HasActiveServer() && Handle.IsValid())
+	{
 		Server->Release(Handle);
+	}
 }
 
 bool FResourceSystem::TakeBulkData(FTransferHandle Handle, FResourceBulkData& OutBulk)
 {
-	if (!HasActiveServer() || !Handle.IsValid()) return false;
+	if (!HasActiveServer() || !Handle.IsValid())
+	{
+		return false;
+	}
 	return Server->TryTakeBulkData(Handle, OutBulk);
 }
 
@@ -399,27 +487,45 @@ bool FResourceSystem::EnqueueImport(
 	std::string& OutAssetPath)
 {
 	OutAssetPath.clear();
-	if (!Importer) return false;
+	if (!Importer)
+	{
+		return false;
+	}
 
-	if (!IsInitialized() || !bAcceptingNewWork) return false;
+	if (!IsInitialized() || !bAcceptingNewWork)
+	{
+		return false;
+	}
 
 	Config.SourcePath = NormalizeSourcePath(std::move(Config.SourcePath));
 	Config.PackagePath = NormalizePackageName(std::move(Config.PackagePath));
 	if (Config.ObjectName.empty() && !Config.SourcePath.empty())
+	{
 		Config.ObjectName = MakeObjectNameFromSource(Config.SourcePath);
+	}
 
 	if (Config.PackagePath.empty() || Config.ObjectName.empty() || Config.SourcePath.empty())
+	{
 		return false;
+	}
 
 	OutAssetPath = MakeAssetCatalogKey(Config.PackagePath, Config.ObjectName);
 
 	if (PendingIO.find(OutAssetPath) != PendingIO.end())
+	{
 		return true;
+	}
 
-	if (!HasActiveServer()) return false;
+	if (!HasActiveServer())
+	{
+		return false;
+	}
 
 	FTransferHandle Handle = RequestBulkLoad(Config.SourcePath);
-	if (!Handle.IsValid()) return false;
+	if (!Handle.IsValid())
+	{
+		return false;
+	}
 
 	FPendingIO Pending;
 	Pending.Handle = Handle;
@@ -434,13 +540,22 @@ bool FResourceSystem::EnqueueImport(
 bool FResourceSystem::TryLoad(const std::string& AssetPath, bool bAsync)
 {
 	(void)bAsync;
-	if (AssetPath.empty()) return false;
+	if (AssetPath.empty())
+	{
+		return false;
+	}
 
 	// Already loaded
-	if (Find(AssetPath)) return true;
+	if (Find(AssetPath))
+	{
+		return true;
+	}
 
 	const std::string Filename = FPaths::ConvertPackageNameToFilename(AssetPath);
-	if (Filename.empty()) return false;
+	if (Filename.empty())
+	{
+		return false;
+	}
 
 	return !LoadPackage(Filename).empty();
 }
@@ -462,7 +577,10 @@ bool FResourceSystem::EnqueueSavePackage(
 		MAHO_CORE_WARN("FResourceSystem::EnqueueSavePackage: save already in progress");
 		return false;
 	}
-	if (!IsInitialized() || !bAcceptingNewWork) return false;
+	if (!IsInitialized() || !bAcceptingNewWork)
+	{
+		return false;
+	}
 
 	std::string PkgPath = NormalizePackageName(PackagePath);
 	auto It = Packages.find(PkgPath);
@@ -474,23 +592,38 @@ bool FResourceSystem::EnqueueSavePackage(
 
 		FResourcePackage& Pkg = *It->second;
 		std::string OutPath = FPaths::ConvertPackageNameToFilename(PkgPath);
-		if (OutPath.empty()) return false;
+		if (OutPath.empty())
+		{
+			return false;
+		}
 
 	if (bSaveDependencies)
 	{
 		std::unordered_set<std::string> SavingPackageNames;
 		for (const FResource* Obj : Pkg.Objects)
 		{
-			if (!Obj) continue;
+			if (!Obj)
+			{
+				continue;
+			}
 			for (const std::string& Ref : Obj->GetReferencePaths())
 			{
 				std::size_t Dot = Ref.find('.');
-				if (Dot == std::string::npos) continue;
+				if (Dot == std::string::npos)
+				{
+					continue;
+				}
 				std::string DepPkg = NormalizePackageName(Ref.substr(0, Dot));
-				if (DepPkg == PkgPath) continue;
+				if (DepPkg == PkgPath)
+				{
+					continue;
+				}
 
 				auto DepIt = Packages.find(DepPkg);
-				if (DepIt == Packages.end()) continue;
+				if (DepIt == Packages.end())
+				{
+					continue;
+				}
 
 				if (!SavePackageInternal(DepPkg, true, SavingPackageNames))
 				{
@@ -505,7 +638,9 @@ bool FResourceSystem::EnqueueSavePackage(
 		std::error_code ErrorCode;
 		const std::filesystem::path Parent = PathFromUtf8(OutPath).parent_path();
 		if (!Parent.empty())
+		{
 			std::filesystem::create_directories(Parent, ErrorCode);
+		}
 	}
 
 	AsyncSave = {};
@@ -547,13 +682,25 @@ bool FResourceSystem::EnqueueSavePackage(
 	return true;
 }
 
-bool FResourceSystem::IsSavePackageBusy() const { return AsyncSave.bActive; }
+bool FResourceSystem::IsSavePackageBusy() const
+{
+	return AsyncSave.bActive;
+}
 
 float FResourceSystem::GetSavePackageProgress() const
 {
-	if (!AsyncSave.bActive) return 1.f;
-	if (!AsyncSave.bCompressStarted) return AsyncSave.Progress;
-	if (AsyncSave.Task && !AsyncSave.Task->IsDone()) return 0.7f;
+	if (!AsyncSave.bActive)
+	{
+		return 1.f;
+	}
+	if (!AsyncSave.bCompressStarted)
+	{
+		return AsyncSave.Progress;
+	}
+	if (AsyncSave.Task && !AsyncSave.Task->IsDone())
+	{
+		return 0.7f;
+	}
 	return 0.95f;
 }
 
@@ -565,7 +712,10 @@ const std::string& FResourceSystem::GetSavePackageStatusText() const
 
 void FResourceSystem::TickSavePackage()
 {
-	if (!AsyncSave.bActive || !AsyncSave.bCompressStarted || !AsyncSave.Task) return;
+	if (!AsyncSave.bActive || !AsyncSave.bCompressStarted || !AsyncSave.Task)
+	{
+		return;
+	}
 	if (!AsyncSave.Task->IsDone())
 	{
 		AsyncSave.StatusText = "Compressing / writing...";
@@ -576,9 +726,13 @@ void FResourceSystem::TickSavePackage()
 	AsyncSave.Task->Wait();
 	const bool bOk = AsyncSave.bOk && AsyncSave.bOk->load(std::memory_order_acquire);
 	if (bOk)
+	{
 		FinalizeSavePackageSuccess();
+	}
 	else
+	{
 		FinalizeSavePackageFailure();
+	}
 }
 
 void FResourceSystem::FinalizeSavePackageSuccess()
@@ -588,7 +742,10 @@ void FResourceSystem::FinalizeSavePackageSuccess()
 	{
 		for (FResource* Obj : It->second->Objects)
 		{
-			if (Obj) Obj->ClearDirty();
+			if (Obj)
+			{
+				Obj->ClearDirty();
+			}
 		}
 	}
 	AsyncSave = {};
@@ -606,7 +763,10 @@ bool FResourceSystem::SavePackageInternal(
 	bool bSaveDependencies,
 	std::unordered_set<std::string>& SavingPackageNames)
 {
-	if (!IsInitialized()) return false;
+	if (!IsInitialized())
+	{
+		return false;
+	}
 
 	std::string PkgKey = NormalizePackageName(PackagePath);
 	if (SavingPackageNames.find(PkgKey) != SavingPackageNames.end())
@@ -638,16 +798,28 @@ bool FResourceSystem::SavePackageInternal(
 	{
 		for (const FResource* Obj : Pkg.Objects)
 		{
-			if (!Obj) continue;
+			if (!Obj)
+			{
+				continue;
+			}
 			for (const std::string& Ref : Obj->GetReferencePaths())
 			{
 				std::size_t Dot = Ref.find('.');
-				if (Dot == std::string::npos) continue;
+				if (Dot == std::string::npos)
+				{
+					continue;
+				}
 				std::string DepPkg = NormalizePackageName(Ref.substr(0, Dot));
-				if (DepPkg == PkgKey) continue;
+				if (DepPkg == PkgKey)
+				{
+					continue;
+				}
 
 				auto DepIt = Packages.find(DepPkg);
-				if (DepIt == Packages.end()) continue;
+				if (DepIt == Packages.end())
+				{
+					continue;
+				}
 
 				if (!SavePackageInternal(DepPkg, true, SavingPackageNames))
 				{
@@ -662,7 +834,9 @@ bool FResourceSystem::SavePackageInternal(
 		std::error_code ErrorCode;
 		const std::filesystem::path Parent = PathFromUtf8(OutPath).parent_path();
 		if (!Parent.empty())
+		{
 			std::filesystem::create_directories(Parent, ErrorCode);
+		}
 	}
 
 	std::vector<std::uint8_t> FileBytes;
@@ -686,7 +860,10 @@ bool FResourceSystem::SavePackageInternal(
 
 	for (FResource* Obj : Pkg.Objects)
 	{
-		if (Obj) Obj->ClearDirty();
+		if (Obj)
+		{
+			Obj->ClearDirty();
+		}
 	}
 
 	SavingPackageNames.erase(PkgKey);
@@ -703,9 +880,15 @@ std::string FResourceSystem::LoadPackageInternal(
 	const std::string& FilePath,
 	std::unordered_set<std::string>& LoadingFilePaths)
 {
-	if (!IsInitialized() || !bAcceptingNewWork) return {};
+	if (!IsInitialized() || !bAcceptingNewWork)
+	{
+		return {};
+	}
 
-	if (FilePath.empty()) return {};
+	if (FilePath.empty())
+	{
+		return {};
+	}
 
 	const std::string NormalizedFile = NormalizeSourcePath(FilePath);
 	if (LoadingFilePaths.find(NormalizedFile) != LoadingFilePaths.end())
@@ -747,7 +930,10 @@ bool ApplyCpuPayload(FResource& Resource, const std::vector<std::uint8_t>& CpuBy
 {
 	FArchive Ar(EArchiveMode::Loading, CpuBytes.data(), CpuBytes.size());
 	Resource.Serialize(Ar);
-	if (Ar.IsError()) return false;
+	if (Ar.IsError())
+	{
+		return false;
+	}
 
 	Resource.MarkCpuReady();
 	return true;
@@ -758,15 +944,24 @@ FResource* CreateResourceFromParsed(
 	const std::string& PackageName,
 	const FPackageDocumentObject& Entry)
 {
-	if (Entry.Name.empty()) return nullptr;
+	if (Entry.Name.empty())
+	{
+		return nullptr;
+	}
 
 	FResourceSystem::FResourceFactory Factory = Manager.GetResourceFactory(Entry.Type);
-	if (!Factory) return nullptr;
+	if (!Factory)
+	{
+		return nullptr;
+	}
 
 	FResource* Created = Factory(Entry.Name, Entry.Type, Entry.ImportSource);
-	if (!Created) return nullptr;
+	if (!Created)
+	{
+		return nullptr;
+	}
 
-	(void)Manager.RegisterResource(Ref<FResource>(Created), PackageName);
+	(void)Manager.RegisterResource(TRef<FResource>(Created), PackageName);
 
 	if (!Entry.CpuBytes.empty())
 	{
@@ -794,7 +989,9 @@ std::string FResourceSystem::LoadPackageFromBinary(
 {
 	const std::string NormalizedFile = NormalizeSourcePath(FilePath);
 	if (LoadingFilePaths.find(NormalizedFile) == LoadingFilePaths.end())
+	{
 		LoadingFilePaths.insert(NormalizedFile);
+	}
 
 	const FPackageCodec* Codec = GetPackageCodec();
 	if (!Codec)
@@ -815,8 +1012,13 @@ std::string FResourceSystem::LoadPackageFromBinary(
 	{
 		const std::string DepName = NormalizePackageName(Dep.PackageName);
 		if (!DepName.empty() && Packages.find(DepName) != Packages.end())
+		{
 			continue;
-		if (Dep.FilePath.empty()) continue;
+		}
+		if (Dep.FilePath.empty())
+		{
+			continue;
+		}
 		if (LoadPackageInternal(Dep.FilePath, LoadingFilePaths).empty())
 		{
 			MAHO_CORE_ERROR("FResourceSystem::LoadPackage: failed loading dependency '{}' from '{}'",
@@ -828,7 +1030,9 @@ std::string FResourceSystem::LoadPackageFromBinary(
 
 	std::string PackageName = NormalizePackageName(Parsed.Name);
 	if (PackageName.empty())
+	{
 		PackageName = FilePath;
+	}
 
 	FResourcePackage* Pkg = FindOrCreatePackage(PackageName, FilePath);
 	Pkg->Flags = Parsed.Flags;
@@ -851,44 +1055,67 @@ std::string FResourceSystem::LoadPackageFromBinary(
 
 EAssetLoadState FResourceSystem::GetLoadState(const std::string& AssetPath) const
 {
-	if (AssetPath.empty()) return EAssetLoadState::Invalid;
+	if (AssetPath.empty())
+	{
+		return EAssetLoadState::Invalid;
+	}
 
 	const std::string Key = NormalizeResourceVirtualPath(AssetPath);
 	auto Found = Find<FResource>(Key);
-	if (Found) return Found->GetLoadState();
+	if (Found)
+	{
+		return Found->GetLoadState();
+	}
 
 	return EAssetLoadState::Invalid;
 }
 
 void FResourceSystem::Flush(const std::string& AssetPath)
 {
-	if (!IsInitialized() || AssetPath.empty()) return;
+	if (!IsInitialized() || AssetPath.empty())
+	{
+		return;
+	}
 
 	std::string Key = NormalizeResourceVirtualPath(AssetPath);
 	const auto It = PendingIO.find(Key);
 	if (It != PendingIO.end() && HasActiveServer())
+	{
 		Server->Flush(It->second.Handle);
+	}
 
 	while (PendingIO.find(Key) != PendingIO.end())
 	{
 		ProcessReadyIO();
 		const auto Still = PendingIO.find(Key);
-		if (Still == PendingIO.end()) break;
+		if (Still == PendingIO.end())
+		{
+			break;
+		}
 		if (Still->second.Handle.IsInProgress())
+		{
 			Server->Flush(Still->second.Handle);
+		}
 	}
 }
 
 void FResourceSystem::FlushAll()
 {
-	if (!IsInitialized()) return;
+	if (!IsInitialized())
+	{
+		return;
+	}
 
 	for (const auto& Pair : PendingIO)
+	{
 		Server->Flush(Pair.second.Handle);
+	}
 
 	Server->FThreadedServer::Flush();
 	while (!PendingIO.empty())
+	{
 		ProcessReadyIO();
+	}
 }
 
 namespace Detail
@@ -896,7 +1123,10 @@ namespace Detail
 
 FResourceSystem* GetResourceSystem()
 {
-	if (!GEngine) return nullptr;
+	if (!GEngine)
+	{
+		return nullptr;
+	}
 	return GEngine->GetExtension<FResourceSystem>();
 }
 

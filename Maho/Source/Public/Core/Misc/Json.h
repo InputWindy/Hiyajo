@@ -58,12 +58,30 @@ public:
 	[[nodiscard]] static FJsonValue Object();
 
 	[[nodiscard]] EJsonType GetType() const;
-	[[nodiscard]] bool IsNull() const { return GetType() == EJsonType::Null; }
-	[[nodiscard]] bool IsBool() const { return GetType() == EJsonType::Bool; }
-	[[nodiscard]] bool IsNumber() const { return GetType() == EJsonType::Number; }
-	[[nodiscard]] bool IsString() const { return GetType() == EJsonType::String; }
-	[[nodiscard]] bool IsArray() const { return GetType() == EJsonType::Array; }
-	[[nodiscard]] bool IsObject() const { return GetType() == EJsonType::Object; }
+	[[nodiscard]] bool IsNull() const
+	{
+		return GetType() == EJsonType::Null;
+	}
+	[[nodiscard]] bool IsBool() const
+	{
+		return GetType() == EJsonType::Bool;
+	}
+	[[nodiscard]] bool IsNumber() const
+	{
+		return GetType() == EJsonType::Number;
+	}
+	[[nodiscard]] bool IsString() const
+	{
+		return GetType() == EJsonType::String;
+	}
+	[[nodiscard]] bool IsArray() const
+	{
+		return GetType() == EJsonType::Array;
+	}
+	[[nodiscard]] bool IsObject() const
+	{
+		return GetType() == EJsonType::Object;
+	}
 
 	[[nodiscard]] bool TryGetBool(bool& OutValue) const;
 	[[nodiscard]] bool TryGetInt(int& OutValue) const;
@@ -81,11 +99,20 @@ public:
 
 	/** Object helpers (no-op / null if not an object). */
 	[[nodiscard]] bool HasField(const char* Name) const;
-	[[nodiscard]] bool HasField(const std::string& Name) const { return HasField(Name.c_str()); }
+	[[nodiscard]] bool HasField(const std::string& Name) const
+	{
+		return HasField(Name.c_str());
+	}
 	[[nodiscard]] FJsonValue GetField(const char* Name) const;
-	[[nodiscard]] FJsonValue GetField(const std::string& Name) const { return GetField(Name.c_str()); }
+	[[nodiscard]] FJsonValue GetField(const std::string& Name) const
+	{
+		return GetField(Name.c_str());
+	}
 	void SetField(const char* Name, const FJsonValue& Value);
-	void SetField(const std::string& Name, const FJsonValue& Value) { SetField(Name.c_str(), Value); }
+	void SetField(const std::string& Name, const FJsonValue& Value)
+	{
+		SetField(Name.c_str(), Value);
+	}
 	void RemoveField(const char* Name);
 	[[nodiscard]] std::vector<std::string> GetFieldNames() const;
 
@@ -141,12 +168,24 @@ public:
 
 	[[nodiscard]] std::string Stringify(bool bPretty = true) const;
 
-	[[nodiscard]] const FJsonValue& GetRoot() const { return Root; }
-	[[nodiscard]] FJsonValue& GetRoot() { return Root; }
+	[[nodiscard]] const FJsonValue& GetRoot() const
+	{
+		return Root;
+	}
+	[[nodiscard]] FJsonValue& GetRoot()
+	{
+		return Root;
+	}
 	void SetRoot(FJsonValue Value);
 
-	[[nodiscard]] const std::string& GetLastError() const { return LastError; }
-	[[nodiscard]] const std::string& GetSourcePath() const { return SourcePath; }
+	[[nodiscard]] const std::string& GetLastError() const
+	{
+		return LastError;
+	}
+	[[nodiscard]] const std::string& GetSourcePath() const
+	{
+		return SourcePath;
+	}
 
 private:
 	FJsonValue Root;

@@ -395,7 +395,10 @@ void FVulkanCommandList::BeginRendering(
 	for (std::uint32_t I = 0; I < ColorCount; ++I)
 	{
 		auto* VkView = static_cast<FVulkanTextureView*>(ColorAttachments[I].View);
-		if (VkView == nullptr) continue;
+		if (VkView == nullptr)
+		{
+			continue;
+		}
 
 		VkRenderingAttachmentInfo& Att = ColorAtts[I];
 		Att.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;

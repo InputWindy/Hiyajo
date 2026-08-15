@@ -132,8 +132,14 @@ public:
 	/** Clear all recorded commands without executing them. */
 	void Clear();
 
-	[[nodiscard]] bool IsEmpty() const { return Commands.empty(); }
-	[[nodiscard]] std::size_t GetCommandCount() const { return Commands.size(); }
+	[[nodiscard]] bool IsEmpty() const
+	{
+		return Commands.empty();
+	}
+	[[nodiscard]] std::size_t GetCommandCount() const
+	{
+		return Commands.size();
+	}
 
 private:
 	enum class ECommandType : std::uint8_t
@@ -169,7 +175,10 @@ class MAHO_WORLD_API FECBSystem : public ISystem
 public:
 	explicit FECBSystem(FEntityCommandBuffer& InECB, const char* InName);
 
-	const char* GetName() const override { return Name.c_str(); }
+	const char* GetName() const override
+	{
+		return Name.c_str();
+	}
 
 	void OnUpdate(float DeltaTime, FWorld& World) override;
 

@@ -47,7 +47,10 @@ public:
 	/** Keys in Section (empty if missing). Order is insertion order within the file. */
 	[[nodiscard]] std::vector<std::string> GetKeys(const std::string& Section) const;
 
-	[[nodiscard]] const std::string& GetSourcePath() const { return SourcePath; }
+	[[nodiscard]] const std::string& GetSourcePath() const
+	{
+		return SourcePath;
+	}
 
 private:
 	using FSectionMap = std::unordered_map<std::string, std::string>;
