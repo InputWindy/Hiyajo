@@ -12,7 +12,8 @@
 			"Extension": {
 				"Class": "Maho::FScriptSystem",
 				"Header": "ScriptSystem.h",
-				"Priority": "Overlay"
+				"Priority": "Overlay",
+				"Stage": "EEngineStage"
 			}
 		}
 	]

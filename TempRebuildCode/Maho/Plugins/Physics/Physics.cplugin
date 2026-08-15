@@ -1,0 +1,19 @@
+{
+	"FileVersion": 1,
+	"FriendlyName": "Physics",
+	"Description": "Physics simulation library extension (rigid body solver).",
+	"Category": "Engine",
+	"EnabledByDefault": true,
+	"Modules": [
+		{
+			"Name": "Physics",
+			"Type": "Runtime",
+			"Extension": {
+				"Class": "Maho::FPhysics",
+				"Header": "Physics.h",
+				"Priority": "System",
+				"Stage": "ESingletonStage"
+			}
+		}
+	]
+}

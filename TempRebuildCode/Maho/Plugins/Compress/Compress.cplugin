@@ -1,0 +1,19 @@
+{
+	"FileVersion": 1,
+	"FriendlyName": "Compress",
+	"Description": "Compression extension (zlib/zstd).",
+	"Category": "Engine",
+	"EnabledByDefault": true,
+	"Modules": [
+		{
+			"Name": "Compress",
+			"Type": "Runtime",
+			"Extension": {
+				"Class": "Maho::FCompress",
+				"Header": "Compress.h",
+				"Priority": "System",
+				"Stage": "ESingletonStage"
+			}
+		}
+	]
+}

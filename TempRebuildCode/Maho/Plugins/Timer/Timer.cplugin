@@ -1,0 +1,19 @@
+{
+	"FileVersion": 1,
+	"FriendlyName": "Timer",
+	"Description": "Time source extension (chrono).",
+	"Category": "Engine",
+	"EnabledByDefault": true,
+	"Modules": [
+		{
+			"Name": "Timer",
+			"Type": "Runtime",
+			"Extension": {
+				"Class": "Maho::FTimer",
+				"Header": "Timer.h",
+				"Priority": "System",
+				"Stage": "ESingletonStage"
+			}
+		}
+	]
+}

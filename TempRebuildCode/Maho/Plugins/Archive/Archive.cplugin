@@ -1,0 +1,19 @@
+{
+	"FileVersion": 1,
+	"FriendlyName": "Archive",
+	"Description": "Serialization archive extension.",
+	"Category": "Engine",
+	"EnabledByDefault": true,
+	"Modules": [
+		{
+			"Name": "Archive",
+			"Type": "Runtime",
+			"Extension": {
+				"Class": "Maho::FArchive",
+				"Header": "Archive.h",
+				"Priority": "System",
+				"Stage": "ESingletonStage"
+			}
+		}
+	]
+}

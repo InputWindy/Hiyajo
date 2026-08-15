@@ -11,7 +11,8 @@
 			"Extension": {
 				"Class": "Maho::FInitializationSystemGroup",
 				"Header": "ECS/SystemGroup.h",
-				"Priority": "Layer"
+				"Priority": "Layer",
+				"Stage": "EEngineStage"
 			}
 		}
 	]

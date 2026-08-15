@@ -11,7 +11,8 @@
 			"Extension": {
 				"Class": "Maho::FPlatformSystem",
 				"Header": "Platform.h",
-				"Priority": "System"
+				"Priority": "System",
+				"Stage": "EEngineStage"
 			}
 		}
 	]

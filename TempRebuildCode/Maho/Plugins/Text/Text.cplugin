@@ -1,0 +1,19 @@
+{
+	"FileVersion": 1,
+	"FriendlyName": "Text",
+	"Description": "Text / UTF-8 encoding extension.",
+	"Category": "Engine",
+	"EnabledByDefault": true,
+	"Modules": [
+		{
+			"Name": "Text",
+			"Type": "Runtime",
+			"Extension": {
+				"Class": "Maho::FText",
+				"Header": "Text.h",
+				"Priority": "System",
+				"Stage": "ESingletonStage"
+			}
+		}
+	]
+}

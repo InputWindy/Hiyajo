@@ -4,15 +4,38 @@
 
 ## 插件清单
 
-| 插件 | 扩展类 | 说明 | 状态 |
-|------|--------|------|------|
-| [Platform](Platform/Platform.cplugin) | `Maho::FPlatformSystem` | OS 窗口 + 输入（GLFW） | 脚手架 |
-| [Render](Render/Render.cplugin) | `Maho::FRenderSystem` | Render/RHI/RDG/Shader/UI | 脚手架 |
-| [Resource](Resource/Resource.cplugin) | `Maho::FResourceSystem` | 异步资源系统 + 包 IO | 脚手架 |
-| [Script](Script/Script.cplugin) | `Maho::FScriptSystem` | Lua 脚本 VM（sol2 + Lua） | 脚手架 |
-| [World](World/World.cplugin) | `Maho::FInitializationSystemGroup` | DOTS 风格 ECS world / system-group | 脚手架 |
+### Singleton（ESingletonStage，预 app 单例）
 
-> 状态"脚手架"= 目录结构 + `.cplugin` + `.cmake` 已就位，源码未实现。
+| 插件 | 扩展类 | 说明 |
+|------|--------|------|
+| [Log](Log/Log.cplugin) | `Maho::FLogger` | 日志（spdlog） |
+| [Timer](Timer/Timer.cplugin) | `Maho::FTimer` | 时钟（chrono） |
+| [Config](Config/Config.cplugin) | `Maho::FConfig` | 配置（JSON） |
+| [Paths](Paths/Paths.cplugin) | `Maho::FPaths` | 路径解析（项目/引擎根） |
+| [Json](Json/Json.cplugin) | `Maho::FJson` | JSON 序列化（nlohmann/json） |
+| [ConsoleVariable](ConsoleVariable/ConsoleVariable.cplugin) | `Maho::FConsoleVariable` | 控制台变量注册表 |
+| [Compress](Compress/Compress.cplugin) | `Maho::FCompress` | 压缩（zlib/zstd） |
+| [Archive](Archive/Archive.cplugin) | `Maho::FArchive` | 序列化归档 |
+| [Text](Text/Text.cplugin) | `Maho::FText` | 文本 / UTF-8 编码 |
+| [Physics](Physics/Physics.cplugin) | `Maho::FPhysics` | 物理模拟库（刚体 solver） |
+| [Audio](Audio/Audio.cplugin) | `Maho::FAudio` | 音频播放库（设备 + 音源） |
+| [Math](Math/Math.cplugin) | `Maho::FMath` | 数学库（GLM + 数学辅助） |
+
+### Engine（EEngineStage，引擎扩展）
+
+| 插件 | 扩展类 | 说明 |
+|------|--------|------|
+| [Platform](Platform/Platform.cplugin) | `Maho::FPlatformSystem` | OS 窗口 + 输入（GLFW） |
+| [RHI](RHI/RHI.cplugin) | `Maho::FRHI` | 渲染硬件接口（GPU 设备） |
+| [Render](Render/Render.cplugin) | `Maho::FRenderSystem` | Render/RHI/RDG/Shader/UI |
+| [Resource](Resource/Resource.cplugin) | `Maho::FResourceSystem` | 异步资源系统 + 包 IO |
+| [Script](Script/Script.cplugin) | `Maho::FScriptSystem` | Lua 脚本 VM（sol2 + Lua） |
+| [World](World/World.cplugin) | `Maho::FInitializationSystemGroup` | DOTS 风格 ECS world / system-group |
+| [Exception](Exception/Exception.cplugin) | `Maho::FException` | 异常处理（非致命异常事件） |
+| [Network](Network/Network.cplugin) | `Maho::FNetworkSystem` | 网络通信（客户端 / 服务器） |
+| [Editor](Editor/Editor.cplugin) | `Maho::FEditorSystem` | 编辑器工具（ImGui 编辑器 UI） |
+
+> 状态：全部脚手架——目录结构 + `.cplugin` + `.cmake` 已就位，源码未实现。
 
 ## 目录结构
 
@@ -61,7 +84,8 @@
 | `Modules[].Dependencies` | 依赖的其他插件模块 |
 | `Modules[].Extension.Class` | 扩展类（`TExtension` 子类） |
 | `Modules[].Extension.Header` | 扩展类所在头（聚合头内 include） |
-| `Modules[].Extension.Priority` | 优先级（System / Feature 等） |
+| `Modules[].Extension.Priority` | 优先级（System / Layer / Overlay） |
+| `Modules[].Extension.Stage` | 装配目标注册表：`ESingletonStage`（预 app 单例）或 `EEngineStage`（引擎） |
 
 code-gen 汇总所有启用的插件，把 `Extension.Class` 塞进项目引擎的 `FExtensions<...>` 继承列表（见 [../Source/Public/Maho.md](../Source/Public/Maho.md) 装配方式）。
 

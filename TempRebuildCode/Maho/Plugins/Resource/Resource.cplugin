@@ -11,7 +11,8 @@
 			"Extension": {
 				"Class": "Maho::FResourceSystem",
 				"Header": "ResourceSystem.h",
-				"Priority": "System"
+				"Priority": "System",
+				"Stage": "EEngineStage"
 			}
 		}
 	]

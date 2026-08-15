@@ -1,0 +1,19 @@
+{
+	"FileVersion": 1,
+	"FriendlyName": "ConsoleVariable",
+	"Description": "Console variable registry extension.",
+	"Category": "Engine",
+	"EnabledByDefault": true,
+	"Modules": [
+		{
+			"Name": "ConsoleVariable",
+			"Type": "Runtime",
+			"Extension": {
+				"Class": "Maho::FConsoleVariable",
+				"Header": "ConsoleVariable.h",
+				"Priority": "System",
+				"Stage": "ESingletonStage"
+			}
+		}
+	]
+}

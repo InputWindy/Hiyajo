@@ -1,0 +1,19 @@
+{
+	"FileVersion": 1,
+	"FriendlyName": "Network",
+	"Description": "Network communication extension (client/server).",
+	"Category": "Engine",
+	"EnabledByDefault": true,
+	"Modules": [
+		{
+			"Name": "Network",
+			"Type": "Runtime",
+			"Extension": {
+				"Class": "Maho::FNetworkSystem",
+				"Header": "Network.h",
+				"Priority": "System",
+				"Stage": "EEngineStage"
+			}
+		}
+	]
+}

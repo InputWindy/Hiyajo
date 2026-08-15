@@ -1,0 +1,19 @@
+{
+	"FileVersion": 1,
+	"FriendlyName": "Json",
+	"Description": "JSON serialization extension (nlohmann/json).",
+	"Category": "Engine",
+	"EnabledByDefault": true,
+	"Modules": [
+		{
+			"Name": "Json",
+			"Type": "Runtime",
+			"Extension": {
+				"Class": "Maho::FJson",
+				"Header": "Json.h",
+				"Priority": "System",
+				"Stage": "ESingletonStage"
+			}
+		}
+	]
+}

@@ -1,0 +1,19 @@
+{
+	"FileVersion": 1,
+	"FriendlyName": "Editor",
+	"Description": "Editor tooling extension (ImGui editor UI).",
+	"Category": "Editor",
+	"EnabledByDefault": true,
+	"Modules": [
+		{
+			"Name": "Editor",
+			"Type": "Editor",
+			"Extension": {
+				"Class": "Maho::FEditorSystem",
+				"Header": "Editor.h",
+				"Priority": "Overlay",
+				"Stage": "EEngineStage"
+			}
+		}
+	]
+}

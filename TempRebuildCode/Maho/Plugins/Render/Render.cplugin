@@ -12,7 +12,8 @@
 			"Extension": {
 				"Class": "Maho::FRenderSystem",
 				"Header": "RenderSystem.h",
-				"Priority": "System"
+				"Priority": "System",
+				"Stage": "EEngineStage"
 			}
 		}
 	]

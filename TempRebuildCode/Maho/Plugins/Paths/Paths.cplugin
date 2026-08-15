@@ -1,0 +1,19 @@
+{
+	"FileVersion": 1,
+	"FriendlyName": "Paths",
+	"Description": "Path resolution extension (project/engine roots).",
+	"Category": "Engine",
+	"EnabledByDefault": true,
+	"Modules": [
+		{
+			"Name": "Paths",
+			"Type": "Runtime",
+			"Extension": {
+				"Class": "Maho::FPaths",
+				"Header": "Paths.h",
+				"Priority": "System",
+				"Stage": "ESingletonStage"
+			}
+		}
+	]
+}
