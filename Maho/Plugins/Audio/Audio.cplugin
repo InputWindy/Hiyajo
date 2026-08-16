@@ -1,0 +1,19 @@
+{
+	"FileVersion": 1,
+	"FriendlyName": "Audio",
+	"Description": "Audio playback library extension (device + sources).",
+	"Category": "Engine",
+	"EnabledByDefault": true,
+	"Modules": [
+		{
+			"Name": "Audio",
+			"Type": "Runtime",
+			"Extension": {
+				"Class": "Maho::Audio::FAudio",
+				"Header": "Audio.h",
+				"Priority": "System",
+				"Stage": "EToolStage"
+			}
+		}
+	]
+}

@@ -1,0 +1,20 @@
+{
+	"FileVersion": 1,
+	"FriendlyName": "Render",
+	"Description": "Render/RHI/RDG/Shader/UI extension.",
+	"Category": "Engine",
+	"EnabledByDefault": true,
+	"Modules": [
+		{
+			"Name": "Render",
+			"Type": "Runtime",
+			"Dependencies": ["Platform"],
+			"Extension": {
+				"Class": "Maho::Render::FRenderSystem",
+				"Header": "RenderSystem.h",
+				"Priority": "System",
+				"Stage": "EEngineStage"
+			}
+		}
+	]
+}

@@ -1,0 +1,50 @@
+#include <Maho.h>
+
+#define MAHO_CLI_ENTRY 1
+#include <{{ENTRY_POINT_INCLUDE}}>
+
+{{PLUGIN_INCLUDES}}
+
+// Code-gen: toolkit extension list filled from the .cproject plugin config.
+using FEnabledToolExtensions = {{TOOL_EXTENSIONS}};
+
+/**
+ * CLI application — serial toolkit, runs once, then exits. No engine loop.
+ */
+class {{TOOLKIT_CLASS}} final
+	: public Maho::FToolkitBase
+	, public FEnabledToolExtensions
+{
+public:
+	{{TOOLKIT_CLASS}}(int Argc, char** Argv)
+	{
+		ParseCommandLine(Argc, Argv);
+		Init();
+	}
+
+	~{{TOOLKIT_CLASS}}() override
+	{
+		Shutdown();
+	}
+
+protected:
+	void ParseCommandLine(int Argc, char** Argv) override
+	{
+{{PARSE_COMMAND_LINE}}
+	}
+
+	void Init() override
+	{
+		Execute<Maho::EToolStage::Init, FList>();
+	}
+
+	void Shutdown() override
+	{
+		Execute<Maho::EToolStage::Shutdown, FList, Maho::FReverseTopology>();
+	}
+};
+
+Maho::FToolkitBase* Maho::CreateToolkit(int Argc, char** Argv)
+{
+	return new {{TOOLKIT_CLASS}}(Argc, Argv);
+}

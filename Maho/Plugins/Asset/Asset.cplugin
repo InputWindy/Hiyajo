@@ -1,0 +1,20 @@
+{
+	"FileVersion": 1,
+	"FriendlyName": "Asset",
+	"Description": "Asset path + registry (logical path → physical file + type).",
+	"Category": "Engine",
+	"EnabledByDefault": true,
+	"Modules": [
+			{
+				"Name": "Asset",
+				"Type": "Runtime",
+				"Dependencies": ["Paths"],
+				"Extension": {
+				"Class": "Maho::Asset::FAssetRegistry",
+				"Header": "Asset.h",
+				"Priority": "System",
+				"Stage": "EToolStage"
+			}
+		}
+	]
+}

@@ -1,0 +1,19 @@
+{
+	"FileVersion": 1,
+	"FriendlyName": "Log",
+	"Description": "Logging extension (spdlog).",
+	"Category": "Engine",
+	"EnabledByDefault": true,
+	"Modules": [
+		{
+			"Name": "Log",
+			"Type": "Runtime",
+			"Extension": {
+				"Class": "Maho::Log::FLogger",
+				"Header": "Log.h",
+				"Priority": "System",
+				"Stage": "EToolStage"
+			}
+		}
+	]
+}
