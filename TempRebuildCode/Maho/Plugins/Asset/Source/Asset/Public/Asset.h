@@ -1,6 +1,7 @@
 #pragma once
 
 #include "AssetApi.h"
+#include "Asset.gen.h"
 #include <Engine.h>
 
 #include <cstdint>
@@ -61,7 +62,9 @@ struct FAssetData
  * and indexes every asset file; Find() resolves a logical path.
  * Pre-app toolkit (driven by EToolStage).
  */
-class MAHO_ASSET_API FAssetRegistry final : public TExtension<EToolStage, FAssetRegistry>
+class MAHO_ASSET_API FAssetRegistry final
+	: public TExtension<EToolStage, FAssetRegistry>
+	, public FAssetRegistryDependencies
 {
 public:
 	[[nodiscard]] bool ExecuteStage(EToolStage Stage) override;

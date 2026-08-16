@@ -348,6 +348,77 @@ def _write_game_app(project_dir: Path, mapping: dict[str, str], app_type: str) -
 	return dst
 
 
+def codegen_plugin_dependencies(engine_root: Path) -> list[Path]:
+	"""
+	Regenerate <Name>.gen.h for every plugin that has .cplugin Dependencies.
+	The generated header declares FDependsPack (scheduler-level) mirroring the
+	build-level Dependencies list; plugin classes inherit the generated struct.
+	"""
+	plugins_dir = (engine_root / "Maho" / "Plugins").resolve()
+	if not plugins_dir.is_dir():
+		return []
+
+	meta: dict[str, dict[str, str]] = {}
+	has_source: dict[str, bool] = {}
+	for cplugin_path in discover_cplugin_files([plugins_dir]):
+		data = read_cplugin(cplugin_path)
+		name = cplugin_path.parent.name
+		mod = data.get("Modules", [{}])[0]
+		ext = mod.get("Extension") or {}
+		meta[name] = {
+			"Class": ext.get("Class", ""),
+			"Stage": ext.get("Stage", "EEngineStage"),
+		}
+		public_dir = plugins_dir / name / "Source" / name / "Public"
+		has_source[name] = public_dir.is_dir() and any(p.suffix == ".h" for p in public_dir.glob("*.h"))
+
+	generated: list[Path] = []
+	for name, info in meta.items():
+		if not has_source[name]:
+			continue   # empty scaffolding — no class to attach deps to
+
+		cplugin_path = plugins_dir / name / f"{name}.cplugin"
+		deps = (read_cplugin(cplugin_path).get("Modules", [{}])[0]).get("Dependencies", [])
+		if not deps:
+			continue
+
+		cls = info["Class"]
+		class_short = cls.split("::")[-1]
+		ns_parts = cls.split("::")[:-1]
+		stage = info["Stage"]
+
+		dep_classes = [meta[d]["Class"] for d in deps if d in meta and has_source[d]]
+		if not dep_classes:
+			continue
+
+		dep_list = ",\n".join(f"\t\t\t{dc}" for dc in dep_classes)
+		opens = "\n".join(f"namespace {p}\n{{" for p in ns_parts)
+		closes = "\n".join(f"}} // namespace {p}" for p in reversed(ns_parts))
+
+		text = (
+			f"// Generated from {name}.cplugin Dependencies — do not edit by hand.\n"
+			"#pragma once\n"
+			"#include <Engine.h>\n\n"
+			f"{opens}\n\n"
+			f"/** Scheduler-level dependency declaration, synced from .cplugin. */\n"
+			f"struct {class_short}Dependencies\n"
+			"{\n"
+			f"\tusing FDependsPack = TDependsPack<\n"
+			f"\t\tTDependsOn<{stage}::Init, TTypeList<\n"
+			f"{dep_list}\n"
+			"\t\t>>\n"
+			"\t>;\n"
+			"};\n\n"
+			f"{closes}\n"
+		)
+
+		out = plugins_dir / name / "Source" / name / "Public" / f"{name}.gen.h"
+		out.write_text(text, encoding="utf-8", newline="\n")
+		generated.append(out)
+
+	return generated
+
+
 def codegen_game_app(cproject_path: Path) -> Path:
 	"""
 	Regenerate Source/GameApp.cpp from the .cproject's current plugin selection.
@@ -720,6 +791,9 @@ def generate_from_cproject(
 	# Regenerate GameApp.cpp from the .cproject's current plugin selection.
 	game_app = codegen_game_app(cproject_path)
 	log(f"[Maho] GameApp : {game_app.relative_to(project_dir)}")
+
+	# Sync .cplugin Dependencies → <Name>.gen.h (scheduler-level FDependsPack).
+	codegen_plugin_dependencies(engine_root)
 
 	lock = _GenerateLock(intermediate)
 	lock.acquire()

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "TextApi.h"
+#include "Text.gen.h"
 #include <Engine.h>
 
 #include <mutex>
@@ -63,7 +64,9 @@ private:
 };
 
 /** Localization manager: current culture + translation catalog (pre-app singleton). */
-class MAHO_TEXT_API FTextManager final : public TExtension<EToolStage, FTextManager>
+class MAHO_TEXT_API FTextManager final
+	: public TExtension<EToolStage, FTextManager>
+	, public FTextManagerDependencies
 {
 public:
 	[[nodiscard]] bool ExecuteStage(EToolStage Stage) override;
