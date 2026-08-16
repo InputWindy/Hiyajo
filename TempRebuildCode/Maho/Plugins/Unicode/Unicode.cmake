@@ -10,6 +10,7 @@ if(NOT TARGET utf8cpp)
 		GIT_REPOSITORY ${_UTF8CPP_URL}
 		GIT_TAG v4.0.6
 		GIT_SHALLOW TRUE
+		GIT_PROGRESS TRUE
 	)
 	maho_fetchcontent_populate_or_reuse(utfcpp source/utf8.h)
 	add_subdirectory(${utfcpp_SOURCE_DIR} ${utfcpp_BINARY_DIR})

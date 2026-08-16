@@ -16,6 +16,7 @@ if(NOT TARGET spdlog::spdlog_header_only)
 		GIT_REPOSITORY ${_SPDLOG_URL}
 		GIT_TAG v1.15.3
 		GIT_SHALLOW TRUE
+		GIT_PROGRESS TRUE
 	)
 	maho_fetchcontent_populate_or_reuse(spdlog include/spdlog/spdlog.h)
 	add_subdirectory(${spdlog_SOURCE_DIR} ${spdlog_BINARY_DIR})

@@ -13,6 +13,7 @@ if(NOT TARGET nlohmann_json::nlohmann_json)
 		GIT_REPOSITORY ${_NLJSON_URL}
 		GIT_TAG v3.11.3
 		GIT_SHALLOW TRUE
+		GIT_PROGRESS TRUE
 	)
 	maho_fetchcontent_populate_or_reuse(nlohmann_json single_include/nlohmann/json.hpp)
 	add_subdirectory(${nlohmann_json_SOURCE_DIR} ${nlohmann_json_BINARY_DIR})

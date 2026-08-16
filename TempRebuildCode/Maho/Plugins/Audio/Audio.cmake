@@ -10,6 +10,7 @@ if(NOT DEFINED miniaudio_SOURCE_DIR)
 		GIT_REPOSITORY ${_MINIAUDIO_URL}
 		GIT_TAG 0.11.22
 		GIT_SHALLOW TRUE
+		GIT_PROGRESS TRUE
 	)
 	maho_fetchcontent_populate_or_reuse(miniaudio miniaudio.h)
 endif()

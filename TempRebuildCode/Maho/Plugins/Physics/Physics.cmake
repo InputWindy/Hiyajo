@@ -10,6 +10,7 @@ if(NOT TARGET Jolt)
 		GIT_REPOSITORY ${_JOLT_URL}
 		GIT_TAG v5.4.0
 		GIT_SHALLOW TRUE
+		GIT_PROGRESS TRUE
 	)
 	maho_fetchcontent_populate_or_reuse(JoltPhysics Jolt/Jolt.h)
 	add_subdirectory(${JoltPhysics_SOURCE_DIR}/Build ${JoltPhysics_BINARY_DIR})

@@ -1,5 +1,5 @@
 {
 	"mirrors": {
-		"gabime_spdlog": ""
+		"gabime_spdlog": "https://gitee.com/mirrors/spdlog.git"
 	}
 }

@@ -1,5 +1,5 @@
 {
 	"mirrors": {
-		"nlohmann_json": ""
+		"nlohmann_json": "https://gitee.com/mirrors/nlohmann-json.git"
 	}
 }

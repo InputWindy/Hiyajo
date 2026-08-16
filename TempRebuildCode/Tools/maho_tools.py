@@ -161,13 +161,25 @@ def run_command(
 
 	assert proc.stdout is not None
 	try:
-		for line in proc.stdout:
+		# Read in chunks and treat \r and \n as line terminators — git's clone
+		# progress ("Receiving objects: 45%") uses \r updates, which a plain
+		# `for line in proc.stdout` would buffer until the very end.
+		buf = ""
+		while True:
+			chunk = proc.stdout.read(4096)
+			if not chunk:
+				break
 			if cancel_event is not None and cancel_event.is_set():
 				_kill_process(proc)
 				raise OperationCancelled("Cancelled")
-			text = line.rstrip("\r\n")
-			if text:
-				log(text)
+			buf += chunk
+			parts = buf.replace("\r\n", "\n").replace("\r", "\n").split("\n")
+			buf = parts[-1]
+			for part in parts[:-1]:
+				if part:
+					log(part)
+		if buf:
+			log(buf)
 		rc = proc.wait()
 		if cancel_event is not None and cancel_event.is_set():
 			raise OperationCancelled("Cancelled")

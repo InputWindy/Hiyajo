@@ -10,6 +10,7 @@ if(NOT TARGET libzstd_static)
 		GIT_REPOSITORY ${_ZSTD_URL}
 		GIT_TAG v1.5.6
 		GIT_SHALLOW TRUE
+		GIT_PROGRESS TRUE
 	)
 	maho_fetchcontent_populate_or_reuse(zstd lib/zstd.h)
 	add_subdirectory(${zstd_SOURCE_DIR}/build/cmake ${zstd_BINARY_DIR})
@@ -22,6 +23,7 @@ if(NOT TARGET zlib)
 		GIT_REPOSITORY ${_ZLIB_URL}
 		GIT_TAG v1.3.1
 		GIT_SHALLOW TRUE
+		GIT_PROGRESS TRUE
 	)
 	maho_fetchcontent_populate_or_reuse(zlib zlib.h)
 	add_subdirectory(${zlib_SOURCE_DIR} ${zlib_BINARY_DIR})

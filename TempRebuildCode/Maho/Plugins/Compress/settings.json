@@ -1,6 +1,6 @@
 {
 	"mirrors": {
-		"facebook_zstd": "",
-		"madler_zlib": ""
+		"facebook_zstd": "https://gitee.com/mirrors/facebook-zstd.git",
+		"madler_zlib": "https://gitee.com/mirrors/zlib.git"
 	}
 }
