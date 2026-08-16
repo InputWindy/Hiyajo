@@ -11,3 +11,24 @@ bool FMath::ExecuteStage(EToolStage Stage)
 }
 
 } // namespace Maho::Math
+
+// ── Dynamic plugin entry (runtime load/unload via FPluginManager) ──
+
+namespace
+{
+
+class FMathAdapter final : public Maho::IExtension<Maho::EToolStage>
+{
+public:
+	[[nodiscard]] bool ExecuteStage(Maho::EToolStage Stage) override
+	{
+		return Maho::Math::FMath::Get().ExecuteStage(Stage);
+	}
+};
+
+} // namespace
+
+extern "C" MAHO_MATH_API Maho::IExtension<Maho::EToolStage>* CreateExtension()
+{
+	return new FMathAdapter();
+}

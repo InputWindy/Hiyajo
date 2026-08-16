@@ -92,3 +92,24 @@ const std::string* FTextManager::FindTranslation(std::string_view InNamespace, s
 }
 
 } // namespace Maho::Text
+
+// ── Dynamic plugin entry (runtime load/unload via FPluginManager) ──
+
+namespace
+{
+
+class FTextManagerAdapter final : public Maho::IExtension<Maho::EToolStage>
+{
+public:
+	[[nodiscard]] bool ExecuteStage(Maho::EToolStage Stage) override
+	{
+		return Maho::Text::FTextManager::Get().ExecuteStage(Stage);
+	}
+};
+
+} // namespace
+
+extern "C" MAHO_TEXT_API Maho::IExtension<Maho::EToolStage>* CreateExtension()
+{
+	return new FTextManagerAdapter();
+}

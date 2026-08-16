@@ -70,3 +70,24 @@ FName FNamePool::Intern(std::string_view Str)
 }
 
 } // namespace Maho::Name
+
+// ── Dynamic plugin entry (runtime load/unload via FPluginManager) ──
+
+namespace
+{
+
+class FNamePoolAdapter final : public Maho::IExtension<Maho::EToolStage>
+{
+public:
+	[[nodiscard]] bool ExecuteStage(Maho::EToolStage Stage) override
+	{
+		return Maho::Name::FNamePool::Get().ExecuteStage(Stage);
+	}
+};
+
+} // namespace
+
+extern "C" MAHO_NAME_API Maho::IExtension<Maho::EToolStage>* CreateExtension()
+{
+	return new FNamePoolAdapter();
+}

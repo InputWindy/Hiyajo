@@ -11,3 +11,24 @@ bool FAudio::ExecuteStage(EToolStage Stage)
 }
 
 } // namespace Maho::Audio
+
+// ── Dynamic plugin entry (runtime load/unload via FPluginManager) ──
+
+namespace
+{
+
+class FAudioAdapter final : public Maho::IExtension<Maho::EToolStage>
+{
+public:
+	[[nodiscard]] bool ExecuteStage(Maho::EToolStage Stage) override
+	{
+		return Maho::Audio::FAudio::Get().ExecuteStage(Stage);
+	}
+};
+
+} // namespace
+
+extern "C" MAHO_AUDIO_API Maho::IExtension<Maho::EToolStage>* CreateExtension()
+{
+	return new FAudioAdapter();
+}

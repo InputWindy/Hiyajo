@@ -15,6 +15,7 @@ from typing import Any
 # Tools/maho_tools.py → repo root is parent of Tools/
 ENGINE_ROOT = Path(__file__).resolve().parents[1]
 TEMPLATE_DIR = ENGINE_ROOT / "Build" / "Templates" / "GameProject"
+PLUGIN_TEMPLATE_DIR = ENGINE_ROOT / "Build" / "Templates" / "Plugin"
 CPROJECT_VERSION = 1
 ENGINE_PYTHON_DIR = (ENGINE_ROOT / "Tools" / "python").resolve()
 
@@ -433,6 +434,90 @@ def create_project(
 	cproject_path = project_dir / f"{project_name}.cproject"
 	write_cproject(cproject_path, cproject)
 	return cproject_path
+
+
+def create_plugin(
+	plugin_name: str,
+	engine_root: Path,
+	description: str = "",
+	stage: str = "EEngineStage",
+) -> Path:
+	"""
+	Scaffold a new engine plugin under Maho/Plugins/<Name> from the Plugin
+	template. EEngineStage plugins get the dynamic factory (CreateExtension)
+	exported automatically; EToolStage plugins do not.
+	"""
+	if not is_valid_project_name(plugin_name):
+		raise ValueError(
+			"Plugin name must start with a letter and contain only A-Z, a-z, 0-9, _, -"
+		)
+
+	plugins_dir = (engine_root / "Maho" / "Plugins").resolve()
+	dst = plugins_dir / plugin_name
+	if dst.exists():
+		raise FileExistsError(f"Plugin already exists: {dst}")
+
+	if stage not in ("EEngineStage", "EToolStage"):
+		raise ValueError("stage must be EEngineStage or EToolStage")
+
+	class_name = f"F{plugin_name}"
+	export_name = plugin_name.upper()
+	stage_label = (
+		"engine extension (driven by EEngineStage)"
+		if stage == "EEngineStage"
+		else "pre-app toolkit (driven by EToolStage)"
+	)
+
+	# Dynamic factory — exported via the plugin's API macro. The signature is
+	# stage-parameterized: IExtension<EEngineStage> or IExtension<EToolStage>.
+	factory_block = (
+		"\n"
+		"// ── Dynamic plugin entry (runtime load/unload via FPluginManager) ──\n"
+		"\n"
+		"namespace\n"
+		"{\n"
+		"\n"
+		f"class {class_name}Adapter final : public Maho::IExtension<Maho::{stage}>\n"
+		"{\n"
+		"public:\n"
+		f"\t[[nodiscard]] bool ExecuteStage(Maho::{stage} Stage) override\n"
+		"\t{\n"
+		f"\t\treturn Maho::{plugin_name}::{class_name}::Get().ExecuteStage(Stage);\n"
+		"\t}\n"
+		"};\n"
+		"\n"
+		"} // namespace\n"
+		"\n"
+		f'extern "C" MAHO_{export_name}_API Maho::IExtension<Maho::{stage}>* CreateExtension()\n'
+		"{\n"
+		f"\treturn new {class_name}Adapter();\n"
+		"}\n"
+	)
+
+	mapping = {
+		"NAME": plugin_name,
+		"NAMESPACE": plugin_name,
+		"CLASS": class_name,
+		"STAGE": stage,
+		"EXPORT_NAME": export_name,
+		"DESCRIPTION": description,
+		"STAGE_LABEL": stage_label,
+		"FACTORY_BLOCK": factory_block,
+	}
+
+	for src in PLUGIN_TEMPLATE_DIR.rglob("*"):
+		if src.is_dir():
+			continue
+		rel_parts = [render_template_text(part, mapping) for part in src.relative_to(PLUGIN_TEMPLATE_DIR).parts]
+		out = dst.joinpath(*rel_parts)
+		out.parent.mkdir(parents=True, exist_ok=True)
+		if src.name == ".gitkeep":
+			out.write_text("", encoding="utf-8", newline="\n")
+		else:
+			text = src.read_text(encoding="utf-8")
+			out.write_text(render_template_text(text, mapping), encoding="utf-8", newline="\n")
+
+	return dst
 
 
 def _rewrite_sln_paths(sln_text: str) -> str:

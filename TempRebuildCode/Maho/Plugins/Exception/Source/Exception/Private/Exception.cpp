@@ -11,3 +11,24 @@ bool FException::ExecuteStage(EEngineStage Stage)
 }
 
 } // namespace Maho::Exception
+
+// ── Dynamic plugin entry (runtime load/unload via FPluginManager) ──
+
+namespace
+{
+
+class FExceptionAdapter final : public Maho::IExtension<Maho::EEngineStage>
+{
+public:
+	[[nodiscard]] bool ExecuteStage(Maho::EEngineStage Stage) override
+	{
+		return Maho::Exception::FException::Get().ExecuteStage(Stage);
+	}
+};
+
+} // namespace
+
+extern "C" MAHO_EXCEPTION_API Maho::IExtension<Maho::EEngineStage>* CreateExtension()
+{
+	return new FExceptionAdapter();
+}

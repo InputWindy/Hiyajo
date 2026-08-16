@@ -35,27 +35,33 @@ public:
 };
 
 // ───────────────────────────────────────────────────────────────────────
+// Runtime extension interface: the non-template common base every extension
+// (static TExtension or dynamically-loaded plugin) implements. Stage-driven.
+// ───────────────────────────────────────────────────────────────────────
+
+template <typename TStage>
+class IExtension
+{
+public:
+	virtual ~IExtension() = default;
+
+	[[nodiscard]] virtual bool ExecuteStage(TStage Stage) = 0;
+};
+
+// ───────────────────────────────────────────────────────────────────────
 // Parallel extension base: one page of a group of same-tier features driven
-// by a stage enum (IEngineExtension / IRenderFeature, and the singleton
-// lifecycle above).
+// by a stage enum (IExtension / IRenderFeature, and the singleton lifecycle
+// above).
 // ───────────────────────────────────────────────────────────────────────
 
 template <typename TStage, typename TDerived>
-class TExtension : public TSingleton<TDerived>
+class TExtension : public TSingleton<TDerived>, public IExtension<TStage>
 {
 protected:
 	TExtension() = default;
 
 public:
 	virtual ~TExtension() = default;
-
-	TExtension(const TExtension&) = delete;
-	TExtension& operator=(const TExtension&) = delete;
-
-	using FStage = TStage;
-
-	/** Per-stage behavior, driven by TParallelScheduler in dependency order. */
-	[[nodiscard]] virtual bool ExecuteStage(TStage Stage) = 0;
 };
 
 // ───────────────────────────────────────────────────────────────────────

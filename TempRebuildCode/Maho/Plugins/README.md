@@ -37,6 +37,7 @@
 | [Exception](Exception/Exception.cplugin) | `Maho::FException` | 异常处理（非致命异常事件） |
 | [Network](Network/Network.cplugin) | `Maho::FNetworkSystem` | 网络通信（客户端 / 服务器） |
 | [Editor](Editor/Editor.cplugin) | `Maho::FEditorSystem` | 编辑器工具（ImGui 编辑器 UI） |
+| [PluginManager](PluginManager/PluginManager.cplugin) | `Maho::PluginManager::FPluginManager` | 运行时插件管理器（动态 DLL 装卸） |
 
 > 状态：全部脚手架——目录结构 + `.cplugin` + `.cmake` 已就位，源码未实现。
 

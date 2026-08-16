@@ -18,3 +18,24 @@ void ParseCommandLine(int Argc, char** Argv)
 }
 
 } // namespace Maho::CommandParser
+
+// ── Dynamic plugin entry (runtime load/unload via FPluginManager) ──
+
+namespace
+{
+
+class FCommandParserAdapter final : public Maho::IExtension<Maho::EToolStage>
+{
+public:
+	[[nodiscard]] bool ExecuteStage(Maho::EToolStage Stage) override
+	{
+		return Maho::CommandParser::FCommandParser::Get().ExecuteStage(Stage);
+	}
+};
+
+} // namespace
+
+extern "C" MAHO_COMMANDPARSER_API Maho::IExtension<Maho::EToolStage>* CreateExtension()
+{
+	return new FCommandParserAdapter();
+}
