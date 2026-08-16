@@ -10,6 +10,10 @@
 #include <mutex>
 #include <string>
 
+#if defined(_WIN32)
+#	include <Windows.h>
+#endif
+
 namespace Maho
 {
 
@@ -105,6 +109,13 @@ void InstallFatalHandlers()
 
 [[noreturn]] void ReportFatal(const char* Message)
 {
+#if defined(_WIN32)
+	// The console defaults to the OEM codepage (e.g. CP936 on Chinese Windows);
+	// switch it to UTF-8 so the UTF-8 fatal text renders correctly. No-op when
+	// no console is attached (GUI subsystem).
+	SetConsoleOutputCP(CP_UTF8);
+#endif
+
 	{
 		std::lock_guard<std::mutex> Lock(GFatalMutex);
 		if (bInsideReportFatal)
