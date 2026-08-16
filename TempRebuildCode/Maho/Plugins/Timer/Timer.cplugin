@@ -12,7 +12,7 @@
 				"Class": "Maho::Timer::FTimer",
 				"Header": "Timer.h",
 				"Priority": "System",
-				"Stage": "ESingletonStage"
+				"Stage": "EToolStage"
 			}
 		}
 	]

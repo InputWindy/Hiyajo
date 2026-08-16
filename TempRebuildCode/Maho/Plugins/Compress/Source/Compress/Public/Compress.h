@@ -9,11 +9,11 @@ namespace Maho
 namespace Compress
 {
 
-/** Compression extension (zlib/zstd). Pre-app singleton (driven by ESingletonStage). */
-class MAHO_COMPRESS_API FCompress final : public TExtension<ESingletonStage, FCompress>
+/** Compression extension (zlib/zstd). Pre-app toolkit (driven by EToolStage). */
+class MAHO_COMPRESS_API FCompress final : public TExtension<EToolStage, FCompress>
 {
 public:
-	[[nodiscard]] bool ExecuteStage(ESingletonStage Stage) override;
+	[[nodiscard]] bool ExecuteStage(EToolStage Stage) override;
 
 private:
 	friend TSingleton<FCompress>;

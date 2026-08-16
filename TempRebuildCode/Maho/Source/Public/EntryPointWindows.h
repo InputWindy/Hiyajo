@@ -3,9 +3,10 @@
 /**
  * Windows entry shim. Include in exactly one .cpp.
  *
- * WinMain for the GUI subsystem (no console box) + main for the console
- * subsystem. Both drive the same MahoMain — the "command line" vs "window"
- * split is a link-time subsystem choice, not a code difference.
+ * IDE: WinMain for the GUI subsystem (no console box) + main for the console
+ * subsystem — both drive MahoMain.
+ * CLI: define MAHO_CLI_ENTRY before including — only main, driving MahoCLIMain
+ * (console subsystem, no WinMain).
  */
 
 #include <EntryPoint.h>
@@ -14,6 +15,15 @@
 #	define NOMINMAX
 #endif
 #include <Windows.h>
+
+#if defined(MAHO_CLI_ENTRY)
+
+int main(int Argc, char** Argv)
+{
+	return MahoCLIMain(Argc, Argv);
+}
+
+#else
 
 int WINAPI WinMain(HINSTANCE /*Instance*/, HINSTANCE /*Prev*/, LPSTR /*CmdLine*/, int /*Show*/)
 {
@@ -27,3 +37,5 @@ int main(int Argc, char** Argv)
 {
 	return MahoMain(Argc, Argv);
 }
+
+#endif

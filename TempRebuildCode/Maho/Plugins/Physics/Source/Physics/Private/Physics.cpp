@@ -3,7 +3,7 @@
 namespace Maho::Physics
 {
 
-bool FPhysics::ExecuteStage(ESingletonStage Stage)
+bool FPhysics::ExecuteStage(EToolStage Stage)
 {
 	// TODO: Init = create solver world; Shutdown = destroy.
 	(void)Stage;

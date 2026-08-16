@@ -9,11 +9,11 @@ namespace Maho
 namespace Paths
 {
 
-/** Path resolution extension (project/engine roots). Pre-app singleton (driven by ESingletonStage). */
-class MAHO_PATHS_API FPaths final : public TExtension<ESingletonStage, FPaths>
+/** Path resolution extension (project/engine roots). Pre-app toolkit (driven by EToolStage). */
+class MAHO_PATHS_API FPaths final : public TExtension<EToolStage, FPaths>
 {
 public:
-	[[nodiscard]] bool ExecuteStage(ESingletonStage Stage) override;
+	[[nodiscard]] bool ExecuteStage(EToolStage Stage) override;
 
 private:
 	friend TSingleton<FPaths>;

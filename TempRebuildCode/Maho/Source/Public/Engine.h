@@ -7,8 +7,8 @@
 namespace Maho
 {
 
-/** Singleton lifecycle — modeled as a 2-value stage enum. */
-enum class ESingletonStage : std::uint8_t
+/** Toolkit lifecycle — a 2-value stage enum. */
+enum class EToolStage : std::uint8_t
 {
 	Init = 0,
 	Shutdown = 1,
@@ -28,16 +28,16 @@ enum class EEngineStage : std::uint8_t
 	PostShutdown
 };
 
-/** Pre-app singleton registry: serial drive (no thread pool). */
-class FSingletonRegistryBase : 
+/** Pre-app toolkit: serial drive (no thread pool, no loop). */
+class FToolkitBase : 
 	public ICommandLine,
-	public TSerialScheduler<ESingletonStage>
+	public TSerialScheduler<EToolStage>
 {
 protected:
-	FSingletonRegistryBase() = default;
+	FToolkitBase() = default;
 
 public:
-	virtual ~FSingletonRegistryBase() = default;
+	virtual ~FToolkitBase() = default;
 
 protected:
 	virtual void Init() = 0;

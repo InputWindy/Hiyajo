@@ -12,7 +12,7 @@
 				"Class": "Maho::Physics::FPhysics",
 				"Header": "Physics.h",
 				"Priority": "System",
-				"Stage": "ESingletonStage"
+				"Stage": "EToolStage"
 			}
 		}
 	]

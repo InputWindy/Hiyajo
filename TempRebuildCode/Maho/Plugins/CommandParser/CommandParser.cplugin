@@ -12,7 +12,7 @@
 				"Class": "Maho::CommandParser::FCommandParser",
 				"Header": "CommandParser.h",
 				"Priority": "System",
-				"Stage": "ESingletonStage"
+				"Stage": "EToolStage"
 			}
 		}
 	]

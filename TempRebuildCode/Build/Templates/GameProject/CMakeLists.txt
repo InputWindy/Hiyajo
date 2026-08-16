@@ -84,10 +84,16 @@ endif()
 maho_set_output_dirs({{PROJECT_NAME}})
 maho_source_group_mirrors("${GAME_SOURCE_DIR}" ${GAME_SOURCES})
 maho_add_lua_scripts({{PROJECT_NAME}} "${GAME_SCRIPTS_DIR}")
+# CLI = console subsystem (main); IDE = GUI subsystem (WinMain on Windows).
+if("{{APP_TYPE}}" STREQUAL "CLI")
+	set(_MAHO_WIN32_EXE FALSE)
+else()
+	set(_MAHO_WIN32_EXE $<BOOL:${WIN32}>)
+endif()
 set_target_properties({{PROJECT_NAME}} PROPERTIES
-	FOLDER "Games"
+	FOLDER "Project"
 	VS_DEBUGGER_WORKING_DIRECTORY "${GAME_ROOT}"
-	WIN32_EXECUTABLE $<BOOL:${WIN32}>
+	WIN32_EXECUTABLE ${_MAHO_WIN32_EXE}
 )
 add_dependencies({{PROJECT_NAME}} Maho MahoModules)
 

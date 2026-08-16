@@ -3,7 +3,7 @@
 namespace Maho::Paths
 {
 
-bool FPaths::ExecuteStage(ESingletonStage Stage)
+bool FPaths::ExecuteStage(EToolStage Stage)
 {
 	// TODO: Init = resolve project/engine roots; Shutdown = nothing.
 	(void)Stage;

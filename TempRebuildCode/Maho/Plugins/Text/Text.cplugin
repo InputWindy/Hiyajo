@@ -13,7 +13,7 @@
 					"Class": "Maho::Text::FTextManager",
 					"Header": "Text.h",
 					"Priority": "System",
-					"Stage": "ESingletonStage"
+					"Stage": "EToolStage"
 				}
 			}
 	]

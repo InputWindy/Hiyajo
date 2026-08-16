@@ -3,7 +3,7 @@
 namespace Maho::Json
 {
 
-bool FJson::ExecuteStage(ESingletonStage Stage)
+bool FJson::ExecuteStage(EToolStage Stage)
 {
 	// TODO: Init = nothing (header-only); Shutdown = nothing.
 	(void)Stage;

@@ -9,11 +9,11 @@ namespace Maho
 namespace Audio
 {
 
-/** Audio playback library extension (device + sources). Pre-app singleton (driven by ESingletonStage). */
-class MAHO_AUDIO_API FAudio final : public TExtension<ESingletonStage, FAudio>
+/** Audio playback library extension (device + sources). Pre-app toolkit (driven by EToolStage). */
+class MAHO_AUDIO_API FAudio final : public TExtension<EToolStage, FAudio>
 {
 public:
-	[[nodiscard]] bool ExecuteStage(ESingletonStage Stage) override;
+	[[nodiscard]] bool ExecuteStage(EToolStage Stage) override;
 
 private:
 	friend TSingleton<FAudio>;

@@ -36,17 +36,17 @@ std::string FText::Resolve() const
 	return Translated ? *Translated : Source;
 }
 
-bool FTextManager::ExecuteStage(ESingletonStage Stage)
+bool FTextManager::ExecuteStage(EToolStage Stage)
 {
 	std::lock_guard<std::mutex> Lock(Mutex);
 	switch (Stage)
 	{
-	case ESingletonStage::Init:
+	case EToolStage::Init:
 		Catalog.clear();
 		CurrentCulture = "en-US";
 		break;
 
-	case ESingletonStage::Shutdown:
+	case EToolStage::Shutdown:
 		Catalog.clear();
 		break;
 	}

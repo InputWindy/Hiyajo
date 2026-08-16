@@ -12,7 +12,7 @@
 				"Class": "Maho::Audio::FAudio",
 				"Header": "Audio.h",
 				"Priority": "System",
-				"Stage": "ESingletonStage"
+				"Stage": "EToolStage"
 			}
 		}
 	]

@@ -12,7 +12,7 @@
 				"Class": "Maho::Archive::FArchive",
 				"Header": "Archive.h",
 				"Priority": "System",
-				"Stage": "ESingletonStage"
+				"Stage": "EToolStage"
 			}
 		}
 	]

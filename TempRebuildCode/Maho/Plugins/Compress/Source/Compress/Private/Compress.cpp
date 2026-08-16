@@ -3,7 +3,7 @@
 namespace Maho::Compress
 {
 
-bool FCompress::ExecuteStage(ESingletonStage Stage)
+bool FCompress::ExecuteStage(EToolStage Stage)
 {
 	// TODO: Init = init codecs; Shutdown = release.
 	(void)Stage;

@@ -3,7 +3,7 @@
 namespace Maho::Timer
 {
 
-bool FTimer::ExecuteStage(ESingletonStage Stage)
+bool FTimer::ExecuteStage(EToolStage Stage)
 {
 	// TODO: Init = start steady clock; Shutdown = nothing.
 	(void)Stage;

@@ -63,10 +63,10 @@ private:
 };
 
 /** Localization manager: current culture + translation catalog (pre-app singleton). */
-class MAHO_TEXT_API FTextManager final : public TExtension<ESingletonStage, FTextManager>
+class MAHO_TEXT_API FTextManager final : public TExtension<EToolStage, FTextManager>
 {
 public:
-	[[nodiscard]] bool ExecuteStage(ESingletonStage Stage) override;
+	[[nodiscard]] bool ExecuteStage(EToolStage Stage) override;
 
 	[[nodiscard]] std::string_view GetCulture() const;
 	void SetCulture(std::string InCulture);

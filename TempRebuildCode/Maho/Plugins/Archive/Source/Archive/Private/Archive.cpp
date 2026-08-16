@@ -3,7 +3,7 @@
 namespace Maho::Archive
 {
 
-bool FArchive::ExecuteStage(ESingletonStage Stage)
+bool FArchive::ExecuteStage(EToolStage Stage)
 {
 	// TODO: Init = nothing; Shutdown = nothing.
 	(void)Stage;

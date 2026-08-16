@@ -9,11 +9,11 @@ namespace Maho
 namespace Config
 {
 
-/** Configuration file extension (JSON). Pre-app singleton (driven by ESingletonStage). */
-class MAHO_CONFIG_API FConfig final : public TExtension<ESingletonStage, FConfig>
+/** Configuration file extension (JSON). Pre-app toolkit (driven by EToolStage). */
+class MAHO_CONFIG_API FConfig final : public TExtension<EToolStage, FConfig>
 {
 public:
-	[[nodiscard]] bool ExecuteStage(ESingletonStage Stage) override;
+	[[nodiscard]] bool ExecuteStage(EToolStage Stage) override;
 
 private:
 	friend TSingleton<FConfig>;

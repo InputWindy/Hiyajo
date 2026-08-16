@@ -115,8 +115,8 @@
 <h2>Stage 枚举</h2>
 
 <section class="class-panel">
-	<h3 class="class-name">ESingletonStage<span class="class-kind">enum class</span></h3>
-	<p class="class-desc">单例生命周期（2 值），驱动 <code>FSingletonRegistryBase</code>（串行调度）。</p>
+	<h3 class="class-name">EToolStage<span class="class-kind">enum class</span></h3>
+	<p class="class-desc">单例生命周期（2 值），驱动 <code>FToolkitBase</code>（串行调度）。</p>
 	<h3 class="group">成员变量</h3>
 	<table class="api-table">
 		<tr><th style="width:46%">成员</th><th>说明</th></tr>
@@ -137,11 +137,11 @@
 	</table>
 </section>
 
-<!-- ============================ FSingletonRegistryBase ============================ -->
-<h2>FSingletonRegistryBase</h2>
+<!-- ============================ FToolkitBase ============================ -->
+<h2>FToolkitBase</h2>
 
 <section class="class-panel">
-	<h3 class="class-name">FSingletonRegistryBase<span class="class-kind">class</span></h3>
+	<h3 class="class-name">FToolkitBase<span class="class-kind">class</span></h3>
 	<p class="class-desc">
 		Pre-app 单例注册表：串行驱动（无线程池）。抽象基类——项目侧 code-gen 生成具体子类，
 		继承 <code>FExtensions&lt;...&gt;</code> 静态装配，并在派生构造/析构体里调 <code>Init</code>/<code>Shutdown</code>。
@@ -150,7 +150,7 @@
 	<table class="api-table">
 		<tr><th style="width:46%">签名</th><th>说明</th></tr>
 		<tr>
-			<td class="sig"><code><span class="kw">virtual</span> ~FSingletonRegistryBase()</code> <span class="badge badge-virtual">virtual</span></td>
+			<td class="sig"><code><span class="kw">virtual</span> ~FToolkitBase()</code> <span class="badge badge-virtual">virtual</span></td>
 			<td>虚析构（经基类指针安全删除）</td>
 		</tr>
 		<tr>
@@ -163,7 +163,7 @@
 		</tr>
 	</table>
 	<p class="class-desc">
-		基类继承 <code>TSerialScheduler&lt;ESingletonStage&gt;</code>（<code>Execute</code> 公开可调）。构造 <span class="badge badge-protected">protected</span>。
+		基类继承 <code>TSerialScheduler&lt;EToolStage&gt;</code>（<code>Execute</code> 公开可调）。构造 <span class="badge badge-protected">protected</span>。
 	</p>
 </section>
 
@@ -225,7 +225,7 @@
 	<table class="api-table">
 		<tr><th style="width:46%">签名</th><th>说明</th></tr>
 		<tr>
-			<td class="sig"><code><span class="type">FSingletonRegistryBase*</span> CreateSingletonRegistry(<span class="kw">int</span> Argc, <span class="kw">char**</span> Argv)</code></td>
+			<td class="sig"><code><span class="type">FToolkitBase*</span> CreateToolkit(<span class="kw">int</span> Argc, <span class="kw">char**</span> Argv)</code></td>
 			<td><code>new</code> 具体 registry 子类；entry point 用 unique_ptr 持有（RAII）</td>
 		</tr>
 		<tr>
@@ -237,7 +237,7 @@
 	<table class="api-table">
 		<tr><th style="width:46%">步骤</th><th>说明</th></tr>
 		<tr><td class="sig"><code>InstallFatalHandlers()</code></td><td>装 std::terminate 兜底（早于一切）</td></tr>
-		<tr><td class="sig"><code>unique_ptr&lt;FSingletonRegistryBase&gt;</code></td><td>ctor 跑 Init，dtor 跑 Shutdown</td></tr>
+		<tr><td class="sig"><code>unique_ptr&lt;FToolkitBase&gt;</code></td><td>ctor 跑 Init，dtor 跑 Shutdown</td></tr>
 		<tr><td class="sig"><code>CreateEngine(Argc, Argv) → MainLoop()</code></td><td>驱动引擎主循环</td></tr>
 		<tr><td class="sig"><code>try/catch → ReportFatal</code></td><td>逃逸异常兜底（stderr + Fatal.log + abort）</td></tr>
 	</table>

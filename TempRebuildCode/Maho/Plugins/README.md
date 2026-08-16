@@ -4,7 +4,7 @@
 
 ## 插件清单
 
-### Singleton（ESingletonStage，预 app 单例）
+### Tool（EToolStage，预 app 工具包）
 
 | 插件 | 扩展类 | 说明 |
 |------|--------|------|
@@ -88,7 +88,7 @@
 | `Modules[].Extension.Class` | 扩展类（`TExtension` 子类） |
 | `Modules[].Extension.Header` | 扩展类所在头（聚合头内 include） |
 | `Modules[].Extension.Priority` | 优先级（System / Layer / Overlay） |
-| `Modules[].Extension.Stage` | 装配目标注册表：`ESingletonStage`（预 app 单例）或 `EEngineStage`（引擎） |
+| `Modules[].Extension.Stage` | 装配目标：`EToolStage`（工具包）或 `EEngineStage`（引擎） |
 
 code-gen 汇总所有启用的插件，把 `Extension.Class` 塞进项目引擎的 `FExtensions<...>` 继承列表（见 [../Source/Public/Maho.md](../Source/Public/Maho.md) 装配方式）。
 

@@ -9,11 +9,11 @@ namespace Maho
 namespace Log
 {
 
-/** Logging extension (spdlog). Pre-app singleton (driven by ESingletonStage). */
-class MAHO_LOG_API FLogger final : public TExtension<ESingletonStage, FLogger>
+/** Logging extension (spdlog). Pre-app toolkit (driven by EToolStage). */
+class MAHO_LOG_API FLogger final : public TExtension<EToolStage, FLogger>
 {
 public:
-	[[nodiscard]] bool ExecuteStage(ESingletonStage Stage) override;
+	[[nodiscard]] bool ExecuteStage(EToolStage Stage) override;
 
 private:
 	friend TSingleton<FLogger>;

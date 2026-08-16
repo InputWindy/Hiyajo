@@ -1,26 +1,26 @@
 # Maho — 引擎核心
 
-引擎壳层：`FEngineBase` / `FSingletonRegistryBase` 消费 Core 的调度器 + 扩展体系，是 code-gen 装配的目标基类。聚合头 [Maho.h](Maho.h)。
+引擎壳层：`FEngineBase` / `FToolkitBase` 消费 Core 的调度器 + 扩展体系，是 code-gen 装配的目标基类。聚合头 [Maho.h](Maho.h)。
 
 ## 两个基类
 
 | 基类 | 调度器 | 用途 |
 |------|--------|------|
-| `FSingletonRegistryBase` | `TSerialScheduler<ESingletonStage>`（串行，无池） | Pre-app 单例注册表：`Init` / `Shutdown` |
+| `FToolkitBase` | `TSerialScheduler<EToolStage>`（串行，无池） | 预 app 工具包：`Init` / `Shutdown` |
 | `FEngineBase` | `TParallelScheduler<EEngineStage>`（并行，持池） | App 引擎：完整生命周期 + `MainLoop` |
 
 两者都是抽象基类（生命周期方法纯虚），项目侧 code-gen 生成具体子类并静态装配 `FExtensions`。
 
 ## Stage 枚举
 
-- `ESingletonStage`：`Init` → `Shutdown`（2 值）
+- `EToolStage`：`Init` → `Shutdown`（2 值）
 - `EEngineStage`：`PreInit → Init → PostInit → PreTick → Tick → PostTick → PreShutdown → Shutdown → PostShutdown`
 
 ## 生命周期
 
 ```mermaid
 flowchart TD
-    A["InstallFatalHandlers()"] --> B["CreateSingletonRegistry()"]
+    A["InstallFatalHandlers()"] --> B["CreateToolkit()"]
     B --> C["registry ctor 跑 Init"]
     C --> D["CreateEngine()"]
     D --> E["MainLoop()"]
@@ -48,7 +48,7 @@ code-gen 扫插件配置表（`.cplugin`），项目侧生成两个类，在**�
 
 ```cpp
 class FGameSingletonRegistry final
-	: public FSingletonRegistryBase
+	: public FToolkitBase
 	, public FExtensions<FLog, FTimer>
 {
 public:
@@ -56,8 +56,8 @@ public:
 	~FGameSingletonRegistry() override { Shutdown(); }
 
 protected:
-	void Init() override     { Execute<ESingletonStage::Init, FList>(); }
-	void Shutdown() override { Execute<ESingletonStage::Shutdown, FList, FReverseTopology>(); }
+	void Init() override     { Execute<EToolStage::Init, FList>(); }
+	void Shutdown() override { Execute<EToolStage::Shutdown, FList, FReverseTopology>(); }
 };
 
 class FGameEngine final
@@ -92,12 +92,12 @@ protected:
 流程（`MahoMain`）：
 
 1. `InstallFatalHandlers()`（装 `std::terminate` 兜底，早于一切）
-2. `CreateSingletonRegistry(Argc, Argv)` → `unique_ptr` RAII（ctor 跑 ParseCommandLine + Init，dtor 跑 Shutdown）
+2. `CreateToolkit(Argc, Argv)` → `unique_ptr` RAII（ctor 跑 ParseCommandLine + Init，dtor 跑 Shutdown）
 3. `CreateEngine(Argc, Argv)` → `IRunable*`（ctor 跑 ParseCommandLine）
 4. `App->MainLoop()` → `delete App`
 5. `try/catch` 兜底 → `ReportFatal`
 
-`CreateSingletonRegistry()` / `CreateEngine()` 是项目侧契约（code-gen 生成）。
+`CreateToolkit()` / `CreateEngine()` 是项目侧契约（code-gen 生成）。
 
 ## 相关文档
 

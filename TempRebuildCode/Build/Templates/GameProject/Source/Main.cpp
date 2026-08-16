@@ -4,25 +4,25 @@
 {{PLUGIN_INCLUDES}}
 
 // Code-gen: extension template lists filled from the .cproject plugin config.
-using FEnabledSingletonExtensions = {{SINGLETON_EXTENSIONS}};
+using FEnabledToolExtensions = {{TOOL_EXTENSIONS}};
 using FEnabledEngineExtensions = {{ENGINE_EXTENSIONS}};
 
 // ─────────────────────────────────────────────────────────────
-// Pre-app singleton registry (serial drive, ESingletonStage).
+// Pre-app toolkit (serial drive, EToolStage).
 // ctor: ParseCommandLine → Init; dtor: Shutdown.
 // ─────────────────────────────────────────────────────────────
-class {{REGISTRY_CLASS}} final
-	: public Maho::FSingletonRegistryBase
-	, public FEnabledSingletonExtensions
+class {{TOOLKIT_CLASS}} final
+	: public Maho::FToolkitBase
+	, public FEnabledToolExtensions
 {
 public:
-	{{REGISTRY_CLASS}}(int Argc, char** Argv)
+	{{TOOLKIT_CLASS}}(int Argc, char** Argv)
 	{
 		ParseCommandLine(Argc, Argv);
 		Init();
 	}
 
-	~{{REGISTRY_CLASS}}() override
+	~{{TOOLKIT_CLASS}}() override
 	{
 		Shutdown();
 	}
@@ -35,12 +35,12 @@ protected:
 
 	void Init() override
 	{
-		Execute<Maho::ESingletonStage::Init, FList>();
+		Execute<Maho::EToolStage::Init, FList>();
 	}
 
 	void Shutdown() override
 	{
-		Execute<Maho::ESingletonStage::Shutdown, FList, Maho::FReverseTopology>();
+		Execute<Maho::EToolStage::Shutdown, FList, Maho::FReverseTopology>();
 	}
 };
 
@@ -75,9 +75,9 @@ protected:
 	void PostShutdown() override { Execute<Maho::EEngineStage::PostShutdown, FList, Maho::FReverseTopology>(); }
 };
 
-Maho::FSingletonRegistryBase* Maho::CreateSingletonRegistry(int Argc, char** Argv)
+Maho::FToolkitBase* Maho::CreateToolkit(int Argc, char** Argv)
 {
-	return new {{REGISTRY_CLASS}}(Argc, Argv);
+	return new {{TOOLKIT_CLASS}}(Argc, Argv);
 }
 
 Maho::IRunable* Maho::CreateEngine(int Argc, char** Argv)

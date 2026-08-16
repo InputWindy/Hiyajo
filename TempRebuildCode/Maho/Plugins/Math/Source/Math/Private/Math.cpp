@@ -3,7 +3,7 @@
 namespace Maho::Math
 {
 
-bool FMath::ExecuteStage(ESingletonStage Stage)
+bool FMath::ExecuteStage(EToolStage Stage)
 {
 	// TODO: Init = nothing (header-only); Shutdown = nothing.
 	(void)Stage;

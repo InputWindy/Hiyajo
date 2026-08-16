@@ -12,7 +12,7 @@
 				"Class": "Maho::Compress::FCompress",
 				"Header": "Compress.h",
 				"Priority": "System",
-				"Stage": "ESingletonStage"
+				"Stage": "EToolStage"
 			}
 		}
 	]

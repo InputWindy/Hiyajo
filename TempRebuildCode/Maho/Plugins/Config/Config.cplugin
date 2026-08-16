@@ -12,7 +12,7 @@
 				"Class": "Maho::Config::FConfig",
 				"Header": "Config.h",
 				"Priority": "System",
-				"Stage": "ESingletonStage"
+				"Stage": "EToolStage"
 			}
 		}
 	]

@@ -78,11 +78,11 @@ MAHO_UNICODE_API void EnsureConsoleUtf8();
 
 // ── Extension (pre-app singleton; pure function library, no state) ──
 
-/** Text encoding extension (UTF-8/16/32 conversion). Pre-app singleton (driven by ESingletonStage). */
-class MAHO_UNICODE_API FUnicode final : public TExtension<ESingletonStage, FUnicode>
+/** Text encoding extension (UTF-8/16/32 conversion). Pre-app toolkit (driven by EToolStage). */
+class MAHO_UNICODE_API FUnicode final : public TExtension<EToolStage, FUnicode>
 {
 public:
-	[[nodiscard]] bool ExecuteStage(ESingletonStage Stage) override;
+	[[nodiscard]] bool ExecuteStage(EToolStage Stage) override;
 
 private:
 	friend TSingleton<FUnicode>;

@@ -25,18 +25,18 @@ std::string_view FName::ToString() const
 	return GPool[Id];
 }
 
-bool FNamePool::ExecuteStage(ESingletonStage Stage)
+bool FNamePool::ExecuteStage(EToolStage Stage)
 {
 	std::lock_guard<std::mutex> Lock(GPoolMutex);
 	switch (Stage)
 	{
-	case ESingletonStage::Init:
+	case EToolStage::Init:
 		GPool.clear();
 		GLookup.clear();
 		GPool.emplace_back();   // reserve index 0 = None (empty)
 		break;
 
-	case ESingletonStage::Shutdown:
+	case EToolStage::Shutdown:
 		GPool.clear();
 		GLookup.clear();
 		break;

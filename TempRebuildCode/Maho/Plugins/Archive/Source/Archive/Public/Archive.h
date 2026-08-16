@@ -9,11 +9,11 @@ namespace Maho
 namespace Archive
 {
 
-/** Serialization archive extension. Pre-app singleton (driven by ESingletonStage). */
-class MAHO_ARCHIVE_API FArchive final : public TExtension<ESingletonStage, FArchive>
+/** Serialization archive extension. Pre-app toolkit (driven by EToolStage). */
+class MAHO_ARCHIVE_API FArchive final : public TExtension<EToolStage, FArchive>
 {
 public:
-	[[nodiscard]] bool ExecuteStage(ESingletonStage Stage) override;
+	[[nodiscard]] bool ExecuteStage(EToolStage Stage) override;
 
 private:
 	friend TSingleton<FArchive>;

@@ -12,7 +12,7 @@
 				"Class": "Maho::Paths::FPaths",
 				"Header": "Paths.h",
 				"Priority": "System",
-				"Stage": "ESingletonStage"
+				"Stage": "EToolStage"
 			}
 		}
 	]

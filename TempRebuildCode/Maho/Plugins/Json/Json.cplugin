@@ -12,7 +12,7 @@
 				"Class": "Maho::Json::FJson",
 				"Header": "Json.h",
 				"Priority": "System",
-				"Stage": "ESingletonStage"
+				"Stage": "EToolStage"
 			}
 		}
 	]

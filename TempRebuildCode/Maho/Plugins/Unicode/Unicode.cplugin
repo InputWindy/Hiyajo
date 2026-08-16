@@ -12,7 +12,7 @@
 				"Class": "Maho::Unicode::FUnicode",
 				"Header": "Unicode.h",
 				"Priority": "System",
-				"Stage": "ESingletonStage"
+				"Stage": "EToolStage"
 			}
 		}
 	]

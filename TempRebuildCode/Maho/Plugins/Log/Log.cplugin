@@ -12,7 +12,7 @@
 				"Class": "Maho::Log::FLogger",
 				"Header": "Log.h",
 				"Priority": "System",
-				"Stage": "ESingletonStage"
+				"Stage": "EToolStage"
 			}
 		}
 	]

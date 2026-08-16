@@ -12,7 +12,7 @@
 				"Class": "Maho::Name::FNamePool",
 				"Header": "Name.h",
 				"Priority": "System",
-				"Stage": "ESingletonStage"
+				"Stage": "EToolStage"
 			}
 		}
 	]

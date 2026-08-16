@@ -83,4 +83,4 @@ public:
 - [Core.html](Core.html) — API 文档
 - [Async/Async.md](Async/Async.md) — 并行模型概念
 - [Async/Async.html](Async/Async.html) — 并行模型 API
-- [../Maho.md](../Maho.md) — 引擎核心（`FEngineBase` / `FSingletonRegistryBase` 消费本层）
+- [../Maho.md](../Maho.md) — 引擎核心（`FEngineBase` / `FToolkitBase` 消费本层）

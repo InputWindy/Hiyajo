@@ -3,7 +3,7 @@
 namespace Maho::ConsoleVariable
 {
 
-bool FConsoleVariable::ExecuteStage(ESingletonStage Stage)
+bool FConsoleVariable::ExecuteStage(EToolStage Stage)
 {
 	// TODO: Init = register builtin cvars; Shutdown = unregister.
 	(void)Stage;

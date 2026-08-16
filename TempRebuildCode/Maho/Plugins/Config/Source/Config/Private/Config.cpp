@@ -3,7 +3,7 @@
 namespace Maho::Config
 {
 
-bool FConfig::ExecuteStage(ESingletonStage Stage)
+bool FConfig::ExecuteStage(EToolStage Stage)
 {
 	// TODO: Init = load config; Shutdown = save if dirty.
 	(void)Stage;

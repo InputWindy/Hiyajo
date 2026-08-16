@@ -3,7 +3,7 @@
 namespace Maho::CommandParser
 {
 
-bool FCommandParser::ExecuteStage(ESingletonStage Stage)
+bool FCommandParser::ExecuteStage(EToolStage Stage)
 {
 	// TODO: Init = reset parsed store; Shutdown = nothing.
 	(void)Stage;

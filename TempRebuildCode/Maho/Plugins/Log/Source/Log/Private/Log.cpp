@@ -3,7 +3,7 @@
 namespace Maho::Log
 {
 
-bool FLogger::ExecuteStage(ESingletonStage Stage)
+bool FLogger::ExecuteStage(EToolStage Stage)
 {
 	// TODO: Init = init spdlog sinks; Shutdown = flush + drop.
 	(void)Stage;

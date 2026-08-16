@@ -12,7 +12,7 @@
 				"Class": "Maho::ConsoleVariable::FConsoleVariable",
 				"Header": "ConsoleVariable.h",
 				"Priority": "System",
-				"Stage": "ESingletonStage"
+				"Stage": "EToolStage"
 			}
 		}
 	]

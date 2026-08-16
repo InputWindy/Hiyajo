@@ -9,11 +9,11 @@ namespace Maho
 namespace CommandParser
 {
 
-/** Command-line argument parser extension (key-value store). Pre-app singleton (driven by ESingletonStage). */
-class MAHO_COMMANDPARSER_API FCommandParser final : public TExtension<ESingletonStage, FCommandParser>
+/** Command-line argument parser extension (key-value store). Pre-app toolkit (driven by EToolStage). */
+class MAHO_COMMANDPARSER_API FCommandParser final : public TExtension<EToolStage, FCommandParser>
 {
 public:
-	[[nodiscard]] bool ExecuteStage(ESingletonStage Stage) override;
+	[[nodiscard]] bool ExecuteStage(EToolStage Stage) override;
 
 private:
 	friend TSingleton<FCommandParser>;

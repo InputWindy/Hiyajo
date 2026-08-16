@@ -69,7 +69,7 @@ void EnsureConsoleUtf8()
 #endif
 }
 
-bool FUnicode::ExecuteStage(ESingletonStage Stage)
+bool FUnicode::ExecuteStage(EToolStage Stage)
 {
 	// Pure function library — no state.
 	(void)Stage;

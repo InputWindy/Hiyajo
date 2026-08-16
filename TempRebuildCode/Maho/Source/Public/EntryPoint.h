@@ -1,18 +1,16 @@
 #pragma once
 
 /**
- * Maho shared app driver (platform-agnostic).
+ * Maho shared app drivers (platform-agnostic).
  *
- * This header is included by one of the platform entry shims
- * (EntryPointDesktop / EntryPointAndroid / EntryPointIOS / EntryPointXbox),
- * which in turn is included in exactly one .cpp of the game project.
+ * MahoMain drives an IDE/engine app: install fatal handlers → create the
+ * toolkit (ctor: ParseCommandLine + Init) → create the engine (ctor:
+ * ParseCommandLine) → MainLoop → destroy.
  *
- * MahoMain drives the whole app: install fatal handlers → create the
- * singleton registry (ctor: ParseCommandLine + Init) → create the engine
- * (ctor: ParseCommandLine) → MainLoop → destroy. Anything that escapes
- * MainLoop funnels into ReportFatal (stderr + Saved/Logs/Fatal.log + abort).
+ * MahoCLIMain drives a CLI app: install fatal handlers → create the toolkit
+ * (ctor: ParseCommandLine + Init) → return → dtor runs Shutdown.
  *
- * The project defines CreateSingletonRegistry() and CreateEngine() (code-gen).
+ * Anything that escapes funnels into ReportFatal (stderr + Fatal.log + abort).
  */
 
 #include <Engine.h>
@@ -23,8 +21,8 @@
 namespace Maho
 {
 
-/** Project-defined: create the concrete singleton registry (owning raw pointer). */
-FSingletonRegistryBase* CreateSingletonRegistry(int Argc, char** Argv);
+/** Project-defined: create the concrete toolkit (owning raw pointer). */
+FToolkitBase* CreateToolkit(int Argc, char** Argv);
 
 /** Project-defined: create the concrete runnable engine (owning raw pointer). */
 IRunable* CreateEngine(int Argc, char** Argv);
@@ -34,7 +32,7 @@ IRunable* CreateEngine(int Argc, char** Argv);
 namespace
 {
 
-int MahoMain(int Argc, char** Argv)
+inline int MahoMain(int Argc, char** Argv)
 {
 	// Install fatal handlers before anything else (pre-scheduler).
 	Maho::InstallFatalHandlers();
@@ -43,10 +41,10 @@ int MahoMain(int Argc, char** Argv)
 	try
 	{
 		// RAII: registry ctor runs ParseCommandLine + Init, dtor runs Shutdown.
-		std::unique_ptr<Maho::FSingletonRegistryBase> Registry(Maho::CreateSingletonRegistry(Argc, Argv));
+		std::unique_ptr<Maho::FToolkitBase> Registry(Maho::CreateToolkit(Argc, Argv));
 		if (!Registry)
 		{
-			Maho::ReportFatal("CreateSingletonRegistry returned null");
+			Maho::ReportFatal("CreateToolkit returned null");
 		}
 
 		App = Maho::CreateEngine(Argc, Argv);
@@ -71,5 +69,32 @@ int MahoMain(int Argc, char** Argv)
 		Maho::ReportFatal("Unhandled unknown exception");
 	}
 }
+
+inline int MahoCLIMain(int Argc, char** Argv)
+{
+	// Install fatal handlers before anything else (pre-scheduler).
+	Maho::InstallFatalHandlers();
+
+	try
+	{
+		// RAII: registry ctor runs ParseCommandLine + Init, dtor runs Shutdown.
+		std::unique_ptr<Maho::FToolkitBase> Registry(Maho::CreateToolkit(Argc, Argv));
+		if (!Registry)
+		{
+			Maho::ReportFatal("CreateToolkit returned null");
+		}
+
+		return 0;
+	}
+	catch (const std::exception& Exception)
+	{
+		Maho::ReportFatal(Exception.what());
+	}
+	catch (...)
+	{
+		Maho::ReportFatal("Unhandled unknown exception");
+	}
+}
+
 
 } // namespace

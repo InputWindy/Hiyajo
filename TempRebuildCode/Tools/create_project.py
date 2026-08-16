@@ -1,5 +1,5 @@
 # Run via Tools/maho_python.bat (or Tools/*.bat) — engine Tools/python only.
-"""Maho new-project UI (CreateProject.bat). Logs go to the UI, not a console window."""
+"""Maho new-project UI (CreateProject.bat)."""
 
 from __future__ import annotations
 
@@ -21,42 +21,33 @@ from maho_tools import (  # noqa: E402
 	open_in_file_manager,
 )
 
-
-# Project templates: label → default-checked engine extensions (tools are
-# checked by default for client/server, none for null). Defaults are soft —
-# the user may uncheck them freely. Order matches the combobox list.
-ENGINE_TEMPLATES = [
-	{"key": "client", "label": "游戏客户端 (Client)", "default_extensions": ["Platform", "Network", "World", "Render"]},
-	{"key": "server", "label": "游戏服务器 (Server)", "default_extensions": ["Platform", "Network", "World"]},
-	{"key": "null", "label": "空引擎 (Null)", "default_extensions": []},
-]
-DEFAULT_TEMPLATE_LABEL = "游戏客户端 (Client)"
+_CHECKED = "☑"
+_UNCHECKED = "☐"
 
 
 class CreateProjectApp(tk.Tk):
 	def __init__(self) -> None:
 		super().__init__()
 		self.title("Maho — New Project")
-		self.geometry("720x640")
-		self.minsize(640, 520)
+		self.geometry("820x640")
+		self.minsize(720, 520)
 		self.resizable(True, True)
 
 		self.var_name = tk.StringVar(value="MyGame")
 		self.var_parent = tk.StringVar(value=str(Path.home() / "Documents" / "MahoProjects"))
 		self.var_engine = tk.StringVar(value=str(ENGINE_ROOT))
-		self.var_author = tk.StringVar(value="")
+		self.var_author = tk.StringVar(value="土豆泥大王")
 		self.var_dev_platform = tk.StringVar(value="Windows")
+		self.var_app_type = tk.StringVar(value="IDE")
 		self.var_open_folder = tk.BooleanVar(value=True)
-		self._associate_busy = False
+
 		self._plugins: list[dict] = []
-		self._plugin_vars: dict[str, tk.BooleanVar] = {}
+		self._checked: dict[str, bool] = {}
 		self._tool_names: list[str] = []
 		self._extension_names: list[str] = []
 
 		self._build()
 		self.protocol("WM_DELETE_WINDOW", self.destroy)
-		self.log_line("[Maho] UI ready.")
-		# Defer registry work so the window paints first; run off the UI thread.
 		self.after(100, self._auto_associate_cproject_async)
 
 	def _build(self) -> None:
@@ -64,7 +55,7 @@ class CreateProjectApp(tk.Tk):
 		frm = ttk.Frame(self, padding=12)
 		frm.pack(fill=tk.BOTH, expand=True)
 
-		ttk.Label(frm, text="Create a new Maho game project", font=("Segoe UI", 12, "bold")).grid(
+		ttk.Label(frm, text="Create a new Maho project", font=("Segoe UI", 12, "bold")).grid(
 			row=0, column=0, columnspan=3, sticky="w", **pad
 		)
 
@@ -85,91 +76,63 @@ class CreateProjectApp(tk.Tk):
 		ttk.Label(frm, text="Description").grid(row=5, column=0, sticky="nw", **pad)
 		self.txt_desc = tk.Text(frm, height=3, wrap=tk.WORD)
 		self.txt_desc.grid(row=5, column=1, columnspan=2, sticky="nsew", **pad)
+		self.txt_desc.insert("1.0", "哈哈，我是土豆泥大王！")
 
 		ttk.Label(frm, text="Dev Platform").grid(row=6, column=0, sticky="w", **pad)
-		self.cmb_dev_platform = ttk.Combobox(
-			frm,
-			state="readonly",
-			values=["Windows", "Linux"],
-		)
+		self.cmb_dev_platform = ttk.Combobox(frm, state="readonly", values=["Windows", "Linux"])
 		self.cmb_dev_platform.grid(row=6, column=1, columnspan=2, sticky="ew", **pad)
 		self.cmb_dev_platform.set(self.var_dev_platform.get())
 
-		ttk.Label(frm, text="Project Template").grid(row=7, column=0, sticky="w", **pad)
-		self.cmb_template = ttk.Combobox(
-			frm,
-			state="readonly",
-			values=[t["label"] for t in ENGINE_TEMPLATES],
-		)
-		self.cmb_template.grid(row=7, column=1, columnspan=2, sticky="ew", **pad)
-		self.cmb_template.bind("<<ComboboxSelected>>", self._on_template_change)
-		self.cmb_template.set(DEFAULT_TEMPLATE_LABEL)
+		ttk.Label(frm, text="App Type").grid(row=7, column=0, sticky="w", **pad)
+		self.cmb_app_type = ttk.Combobox(frm, state="readonly", values=["IDE", "CLI"])
+		self.cmb_app_type.grid(row=7, column=1, columnspan=2, sticky="ew", **pad)
+		self.cmb_app_type.bind("<<ComboboxSelected>>", self._on_app_type_change)
+		self.cmb_app_type.set(self.var_app_type.get())
 
 		ttk.Label(frm, text="Plugins").grid(row=8, column=0, sticky="nw", **pad)
-		plugin_frame = ttk.Frame(frm)
-		plugin_frame.grid(row=8, column=1, columnspan=2, sticky="nsew", **pad)
-		plugin_frame.columnconfigure(0, weight=1)
-		plugin_frame.rowconfigure(0, weight=1)
-		canvas = tk.Canvas(plugin_frame, borderwidth=0, highlightthickness=0, height=110)
-		plugin_scroll = ttk.Scrollbar(plugin_frame, orient=tk.VERTICAL, command=canvas.yview)
-		canvas.configure(yscrollcommand=plugin_scroll.set)
-		canvas.grid(row=0, column=0, sticky="nsew")
-		plugin_scroll.grid(row=0, column=1, sticky="ns")
-		self.plugin_inner = ttk.Frame(canvas)
-		self.plugin_inner.bind(
-			"<Configure>", lambda _e: canvas.configure(scrollregion=canvas.bbox("all"))
-		)
-		canvas.create_window((0, 0), window=self.plugin_inner, anchor="nw")
+		plugins_frame = ttk.Frame(frm)
+		plugins_frame.grid(row=8, column=1, columnspan=2, sticky="nsew", **pad)
+		plugins_frame.columnconfigure(0, weight=1)
+		plugins_frame.columnconfigure(1, weight=1)
+		plugins_frame.rowconfigure(0, weight=1)
 
-		opts = ttk.Frame(frm)
-		opts.grid(row=9, column=0, columnspan=3, sticky="w", **pad)
-		ttk.Checkbutton(opts, text="Open project folder", variable=self.var_open_folder).pack(side=tk.LEFT)
+		# Left: tools (no loop).
+		tool_panel = ttk.LabelFrame(plugins_frame, text="工具 (Tool)")
+		tool_panel.grid(row=0, column=0, sticky="nsew", padx=(0, 6))
+		tool_panel.columnconfigure(0, weight=1)
+		tool_panel.rowconfigure(0, weight=1)
+		self.tool_tree = ttk.Treeview(tool_panel, show="tree", selectmode="none")
+		tool_scroll = ttk.Scrollbar(tool_panel, orient=tk.VERTICAL, command=self.tool_tree.yview)
+		self.tool_tree.configure(yscrollcommand=tool_scroll.set)
+		self.tool_tree.grid(row=0, column=0, sticky="nsew")
+		tool_scroll.grid(row=0, column=1, sticky="ns")
+		self.tool_tree.bind("<Button-1>", self._on_tree_click)
 
-		hint = (
-			"Creates Parent/Name/ with Name.cproject (JSON, like .uproject).\n"
-			"Double-click the .cproject to generate Name.sln beside it (first run downloads\n"
-			"third-party into Intermediate/). Requires engine Setup.bat beforehand."
-		)
-		ttk.Label(frm, text=hint, foreground="#555").grid(row=10, column=0, columnspan=3, sticky="w", **pad)
+		# Right: extensions (with loop) — hidden for CLI.
+		self.ext_panel = ttk.LabelFrame(plugins_frame, text="拓展 (Extension)")
+		self.ext_panel.grid(row=0, column=1, sticky="nsew", padx=(6, 0))
+		self.ext_panel.columnconfigure(0, weight=1)
+		self.ext_panel.rowconfigure(0, weight=1)
+		self.ext_tree = ttk.Treeview(self.ext_panel, show="tree", selectmode="none")
+		ext_scroll = ttk.Scrollbar(self.ext_panel, orient=tk.VERTICAL, command=self.ext_tree.yview)
+		self.ext_tree.configure(yscrollcommand=ext_scroll.set)
+		self.ext_tree.grid(row=0, column=0, sticky="nsew")
+		ext_scroll.grid(row=0, column=1, sticky="ns")
+		self.ext_tree.bind("<Button-1>", self._on_tree_click)
 
-		ttk.Label(frm, text="Log").grid(row=11, column=0, sticky="nw", **pad)
-		log_frame = ttk.Frame(frm)
-		log_frame.grid(row=11, column=1, columnspan=2, sticky="nsew", **pad)
-		self.txt_log = tk.Text(
-			log_frame,
-			height=10,
-			wrap=tk.WORD,
-			state=tk.DISABLED,
-			font=("Consolas", 9),
-			bg="#1e1e1e",
-			fg="#d4d4d4",
-			insertbackground="#d4d4d4",
-		)
-		scroll = ttk.Scrollbar(log_frame, orient=tk.VERTICAL, command=self.txt_log.yview)
-		self.txt_log.configure(yscrollcommand=scroll.set)
-		self.txt_log.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-		scroll.pack(side=tk.RIGHT, fill=tk.Y)
-
-		btns = ttk.Frame(frm)
-		btns.grid(row=12, column=0, columnspan=3, sticky="ew", **pad)
-		self.btn_clear_log = ttk.Button(btns, text="Clear Log", command=self._clear_log)
-		self.btn_clear_log.pack(side=tk.LEFT)
-		ttk.Button(btns, text="Create Project", command=self._create).pack(side=tk.RIGHT, padx=(8, 0))
-		ttk.Button(btns, text="Close", command=self.destroy).pack(side=tk.RIGHT)
+		# Bottom row: open-folder checkbox (left) + Create Project (right).
+		bottom = ttk.Frame(frm)
+		bottom.grid(row=9, column=0, columnspan=3, sticky="ew", **pad)
+		ttk.Checkbutton(bottom, text="Open project folder", variable=self.var_open_folder).pack(side=tk.LEFT)
+		ttk.Button(bottom, text="Create Project", command=self._create).pack(side=tk.RIGHT)
 
 		frm.columnconfigure(1, weight=1)
 		frm.rowconfigure(5, weight=1)
-		frm.rowconfigure(8, weight=2)
-		frm.rowconfigure(11, weight=2)
+		frm.rowconfigure(8, weight=3)
 
 		self._reload_plugins()
 
-	def _selected_template_key(self) -> str:
-		label = self.cmb_template.get()
-		for t in ENGINE_TEMPLATES:
-			if t["label"] == label:
-				return t["key"]
-		return "client"
+	# ── plugin tree ──────────────────────────────────────────────────────
 
 	def _deps_of(self, name: str) -> list[str]:
 		for p in self._plugins:
@@ -178,109 +141,87 @@ class CreateProjectApp(tk.Tk):
 		return []
 
 	def _reload_plugins(self) -> None:
-		for child in self.plugin_inner.winfo_children():
-			child.destroy()
+		for tree in (self.tool_tree, self.ext_tree):
+			for item in tree.get_children():
+				tree.delete(item)
 		engine = Path(self.var_engine.get().strip())
 		self._plugins = list_engine_plugins(engine)
-		self._plugin_vars = {}
+		self._checked = {}
 		self._tool_names = []
 		self._extension_names = []
 
-		tools = [p for p in self._plugins if p["Extension"] and p["Extension"]["Stage"] == "ESingletonStage"]
+		tools = [p for p in self._plugins if p["Extension"] and p["Extension"]["Stage"] == "EToolStage"]
 		extensions = [p for p in self._plugins if p["Extension"] and p["Extension"]["Stage"] == "EEngineStage"]
 
-		if tools:
-			ttk.Label(self.plugin_inner, text="工具 (Tool)", font=("Segoe UI", 9, "bold")).pack(anchor="w", pady=(0, 2))
-			for p in tools:
-				self._add_plugin_checkbox(p, self._tool_names)
-		if extensions:
-			ttk.Label(self.plugin_inner, text="拓展 (Extension)", font=("Segoe UI", 9, "bold")).pack(anchor="w", pady=(8, 2))
-			for p in extensions:
-				self._add_plugin_checkbox(p, self._extension_names)
+		for p in tools:
+			self._insert_plugin(self.tool_tree, p, self._tool_names, default=False)
+		for p in extensions:
+			self._insert_plugin(self.ext_tree, p, self._extension_names, default=False)
 
-		self._apply_template()
+		self._apply_app_type()
 
-	def _add_plugin_checkbox(self, p: dict, name_list: list[str]) -> None:
+	def _insert_plugin(self, tree: ttk.Treeview, p: dict, name_list: list[str], default: bool) -> None:
 		name = p["Name"]
 		name_list.append(name)
-		var = tk.BooleanVar(value=False)
-		text = name
-		if p["Description"]:
-			text += f"  —  {p['Description']}"
-		cb = ttk.Checkbutton(
-			self.plugin_inner,
-			text=text,
-			variable=var,
-			command=lambda n=name: self._toggle_plugin(n),
-		)
-		cb.pack(anchor="w", fill=tk.X)
-		self._plugin_vars[name] = var
+		self._checked[name] = default
+		# Use the plugin name as the item id — unique across both trees.
+		tree.insert("", tk.END, iid=name, text=self._label(name), open=True)
 
-	def _on_template_change(self, _event=None) -> None:
-		self._apply_template()
+	def _label(self, name: str) -> str:
+		mark = _CHECKED if self._checked.get(name) else _UNCHECKED
+		return f"{mark} {name}"
 
-	def _apply_template(self) -> None:
-		template = next(
-			(t for t in ENGINE_TEMPLATES if t["label"] == self.cmb_template.get()),
-			ENGINE_TEMPLATES[0],
-		)
+	def _refresh_item(self, name: str) -> None:
+		tree = self.tool_tree if name in self._tool_names else self.ext_tree
+		if tree.exists(name):
+			tree.item(name, text=self._label(name))
 
-		# Tools: all checked by default except the null engine.
-		default_tools = template["key"] != "null"
-		for name in self._tool_names:
-			self._plugin_vars[name].set(default_tools)
+	def _on_app_type_change(self, _event=None) -> None:
+		self._apply_app_type()
 
-		# Extensions: the template's default set.
-		ext_defaults = set(template["default_extensions"])
-		for name in self._extension_names:
-			self._plugin_vars[name].set(name in ext_defaults)
+	def _apply_app_type(self) -> None:
+		if self.cmb_app_type.get() == "CLI":
+			self.ext_panel.grid_remove()
+		else:
+			self.ext_panel.grid()
+
+	def _on_tree_click(self, event: tk.Event) -> None:
+		item = event.widget.identify_row(event.y)
+		if item and item in self._checked:
+			self._toggle_plugin(item)
 
 	def _toggle_plugin(self, name: str) -> None:
-		var = self._plugin_vars[name]
-		if var.get():
-			self._check_deps(name)
-		else:
+		if self._checked.get(name, False):
+			self._uncheck(name)
 			self._uncheck_dependents(name)
+		else:
+			self._check(name)
+			self._check_deps(name)
+
+	def _check(self, name: str) -> None:
+		self._checked[name] = True
+		self._refresh_item(name)
+
+	def _uncheck(self, name: str) -> None:
+		self._checked[name] = False
+		self._refresh_item(name)
 
 	def _check_deps(self, name: str) -> None:
 		for dep in self._deps_of(name):
-			dep_var = self._plugin_vars.get(dep)
-			if dep_var is None:
-				continue
-			if not dep_var.get():
-				dep_var.set(True)
+			if dep in self._checked and not self._checked[dep]:
+				self._check(dep)
 				self._check_deps(dep)
 
 	def _uncheck_dependents(self, name: str) -> None:
 		for p in self._plugins:
 			if name not in p["Dependencies"]:
 				continue
-			dep_var = self._plugin_vars.get(p["Name"])
-			if dep_var is None:
-				continue
-			if dep_var.get():
-				dep_var.set(False)
-				self._uncheck_dependents(p["Name"])
+			dep_name = p["Name"]
+			if dep_name in self._checked and self._checked[dep_name]:
+				self._uncheck(dep_name)
+				self._uncheck_dependents(dep_name)
 
-	def append_log(self, text: str) -> None:
-		def _do() -> None:
-			self.txt_log.configure(state=tk.NORMAL)
-			self.txt_log.insert(tk.END, text)
-			self.txt_log.see(tk.END)
-			self.txt_log.configure(state=tk.DISABLED)
-
-		if threading.current_thread() is threading.main_thread():
-			_do()
-		else:
-			self.after(0, _do)
-
-	def log_line(self, message: str) -> None:
-		self.append_log(message if message.endswith("\n") else message + "\n")
-
-	def _clear_log(self) -> None:
-		self.txt_log.configure(state=tk.NORMAL)
-		self.txt_log.delete("1.0", tk.END)
-		self.txt_log.configure(state=tk.DISABLED)
+	# ── actions ──────────────────────────────────────────────────────────
 
 	def _browse_parent(self) -> None:
 		path = filedialog.askdirectory(initialdir=self.var_parent.get() or str(Path.home()))
@@ -293,22 +234,19 @@ class CreateProjectApp(tk.Tk):
 			self.var_engine.set(path)
 			self._reload_plugins()
 
+	def log_line(self, message: str) -> None:
+		# No log box in this UI; forward to stdout for console debugging.
+		print(message, end="" if message.endswith("\n") else "\n")
+
 	def _run_associate(self) -> None:
-		"""Runs on a worker thread — do not touch Tk widgets except via log_line."""
 		try:
 			install_cproject_association(log=self.log_line)
 		except Exception as ex:  # noqa: BLE001
 			self.log_line(f"[Maho] Associate failed: {ex}")
-		finally:
-			self._associate_busy = False
 
 	def _auto_associate_cproject_async(self) -> None:
 		if sys.platform != "win32":
 			return
-		if self._associate_busy:
-			return
-		self._associate_busy = True
-		self.log_line("[Maho] Registering .cproject association (background)…")
 		threading.Thread(target=self._run_associate, daemon=True).start()
 
 	def _create(self) -> None:
@@ -318,7 +256,12 @@ class CreateProjectApp(tk.Tk):
 		author = self.var_author.get().strip()
 		desc = self.txt_desc.get("1.0", tk.END).strip()
 		want_open = self.var_open_folder.get()
-		checked_plugins = sorted(n for n, v in self._plugin_vars.items() if v.get())
+		app_type = self.cmb_app_type.get()
+
+		if app_type == "CLI":
+			checked_plugins = sorted(n for n in self._tool_names if self._checked.get(n))
+		else:
+			checked_plugins = sorted(n for n in self._checked if self._checked[n])
 
 		if not is_valid_project_name(name):
 			messagebox.showerror("Maho", "Invalid project name.\nUse Letter + A-Z a-z 0-9 _ -")
@@ -337,7 +280,6 @@ class CreateProjectApp(tk.Tk):
 			)
 			return
 
-		self.log_line(f"[Maho] Creating project '{name}' …")
 		try:
 			cproject = create_project(
 				name,
@@ -346,19 +288,17 @@ class CreateProjectApp(tk.Tk):
 				description=desc,
 				author=author,
 				plugins=checked_plugins,
-				template=self._selected_template_key(),
 				dev_platform=self.cmb_dev_platform.get(),
+				app_type=app_type,
 			)
 		except Exception as ex:  # noqa: BLE001
 			messagebox.showerror("Maho", str(ex))
 			return
-		self.log_line(f"[Maho] Wrote {cproject}")
 		if want_open:
 			open_in_file_manager(cproject.parent)
-		self.log_line("[Maho] Project create finished successfully.")
 		messagebox.showinfo(
 			"Maho",
-			f"Project created:\n{cproject}\n\nDouble-click {cproject.name} to generate the .sln\n(first run downloads third-party into Intermediate/).",
+			f"Project created:\n{cproject}\n\nDouble-click {cproject.name} to generate the build files\n(first run downloads third-party into Intermediate/).",
 		)
 
 

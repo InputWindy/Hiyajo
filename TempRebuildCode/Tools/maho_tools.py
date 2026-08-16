@@ -270,6 +270,10 @@ def copy_template(project_dir: Path, mapping: dict[str, str]) -> None:
 	for src in TEMPLATE_DIR.rglob("*"):
 		if src.is_dir():
 			continue
+		if src.suffix.lower() == ".tmpl":
+			# Alternate templates (e.g. GameAppCli.cpp.tmpl) are rendered on
+			# demand by _write_game_app — never copied into the project tree.
+			continue
 		rel = src.relative_to(TEMPLATE_DIR)
 		rel_parts = [render_template_text(part, mapping) for part in rel.parts]
 		dst = project_dir.joinpath(*rel_parts)
@@ -301,7 +305,7 @@ def build_gameapp_mapping(project_name: str, engine_root: Path, plugin_names: li
 	plugin_meta = {p["Name"]: p for p in list_engine_plugins(engine_root)}
 
 	plugin_includes: list[str] = []
-	singleton_classes: list[str] = []
+	tool_classes: list[str] = []
 	engine_classes: list[str] = []
 	for name in sorted(plugin_names):
 		meta = plugin_meta.get(name)
@@ -311,8 +315,8 @@ def build_gameapp_mapping(project_name: str, engine_root: Path, plugin_names: li
 		cls = meta["Extension"]["Class"]
 		stage = meta["Extension"].get("Stage", "EEngineStage")
 		plugin_includes.append(f"#include <{header}>")
-		if stage == "ESingletonStage":
-			singleton_classes.append(cls)
+		if stage == "EToolStage":
+			tool_classes.append(cls)
 		else:
 			engine_classes.append(cls)
 
@@ -322,14 +326,25 @@ def build_gameapp_mapping(project_name: str, engine_root: Path, plugin_names: li
 	return {
 		"PROJECT_NAME": project_name,
 		"PROJECT_IDENT": ident,
-		"REGISTRY_CLASS": f"F{ident}Registry",
+		"TOOLKIT_CLASS": f"F{ident}Toolkit",
 		"APP_CLASS": f"F{ident}Engine",
 		"PLUGIN_INCLUDES": "\n".join(plugin_includes),
-		"SINGLETON_EXTENSIONS": _format_extensions_list(singleton_classes),
+		"TOOL_EXTENSIONS": _format_extensions_list(tool_classes),
 		"ENGINE_EXTENSIONS": _format_extensions_list(engine_classes),
 		"ENTRY_POINT_INCLUDE": "EntryPointWindows.h" if dev_platform == "Windows" else "EntryPointLinux.h",
 		"PARSE_COMMAND_LINE": parse_body,
 	}
+
+
+def _write_game_app(project_dir: Path, mapping: dict[str, str], app_type: str) -> Path:
+	"""Render the app-type-correct template into Source/Main.cpp."""
+	template_name = "MainCli.cpp.tmpl" if app_type == "CLI" else "Main.cpp"
+	text = (TEMPLATE_DIR / "Source" / template_name).read_text(encoding="utf-8")
+	rendered = render_template_text(text, mapping)
+	dst = project_dir / "Source" / "Main.cpp"
+	dst.parent.mkdir(parents=True, exist_ok=True)
+	dst.write_text(rendered, encoding="utf-8", newline="\n")
+	return dst
 
 
 def codegen_game_app(cproject_path: Path) -> Path:
@@ -352,13 +367,8 @@ def codegen_game_app(cproject_path: Path) -> Path:
 	dev_platform = str(data.get("DevPlatform", "Windows"))
 	mapping = build_gameapp_mapping(project_name, engine_root, plugin_names, dev_platform=dev_platform)
 
-	template_src = TEMPLATE_DIR / "Source" / "GameApp.cpp"
-	rendered = render_template_text(template_src.read_text(encoding="utf-8"), mapping)
-
-	dst = project_dir / "Source" / "GameApp.cpp"
-	dst.parent.mkdir(parents=True, exist_ok=True)
-	dst.write_text(rendered, encoding="utf-8", newline="\n")
-	return dst
+	app_type = str(data.get("AppType", "IDE"))
+	return _write_game_app(project_dir, mapping, app_type)
 
 
 def create_project(
@@ -370,6 +380,7 @@ def create_project(
 	plugins: list[str] | None = None,
 	template: str = "client",
 	dev_platform: str = "Windows",
+	app_type: str = "IDE",
 ) -> Path:
 	if not is_valid_project_name(project_name):
 		raise ValueError(
@@ -393,7 +404,9 @@ def create_project(
 	mapping = build_gameapp_mapping(project_name, engine_root, plugin_names, dev_platform=dev_platform)
 	mapping["DESCRIPTION"] = description
 	mapping["AUTHOR"] = author
+	mapping["APP_TYPE"] = app_type
 	copy_template(project_dir, mapping)
+	_write_game_app(project_dir, mapping, app_type)
 
 	if plugins is None:
 		plugin_entries = default_engine_plugin_entries(engine_root)
@@ -408,6 +421,7 @@ def create_project(
 		"Author": author,
 		"EngineTemplate": template,
 		"DevPlatform": dev_platform,
+		"AppType": app_type,
 		"Modules": [
 			{
 				"Name": project_name,
@@ -1034,9 +1048,9 @@ def _normalize_module_entry(raw: Any, *, cplugin_path: Path) -> dict[str, Any]:
 			raise ValueError(
 				f"Module '{name}' Extension.Priority must be System|Layer|Overlay in {cplugin_path}"
 			)
-		if not isinstance(stage, str) or stage.strip() not in ("ESingletonStage", "EEngineStage"):
+		if not isinstance(stage, str) or stage.strip() not in ("EToolStage", "EEngineStage"):
 			raise ValueError(
-				f"Module '{name}' Extension.Stage must be ESingletonStage|EEngineStage in {cplugin_path}"
+				f"Module '{name}' Extension.Stage must be EToolStage|EEngineStage in {cplugin_path}"
 			)
 		extension = {
 			"Class": cls.strip(),

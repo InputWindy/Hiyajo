@@ -9,11 +9,11 @@ namespace Maho
 namespace Timer
 {
 
-/** Time source extension (chrono). Pre-app singleton (driven by ESingletonStage). */
-class MAHO_TIMER_API FTimer final : public TExtension<ESingletonStage, FTimer>
+/** Time source extension (chrono). Pre-app toolkit (driven by EToolStage). */
+class MAHO_TIMER_API FTimer final : public TExtension<EToolStage, FTimer>
 {
 public:
-	[[nodiscard]] bool ExecuteStage(ESingletonStage Stage) override;
+	[[nodiscard]] bool ExecuteStage(EToolStage Stage) override;
 
 private:
 	friend TSingleton<FTimer>;

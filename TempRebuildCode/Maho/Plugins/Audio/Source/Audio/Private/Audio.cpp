@@ -3,7 +3,7 @@
 namespace Maho::Audio
 {
 
-bool FAudio::ExecuteStage(ESingletonStage Stage)
+bool FAudio::ExecuteStage(EToolStage Stage)
 {
 	// TODO: Init = open audio device; Shutdown = close.
 	(void)Stage;
