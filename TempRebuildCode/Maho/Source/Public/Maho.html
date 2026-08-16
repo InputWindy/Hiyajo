@@ -224,11 +224,11 @@
 	<table class="api-table">
 		<tr><th style="width:46%">签名</th><th>说明</th></tr>
 		<tr>
-			<td class="sig"><code><span class="type">FSingletonRegistryBase*</span> CreateSingletonRegistry()</code></td>
+			<td class="sig"><code><span class="type">FSingletonRegistryBase*</span> CreateSingletonRegistry(<span class="kw">int</span> Argc, <span class="kw">char**</span> Argv)</code></td>
 			<td><code>new</code> 具体 registry 子类；entry point 用 unique_ptr 持有（RAII）</td>
 		</tr>
 		<tr>
-			<td class="sig"><code><span class="type">IRunable*</span> CreateApp()</code></td>
+			<td class="sig"><code><span class="type">IRunable*</span> CreateEngine(<span class="kw">int</span> Argc, <span class="kw">char**</span> Argv)</code></td>
 			<td><code>new</code> 具体引擎子类，转 IRunable* 返回</td>
 		</tr>
 	</table>
@@ -237,7 +237,7 @@
 		<tr><th style="width:46%">步骤</th><th>说明</th></tr>
 		<tr><td class="sig"><code>InstallFatalHandlers()</code></td><td>装 std::terminate 兜底（早于一切）</td></tr>
 		<tr><td class="sig"><code>unique_ptr&lt;FSingletonRegistryBase&gt;</code></td><td>ctor 跑 Init，dtor 跑 Shutdown</td></tr>
-		<tr><td class="sig"><code>CreateApp() → MainLoop()</code></td><td>驱动引擎主循环</td></tr>
+		<tr><td class="sig"><code>CreateEngine(Argc, Argv) → MainLoop()</code></td><td>驱动引擎主循环</td></tr>
 		<tr><td class="sig"><code>try/catch → ReportFatal</code></td><td>逃逸异常兜底（stderr + Fatal.log + abort）</td></tr>
 	</table>
 </section>

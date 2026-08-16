@@ -1,0 +1,33 @@
+{
+  "version": 3,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 20,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "vs2022-win64",
+      "displayName": "Visual Studio 2022 Win64",
+      "description": "Source is Build/; intermediates and binaries live under the repo root.",
+      "generator": "Visual Studio 17 2022",
+      "architecture": "x64",
+      "binaryDir": "${sourceDir}/../Maho/Intermediate",
+      "cacheVariables": {
+        "MAHO_BUILD_SHARED": "ON"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "debug",
+      "configurePreset": "vs2022-win64",
+      "configuration": "Debug"
+    },
+    {
+      "name": "release",
+      "configurePreset": "vs2022-win64",
+      "configuration": "Release"
+    }
+  ]
+}

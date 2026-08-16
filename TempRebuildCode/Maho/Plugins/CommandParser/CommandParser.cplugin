@@ -1,0 +1,19 @@
+{
+	"FileVersion": 1,
+	"FriendlyName": "CommandParser",
+	"Description": "Command-line argument parser extension (key-value store).",
+	"Category": "Engine",
+	"EnabledByDefault": true,
+	"Modules": [
+		{
+			"Name": "CommandParser",
+			"Type": "Runtime",
+			"Extension": {
+				"Class": "Maho::FCommandParser",
+				"Header": "CommandParser.h",
+				"Priority": "System",
+				"Stage": "ESingletonStage"
+			}
+		}
+	]
+}

@@ -29,7 +29,9 @@ enum class EEngineStage : std::uint8_t
 };
 
 /** Pre-app singleton registry: serial drive (no thread pool). */
-class FSingletonRegistryBase : public TSerialScheduler<ESingletonStage>
+class FSingletonRegistryBase : 
+	public ICommandLine,
+	public TSerialScheduler<ESingletonStage>
 {
 protected:
 	FSingletonRegistryBase() = default;

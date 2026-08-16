@@ -20,6 +20,7 @@
 | [Physics](Physics/Physics.cplugin) | `Maho::FPhysics` | 物理模拟库（刚体 solver） |
 | [Audio](Audio/Audio.cplugin) | `Maho::FAudio` | 音频播放库（设备 + 音源） |
 | [Math](Math/Math.cplugin) | `Maho::FMath` | 数学库（GLM + 数学辅助） |
+| [CommandParser](CommandParser/CommandParser.cplugin) | `Maho::FCommandParser` | 命令行参数解析（键值存储） |
 
 ### Engine（EEngineStage，引擎扩展）
 

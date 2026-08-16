@@ -9,7 +9,7 @@
  * try/catch: anything that escapes MainLoop funnels into ReportFatal (stderr
  * + Saved/Logs/Fatal.log + abort).
  *
- * The project defines CreateSingletonRegistry() and CreateApp() (code-gen).
+ * The project defines CreateSingletonRegistry() and CreateEngine() (code-gen).
  *
  * On Windows the game is typically linked as a GUI app (WIN32_EXECUTABLE) so
  * no console black box appears.
@@ -24,10 +24,10 @@ namespace Maho
 {
 
 /** Project-defined: create the concrete singleton registry (owning raw pointer). */
-FSingletonRegistryBase* CreateSingletonRegistry();
+FSingletonRegistryBase* CreateSingletonRegistry(int Argc, char** Argv);
 
 /** Project-defined: create the concrete runnable engine (owning raw pointer). */
-IRunable* CreateApp();
+IRunable* CreateEngine(int Argc, char** Argv);
 
 } // namespace Maho
 
@@ -36,26 +36,23 @@ namespace
 
 int MahoMain(int Argc, char** Argv)
 {
-	(void)Argc;
-	(void)Argv;
-
 	// Install fatal handlers before anything else (pre-scheduler).
 	Maho::InstallFatalHandlers();
 
 	Maho::IRunable* App = nullptr;
 	try
 	{
-		// RAII: registry ctor runs Init, dtor runs Shutdown.
-		std::unique_ptr<Maho::FSingletonRegistryBase> Registry(Maho::CreateSingletonRegistry());
+		// RAII: registry ctor runs ParseCommandLine + Init, dtor runs Shutdown.
+		std::unique_ptr<Maho::FSingletonRegistryBase> Registry(Maho::CreateSingletonRegistry(Argc, Argv));
 		if (!Registry)
 		{
 			Maho::ReportFatal("CreateSingletonRegistry returned null");
 		}
 
-		App = Maho::CreateApp();
+		App = Maho::CreateEngine(Argc, Argv);
 		if (!App)
 		{
-			Maho::ReportFatal("CreateApp returned null");
+			Maho::ReportFatal("CreateEngine returned null");
 		}
 
 		App->MainLoop();

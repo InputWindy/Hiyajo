@@ -22,7 +22,7 @@
 flowchart TD
     A["InstallFatalHandlers()"] --> B["CreateSingletonRegistry()"]
     B --> C["registry ctor 跑 Init"]
-    C --> D["CreateApp()"]
+    C --> D["CreateEngine()"]
     D --> E["MainLoop()"]
     E --> F["PreInit → Init → PostInit"]
     F --> G{"Tick 循环<br/>PreTick / Tick / PostTick"}
@@ -82,12 +82,12 @@ protected:
 [EntryPoint.h](EntryPoint.h) 定义 `main` / `WinMain`，游戏项目单 `.cpp` include：
 
 1. `InstallFatalHandlers()`（装 `std::terminate` 兜底，早于一切）
-2. `CreateSingletonRegistry()` → `unique_ptr` RAII（ctor 跑 Init，dtor 跑 Shutdown）
-3. `CreateApp()` → `IRunable*`
+2. `CreateSingletonRegistry(Argc, Argv)` → `unique_ptr` RAII（ctor 跑 ParseCommandLine + Init，dtor 跑 Shutdown）
+3. `CreateEngine(Argc, Argv)` → `IRunable*`（ctor 跑 ParseCommandLine）
 4. `App->MainLoop()` → `delete App`
 5. `try/catch` 兜底 → `ReportFatal`
 
-`CreateSingletonRegistry()` / `CreateApp()` 是项目侧契约（code-gen 生成）。
+`CreateSingletonRegistry()` / `CreateEngine()` 是项目侧契约（code-gen 生成）。
 
 ## 相关文档
 

@@ -4,7 +4,6 @@ set(MAHO_ROOT "${CMAKE_CURRENT_SOURCE_DIR}")
 set(MAHO_SOURCE_DIR "${MAHO_ROOT}/Source")
 set(MAHO_PUBLIC_DIR "${MAHO_SOURCE_DIR}/Public")
 set(MAHO_PRIVATE_DIR "${MAHO_SOURCE_DIR}/Private")
-set(MAHO_SHADERS_DIR "${MAHO_ROOT}/Shaders")
 set(MAHO_PLUGINS_DIR "${MAHO_ROOT}/Plugins")
 
 # Resolve Build/CMake helpers when Maho is added from engine workspace or external .cproject.
@@ -45,53 +44,16 @@ add_library(Maho::Engine ALIAS Maho)
 target_include_directories(Maho
 	PUBLIC
 		"${MAHO_PUBLIC_DIR}"
-		"${MAHO_GLM_INCLUDE_DIR}"
 	PRIVATE
 		"${MAHO_PRIVATE_DIR}"
-		"${MAHO_NLOHMANN_JSON_INCLUDE_DIR}"
 )
 
-# PUBLIC: game code uses MAHO_* macros that expand to spdlog calls.
-# Header-only avoids duplicating a static spdlog into both Maho.dll and the game EXE.
-# ImGui moved to the Render plugin; Maho.dll no longer links glfw/imgui.
+# Engine core links only the system threads library (std::thread). All
+# third-party libraries live in their plugins.
 target_link_libraries(Maho
-	PUBLIC
-		spdlog::spdlog_header_only
-		Vulkan::Vulkan
 	PRIVATE
 		Threads::Threads
 )
-
-if(MAHO_HAS_LIBKTX)
-	target_link_libraries(Maho PRIVATE ktx)
-	target_compile_definitions(Maho PRIVATE MAHO_WITH_LIBKTX=1)
-endif()
-if(MAHO_HAS_OPENIMAGEIO)
-	target_compile_definitions(Maho PRIVATE MAHO_WITH_OPENIMAGEIO=1)
-endif()
-
-# zlib — FCompression (package / BulkData). zlibstatic is provided by the
-# project's Assimp fetch (bundled zlib), so engine-only workspaces degrade
-# FCompression gracefully; game projects always have it.
-if(TARGET zlibstatic)
-	target_link_libraries(Maho PRIVATE zlibstatic)
-	target_compile_definitions(Maho PRIVATE MAHO_WITH_ZLIB=1)
-	target_include_directories(Maho PRIVATE
-		$<TARGET_PROPERTY:zlibstatic,SOURCE_DIR>
-		$<TARGET_PROPERTY:zlibstatic,BINARY_DIR>
-	)
-endif()
-
-target_compile_definitions(Maho
-	PUBLIC
-		MAHO_WITH_VULKAN=1
-		MAHO_PLATFORM_${MAHO_PLATFORM_NAME}=1
-)
-
-if(WIN32)
-	target_compile_definitions(Maho PRIVATE VK_USE_PLATFORM_WIN32_KHR=1)
-	target_link_libraries(Maho PRIVATE winhttp)
-endif()
 
 # Absolute engine root for locating Tools/AgentBridge at runtime (dev builds).
 file(TO_CMAKE_PATH "${_MAHO_ENGINE_ROOT}" _MAHO_ENGINE_ROOT_PATH)
@@ -120,39 +82,13 @@ set_target_properties(Maho PROPERTIES
 	OUTPUT_NAME "Maho"
 )
 
-maho_copy_shaders(Maho "${MAHO_SHADERS_DIR}" "Engine/Shaders")
-if(DEFINED MAHO_ENGINE_FONTS_DIR AND IS_DIRECTORY "${MAHO_ENGINE_FONTS_DIR}")
-	add_custom_command(TARGET Maho POST_BUILD
-		COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:Maho>/Engine/Fonts"
-		COMMAND ${CMAKE_COMMAND} -E copy_directory
-			"${MAHO_ENGINE_FONTS_DIR}"
-			"$<TARGET_FILE_DIR:Maho>/Engine/Fonts"
-		COMMENT "Copy engine Fonts"
-		VERBATIM
-	)
-	maho_install_directory("${MAHO_ENGINE_FONTS_DIR}" "Engine/Fonts")
-endif()
-if(DEFINED MAHO_ENGINE_EDITOR_DIR AND IS_DIRECTORY "${MAHO_ENGINE_EDITOR_DIR}")
-	add_custom_command(TARGET Maho POST_BUILD
-		COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:Maho>/Engine/Editor"
-		COMMAND ${CMAKE_COMMAND} -E copy_directory
-			"${MAHO_ENGINE_EDITOR_DIR}"
-			"$<TARGET_FILE_DIR:Maho>/Engine/Editor"
-		COMMENT "Copy engine Editor assets"
-		VERBATIM
-	)
-	maho_install_directory("${MAHO_ENGINE_EDITOR_DIR}" "Engine/Editor")
-endif()
-
 # Preserve -DMAHO_ENGINE_ROOT from game projects (repo root). Never overwrite with Maho/.
 if(NOT MAHO_ENGINE_ROOT)
 	get_filename_component(MAHO_ENGINE_ROOT "${MAHO_ROOT}/.." ABSOLUTE)
 endif()
-set(MAHO_ENGINE_SHADERS_DIR "${MAHO_SHADERS_DIR}" CACHE INTERNAL "Maho engine shaders")
 set(MAHO_ENGINE_PLUGINS_DIR "${MAHO_PLUGINS_DIR}" CACHE INTERNAL "Maho engine plugins")
 
 maho_install_runtime_target(Maho)
-maho_install_directory("${MAHO_SHADERS_DIR}" "Engine/Shaders")
 maho_install_directory("${MAHO_PLUGINS_DIR}" "Engine/Plugins")
 
 set(_MAHO_SCAN_PLUGINS_PY "${_MAHO_ENGINE_ROOT}/Tools/scan_plugins.py")
