@@ -240,11 +240,18 @@
 </section>
 
 <section class="class-panel">
+	<h3 class="class-name">IExtension&lt;TStage&gt;<span class="class-kind">interface</span></h3>
+	<p class="class-desc">
+		运行时扩展接口（非模板公共基类）：<code>virtual bool ExecuteStage(TStage) = 0</code>。
+		静态 <code>TExtension</code> 与动态 DLL 插件都实现它，PluginManager 经它统一驱动。
+	</p>
+</section>
+
+<section class="class-panel">
 	<h3 class="class-name">TExtension&lt;TStage, TDerived&gt;<span class="class-kind">template</span></h3>
 	<p class="class-desc">
 		并行扩展基类：一组平级功能里的一员，由 stage 枚举驱动。
-		对应 <code>IEngineExtension</code> / <code>IRenderFeature</code>。
-		继承 <code>TSingleton&lt;TDerived&gt;</code>（自带 Get()）。
+		继承 <code>TSingleton&lt;TDerived&gt;</code>（自带 Get()）+ <code>IExtension&lt;TStage&gt;</code>（运行时接口）。
 	</p>
 	<h3 class="group">接口</h3>
 	<table class="api-table">

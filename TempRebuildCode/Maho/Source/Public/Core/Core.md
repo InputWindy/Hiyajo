@@ -12,7 +12,7 @@ Maho 的编译期基础设施 + 并发基础设施。所有高层模块（引擎
 | [Extension.h](Extension.h) | 单例 `TSingleton` + 扩展 `TExtension` + 调度器（串行 / 并行）+ 静态装配载体 `FExtensions` |
 | [Fatal.h](Fatal.h) | 致命路径 `ReportFatal` + `InstallFatalHandlers`（零依赖，崩溃兜底） |
 | [Export.h](Export.h) | DLL 导出宏 `MAHO_API`（UE 风格模块边界） |
-| [Async/](Async/Async.md) | 并行模型：`FThreadPool` + `FThreadedServer` + 可运行契约 `IRunable` |
+| [Async/](Async/Async.md) | 并行模型：`FThreadPool` + `FThreadedServer` + 可运行契约 `IRunable`（含 `ICommandLine`） |
 
 ## 依赖关系
 

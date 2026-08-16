@@ -44,16 +44,16 @@ flowchart TD
 
 ## 装配方式（code-gen）
 
-code-gen 扫插件配置表（`.cplugin`），项目侧生成两个类，在**继承列表**里静态装配 `FExtensions`：
+code-gen 扫插件配置表（`.cplugin`），项目侧生成两个类，在**继承列表**里静态装配 `FExtensions`（工具插件分进 toolkit，引擎插件分进 engine）：
 
 ```cpp
-class FGameSingletonRegistry final
+class FMyGameToolkit final
 	: public FToolkitBase
-	, public FExtensions<FLog, FTimer>
+	, public FExtensions<Maho::Log::FLogger, Maho::Paths::FPaths>
 {
 public:
-	FGameSingletonRegistry() { Init(); }
-	~FGameSingletonRegistry() override { Shutdown(); }
+	FMyGameToolkit() { Init(); }
+	~FMyGameToolkit() override { Shutdown(); }
 
 protected:
 	void Init() override     { Execute<EToolStage::Init, FList>(); }
@@ -76,10 +76,11 @@ protected:
 - 装配只落在 `public FExtensions<...>` 一行，`FList` 从基类继承。
 - registry 的 `Init`/`Shutdown` 在**派生**构造/析构体里调用（虚分派安全）；基类保持纯虚。
 - `FEngineBase::MainLoop` 是 `final` 模板方法，项目类不能覆写；`RequestShutdown()` 供 extension 在 Tick 中触发退出。
+- 全局 `GApp`（`FEngineBase*`）由 `FEngineBase` 构造时置位，供 extension（如 Platform 的窗口关闭检测）安全地请求退出。
 
 ## EntryPoint
 
-[EntryPoint.h](EntryPoint.h) 是平台无关的共享驱动（`MahoMain` + 工厂声明）。平台入口 shim 各一个，游戏项目单 `.cpp` 按目标平台 include 其一：
+[EntryPoint.h](EntryPoint.h) 是平台无关的共享驱动（`MahoMain` + `MahoCLIMain` + 工厂声明）。平台入口 shim 各一个，游戏项目单 `.cpp` 按目标平台 include 其一：
 
 | shim | 入口 | 平台 |
 |------|------|------|
@@ -89,7 +90,7 @@ protected:
 | [EntryPointIOS.h](EntryPointIOS.h) | `RunIOS()`（ObjC 入口调它） | iOS |
 | [EntryPointXbox.h](EntryPointXbox.h) | `main` | Xbox (GDK) |
 
-流程（`MahoMain`）：
+流程（`MahoMain`，IDE/引擎 app）：
 
 1. `InstallFatalHandlers()`（装 `std::terminate` 兜底，早于一切）
 2. `CreateToolkit(Argc, Argv)` → `unique_ptr` RAII（ctor 跑 ParseCommandLine + Init，dtor 跑 Shutdown）
@@ -97,7 +98,11 @@ protected:
 4. `App->MainLoop()` → `delete App`
 5. `try/catch` 兜底 → `ReportFatal`
 
+`MahoCLIMain`（CLI app）只跑前两步后直接返回（dtor 跑 Shutdown）。CLI 项目在 include 入口前定义 `MAHO_CLI_ENTRY` 即转发到 `MahoCLIMain`。
+
 `CreateToolkit()` / `CreateEngine()` 是项目侧契约（code-gen 生成）。
+
+`FToolkitBase` 与 `FEngineBase` 都继承 `ICommandLine`（`ParseCommandLine` 纯虚），app 启动时由 `MahoMain`/`MahoCLIMain` 调 `CreateToolkit`/`CreateEngine` 传入命令行。
 
 ## 相关文档
 

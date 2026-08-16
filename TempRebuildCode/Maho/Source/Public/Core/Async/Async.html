@@ -194,11 +194,33 @@
 	</table>
 </section>
 
+<!-- ============================ ICommandLine ============================ -->
+<section class="class-panel">
+	<h2 class="class-name">ICommandLine<span class="class-kind">interface</span></h2>
+	<p class="class-desc">
+		命令行接收契约：所有可运行对象（工具包 / 引擎）在启动时接收原始命令行。
+		<code>MahoMain</code> / <code>MahoCLIMain</code> 创建后先调 <code>ParseCommandLine</code> 再驱动。
+	</p>
+
+	<h3 class="group">接口</h3>
+	<table class="api-table">
+		<tr><th style="width:48%">签名</th><th>说明</th></tr>
+		<tr>
+			<td class="sig"><code><span class="kw">virtual</span> ~ICommandLine()</code> <span class="badge badge-virtual">virtual</span></td>
+			<td>虚析构。</td>
+		</tr>
+		<tr>
+			<td class="sig"><code><span class="kw">virtual void</span> ParseCommandLine(<span class="type">int</span> Argc, <span class="type">char</span>** Argv) = 0</code> <span class="badge badge-virtual">virtual</span></td>
+			<td>纯虚：解析原始命令行（如 CommandParser 插件实现键值存储）。</td>
+		</tr>
+	</table>
+</section>
+
 <!-- ============================ IRunable ============================ -->
 <section class="class-panel">
 	<h2 class="class-name">IRunable<span class="class-kind">interface</span></h2>
 	<p class="class-desc">
-		可运行契约：凡有主循环的类型（引擎、常驻线程）都实现它，供 app 侧统一驱动。
+		可运行契约：继承 <code>ICommandLine</code>。凡有主循环的类型（引擎、常驻线程）都实现它，供 app 侧统一驱动。
 	</p>
 
 	<h3 class="group">接口</h3>

@@ -61,7 +61,13 @@ Render.Shutdown();      // 排空队列后 join
 凡有主循环的类型都实现它，app 侧统一驱动：
 
 ```cpp
-class IRunable
+class ICommandLine
+{
+	virtual ~ICommandLine() = default;
+	virtual void ParseCommandLine(int Argc, char** Argv) = 0;
+};
+
+class IRunable : public ICommandLine
 {
 	virtual ~IRunable() = default;
 	virtual void MainLoop() = 0;
@@ -70,6 +76,8 @@ class IRunable
 // FEngineBase::MainLoop 在调用线程跑 app 主循环
 // FThreadedServer::MainLoop 在专用线程跑 FIFO 队列循环
 ```
+
+`ICommandLine` 让所有可运行对象（工具包 / 引擎）都能接收命令行参数；`MahoMain`/`MahoCLIMain` 创建后先 `ParseCommandLine` 再驱动。
 
 ## 关键语义
 

@@ -201,9 +201,14 @@
 		<tr><td class="sig"><code><span class="kw">virtual void</span> Shutdown() = 0</code> <span class="badge badge-protected">protected</span></td><td>驱动 <code>Execute&lt;Shutdown, FList, FReverseTopology&gt;</code></td></tr>
 		<tr><td class="sig"><code><span class="kw">virtual void</span> PostShutdown() = 0</code> <span class="badge badge-protected">protected</span></td><td>驱动 <code>Execute&lt;PostShutdown, FList, FReverseTopology&gt;</code></td></tr>
 		<tr>
-			<td class="sig"><code><span class="type">void</span> RequestShutdown()</code> <span class="badge badge-protected">protected</span></td>
-			<td>extension 在 Tick 中调用，置 CurrentStage 退出主循环</td>
+			<td class="sig"><code><span class="type">void</span> RequestShutdown()</code></td>
+			<td>extension 在 Tick 中调用，置 CurrentStage 退出主循环（公开，任意线程安全）</td>
 		</tr>
+	</table>
+	<h3 class="group">全局</h3>
+	<table class="api-table">
+		<tr><th style="width:46%">符号</th><th>说明</th></tr>
+		<tr><td class="sig"><code>GApp</code>（<span class="type">FEngineBase*</span>）</td><td>运行中的引擎实例；构造时置位，供 extension 请求退出</td></tr>
 	</table>
 	<h3 class="group">成员变量</h3>
 	<table class="api-table">
@@ -218,8 +223,9 @@
 <section class="class-panel">
 	<h3 class="class-name">EntryPoint.h<span class="class-kind">header</span></h3>
 	<p class="class-desc">
-		平台无关共享驱动（<code>MahoMain</code> + 工厂声明）。平台入口 shim 各一个
-		（<code>EntryPointDesktop/Android/IOS/Xbox.h</code>），游戏项目单 .cpp 按目标平台 include 其一。
+		平台无关共享驱动（<code>MahoMain</code>（IDE/引擎）+ <code>MahoCLIMain</code>（CLI）+ 工厂声明）。
+		平台入口 shim 各一个（<code>EntryPointWindows/Linux/Android/IOS/Xbox.h</code>），游戏项目单 .cpp 按目标平台 include 其一；
+		CLI 项目 include 前定义 <code>MAHO_CLI_ENTRY</code> 转发到 <code>MahoCLIMain</code>。
 	</p>
 	<h3 class="group">项目侧契约（code-gen 生成）</h3>
 	<table class="api-table">
@@ -237,8 +243,8 @@
 	<table class="api-table">
 		<tr><th style="width:46%">步骤</th><th>说明</th></tr>
 		<tr><td class="sig"><code>InstallFatalHandlers()</code></td><td>装 std::terminate 兜底（早于一切）</td></tr>
-		<tr><td class="sig"><code>unique_ptr&lt;FToolkitBase&gt;</code></td><td>ctor 跑 Init，dtor 跑 Shutdown</td></tr>
-		<tr><td class="sig"><code>CreateEngine(Argc, Argv) → MainLoop()</code></td><td>驱动引擎主循环</td></tr>
+		<tr><td class="sig"><code>unique_ptr&lt;FToolkitBase&gt;</code></td><td>ctor 跑 ParseCommandLine + Init，dtor 跑 Shutdown</td></tr>
+		<tr><td class="sig"><code>CreateEngine(Argc, Argv) → MainLoop()</code></td><td>驱动引擎主循环（仅 MahoMain）</td></tr>
 		<tr><td class="sig"><code>try/catch → ReportFatal</code></td><td>逃逸异常兜底（stderr + Fatal.log + abort）</td></tr>
 	</table>
 </section>
@@ -248,7 +254,7 @@
 
 <section class="class-panel">
 	<h3 class="class-name">IRunable<span class="class-kind">interface</span></h3>
-	<p class="class-desc">可运行契约（<code>virtual void MainLoop() = 0</code>）。见 <a href="Core/Async/Async.html">Async/Async.html</a>。</p>
+	<p class="class-desc">可运行契约（继承 <code>ICommandLine</code>：<code>ParseCommandLine</code> + <code>virtual void MainLoop() = 0</code>）。见 <a href="Core/Async/Async.html">Async/Async.html</a>。</p>
 </section>
 
 <section class="class-panel">
