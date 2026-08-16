@@ -91,10 +91,10 @@ function(maho_set_plugin_output_dirs TARGET_NAME PLUGIN_DIR)
 	foreach(_maho_out RUNTIME LIBRARY ARCHIVE)
 		set_target_properties(${TARGET_NAME} PROPERTIES
 			${_maho_out}_OUTPUT_DIRECTORY "${PLUGIN_DIR}/Binaries"
-			${_maho_out}_OUTPUT_DIRECTORY_DEBUG "${PLUGIN_DIR}/Binaries"
-			${_maho_out}_OUTPUT_DIRECTORY_RELEASE "${PLUGIN_DIR}/Binaries"
-			${_maho_out}_OUTPUT_DIRECTORY_RELWITHDEBINFO "${PLUGIN_DIR}/Binaries"
-			${_maho_out}_OUTPUT_DIRECTORY_MINSIZEREL "${PLUGIN_DIR}/Binaries"
+			${_maho_out}_OUTPUT_DIRECTORY_DEBUG "${PLUGIN_DIR}/Binaries/Debug"
+			${_maho_out}_OUTPUT_DIRECTORY_RELEASE "${PLUGIN_DIR}/Binaries/Release"
+			${_maho_out}_OUTPUT_DIRECTORY_RELWITHDEBINFO "${PLUGIN_DIR}/Binaries/RelWithDebInfo"
+			${_maho_out}_OUTPUT_DIRECTORY_MINSIZEREL "${PLUGIN_DIR}/Binaries/MinSizeRel"
 		)
 	endforeach()
 	set_target_properties(${TARGET_NAME} PROPERTIES
