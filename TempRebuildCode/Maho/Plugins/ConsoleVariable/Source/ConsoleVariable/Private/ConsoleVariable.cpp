@@ -1,138 +1,122 @@
 #include <ConsoleVariable.h>
 
+#include <mutex>
 #include <string>
 #include <utility>
 
 namespace Maho::ConsoleVariable
 {
 
-void FConsoleVariable::Register(std::string_view Name, int Value, std::string_view Description)
+namespace
 {
-	std::lock_guard<std::mutex> Lock(Mutex);
-	Registry[std::string(Name)] = { std::to_string(Value), std::string(Description) };
-}
+	std::mutex GMutex;
 
-void FConsoleVariable::Register(std::string_view Name, float Value, std::string_view Description)
-{
-	std::lock_guard<std::mutex> Lock(Mutex);
-	Registry[std::string(Name)] = { std::to_string(Value), std::string(Description) };
-}
-
-void FConsoleVariable::Register(std::string_view Name, bool Value, std::string_view Description)
-{
-	std::lock_guard<std::mutex> Lock(Mutex);
-	Registry[std::string(Name)] = { Value ? "true" : "false", std::string(Description) };
-}
-
-void FConsoleVariable::Register(std::string_view Name, std::string Value, std::string_view Description)
-{
-	std::lock_guard<std::mutex> Lock(Mutex);
-	Registry[std::string(Name)] = { std::move(Value), std::string(Description) };
-}
-
-int FConsoleVariable::GetInt(std::string_view Name) const
-{
-	std::lock_guard<std::mutex> Lock(Mutex);
-	const auto It = Registry.find(std::string(Name));
-	if (It == Registry.end())
+	[[nodiscard]] std::string ToLower(std::string_view S)
 	{
-		return 0;
-	}
-	return std::stoi(It->second.Value);
-}
-
-float FConsoleVariable::GetFloat(std::string_view Name) const
-{
-	std::lock_guard<std::mutex> Lock(Mutex);
-	const auto It = Registry.find(std::string(Name));
-	if (It == Registry.end())
-	{
-		return 0.0f;
-	}
-	return std::stof(It->second.Value);
-}
-
-bool FConsoleVariable::GetBool(std::string_view Name) const
-{
-	std::lock_guard<std::mutex> Lock(Mutex);
-	const auto It = Registry.find(std::string(Name));
-	if (It == Registry.end())
-	{
-		return false;
-	}
-	const std::string& Value = It->second.Value;
-	return Value == "true" || Value == "1";
-}
-
-std::string FConsoleVariable::GetString(std::string_view Name) const
-{
-	std::lock_guard<std::mutex> Lock(Mutex);
-	const auto It = Registry.find(std::string(Name));
-	if (It == Registry.end())
-	{
-		return std::string();
-	}
-	return It->second.Value;
-}
-
-void FConsoleVariable::SetInt(std::string_view Name, int Value)
-{
-	std::lock_guard<std::mutex> Lock(Mutex);
-	const auto It = Registry.find(std::string(Name));
-	if (It != Registry.end())
-	{
-		It->second.Value = std::to_string(Value);
+		std::string Out(S);
+		for (char& C : Out)
+		{
+			if (C >= 'A' && C <= 'Z')
+			{
+				C = static_cast<char>(C - 'A' + 'a');
+			}
+		}
+		return Out;
 	}
 }
 
-void FConsoleVariable::SetFloat(std::string_view Name, float Value)
+// ── FCVarEntry (concrete IConsoleVariable) ──
+
+namespace
 {
-	std::lock_guard<std::mutex> Lock(Mutex);
-	const auto It = Registry.find(std::string(Name));
-	if (It != Registry.end())
+	class FCVarEntry final : public IConsoleVariable
 	{
-		It->second.Value = std::to_string(Value);
-	}
+	public:
+		FCVarEntry(std::string InName, ECVarType InType, std::string InValue, std::string InDescription, ECVarFlags InFlags)
+			: Name(std::move(InName))
+			, Type(InType)
+			, Value(std::move(InValue))
+			, Description(std::move(InDescription))
+			, Flags(InFlags)
+		{
+		}
+
+		[[nodiscard]] std::string_view GetName() const override { return Name; }
+		[[nodiscard]] std::string_view GetDescription() const override { return Description; }
+		[[nodiscard]] ECVarFlags GetFlags() const override { return Flags; }
+
+		[[nodiscard]] int GetInt() const override
+		{
+			try { return std::stoi(Value); }
+			catch (...) { return 0; }
+		}
+
+		[[nodiscard]] float GetFloat() const override
+		{
+			try { return std::stof(Value); }
+			catch (...) { return 0.0f; }
+		}
+
+		[[nodiscard]] bool GetBool() const override
+		{
+			const std::string Lower = ToLower(Value);
+			return Lower == "true" || Lower == "1" || Lower == "yes" || Lower == "on";
+		}
+
+		[[nodiscard]] std::string GetString() const override { return Value; }
+
+		void Set(std::string_view InValue) override
+		{
+			if (HasFlag(Flags, ECVarFlags::ReadOnly))
+			{
+				return;
+			}
+			Value = std::string(InValue);
+		}
+
+	private:
+		std::string Name;
+		ECVarType Type;
+		std::string Value;
+		std::string Description;
+		ECVarFlags Flags;
+	};
 }
 
-void FConsoleVariable::SetBool(std::string_view Name, bool Value)
-{
-	std::lock_guard<std::mutex> Lock(Mutex);
-	const auto It = Registry.find(std::string(Name));
-	if (It != Registry.end())
-	{
-		It->second.Value = Value ? "true" : "false";
-	}
-}
-
-void FConsoleVariable::SetString(std::string_view Name, std::string Value)
-{
-	std::lock_guard<std::mutex> Lock(Mutex);
-	const auto It = Registry.find(std::string(Name));
-	if (It != Registry.end())
-	{
-		It->second.Value = std::move(Value);
-	}
-}
-
-bool FConsoleVariable::Has(std::string_view Name) const
-{
-	std::lock_guard<std::mutex> Lock(Mutex);
-	return Registry.find(std::string(Name)) != Registry.end();
-}
+// ── FConsoleVariable ──
 
 bool FConsoleVariable::ExecuteStage(EToolStage Stage)
 {
-	switch (Stage)
+	if (Stage == EToolStage::Shutdown)
 	{
-	case EToolStage::Init:
-	case EToolStage::Shutdown:
-		std::lock_guard<std::mutex> Lock(Mutex);
+		std::lock_guard<std::mutex> Lock(GMutex);
 		Registry.clear();
-		return true;
-	default:
-		return true;
 	}
+	// NOTE: Init does NOT clear — static TAutoConsoleVariable globals registered
+	// at static-init must survive the app's Init stage.
+	return true;
+}
+
+IConsoleVariable* FConsoleVariable::Find(std::string_view Name)
+{
+	std::lock_guard<std::mutex> Lock(GMutex);
+	const auto It = Registry.find(std::string(Name));
+	return It != Registry.end() ? It->second.get() : nullptr;
+}
+
+IConsoleVariable* FConsoleVariable::Register(
+	std::string_view Name,
+	ECVarType Type,
+	std::string DefaultValue,
+	std::string_view Description,
+	ECVarFlags Flags)
+{
+	std::lock_guard<std::mutex> Lock(GMutex);
+	auto Entry = std::make_unique<FCVarEntry>(
+		std::string(Name), Type, std::move(DefaultValue), std::string(Description), Flags);
+	IConsoleVariable* Result = Entry.get();
+	Registry[std::string(Name)] = std::move(Entry);
+	return Result;
 }
 
 } // namespace Maho::ConsoleVariable

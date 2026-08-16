@@ -1,80 +1,149 @@
 #include <Config.h>
 
+#include <fstream>
+#include <string>
+
 namespace Maho::Config
 {
 
+namespace
+{
+	[[nodiscard]] std::string Trim(std::string_view S)
+	{
+		const std::size_t First = S.find_first_not_of(" \t\r");
+		if (First == std::string_view::npos)
+		{
+			return "";
+		}
+		const std::size_t Last = S.find_last_not_of(" \t\r");
+		return std::string(S.substr(First, Last - First + 1));
+	}
+}
+
 bool FConfig::ExecuteStage(EToolStage Stage)
 {
-	switch (Stage)
+	if (Stage == EToolStage::Init || Stage == EToolStage::Shutdown)
 	{
-	case EToolStage::Init:
-		Table = toml::table{};
-		break;
-
-	case EToolStage::Shutdown:
-		Table = toml::table{};
-		break;
+		Sections.clear();
 	}
-
 	return true;
 }
 
 bool FConfig::Load(std::string_view Path)
 {
-	try
-	{
-		Table = toml::parse_file(Path);
-		return true;
-	}
-	catch (const toml::parse_error&)
+	std::ifstream Stream(std::string(Path));
+	if (!Stream)
 	{
 		return false;
 	}
-}
 
-bool FConfig::Has(std::string_view Key) const
-{
-	return FindNode(Key) != nullptr;
-}
-
-const toml::node* FConfig::FindNode(std::string_view Key) const
-{
-	const toml::node* Current = &Table;
-	std::size_t Begin = 0;
-
-	while (true)
+	std::string CurrentSection;
+	std::string Line;
+	while (std::getline(Stream, Line))
 	{
-		const std::size_t Dot = Key.find('.', Begin);
-		const std::string_view Segment = (Dot == std::string_view::npos)
-			? Key.substr(Begin)
-			: Key.substr(Begin, Dot - Begin);
-
-		if (Segment.empty())
+		const std::string Trimmed = Trim(Line);
+		if (Trimmed.empty() || Trimmed.front() == ';' || Trimmed.front() == '#')
 		{
-			return nullptr;
+			continue;   // empty / comment
 		}
 
-		const auto* CurrentTable = Current->as_table();
-		if (CurrentTable == nullptr)
+		if (Trimmed.front() == '[' && Trimmed.back() == ']')
 		{
-			return nullptr;
+			CurrentSection = Trimmed.substr(1, Trimmed.size() - 2);
+			continue;
 		}
 
-		const auto* Next = CurrentTable->get(Segment);
-		if (Next == nullptr)
+		const std::size_t Eq = Trimmed.find('=');
+		if (Eq == std::string::npos)
 		{
-			return nullptr;
+			continue;   // not a key=value line
 		}
 
-		Current = Next;
-
-		if (Dot == std::string_view::npos)
-		{
-			return Current;
-		}
-
-		Begin = Dot + 1;
+		Sections[CurrentSection][Trim(Trimmed.substr(0, Eq))] = Trim(Trimmed.substr(Eq + 1));
 	}
+	return true;
+}
+
+std::optional<std::string> FConfig::GetString(std::string_view Section, std::string_view Key) const
+{
+	const auto SectionIt = Sections.find(std::string(Section));
+	if (SectionIt == Sections.end())
+	{
+		return std::nullopt;
+	}
+	const auto KeyIt = SectionIt->second.find(std::string(Key));
+	if (KeyIt == SectionIt->second.end())
+	{
+		return std::nullopt;
+	}
+	return KeyIt->second;
+}
+
+std::int64_t FConfig::GetInt(std::string_view Section, std::string_view Key, std::int64_t Default) const
+{
+	const auto Value = GetString(Section, Key);
+	if (!Value)
+	{
+		return Default;
+	}
+	try
+	{
+		return std::stoll(*Value);
+	}
+	catch (...)
+	{
+		return Default;
+	}
+}
+
+double FConfig::GetFloat(std::string_view Section, std::string_view Key, double Default) const
+{
+	const auto Value = GetString(Section, Key);
+	if (!Value)
+	{
+		return Default;
+	}
+	try
+	{
+		return std::stod(*Value);
+	}
+	catch (...)
+	{
+		return Default;
+	}
+}
+
+bool FConfig::GetBool(std::string_view Section, std::string_view Key, bool Default) const
+{
+	const auto Value = GetString(Section, Key);
+	if (!Value)
+	{
+		return Default;
+	}
+	std::string Lower = *Value;
+	for (char& C : Lower)
+	{
+		if (C >= 'A' && C <= 'Z')
+		{
+			C = static_cast<char>(C - 'A' + 'a');
+		}
+	}
+	return Lower == "true" || Lower == "1" || Lower == "yes" || Lower == "on";
+}
+
+void FConfig::SetString(std::string_view Section, std::string_view Key, std::string Value)
+{
+	Sections[std::string(Section)][std::string(Key)] = std::move(Value);
+}
+
+bool FConfig::HasSection(std::string_view Section) const
+{
+	return Sections.find(std::string(Section)) != Sections.end();
+}
+
+bool FConfig::HasKey(std::string_view Section, std::string_view Key) const
+{
+	return GetString(Section, Key).has_value();
 }
 
 } // namespace Maho::Config
