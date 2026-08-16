@@ -218,7 +218,8 @@
 <section class="class-panel">
 	<h3 class="class-name">EntryPoint.h<span class="class-kind">header</span></h3>
 	<p class="class-desc">
-		定义 <code>main</code> / <code>WinMain</code>。游戏项目单 .cpp include。项目侧实现两个工厂。
+		平台无关共享驱动（<code>MahoMain</code> + 工厂声明）。平台入口 shim 各一个
+		（<code>EntryPointDesktop/Android/IOS/Xbox.h</code>），游戏项目单 .cpp 按目标平台 include 其一。
 	</p>
 	<h3 class="group">项目侧契约（code-gen 生成）</h3>
 	<table class="api-table">

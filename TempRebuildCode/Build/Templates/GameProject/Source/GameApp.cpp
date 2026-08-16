@@ -1,5 +1,5 @@
 #include <Maho.h>
-#include <EntryPoint.h>
+#include <EntryPointDesktop.h>
 
 {{PLUGIN_INCLUDES}}
 

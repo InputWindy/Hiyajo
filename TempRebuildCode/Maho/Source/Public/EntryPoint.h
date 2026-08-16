@@ -1,18 +1,18 @@
 #pragma once
 
 /**
- * Platform entry point for Maho game executables.
- * Include this header in exactly one .cpp of the game project.
+ * Maho shared app driver (platform-agnostic).
  *
- * Exception handling is installed first (InstallFatalHandlers) — before any
- * scheduler or engine object exists. The main-thread lifecycle is wrapped in
- * try/catch: anything that escapes MainLoop funnels into ReportFatal (stderr
- * + Saved/Logs/Fatal.log + abort).
+ * This header is included by one of the platform entry shims
+ * (EntryPointDesktop / EntryPointAndroid / EntryPointIOS / EntryPointXbox),
+ * which in turn is included in exactly one .cpp of the game project.
+ *
+ * MahoMain drives the whole app: install fatal handlers → create the
+ * singleton registry (ctor: ParseCommandLine + Init) → create the engine
+ * (ctor: ParseCommandLine) → MainLoop → destroy. Anything that escapes
+ * MainLoop funnels into ReportFatal (stderr + Saved/Logs/Fatal.log + abort).
  *
  * The project defines CreateSingletonRegistry() and CreateEngine() (code-gen).
- *
- * On Windows the game is typically linked as a GUI app (WIN32_EXECUTABLE) so
- * no console black box appears.
  */
 
 #include <Engine.h>
@@ -73,22 +73,3 @@ int MahoMain(int Argc, char** Argv)
 }
 
 } // namespace
-
-#if defined(_WIN32)
-#	ifndef NOMINMAX
-#		define NOMINMAX
-#	endif
-#	include <Windows.h>
-int WINAPI WinMain(HINSTANCE /*Instance*/, HINSTANCE /*Prev*/, LPSTR /*CmdLine*/, int /*Show*/)
-{
-	// Detach any inherited / debugger console so the OS black box stays hidden.
-	FreeConsole();
-
-	return MahoMain(__argc, __argv);
-}
-#endif
-
-int main(int Argc, char** Argv)
-{
-	return MahoMain(Argc, Argv);
-}

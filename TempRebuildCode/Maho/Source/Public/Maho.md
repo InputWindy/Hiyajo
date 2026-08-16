@@ -79,7 +79,16 @@ protected:
 
 ## EntryPoint
 
-[EntryPoint.h](EntryPoint.h) 定义 `main` / `WinMain`，游戏项目单 `.cpp` include：
+[EntryPoint.h](EntryPoint.h) 是平台无关的共享驱动（`MahoMain` + 工厂声明）。平台入口 shim 各一个，游戏项目单 `.cpp` 按目标平台 include 其一：
+
+| shim | 入口 | 平台 |
+|------|------|------|
+| [EntryPointDesktop.h](EntryPointDesktop.h) | `main` + `WinMain` | Windows / Linux |
+| [EntryPointAndroid.h](EntryPointAndroid.h) | `android_main` | Android |
+| [EntryPointIOS.h](EntryPointIOS.h) | `RunIOS()`（ObjC 入口调它） | iOS |
+| [EntryPointXbox.h](EntryPointXbox.h) | `main` | Xbox (GDK) |
+
+流程（`MahoMain`）：
 
 1. `InstallFatalHandlers()`（装 `std::terminate` 兜底，早于一切）
 2. `CreateSingletonRegistry(Argc, Argv)` → `unique_ptr` RAII（ctor 跑 ParseCommandLine + Init，dtor 跑 Shutdown）
