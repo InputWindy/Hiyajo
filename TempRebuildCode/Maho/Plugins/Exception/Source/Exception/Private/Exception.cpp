@@ -5,9 +5,21 @@ namespace Maho::Exception
 
 bool FException::ExecuteStage(EEngineStage Stage)
 {
-	// TODO: Init = register exception handlers; Shutdown = unregister.
-	(void)Stage;
+	if (Stage == EEngineStage::Init || Stage == EEngineStage::Shutdown)
+	{
+		OnException.RemoveAll();
+	}
 	return true;
+}
+
+void FException::ReportException(std::string_view Message)
+{
+	OnException.Broadcast(std::string(Message));
+}
+
+void FException::ReportException(const std::exception& Error)
+{
+	ReportException(Error.what());
 }
 
 } // namespace Maho::Exception
