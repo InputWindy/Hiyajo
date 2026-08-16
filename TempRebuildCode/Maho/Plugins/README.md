@@ -23,7 +23,7 @@
 | [Audio](Audio/Audio.cplugin) | `Maho::FAudio` | 音频播放库（设备 + 音源） |
 | [Math](Math/Math.cplugin) | `Maho::FMath` | 数学库（GLM + 数学辅助） |
 | [CommandParser](CommandParser/CommandParser.cplugin) | `Maho::FCommandParser` | 命令行参数解析（键值存储） |
-| [AssetRegistry](AssetRegistry/AssetRegistry.cplugin) | `Maho::AssetRegistry::FAssetRegistry` | 资产路径 + 注册表（逻辑路径 → 物理文件 + 类型 + 依赖） |
+| [Asset](Asset/Asset.cplugin) | `Maho::Asset::FAssetRegistry` | 资产路径 + 注册表（逻辑路径 → 物理文件 + 类型 + 依赖 + 加载） |
 
 ### Engine（EEngineStage，引擎扩展）
 

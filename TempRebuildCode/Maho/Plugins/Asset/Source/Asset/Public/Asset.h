@@ -7,6 +7,7 @@
 #include <filesystem>
 #include <map>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -73,6 +74,14 @@ public:
 
 	/** Look up an asset by logical path; nullptr when absent. */
 	[[nodiscard]] const FAssetData* Find(const FAssetPath& Path) const;
+
+	/** Resolve a logical path to its physical file via FPaths (the mount alias is a root). */
+	[[nodiscard]] std::filesystem::path Resolve(const FAssetPath& Path) const;
+
+	/** Load an asset file's raw bytes; nullopt when missing or unreadable. */
+	[[nodiscard]] std::optional<std::vector<std::uint8_t>> Load(const FAssetPath& Path) const;
+
+	[[nodiscard]] std::size_t GetAssetCount() const;
 
 private:
 	friend TSingleton<FAssetRegistry>;

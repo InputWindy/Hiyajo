@@ -5,10 +5,11 @@
 	"Category": "Engine",
 	"EnabledByDefault": true,
 	"Modules": [
-		{
-			"Name": "Asset",
-			"Type": "Runtime",
-			"Extension": {
+			{
+				"Name": "Asset",
+				"Type": "Runtime",
+				"Dependencies": ["Paths"],
+				"Extension": {
 				"Class": "Maho::Asset::FAssetRegistry",
 				"Header": "Asset.h",
 				"Priority": "System",
