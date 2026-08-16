@@ -5,14 +5,7 @@ include(FetchContent)
 
 if(NOT TARGET glm::glm)
 	maho_git_repository_url(_GLM_URL https://github.com/g-truc/glm.git)
-	FetchContent_Declare(
-		glm
-		GIT_REPOSITORY ${_GLM_URL}
-		GIT_TAG 1.0.1
-		GIT_SHALLOW TRUE
-		GIT_PROGRESS TRUE
-	)
-	maho_fetchcontent_populate_or_reuse(glm glm/glm.hpp)
+	maho_fetchcontent_populate_or_reuse(glm ${_GLM_URL} 1.0.1 glm/glm.hpp)
 	add_subdirectory(${glm_SOURCE_DIR} ${glm_BINARY_DIR})
 endif()
 

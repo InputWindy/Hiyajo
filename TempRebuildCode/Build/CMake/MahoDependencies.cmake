@@ -13,10 +13,12 @@ include(FetchContent)
 set(FETCHCONTENT_UPDATES_DISCONNECTED ON CACHE BOOL
 	"Skip FetchContent git update when already populated" FORCE)
 
-# If a previous populate left sources but lost CMake stamps, reuse the tree
-# instead of calling FetchContent_Populate (which may still hit the network).
-# Markers: relative paths that must exist under ${FETCHCONTENT_BASE_DIR}/<name>-src.
-macro(maho_fetchcontent_populate_or_reuse _name)
+# If a previous populate left sources but lost CMake stamps, reuse the tree.
+# Otherwise clone manually (execute_process WITHOUT output capture) so git's
+# --progress streams live to the console — FetchContent_Populate captures
+# git's output into variables, hiding the progress.
+# Usage: maho_fetchcontent_populate_or_reuse(<name> <repo-url> <git-tag> <marker>...)
+macro(maho_fetchcontent_populate_or_reuse _name _repo _tag)
 	FetchContent_GetProperties(${_name})
 	if(NOT ${_name}_POPULATED)
 		string(TOLOWER "${_name}" _maho_fc_lower)
@@ -29,14 +31,22 @@ macro(maho_fetchcontent_populate_or_reuse _name)
 			endif()
 		endforeach()
 		if(_maho_fc_ok)
-			set(${_name}_SOURCE_DIR "${_maho_fc_src}")
-			set(${_name}_BINARY_DIR "${FETCHCONTENT_BASE_DIR}/${_maho_fc_lower}-build")
-			set(${_name}_POPULATED TRUE)
-			message(STATUS "Maho: reusing FetchContent ${_name} at ${${_name}_SOURCE_DIR}")
-			else()
-				message(STATUS "Maho: Downloading ${_name} from the network (first time)…")
-				FetchContent_Populate(${_name})
+			message(STATUS "Maho: reusing ${_name} at ${_maho_fc_src}")
+		else()
+			message(STATUS "Maho: Downloading ${_name} (${_repo}) …")
+			find_package(Git REQUIRED)
+			file(REMOVE_RECURSE "${_maho_fc_src}")   # clean any half-clone
+			execute_process(
+				COMMAND "${GIT_EXECUTABLE}" clone --progress --depth 1 --branch "${_tag}" "${_repo}" "${_maho_fc_src}"
+				RESULT_VARIABLE _maho_fc_result
+			)
+			if(NOT _maho_fc_result EQUAL 0)
+				message(FATAL_ERROR "Maho: git clone failed for ${_name} (exit ${_maho_fc_result})")
 			endif()
+		endif()
+		set(${_name}_SOURCE_DIR "${_maho_fc_src}")
+		set(${_name}_BINARY_DIR "${FETCHCONTENT_BASE_DIR}/${_maho_fc_lower}-build")
+		set(${_name}_POPULATED TRUE)
 		unset(_maho_fc_src)
 		unset(_maho_fc_ok)
 		unset(_maho_fc_lower)

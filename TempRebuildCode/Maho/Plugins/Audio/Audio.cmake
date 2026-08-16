@@ -5,14 +5,7 @@ include(FetchContent)
 
 if(NOT DEFINED miniaudio_SOURCE_DIR)
 	maho_git_repository_url(_MINIAUDIO_URL https://github.com/mackron/miniaudio.git)
-	FetchContent_Declare(
-		miniaudio
-		GIT_REPOSITORY ${_MINIAUDIO_URL}
-		GIT_TAG 0.11.22
-		GIT_SHALLOW TRUE
-		GIT_PROGRESS TRUE
-	)
-	maho_fetchcontent_populate_or_reuse(miniaudio miniaudio.h)
+	maho_fetchcontent_populate_or_reuse(miniaudio ${_MINIAUDIO_URL} 0.11.22 miniaudio.h)
 endif()
 
 target_include_directories(${_MOD_TARGET} PUBLIC "${miniaudio_SOURCE_DIR}")

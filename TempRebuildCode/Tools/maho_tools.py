@@ -127,6 +127,12 @@ class OperationCancelled(Exception):
 	"""Raised when a long-running tool command is aborted by the user."""
 
 
+# git emits progress with \n (not \r) when its stderr is not a TTY (piped).
+# Recognise those lines so they can be redrawn in place instead of spamming.
+_PROGRESS_LINE_RE = re.compile(
+	r"^(Receiving objects|Resolving deltas|remote: Compressing objects|remote: Counting objects|remote: Enumerating objects):")
+
+
 def run_command(
 	cmd: list[str],
 	*,
@@ -161,23 +167,34 @@ def run_command(
 
 	assert proc.stdout is not None
 	try:
-		# Read in chunks and treat \r and \n as line terminators — git's clone
-		# progress ("Receiving objects: 45%") uses \r updates, which a plain
-		# `for line in proc.stdout` would buffer until the very end.
+		# Read char-by-char. \n = real line (log it); \r = in-place progress
+		# update (git clone "Receiving objects: X%") — overwrite the SAME
+		# console line via print(..., end=""), padded to clear stale chars.
 		buf = ""
+		on_progress = False
 		while True:
-			chunk = proc.stdout.read(4096)
-			if not chunk:
+			ch = proc.stdout.read(1)
+			if not ch:
 				break
 			if cancel_event is not None and cancel_event.is_set():
 				_kill_process(proc)
 				raise OperationCancelled("Cancelled")
-			buf += chunk
-			parts = buf.replace("\r\n", "\n").replace("\r", "\n").split("\n")
-			buf = parts[-1]
-			for part in parts[:-1]:
-				if part:
-					log(part)
+			if ch == "\n":
+				if _PROGRESS_LINE_RE.match(buf) and "done." not in buf:
+					# in-place progress (git uses \n when stderr isn't a TTY)
+					print("\r" + buf.ljust(80), end="", flush=True)
+					on_progress = True
+				else:
+					if on_progress:
+						print()
+						on_progress = False
+					if buf:
+						log(buf)
+				buf = ""
+			else:
+				buf += ch
+		if on_progress:
+			print()
 		if buf:
 			log(buf)
 		rc = proc.wait()

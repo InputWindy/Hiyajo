@@ -5,14 +5,7 @@ include(FetchContent)
 
 if(NOT TARGET Jolt)
 	maho_git_repository_url(_JOLT_URL https://github.com/jrouwe/JoltPhysics.git)
-	FetchContent_Declare(
-		JoltPhysics
-		GIT_REPOSITORY ${_JOLT_URL}
-		GIT_TAG v5.4.0
-		GIT_SHALLOW TRUE
-		GIT_PROGRESS TRUE
-	)
-	maho_fetchcontent_populate_or_reuse(JoltPhysics Jolt/Jolt.h)
+	maho_fetchcontent_populate_or_reuse(JoltPhysics ${_JOLT_URL} v5.4.0 Jolt/Jolt.h)
 	add_subdirectory(${JoltPhysics_SOURCE_DIR}/Build ${JoltPhysics_BINARY_DIR})
 endif()
 

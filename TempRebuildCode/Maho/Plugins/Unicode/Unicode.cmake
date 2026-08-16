@@ -5,14 +5,7 @@ include(FetchContent)
 
 if(NOT TARGET utf8cpp)
 	maho_git_repository_url(_UTF8CPP_URL https://github.com/nemtrif/utfcpp.git)
-	FetchContent_Declare(
-		utfcpp
-		GIT_REPOSITORY ${_UTF8CPP_URL}
-		GIT_TAG v4.0.6
-		GIT_SHALLOW TRUE
-		GIT_PROGRESS TRUE
-	)
-	maho_fetchcontent_populate_or_reuse(utfcpp source/utf8.h)
+	maho_fetchcontent_populate_or_reuse(utfcpp ${_UTF8CPP_URL} v4.0.6 source/utf8.h)
 	add_subdirectory(${utfcpp_SOURCE_DIR} ${utfcpp_BINARY_DIR})
 endif()
 
