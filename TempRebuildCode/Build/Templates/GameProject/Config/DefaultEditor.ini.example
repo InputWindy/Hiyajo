@@ -1,8 +1,0 @@
-; Maho editor settings template (copy to DefaultEditor.ini and fill ApiKey).
-; DefaultEditor.ini should stay local / gitignored.
-
-[Agent]
-; Cursor User API Key (https://cursor.com/dashboard/api)
-ApiKey=
-BridgePort=8765
-bAutoConnect=True
