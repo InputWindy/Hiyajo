@@ -1,6 +1,6 @@
 #include <Log.h>
 
-namespace Maho
+namespace Maho::Log
 {
 
 bool FLogger::ExecuteStage(ESingletonStage Stage)
@@ -10,4 +10,4 @@ bool FLogger::ExecuteStage(ESingletonStage Stage)
 	return true;
 }
 
-} // namespace Maho
+} // namespace Maho::Log

@@ -1,6 +1,6 @@
 #include <Audio.h>
 
-namespace Maho
+namespace Maho::Audio
 {
 
 bool FAudio::ExecuteStage(ESingletonStage Stage)
@@ -10,4 +10,4 @@ bool FAudio::ExecuteStage(ESingletonStage Stage)
 	return true;
 }
 
-} // namespace Maho
+} // namespace Maho::Audio

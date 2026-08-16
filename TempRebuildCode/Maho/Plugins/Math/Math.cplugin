@@ -9,7 +9,7 @@
 			"Name": "Math",
 			"Type": "Runtime",
 			"Extension": {
-				"Class": "Maho::FMath",
+				"Class": "Maho::Math::FMath",
 				"Header": "Math.h",
 				"Priority": "System",
 				"Stage": "ESingletonStage"

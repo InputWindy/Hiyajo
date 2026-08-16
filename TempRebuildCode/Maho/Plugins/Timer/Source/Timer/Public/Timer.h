@@ -6,6 +6,9 @@
 namespace Maho
 {
 
+namespace Timer
+{
+
 /** Time source extension (chrono). Pre-app singleton (driven by ESingletonStage). */
 class MAHO_TIMER_API FTimer final : public TExtension<ESingletonStage, FTimer>
 {
@@ -16,5 +19,7 @@ private:
 	friend TSingleton<FTimer>;
 	FTimer() = default;
 };
+
+} // namespace Timer
 
 } // namespace Maho

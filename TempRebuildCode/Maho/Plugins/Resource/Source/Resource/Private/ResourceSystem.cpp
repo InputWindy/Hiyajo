@@ -1,6 +1,6 @@
 #include <ResourceSystem.h>
 
-namespace Maho
+namespace Maho::Resource
 {
 
 bool FResourceSystem::ExecuteStage(EEngineStage Stage)
@@ -15,4 +15,4 @@ const char* FResourceSystem::GetThreadName() const
 	return "Resource";
 }
 
-} // namespace Maho
+} // namespace Maho::Resource

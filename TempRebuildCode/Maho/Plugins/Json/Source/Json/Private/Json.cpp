@@ -1,6 +1,6 @@
 #include <Json.h>
 
-namespace Maho
+namespace Maho::Json
 {
 
 bool FJson::ExecuteStage(ESingletonStage Stage)
@@ -10,4 +10,4 @@ bool FJson::ExecuteStage(ESingletonStage Stage)
 	return true;
 }
 
-} // namespace Maho
+} // namespace Maho::Json

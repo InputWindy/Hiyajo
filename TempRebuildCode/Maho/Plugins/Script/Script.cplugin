@@ -10,7 +10,7 @@
 			"Type": "Runtime",
 			"Dependencies": ["Resource"],
 			"Extension": {
-				"Class": "Maho::FScriptSystem",
+				"Class": "Maho::Script::FScriptSystem",
 				"Header": "ScriptSystem.h",
 				"Priority": "Overlay",
 				"Stage": "EEngineStage"

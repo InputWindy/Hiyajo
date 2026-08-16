@@ -9,7 +9,7 @@
 			"Name": "Network",
 			"Type": "Runtime",
 			"Extension": {
-				"Class": "Maho::FNetworkSystem",
+				"Class": "Maho::Network::FNetworkSystem",
 				"Header": "Network.h",
 				"Priority": "System",
 				"Stage": "EEngineStage"

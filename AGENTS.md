@@ -108,3 +108,14 @@
 |------|------|
 | `Build/README.md` | CMake 构建体系 + 项目模板 |
 | `Tools/README.md` | 引擎工具链 |
+
+### 三方库拉取镜像源
+
+引擎核心零三方依赖；所有三方库由各插件的 `<Name>.cmake` 用 FetchContent 拉取。遇到 GitHub 拉不下来（大陆网络）时，两种配置方式：
+
+| 方式 | 配置 | 说明 |
+|------|------|------|
+| 逐仓库镜像 | 编辑 `Maho/Mirrors.txt`，去掉对应行注释 | gitee 官方镜像（稳定），`github路径=镜像url` 每行 |
+| 透明代理前缀 | `setx MAHO_GIT_PROXY_PREFIX https://ghproxy.com/` 或 cmake `-DMAHO_GIT_PROXY_PREFIX=...` | 纯前缀拼接，一次性覆盖所有 GitHub 克隆 |
+
+优先级：`Mirrors.txt` 映射 > 代理前缀 > 直连 GitHub。改写统一走 `maho_git_repository_url()`（`Build/CMake/MahoDependencies.cmake`），插件 `.cmake` 里 `FetchContent_Declare` 的 `GIT_REPOSITORY` 都经它。拉取卡住时先杀 `cmake.exe`/`git.exe`，再删 `Intermediate/_deps/<name>-*` 半成品目录重试。

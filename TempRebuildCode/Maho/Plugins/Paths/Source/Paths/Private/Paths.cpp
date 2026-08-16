@@ -1,6 +1,6 @@
 #include <Paths.h>
 
-namespace Maho
+namespace Maho::Paths
 {
 
 bool FPaths::ExecuteStage(ESingletonStage Stage)
@@ -10,4 +10,4 @@ bool FPaths::ExecuteStage(ESingletonStage Stage)
 	return true;
 }
 
-} // namespace Maho
+} // namespace Maho::Paths

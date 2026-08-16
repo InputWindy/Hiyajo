@@ -9,7 +9,7 @@
 			"Name": "Resource",
 			"Type": "Runtime",
 			"Extension": {
-				"Class": "Maho::FResourceSystem",
+				"Class": "Maho::Resource::FResourceSystem",
 				"Header": "ResourceSystem.h",
 				"Priority": "System",
 				"Stage": "EEngineStage"

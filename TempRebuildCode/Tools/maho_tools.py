@@ -317,7 +317,7 @@ def build_gameapp_mapping(project_name: str, engine_root: Path, plugin_names: li
 			engine_classes.append(cls)
 
 	has_parser = "CommandParser" in plugin_names
-	parse_body = "\t\tMaho::ParseCommandLine(Argc, Argv);" if has_parser else "\t\t(void)Argc;\n\t\t(void)Argv;"
+	parse_body = "\t\tMaho::CommandParser::ParseCommandLine(Argc, Argv);" if has_parser else "\t\t(void)Argc;\n\t\t(void)Argv;"
 
 	return {
 		"PROJECT_NAME": project_name,

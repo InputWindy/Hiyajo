@@ -9,7 +9,7 @@
 			"Name": "Json",
 			"Type": "Runtime",
 			"Extension": {
-				"Class": "Maho::FJson",
+				"Class": "Maho::Json::FJson",
 				"Header": "Json.h",
 				"Priority": "System",
 				"Stage": "ESingletonStage"

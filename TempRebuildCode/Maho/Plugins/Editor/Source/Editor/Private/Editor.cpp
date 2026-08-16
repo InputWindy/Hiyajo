@@ -1,6 +1,6 @@
 #include <Editor.h>
 
-namespace Maho
+namespace Maho::Editor
 {
 
 bool FEditorSystem::ExecuteStage(EEngineStage Stage)
@@ -10,4 +10,4 @@ bool FEditorSystem::ExecuteStage(EEngineStage Stage)
 	return true;
 }
 
-} // namespace Maho
+} // namespace Maho::Editor

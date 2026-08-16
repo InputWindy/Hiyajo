@@ -1,6 +1,6 @@
 #include <RenderSystem.h>
 
-namespace Maho
+namespace Maho::Render
 {
 
 bool FRenderSystem::ExecuteStage(EEngineStage Stage)
@@ -15,4 +15,4 @@ const char* FRenderSystem::GetThreadName() const
 	return "Render";
 }
 
-} // namespace Maho
+} // namespace Maho::Render

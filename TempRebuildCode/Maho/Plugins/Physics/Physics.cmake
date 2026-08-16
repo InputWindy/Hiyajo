@@ -4,9 +4,10 @@ maho_set_plugin_output_dirs(${_MOD_TARGET} "${_MOD_PLUGIN_DIR}")
 include(FetchContent)
 
 if(NOT TARGET Jolt)
+	maho_git_repository_url(_JOLT_URL https://github.com/jrouwe/JoltPhysics.git)
 	FetchContent_Declare(
 		JoltPhysics
-		GIT_REPOSITORY https://github.com/jrouwe/JoltPhysics.git
+		GIT_REPOSITORY ${_JOLT_URL}
 		GIT_TAG v5.4.0
 		GIT_SHALLOW TRUE
 	)

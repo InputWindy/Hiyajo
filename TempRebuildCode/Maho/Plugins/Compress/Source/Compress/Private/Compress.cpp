@@ -1,6 +1,6 @@
 #include <Compress.h>
 
-namespace Maho
+namespace Maho::Compress
 {
 
 bool FCompress::ExecuteStage(ESingletonStage Stage)
@@ -10,4 +10,4 @@ bool FCompress::ExecuteStage(ESingletonStage Stage)
 	return true;
 }
 
-} // namespace Maho
+} // namespace Maho::Compress

@@ -7,20 +7,25 @@
 namespace Maho
 {
 
-/** Render hardware interface extension (GPU device). Engine extension (driven by EEngineStage). */
-class MAHO_RHI_API FRHI final
-	: public TExtension<EEngineStage, FRHI>
-	, public FThreadedServer
+namespace RHI
 {
-public:
-	[[nodiscard]] bool ExecuteStage(EEngineStage Stage) override;
 
-protected:
-	[[nodiscard]] const char* GetThreadName() const override;
+	/** Render hardware interface extension (GPU device). Engine extension (driven by EEngineStage). */
+	class MAHO_RHI_API FRHI final
+		: public TExtension<EEngineStage, FRHI>
+		, public FThreadedServer
+	{
+	public:
+		[[nodiscard]] bool ExecuteStage(EEngineStage Stage) override;
 
-private:
-	friend TSingleton<FRHI>;
-	FRHI() = default;
-};
+	protected:
+		[[nodiscard]] const char* GetThreadName() const override;
+
+	private:
+		friend TSingleton<FRHI>;
+		FRHI() = default;
+	};
+
+} // namespace RHI
 
 } // namespace Maho

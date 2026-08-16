@@ -1,6 +1,6 @@
 #include <Config.h>
 
-namespace Maho
+namespace Maho::Config
 {
 
 bool FConfig::ExecuteStage(ESingletonStage Stage)
@@ -10,4 +10,4 @@ bool FConfig::ExecuteStage(ESingletonStage Stage)
 	return true;
 }
 
-} // namespace Maho
+} // namespace Maho::Config

@@ -9,7 +9,7 @@
 			"Name": "World",
 			"Type": "Runtime",
 			"Extension": {
-				"Class": "Maho::FInitializationSystemGroup",
+				"Class": "Maho::World::FInitializationSystemGroup",
 				"Header": "ECS/SystemGroup.h",
 				"Priority": "Layer",
 				"Stage": "EEngineStage"

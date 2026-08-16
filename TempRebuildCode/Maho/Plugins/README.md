@@ -16,7 +16,9 @@
 | [ConsoleVariable](ConsoleVariable/ConsoleVariable.cplugin) | `Maho::FConsoleVariable` | 控制台变量注册表 |
 | [Compress](Compress/Compress.cplugin) | `Maho::FCompress` | 压缩（zlib/zstd） |
 | [Archive](Archive/Archive.cplugin) | `Maho::FArchive` | 序列化归档 |
-| [Text](Text/Text.cplugin) | `Maho::FText` | 文本 / UTF-8 编码 |
+| [Unicode](Unicode/Unicode.cplugin) | `Maho::FUnicode` | 文本编码（UTF-8/16/32 转换） |
+| [Name](Name/Name.cplugin) | `Maho::FName` | interned 字符串标识符池 |
+| [Text](Text/Text.cplugin) | `Maho::FText` | 本地化文本（文化感知） |
 | [Physics](Physics/Physics.cplugin) | `Maho::FPhysics` | 物理模拟库（刚体 solver） |
 | [Audio](Audio/Audio.cplugin) | `Maho::FAudio` | 音频播放库（设备 + 音源） |
 | [Math](Math/Math.cplugin) | `Maho::FMath` | 数学库（GLM + 数学辅助） |

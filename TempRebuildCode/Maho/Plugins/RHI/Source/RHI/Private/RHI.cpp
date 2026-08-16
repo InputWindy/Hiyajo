@@ -1,6 +1,6 @@
 #include <RHI.h>
 
-namespace Maho
+namespace Maho::RHI
 {
 
 bool FRHI::ExecuteStage(EEngineStage Stage)
@@ -15,4 +15,4 @@ const char* FRHI::GetThreadName() const
 	return "RHI";
 }
 
-} // namespace Maho
+} // namespace Maho::RHI

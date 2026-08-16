@@ -9,7 +9,7 @@
 			"Name": "CommandParser",
 			"Type": "Runtime",
 			"Extension": {
-				"Class": "Maho::FCommandParser",
+				"Class": "Maho::CommandParser::FCommandParser",
 				"Header": "CommandParser.h",
 				"Priority": "System",
 				"Stage": "ESingletonStage"

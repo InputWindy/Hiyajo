@@ -9,7 +9,7 @@
 			"Name": "Compress",
 			"Type": "Runtime",
 			"Extension": {
-				"Class": "Maho::FCompress",
+				"Class": "Maho::Compress::FCompress",
 				"Header": "Compress.h",
 				"Priority": "System",
 				"Stage": "ESingletonStage"

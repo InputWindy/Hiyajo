@@ -9,7 +9,7 @@
 			"Name": "Paths",
 			"Type": "Runtime",
 			"Extension": {
-				"Class": "Maho::FPaths",
+				"Class": "Maho::Paths::FPaths",
 				"Header": "Paths.h",
 				"Priority": "System",
 				"Stage": "ESingletonStage"

@@ -1,6 +1,6 @@
 #include <Physics.h>
 
-namespace Maho
+namespace Maho::Physics
 {
 
 bool FPhysics::ExecuteStage(ESingletonStage Stage)
@@ -10,4 +10,4 @@ bool FPhysics::ExecuteStage(ESingletonStage Stage)
 	return true;
 }
 
-} // namespace Maho
+} // namespace Maho::Physics

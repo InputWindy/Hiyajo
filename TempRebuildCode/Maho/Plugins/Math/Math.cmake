@@ -4,9 +4,10 @@ maho_set_plugin_output_dirs(${_MOD_TARGET} "${_MOD_PLUGIN_DIR}")
 include(FetchContent)
 
 if(NOT TARGET glm::glm)
+	maho_git_repository_url(_GLM_URL https://github.com/g-truc/glm.git)
 	FetchContent_Declare(
 		glm
-		GIT_REPOSITORY https://github.com/g-truc/glm.git
+		GIT_REPOSITORY ${_GLM_URL}
 		GIT_TAG 1.0.1
 		GIT_SHALLOW TRUE
 	)

@@ -9,7 +9,7 @@
 			"Name": "RHI",
 			"Type": "Runtime",
 			"Extension": {
-				"Class": "Maho::FRHI",
+				"Class": "Maho::RHI::FRHI",
 				"Header": "RHI.h",
 				"Priority": "System",
 				"Stage": "EEngineStage"

@@ -9,7 +9,7 @@
 			"Name": "ConsoleVariable",
 			"Type": "Runtime",
 			"Extension": {
-				"Class": "Maho::FConsoleVariable",
+				"Class": "Maho::ConsoleVariable::FConsoleVariable",
 				"Header": "ConsoleVariable.h",
 				"Priority": "System",
 				"Stage": "ESingletonStage"

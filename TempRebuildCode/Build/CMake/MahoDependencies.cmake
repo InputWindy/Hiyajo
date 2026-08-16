@@ -44,6 +44,47 @@ macro(maho_fetchcontent_populate_or_reuse _name)
 	endif()
 endmacro()
 
+# Manual git fetch-source override. In mainland China github.com clones often
+# hang; set MAHO_GIT_PROXY_PREFIX to a transparent proxy prefix (e.g.
+# "https://ghproxy.com/") and every github.com URL below is cloned through it:
+#   cmake -DMAHO_GIT_PROXY_PREFIX=https://ghproxy.com/ ...
+#   or set the env var MAHO_GIT_PROXY_PREFIX (e.g. `setx MAHO_GIT_PROXY_PREFIX https://ghproxy.com/`).
+if(NOT DEFINED MAHO_GIT_PROXY_PREFIX AND DEFINED ENV{MAHO_GIT_PROXY_PREFIX})
+	set(MAHO_GIT_PROXY_PREFIX "$ENV{MAHO_GIT_PROXY_PREFIX}")
+endif()
+set(MAHO_GIT_PROXY_PREFIX "${MAHO_GIT_PROXY_PREFIX}" CACHE STRING
+	"Prefix prepended to github.com git clone URLs (empty = clone github.com directly)")
+
+# Rewrite a github.com clone URL: first try the per-repo mirror map
+# (Maho/Mirrors.txt), then fall back to the MAHO_GIT_PROXY_PREFIX proxy.
+function(maho_git_repository_url OUT_VAR INPUT_URL)
+	set(_result "${INPUT_URL}")
+
+	# Per-repo mirror map: "github_owner/repo=mirror_url" per line.
+	if(INPUT_URL MATCHES "^https://github\\.com/([^/]+/[^/]+)(\\.git)?$")
+		set(_gh_path "${CMAKE_MATCH_1}")
+		if(EXISTS "${MAHO_ROOT}/Mirrors.txt")
+			file(STRINGS "${MAHO_ROOT}/Mirrors.txt" _mirror_lines)
+			foreach(_line IN LISTS _mirror_lines)
+				string(STRIP "${_line}" _line)
+				if(_line MATCHES "^([^#][^=]*)=(.*)$")
+					if(CMAKE_MATCH_1 STREQUAL _gh_path)
+						set(_result "${CMAKE_MATCH_2}")
+						break()
+					endif()
+				endif()
+			endforeach()
+		endif()
+	endif()
+
+	# Proxy prefix fallback (only when the result is still a github.com URL).
+	if(MAHO_GIT_PROXY_PREFIX AND _result MATCHES "^https://github\\.com/")
+		set(_result "${MAHO_GIT_PROXY_PREFIX}${_result}")
+	endif()
+
+	set(${OUT_VAR} "${_result}" PARENT_SCOPE)
+endfunction()
+
 # std::thread (FThreadPool / FThreadedServer) needs the system threads library
 # on Linux (pthread). Not a third-party library — a system package.
 find_package(Threads REQUIRED)

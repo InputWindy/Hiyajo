@@ -9,7 +9,7 @@
 			"Name": "Audio",
 			"Type": "Runtime",
 			"Extension": {
-				"Class": "Maho::FAudio",
+				"Class": "Maho::Audio::FAudio",
 				"Header": "Audio.h",
 				"Priority": "System",
 				"Stage": "ESingletonStage"

@@ -9,7 +9,7 @@
 			"Name": "Editor",
 			"Type": "Editor",
 			"Extension": {
-				"Class": "Maho::FEditorSystem",
+				"Class": "Maho::Editor::FEditorSystem",
 				"Header": "Editor.h",
 				"Priority": "Overlay",
 				"Stage": "EEngineStage"

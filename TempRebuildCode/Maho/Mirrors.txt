@@ -1,0 +1,13 @@
+# Maho git mirror map — one "github_owner/repo=mirror_url" per line.
+# Used by maho_git_repository_url (see Build/CMake/MahoDependencies.cmake).
+# Uncomment / add entries to redirect GitHub clones, e.g. for mainland China:
+#
+#nlohmann/json=https://gitee.com/mirrors/nlohmann-json.git
+#gabime/spdlog=https://gitee.com/mirrors/spdlog.git
+#facebook/zstd=https://gitee.com/mirrors/zstd.git
+#madler/zlib=https://gitee.com/mirrors/zlib.git
+#jrouwe/JoltPhysics=https://gitee.com/mirrors/JoltPhysics.git
+#mackron/miniaudio=https://gitee.com/mirrors/miniaudio.git
+#g-truc/glm=https://gitee.com/mirrors/glm.git
+#nemtrif/utfcpp=https://gitee.com/mirrors/utfcpp.git
+#marzer/tomlplusplus=https://gitee.com/mirrors/tomlplusplus.git

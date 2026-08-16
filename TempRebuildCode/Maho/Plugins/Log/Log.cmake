@@ -10,9 +10,10 @@ set(SPDLOG_INSTALL OFF CACHE BOOL "" FORCE)
 set(SPDLOG_BUILD_SHARED OFF CACHE BOOL "" FORCE)
 
 if(NOT TARGET spdlog::spdlog_header_only)
+	maho_git_repository_url(_SPDLOG_URL https://github.com/gabime/spdlog.git)
 	FetchContent_Declare(
 		spdlog
-		GIT_REPOSITORY https://github.com/gabime/spdlog.git
+		GIT_REPOSITORY ${_SPDLOG_URL}
 		GIT_TAG v1.15.3
 		GIT_SHALLOW TRUE
 	)

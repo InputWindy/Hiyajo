@@ -6,6 +6,9 @@
 namespace Maho
 {
 
+namespace Audio
+{
+
 /** Audio playback library extension (device + sources). Pre-app singleton (driven by ESingletonStage). */
 class MAHO_AUDIO_API FAudio final : public TExtension<ESingletonStage, FAudio>
 {
@@ -16,5 +19,7 @@ private:
 	friend TSingleton<FAudio>;
 	FAudio() = default;
 };
+
+} // namespace Audio
 
 } // namespace Maho

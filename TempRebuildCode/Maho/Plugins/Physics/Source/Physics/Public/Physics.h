@@ -6,6 +6,9 @@
 namespace Maho
 {
 
+namespace Physics
+{
+
 /** Physics simulation library extension (rigid body solver). Pre-app singleton (driven by ESingletonStage). */
 class MAHO_PHYSICS_API FPhysics final : public TExtension<ESingletonStage, FPhysics>
 {
@@ -16,5 +19,7 @@ private:
 	friend TSingleton<FPhysics>;
 	FPhysics() = default;
 };
+
+} // namespace Physics
 
 } // namespace Maho

@@ -1,6 +1,6 @@
 #include <Exception.h>
 
-namespace Maho
+namespace Maho::Exception
 {
 
 bool FException::ExecuteStage(EEngineStage Stage)
@@ -10,4 +10,4 @@ bool FException::ExecuteStage(EEngineStage Stage)
 	return true;
 }
 
-} // namespace Maho
+} // namespace Maho::Exception

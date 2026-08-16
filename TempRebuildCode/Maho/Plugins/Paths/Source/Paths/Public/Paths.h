@@ -6,6 +6,9 @@
 namespace Maho
 {
 
+namespace Paths
+{
+
 /** Path resolution extension (project/engine roots). Pre-app singleton (driven by ESingletonStage). */
 class MAHO_PATHS_API FPaths final : public TExtension<ESingletonStage, FPaths>
 {
@@ -16,5 +19,7 @@ private:
 	friend TSingleton<FPaths>;
 	FPaths() = default;
 };
+
+} // namespace Paths
 
 } // namespace Maho

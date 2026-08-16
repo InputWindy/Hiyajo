@@ -9,7 +9,7 @@
 			"Name": "Timer",
 			"Type": "Runtime",
 			"Extension": {
-				"Class": "Maho::FTimer",
+				"Class": "Maho::Timer::FTimer",
 				"Header": "Timer.h",
 				"Priority": "System",
 				"Stage": "ESingletonStage"

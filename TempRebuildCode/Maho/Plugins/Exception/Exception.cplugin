@@ -9,7 +9,7 @@
 			"Name": "Exception",
 			"Type": "Runtime",
 			"Extension": {
-				"Class": "Maho::FException",
+				"Class": "Maho::Exception::FException",
 				"Header": "Exception.h",
 				"Priority": "System",
 				"Stage": "EEngineStage"

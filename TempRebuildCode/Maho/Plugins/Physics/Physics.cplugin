@@ -9,7 +9,7 @@
 			"Name": "Physics",
 			"Type": "Runtime",
 			"Extension": {
-				"Class": "Maho::FPhysics",
+				"Class": "Maho::Physics::FPhysics",
 				"Header": "Physics.h",
 				"Priority": "System",
 				"Stage": "ESingletonStage"

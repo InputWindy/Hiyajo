@@ -9,7 +9,7 @@
 			"Name": "Log",
 			"Type": "Runtime",
 			"Extension": {
-				"Class": "Maho::FLogger",
+				"Class": "Maho::Log::FLogger",
 				"Header": "Log.h",
 				"Priority": "System",
 				"Stage": "ESingletonStage"

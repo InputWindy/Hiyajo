@@ -4,9 +4,10 @@ maho_set_plugin_output_dirs(${_MOD_TARGET} "${_MOD_PLUGIN_DIR}")
 include(FetchContent)
 
 if(NOT TARGET tomlplusplus::tomlplusplus)
+	maho_git_repository_url(_TOMLPLUSPLUS_URL https://github.com/marzer/tomlplusplus.git)
 	FetchContent_Declare(
 		tomlplusplus
-		GIT_REPOSITORY https://github.com/marzer/tomlplusplus.git
+		GIT_REPOSITORY ${_TOMLPLUSPLUS_URL}
 		GIT_TAG v3.4.0
 		GIT_SHALLOW TRUE
 	)

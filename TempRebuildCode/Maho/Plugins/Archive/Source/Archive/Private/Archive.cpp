@@ -1,6 +1,6 @@
 #include <Archive.h>
 
-namespace Maho
+namespace Maho::Archive
 {
 
 bool FArchive::ExecuteStage(ESingletonStage Stage)
@@ -10,4 +10,4 @@ bool FArchive::ExecuteStage(ESingletonStage Stage)
 	return true;
 }
 
-} // namespace Maho
+} // namespace Maho::Archive

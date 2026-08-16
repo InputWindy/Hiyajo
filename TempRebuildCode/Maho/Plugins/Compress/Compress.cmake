@@ -4,9 +4,10 @@ maho_set_plugin_output_dirs(${_MOD_TARGET} "${_MOD_PLUGIN_DIR}")
 include(FetchContent)
 
 if(NOT TARGET libzstd_static)
+	maho_git_repository_url(_ZSTD_URL https://github.com/facebook/zstd.git)
 	FetchContent_Declare(
 		zstd
-		GIT_REPOSITORY https://github.com/facebook/zstd.git
+		GIT_REPOSITORY ${_ZSTD_URL}
 		GIT_TAG v1.5.6
 		GIT_SHALLOW TRUE
 	)
@@ -15,9 +16,10 @@ if(NOT TARGET libzstd_static)
 endif()
 
 if(NOT TARGET zlib)
+	maho_git_repository_url(_ZLIB_URL https://github.com/madler/zlib.git)
 	FetchContent_Declare(
 		zlib
-		GIT_REPOSITORY https://github.com/madler/zlib.git
+		GIT_REPOSITORY ${_ZLIB_URL}
 		GIT_TAG v1.3.1
 		GIT_SHALLOW TRUE
 	)

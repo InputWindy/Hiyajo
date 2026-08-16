@@ -1,6 +1,6 @@
 #include <Math.h>
 
-namespace Maho
+namespace Maho::Math
 {
 
 bool FMath::ExecuteStage(ESingletonStage Stage)
@@ -10,4 +10,4 @@ bool FMath::ExecuteStage(ESingletonStage Stage)
 	return true;
 }
 
-} // namespace Maho
+} // namespace Maho::Math

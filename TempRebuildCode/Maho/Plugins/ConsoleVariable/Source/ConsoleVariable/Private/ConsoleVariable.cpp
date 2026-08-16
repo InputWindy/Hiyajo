@@ -1,6 +1,6 @@
 #include <ConsoleVariable.h>
 
-namespace Maho
+namespace Maho::ConsoleVariable
 {
 
 bool FConsoleVariable::ExecuteStage(ESingletonStage Stage)
@@ -10,4 +10,4 @@ bool FConsoleVariable::ExecuteStage(ESingletonStage Stage)
 	return true;
 }
 
-} // namespace Maho
+} // namespace Maho::ConsoleVariable

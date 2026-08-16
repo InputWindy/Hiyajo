@@ -7,20 +7,25 @@
 namespace Maho
 {
 
-/** Async resource system + package IO extension. Engine extension (driven by EEngineStage). */
-class MAHO_RESOURCE_API FResourceSystem final
-	: public TExtension<EEngineStage, FResourceSystem>
-	, public FThreadedServer
+namespace Resource
 {
-public:
-	[[nodiscard]] bool ExecuteStage(EEngineStage Stage) override;
 
-protected:
-	[[nodiscard]] const char* GetThreadName() const override;
+	/** Async resource system + package IO extension. Engine extension (driven by EEngineStage). */
+	class MAHO_RESOURCE_API FResourceSystem final
+		: public TExtension<EEngineStage, FResourceSystem>
+		, public FThreadedServer
+	{
+	public:
+		[[nodiscard]] bool ExecuteStage(EEngineStage Stage) override;
 
-private:
-	friend TSingleton<FResourceSystem>;
-	FResourceSystem() = default;
-};
+	protected:
+		[[nodiscard]] const char* GetThreadName() const override;
+
+	private:
+		friend TSingleton<FResourceSystem>;
+		FResourceSystem() = default;
+	};
+
+} // namespace Resource
 
 } // namespace Maho

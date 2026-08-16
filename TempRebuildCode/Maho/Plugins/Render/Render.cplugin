@@ -10,7 +10,7 @@
 			"Type": "Runtime",
 			"Dependencies": ["Platform"],
 			"Extension": {
-				"Class": "Maho::FRenderSystem",
+				"Class": "Maho::Render::FRenderSystem",
 				"Header": "RenderSystem.h",
 				"Priority": "System",
 				"Stage": "EEngineStage"

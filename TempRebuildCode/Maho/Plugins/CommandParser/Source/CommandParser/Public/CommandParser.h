@@ -6,6 +6,9 @@
 namespace Maho
 {
 
+namespace CommandParser
+{
+
 /** Command-line argument parser extension (key-value store). Pre-app singleton (driven by ESingletonStage). */
 class MAHO_COMMANDPARSER_API FCommandParser final : public TExtension<ESingletonStage, FCommandParser>
 {
@@ -19,5 +22,7 @@ private:
 
 /** Parse argc/argv into FCommandParser's shared store (idempotent; later calls overwrite). */
 MAHO_COMMANDPARSER_API void ParseCommandLine(int Argc, char** Argv);
+
+} // namespace CommandParser
 
 } // namespace Maho

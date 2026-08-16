@@ -9,7 +9,7 @@
 			"Name": "Config",
 			"Type": "Runtime",
 			"Extension": {
-				"Class": "Maho::FConfig",
+				"Class": "Maho::Config::FConfig",
 				"Header": "Config.h",
 				"Priority": "System",
 				"Stage": "ESingletonStage"

@@ -1,6 +1,6 @@
 #include <CommandParser.h>
 
-namespace Maho
+namespace Maho::CommandParser
 {
 
 bool FCommandParser::ExecuteStage(ESingletonStage Stage)
@@ -17,4 +17,4 @@ void ParseCommandLine(int Argc, char** Argv)
 	(void)Argv;
 }
 
-} // namespace Maho
+} // namespace Maho::CommandParser

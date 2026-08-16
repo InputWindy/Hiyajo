@@ -6,6 +6,9 @@
 namespace Maho
 {
 
+namespace Config
+{
+
 /** Configuration file extension (JSON). Pre-app singleton (driven by ESingletonStage). */
 class MAHO_CONFIG_API FConfig final : public TExtension<ESingletonStage, FConfig>
 {
@@ -16,5 +19,7 @@ private:
 	friend TSingleton<FConfig>;
 	FConfig() = default;
 };
+
+} // namespace Config
 
 } // namespace Maho

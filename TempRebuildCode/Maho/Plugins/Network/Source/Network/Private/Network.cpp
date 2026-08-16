@@ -1,6 +1,6 @@
 #include <Network.h>
 
-namespace Maho
+namespace Maho::Network
 {
 
 bool FNetworkSystem::ExecuteStage(EEngineStage Stage)
@@ -10,4 +10,4 @@ bool FNetworkSystem::ExecuteStage(EEngineStage Stage)
 	return true;
 }
 
-} // namespace Maho
+} // namespace Maho::Network

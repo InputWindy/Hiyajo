@@ -1,6 +1,6 @@
 #include <Timer.h>
 
-namespace Maho
+namespace Maho::Timer
 {
 
 bool FTimer::ExecuteStage(ESingletonStage Stage)
@@ -10,4 +10,4 @@ bool FTimer::ExecuteStage(ESingletonStage Stage)
 	return true;
 }
 
-} // namespace Maho
+} // namespace Maho::Timer

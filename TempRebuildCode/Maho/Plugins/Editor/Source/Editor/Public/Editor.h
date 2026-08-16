@@ -6,15 +6,20 @@
 namespace Maho
 {
 
-/** Editor tooling extension (ImGui editor UI). Engine extension (driven by EEngineStage). */
-class MAHO_EDITOR_API FEditorSystem final : public TExtension<EEngineStage, FEditorSystem>
+namespace Editor
 {
-public:
-	[[nodiscard]] bool ExecuteStage(EEngineStage Stage) override;
 
-private:
-	friend TSingleton<FEditorSystem>;
-	FEditorSystem() = default;
-};
+	/** Editor tooling extension (ImGui editor UI). Engine extension (driven by EEngineStage). */
+	class MAHO_EDITOR_API FEditorSystem final : public TExtension<EEngineStage, FEditorSystem>
+	{
+	public:
+		[[nodiscard]] bool ExecuteStage(EEngineStage Stage) override;
+
+	private:
+		friend TSingleton<FEditorSystem>;
+		FEditorSystem() = default;
+	};
+
+} // namespace Editor
 
 } // namespace Maho

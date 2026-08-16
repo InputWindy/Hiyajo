@@ -4,9 +4,10 @@ maho_set_plugin_output_dirs(${_MOD_TARGET} "${_MOD_PLUGIN_DIR}")
 include(FetchContent)
 
 if(NOT DEFINED miniaudio_SOURCE_DIR)
+	maho_git_repository_url(_MINIAUDIO_URL https://github.com/mackron/miniaudio.git)
 	FetchContent_Declare(
 		miniaudio
-		GIT_REPOSITORY https://github.com/mackron/miniaudio.git
+		GIT_REPOSITORY ${_MINIAUDIO_URL}
 		GIT_TAG 0.11.22
 		GIT_SHALLOW TRUE
 	)
