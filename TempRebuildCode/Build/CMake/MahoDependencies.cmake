@@ -55,25 +55,21 @@ endif()
 set(MAHO_GIT_PROXY_PREFIX "${MAHO_GIT_PROXY_PREFIX}" CACHE STRING
 	"Prefix prepended to github.com git clone URLs (empty = clone github.com directly)")
 
-# Rewrite a github.com clone URL: first try the per-repo mirror map
-# (Maho/Mirrors.txt), then fall back to the MAHO_GIT_PROXY_PREFIX proxy.
+# Rewrite a github.com clone URL: first consult the calling plugin's
+# settings.json "mirrors" map (plugin-local, self-contained), then fall back
+# to the MAHO_GIT_PROXY_PREFIX proxy.
 function(maho_git_repository_url OUT_VAR INPUT_URL)
 	set(_result "${INPUT_URL}")
 
-	# Per-repo mirror map: "github_owner/repo=mirror_url" per line.
-	if(INPUT_URL MATCHES "^https://github\\.com/([^/]+/[^/]+)(\\.git)?$")
-		set(_gh_path "${CMAKE_MATCH_1}")
-		if(EXISTS "${MAHO_ROOT}/Mirrors.txt")
-			file(STRINGS "${MAHO_ROOT}/Mirrors.txt" _mirror_lines)
-			foreach(_line IN LISTS _mirror_lines)
-				string(STRIP "${_line}" _line)
-				if(_line MATCHES "^([^#][^=]*)=(.*)$")
-					if(CMAKE_MATCH_1 STREQUAL _gh_path)
-						set(_result "${CMAKE_MATCH_2}")
-						break()
-					endif()
-				endif()
-			endforeach()
+	# Plugin-local mirror config: <plugin>/settings.json → "mirrors" → { owner_repo: url }.
+	if(INPUT_URL MATCHES "^https://github\\.com/([^/]+)/([^/]+)(\\.git)?$")
+		set(_gh_key "${CMAKE_MATCH_1}_${CMAKE_MATCH_2}")
+		if(DEFINED _MOD_PLUGIN_DIR AND EXISTS "${_MOD_PLUGIN_DIR}/settings.json")
+			file(READ "${_MOD_PLUGIN_DIR}/settings.json" _settings_json)
+			string(JSON _mirror_url ERROR_VARIABLE _mirror_err GET "${_settings_json}" "mirrors" "${_gh_key}")
+			if(_mirror_err STREQUAL "" AND NOT _mirror_url STREQUAL "")
+				set(_result "${_mirror_url}")
+			endif()
 		endif()
 	endif()
 

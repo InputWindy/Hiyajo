@@ -111,11 +111,19 @@
 
 ### 三方库拉取镜像源
 
-引擎核心零三方依赖；所有三方库由各插件的 `<Name>.cmake` 用 FetchContent 拉取。遇到 GitHub 拉不下来（大陆网络）时，两种配置方式：
+引擎核心零三方依赖；所有三方库由各插件的 `<Name>.cmake` 用 FetchContent 拉取。镜像配置**自包含**——每个插件自己的 `settings.json` 里配，不靠外层统一文件：
+
+```json
+{
+	"mirrors": {
+		"nlohmann_json": "https://gitee.com/mirrors/nlohmann-json.git"
+	}
+}
+```
 
 | 方式 | 配置 | 说明 |
 |------|------|------|
-| 逐仓库镜像 | 编辑 `Maho/Mirrors.txt`，去掉对应行注释 | gitee 官方镜像（稳定），`github路径=镜像url` 每行 |
+| 逐插件镜像 | 编辑 `Plugins/<Name>/settings.json` 的 `mirrors` 字段，key 是 `owner_repo` | 插件自包含，跟着插件走 |
 | 透明代理前缀 | `setx MAHO_GIT_PROXY_PREFIX https://ghproxy.com/` 或 cmake `-DMAHO_GIT_PROXY_PREFIX=...` | 纯前缀拼接，一次性覆盖所有 GitHub 克隆 |
 
-优先级：`Mirrors.txt` 映射 > 代理前缀 > 直连 GitHub。改写统一走 `maho_git_repository_url()`（`Build/CMake/MahoDependencies.cmake`），插件 `.cmake` 里 `FetchContent_Declare` 的 `GIT_REPOSITORY` 都经它。拉取卡住时先杀 `cmake.exe`/`git.exe`，再删 `Intermediate/_deps/<name>-*` 半成品目录重试。
+优先级：插件 `settings.json` 镜像 > 代理前缀 > 直连 GitHub。改写统一走 `maho_git_repository_url()`（`Build/CMake/MahoDependencies.cmake`），插件 `.cmake` 里 `FetchContent_Declare` 的 `GIT_REPOSITORY` 都经它。拉取卡住时先杀 `cmake.exe`/`git.exe`，再删 `Intermediate/_deps/<name>-*` 半成品目录重试。`settings.json` 可扩展——后续逐模块的额外配置都往这里加。
