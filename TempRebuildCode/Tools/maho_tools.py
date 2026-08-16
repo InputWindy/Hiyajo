@@ -291,7 +291,7 @@ def _format_extensions_list(classes: list[str]) -> str:
 	return f"Maho::FExtensions<\n{body}\n>"
 
 
-def build_gameapp_mapping(project_name: str, engine_root: Path, plugin_names: list[str]) -> dict[str, str]:
+def build_gameapp_mapping(project_name: str, engine_root: Path, plugin_names: list[str], dev_platform: str = "Windows") -> dict[str, str]:
 	"""
 	Build the GameApp.cpp placeholder mapping from a plugin-name list.
 	Plugins are split by Extension.Stage: tools → singleton registry, the
@@ -327,6 +327,7 @@ def build_gameapp_mapping(project_name: str, engine_root: Path, plugin_names: li
 		"PLUGIN_INCLUDES": "\n".join(plugin_includes),
 		"SINGLETON_EXTENSIONS": _format_extensions_list(singleton_classes),
 		"ENGINE_EXTENSIONS": _format_extensions_list(engine_classes),
+		"ENTRY_POINT_INCLUDE": "EntryPointWindows.h" if dev_platform == "Windows" else "EntryPointLinux.h",
 		"PARSE_COMMAND_LINE": parse_body,
 	}
 
@@ -348,7 +349,8 @@ def codegen_game_app(cproject_path: Path) -> Path:
 	else:
 		plugin_names = [name for name, enabled in overrides.items() if enabled]
 
-	mapping = build_gameapp_mapping(project_name, engine_root, plugin_names)
+	dev_platform = str(data.get("DevPlatform", "Windows"))
+	mapping = build_gameapp_mapping(project_name, engine_root, plugin_names, dev_platform=dev_platform)
 
 	template_src = TEMPLATE_DIR / "Source" / "GameApp.cpp"
 	rendered = render_template_text(template_src.read_text(encoding="utf-8"), mapping)
@@ -367,6 +369,7 @@ def create_project(
 	author: str = "",
 	plugins: list[str] | None = None,
 	template: str = "client",
+	dev_platform: str = "Windows",
 ) -> Path:
 	if not is_valid_project_name(project_name):
 		raise ValueError(
@@ -387,7 +390,7 @@ def create_project(
 	else:
 		plugin_names = list(plugins)
 
-	mapping = build_gameapp_mapping(project_name, engine_root, plugin_names)
+	mapping = build_gameapp_mapping(project_name, engine_root, plugin_names, dev_platform=dev_platform)
 	mapping["DESCRIPTION"] = description
 	mapping["AUTHOR"] = author
 	copy_template(project_dir, mapping)
@@ -404,6 +407,7 @@ def create_project(
 		"Description": description,
 		"Author": author,
 		"EngineTemplate": template,
+		"DevPlatform": dev_platform,
 		"Modules": [
 			{
 				"Name": project_name,

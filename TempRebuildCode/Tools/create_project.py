@@ -45,6 +45,7 @@ class CreateProjectApp(tk.Tk):
 		self.var_parent = tk.StringVar(value=str(Path.home() / "Documents" / "MahoProjects"))
 		self.var_engine = tk.StringVar(value=str(ENGINE_ROOT))
 		self.var_author = tk.StringVar(value="")
+		self.var_dev_platform = tk.StringVar(value="Windows")
 		self.var_open_folder = tk.BooleanVar(value=True)
 		self._associate_busy = False
 		self._plugins: list[dict] = []
@@ -85,19 +86,28 @@ class CreateProjectApp(tk.Tk):
 		self.txt_desc = tk.Text(frm, height=3, wrap=tk.WORD)
 		self.txt_desc.grid(row=5, column=1, columnspan=2, sticky="nsew", **pad)
 
-		ttk.Label(frm, text="Project Template").grid(row=6, column=0, sticky="w", **pad)
+		ttk.Label(frm, text="Dev Platform").grid(row=6, column=0, sticky="w", **pad)
+		self.cmb_dev_platform = ttk.Combobox(
+			frm,
+			state="readonly",
+			values=["Windows", "Linux"],
+		)
+		self.cmb_dev_platform.grid(row=6, column=1, columnspan=2, sticky="ew", **pad)
+		self.cmb_dev_platform.set(self.var_dev_platform.get())
+
+		ttk.Label(frm, text="Project Template").grid(row=7, column=0, sticky="w", **pad)
 		self.cmb_template = ttk.Combobox(
 			frm,
 			state="readonly",
 			values=[t["label"] for t in ENGINE_TEMPLATES],
 		)
-		self.cmb_template.grid(row=6, column=1, columnspan=2, sticky="ew", **pad)
+		self.cmb_template.grid(row=7, column=1, columnspan=2, sticky="ew", **pad)
 		self.cmb_template.bind("<<ComboboxSelected>>", self._on_template_change)
 		self.cmb_template.set(DEFAULT_TEMPLATE_LABEL)
 
-		ttk.Label(frm, text="Plugins").grid(row=7, column=0, sticky="nw", **pad)
+		ttk.Label(frm, text="Plugins").grid(row=8, column=0, sticky="nw", **pad)
 		plugin_frame = ttk.Frame(frm)
-		plugin_frame.grid(row=7, column=1, columnspan=2, sticky="nsew", **pad)
+		plugin_frame.grid(row=8, column=1, columnspan=2, sticky="nsew", **pad)
 		plugin_frame.columnconfigure(0, weight=1)
 		plugin_frame.rowconfigure(0, weight=1)
 		canvas = tk.Canvas(plugin_frame, borderwidth=0, highlightthickness=0, height=110)
@@ -112,7 +122,7 @@ class CreateProjectApp(tk.Tk):
 		canvas.create_window((0, 0), window=self.plugin_inner, anchor="nw")
 
 		opts = ttk.Frame(frm)
-		opts.grid(row=8, column=0, columnspan=3, sticky="w", **pad)
+		opts.grid(row=9, column=0, columnspan=3, sticky="w", **pad)
 		ttk.Checkbutton(opts, text="Open project folder", variable=self.var_open_folder).pack(side=tk.LEFT)
 
 		hint = (
@@ -120,11 +130,11 @@ class CreateProjectApp(tk.Tk):
 			"Double-click the .cproject to generate Name.sln beside it (first run downloads\n"
 			"third-party into Intermediate/). Requires engine Setup.bat beforehand."
 		)
-		ttk.Label(frm, text=hint, foreground="#555").grid(row=9, column=0, columnspan=3, sticky="w", **pad)
+		ttk.Label(frm, text=hint, foreground="#555").grid(row=10, column=0, columnspan=3, sticky="w", **pad)
 
-		ttk.Label(frm, text="Log").grid(row=10, column=0, sticky="nw", **pad)
+		ttk.Label(frm, text="Log").grid(row=11, column=0, sticky="nw", **pad)
 		log_frame = ttk.Frame(frm)
-		log_frame.grid(row=10, column=1, columnspan=2, sticky="nsew", **pad)
+		log_frame.grid(row=11, column=1, columnspan=2, sticky="nsew", **pad)
 		self.txt_log = tk.Text(
 			log_frame,
 			height=10,
@@ -141,7 +151,7 @@ class CreateProjectApp(tk.Tk):
 		scroll.pack(side=tk.RIGHT, fill=tk.Y)
 
 		btns = ttk.Frame(frm)
-		btns.grid(row=11, column=0, columnspan=3, sticky="ew", **pad)
+		btns.grid(row=12, column=0, columnspan=3, sticky="ew", **pad)
 		self.btn_clear_log = ttk.Button(btns, text="Clear Log", command=self._clear_log)
 		self.btn_clear_log.pack(side=tk.LEFT)
 		ttk.Button(btns, text="Create Project", command=self._create).pack(side=tk.RIGHT, padx=(8, 0))
@@ -149,8 +159,8 @@ class CreateProjectApp(tk.Tk):
 
 		frm.columnconfigure(1, weight=1)
 		frm.rowconfigure(5, weight=1)
-		frm.rowconfigure(7, weight=2)
-		frm.rowconfigure(10, weight=2)
+		frm.rowconfigure(8, weight=2)
+		frm.rowconfigure(11, weight=2)
 
 		self._reload_plugins()
 
@@ -337,6 +347,7 @@ class CreateProjectApp(tk.Tk):
 				author=author,
 				plugins=checked_plugins,
 				template=self._selected_template_key(),
+				dev_platform=self.cmb_dev_platform.get(),
 			)
 		except Exception as ex:  # noqa: BLE001
 			messagebox.showerror("Maho", str(ex))

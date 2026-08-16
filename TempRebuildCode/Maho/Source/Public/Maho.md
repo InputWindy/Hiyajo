@@ -83,7 +83,8 @@ protected:
 
 | shim | 入口 | 平台 |
 |------|------|------|
-| [EntryPointDesktop.h](EntryPointDesktop.h) | `main` + `WinMain` | Windows / Linux |
+| [EntryPointWindows.h](EntryPointWindows.h) | `main` + `WinMain` | Windows |
+| [EntryPointLinux.h](EntryPointLinux.h) | `main` | Linux |
 | [EntryPointAndroid.h](EntryPointAndroid.h) | `android_main` | Android |
 | [EntryPointIOS.h](EntryPointIOS.h) | `RunIOS()`（ObjC 入口调它） | iOS |
 | [EntryPointXbox.h](EntryPointXbox.h) | `main` | Xbox (GDK) |

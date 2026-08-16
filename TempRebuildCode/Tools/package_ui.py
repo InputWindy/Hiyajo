@@ -33,7 +33,9 @@ from maho_tools import (  # noqa: E402
 _PLATFORMS = [
 	("Win64", True),
 	("Linux", False),
-	("Mac", False),
+	("Android", False),
+	("iOS", False),
+	("Xbox", False),
 ]
 
 _CONFIGS = ("Release", "Debug", "RelWithDebInfo", "MinSizeRel")
