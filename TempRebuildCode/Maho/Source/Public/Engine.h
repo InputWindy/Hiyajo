@@ -45,12 +45,20 @@ protected:
 };
 
 /** Engine base: parallel drive (owns its thread pool). */
+class FEngineBase;
+
+/** The running engine instance — set by FEngineBase's ctor, read by extensions (e.g. Platform) to request exit. */
+inline FEngineBase* GApp = nullptr;
+
 class FEngineBase :
 	public TParallelScheduler<EEngineStage>,
 	public IRunable
 {
 protected:
-	FEngineBase() = default;
+	FEngineBase()
+	{
+		GApp = this;
+	}
 
 	virtual void PreInit() = 0;
 	virtual void Init() = 0;
@@ -62,14 +70,14 @@ protected:
 	virtual void Shutdown() = 0;
 	virtual void PostShutdown() = 0;
 
-	/** Requested by an extension during Tick; exits the main loop. */
+public:
+	virtual ~FEngineBase() = default;
+
+	/** Request the main loop to exit (safe to call from any extension). */
 	void RequestShutdown()
 	{
 		CurrentStage = EEngineStage::PreShutdown;
 	}
-
-public:
-	virtual ~FEngineBase() = default;
 
 	void MainLoop() final override
 	{

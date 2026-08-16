@@ -165,6 +165,11 @@ bool FPlatformSystem::ExecuteStage(EEngineStage Stage)
 		{
 			PollEvents();
 		}
+		// Window close → request the app to exit.
+		if (Stage == EEngineStage::Tick && ShouldClose() && Maho::GApp != nullptr)
+		{
+			Maho::GApp->RequestShutdown();
+		}
 		break;
 
 	case EEngineStage::Shutdown:

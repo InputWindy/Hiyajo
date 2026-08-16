@@ -4,6 +4,7 @@
 #include <Engine.h>
 
 #include <cstdint>
+#include <functional>
 #include <string_view>
 
 namespace Maho
@@ -30,6 +31,9 @@ public:
 
 	[[nodiscard]] std::string_view ToString() const;
 	[[nodiscard]] bool IsNone() const { return Id == 0; }
+
+	/** The interned pool index — the perfect hash key. */
+	[[nodiscard]] std::uint32_t GetId() const { return Id; }
 
 	[[nodiscard]] bool operator==(const FName& Other) const { return Id == Other.Id; }
 	[[nodiscard]] bool operator!=(const FName& Other) const { return Id != Other.Id; }
@@ -59,3 +63,12 @@ private:
 } // namespace Name
 
 } // namespace Maho
+
+template <>
+struct std::hash<Maho::Name::FName>
+{
+	std::size_t operator()(const Maho::Name::FName& Name) const noexcept
+	{
+		return std::hash<std::uint32_t>{}(Name.GetId());
+	}
+};

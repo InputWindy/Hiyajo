@@ -5,10 +5,11 @@
 	"Category": "Engine",
 	"EnabledByDefault": true,
 	"Modules": [
-		{
-			"Name": "Resource",
-			"Type": "Runtime",
-			"Extension": {
+			{
+				"Name": "Resource",
+				"Type": "Runtime",
+				"Dependencies": ["Paths", "Name"],
+				"Extension": {
 				"Class": "Maho::Resource::FResourceSystem",
 				"Header": "ResourceSystem.h",
 				"Priority": "System",
