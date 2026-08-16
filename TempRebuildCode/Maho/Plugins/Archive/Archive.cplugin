@@ -9,7 +9,7 @@
 			"Name": "Archive",
 			"Type": "Runtime",
 			"Extension": {
-				"Class": "Maho::Archive::FArchive",
+				"Class": "Maho::Archive::FArchiveSystem",
 				"Header": "Archive.h",
 				"Priority": "System",
 				"Stage": "EToolStage"

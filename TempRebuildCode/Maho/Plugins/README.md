@@ -15,7 +15,7 @@
 | [Json](Json/Json.cplugin) | `Maho::FJson` | JSON 序列化（nlohmann/json） |
 | [ConsoleVariable](ConsoleVariable/ConsoleVariable.cplugin) | `Maho::FConsoleVariable` | 控制台变量注册表 |
 | [Compress](Compress/Compress.cplugin) | `Maho::FCompress` | 压缩（zlib/zstd） |
-| [Archive](Archive/Archive.cplugin) | `Maho::FArchive` | 序列化归档 |
+| [Archive](Archive/Archive.cplugin) | `Maho::Archive::FArchiveSystem` | 二进制序列化（FArchive + MemoryReader/Writer） |
 | [Unicode](Unicode/Unicode.cplugin) | `Maho::FUnicode` | 文本编码（UTF-8/16/32 转换） |
 | [Name](Name/Name.cplugin) | `Maho::FName` | interned 字符串标识符池 |
 | [Text](Text/Text.cplugin) | `Maho::FText` | 本地化文本（文化感知） |
@@ -23,6 +23,7 @@
 | [Audio](Audio/Audio.cplugin) | `Maho::FAudio` | 音频播放库（设备 + 音源） |
 | [Math](Math/Math.cplugin) | `Maho::FMath` | 数学库（GLM + 数学辅助） |
 | [CommandParser](CommandParser/CommandParser.cplugin) | `Maho::FCommandParser` | 命令行参数解析（键值存储） |
+| [AssetRegistry](AssetRegistry/AssetRegistry.cplugin) | `Maho::AssetRegistry::FAssetRegistry` | 资产路径 + 注册表（逻辑路径 → 物理文件 + 类型 + 依赖） |
 
 ### Engine（EEngineStage，引擎扩展）
 

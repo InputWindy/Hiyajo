@@ -1,0 +1,9 @@
+#pragma once
+
+#include <Core/Export.h>
+
+#ifdef MAHO_ASSETREGISTRY_MODULE_EXPORTS
+#	define MAHO_ASSETREGISTRY_API MAHO_EXPORT
+#else
+#	define MAHO_ASSETREGISTRY_API MAHO_IMPORT
+#endif

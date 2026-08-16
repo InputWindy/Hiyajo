@@ -5,7 +5,7 @@ namespace Maho::Math
 
 bool FMath::ExecuteStage(EToolStage Stage)
 {
-	// TODO: Init = nothing (header-only); Shutdown = nothing.
+	// Pure function library: nothing to initialize or shut down.
 	(void)Stage;
 	return true;
 }
