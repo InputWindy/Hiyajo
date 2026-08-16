@@ -834,6 +834,98 @@ def install_windows_cproject_association(*, log: Any = print) -> None:
 	log("[Maho] Removed legacy Catty.CProject association if present.")
 
 
+def install_linux_cproject_association(*, log: Any = print) -> None:
+	"""Register the .cproject file association via XDG .desktop + shared-mime-info."""
+	if sys.platform == "win32":
+		raise RuntimeError("Linux file association called on Windows.")
+
+	generate_sh = ENGINE_ROOT / "Tools" / "generateProject.sh"
+	if not generate_sh.is_file():
+		raise FileNotFoundError(f"Missing {generate_sh}")
+
+	data_home = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share"))
+	config_home = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
+	apps_dir = data_home / "applications"
+	mime_pkg_dir = data_home / "mime" / "packages"
+	apps_dir.mkdir(parents=True, exist_ok=True)
+	mime_pkg_dir.mkdir(parents=True, exist_ok=True)
+
+	# 1) .desktop entry: double-click opens generateProject.sh with the file.
+	desktop = apps_dir / "maho-cproject.desktop"
+	desktop.write_text(
+		"[Desktop Entry]\n"
+		"Type=Application\n"
+		"Name=Generate Maho Project\n"
+		"Comment=Generate build files from a Maho .cproject\n"
+		f'Exec="{generate_sh}" %f\n'
+		"MimeType=application/x-maho-cproject;\n"
+		"Terminal=false\n"
+		"NoDisplay=true\n",
+		encoding="utf-8",
+		newline="\n",
+	)
+
+	# 2) shared-mime-info package: map *.cproject to our mime type.
+	mime_xml = mime_pkg_dir / "maho-cproject.xml"
+	mime_xml.write_text(
+		'<?xml version="1.0" encoding="UTF-8"?>\n'
+		'<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">\n'
+		'\t<mime-type type="application/x-maho-cproject">\n'
+		'\t\t<comment>Maho Project</comment>\n'
+		'\t\t<glob pattern="*.cproject"/>\n'
+		'\t</mime-type>\n'
+		'</mime-info>\n',
+		encoding="utf-8",
+		newline="\n",
+	)
+
+	# 3) Refresh the mime database (best-effort).
+	update_mime = shutil.which("update-mime-database")
+	if update_mime:
+		subprocess.run([update_mime, str(data_home / "mime")], check=False)
+	update_desktop = shutil.which("update-desktop-database")
+	if update_desktop:
+		subprocess.run([update_desktop, str(apps_dir)], check=False)
+
+	# 4) Default application in mimeapps.list.
+	apps_list = config_home / "mimeapps.list"
+	lines = apps_list.read_text(encoding="utf-8").splitlines() if apps_list.is_file() else []
+	section = "[Default Applications]"
+	entry = "application/x-maho-cproject=maho-cproject.desktop;"
+	out: list[str] = []
+	in_default = False
+	wrote = False
+	for line in lines:
+		if line.strip() == section:
+			in_default = True
+			out.append(line)
+			continue
+		if in_default and line.strip().startswith("["):
+			in_default = False
+		if in_default and line.startswith("application/x-maho-cproject="):
+			out.append(entry)
+			wrote = True
+			continue
+		out.append(line)
+	if section not in {l.strip() for l in out}:
+		out.append(section)
+	if not wrote:
+		out.append(entry)
+	apps_list.write_text("\n".join(out) + "\n", encoding="utf-8", newline="\n")
+
+	log("[Maho] Associated .cproject → generateProject.sh (current user)")
+	log(f"[Maho] Desktop: {desktop}")
+	log(f"[Maho] Mime:    {mime_xml}")
+
+
+def install_cproject_association(*, log: Any = print) -> None:
+	"""Register the .cproject file association for the current platform."""
+	if sys.platform == "win32":
+		install_windows_cproject_association(log=log)
+	else:
+		install_linux_cproject_association(log=log)
+
+
 
 
 # ---------------------------------------------------------------------------

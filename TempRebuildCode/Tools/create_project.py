@@ -15,7 +15,7 @@ sys.path.insert(0, str(TOOLS_DIR))
 from maho_tools import (  # noqa: E402
 	ENGINE_ROOT,
 	create_project,
-	install_windows_cproject_association,
+	install_cproject_association,
 	is_valid_project_name,
 	list_engine_plugins,
 	open_in_file_manager,
@@ -286,7 +286,7 @@ class CreateProjectApp(tk.Tk):
 	def _run_associate(self) -> None:
 		"""Runs on a worker thread — do not touch Tk widgets except via log_line."""
 		try:
-			install_windows_cproject_association(log=self.log_line)
+			install_cproject_association(log=self.log_line)
 		except Exception as ex:  # noqa: BLE001
 			self.log_line(f"[Maho] Associate failed: {ex}")
 		finally:
