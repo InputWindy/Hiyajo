@@ -31,7 +31,7 @@ TempRebuildCode/
 | 类别 | 状态 |
 |------|------|
 | Tool（EToolStage） | 12 已实现（Log/Timer/Config/Paths/Json/ConsoleVariable/Archive/Unicode/Name/Text/Math/Asset），4 脚手架（Compress/Physics/Audio/CommandParser） |
-| Engine（EEngineStage） | 4 已实现（Platform/Resource/Exception/PluginManager），4 脚手架（RHI/Render/Network/Editor），2 空（Script/World） |
+| Engine（EEngineStage） | 4 已实现（Platform/Resource/Exception/AssemblyImporter），4 脚手架（RHI/Render/Network/Editor），2 空（Script/World） |
 
 详见 [Maho/Plugins/README.md](Maho/Plugins/README.md)。
 

@@ -57,7 +57,7 @@ bool FPaths::ExecuteStage(EToolStage Stage)
 
 } // namespace Maho::Paths
 
-// ── Dynamic plugin entry (runtime load/unload via FPluginManager) ──
+// ── Dynamic plugin entry (runtime load/unload via FAssemblyImporter) ──
 
 namespace
 {

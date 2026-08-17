@@ -148,7 +148,7 @@ bool FConfig::HasKey(std::string_view Section, std::string_view Key) const
 
 } // namespace Maho::Config
 
-// ── Dynamic plugin entry (runtime load/unload via FPluginManager) ──
+// ── Dynamic plugin entry (runtime load/unload via FAssemblyImporter) ──
 
 namespace
 {

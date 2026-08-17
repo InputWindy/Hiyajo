@@ -133,7 +133,7 @@ bool FGameClock::IsPaused() const
 
 } // namespace Maho::Timer
 
-// ── Dynamic plugin entry (runtime load/unload via FPluginManager) ──
+// ── Dynamic plugin entry (runtime load/unload via FAssemblyImporter) ──
 
 namespace
 {

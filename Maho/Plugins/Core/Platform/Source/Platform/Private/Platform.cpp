@@ -226,7 +226,7 @@ bool FPlatformSystem::ShouldClose() const
 
 } // namespace Maho::Platform
 
-// ── Dynamic plugin entry (runtime load/unload via FPluginManager) ──
+// ── Dynamic plugin entry (runtime load/unload via FAssemblyImporter) ──
 
 namespace
 {

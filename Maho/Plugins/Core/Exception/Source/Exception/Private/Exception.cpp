@@ -24,7 +24,7 @@ void FException::ReportException(const std::exception& Error)
 
 } // namespace Maho::Exception
 
-// ── Dynamic plugin entry (runtime load/unload via FPluginManager) ──
+// ── Dynamic plugin entry (runtime load/unload via FAssemblyImporter) ──
 
 namespace
 {

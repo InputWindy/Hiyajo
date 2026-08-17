@@ -17,7 +17,7 @@ const char* FRHI::GetThreadName() const
 
 } // namespace Maho::RHI
 
-// ── Dynamic plugin entry (runtime load/unload via FPluginManager) ──
+// ── Dynamic plugin entry (runtime load/unload via FAssemblyImporter) ──
 
 namespace
 {

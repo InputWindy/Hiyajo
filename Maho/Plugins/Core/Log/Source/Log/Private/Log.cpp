@@ -47,7 +47,7 @@ void SetLogLevel(ELogLevel Level)
 
 } // namespace Maho::Log
 
-// ── Dynamic plugin entry (runtime load/unload via FPluginManager) ──
+// ── Dynamic plugin entry (runtime load/unload via FAssemblyImporter) ──
 
 namespace
 {

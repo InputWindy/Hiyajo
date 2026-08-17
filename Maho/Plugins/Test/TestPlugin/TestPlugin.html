@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PluginManager — API 文档</title>
+<title>TestPlugin — API 文档</title>
 <style>
 	:root {
 		--bg: #14181f;
@@ -89,26 +89,26 @@
 </style>
 </head>
 <body>
-<h1>PluginManager — API 文档</h1>
-<p class="muted">Runtime plugin manager (dynamic DLL load/unload).</p>
+<h1>TestPlugin — API 文档</h1>
+<p class="muted">CoreMinimal</p>
 
 <section class="class-panel">
-	<h2 class="class-name">Maho::PluginManager::FPluginManager<span class="class-kind">class</span></h2>
-	<p class="class-desc">engine extension (driven by EEngineStage)。</p>
+	<h2 class="class-name">Maho::TestPlugin::FTestPlugin<span class="class-kind">class</span></h2>
+	<p class="class-desc">pre-app toolkit (driven by EToolStage)。</p>
 	<p class="class-desc">
-		继承 <code>TExtension&lt;EEngineStage, FPluginManager&gt;</code>
-		+ <code>FPluginManagerDependencies</code>（依赖声明）。
+		继承 <code>TExtension&lt;EToolStage, FTestPlugin&gt;</code>
+		+ <code>FTestPluginDependencies</code>（依赖声明）。
 	</p>
 
 	<h3 class="group">接口</h3>
 	<table class="api-table">
 		<tr><th style="width:48%">签名</th><th>说明</th></tr>
 		<tr>
-			<td class="sig"><code><span class="kw">bool</span> ExecuteStage(<span class="type">EEngineStage</span> Stage)</code></td>
+			<td class="sig"><code><span class="kw">bool</span> ExecuteStage(<span class="type">EToolStage</span> Stage)</code></td>
 			<td>每阶段行为，调度器按依赖序调用。</td>
 		</tr>
 		<tr>
-			<td class="sig"><code><span class="kw">static</span> FPluginManager&amp; Get()</code></td>
+			<td class="sig"><code><span class="kw">static</span> FTestPlugin&amp; Get()</code></td>
 			<td>单例访问（<code>TSingleton</code>）。</td>
 		</tr>
 	</table>
@@ -123,16 +123,16 @@
 <h2>元数据</h2>
 <table class="api-table">
 	<tr><th style="width:24%">字段</th><th>值</th></tr>
-	<tr><td>Header</td><td><code>PluginManager.h</code></td></tr>
-	<tr><td>Stage</td><td><code>EEngineStage</code></td></tr>
+	<tr><td>Header</td><td><code>TestPlugin.h</code></td></tr>
+	<tr><td>Stage</td><td><code>EToolStage</code></td></tr>
 	<tr><td>Priority</td><td><code>System</code></td></tr>
 	<tr><td>Dependencies</td><td>—</td></tr>
-	<tr><td>Inherits</td><td>—</td></tr>
+	<tr><td>Inherits</td><td>Archive, Asset, Audio, CommandParser, Compress, Config, ConsoleVariable, Json, Log, Math, Name, Paths, Physics, Text, Timer, Unicode</td></tr>
 </table>
 
 <h2>相关文档</h2>
 <p>
-	<a href="PluginManager.md">PluginManager.md</a> — 概念文档 ·
+	<a href="TestPlugin.md">TestPlugin.md</a> — 概念文档 ·
 	<a href="../README.md">插件总览</a> ·
 	<a href="../../Source/Public/Maho.md">引擎核心</a>
 </p>

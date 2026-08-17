@@ -1,0 +1,19 @@
+{
+	"FileVersion": 1,
+	"FriendlyName": "AssemblyImporter",
+	"Description": "Imports the project's toolkit + engine aggregate assemblies.",
+	"Category": "Engine",
+	"EnabledByDefault": true,
+	"Modules": [
+		{
+			"Name": "AssemblyImporter",
+			"Type": "Runtime",
+			"Extension": {
+				"Class": "Maho::AssemblyImporter::FAssemblyImporter",
+				"Header": "AssemblyImporter.h",
+				"Priority": "System",
+				"Stage": "EEngineStage"
+			}
+		}
+	]
+}

@@ -12,7 +12,7 @@ bool FJson::ExecuteStage(EToolStage Stage)
 
 } // namespace Maho::Json
 
-// ── Dynamic plugin entry (runtime load/unload via FPluginManager) ──
+// ── Dynamic plugin entry (runtime load/unload via FAssemblyImporter) ──
 
 namespace
 {

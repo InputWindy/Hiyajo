@@ -527,8 +527,11 @@ def validate_plugins(
 	if not plugins_dir.is_dir():
 		return [("error", f"Plugins dir not found: {plugins_dir}")]
 
+	all_cplugins = discover_cplugin_files([plugins_dir])
+	all_names = {p.parent.name for p in all_cplugins}
+
 	problems: list[tuple[str, str]] = []
-	for cplugin_path in discover_cplugin_files([plugins_dir]):
+	for cplugin_path in all_cplugins:
 		data = read_cplugin(cplugin_path)
 		name = cplugin_path.parent.name
 		if enabled is not None and name not in enabled:
@@ -549,7 +552,7 @@ def validate_plugins(
 			problems.append(("error", f"{name}: {name}Api.h missing (export macro)"))
 
 		for dep in mod.get("Dependencies", []) or []:
-			if not (plugins_dir / dep / f"{dep}.cplugin").is_file():
+			if dep not in all_names:
 				problems.append(("error", f"{name}: dependency plugin '{dep}' not found"))
 
 	return problems
@@ -1018,7 +1021,7 @@ def create_plugin(
 	# stage-parameterized: IExtension<EEngineStage> or IExtension<EToolStage>.
 	factory_block = (
 		"\n"
-		"// ── Dynamic plugin entry (runtime load/unload via FPluginManager) ──\n"
+		"// ── Dynamic plugin entry (runtime load/unload via FAssemblyImporter) ──\n"
 		"\n"
 		"namespace\n"
 		"{\n"

@@ -121,7 +121,7 @@ IConsoleVariable* FConsoleVariable::Register(
 
 } // namespace Maho::ConsoleVariable
 
-// ── Dynamic plugin entry (runtime load/unload via FPluginManager) ──
+// ── Dynamic plugin entry (runtime load/unload via FAssemblyImporter) ──
 
 namespace
 {

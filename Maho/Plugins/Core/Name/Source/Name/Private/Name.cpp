@@ -71,7 +71,7 @@ FName FNamePool::Intern(std::string_view Str)
 
 } // namespace Maho::Name
 
-// ── Dynamic plugin entry (runtime load/unload via FPluginManager) ──
+// ── Dynamic plugin entry (runtime load/unload via FAssemblyImporter) ──
 
 namespace
 {

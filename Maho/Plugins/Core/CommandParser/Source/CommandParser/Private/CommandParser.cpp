@@ -19,7 +19,7 @@ void ParseCommandLine(int Argc, char** Argv)
 
 } // namespace Maho::CommandParser
 
-// ── Dynamic plugin entry (runtime load/unload via FPluginManager) ──
+// ── Dynamic plugin entry (runtime load/unload via FAssemblyImporter) ──
 
 namespace
 {

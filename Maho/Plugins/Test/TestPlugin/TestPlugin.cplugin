@@ -1,0 +1,22 @@
+{
+	"FileVersion": 1,
+	"FriendlyName": "TestPlugin",
+	"Description": "CoreMinimal",
+	"Category": "Engine",
+	"EnabledByDefault": true,
+	"Modules": [
+		{
+			"Name": "TestPlugin",
+			"Type": "Runtime",
+			"Inherits": ["Archive", "Asset", "Audio", "CommandParser", "Compress", "Config", "ConsoleVariable", "Json", "Log", "Math", "Name", "Paths", "Physics", "Text", "Timer", "Unicode"],
+
+			"Dependencies": [],
+			"Extension": {
+				"Class": "Maho::TestPlugin::FTestPlugin",
+				"Header": "TestPlugin.h",
+				"Priority": "System",
+				"Stage": "EToolStage"
+			}
+		}
+	]
+}

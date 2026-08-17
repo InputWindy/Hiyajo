@@ -12,7 +12,7 @@ bool FCompress::ExecuteStage(EToolStage Stage)
 
 } // namespace Maho::Compress
 
-// ── Dynamic plugin entry (runtime load/unload via FPluginManager) ──
+// ── Dynamic plugin entry (runtime load/unload via FAssemblyImporter) ──
 
 namespace
 {

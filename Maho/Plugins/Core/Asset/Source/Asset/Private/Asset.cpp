@@ -124,7 +124,7 @@ std::size_t FAssetRegistry::GetAssetCount() const
 
 } // namespace Maho::Asset
 
-// ── Dynamic plugin entry (runtime load/unload via FPluginManager) ──
+// ── Dynamic plugin entry (runtime load/unload via FAssemblyImporter) ──
 
 namespace
 {

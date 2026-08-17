@@ -17,7 +17,7 @@ const char* FRenderSystem::GetThreadName() const
 
 } // namespace Maho::Render
 
-// ── Dynamic plugin entry (runtime load/unload via FPluginManager) ──
+// ── Dynamic plugin entry (runtime load/unload via FAssemblyImporter) ──
 
 namespace
 {

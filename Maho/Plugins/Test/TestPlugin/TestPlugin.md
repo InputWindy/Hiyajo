@@ -1,21 +1,21 @@
-# PluginManager
+# TestPlugin
 
-Runtime plugin manager (dynamic DLL load/unload).
+CoreMinimal
 
 ## 扩展类
 
 | 字段 | 值 |
 |------|-----|
-| Class | `Maho::PluginManager::FPluginManager` |
-| Header | `PluginManager.h` |
-| Stage | `EEngineStage` |
+| Class | `Maho::TestPlugin::FTestPlugin` |
+| Header | `TestPlugin.h` |
+| Stage | `EToolStage` |
 | Priority | `System` |
 | Dependencies | — |
-| Inherits | — |
+| Inherits | Archive, Asset, Audio, CommandParser, Compress, Config, ConsoleVariable, Json, Log, Math, Name, Paths, Physics, Text, Timer, Unicode |
 
 ## 说明
 
-engine extension (driven by EEngineStage)。
+pre-app toolkit (driven by EToolStage)。
 
 ## 用法
 
@@ -23,7 +23,7 @@ engine extension (driven by EEngineStage)。
 
 ## 相关文档
 
-- [PluginManager.html](PluginManager.html) — API 文档
+- [TestPlugin.html](TestPlugin.html) — API 文档
 - [../README.md](../README.md) — 插件总览
 - [../../Source/Public/Maho.md](../../Source/Public/Maho.md) — 引擎核心
 - [../../Source/Public/Core/Core.md](../../Source/Public/Core/Core.md) — 基础设施

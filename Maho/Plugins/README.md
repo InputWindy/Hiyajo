@@ -40,7 +40,7 @@
 | [Exception](Exception/Exception.cplugin) | `Maho::Exception::FException` | ✅ | 异常处理（非致命异常多播事件） |
 | [Network](Network/Network.cplugin) | `Maho::Network::FNetworkSystem` | ⬜ | 网络通信（客户端 / 服务器） |
 | [Editor](Editor/Editor.cplugin) | `Maho::Editor::FEditorSystem` | ⬜ | 编辑器工具（ImGui 编辑器 UI） |
-| [PluginManager](PluginManager/PluginManager.cplugin) | `Maho::PluginManager::FPluginManager` | ✅ | 运行时插件管理器（动态 DLL 装卸） |
+| [AssemblyImporter](AssemblyImporter/AssemblyImporter.cplugin) | `Maho::AssemblyImporter::FAssemblyImporter` | ✅ | 导入项目的 toolkit + engine 聚合程序集 |
 
 ## 目录结构
 

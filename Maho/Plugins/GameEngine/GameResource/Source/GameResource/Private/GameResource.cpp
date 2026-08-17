@@ -18,7 +18,7 @@ bool FGameResource::ExecuteStage(EEngineStage Stage)
 } // namespace Maho
 
 
-// ── Dynamic plugin entry (runtime load/unload via FPluginManager) ──
+// ── Dynamic plugin entry (runtime load/unload via FAssemblyImporter) ──
 
 namespace
 {

@@ -93,7 +93,7 @@ const std::string* FTextManager::FindTranslation(std::string_view InNamespace, s
 
 } // namespace Maho::Text
 
-// ── Dynamic plugin entry (runtime load/unload via FPluginManager) ──
+// ── Dynamic plugin entry (runtime load/unload via FAssemblyImporter) ──
 
 namespace
 {

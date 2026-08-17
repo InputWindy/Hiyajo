@@ -12,7 +12,7 @@ bool FNetworkSystem::ExecuteStage(EEngineStage Stage)
 
 } // namespace Maho::Network
 
-// ── Dynamic plugin entry (runtime load/unload via FPluginManager) ──
+// ── Dynamic plugin entry (runtime load/unload via FAssemblyImporter) ──
 
 namespace
 {
