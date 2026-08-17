@@ -1,0 +1,14 @@
+{
+  "FileVersion": 1,
+  "FriendlyName": "Engine",
+  "Description": "Engine app shape (base classes).",
+  "Category": "Engine",
+  "EnabledByDefault": true,
+  "Modules": [
+    {
+      "Name": "Engine",
+      "Type": "Runtime",
+      "Dependencies": []
+    }
+  ]
+}

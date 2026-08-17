@@ -3,6 +3,7 @@
 #include "AssemblyImporterApi.h"
 #include <Core/Assembly.h>
 #include <Engine.h>
+#include <Toolkit.h>
 
 #include <string_view>
 

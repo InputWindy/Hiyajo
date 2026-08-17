@@ -1,19 +1,22 @@
 {
-	"FileVersion": 1,
-	"FriendlyName": "Archive",
-	"Description": "Serialization archive extension.",
-	"Category": "Engine",
-	"EnabledByDefault": true,
-	"Modules": [
-		{
-			"Name": "Archive",
-			"Type": "Runtime",
-			"Extension": {
-				"Class": "Maho::Archive::FArchiveSystem",
-				"Header": "Archive.h",
-				"Priority": "System",
-				"Stage": "EToolStage"
-			}
-		}
-	]
+  "FileVersion": 1,
+  "FriendlyName": "Archive",
+  "Description": "Serialization archive extension.",
+  "Category": "Engine",
+  "EnabledByDefault": true,
+  "Modules": [
+    {
+      "Name": "Archive",
+      "Type": "Runtime",
+      "Extension": {
+        "Class": "Maho::Archive::FArchiveSystem",
+        "Header": "Archive.h",
+        "Priority": "System",
+        "Stage": "EToolStage"
+      },
+      "Dependencies": [
+        "Toolkit"
+      ]
+    }
+  ]
 }

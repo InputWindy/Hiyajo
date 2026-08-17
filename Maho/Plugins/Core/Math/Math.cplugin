@@ -1,19 +1,22 @@
 {
-	"FileVersion": 1,
-	"FriendlyName": "Math",
-	"Description": "Math library extension (GLM + math helpers).",
-	"Category": "Engine",
-	"EnabledByDefault": true,
-	"Modules": [
-		{
-			"Name": "Math",
-			"Type": "Runtime",
-			"Extension": {
-				"Class": "Maho::Math::FMath",
-				"Header": "MathLibrary.h",
-				"Priority": "System",
-				"Stage": "EToolStage"
-			}
-		}
-	]
+  "FileVersion": 1,
+  "FriendlyName": "Math",
+  "Description": "Math library extension (GLM + math helpers).",
+  "Category": "Engine",
+  "EnabledByDefault": true,
+  "Modules": [
+    {
+      "Name": "Math",
+      "Type": "Runtime",
+      "Extension": {
+        "Class": "Maho::Math::FMath",
+        "Header": "MathLibrary.h",
+        "Priority": "System",
+        "Stage": "EToolStage"
+      },
+      "Dependencies": [
+        "Toolkit"
+      ]
+    }
+  ]
 }

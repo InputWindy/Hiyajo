@@ -1,20 +1,23 @@
 {
-	"FileVersion": 1,
-	"FriendlyName": "Text",
-	"Description": "Localized text (culture-aware).",
-	"Category": "Engine",
-	"EnabledByDefault": true,
-	"Modules": [
-			{
-				"Name": "Text",
-				"Type": "Runtime",
-				"Dependencies": ["Json"],
-				"Extension": {
-					"Class": "Maho::Text::FTextManager",
-					"Header": "Text.h",
-					"Priority": "System",
-					"Stage": "EToolStage"
-				}
-			}
-	]
+  "FileVersion": 1,
+  "FriendlyName": "Text",
+  "Description": "Localized text (culture-aware).",
+  "Category": "Engine",
+  "EnabledByDefault": true,
+  "Modules": [
+    {
+      "Name": "Text",
+      "Type": "Runtime",
+      "Dependencies": [
+        "Json",
+        "Toolkit"
+      ],
+      "Extension": {
+        "Class": "Maho::Text::FTextManager",
+        "Header": "Text.h",
+        "Priority": "System",
+        "Stage": "EToolStage"
+      }
+    }
+  ]
 }

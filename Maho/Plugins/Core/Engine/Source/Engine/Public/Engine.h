@@ -1,18 +1,12 @@
 #pragma once
 
+#include "EngineApi.h"
 #include <Core/Core.h>
 
 #include <cstdint>
 
 namespace Maho
 {
-
-/** Toolkit lifecycle — a 2-value stage enum. */
-enum class EToolStage : std::uint8_t
-{
-	Init = 0,
-	Shutdown = 1,
-};
 
 /** Engine lifecycle stages. */
 enum class EEngineStage : std::uint8_t
@@ -28,31 +22,15 @@ enum class EEngineStage : std::uint8_t
 	PostShutdown
 };
 
-/** Pre-app toolkit: serial drive (no thread pool, no loop). */
-class FToolkitBase : 
-	public ICommandLine,
-	public TSerialScheduler<EToolStage>
-{
-protected:
-	FToolkitBase() = default;
-
-public:
-	virtual ~FToolkitBase() = default;
-
-protected:
-	virtual void Init() = 0;
-	virtual void Shutdown() = 0;
-};
-
 /** Engine base: parallel drive (owns its thread pool). */
-class FEngineBase;
+class MAHO_ENGINE_API FEngineBase;
 
 /** The running engine instance — set by FEngineBase's ctor, read by extensions (e.g. Platform) to request exit. */
 inline FEngineBase* GApp = nullptr;
 
-class FEngineBase :
-	public TParallelScheduler<EEngineStage>,
-	public IRunable
+class MAHO_ENGINE_API FEngineBase
+	: public TParallelScheduler<EEngineStage>
+	, public IRunable
 {
 protected:
 	FEngineBase()

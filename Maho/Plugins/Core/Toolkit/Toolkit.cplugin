@@ -1,0 +1,14 @@
+{
+  "FileVersion": 1,
+  "FriendlyName": "Toolkit",
+  "Description": "Toolkit app shape (base classes).",
+  "Category": "Engine",
+  "EnabledByDefault": true,
+  "Modules": [
+    {
+      "Name": "Toolkit",
+      "Type": "Runtime",
+      "Dependencies": []
+    }
+  ]
+}

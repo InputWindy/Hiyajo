@@ -1,19 +1,22 @@
 {
-	"FileVersion": 1,
-	"FriendlyName": "Exception",
-	"Description": "Exception handling extension (non-fatal exception events).",
-	"Category": "Engine",
-	"EnabledByDefault": true,
-	"Modules": [
-		{
-			"Name": "Exception",
-			"Type": "Runtime",
-			"Extension": {
-				"Class": "Maho::Exception::FException",
-				"Header": "Exception.h",
-				"Priority": "System",
-				"Stage": "EEngineStage"
-			}
-		}
-	]
+  "FileVersion": 1,
+  "FriendlyName": "Exception",
+  "Description": "Exception handling extension (non-fatal exception events).",
+  "Category": "Engine",
+  "EnabledByDefault": true,
+  "Modules": [
+    {
+      "Name": "Exception",
+      "Type": "Runtime",
+      "Extension": {
+        "Class": "Maho::Exception::FException",
+        "Header": "Exception.h",
+        "Priority": "System",
+        "Stage": "EEngineStage"
+      },
+      "Dependencies": [
+        "Engine"
+      ]
+    }
+  ]
 }

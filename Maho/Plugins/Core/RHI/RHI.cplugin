@@ -1,19 +1,22 @@
 {
-	"FileVersion": 1,
-	"FriendlyName": "RHI",
-	"Description": "Render hardware interface extension (GPU device).",
-	"Category": "Engine",
-	"EnabledByDefault": true,
-	"Modules": [
-		{
-			"Name": "RHI",
-			"Type": "Runtime",
-			"Extension": {
-				"Class": "Maho::RHI::FRHI",
-				"Header": "RHI.h",
-				"Priority": "System",
-				"Stage": "EEngineStage"
-			}
-		}
-	]
+  "FileVersion": 1,
+  "FriendlyName": "RHI",
+  "Description": "Render hardware interface extension (GPU device).",
+  "Category": "Engine",
+  "EnabledByDefault": true,
+  "Modules": [
+    {
+      "Name": "RHI",
+      "Type": "Runtime",
+      "Extension": {
+        "Class": "Maho::RHI::FRHI",
+        "Header": "RHI.h",
+        "Priority": "System",
+        "Stage": "EEngineStage"
+      },
+      "Dependencies": [
+        "Engine"
+      ]
+    }
+  ]
 }

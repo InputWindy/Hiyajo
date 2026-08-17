@@ -1,19 +1,22 @@
 {
-	"FileVersion": 1,
-	"FriendlyName": "Unicode",
-	"Description": "Text encoding extension (UTF-8/16/32 conversion).",
-	"Category": "Engine",
-	"EnabledByDefault": true,
-	"Modules": [
-		{
-			"Name": "Unicode",
-			"Type": "Runtime",
-			"Extension": {
-				"Class": "Maho::Unicode::FUnicode",
-				"Header": "Unicode.h",
-				"Priority": "System",
-				"Stage": "EToolStage"
-			}
-		}
-	]
+  "FileVersion": 1,
+  "FriendlyName": "Unicode",
+  "Description": "Text encoding extension (UTF-8/16/32 conversion).",
+  "Category": "Engine",
+  "EnabledByDefault": true,
+  "Modules": [
+    {
+      "Name": "Unicode",
+      "Type": "Runtime",
+      "Extension": {
+        "Class": "Maho::Unicode::FUnicode",
+        "Header": "Unicode.h",
+        "Priority": "System",
+        "Stage": "EToolStage"
+      },
+      "Dependencies": [
+        "Toolkit"
+      ]
+    }
+  ]
 }
