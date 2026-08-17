@@ -574,7 +574,7 @@ def validate_plugins(
 	'warning'. Empty list = all healthy.
 	"""
 	plugins_dir = (engine_root / "Maho" / "Plugins").resolve()
-	basic_dir = (engine_root / "Maho" / "Source" / "Public" / "Basic").resolve()
+	basic_dir = (engine_root / "Maho" / "Basic").resolve()
 	if not plugins_dir.is_dir():
 		return [("error", f"Plugins dir not found: {plugins_dir}")]
 
@@ -2170,7 +2170,7 @@ def resolve_plugin_roots_for_cproject(cproject_path: Path) -> list[Path]:
 	project_dir = cproject_path.parent
 	roots = [
 		engine_root / "Maho" / "Plugins",
-		engine_root / "Maho" / "Source" / "Public" / "Basic",
+		engine_root / "Maho" / "Basic",
 	]
 	for candidate in (project_dir / "Plugins", project_dir / "Project" / "Plugins"):
 		if candidate.is_dir():

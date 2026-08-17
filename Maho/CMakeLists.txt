@@ -23,8 +23,6 @@ if(NOT EXISTS "${_MAHO_LOCAL_PYTHON}")
 endif()
 
 maho_collect_sources(MAHO_SOURCES "${MAHO_SOURCE_DIR}")
-# Exclude the Basic/ infrastructure assemblies — built as separate plugin DLLs.
-list(FILTER MAHO_SOURCES EXCLUDE REGEX "/Basic/")
 
 if(MAHO_SOURCES STREQUAL "")
 	message(FATAL_ERROR "Maho: no sources found under ${MAHO_SOURCE_DIR}")
