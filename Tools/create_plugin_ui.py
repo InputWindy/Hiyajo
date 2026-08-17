@@ -14,6 +14,7 @@ sys.path.insert(0, str(TOOLS_DIR))
 from maho_tools import (  # noqa: E402
 	ENGINE_ROOT,
 	create_plugin,
+	inheritance_problems,
 	is_valid_project_name,
 	list_engine_plugins,
 )
@@ -161,6 +162,11 @@ class CreatePluginApp(tk.Tk):
 		desc = self.txt_desc.get("1.0", tk.END).strip()
 
 		engine_root = self._engine_root_of(plugins_dir)
+		problems = inheritance_problems(engine_root, name, inherits)
+		if problems:
+			messagebox.showerror("Maho", "继承冲突：\n\n" + "\n".join(problems))
+			return
+
 		try:
 			path = create_plugin(
 				name,

@@ -598,6 +598,61 @@ def fix_plugins(engine_root: Path | None = None) -> list[str]:
 	return messages
 
 
+def inheritance_problems(
+	engine_root: Path,
+	new_name: str,
+	parent_names: list[str],
+) -> list[str]:
+	"""
+	Check circular / redundant inheritance if a plugin `new_name` inherits
+	`parent_names`. Returns problem messages (empty = OK).
+
+	- Cycle: a parent (transitively) inherits `new_name` → new plugin would
+	  close a loop.
+	- Redundant: one selected parent already inherits another selected parent
+	  (diamond) → duplicate base, drop the redundant direct selection.
+	"""
+	plugins_dir = (engine_root / "Maho" / "Plugins").resolve()
+	graph: dict[str, set[str]] = {}
+	for cplugin_path in discover_cplugin_files([plugins_dir]):
+		data = read_cplugin(cplugin_path)
+		name = cplugin_path.parent.name
+		inherits = (data.get("Modules", [{}])[0]).get("Inherits", []) or []
+		if isinstance(inherits, str):
+			inherits = [inherits]
+		graph[name] = set(inherits)
+
+	# Transitive ancestors of `node` (everything node inherits, directly or not).
+	def ancestors_of(node: str) -> set[str]:
+		seen: set[str] = set()
+		stack: list[str] = list(graph.get(node, ()))
+		while stack:
+			cur = stack.pop()
+			if cur in seen:
+				continue
+			seen.add(cur)
+			stack.extend(graph.get(cur, ()))
+		return seen
+
+	problems: list[str] = []
+	for parent in parent_names:
+		if new_name in ancestors_of(parent):
+			problems.append(f"循环继承：{parent} 已（传递）继承 {new_name}")
+	for p in parent_names:
+		for q in parent_names:
+			if p != q and q in ancestors_of(p):
+				problems.append(f"冗余继承：{p} 已继承 {q}，无需再直接勾选 {q}")
+
+	# De-duplicate, keep order.
+	seen: set[str] = set()
+	uniq: list[str] = []
+	for msg in problems:
+		if msg not in seen:
+			seen.add(msg)
+			uniq.append(msg)
+	return uniq
+
+
 def codegen_game_app(cproject_path: Path) -> Path:
 	"""
 	Regenerate Source/GameApp.cpp from the .cproject's current plugin selection.
