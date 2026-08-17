@@ -6,314 +6,104 @@
 <title>Async — API 文档</title>
 <style>
 	:root {
-		--bg: #14181f;
-		--panel: #1b2130;
-		--code-bg: #0d1117;
-		--text: #d8e1f0;
-		--muted: #8b96a8;
-		--accent: #5b8dd9;
-		--accent2: #3f8f63;
-		--border: #2c3444;
-		--border-strong: #3d4a61;
-		--kw: #ff7b72;
-		--type: #79c0ff;
-		--fn: #d2a8ff;
-		--field: #e6c07b;
+		--bg: #14181f; --panel: #1b2130; --code-bg: #0d1117; --text: #d8e1f0;
+		--muted: #8b96a8; --accent: #5b8dd9; --border: #2c3444; --border-strong: #3d4a61;
+		--kw: #ff7b72; --type: #79c0ff; --fn: #d2a8ff; --field: #e6c07b;
 	}
 	* { box-sizing: border-box; }
-	body {
-		margin: 0;
-		padding: 32px 40px;
-		background: var(--bg);
-		color: var(--text);
-		font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
-		line-height: 1.7;
-		max-width: 1040px;
-	}
-	h1 {
-		font-size: 26px;
-		border-bottom: 2px solid var(--border-strong);
-		padding-bottom: 12px;
-	}
+	body { margin: 0; padding: 32px 40px; background: var(--bg); color: var(--text);
+		font-family: "Segoe UI", "Microsoft YaHei", sans-serif; line-height: 1.7; max-width: 1040px; }
+	h1 { font-size: 26px; border-bottom: 2px solid var(--border-strong); padding-bottom: 12px; }
+	h2 { font-size: 22px; margin-top: 44px; color: var(--accent); border-bottom: 1px solid var(--border); padding-bottom: 8px; }
 	a { color: var(--accent); text-decoration: none; }
 	a:hover { text-decoration: underline; }
-	code {
-		font-family: "Cascadia Code", Consolas, monospace;
-		background: var(--code-bg);
-		padding: 2px 6px;
-		border-radius: 4px;
-		font-size: 13px;
-	}
-	.kw { color: var(--kw); }
-	.type { color: var(--type); }
-	.fn { color: var(--fn); }
-	.field { color: var(--field); }
-	.muted { color: var(--muted); }
-
-	/* ── 类面板 ── */
-	.class-panel {
-		background: var(--panel);
-		border: 1px solid var(--border);
-		border-left: 4px solid var(--accent);
-		border-radius: 8px;
-		padding: 20px 24px;
-		margin: 28px 0;
-	}
-	.class-name {
-		font-family: "Cascadia Code", Consolas, monospace;
-		font-size: 20px;
-		color: var(--accent);
-		margin: 0 0 4px 0;
-	}
-	.class-kind {
-		display: inline-block;
-		font-size: 11px;
-		font-family: "Segoe UI", sans-serif;
-		color: var(--muted);
-		border: 1px solid var(--border);
-		border-radius: 10px;
-		padding: 1px 10px;
-		margin-left: 10px;
-		vertical-align: middle;
-	}
-	.class-desc {
-		color: var(--muted);
-		margin: 8px 0 16px 0;
-	}
-
-	/* ── 分组标题 ── */
-	h3.group {
-		font-size: 14px;
-		text-transform: uppercase;
-		letter-spacing: 1px;
-		color: var(--muted);
-		border-bottom: 1px solid var(--border);
-		padding-bottom: 6px;
-		margin: 20px 0 10px 0;
-	}
-
-	/* ── 表格 ── */
-	table.api-table {
-		border-collapse: collapse;
-		width: 100%;
-		margin: 8px 0;
-	}
-	table.api-table th, table.api-table td {
-		border: 1px solid var(--border);
-		padding: 8px 12px;
-		text-align: left;
-		vertical-align: top;
-	}
-	table.api-table th {
-		background: #222b38;
-		color: var(--muted);
-		font-weight: 600;
-		font-size: 13px;
-	}
-	table.api-table td.sig {
-		font-family: "Cascadia Code", Consolas, monospace;
-		font-size: 13px;
-		white-space: nowrap;
-	}
-	table.api-table td.field-name {
-		font-family: "Cascadia Code", Consolas, monospace;
-		font-size: 13px;
-		color: var(--field);
-	}
-	table.api-table td.type-name {
-		font-family: "Cascadia Code", Consolas, monospace;
-		font-size: 13px;
-		color: var(--type);
-	}
-
-	/* ── 徽章 ── */
-	.badge {
-		display: inline-block;
-		font-size: 11px;
-		padding: 1px 8px;
-		border-radius: 10px;
-		margin-left: 6px;
-		vertical-align: middle;
-	}
-	.badge-protected { background: #3d2a1f; color: #e0a878; }
-	.badge-virtual   { background: #2a1f3d; color: #b79ae0; }
-	.badge-template  { background: #143d2b; color: #6fd3a0; }
-	.badge-static    { background: #1f2a44; color: #8fb8e8; }
+	code { font-family: "Cascadia Code", Consolas, monospace; background: var(--code-bg);
+		padding: 2px 6px; border-radius: 4px; font-size: 13px; }
+	.kw { color: var(--kw); } .type { color: var(--type); } .fn { color: var(--fn); } .field { color: var(--field); } .muted { color: var(--muted); }
+	.class-panel { background: var(--panel); border: 1px solid var(--border); border-left: 4px solid var(--accent);
+		border-radius: 8px; padding: 20px 24px; margin: 28px 0; }
+	.class-name { font-family: "Cascadia Code", Consolas, monospace; font-size: 20px; color: var(--accent); margin: 0 0 4px 0; }
+	.class-kind { font-size: 12px; color: var(--muted); border: 1px solid var(--border); border-radius: 4px; padding: 1px 6px; margin-left: 8px; }
+	.class-desc { margin: 8px 0 0 0; }
+	.api-table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+	.api-table th, .api-table td { border: 1px solid var(--border); padding: 8px 10px; text-align: left; vertical-align: top; }
+	.api-table th { background: var(--code-bg); color: var(--muted); font-weight: normal; }
+	.sig { font-family: "Cascadia Code", Consolas, monospace; font-size: 13px; }
+	.group { text-transform: uppercase; letter-spacing: 1px; font-size: 13px; color: var(--muted);
+		margin: 20px 0 8px 0; border-bottom: 1px dashed var(--border); padding-bottom: 4px; }
+	.badge { font-size: 11px; border-radius: 4px; padding: 1px 6px; margin-left: 6px; vertical-align: middle; }
+	.badge-virtual { color: #d2a8ff; border: 1px solid #6e4a9e; }
+	.badge-template { color: #79c0ff; border: 1px solid #2d5b8a; }
+	.badge-static { color: #e6c07b; border: 1px solid #8a6d2d; }
 </style>
 </head>
 <body>
-
 <h1>Async — API 文档</h1>
-<p class="muted">
-			引擎的两种多线程模型 + 可运行契约。入口：<a href="Async.h">Async.h</a>（聚合头）· 概念见 <a href="Async.md">Async.md</a>
-</p>
+<p class="muted">两种并行模型 + 可运行契约。</p>
 
-<!-- ============================ FThreadPool ============================ -->
-<section class="class-panel">
-	<h2 class="class-name">FThreadPool<span class="class-kind">class</span></h2>
-	<p class="class-desc">
-		固定大小的线程池：N 个常驻 worker + 任务队列 + barrier。
-		用于瞬态并行任务（并行 for、job、短计算），不做常驻角色。
-	</p>
-
-	<h3 class="group">接口</h3>
-	<table class="api-table">
-		<tr><th style="width:48%">签名</th><th>说明</th></tr>
-		<tr>
-			<td class="sig"><code><span class="kw">explicit</span> FThreadPool(<span class="type">std::uint32_t</span> NumThreads = 0)</code></td>
-			<td>创建池。0 = 硬件核数（0 则回退 1）。构造即启动全部 worker。</td>
-		</tr>
-		<tr>
-			<td class="sig"><code>~FThreadPool()</code></td>
-			<td>停机：置停止标志、唤醒、join。队列剩余任务被丢弃。</td>
-		</tr>
-		<tr>
-			<td class="sig"><code><span class="type">void</span> Submit(<span class="type">std::function</span>&lt;<span class="type">void</span>()&gt; Task)</code></td>
-			<td>入队 fire-and-forget 任务，立即返回。线程安全。</td>
-		</tr>
-		<tr>
-			<td class="sig"><code><span class="kw">template</span> &lt;<span class="kw">typename</span>... FCallables&gt;<br>
-				<span class="type">void</span> Run(FCallables&amp;&amp;... Callables)</code> <span class="badge badge-template">template</span></td>
-			<td>所有 callable 并发执行 + barrier。0 个返回、1 个内联、N 个并发。</td>
-		</tr>
-		<tr>
-			<td class="sig"><code><span class="type">std::uint32_t</span> GetNumThreads() <span class="kw">const</span></code></td>
-			<td>返回 worker 线程数。</td>
-		</tr>
-	</table>
-
-	<h3 class="group">成员变量</h3>
-	<table class="api-table">
-		<tr><th>字段</th><th style="width:44%">类型</th><th>说明</th></tr>
-		<tr><td class="field-name">Workers</td><td class="type-name">std::vector&lt;std::thread&gt;</td><td>常驻 worker 线程</td></tr>
-		<tr><td class="field-name">Queue</td><td class="type-name">std::deque&lt;std::function&lt;void()&gt;&gt;</td><td>任务队列（Mutex 保护）</td></tr>
-		<tr><td class="field-name">Mutex</td><td class="type-name">std::mutex</td><td>队列互斥锁</td></tr>
-		<tr><td class="field-name">CondVar</td><td class="type-name">std::condition_variable</td><td>唤醒 worker（新任务 / 停止）</td></tr>
-		<tr><td class="field-name">NumThreads</td><td class="type-name">std::uint32_t</td><td>worker 数量</td></tr>
-		<tr><td class="field-name">bStopping</td><td class="type-name">bool</td><td>停止标志</td></tr>
-	</table>
-</section>
-
-<!-- ============================ ICommandLine ============================ -->
 <section class="class-panel">
 	<h2 class="class-name">ICommandLine<span class="class-kind">interface</span></h2>
-	<p class="class-desc">
-		命令行接收契约：所有可运行对象（工具包 / 引擎）在启动时接收原始命令行。
-		<code>MahoMain</code> / <code>MahoCLIMain</code> 创建后先调 <code>ParseCommandLine</code> 再驱动。
-	</p>
-
+	<p class="class-desc">命令行接收契约：启动时接收原始命令行。</p>
 	<h3 class="group">接口</h3>
 	<table class="api-table">
 		<tr><th style="width:48%">签名</th><th>说明</th></tr>
-		<tr>
-			<td class="sig"><code><span class="kw">virtual</span> ~ICommandLine()</code> <span class="badge badge-virtual">virtual</span></td>
-			<td>虚析构。</td>
-		</tr>
-		<tr>
-			<td class="sig"><code><span class="kw">virtual void</span> ParseCommandLine(<span class="type">int</span> Argc, <span class="type">char</span>** Argv) = 0</code> <span class="badge badge-virtual">virtual</span></td>
-			<td>纯虚：解析原始命令行（如 CommandParser 插件实现键值存储）。</td>
-		</tr>
+		<tr><td class="sig"><code><span class="kw">void</span> ParseCommandLine(<span class="type">int</span> Argc, <span class="type">char</span>** Argv)</code> <span class="badge badge-virtual">virtual</span></td><td>解析原始命令行</td></tr>
 	</table>
 </section>
 
-<!-- ============================ IRunable ============================ -->
 <section class="class-panel">
 	<h2 class="class-name">IRunable<span class="class-kind">interface</span></h2>
-	<p class="class-desc">
-		可运行契约：继承 <code>ICommandLine</code>。凡有主循环的类型（引擎、常驻线程）都实现它，供 app 侧统一驱动。
-	</p>
-
+	<p class="class-desc">可运行契约：继承 <code>ICommandLine</code>。凡有主循环的类型（引擎）都实现它。</p>
 	<h3 class="group">接口</h3>
 	<table class="api-table">
 		<tr><th style="width:48%">签名</th><th>说明</th></tr>
-		<tr>
-			<td class="sig"><code><span class="kw">virtual</span> ~IRunable()</code> <span class="badge badge-virtual">virtual</span></td>
-			<td>虚析构，可安全经接口指针删除。</td>
-		</tr>
-		<tr>
-			<td class="sig"><code><span class="kw">virtual void</span> MainLoop() = 0</code> <span class="badge badge-virtual">virtual</span></td>
-			<td>纯虚主循环。FEngineBase 在调用线程驱动；FThreadedServer 在专用线程驱动。</td>
-		</tr>
+		<tr><td class="sig"><code><span class="kw">void</span> MainLoop()</code> <span class="badge badge-virtual">virtual</span></td><td>主循环</td></tr>
+		<tr><td class="sig"><code><span class="kw">void</span> RequestShutdown()</code> <span class="badge badge-virtual">virtual</span></td><td>请求退出主循环（只有可运行的东西才有"停止"）</td></tr>
+	</table>
+	<h3 class="group">全局</h3>
+	<table class="api-table">
+		<tr><th style="width:34%">符号</th><th>说明</th></tr>
+		<tr><td class="sig"><code>GApp</code>（<span class="type">IRunable*</span>）</td><td>运行中的 app；<code>FEngineBase</code> 构造时置位，扩展经它请求退出</td></tr>
 	</table>
 </section>
 
-<!-- ============================ FThreadedServer ============================ -->
 <section class="class-panel">
-	<h2 class="class-name">FThreadedServer<span class="class-kind">class</span></h2>
-	<p class="class-desc">
-		专用常驻线程：单 worker + FIFO 队列。用于长命角色（渲染线程、IO、音频），
-		继承 <code>IRunable</code>，可子类化重写钩子。不用于瞬态并行工作（用 FThreadPool）。
-	</p>
-
+	<h2 class="class-name">FThreadPool<span class="class-kind">class</span></h2>
+	<p class="class-desc">N 个常驻 worker 的任务池，瞬态并行计算。</p>
 	<h3 class="group">接口</h3>
 	<table class="api-table">
 		<tr><th style="width:48%">签名</th><th>说明</th></tr>
-		<tr>
-			<td class="sig"><code>FThreadedServer()</code></td>
-			<td>默认构造，不启动线程。</td>
-		</tr>
-		<tr>
-			<td class="sig"><code><span class="kw">virtual</span> ~FThreadedServer()</code> <span class="badge badge-virtual">virtual</span></td>
-			<td>若仍在运行则先 Shutdown。</td>
-		</tr>
-		<tr>
-			<td class="sig"><code><span class="type">bool</span> Initialize()</code></td>
-			<td>调 OnInitialize（失败返回 false），成功后启动 worker。</td>
-		</tr>
-		<tr>
-			<td class="sig"><code><span class="type">void</span> Shutdown()</code></td>
-			<td>停止 + join + OnShutdown。<b>排空队列</b>：已提交任务跑完才退。</td>
-		</tr>
-		<tr>
-			<td class="sig"><code><span class="type">void</span> MainLoop() <span class="kw">override</span></code></td>
-			<td>常驻 worker 循环：取队列任务执行；停止标志 + 队列空时退出。跑在专用线程上。</td>
-		</tr>
-		<tr>
-			<td class="sig"><code><span class="type">bool</span> IsRunning() <span class="kw">const</span></code></td>
-			<td>worker 是否在运行（原子读，跨线程安全）。</td>
-		</tr>
-		<tr>
-			<td class="sig"><code><span class="type">void</span> Submit(<span class="type">std::function</span>&lt;<span class="type">void</span>()&gt; Task)</code></td>
-			<td>FIFO 入队，非阻塞。线程安全。</td>
-		</tr>
-		<tr>
-			<td class="sig"><code><span class="type">void</span> Flush()</code></td>
-			<td>FIFO barrier：哨兵任务之前的任务全跑完才返回。</td>
-		</tr>
-		<tr>
-			<td class="sig"><code><span class="kw">virtual bool</span> OnInitialize()</code> <span class="badge badge-virtual">virtual</span> <span class="badge badge-protected">protected</span></td>
-			<td>worker 启动前调用，返回 false 则初始化失败。默认 true。</td>
-		</tr>
-		<tr>
-			<td class="sig"><code><span class="kw">virtual void</span> OnShutdown()</code> <span class="badge badge-virtual">virtual</span> <span class="badge badge-protected">protected</span></td>
-			<td>worker join 后调用，角色清理。默认空。</td>
-		</tr>
-		<tr>
-			<td class="sig"><code><span class="kw">virtual const char</span>* GetThreadName() <span class="kw">const</span></code> <span class="badge badge-virtual">virtual</span> <span class="badge badge-protected">protected</span></td>
-			<td>线程名（日志/调试）。默认 <code>"ThreadedServer"</code>。</td>
-		</tr>
+		<tr><td class="sig"><code>FThreadPool(<span class="type">std::uint32_t</span> NumThreads = 0)</code></td><td>0 = 硬件核数</td></tr>
+		<tr><td class="sig"><code><span class="kw">void</span> Submit(<span class="type">std::function</span>&lt;<span class="kw">void</span>()&gt;)</code></td><td>提交 fire-and-forget 任务</td></tr>
+		<tr><td class="sig"><code><span class="kw">template</span>&lt;Fs...&gt; <span class="kw">void</span> Run(Fs...)</code> <span class="badge badge-template">template</span></td><td>并行执行 + barrier；0 个直接返回，1 个内联</td></tr>
 	</table>
+</section>
 
-	<h3 class="group">成员变量</h3>
+<section class="class-panel">
+	<h2 class="class-name">FThreadedServer<span class="class-kind">class</span></h2>
+	<p class="class-desc">1 个专用线程的 FIFO 串行队列，常驻角色（渲染/IO/音频）。</p>
+	<h3 class="group">接口</h3>
 	<table class="api-table">
-		<tr><th>字段</th><th style="width:44%">类型</th><th>说明</th></tr>
-		<tr><td class="field-name">Worker</td><td class="type-name">std::thread</td><td>专用 worker 线程</td></tr>
-		<tr><td class="field-name">Queue</td><td class="type-name">std::deque&lt;std::function&lt;void()&gt;&gt;</td><td>FIFO 任务队列（Mutex 保护）</td></tr>
-		<tr><td class="field-name">Mutex</td><td class="type-name">std::mutex</td><td>队列互斥锁</td></tr>
-		<tr><td class="field-name">CondVar</td><td class="type-name">std::condition_variable</td><td>唤醒 worker（新任务 / 停止）</td></tr>
-		<tr><td class="field-name">bRunning</td><td class="type-name">std::atomic&lt;bool&gt;</td><td>运行标志（跨线程）</td></tr>
-		<tr><td class="field-name">bStopping</td><td class="type-name">bool</td><td>停止标志（worker 循环退出条件）</td></tr>
+		<tr><th style="width:48%">签名</th><th>说明</th></tr>
+		<tr><td class="sig"><code><span class="kw">bool</span> Initialize()</code></td><td>起线程 + <code>OnInitialize</code></td></tr>
+		<tr><td class="sig"><code><span class="kw">void</span> Submit(<span class="type">std::function</span>&lt;<span class="kw">void</span>()&gt;)</code></td><td>FIFO 入队（非阻塞）</td></tr>
+		<tr><td class="sig"><code><span class="kw">void</span> Flush()</code></td><td>FIFO barrier（哨兵任务排尾）</td></tr>
+		<tr><td class="sig"><code><span class="kw">void</span> Shutdown()</code></td><td>排空队列后 join</td></tr>
+	</table>
+	<h3 class="group">子类钩子</h3>
+	<table class="api-table">
+		<tr><th style="width:48%">签名</th><th>说明</th></tr>
+		<tr><td class="sig"><code><span class="kw">bool</span> OnInitialize()</code></td><td>线程内初始化</td></tr>
+		<tr><td class="sig"><code><span class="kw">void</span> OnShutdown()</code></td><td>线程内清理</td></tr>
+		<tr><td class="sig"><code><span class="kw">const char</span>* GetThreadName()</code></td><td>线程名</td></tr>
 	</table>
 </section>
 
 <h2>相关文档</h2>
-<ul>
-	<li><a href="Async.h">Async.h</a> — 聚合头</li>
-	<li><a href="Async.md">Async.md</a> — 概念与选型</li>
-	<li><a href="Runable.h">Runable.h</a> — IRunable 可运行契约</li>
-	<li><a href="../TypeList.h">../TypeList.h</a> — ForEach + 调度器（并行遍历消费方）</li>
-	<li><a href="../Extension.h">../Extension.h</a> — 串行 / 并行调度器 + 并行扩展</li>
-</ul>
-
+<p>
+	<a href="Async.md">Async.md</a> — 概念 ·
+	<a href="../Core.md">Core.md</a> — 基础设施 ·
+	<a href="../../Maho.md">Maho.md</a> — 引擎核心
+</p>
 </body>
 </html>

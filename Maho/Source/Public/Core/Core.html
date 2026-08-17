@@ -6,362 +6,96 @@
 <title>Core — API 文档</title>
 <style>
 	:root {
-		--bg: #14181f;
-		--panel: #1b2130;
-		--code-bg: #0d1117;
-		--text: #d8e1f0;
-		--muted: #8b96a8;
-		--accent: #5b8dd9;
-		--accent2: #3f8f63;
-		--border: #2c3444;
-		--border-strong: #3d4a61;
-		--kw: #ff7b72;
-		--type: #79c0ff;
-		--field: #e6c07b;
+		--bg: #14181f; --panel: #1b2130; --code-bg: #0d1117; --text: #d8e1f0;
+		--muted: #8b96a8; --accent: #5b8dd9; --border: #2c3444; --border-strong: #3d4a61;
+		--kw: #ff7b72; --type: #79c0ff; --field: #e6c07b;
 	}
 	* { box-sizing: border-box; }
-	body {
-		margin: 0;
-		padding: 32px 40px;
-		background: var(--bg);
-		color: var(--text);
-		font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
-		line-height: 1.7;
-		max-width: 1040px;
-	}
+	body { margin: 0; padding: 32px 40px; background: var(--bg); color: var(--text);
+		font-family: "Segoe UI", "Microsoft YaHei", sans-serif; line-height: 1.7; max-width: 1040px; }
 	h1 { font-size: 26px; border-bottom: 2px solid var(--border-strong); padding-bottom: 12px; }
 	h2 { font-size: 22px; margin-top: 44px; color: var(--accent); border-bottom: 1px solid var(--border); padding-bottom: 8px; }
 	a { color: var(--accent); text-decoration: none; }
 	a:hover { text-decoration: underline; }
-	code {
-		font-family: "Cascadia Code", Consolas, monospace;
-		background: var(--code-bg);
-		padding: 2px 6px;
-		border-radius: 4px;
-		font-size: 13px;
-	}
-	.kw { color: var(--kw); }
-	.type { color: var(--type); }
-	.field { color: var(--field); }
-	.muted { color: var(--muted); }
-
-	.class-panel {
-		background: var(--panel);
-		border: 1px solid var(--border);
-		border-left: 4px solid var(--accent);
-		border-radius: 8px;
-		padding: 20px 24px;
-		margin: 20px 0;
-	}
-	.class-name {
-		font-family: "Cascadia Code", Consolas, monospace;
-		font-size: 18px;
-		color: var(--accent);
-		margin: 0 0 4px 0;
-	}
-	.class-kind {
-		display: inline-block;
-		font-size: 11px;
-		font-family: "Segoe UI", sans-serif;
-		color: var(--muted);
-		border: 1px solid var(--border);
-		border-radius: 10px;
-		padding: 1px 10px;
-		margin-left: 10px;
-		vertical-align: middle;
-	}
-	.class-desc { color: var(--muted); margin: 8px 0 16px 0; }
-
-	h3.group {
-		font-size: 13px;
-		text-transform: uppercase;
-		letter-spacing: 1px;
-		color: var(--muted);
-		border-bottom: 1px solid var(--border);
-		padding-bottom: 6px;
-		margin: 18px 0 10px 0;
-	}
-	table.api-table { border-collapse: collapse; width: 100%; margin: 8px 0; }
-	table.api-table th, table.api-table td {
-		border: 1px solid var(--border);
-		padding: 8px 12px;
-		text-align: left;
-		vertical-align: top;
-	}
-	table.api-table th { background: #222b38; color: var(--muted); font-weight: 600; font-size: 13px; }
-	table.api-table td.sig { font-family: "Cascadia Code", Consolas, monospace; font-size: 13px; white-space: nowrap; }
-	.badge {
-		display: inline-block;
-		font-size: 11px;
-		padding: 1px 8px;
-		border-radius: 10px;
-		margin-left: 6px;
-		vertical-align: middle;
-	}
-	.badge-template { background: #143d2b; color: #6fd3a0; }
-	.badge-protected { background: #3d2a1f; color: #e0a878; }
-	.badge-virtual { background: #2a1f3d; color: #b79ae0; }
+	code { font-family: "Cascadia Code", Consolas, monospace; background: var(--code-bg);
+		padding: 2px 6px; border-radius: 4px; font-size: 13px; }
+	.kw { color: var(--kw); } .type { color: var(--type); } .field { color: var(--field); } .muted { color: var(--muted); }
+	.class-panel { background: var(--panel); border: 1px solid var(--border); border-left: 4px solid var(--accent);
+		border-radius: 8px; padding: 20px 24px; margin: 20px 0; }
+	.class-name { font-family: "Cascadia Code", Consolas, monospace; font-size: 18px; color: var(--accent); margin: 0 0 4px 0; }
+	.class-kind { font-size: 12px; color: var(--muted); border: 1px solid var(--border); border-radius: 4px; padding: 1px 6px; margin-left: 8px; }
+	.class-desc { margin: 8px 0 0 0; }
+	.api-table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+	.api-table th, .api-table td { border: 1px solid var(--border); padding: 8px 10px; text-align: left; vertical-align: top; }
+	.api-table th { background: var(--code-bg); color: var(--muted); font-weight: normal; }
+	.sig { font-family: "Cascadia Code", Consolas, monospace; font-size: 13px; }
+	.group { text-transform: uppercase; letter-spacing: 1px; font-size: 13px; color: var(--muted);
+		margin: 20px 0 8px 0; border-bottom: 1px dashed var(--border); padding-bottom: 4px; }
+	.badge { font-size: 11px; border-radius: 4px; padding: 1px 6px; margin-left: 6px; vertical-align: middle; }
+	.badge-virtual { color: #d2a8ff; border: 1px solid #6e4a9e; }
+	.badge-template { color: #79c0ff; border: 1px solid #2d5b8a; }
 </style>
 </head>
 <body>
-
 <h1>Core — API 文档</h1>
-<p class="muted">
-	引擎的编译期 + 并发基础设施。入口：<a href="Core.h">Core.h</a>（聚合头）· 概念见 <a href="Core.md">Core.md</a>
-</p>
-
-<!-- ============================ TypeList ============================ -->
-<h2>TypeList — 编译期类型列表 + 运行时遍历</h2>
+<p class="muted">编译期 + 并发基础设施，零 app 假设、零三方依赖。</p>
 
 <section class="class-panel">
-	<h3 class="class-name">TTypeList&lt;TTypes...&gt;<span class="class-kind">template</span></h3>
-	<p class="class-desc">编译期有序类型列表（"类型数组"）。顺序有意义；遍历方式（串行/并行）由调用方选择。</p>
+	<h2 class="class-name">TTypeList&lt;Ts...&gt;<span class="class-kind">template</span></h2>
+	<p class="class-desc">编译期类型列表，调度器与拓扑的载体。</p>
 	<h3 class="group">接口</h3>
 	<table class="api-table">
-		<tr><th style="width:46%">签名</th><th>说明</th></tr>
-		<tr><td class="sig"><code><span class="type">static constexpr std::size_t</span> Count</code></td><td>类型数量</td></tr>
+		<tr><th style="width:48%">签名</th><th>说明</th></tr>
+		<tr><td class="sig"><code>ForEach&lt;TList&gt;(Scheduler, Visitor)</code></td><td>按调度策略遍历列表</td></tr>
 	</table>
 </section>
 
 <section class="class-panel">
-	<h3 class="class-name">TTag&lt;T&gt;<span class="class-kind">template</span></h3>
-	<p class="class-desc">类型标签，让泛型 lambda 用 <code>decltype(Tag)::Type</code> 取回类型 T。</p>
-</section>
-
-<section class="class-panel">
-	<h3 class="class-name">ForEach&lt;TList&gt;(Scheduler, Visitor, Args...)<span class="class-kind">function</span></h3>
-	<p class="class-desc">拆包 TList，逐个喂给 Visitor（TTag&lt;T&gt;）。调度器决定串行/并行。</p>
-	<h3 class="group">签名</h3>
+	<h2 class="class-name">TDependsPack&lt;Slots...&gt;<span class="class-kind">template</span></h2>
+	<p class="class-desc">依赖声明：继承在接口旁，声明 <code>FDependsPack</code>。</p>
+	<h3 class="group">相关</h3>
 	<table class="api-table">
-		<tr><th style="width:46%">签名</th><th>说明</th></tr>
-		<tr>
-			<td class="sig"><code><span class="kw">template</span> &lt;<span class="kw">typename</span> TList, <span class="kw">typename</span> TScheduler, <span class="kw">typename</span> TVisitor, <span class="kw">typename</span>... TArgs&gt;<br>
-			<span class="type">void</span> ForEach(TScheduler&amp;&amp;, TVisitor&amp;&amp;, TArgs&amp;&amp;...)</code> <span class="badge badge-template">template</span></td>
-			<td>TScheduler 受 <code>FForEachScheduler</code> 概念约束</td>
-		</tr>
+		<tr><th style="width:48%">类型</th><th>说明</th></tr>
+		<tr><td class="sig"><code>TDependsOn&lt;Key, TList&gt;</code></td><td>一个依赖槽：在 Key，依赖 TList 里的每个类型</td></tr>
+		<tr><td class="sig"><code>TPackConcat&lt;Packs...&gt;</code></td><td>合并多个依赖包（子类扩展父类依赖表）</td></tr>
+		<tr><td class="sig"><code>TResolveDependsPack&lt;T&gt;</code></td><td>解析 T 的依赖包（无声明则空）</td></tr>
+		<tr><td class="sig"><code>Topo::TLevels_t / TReverse_t</code></td><td>编译期分层 / 逆序</td></tr>
+		<tr><td class="sig"><code>Topo::TIsAcyclic_v</code></td><td>编译期环检测</td></tr>
 	</table>
 </section>
 
 <section class="class-panel">
-	<h3 class="class-name">FForEachScheduler<span class="class-kind">concept</span></h3>
-	<p class="class-desc">调度器契约：对象有 <code>Run(Callables...)</code>。</p>
-	<h3 class="group">约束</h3>
-	<table class="api-table">
-		<tr><th style="width:46%">签名</th><th>说明</th></tr>
-		<tr><td class="sig"><code>requires(TScheduler&amp; S) { S.Run([]{}); }</code></td><td>需可被调用以执行 callable</td></tr>
-	</table>
-</section>
-
-<!-- ============================ Topology ============================ -->
-<h2>Topology — 依赖声明 + 编译期拓扑算法</h2>
-
-<section class="class-panel">
-	<h3 class="class-name">TDependsOn&lt;SlotKey, TList&gt;<span class="class-kind">template</span></h3>
-	<p class="class-desc">一个依赖槽：在 SlotKey 阶段，Self 依赖 TList 里的每个类型（peer 先于 self）。</p>
-</section>
-
-<section class="class-panel">
-	<h3 class="class-name">TDependsPack&lt;TSlots...&gt;<span class="class-kind">template</span></h3>
-	<p class="class-desc">依赖槽的可变包。继承在接口旁，声明 <code>FDependsPack</code>。</p>
-</section>
-
-<section class="class-panel">
-	<h3 class="class-name">TResolveDependsPack&lt;T&gt; / TDependsList&lt;T, Key&gt;<span class="class-kind">template</span></h3>
-	<p class="class-desc">解析 T 的依赖包 / 取 T 在 Key 阶段的 peer 列表（无匹配槽则空）。</p>
-</section>
-
-<section class="class-panel">
-	<h3 class="class-name">Topo::* — 编译期算法<span class="class-kind">namespace</span></h3>
-	<p class="class-desc">图算法，输入都是 <code>(TNodes, Key)</code>。</p>
+	<h2 class="class-name">IExtension&lt;TStage&gt;<span class="class-kind">interface</span></h2>
+	<p class="class-desc">运行时扩展接口（非模板公共基类）：统一驱动契约。静态 <code>TExtension</code>、动态 DLL 插件、toolkit/engine 聚合都实现它。</p>
 	<h3 class="group">接口</h3>
 	<table class="api-table">
-		<tr><th style="width:52%">签名</th><th>说明</th></tr>
-		<tr><td class="sig"><code>Topo::TIsAcyclic_v&lt;TNodes, Key&gt;</code></td><td>无环检测（bool）</td></tr>
-		<tr><td class="sig"><code>Topo::THasCycle_v&lt;TNodes, Key&gt;</code></td><td>有环检测（bool）</td></tr>
-		<tr><td class="sig"><code>Topo::TTopoSort_t&lt;TNodes, Key&gt;</code></td><td>线性拓扑序 → <code>TTypeList&lt;...&gt;</code></td></tr>
-		<tr><td class="sig"><code>Topo::TLevels_t&lt;TNodes, Key&gt;</code></td><td>分层序 → <code>TTypeList&lt;TTypeList&lt;...&gt;, ...&gt;</code></td></tr>
-		<tr><td class="sig"><code>Topo::TReverse_t&lt;TList&gt;</code></td><td>逆序一个 TTypeList（卸载序镜像）</td></tr>
-		<tr><td class="sig"><code>Topo::TFindDependents_t&lt;TNodes, Key, T&gt;</code></td><td>反向依赖：谁依赖 T（注册日志用）</td></tr>
-	</table>
-</section>
-
-<!-- ============================ Delegate ============================ -->
-<h2>Delegate — 单播 / 多播</h2>
-
-<section class="class-panel">
-	<h3 class="class-name">FDelegateHandle<span class="class-kind">struct</span></h3>
-	<p class="class-desc">多播绑定的句柄（Add/AddRaw 返回），用于 Remove。</p>
-</section>
-
-<section class="class-panel">
-	<h3 class="class-name">TDelegate&lt;Ret(Args...)&gt;<span class="class-kind">template</span></h3>
-	<p class="class-desc">单播委托，一个绑定，可带返回值。</p>
-	<h3 class="group">接口</h3>
-	<table class="api-table">
-		<tr><th style="width:46%">签名</th><th>说明</th></tr>
-		<tr><td class="sig"><code><span class="type">void</span> Bind(std::function&lt;Ret(Args...)&gt;)</code></td><td>绑 lambda / static / functor</td></tr>
-		<tr><td class="sig"><code><span class="kw">template</span> BindRaw(TObject*, TMethod)</code></td><td>绑成员函数</td></tr>
-		<tr><td class="sig"><code><span class="type">Ret</span> Execute(Args...) <span class="kw">const</span></code></td><td>调用（未绑定 = UB）</td></tr>
-		<tr><td class="sig"><code><span class="type">Ret</span> ExecuteIfBound(Args...) <span class="kw">const</span></code></td><td>调用，未绑定返回 Ret{}</td></tr>
-		<tr><td class="sig"><code><span class="type">void</span> Unbind() / <span class="type">bool</span> IsBound()</code></td><td>解绑 / 查询</td></tr>
+		<tr><th style="width:48%">签名</th><th>说明</th></tr>
+		<tr><td class="sig"><code><span class="kw">virtual bool</span> ExecuteStage(TStage)</code> <span class="badge badge-virtual">virtual</span></td><td>每阶段行为</td></tr>
 	</table>
 </section>
 
 <section class="class-panel">
-	<h3 class="class-name">TMulticastDelegate&lt;void(Args...)&gt;<span class="class-kind">template</span></h3>
-	<p class="class-desc">多播委托，N 个绑定，无返回值。单播 = 只 Add 一个。</p>
-	<h3 class="group">接口</h3>
-	<table class="api-table">
-		<tr><th style="width:46%">签名</th><th>说明</th></tr>
-		<tr><td class="sig"><code>FDelegateHandle Add(std::function&lt;...&gt;)</code></td><td>加绑定，返回句柄</td></tr>
-		<tr><td class="sig"><code><span class="kw">template</span> AddRaw(TObject*, TMethod)</code></td><td>加成员绑定（追踪对象）</td></tr>
-		<tr><td class="sig"><code><span class="type">bool</span> Remove(FDelegateHandle)</code></td><td>按句柄删</td></tr>
-		<tr><td class="sig"><code><span class="type">int</span> RemoveAll(<span class="type">void</span>*)</code></td><td>按对象删（AddRaw 绑定）</td></tr>
-		<tr><td class="sig"><code><span class="type">void</span> Broadcast(Args...) <span class="kw">const</span></code></td><td>快照广播（广播中增删安全）</td></tr>
-	</table>
-</section>
-
-<!-- ============================ Extension ============================ -->
-<h2>Extension — 单例 / 扩展 / 调度器</h2>
-
-<section class="class-panel">
-	<h3 class="class-name">TSingleton&lt;TDerived&gt;<span class="class-kind">template</span></h3>
-	<p class="class-desc">单例基类（CRTP Meyers）。扩展 / 全局单例继承它，自动获得静态 <code>Get()</code>。</p>
-	<h3 class="group">接口</h3>
-	<table class="api-table">
-		<tr><th style="width:46%">签名</th><th>说明</th></tr>
-		<tr><td class="sig"><code><span class="kw">static</span> TDerived&amp; Get()</code> <span class="badge badge-template">static</span></td><td>Meyers 静态实例（懒创建，线程安全）</td></tr>
-	</table>
+	<h2 class="class-name">TExtension&lt;TStage, TDerived&gt;<span class="class-kind">template</span></h2>
+	<p class="class-desc">扩展基类：<code>TSingleton&lt;TDerived&gt;</code>（自带 Get()）+ <code>IExtension&lt;TStage&gt;</code>。</p>
+	<p class="class-desc">依赖在 public 继承列表显式声明：<code>TDependsPack&lt;...&gt;</code>。</p>
 </section>
 
 <section class="class-panel">
-	<h3 class="class-name">EToolStage<span class="class-kind">enum</span></h3>
-	<p class="class-desc">单例生命周期（2 值 stage 枚举）：<code>Init</code>（正序初始化）+ <code>Shutdown</code>（逆序卸载）。</p>
+	<h2 class="class-name">FAssembly<span class="class-kind">class</span></h2>
+	<p class="class-desc">动态加载原语：句柄 + 符号探测。见 <a href="../Maho.html">Maho.html</a>。</p>
 </section>
 
 <section class="class-panel">
-	<h3 class="class-name">IExtension&lt;TStage&gt;<span class="class-kind">interface</span></h3>
-	<p class="class-desc">
-		运行时扩展接口（非模板公共基类）：<code>virtual bool ExecuteStage(TStage) = 0</code>。
-		静态 <code>TExtension</code> 与动态 DLL 插件都实现它，AssemblyImporter 经它统一驱动。
-	</p>
-</section>
-
-<section class="class-panel">
-	<h3 class="class-name">TExtension&lt;TStage, TDerived&gt;<span class="class-kind">template</span></h3>
-	<p class="class-desc">
-		并行扩展基类：一组平级功能里的一员，由 stage 枚举驱动。
-		继承 <code>TSingleton&lt;TDerived&gt;</code>（自带 Get()）+ <code>IExtension&lt;TStage&gt;</code>（运行时接口）。
-	</p>
-	<h3 class="group">接口</h3>
-	<table class="api-table">
-		<tr><th style="width:46%">签名</th><th>说明</th></tr>
-		<tr><td class="sig"><code><span class="kw">virtual bool</span> ExecuteStage(TStage)</code> <span class="badge badge-virtual">virtual</span></td><td>每阶段行为（调度器按依赖序调）</td></tr>
-	</table>
-	<p class="class-desc">依赖在 public 继承列表显式声明：<code>TDependsPack&lt;TDependsOn&lt;...&gt;&gt;</code>。</p>
-</section>
-
-<section class="class-panel">
-	<h3 class="class-name">FExtensions&lt;TExtensions...&gt;<span class="class-kind">template</span></h3>
-	<p class="class-desc">
-		扩展列表载体：静态装配用。项目侧继承 <code>FExtensions&lt;FSystemA, FSystemB&gt;</code>，
-		继承到 <code>FList = TTypeList&lt;FSystemA, FSystemB&gt;</code>，供 <code>Execute&lt;Stage, FList&gt;</code> 驱动。
-	</p>
-	<h3 class="group">成员</h3>
-	<table class="api-table">
-		<tr><th style="width:46%">成员</th><th>说明</th></tr>
-		<tr><td class="sig"><code><span class="kw">using</span> FList = TTypeList&lt;TExtensions...&gt;</code></td><td>装配好的类型列表</td></tr>
-	</table>
-</section>
-
-<section class="class-panel">
-	<h3 class="class-name">FSerialTraversePolicy / FParallelTraversePolicy<span class="class-kind">struct</span></h3>
-	<p class="class-desc">ForEach 遍历策略：串行 fold / 并行（持池 + barrier）。</p>
-	<h3 class="group">接口</h3>
-	<table class="api-table">
-		<tr><th style="width:46%">签名</th><th>说明</th></tr>
-		<tr><td class="sig"><code><span class="type">void</span> Run(FCallables&amp;&amp;...) <span class="kw">const</span></code></td><td>串行 fold / 并行派发</td></tr>
-	</table>
-</section>
-
-<section class="class-panel">
-	<h3 class="class-name">FForwardTopology / FReverseTopology<span class="class-kind">struct</span></h3>
-	<p class="class-desc">拓扑 policy：正序（依赖在前）/ 逆序（依赖者在前，shutdown 用）。</p>
-	<h3 class="group">接口</h3>
-	<table class="api-table">
-		<tr><th style="width:46%">签名</th><th>说明</th></tr>
-		<tr><td class="sig"><code><span class="kw">template</span> &lt;<span class="kw">typename</span> TLevels&gt; <span class="kw">using</span> Apply</code> <span class="badge badge-template">template</span></td><td>恒等（正序）/ TReverse_t（逆序）</td></tr>
-	</table>
-</section>
-
-<section class="class-panel">
-	<h3 class="class-name">TScheduler / TSerialScheduler / TParallelScheduler<span class="class-kind">template</span></h3>
-	<p class="class-desc">
-		调度器层次：<code>TScheduler</code>（基类）→ <code>TSerialScheduler</code>（串行，无池）
-		/ <code>TParallelScheduler</code>（并行，持池）。串行 / 并行是编译期类型选择。
-	</p>
-	<h3 class="group">接口</h3>
-	<table class="api-table">
-		<tr><th style="width:52%">签名</th><th>说明</th></tr>
-		<tr><td class="sig"><code><span class="kw">template</span> &lt;TStage Stage, <span class="kw">typename</span> TExtensions, <span class="kw">typename</span> TTopology = FForwardTopology&gt;<br><span class="type">void</span> Execute()</code> <span class="badge badge-template">template</span></td><td>按依赖分层驱动 TExtensions（外层串行，内层按调度器串行/并行）</td></tr>
-	</table>
-	<p class="class-desc">
-		用法：<code>Serial.Execute&lt;Init&gt;()</code>（串行，无池）；
-		<code>Parallel.Execute&lt;Shutdown, FReverseTopology&gt;()</code>（并行 + 逆序）。
-	</p>
-</section>
-
-<!-- ============================ Fatal ============================ -->
-<h2>Fatal — 致命路径（零依赖崩溃兜底）</h2>
-
-<section class="class-panel">
-	<h3 class="class-name">ReportFatal<span class="class-kind">function</span></h3>
-	<p class="class-desc">统一致命出口：stderr + <code>Saved/Logs/Fatal.log</code>（std::ofstream 直接 append）+ <code>abort()</code>。不依赖日志系统。</p>
-	<h3 class="group">签名</h3>
-	<table class="api-table">
-		<tr><th style="width:46%">签名</th><th>说明</th></tr>
-		<tr>
-			<td class="sig"><code>[[noreturn]] <span class="type">void</span> ReportFatal(<span class="kw">const char</span>* Message)</code></td>
-			<td>打印 + 落盘 + abort；线程安全 + 重入守卫</td>
-		</tr>
-		<tr>
-			<td class="sig"><code><span class="type">void</span> InstallFatalHandlers()</code></td>
-			<td>装 <code>std::terminate</code> 兜底（幂等），main 第一行调用</td>
-		</tr>
-	</table>
-</section>
-
-<section class="class-panel">
-	<h3 class="class-name">MAHO_API / MAHO_EXPORT / MAHO_IMPORT<span class="class-kind">macro</span></h3>
-	<p class="class-desc">
-		DLL 导出宏（Export.h）。<code>MAHO_BUILD_SHARED</code> + <code>MAHO_EXPORTS</code> 时 dllexport，
-		否则 dllimport；静态构建全空。
-	</p>
-</section>
-
-<!-- ============================ Async ============================ -->
-<h2>Async — 两种并行模型</h2>
-<p class="muted">详细 API 见 <a href="Async/Async.html">Async/Async.html</a>。</p>
-
-<section class="class-panel">
-	<h3 class="class-name">FThreadPool<span class="class-kind">class</span></h3>
-	<p class="class-desc">固定大小线程池：N worker + 任务队列 + barrier。瞬态并行任务。</p>
-</section>
-
-<section class="class-panel">
-	<h3 class="class-name">FThreadedServer<span class="class-kind">class</span></h3>
-	<p class="class-desc">专用常驻线程：单 worker + FIFO 队列。渲染/IO/音频角色，可子类化。</p>
+	<h2 class="class-name">FSerialTraversePolicy / FParallelTraversePolicy<span class="class-kind">struct</span></h2>
+	<p class="class-desc">遍历策略：串行（无线程）与并行（线程池 + barrier）。</p>
 </section>
 
 <h2>相关文档</h2>
-<ul>
-	<li><a href="Core.h">Core.h</a> — 聚合头</li>
-	<li><a href="Core.md">Core.md</a> — 概念与依赖关系</li>
-	<li><a href="Async/Async.md">Async/Async.md</a> — 并行模型概念</li>
-	<li><a href="Async/Async.html">Async/Async.html</a> — 并行模型 API</li>
-	<li><a href="../Maho.md">../Maho.md</a> — 引擎核心概念</li>
-	<li><a href="../Maho.html">../Maho.html</a> — 引擎核心 API</li>
-</ul>
-
+<p>
+	<a href="Core.md">Core.md</a> — 概念 ·
+	<a href="Async/Async.md">Async.md</a> — 并行模型 ·
+	<a href="Async/Async.html">Async.html</a> — 并行模型 API ·
+	<a href="../Maho.md">Maho.md</a> — 引擎核心
+</p>
 </body>
 </html>
