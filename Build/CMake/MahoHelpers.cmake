@@ -83,23 +83,26 @@ function(maho_set_output_dirs TARGET_NAME)
 	)
 endfunction()
 
-# Redirect a plugin target's binaries to the plugin's own Binaries/ dir and
-# compile PDBs to the plugin's own Intermediate/ dir. Overrides the workspace
-# output dirs set earlier by maho_set_output_dirs (including per-config variants).
+# Redirect a plugin target's binaries into the BUILD tree (never the engine
+# source tree). A project build must not modify the engine — plugin outputs and
+# PDBs land under <binary-dir>/Plugins/<Name>/, then get copied next to the
+# engine DLL by the post-build step.
 function(maho_set_plugin_output_dirs TARGET_NAME PLUGIN_DIR)
-	file(MAKE_DIRECTORY "${PLUGIN_DIR}/Binaries" "${PLUGIN_DIR}/Intermediate")
+	get_filename_component(_PLUGIN_NAME "${PLUGIN_DIR}" NAME)
+	set(_PLUGIN_OUT "${CMAKE_BINARY_DIR}/Plugins/${_PLUGIN_NAME}")
+	file(MAKE_DIRECTORY "${_PLUGIN_OUT}/Binaries" "${_PLUGIN_OUT}/Intermediate")
 	foreach(_maho_out RUNTIME LIBRARY ARCHIVE)
 		set_target_properties(${TARGET_NAME} PROPERTIES
-			${_maho_out}_OUTPUT_DIRECTORY "${PLUGIN_DIR}/Binaries"
-			${_maho_out}_OUTPUT_DIRECTORY_DEBUG "${PLUGIN_DIR}/Binaries/Debug"
-			${_maho_out}_OUTPUT_DIRECTORY_RELEASE "${PLUGIN_DIR}/Binaries/Release"
-			${_maho_out}_OUTPUT_DIRECTORY_RELWITHDEBINFO "${PLUGIN_DIR}/Binaries/RelWithDebInfo"
-			${_maho_out}_OUTPUT_DIRECTORY_MINSIZEREL "${PLUGIN_DIR}/Binaries/MinSizeRel"
+			${_maho_out}_OUTPUT_DIRECTORY "${_PLUGIN_OUT}/Binaries"
+			${_maho_out}_OUTPUT_DIRECTORY_DEBUG "${_PLUGIN_OUT}/Binaries/Debug"
+			${_maho_out}_OUTPUT_DIRECTORY_RELEASE "${_PLUGIN_OUT}/Binaries/Release"
+			${_maho_out}_OUTPUT_DIRECTORY_RELWITHDEBINFO "${_PLUGIN_OUT}/Binaries/RelWithDebInfo"
+			${_maho_out}_OUTPUT_DIRECTORY_MINSIZEREL "${_PLUGIN_OUT}/Binaries/MinSizeRel"
 		)
 	endforeach()
 	set_target_properties(${TARGET_NAME} PROPERTIES
-		COMPILE_PDB_OUTPUT_DIRECTORY "${PLUGIN_DIR}/Intermediate"
-		PDB_OUTPUT_DIRECTORY "${PLUGIN_DIR}/Binaries"
+		COMPILE_PDB_OUTPUT_DIRECTORY "${_PLUGIN_OUT}/Intermediate"
+		PDB_OUTPUT_DIRECTORY "${_PLUGIN_OUT}/Binaries"
 	)
 endfunction()
 
@@ -304,8 +307,8 @@ function(maho_add_plugin_modules)
 			include("${_MOD_PLUGIN_DIR}/${_MOD_CPLUGIN_STEM}.cmake")
 		endif()
 
-		# Keep a runtime copy next to the engine/game EXE as well; plugin-local
-		# Binaries/ is the plugin's own copy, not the EXE's DLL search dir.
+		# Keep a runtime copy next to the engine/game EXE; the plugin's own
+		# binaries live under <binary-dir>/Plugins/<Name>/ (not the engine tree).
 		if(MAHO_BUILD_SHARED)
 			add_custom_command(TARGET ${_MOD_TARGET} POST_BUILD
 				COMMAND ${CMAKE_COMMAND} -E copy_if_different
