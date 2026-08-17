@@ -1,7 +1,7 @@
 #pragma once
 
 #include "CommandParserApi.h"
-#include <Core/Core.h>
+#include <Toolkit.h>
 
 namespace Maho
 {

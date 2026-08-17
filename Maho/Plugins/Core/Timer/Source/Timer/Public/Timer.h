@@ -1,7 +1,7 @@
 #pragma once
 
 #include "TimerApi.h"
-#include <Core/Core.h>
+#include <Toolkit.h>
 
 #include <chrono>
 #include <cstdint>

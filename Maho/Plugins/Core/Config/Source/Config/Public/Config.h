@@ -1,7 +1,7 @@
 #pragma once
 
 #include "ConfigApi.h"
-#include <Core/Core.h>
+#include <Toolkit.h>
 
 #include <cstdint>
 #include <map>

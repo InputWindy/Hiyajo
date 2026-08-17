@@ -8,6 +8,13 @@
 namespace Maho
 {
 
+/** Toolkit lifecycle — a 2-value stage enum. */
+enum class EToolStage : std::uint8_t
+{
+	Init = 0,
+	Shutdown = 1,
+};
+
 /** Pre-app toolkit: serial drive (no thread pool, no loop). */
 class MAHO_TOOLKIT_API FToolkitBase
 	: public ICommandLine

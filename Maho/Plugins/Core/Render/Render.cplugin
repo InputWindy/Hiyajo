@@ -9,7 +9,8 @@
       "Name": "Render",
       "Type": "Runtime",
       "Dependencies": [
-        "Platform"
+        "Platform",
+        "Engine"
       ],
       "Extension": {
         "Class": "Maho::Render::FRenderSystem",

@@ -14,7 +14,10 @@
         "Priority": "System",
         "Stage": "EEngineStage"
       },
-      "Dependencies": []
+      "Dependencies": [
+        "Engine",
+        "Toolkit"
+      ]
     }
   ]
 }

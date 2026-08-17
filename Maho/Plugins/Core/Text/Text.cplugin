@@ -9,7 +9,8 @@
       "Name": "Text",
       "Type": "Runtime",
       "Dependencies": [
-        "Json"
+        "Json",
+        "Toolkit"
       ],
       "Extension": {
         "Class": "Maho::Text::FTextManager",

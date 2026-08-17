@@ -2,7 +2,7 @@
 
 #include "ResourceApi.h"
 #include <Core/Async/ThreadedServer.h>
-#include <Core/Core.h>
+#include <Engine.h>
 #include <Paths.h>
 
 #include <cstdint>

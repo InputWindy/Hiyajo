@@ -1,7 +1,7 @@
 #pragma once
 
 #include "ArchiveApi.h"
-#include <Core/Core.h>
+#include <Toolkit.h>
 
 #include <cstddef>
 #include <cstdint>

@@ -2,7 +2,7 @@
 
 #include "AssetApi.h"
 #include "Asset.gen.h"
-#include <Core/Core.h>
+#include <Toolkit.h>
 
 #include <cstdint>
 #include <filesystem>

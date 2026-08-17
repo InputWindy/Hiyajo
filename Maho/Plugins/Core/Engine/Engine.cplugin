@@ -8,10 +8,7 @@
     {
       "Name": "Engine",
       "Type": "Runtime",
-      "Dependencies": [
-        "Platform",
-        "AssemblyImporter"
-      ]
+      "Dependencies": []
     }
   ]
 }

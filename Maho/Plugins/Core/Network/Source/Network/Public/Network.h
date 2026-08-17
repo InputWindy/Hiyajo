@@ -1,7 +1,7 @@
 #pragma once
 
 #include "NetworkApi.h"
-#include <Core/Core.h>
+#include <Engine.h>
 
 namespace Maho
 {

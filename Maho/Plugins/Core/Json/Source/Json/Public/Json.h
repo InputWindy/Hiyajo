@@ -1,7 +1,7 @@
 #pragma once
 
 #include "JsonApi.h"
-#include <Core/Core.h>
+#include <Toolkit.h>
 
 #include <nlohmann/json.hpp>
 

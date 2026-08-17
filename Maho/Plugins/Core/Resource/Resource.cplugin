@@ -10,7 +10,8 @@
       "Type": "Runtime",
       "Dependencies": [
         "Paths",
-        "Name"
+        "Name",
+        "Engine"
       ],
       "Extension": {
         "Class": "Maho::Resource::FResourceSystem",

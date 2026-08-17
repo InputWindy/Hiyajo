@@ -1,7 +1,7 @@
 #pragma once
 
 #include "NameApi.h"
-#include <Core/Core.h>
+#include <Toolkit.h>
 
 #include <cstdint>
 #include <functional>

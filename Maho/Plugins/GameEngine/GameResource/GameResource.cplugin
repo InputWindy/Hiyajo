@@ -11,7 +11,9 @@
       "Inherits": [
         "Resource"
       ],
-      "Dependencies": [],
+      "Dependencies": [
+        "Engine"
+      ],
       "Extension": {
         "Class": "Maho::GameResource::FGameResource",
         "Header": "GameResource.h",

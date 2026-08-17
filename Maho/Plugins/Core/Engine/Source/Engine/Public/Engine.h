@@ -8,6 +8,31 @@
 namespace Maho
 {
 
+/** Engine lifecycle stages. */
+enum class EEngineStage : std::uint8_t
+{
+	PreInit = 0,
+	Init,
+	PostInit,
+	PreTick,
+	Tick,
+	PostTick,
+	PreShutdown,
+	Shutdown,
+	PostShutdown
+};
+
+/** The running app — extensions request shutdown through it. */
+class MAHO_ENGINE_API IAppContext
+{
+public:
+	virtual ~IAppContext() = default;
+	virtual void RequestShutdown() = 0;
+};
+
+/** The running app instance — set by FEngineBase's ctor. */
+inline IAppContext* GApp = nullptr;
+
 /** Engine base: parallel drive (owns its thread pool). */
 class MAHO_ENGINE_API FEngineBase
 	: public TParallelScheduler<EEngineStage>

@@ -9,7 +9,8 @@
       "Name": "Script",
       "Type": "Runtime",
       "Dependencies": [
-        "Resource"
+        "Resource",
+        "Engine"
       ],
       "Extension": {
         "Class": "Maho::Script::FScriptSystem",

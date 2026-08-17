@@ -14,7 +14,9 @@
         "Priority": "System",
         "Stage": "EToolStage"
       },
-      "Dependencies": []
+      "Dependencies": [
+        "Toolkit"
+      ]
     }
   ]
 }

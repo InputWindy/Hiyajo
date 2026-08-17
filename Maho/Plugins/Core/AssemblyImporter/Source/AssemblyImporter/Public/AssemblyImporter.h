@@ -2,6 +2,8 @@
 
 #include "AssemblyImporterApi.h"
 #include <Core/Core.h>
+#include <Engine.h>
+#include <Toolkit.h>
 
 #include <string_view>
 

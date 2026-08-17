@@ -1,7 +1,7 @@
 #pragma once
 
 #include "AudioApi.h"
-#include <Core/Core.h>
+#include <Toolkit.h>
 
 namespace Maho
 {

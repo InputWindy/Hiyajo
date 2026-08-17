@@ -1,7 +1,7 @@
 #pragma once
 
 #include "EditorApi.h"
-#include <Core/Core.h>
+#include <Engine.h>
 
 namespace Maho
 {
