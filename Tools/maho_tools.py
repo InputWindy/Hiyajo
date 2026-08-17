@@ -781,7 +781,9 @@ def fix_plugin(cplugin_path: Path, engine_root: Path | None = None) -> list[str]
 		messages.append(f"FIXED {api.relative_to(engine_root)}")
 
 	main = public_dir / header
-	if not main.is_file():
+	private_dir = cplugin_path.parent / "Source" / name / "Private"
+	has_impl = private_dir.is_dir() and any(p.suffix == ".cpp" for p in private_dir.glob("*.cpp"))
+	if has_impl and not main.is_file():
 		messages.append(f"UNFIXABLE {name}: Extension.Header '{header}' missing — content unknown")
 
 	# Starter docs at the plugin root — generated only when missing, never
