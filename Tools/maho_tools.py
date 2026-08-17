@@ -983,6 +983,11 @@ def create_project(
 	else:
 		plugin_names = list(plugins)
 
+	# Infrastructure assemblies every project needs (app shapes + importer).
+	for infra in ("Toolkit", "Engine", "AssemblyImporter"):
+		if infra not in plugin_names:
+			plugin_names.append(infra)
+
 	mapping = build_gameapp_mapping(project_name, engine_root, plugin_names, dev_platform=dev_platform)
 	mapping["DESCRIPTION"] = description
 	mapping["AUTHOR"] = author
@@ -990,10 +995,7 @@ def create_project(
 	copy_template(project_dir, mapping)
 	_write_game_app(project_dir, mapping, app_type)
 
-	if plugins is None:
-		plugin_entries = default_engine_plugin_entries(engine_root)
-	else:
-		plugin_entries = [{"Name": name, "Enabled": True} for name in plugins]
+	plugin_entries = [{"Name": name, "Enabled": True} for name in plugin_names]
 	cproject = {
 		"FileVersion": CPROJECT_VERSION,
 		"EngineAssociation": "Maho",
