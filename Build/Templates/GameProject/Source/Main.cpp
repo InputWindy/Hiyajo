@@ -1,86 +1,48 @@
 #include <Maho.h>
-#include <{{ENTRY_POINT_INCLUDE}}>
+#include <AssemblyImporter.h>
 
-{{PLUGIN_INCLUDES}}
+#ifndef NOMINMAX
+#	define NOMINMAX
+#endif
+#include <Windows.h>
 
-// Code-gen: extension template lists filled from the .cproject plugin config.
-using FEnabledToolExtensions = {{TOOL_EXTENSIONS}};
-using FEnabledEngineExtensions = {{ENGINE_EXTENSIONS}};
+// Thin launcher: install the AssemblyImporter (linked), import the two
+// aggregate assemblies, and run the engine's main loop. No project logic here.
 
-// ─────────────────────────────────────────────────────────────
-// Pre-app toolkit (serial drive, EToolStage).
-// ctor: ParseCommandLine → Init; dtor: Shutdown.
-// ─────────────────────────────────────────────────────────────
-class {{TOOLKIT_CLASS}} final
-	: public Maho::FToolkitBase
-	, public FEnabledToolExtensions
+static int RunDynamic()
 {
-public:
-	{{TOOLKIT_CLASS}}(int Argc, char** Argv)
+	Maho::InstallFatalHandlers();
+
+	auto& Importer = Maho::AssemblyImporter::FAssemblyImporter::Get();
+	if (!Importer.ImportToolkit("{{PROJECT_NAME}}Toolkit.dll"))
 	{
-		ParseCommandLine(Argc, Argv);
-		Init();
+		return 1;
+	}
+	if (!Importer.ImportEngine("{{PROJECT_NAME}}Engine.dll"))
+	{
+		return 1;
 	}
 
-	~{{TOOLKIT_CLASS}}() override
+	Maho::IRunable* Engine = Importer.GetEngine();
+	if (Engine == nullptr)
 	{
-		Shutdown();
+		return 1;
 	}
+	Engine->MainLoop();
 
-protected:
-	void ParseCommandLine(int Argc, char** Argv) override
-	{
-{{PARSE_COMMAND_LINE}}
-	}
-
-	void Init() override
-	{
-		Execute<Maho::EToolStage::Init, FList>();
-	}
-
-	void Shutdown() override
-	{
-		Execute<Maho::EToolStage::Shutdown, FList, Maho::FReverseTopology>();
-	}
-};
-
-// ─────────────────────────────────────────────────────────────
-// Engine (parallel drive, EEngineStage).
-// ctor: ParseCommandLine; each stage drives its assembled FList.
-// ─────────────────────────────────────────────────────────────
-class {{APP_CLASS}} final
-	: public Maho::FEngineBase
-	, public FEnabledEngineExtensions
-{
-public:
-	{{APP_CLASS}}(int Argc, char** Argv)
-	{
-		ParseCommandLine(Argc, Argv);
-	}
-
-protected:
-	void ParseCommandLine(int Argc, char** Argv) override
-	{
-{{PARSE_COMMAND_LINE}}
-	}
-
-	void PreInit() override      { Execute<Maho::EEngineStage::PreInit, FList>(); }
-	void Init() override         { Execute<Maho::EEngineStage::Init, FList>(); }
-	void PostInit() override     { Execute<Maho::EEngineStage::PostInit, FList>(); }
-	void PreTick() override      { Execute<Maho::EEngineStage::PreTick, FList>(); }
-	void Tick() override         { Execute<Maho::EEngineStage::Tick, FList>(); }
-	void PostTick() override     { Execute<Maho::EEngineStage::PostTick, FList>(); }
-	void PreShutdown() override  { Execute<Maho::EEngineStage::PreShutdown, FList, Maho::FReverseTopology>(); }
-	void Shutdown() override     { Execute<Maho::EEngineStage::Shutdown, FList, Maho::FReverseTopology>(); }
-	void PostShutdown() override { Execute<Maho::EEngineStage::PostShutdown, FList, Maho::FReverseTopology>(); }
-};
-
-Maho::FToolkitBase* Maho::CreateToolkit(int Argc, char** Argv)
-{
-	return new {{TOOLKIT_CLASS}}(Argc, Argv);
+	Importer.ExecuteStage(Maho::EEngineStage::Shutdown);
+	return 0;
 }
 
-Maho::IRunable* Maho::CreateEngine(int Argc, char** Argv)
+int WINAPI WinMain(HINSTANCE /*Instance*/, HINSTANCE /*Prev*/, LPSTR /*CmdLine*/, int /*Show*/)
 {
-	return new {{APP_CLASS}}(Argc, Argv);
+	FreeConsole();
+	return RunDynamic();
+}
+
+int main(int Argc, char** Argv)
+{
+	(void)Argc;
+	(void)Argv;
+	return RunDynamic();
 }

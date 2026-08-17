@@ -1,0 +1,44 @@
+#include <Maho.h>
+
+{{TOOL_INCLUDES}}
+
+using FEnabledToolExtensions = {{TOOL_EXTENSIONS}};
+
+// ── Pre-app toolkit aggregate (serial drive, EToolStage). ──
+class {{TOOLKIT_CLASS}} final
+	: public Maho::FToolkitBase
+	, public FEnabledToolExtensions
+{
+public:
+	{{TOOLKIT_CLASS}}()
+	{
+		Init();
+	}
+
+	~{{TOOLKIT_CLASS}}() override
+	{
+		Shutdown();
+	}
+
+protected:
+	void ParseCommandLine(int Argc, char** Argv) override
+	{
+		(void)Argc;
+		(void)Argv;
+	}
+
+	void Init() override
+	{
+		Execute<Maho::EToolStage::Init, FList>();
+	}
+
+	void Shutdown() override
+	{
+		Execute<Maho::EToolStage::Shutdown, FList, Maho::FReverseTopology>();
+	}
+};
+
+extern "C" Maho::FToolkitBase* CreateTool()
+{
+	return new {{TOOLKIT_CLASS}}();
+}

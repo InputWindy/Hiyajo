@@ -335,9 +335,13 @@ def build_gameapp_mapping(project_name: str, engine_root: Path, plugin_names: li
 	plugin_meta = {p["Name"]: p for p in list_engine_plugins(engine_root)}
 
 	plugin_includes: list[str] = []
+	tool_includes: list[str] = []
+	engine_includes: list[str] = []
 	tool_classes: list[str] = []
 	engine_classes: list[str] = []
 	for name in sorted(plugin_names):
+		if name == "AssemblyImporter":
+			continue   # infrastructure — loaded by the thin launcher, not an aggregate member
 		meta = plugin_meta.get(name)
 		if meta is None or not meta.get("Extension"):
 			continue
@@ -346,8 +350,10 @@ def build_gameapp_mapping(project_name: str, engine_root: Path, plugin_names: li
 		stage = meta["Extension"].get("Stage", "EEngineStage")
 		plugin_includes.append(f"#include <{header}>")
 		if stage == "EToolStage":
+			tool_includes.append(f"#include <{header}>")
 			tool_classes.append(cls)
 		else:
+			engine_includes.append(f"#include <{header}>")
 			engine_classes.append(cls)
 
 	has_parser = "CommandParser" in plugin_names
@@ -359,6 +365,8 @@ def build_gameapp_mapping(project_name: str, engine_root: Path, plugin_names: li
 		"TOOLKIT_CLASS": f"F{ident}Toolkit",
 		"APP_CLASS": f"F{ident}Engine",
 		"PLUGIN_INCLUDES": "\n".join(plugin_includes),
+		"TOOL_INCLUDES": "\n".join(tool_includes),
+		"ENGINE_INCLUDES": "\n".join(engine_includes),
 		"TOOL_EXTENSIONS": _format_extensions_list(tool_classes),
 		"ENGINE_EXTENSIONS": _format_extensions_list(engine_classes),
 		"ENTRY_POINT_INCLUDE": "EntryPointWindows.h" if dev_platform == "Windows" else "EntryPointLinux.h",
@@ -367,13 +375,48 @@ def build_gameapp_mapping(project_name: str, engine_root: Path, plugin_names: li
 
 
 def _write_game_app(project_dir: Path, mapping: dict[str, str], app_type: str) -> Path:
-	"""Render the app-type-correct template into Source/Main.cpp."""
-	template_name = "MainCli.cpp.tmpl" if app_type == "CLI" else "Main.cpp"
-	text = (TEMPLATE_DIR / "Source" / template_name).read_text(encoding="utf-8")
-	rendered = render_template_text(text, mapping)
-	dst = project_dir / "Source" / "Main.cpp"
-	dst.parent.mkdir(parents=True, exist_ok=True)
-	dst.write_text(rendered, encoding="utf-8", newline="\n")
+	"""
+	Render the aggregate modules (Toolkit/Engine DLLs) + thin Main.cpp.
+	IDE → toolkit + engine aggregates + thin launcher (MainLoop).
+	CLI  → toolkit aggregate + thin launcher (Init only, no loop).
+	"""
+	src_dir = project_dir / "Source"
+	src_dir.mkdir(parents=True, exist_ok=True)
+
+	def render(src_name: str) -> str:
+		text = (TEMPLATE_DIR / "Source" / src_name).read_text(encoding="utf-8")
+		return render_template_text(text, mapping)
+
+	ident = mapping["PROJECT_IDENT"]
+
+	# Toolkit aggregate (both IDE and CLI).
+	(src_dir / f"{ident}Toolkit.cpp").write_text(
+		render("ToolkitModule.cpp.tmpl"), encoding="utf-8", newline="\n"
+	)
+
+	if app_type == "CLI":
+		main_text = (
+			"#include <Maho.h>\n"
+			"#include <AssemblyImporter.h>\n\n"
+			"int main(int Argc, char** Argv)\n"
+			"{\n"
+			"\t(void)Argc;\n\t(void)Argv;\n"
+			"\tMaho::InstallFatalHandlers();\n\n"
+			"\tauto& Importer = Maho::AssemblyImporter::FAssemblyImporter::Get();\n"
+			"\tif (!Importer.ImportToolkit(\"{{PROJECT_NAME}}Toolkit.dll\"))\n\t{\n\t\treturn 1;\n\t}\n"
+			"\tImporter.ExecuteStage(Maho::EEngineStage::Shutdown);\n"
+			"\treturn 0;\n"
+			"}\n"
+		)
+	else:
+		# Engine aggregate.
+		(src_dir / f"{ident}Engine.cpp").write_text(
+			render("EngineModule.cpp.tmpl"), encoding="utf-8", newline="\n"
+		)
+		main_text = render("Main.cpp")
+
+	dst = src_dir / "Main.cpp"
+	dst.write_text(main_text, encoding="utf-8", newline="\n")
 	return dst
 
 

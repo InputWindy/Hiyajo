@@ -1,0 +1,36 @@
+#include <Maho.h>
+
+{{ENGINE_INCLUDES}}
+
+using FEnabledEngineExtensions = {{ENGINE_EXTENSIONS}};
+
+// ── Engine aggregate (parallel drive, EEngineStage). ──
+class {{APP_CLASS}} final
+	: public Maho::FEngineBase
+	, public FEnabledEngineExtensions
+{
+public:
+	{{APP_CLASS}}() = default;
+
+protected:
+	void ParseCommandLine(int Argc, char** Argv) override
+	{
+		(void)Argc;
+		(void)Argv;
+	}
+
+	void PreInit() override      { Execute<Maho::EEngineStage::PreInit, FList>(); }
+	void Init() override         { Execute<Maho::EEngineStage::Init, FList>(); }
+	void PostInit() override     { Execute<Maho::EEngineStage::PostInit, FList>(); }
+	void PreTick() override      { Execute<Maho::EEngineStage::PreTick, FList>(); }
+	void Tick() override         { Execute<Maho::EEngineStage::Tick, FList>(); }
+	void PostTick() override     { Execute<Maho::EEngineStage::PostTick, FList>(); }
+	void PreShutdown() override  { Execute<Maho::EEngineStage::PreShutdown, FList, Maho::FReverseTopology>(); }
+	void Shutdown() override     { Execute<Maho::EEngineStage::Shutdown, FList, Maho::FReverseTopology>(); }
+	void PostShutdown() override { Execute<Maho::EEngineStage::PostShutdown, FList, Maho::FReverseTopology>(); }
+};
+
+extern "C" Maho::IRunable* CreateEngine()
+{
+	return new {{APP_CLASS}}();
+}

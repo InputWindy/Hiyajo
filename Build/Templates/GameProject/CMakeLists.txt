@@ -64,12 +64,50 @@ if(GAME_SOURCES STREQUAL "")
 	message(FATAL_ERROR "{{PROJECT_NAME}}: no sources under Source/")
 endif()
 
-add_executable({{PROJECT_NAME}} ${GAME_SOURCES})
+# ── Aggregate modules (project plugins assembled as DLLs) + thin launcher. ──
+# Toolkit aggregate: all EToolStage plugins, exports CreateTool.
+add_library({{PROJECT_NAME}}Toolkit SHARED "${GAME_SOURCE_DIR}/{{PROJECT_IDENT}}Toolkit.cpp")
+target_include_directories({{PROJECT_NAME}}Toolkit PRIVATE
+	"${GAME_SOURCE_DIR}"
+	"${MAHO_ENGINE_ROOT}/Maho/Source/Private"
+)
+target_link_libraries({{PROJECT_NAME}}Toolkit PRIVATE Maho::Engine Maho::Modules)
+target_compile_features({{PROJECT_NAME}}Toolkit PRIVATE cxx_std_20)
+if(MSVC)
+	target_compile_options({{PROJECT_NAME}}Toolkit PRIVATE /W4 /permissive- /Zc:preprocessor /utf-8)
+endif()
+set_target_properties({{PROJECT_NAME}}Toolkit PROPERTIES
+	FOLDER "Project"
+	WINDOWS_EXPORT_ALL_SYMBOLS ON
+)
+maho_set_output_dirs({{PROJECT_NAME}}Toolkit)
+add_dependencies({{PROJECT_NAME}}Toolkit Maho MahoModules)
+
+# Engine aggregate: all EEngineStage plugins, exports CreateEngine.
+add_library({{PROJECT_NAME}}Engine SHARED "${GAME_SOURCE_DIR}/{{PROJECT_IDENT}}Engine.cpp")
+target_include_directories({{PROJECT_NAME}}Engine PRIVATE
+	"${GAME_SOURCE_DIR}"
+	"${MAHO_ENGINE_ROOT}/Maho/Source/Private"
+)
+target_link_libraries({{PROJECT_NAME}}Engine PRIVATE Maho::Engine Maho::Modules)
+target_compile_features({{PROJECT_NAME}}Engine PRIVATE cxx_std_20)
+if(MSVC)
+	target_compile_options({{PROJECT_NAME}}Engine PRIVATE /W4 /permissive- /Zc:preprocessor /utf-8)
+endif()
+set_target_properties({{PROJECT_NAME}}Engine PROPERTIES
+	FOLDER "Project"
+	WINDOWS_EXPORT_ALL_SYMBOLS ON
+)
+maho_set_output_dirs({{PROJECT_NAME}}Engine)
+add_dependencies({{PROJECT_NAME}}Engine Maho MahoModules)
+
+# Thin launcher: core + AssemblyImporter only (aggregates are loaded at runtime).
+add_executable({{PROJECT_NAME}} "${GAME_SOURCE_DIR}/Main.cpp")
 target_include_directories({{PROJECT_NAME}} PRIVATE
 	"${GAME_SOURCE_DIR}"
 	"${MAHO_ENGINE_ROOT}/Maho/Source/Private"
 )
-target_link_libraries({{PROJECT_NAME}} PRIVATE Maho::Engine Maho::Modules)
+target_link_libraries({{PROJECT_NAME}} PRIVATE Maho::Engine AssemblyImporter)
 target_compile_features({{PROJECT_NAME}} PRIVATE cxx_std_20)
 target_compile_definitions({{PROJECT_NAME}} PRIVATE
 	$<$<BOOL:${GAME_WITH_EDITOR}>:GAME_WITH_EDITOR=1>
@@ -95,7 +133,7 @@ set_target_properties({{PROJECT_NAME}} PROPERTIES
 	VS_DEBUGGER_WORKING_DIRECTORY "${GAME_ROOT}"
 	WIN32_EXECUTABLE ${_MAHO_WIN32_EXE}
 )
-add_dependencies({{PROJECT_NAME}} Maho MahoModules)
+add_dependencies({{PROJECT_NAME}} Maho MahoModules AssemblyImporter)
 
 maho_copy_shaders({{PROJECT_NAME}} "${GAME_SHADERS_DIR}" "Project/Shaders")
 if(IS_DIRECTORY "${GAME_CONFIG_DIR}")
