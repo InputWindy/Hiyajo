@@ -12,6 +12,12 @@ bool FLogger::ExecuteStage(EToolStage Stage)
 		break;
 
 	case EToolStage::Shutdown:
+		// Flush buffered stdout before tearing the logger down — GUI apps
+		// (WinMain + FreeConsole) lose buffered messages at exit otherwise.
+		if (spdlog::default_logger() != nullptr)
+		{
+			spdlog::default_logger()->flush();
+		}
 		spdlog::shutdown();
 		break;
 	}

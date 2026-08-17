@@ -395,6 +395,7 @@ def _write_game_app(project_dir: Path, mapping: dict[str, str], app_type: str) -
 	)
 
 	if app_type == "CLI":
+		project_name = mapping["PROJECT_NAME"]
 		main_text = (
 			"#include <Maho.h>\n"
 			"#include <AssemblyImporter.h>\n\n"
@@ -403,7 +404,7 @@ def _write_game_app(project_dir: Path, mapping: dict[str, str], app_type: str) -
 			"\t(void)Argc;\n\t(void)Argv;\n"
 			"\tMaho::InstallFatalHandlers();\n\n"
 			"\tauto& Importer = Maho::AssemblyImporter::FAssemblyImporter::Get();\n"
-			"\tif (!Importer.ImportToolkit(\"{{PROJECT_NAME}}Toolkit.dll\"))\n\t{\n\t\treturn 1;\n\t}\n"
+			f"\tif (!Importer.ImportToolkit(\"{project_name}Toolkit.dll\"))\n\t{{\n\t\treturn 1;\n\t}}\n"
 			"\tImporter.ExecuteStage(Maho::EEngineStage::Shutdown);\n"
 			"\treturn 0;\n"
 			"}\n"

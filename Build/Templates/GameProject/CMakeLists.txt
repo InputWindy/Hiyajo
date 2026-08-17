@@ -81,9 +81,11 @@ set_target_properties({{PROJECT_NAME}}Toolkit PROPERTIES
 	WINDOWS_EXPORT_ALL_SYMBOLS ON
 )
 maho_set_output_dirs({{PROJECT_NAME}}Toolkit)
+maho_install_runtime_target({{PROJECT_NAME}}Toolkit)
 add_dependencies({{PROJECT_NAME}}Toolkit Maho MahoModules)
 
-# Engine aggregate: all EEngineStage plugins, exports CreateEngine.
+# Engine aggregate: all EEngineStage plugins, exports CreateEngine (IDE only).
+if("{{APP_TYPE}}" STREQUAL "IDE")
 add_library({{PROJECT_NAME}}Engine SHARED "${GAME_SOURCE_DIR}/{{PROJECT_IDENT}}Engine.cpp")
 target_include_directories({{PROJECT_NAME}}Engine PRIVATE
 	"${GAME_SOURCE_DIR}"
@@ -99,7 +101,9 @@ set_target_properties({{PROJECT_NAME}}Engine PROPERTIES
 	WINDOWS_EXPORT_ALL_SYMBOLS ON
 )
 maho_set_output_dirs({{PROJECT_NAME}}Engine)
+maho_install_runtime_target({{PROJECT_NAME}}Engine)
 add_dependencies({{PROJECT_NAME}}Engine Maho MahoModules)
+endif()
 
 # Thin launcher: core + AssemblyImporter only (aggregates are loaded at runtime).
 add_executable({{PROJECT_NAME}} "${GAME_SOURCE_DIR}/Main.cpp")
