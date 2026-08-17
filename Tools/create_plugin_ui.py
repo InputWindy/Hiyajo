@@ -161,8 +161,12 @@ class CreatePluginApp(tk.Tk):
 			messagebox.showerror("Maho", "Invalid plugin name.\nUse Letter + A-Z a-z 0-9 _ -")
 			return
 		if not plugins_dir.is_dir():
-			messagebox.showerror("Maho", f"Plugins path does not exist:\n{plugins_dir}")
-			return
+			# Auto-create the target folder (e.g. a new group dir like GameEngine/).
+			try:
+				plugins_dir.mkdir(parents=True, exist_ok=True)
+			except OSError as ex:
+				messagebox.showerror("Maho", f"Cannot create plugins path:\n{plugins_dir}\n\n{ex}")
+				return
 
 		is_tool = self.cmb_type.get() == _TYPE_TOOL
 		stage = "EToolStage" if is_tool else "EEngineStage"
