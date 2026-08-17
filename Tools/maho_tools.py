@@ -413,7 +413,9 @@ def codegen_plugin_dependencies(engine_root: Path, out_dir: Path) -> list[Path]:
 		cplugin_path = plugins_dir / name / f"{name}.cplugin"
 		mod_data = read_cplugin(cplugin_path).get("Modules", [{}])[0]
 		deps = mod_data.get("Dependencies", []) or []
-		inherits = mod_data.get("Inherits", "")
+		inherits = mod_data.get("Inherits", []) or []
+		if isinstance(inherits, str):
+			inherits = [inherits]
 
 		cls = info["Class"]
 		class_short = cls.split("::")[-1]
@@ -423,23 +425,27 @@ def codegen_plugin_dependencies(engine_root: Path, out_dir: Path) -> list[Path]:
 		dep_classes = [meta[d]["Class"] for d in deps if d in meta and has_source[d]]
 		dep_headers = [meta[d]["Header"] for d in deps if d in meta and has_source[d]]
 
-		# Inherits: pull in the parent's .gen.h (FDependsPack struct) + header
+		# Inherits: pull in each parent's .gen.h (FDependsPack struct) + header
 		# (class declaration) so TResolveDependsPack<FParent> resolves correctly.
-		parent_class = ""
+		parent_classes: list[str] = []
 		inherits_includes: list[str] = []
-		if inherits and inherits in meta and has_source[inherits]:
-			parent_class = meta[inherits]["Class"]
-			inherits_includes = [f"{inherits}.gen.h", meta[inherits]["Header"]]
+		for parent in inherits:
+			if parent in meta and has_source[parent]:
+				parent_classes.append(meta[parent]["Class"])
+				inherits_includes.append(f"{parent}.gen.h")
+				inherits_includes.append(meta[parent]["Header"])
 
 		dep_includes = "\n".join(f"#include <{h}>" for h in (inherits_includes + dep_headers))
 
-		if parent_class:
-			parent_pack = f"typename TResolveDependsPack<{parent_class}>::Type"
+		if parent_classes:
+			parent_packs = ",\n".join(
+				f"\t\ttypename TResolveDependsPack<{pc}>::Type" for pc in parent_classes
+			)
 			if dep_classes:
 				dep_list = ",\n".join(f"\t\t\t\t{dc}" for dc in dep_classes)
 				pack_body = (
-					f"\tusing FDependsPack = typename TPackConcat<\n"
-					f"\t\t{parent_pack},\n"
+					"\tusing FDependsPack = typename TPackConcat<\n"
+					f"{parent_packs},\n"
 					"\t\tTDependsPack<\n"
 					f"\t\t\tTDependsOn<{stage}::Init, TTypeList<\n"
 					f"{dep_list}\n"
@@ -448,7 +454,11 @@ def codegen_plugin_dependencies(engine_root: Path, out_dir: Path) -> list[Path]:
 					"\t>::Type;\n"
 				)
 			else:
-				pack_body = f"\tusing FDependsPack = {parent_pack};\n"
+				pack_body = (
+					"\tusing FDependsPack = typename TPackConcat<\n"
+					f"{parent_packs}\n"
+					"\t>::Type;\n"
+				)
 		elif dep_classes:
 			dep_list = ",\n".join(f"\t\t\t{dc}" for dc in dep_classes)
 			pack_body = (
@@ -681,24 +691,30 @@ def create_plugin(
 	engine_root: Path,
 	description: str = "",
 	stage: str = "EEngineStage",
+	inherits: list[str] | None = None,
+	plugins_dir: Path | None = None,
 ) -> Path:
 	"""
-	Scaffold a new engine plugin under Maho/Plugins/<Name> from the Plugin
-	template. EEngineStage plugins get the dynamic factory (CreateExtension)
-	exported automatically; EToolStage plugins do not.
+	Scaffold a new engine plugin under plugins_dir (default <engine>/Maho/Plugins)
+	from the Plugin template. EEngineStage plugins get the dynamic factory
+	(CreateExtension) exported automatically. `inherits` lists parent plugin
+	names (multi-inherit) — written to .cplugin Inherits so codegen merges
+	their FDependsPack via TPackConcat.
 	"""
 	if not is_valid_project_name(plugin_name):
 		raise ValueError(
 			"Plugin name must start with a letter and contain only A-Z, a-z, 0-9, _, -"
 		)
 
-	plugins_dir = (engine_root / "Maho" / "Plugins").resolve()
+	plugins_dir = (plugins_dir or engine_root / "Maho" / "Plugins").resolve()
 	dst = plugins_dir / plugin_name
 	if dst.exists():
 		raise FileExistsError(f"Plugin already exists: {dst}")
 
 	if stage not in ("EEngineStage", "EToolStage"):
 		raise ValueError("stage must be EEngineStage or EToolStage")
+
+	inherits = [p for p in (inherits or []) if p and p != plugin_name]
 
 	class_name = f"F{plugin_name}"
 	export_name = plugin_name.upper()
@@ -743,6 +759,11 @@ def create_plugin(
 		"DESCRIPTION": description,
 		"STAGE_LABEL": stage_label,
 		"FACTORY_BLOCK": factory_block,
+		"INHERITS_LINE": (
+			f'"Inherits": {json.dumps(inherits)},\n'
+			if inherits
+			else ""
+		),
 	}
 
 	for src in PLUGIN_TEMPLATE_DIR.rglob("*"):

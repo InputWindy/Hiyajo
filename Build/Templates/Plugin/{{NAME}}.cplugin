@@ -8,9 +8,10 @@
 		{
 			"Name": "{{NAME}}",
 			"Type": "Runtime",
+			{{INHERITS_LINE}}
 			"Dependencies": [],
 			"Extension": {
-				"Class": "{{NAMESPACE}}::{{CLASS}}",
+				"Class": "Maho::{{NAMESPACE}}::{{CLASS}}",
 				"Header": "{{NAME}}.h",
 				"Priority": "System",
 				"Stage": "{{STAGE}}"
