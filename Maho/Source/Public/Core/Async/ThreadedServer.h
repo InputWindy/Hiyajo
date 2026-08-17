@@ -47,6 +47,16 @@ public:
 		(void)Argv;
 	}
 
+	/** Request the worker loop to exit (non-blocking; Shutdown() joins). */
+	void RequestShutdown() override
+	{
+		{
+			std::lock_guard Lock(Mutex);
+			bStopping = true;
+		}
+		CondVar.notify_all();
+	}
+
 	[[nodiscard]] bool IsRunning() const
 	{
 		return bRunning.load(std::memory_order_acquire);

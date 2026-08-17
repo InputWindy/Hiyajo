@@ -1869,6 +1869,17 @@ def _normalize_module_entry(raw: Any, *, cplugin_path: Path) -> dict[str, Any]:
 			raise ValueError(f"Module '{name}' has invalid dependency in {cplugin_path}")
 		deps.append(dep.strip())
 
+	# Inherits implies a build dependency — the child C++-inherits the parent,
+	# so it links the parent's DLL (and gets its PUBLIC include dirs).
+	inherits_raw = raw.get("Inherits", [])
+	if inherits_raw is None:
+		inherits_raw = []
+	if isinstance(inherits_raw, str):
+		inherits_raw = [inherits_raw]
+	for inh in inherits_raw:
+		if isinstance(inh, str) and inh.strip() and inh.strip() not in deps:
+			deps.append(inh.strip())
+
 	extension = None
 	ext_raw = raw.get("Extension")
 	if ext_raw is not None:
@@ -2057,6 +2068,34 @@ def scan_plugin_modules(
 	plugins_out: list[dict[str, Any]] = []
 	modules_by_name: dict[str, dict[str, Any]] = {}
 
+	# Pre-pass: resolve transitive enablement — enabling a plugin also enables
+	# its Dependencies + Inherits parents (recursively).
+	_name_to_deps: dict[str, set[str]] = {}
+	_name_to_default: dict[str, bool] = {}
+	for cplugin_path in cplugin_files:
+		data = read_cplugin(cplugin_path)
+		plugin_name = cplugin_path.parent.name
+		_name_to_default[plugin_name] = bool(data.get("EnabledByDefault", True))
+		deps: set[str] = set()
+		for raw in data["Modules"]:
+			norm = _normalize_module_entry(raw, cplugin_path=cplugin_path)
+			deps.update(norm["Dependencies"])
+		_name_to_deps[plugin_name] = deps
+
+	if enabled_overrides is not None:
+		enabled_set = {n for n, on in enabled_overrides.items() if on}
+	else:
+		enabled_set = {n for n, d in _name_to_default.items() if d}
+
+	changed = True
+	while changed:
+		changed = False
+		for n in list(enabled_set):
+			for dep in _name_to_deps.get(n, ()):
+				if dep in _name_to_deps and dep not in enabled_set:
+					enabled_set.add(dep)
+					changed = True
+
 	for cplugin_path in cplugin_files:
 		data = read_cplugin(cplugin_path)
 		default_enabled = data.get("EnabledByDefault", True)
@@ -2064,10 +2103,7 @@ def scan_plugin_modules(
 			default_enabled = True
 		plugin_dir = cplugin_path.parent
 		plugin_name = plugin_dir.name
-		if enabled_overrides is not None:
-			enabled = bool(enabled_overrides.get(plugin_name, False))
-		else:
-			enabled = bool(default_enabled)
+		enabled = plugin_name in enabled_set
 		if not include_disabled and not enabled:
 			continue
 
