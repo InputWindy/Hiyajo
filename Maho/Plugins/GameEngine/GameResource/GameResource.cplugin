@@ -1,0 +1,22 @@
+{
+	"FileVersion": 1,
+	"FriendlyName": "GameResource",
+	"Description": "拓展游戏引擎所需的资源类型和导入导出逻辑",
+	"Category": "Engine",
+	"EnabledByDefault": true,
+	"Modules": [
+		{
+			"Name": "GameResource",
+			"Type": "Runtime",
+			"Inherits": ["Resource"],
+
+			"Dependencies": [],
+			"Extension": {
+				"Class": "Maho::GameResource::FGameResource",
+				"Header": "GameResource.h",
+				"Priority": "System",
+				"Stage": "EEngineStage"
+			}
+		}
+	]
+}
