@@ -27,15 +27,16 @@ _TYPE_ENGINE = "Extension"
 
 
 class CreatePluginApp(tk.Tk):
-	def __init__(self) -> None:
+	def __init__(self, default_plugins_dir: Path | None = None) -> None:
 		super().__init__()
 		self.title("Maho — New Plugin")
 		self.geometry("640x520")
 		self.minsize(560, 420)
 		self.resizable(True, True)
 
+		plugins_default = default_plugins_dir or (ENGINE_ROOT / "Maho" / "Plugins")
 		self.var_name = tk.StringVar(value="MyPlugin")
-		self.var_plugins_dir = tk.StringVar(value=str(ENGINE_ROOT / "Maho" / "Plugins"))
+		self.var_plugins_dir = tk.StringVar(value=str(plugins_default))
 		self.var_type = tk.StringVar(value=_TYPE_TOOL)
 
 		self._plugins: list[dict] = []
@@ -197,7 +198,14 @@ class CreatePluginApp(tk.Tk):
 
 
 def main() -> int:
-	app = CreatePluginApp()
+	# Optional positional arg: default plugins dir (e.g. a project's Plugins/).
+	default_plugins_dir: Path | None = None
+	for arg in sys.argv[1:]:
+		p = Path(arg).expanduser().resolve()
+		if p.is_dir() or not p.exists():
+			default_plugins_dir = Path(arg).expanduser().resolve()
+			break
+	app = CreatePluginApp(default_plugins_dir=default_plugins_dir)
 	app.mainloop()
 	return 0
 

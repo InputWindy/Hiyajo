@@ -755,14 +755,14 @@ def _plugin_html_text(info: dict[str, str]) -> str:
 """
 
 
-def fix_plugin(cplugin_path: Path, engine_root: Path | None = None) -> list[str]:
+def fix_plugin(cplugin_path: Path, base: Path | None = None) -> list[str]:
 	"""
 	Auto-fix one plugin: regenerate missing Api.h, and generate starter docs
 	(<Name>.md + <Name>.html) at the plugin root. .gen.h is generated per-project
 	into Intermediate at .cproject sync — not stored in Public/.
 	Returns human-readable messages ('FIXED ...' / 'UNFIXABLE ...').
 	"""
-	engine_root = (engine_root or ENGINE_ROOT).resolve()
+	base = (base or cplugin_path.parent).resolve()
 	cplugin_path = cplugin_path.resolve()
 	data = read_cplugin(cplugin_path)
 	name = cplugin_path.parent.name
@@ -778,7 +778,7 @@ def fix_plugin(cplugin_path: Path, engine_root: Path | None = None) -> list[str]
 	api = public_dir / f"{name}Api.h"
 	if not api.is_file():
 		api.write_text(_api_header_text(name), encoding="utf-8", newline="\n")
-		messages.append(f"FIXED {api.relative_to(engine_root)}")
+		messages.append(f"FIXED {api.relative_to(base)}")
 
 	main = public_dir / header
 	private_dir = cplugin_path.parent / "Source" / name / "Private"
@@ -792,26 +792,32 @@ def fix_plugin(cplugin_path: Path, engine_root: Path | None = None) -> list[str]
 	md = cplugin_path.parent / f"{name}.md"
 	if not md.is_file():
 		md.write_text(_plugin_md_text(info), encoding="utf-8", newline="\n")
-		messages.append(f"FIXED {md.relative_to(engine_root)}")
+		messages.append(f"FIXED {md.relative_to(base)}")
 
 	html = cplugin_path.parent / f"{name}.html"
 	if not html.is_file():
 		html.write_text(_plugin_html_text(info), encoding="utf-8", newline="\n")
-		messages.append(f"FIXED {html.relative_to(engine_root)}")
+		messages.append(f"FIXED {html.relative_to(base)}")
 
 	return messages
 
 
-def fix_plugins(engine_root: Path | None = None) -> list[str]:
-	"""Batch-fix all plugins (Api.h). .gen.h is generated per-project at .cproject sync."""
+def fix_plugins(
+	engine_root: Path | None = None,
+	plugin_roots: list[Path] | None = None,
+) -> list[str]:
+	"""
+	Batch-fix all plugins under plugin_roots (default: the engine's Maho/Plugins).
+	.gen.h is generated per-project at .cproject sync — not touched here.
+	"""
 	engine_root = (engine_root or ENGINE_ROOT).resolve()
-	plugins_dir = engine_root / "Maho" / "Plugins"
-	if not plugins_dir.is_dir():
-		return [f"ERROR Plugins dir not found: {plugins_dir}"]
+	roots = [Path(r).resolve() for r in (plugin_roots or [engine_root / "Maho" / "Plugins"])]
+	if not roots:
+		return ["ERROR no plugin roots"]
 
 	messages: list[str] = []
-	for cplugin_path in discover_cplugin_files([plugins_dir]):
-		messages.extend(fix_plugin(cplugin_path, engine_root))
+	for cplugin_path in discover_cplugin_files(roots):
+		messages.extend(fix_plugin(cplugin_path))
 	return messages
 
 

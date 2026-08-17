@@ -1,9 +1,10 @@
 # Run via Tools/fix_plugins.bat — engine Tools/python only.
 """
-Batch-fix all engine plugins: regenerate missing Api.h + .gen.h headers.
+Batch-fix plugins: regenerate missing Api.h + starter .md/.html docs.
 
 Usage:
   Tools\\fix_plugins.bat
+  Tools\\fix_plugins.bat path\\Plugins   (scan a specific plugins dir, e.g. a project's)
 """
 
 from __future__ import annotations
@@ -19,12 +20,13 @@ from maho_tools import ENGINE_ROOT, fix_plugins  # noqa: E402
 
 def main(argv: list[str]) -> int:
 	engine_root = ENGINE_ROOT.resolve()
+	roots: list[Path] = []
 	for arg in argv[1:]:
 		p = Path(arg).expanduser().resolve()
 		if p.is_dir():
-			engine_root = p
+			roots.append(p)
 
-	messages = fix_plugins(engine_root)
+	messages = fix_plugins(engine_root, plugin_roots=roots or None)
 	for m in messages:
 		print(f"[Maho] {m}")
 

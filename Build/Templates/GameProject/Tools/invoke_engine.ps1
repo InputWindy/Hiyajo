@@ -1,7 +1,7 @@
 # Requires -Version 5.0
 param(
 	[Parameter(Mandatory = $true)]
-	[ValidateSet("package")]
+	[ValidateSet("package", "fix-plugins", "create-plugin")]
 	[string] $Action,
 
 	[Parameter(Mandatory = $true)]
@@ -43,6 +43,8 @@ if (-not (Test-Path -LiteralPath $localPy)) {
 	exit 1
 }
 
+$projectPlugins = Join-Path $projectDir "Plugins"
+
 if ($Action -eq "package") {
 	# GUI via WScript + pythonw — no Python console attached to this process.
 	$vbs = Join-Path $engine "Tools\launch_package.vbs"
@@ -53,5 +55,34 @@ if ($Action -eq "package") {
 	$wscript = Join-Path $env:SystemRoot "System32\wscript.exe"
 	$p = Start-Process -FilePath $wscript -ArgumentList @("//nologo", $vbs, $CProject) -PassThru -Wait
 	exit $p.ExitCode
+}
+
+if ($Action -eq "fix-plugins") {
+	# Batch-fix the PROJECT's plugins only (never the engine's).
+	$script = Join-Path $engine "Tools\fix_plugins.py"
+	if (-not (Test-Path -LiteralPath $script)) {
+		Write-Error "Missing script: $script"
+		exit 1
+	}
+	$p = Start-Process -FilePath $localPy -ArgumentList @($script, $projectPlugins) -NoNewWindow -Wait -PassThru
+	exit $p.ExitCode
+}
+
+if ($Action -eq "create-plugin") {
+	# New-plugin UI, defaulting to the project's Plugins/ dir (GUI via pythonw).
+	$pyw = Join-Path $engine "Tools\python\pythonw.exe"
+	if (-not (Test-Path -LiteralPath $pyw)) {
+		$pyw = Join-Path $engine "Tools\python\Scripts\pythonw.exe"
+	}
+	if (-not (Test-Path -LiteralPath $pyw)) {
+		$pyw = $localPy
+	}
+	$script = Join-Path $engine "Tools\create_plugin_ui.py"
+	if (-not (Test-Path -LiteralPath $script)) {
+		Write-Error "Missing script: $script"
+		exit 1
+	}
+	$p = Start-Process -FilePath $pyw -ArgumentList @($script, $projectPlugins) -PassThru
+	exit 0
 }
 
