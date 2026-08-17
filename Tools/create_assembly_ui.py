@@ -25,27 +25,25 @@ _UNCHECKED = "☐"
 
 _PRODUCT_DLL = "动态链接库"
 _PRODUCT_EXE = "可执行程序"
-_KIND_TOOL = "工具 (Tool)"
-_KIND_APP = "应用 (App)"
 
 
 class CreateAssemblyApp(tk.Tk):
 	def __init__(self) -> None:
 		super().__init__()
 		self.title("Maho — 创建程序集")
-		self.geometry("680x560")
-		self.minsize(600, 460)
+		self.geometry("720x560")
+		self.minsize(640, 460)
 		self.resizable(True, True)
 
 		self.var_name = tk.StringVar(value="MyAssembly")
 		self.var_dir = tk.StringVar(value=str(ENGINE_ROOT / "Maho" / "Plugins"))
 		self.var_product = tk.StringVar(value=_PRODUCT_DLL)
-		self.var_kind = tk.StringVar(value=_KIND_TOOL)
 
 		self._plugins: list[dict] = []
 		self._checked: dict[str, bool] = {}
+		self._app_tool_tree: ttk.Treeview
+		self._app_app_tree: ttk.Treeview
 		self._tool_tree: ttk.Treeview
-		self._app_tree: ttk.Treeview
 
 		self._build()
 		self.protocol("WM_DELETE_WINDOW", self.destroy)
@@ -66,43 +64,54 @@ class CreateAssemblyApp(tk.Tk):
 		ttk.Entry(frm, textvariable=self.var_dir).grid(row=2, column=1, sticky="ew", **pad)
 		ttk.Button(frm, text="浏览…", command=self._browse_dir).grid(row=2, column=2, sticky="e", **pad)
 
-		ttk.Label(frm, text="项目").grid(row=3, column=0, sticky="w", **pad)
+		ttk.Label(frm, text="程序集").grid(row=3, column=0, sticky="w", **pad)
 		self.cmb_product = ttk.Combobox(frm, state="readonly", values=[_PRODUCT_DLL, _PRODUCT_EXE])
 		self.cmb_product.grid(row=3, column=1, columnspan=2, sticky="ew", **pad)
 		self.cmb_product.bind("<<ComboboxSelected>>", self._on_product_change)
 
-		# 种类（仅 DLL 时显示：工具 / 应用）
-		self.lbl_kind = ttk.Label(frm, text="种类")
-		self.lbl_kind.grid(row=4, column=0, sticky="w", **pad)
-		self.cmb_kind = ttk.Combobox(frm, state="readonly", values=[_KIND_TOOL, _KIND_APP])
-		self.cmb_kind.grid(row=4, column=1, columnspan=2, sticky="ew", **pad)
-		self.cmb_kind.bind("<<ComboboxSelected>>", self._on_kind_change)
-
-		# 继承：两个页签（工具 / 应用）
-		ttk.Label(frm, text="继承").grid(row=5, column=0, sticky="nw", **pad)
+		# 项目（tab：应用 / 工具）
+		ttk.Label(frm, text="项目").grid(row=4, column=0, sticky="nw", **pad)
 		self.notebook = ttk.Notebook(frm)
-		self.notebook.grid(row=5, column=1, columnspan=2, sticky="nsew", **pad)
+		self.notebook.grid(row=4, column=1, columnspan=2, sticky="nsew", **pad)
 
-		self._tool_tab = ttk.Frame(self.notebook)
+		# 应用 tab：左右两个勾选框（工具 | 应用）
 		self._app_tab = ttk.Frame(self.notebook)
-		self.notebook.add(self._tool_tab, text="工具")
+		self._app_tab.columnconfigure(0, weight=1, uniform="app")
+		self._app_tab.columnconfigure(1, weight=1, uniform="app")
+		self._app_tab.rowconfigure(0, weight=1)
+		self._app_tool_panel = ttk.LabelFrame(self._app_tab, text="工具")
+		self._app_app_panel = ttk.LabelFrame(self._app_tab, text="应用")
+		self._app_tool_panel.grid(row=0, column=0, sticky="nsew", padx=(0, 4))
+		self._app_app_panel.grid(row=0, column=1, sticky="nsew", padx=(4, 0))
+		self._app_tool_tree = self._make_tree(self._app_tool_panel)
+		self._app_app_tree = self._make_tree(self._app_app_panel)
+
+		# 工具 tab：单个勾选框
+		self._tool_tab = ttk.Frame(self.notebook)
+		self._tool_tab.columnconfigure(0, weight=1)
+		self._tool_tab.rowconfigure(0, weight=1)
+		self._tool_panel = ttk.LabelFrame(self._tool_tab, text="工具")
+		self._tool_panel.grid(row=0, column=0, sticky="nsew")
+		self._tool_tree = self._make_tree(self._tool_panel)
+
 		self.notebook.add(self._app_tab, text="应用")
+		self.notebook.add(self._tool_tab, text="工具")
 
-		self._tool_tree = ttk.Treeview(self._tool_tab, show="tree", selectmode="none")
-		self._app_tree = ttk.Treeview(self._app_tab, show="tree", selectmode="none")
-		for tree in (self._tool_tree, self._app_tree):
-			scroll = ttk.Scrollbar(tree.master, orient=tk.VERTICAL, command=tree.yview)
-			tree.configure(yscrollcommand=scroll.set)
-			tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-			scroll.pack(side=tk.RIGHT, fill=tk.Y)
-			tree.bind("<Button-1>", self._on_tree_click)
-
-		ttk.Button(frm, text="创建", command=self._create).grid(row=6, column=1, columnspan=2, sticky="e", **pad)
+		ttk.Button(frm, text="创建", command=self._create).grid(row=5, column=1, columnspan=2, sticky="e", **pad)
 
 		frm.columnconfigure(1, weight=1)
-		frm.rowconfigure(5, weight=1)
+		frm.rowconfigure(4, weight=1)
 
 		self._reload_plugins()
+
+	def _make_tree(self, parent: ttk.Frame) -> ttk.Treeview:
+		tree = ttk.Treeview(parent, show="tree", selectmode="none")
+		scroll = ttk.Scrollbar(parent, orient=tk.VERTICAL, command=tree.yview)
+		tree.configure(yscrollcommand=scroll.set)
+		tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+		scroll.pack(side=tk.RIGHT, fill=tk.Y)
+		tree.bind("<Button-1>", self._on_tree_click)
+		return tree
 
 	def _browse_dir(self) -> None:
 		path = filedialog.askdirectory(initialdir=self.var_dir.get() or str(ENGINE_ROOT))
@@ -124,32 +133,18 @@ class CreateAssemblyApp(tk.Tk):
 	def _on_product_change(self, _event=None) -> None:
 		self._apply()
 
-	def _on_kind_change(self, _event=None) -> None:
-		self._apply()
-
 	def _apply(self) -> None:
-		for tree in (self._tool_tree, self._app_tree):
+		for tree in (self._app_tool_tree, self._app_app_tree, self._tool_tree):
 			for item in tree.get_children():
 				tree.delete(item)
 		self._checked = {}
 
 		is_exe = self.cmb_product.get() == _PRODUCT_EXE
-		is_tool = (not is_exe) and self.cmb_kind.get() == _KIND_TOOL
 
-		# 种类行：EXE 隐藏（本身就是应用）
+		# EXE 本身就是应用，禁用"工具"tab
+		self.notebook.tab(self._tool_tab, state="disabled" if is_exe else "normal")
 		if is_exe:
-			self.lbl_kind.grid_remove()
-			self.cmb_kind.grid_remove()
-		else:
-			self.lbl_kind.grid(row=4, column=0, sticky="w", padx=12, pady=6)
-			self.cmb_kind.grid(row=4, column=1, columnspan=2, sticky="ew", padx=12, pady=6)
-
-		# 工具页签：总是显示工具；应用页签：仅应用/EXE 时可用
-		self.notebook.tab(self._tool_tab, state="normal")
-		if is_tool:
-			self.notebook.tab(self._app_tab, state="disabled")
-		else:
-			self.notebook.tab(self._app_tab, state="normal")
+			self.notebook.select(self._app_tab)
 
 		for p in self._plugins:
 			ext = p.get("Extension") or {}
@@ -157,15 +152,23 @@ class CreateAssemblyApp(tk.Tk):
 			name = p["Name"]
 			group = p.get("Group") or []
 
-			tree = self._tool_tree if stage == "EToolStage" else self._app_tree
 			self._checked[name] = False
-			parent = ""
-			for i in range(len(group)):
-				gid = f"{stage}:group:" + "/".join(group[: i + 1])
-				if not tree.exists(gid):
-					tree.insert(parent, tk.END, iid=gid, text=group[i], open=True)
-				parent = gid
-			tree.insert(parent, tk.END, iid=name, text=self._label(name), open=True)
+			if stage == "EToolStage":
+				# 工具：两个 tab 都放（应用 tab 左侧 + 工具 tab）
+				self._insert(self._app_tool_tree, name, group, "tool")
+				self._insert(self._tool_tree, name, group, "tool")
+			else:
+				# 应用：只在应用 tab 右侧
+				self._insert(self._app_app_tree, name, group, "app")
+
+	def _insert(self, tree: ttk.Treeview, name: str, group: list[str], stage: str) -> None:
+		parent = ""
+		for i in range(len(group)):
+			gid = f"{stage}:group:" + "/".join(group[: i + 1])
+			if not tree.exists(gid):
+				tree.insert(parent, tk.END, iid=gid, text=group[i], open=True)
+			parent = gid
+		tree.insert(parent, tk.END, iid=name, text=self._label(name), open=True)
 
 	def _label(self, name: str) -> str:
 		mark = _CHECKED if self._checked.get(name) else _UNCHECKED
@@ -175,7 +178,11 @@ class CreateAssemblyApp(tk.Tk):
 		item = event.widget.identify_row(event.y)
 		if item and item in self._checked:
 			self._checked[item] = not self._checked[item]
+			# 同步所有树里的同名项
 			event.widget.item(item, text=self._label(item))
+			for tree in (self._app_tool_tree, self._app_app_tree, self._tool_tree):
+				if tree is not event.widget and tree.exists(item):
+					tree.item(item, text=self._label(item))
 
 	def _create(self) -> None:
 		name = self.var_name.get().strip()
@@ -199,7 +206,6 @@ class CreateAssemblyApp(tk.Tk):
 			return
 
 		is_exe = self.cmb_product.get() == _PRODUCT_EXE
-		# 开发平台：.bat 打开 = Windows，.sh 打开 = Linux。
 		dev_platform = "Windows" if sys.platform == "win32" else "Linux"
 		try:
 			if is_exe:
@@ -214,7 +220,8 @@ class CreateAssemblyApp(tk.Tk):
 					app_type="IDE",
 				)
 			else:
-				stage = "EToolStage" if self.cmb_kind.get() == _KIND_TOOL else "EEngineStage"
+				# 当前选中的 tab 决定 DLL 种类
+				stage = "EToolStage" if self.notebook.index(self.notebook.select()) == 1 else "EEngineStage"
 				path = create_plugin(
 					name,
 					engine_root,
