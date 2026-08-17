@@ -6,11 +6,13 @@
 
 #if defined(_WIN32)
 #	include <Windows.h>
+using FModuleHandle = HMODULE;
 #	define MAHO_LOAD_LIBRARY(P) LoadLibraryA(P)
 #	define MAHO_GET_PROC(H, N) GetProcAddress(H, N)
 #	define MAHO_FREE_LIBRARY(H) FreeLibrary(H)
 #else
 #	include <dlfcn.h>
+using FModuleHandle = void*;
 #	define MAHO_LOAD_LIBRARY(P) dlopen(P, RTLD_NOW)
 #	define MAHO_GET_PROC(H, N) dlsym(H, N)
 #	define MAHO_FREE_LIBRARY(H) dlclose(H)
@@ -24,7 +26,7 @@ namespace
 	struct FLoadedPlugin
 	{
 		std::string Name;
-		void* Handle = nullptr;
+		FModuleHandle Handle = nullptr;
 		IExtension<EEngineStage>* Extension = nullptr;
 	};
 
@@ -37,7 +39,7 @@ namespace
 	{
 		for (const std::string& Path : GInstallRequests)
 		{
-			void* Handle = MAHO_LOAD_LIBRARY(Path.c_str());
+			FModuleHandle Handle = MAHO_LOAD_LIBRARY(Path.c_str());
 			if (Handle == nullptr)
 			{
 				continue;   // TODO: log load failure

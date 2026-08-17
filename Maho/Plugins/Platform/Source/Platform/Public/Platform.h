@@ -8,6 +8,11 @@
 #include <string>
 #include <string_view>
 
+// Win32 <Windows.h> #defines CreateWindow → CreateWindowW; keep the clean API name.
+#ifdef CreateWindow
+#	undef CreateWindow
+#endif
+
 namespace Maho
 {
 

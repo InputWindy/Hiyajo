@@ -1,6 +1,7 @@
 // Generated from Asset.cplugin Dependencies — do not edit by hand.
 #pragma once
 #include <Engine.h>
+#include <Paths.h>
 
 namespace Maho
 {

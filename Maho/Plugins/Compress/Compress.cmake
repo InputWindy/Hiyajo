@@ -6,6 +6,11 @@ include(FetchContent)
 if(NOT TARGET libzstd_static)
 	maho_git_repository_url(_ZSTD_URL https://github.com/facebook/zstd.git)
 	maho_fetchcontent_populate_or_reuse(zstd ${_ZSTD_URL} v1.5.6 lib/zstd.h)
+	# Only the static lib is needed; the shared lib's .rc step and the CLI are
+	# unneeded (and the .rc step can't find zstd.h on some toolchains).
+	set(ZSTD_BUILD_SHARED OFF CACHE BOOL "" FORCE)
+	set(ZSTD_BUILD_PROGRAMS OFF CACHE BOOL "" FORCE)
+	set(ZSTD_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 	add_subdirectory(${zstd_SOURCE_DIR}/build/cmake ${zstd_BINARY_DIR})
 endif()
 

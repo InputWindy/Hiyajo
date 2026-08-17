@@ -397,6 +397,7 @@ def codegen_plugin_dependencies(engine_root: Path) -> list[Path]:
 		meta[name] = {
 			"Class": ext.get("Class", ""),
 			"Stage": ext.get("Stage", "EEngineStage"),
+			"Header": ext.get("Header", f"{name}.h"),
 		}
 		public_dir = plugins_dir / name / "Source" / name / "Public"
 		has_source[name] = public_dir.is_dir() and any(p.suffix == ".h" for p in public_dir.glob("*.h"))
@@ -420,6 +421,9 @@ def codegen_plugin_dependencies(engine_root: Path) -> list[Path]:
 		if not dep_classes:
 			continue
 
+		dep_headers = [meta[d]["Header"] for d in deps if d in meta and has_source[d]]
+		dep_includes = "\n".join(f"#include <{h}>" for h in dep_headers)
+
 		dep_list = ",\n".join(f"\t\t\t{dc}" for dc in dep_classes)
 		opens = "\n".join(f"namespace {p}\n{{" for p in ns_parts)
 		closes = "\n".join(f"}} // namespace {p}" for p in reversed(ns_parts))
@@ -427,7 +431,8 @@ def codegen_plugin_dependencies(engine_root: Path) -> list[Path]:
 		text = (
 			f"// Generated from {name}.cplugin Dependencies — do not edit by hand.\n"
 			"#pragma once\n"
-			"#include <Engine.h>\n\n"
+			"#include <Engine.h>\n"
+			f"{dep_includes}\n\n"
 			f"{opens}\n\n"
 			f"/** Scheduler-level dependency declaration, synced from .cplugin. */\n"
 			f"struct {class_short}Dependencies\n"

@@ -1,6 +1,7 @@
 // Generated from Render.cplugin Dependencies — do not edit by hand.
 #pragma once
 #include <Engine.h>
+#include <Platform.h>
 
 namespace Maho
 {

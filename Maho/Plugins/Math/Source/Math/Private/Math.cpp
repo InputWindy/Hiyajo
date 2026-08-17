@@ -1,4 +1,4 @@
-#include <Math.h>
+#include <MathLibrary.h>
 
 namespace Maho::Math
 {

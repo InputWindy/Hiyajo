@@ -1,6 +1,7 @@
 // Generated from Text.cplugin Dependencies — do not edit by hand.
 #pragma once
 #include <Engine.h>
+#include <Json.h>
 
 namespace Maho
 {

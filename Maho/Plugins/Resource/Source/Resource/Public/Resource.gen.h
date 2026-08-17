@@ -1,6 +1,8 @@
 // Generated from Resource.cplugin Dependencies — do not edit by hand.
 #pragma once
 #include <Engine.h>
+#include <Paths.h>
+#include <Name.h>
 
 namespace Maho
 {

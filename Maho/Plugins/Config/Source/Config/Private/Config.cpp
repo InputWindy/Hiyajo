@@ -31,7 +31,7 @@ bool FConfig::ExecuteStage(EToolStage Stage)
 
 bool FConfig::Load(std::string_view Path)
 {
-	std::ifstream Stream(std::string(Path));
+	std::ifstream Stream{ std::string(Path) };
 	if (!Stream)
 	{
 		return false;

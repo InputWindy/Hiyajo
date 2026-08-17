@@ -36,6 +36,7 @@ class FTransferHandle
 {
 public:
 	FTransferHandle() = default;
+	explicit FTransferHandle(std::shared_ptr<FTransferState> InState) : State(std::move(InState)) {}
 	FTransferHandle(FTransferHandle&&) noexcept = default;
 	FTransferHandle& operator=(FTransferHandle&&) noexcept = default;
 	~FTransferHandle() = default;

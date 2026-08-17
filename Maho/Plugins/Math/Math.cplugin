@@ -10,7 +10,7 @@
 			"Type": "Runtime",
 			"Extension": {
 				"Class": "Maho::Math::FMath",
-				"Header": "Math.h",
+				"Header": "MathLibrary.h",
 				"Priority": "System",
 				"Stage": "EToolStage"
 			}

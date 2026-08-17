@@ -10,6 +10,11 @@
 #	include <EGL/eglext.h>
 #endif
 
+// GLFW pulls in <Windows.h>, which #defines CreateWindow → CreateWindowW.
+#ifdef CreateWindow
+#	undef CreateWindow
+#endif
+
 namespace Maho::Platform
 {
 

@@ -40,6 +40,13 @@ public:
 	/** The resident worker loop; runs on the dedicated thread. */
 	void MainLoop() override;
 
+	/** Background workers don't parse the command line. */
+	void ParseCommandLine(int Argc, char** Argv) override
+	{
+		(void)Argc;
+		(void)Argv;
+	}
+
 	[[nodiscard]] bool IsRunning() const
 	{
 		return bRunning.load(std::memory_order_acquire);
