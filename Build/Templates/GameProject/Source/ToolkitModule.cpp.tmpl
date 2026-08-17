@@ -10,15 +10,7 @@ class {{TOOLKIT_CLASS}} final
 	, public FEnabledToolExtensions
 {
 public:
-	{{TOOLKIT_CLASS}}()
-	{
-		Init();
-	}
-
-	~{{TOOLKIT_CLASS}}() override
-	{
-		Shutdown();
-	}
+	{{TOOLKIT_CLASS}}() = default;
 
 protected:
 	void ParseCommandLine(int Argc, char** Argv) override
@@ -27,14 +19,18 @@ protected:
 		(void)Argv;
 	}
 
-	void Init() override
+public:
+	bool ExecuteStage(Maho::EToolStage Stage) override
 	{
-		Execute<Maho::EToolStage::Init, FList>();
-	}
-
-	void Shutdown() override
-	{
-		Execute<Maho::EToolStage::Shutdown, FList, Maho::FReverseTopology>();
+		if (Stage == Maho::EToolStage::Init)
+		{
+			Execute<Maho::EToolStage::Init, FList>();
+		}
+		else
+		{
+			Execute<Maho::EToolStage::Shutdown, FList, Maho::FReverseTopology>();
+		}
+		return true;
 	}
 };
 

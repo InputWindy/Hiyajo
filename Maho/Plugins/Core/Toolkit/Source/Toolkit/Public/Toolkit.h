@@ -26,24 +26,6 @@ protected:
 
 public:
 	virtual ~FToolkitBase() = default;
-
-	/** Unified stage drive: Init / Shutdown. */
-	bool ExecuteStage(EToolStage Stage) override
-	{
-		if (Stage == EToolStage::Init)
-		{
-			Init();
-		}
-		else
-		{
-			Shutdown();
-		}
-		return true;
-	}
-
-protected:
-	virtual void Init() = 0;
-	virtual void Shutdown() = 0;
 };
 
 } // namespace Maho

@@ -20,7 +20,13 @@ bool FAssemblyImporter::ImportToolkit(std::string_view Path)
 		return false;
 	}
 	Toolkit = Create();
-	return Toolkit != nullptr;
+	if (Toolkit == nullptr)
+	{
+		ToolkitAssembly.Unload();
+		return false;
+	}
+	Toolkit->ExecuteStage(EToolStage::Init);   // drive the pre-app init
+	return true;
 }
 
 bool FAssemblyImporter::ImportEngine(std::string_view Path)
@@ -47,6 +53,10 @@ bool FAssemblyImporter::ExecuteStage(EEngineStage Stage)
 {
 	if (Stage == EEngineStage::Shutdown)
 	{
+		if (Toolkit != nullptr)
+		{
+			Toolkit->ExecuteStage(EToolStage::Shutdown);   // drive the pre-app shutdown
+		}
 		delete Engine;                  // virtual dtor via IExtension
 		Engine = nullptr;
 		delete Toolkit;                 // virtual dtor via IExtension
