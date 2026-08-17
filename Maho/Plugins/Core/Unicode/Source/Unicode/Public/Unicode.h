@@ -27,7 +27,7 @@
 // ───────────────────────────────────────────────────────────────────────
 
 #include "UnicodeApi.h"
-#include <Toolkit.h>
+#include <Core/Core.h>
 
 #include <string>
 #include <string_view>

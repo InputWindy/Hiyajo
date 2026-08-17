@@ -1,7 +1,7 @@
 #pragma once
 
 #include "ConsoleVariableApi.h"
-#include <Toolkit.h>
+#include <Core/Core.h>
 
 #include <cstdint>
 #include <map>

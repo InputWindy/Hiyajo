@@ -1,7 +1,7 @@
 #pragma once
 
 #include "PathsApi.h"
-#include <Toolkit.h>
+#include <Core/Core.h>
 #include <filesystem>
 #include <map>
 #include <string>

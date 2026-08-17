@@ -1,7 +1,7 @@
 #pragma once
 
 #include "CompressApi.h"
-#include <Toolkit.h>
+#include <Core/Core.h>
 
 namespace Maho
 {

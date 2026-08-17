@@ -9,8 +9,7 @@
       "Name": "Asset",
       "Type": "Runtime",
       "Dependencies": [
-        "Paths",
-        "Toolkit"
+        "Paths"
       ],
       "Extension": {
         "Class": "Maho::Asset::FAssetRegistry",

@@ -1,7 +1,7 @@
 #pragma once
 
 #include "LogApi.h"
-#include <Toolkit.h>
+#include <Core/Core.h>
 
 #include <spdlog/spdlog.h>
 #include <spdlog/fmt/fmt.h>

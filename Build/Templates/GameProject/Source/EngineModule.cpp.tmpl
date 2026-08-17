@@ -30,7 +30,7 @@ protected:
 	void PostShutdown() override { Execute<Maho::EEngineStage::PostShutdown, FList, Maho::FReverseTopology>(); }
 };
 
-extern "C" Maho::IRunable* CreateEngine()
+extern "C" Maho::IExtension<Maho::EEngineStage>* CreateEngine()
 {
 	return new {{APP_CLASS}}();
 }

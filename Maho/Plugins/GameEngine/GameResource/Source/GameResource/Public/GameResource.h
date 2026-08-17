@@ -2,7 +2,7 @@
 
 #include "GameResourceApi.h"
 #include <GameResource.gen.h>
-#include <Engine.h>
+#include <Core/Core.h>
 
 namespace Maho
 {

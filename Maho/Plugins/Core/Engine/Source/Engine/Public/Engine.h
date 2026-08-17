@@ -8,29 +8,12 @@
 namespace Maho
 {
 
-/** Engine lifecycle stages. */
-enum class EEngineStage : std::uint8_t
-{
-	PreInit = 0,
-	Init,
-	PostInit,
-	PreTick,
-	Tick,
-	PostTick,
-	PreShutdown,
-	Shutdown,
-	PostShutdown
-};
-
 /** Engine base: parallel drive (owns its thread pool). */
-class MAHO_ENGINE_API FEngineBase;
-
-/** The running engine instance — set by FEngineBase's ctor, read by extensions (e.g. Platform) to request exit. */
-inline FEngineBase* GApp = nullptr;
-
 class MAHO_ENGINE_API FEngineBase
 	: public TParallelScheduler<EEngineStage>
 	, public IRunable
+	, public IExtension<EEngineStage>
+	, public IAppContext
 {
 protected:
 	FEngineBase()
@@ -52,32 +35,46 @@ public:
 	virtual ~FEngineBase() = default;
 
 	/** Request the main loop to exit (safe to call from any extension). */
-	void RequestShutdown()
+	void RequestShutdown() override
 	{
 		CurrentStage = EEngineStage::PreShutdown;
 	}
 
+	/** Unified stage drive: dispatches to the 9 stage virtuals. */
+	bool ExecuteStage(EEngineStage Stage) override
+	{
+		switch (Stage)
+		{
+		case EEngineStage::PreInit: PreInit(); break;
+		case EEngineStage::Init: Init(); break;
+		case EEngineStage::PostInit: PostInit(); break;
+		case EEngineStage::PreTick: PreTick(); break;
+		case EEngineStage::Tick: Tick(); break;
+		case EEngineStage::PostTick: PostTick(); break;
+		case EEngineStage::PreShutdown: PreShutdown(); break;
+		case EEngineStage::Shutdown: Shutdown(); break;
+		case EEngineStage::PostShutdown: PostShutdown(); break;
+		}
+		return true;
+	}
+
+	/** Convenience: run the full lifecycle loop via ExecuteStage. */
 	void MainLoop() final override
 	{
-		PreInit();
-		Init();
-		PostInit();
+		ExecuteStage(EEngineStage::PreInit);
+		ExecuteStage(EEngineStage::Init);
+		ExecuteStage(EEngineStage::PostInit);
 
-		while (true)
+		while (CurrentStage != EEngineStage::PreShutdown)
 		{
-			PreTick();
-			Tick();
-			PostTick();
-
-			if (CurrentStage == EEngineStage::PreShutdown)
-			{
-				break;
-			}
+			ExecuteStage(EEngineStage::PreTick);
+			ExecuteStage(EEngineStage::Tick);
+			ExecuteStage(EEngineStage::PostTick);
 		}
 
-		PreShutdown();
-		Shutdown();
-		PostShutdown();
+		ExecuteStage(EEngineStage::PreShutdown);
+		ExecuteStage(EEngineStage::Shutdown);
+		ExecuteStage(EEngineStage::PostShutdown);
 	}
 
 private:

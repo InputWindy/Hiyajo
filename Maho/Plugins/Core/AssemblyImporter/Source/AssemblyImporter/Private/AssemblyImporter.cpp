@@ -13,13 +13,13 @@ bool FAssemblyImporter::ImportToolkit(std::string_view Path)
 	{
 		return false;
 	}
-	const auto Create = ToolkitAssembly.GetProc<FToolkitBase*()>("CreateTool");
+	const auto Create = ToolkitAssembly.GetProc<IExtension<EToolStage>*()>("CreateTool");
 	if (Create == nullptr)
 	{
 		ToolkitAssembly.Unload();
 		return false;
 	}
-	Toolkit = Create();   // ctor runs Init
+	Toolkit = Create();
 	return Toolkit != nullptr;
 }
 
@@ -33,7 +33,7 @@ bool FAssemblyImporter::ImportEngine(std::string_view Path)
 	{
 		return false;
 	}
-	const auto Create = EngineAssembly.GetProc<IRunable*()>("CreateEngine");
+	const auto Create = EngineAssembly.GetProc<IExtension<EEngineStage>*()>("CreateEngine");
 	if (Create == nullptr)
 	{
 		EngineAssembly.Unload();
@@ -47,9 +47,9 @@ bool FAssemblyImporter::ExecuteStage(EEngineStage Stage)
 {
 	if (Stage == EEngineStage::Shutdown)
 	{
-		delete Engine;                  // dtor runs the engine's shutdown
+		delete Engine;                  // virtual dtor via IExtension
 		Engine = nullptr;
-		delete Toolkit;                 // dtor runs the toolkit's shutdown
+		delete Toolkit;                 // virtual dtor via IExtension
 		Toolkit = nullptr;
 		EngineAssembly.Unload();
 		ToolkitAssembly.Unload();

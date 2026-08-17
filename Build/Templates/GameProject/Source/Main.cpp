@@ -23,12 +23,17 @@ static int RunDynamic()
 		return 1;
 	}
 
-	Maho::IRunable* Engine = Importer.GetEngine();
+	Maho::IExtension<Maho::EEngineStage>* Engine = Importer.GetEngine();
 	if (Engine == nullptr)
 	{
 		return 1;
 	}
-	Engine->MainLoop();
+	Maho::IRunable* Runable = dynamic_cast<Maho::IRunable*>(Engine);
+	if (Runable == nullptr)
+	{
+		return 1;
+	}
+	Runable->MainLoop();
 
 	Importer.ExecuteStage(Maho::EEngineStage::Shutdown);
 	return 0;

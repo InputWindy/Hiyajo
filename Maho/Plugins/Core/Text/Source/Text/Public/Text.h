@@ -2,7 +2,7 @@
 
 #include "TextApi.h"
 #include "Text.gen.h"
-#include <Toolkit.h>
+#include <Core/Core.h>
 
 #include <mutex>
 #include <string>
