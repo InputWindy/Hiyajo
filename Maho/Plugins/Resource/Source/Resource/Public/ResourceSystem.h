@@ -91,7 +91,7 @@ struct TResourceExporter;   // undefined — specialize per resource type
  * internal — the header only forward-declares it. Importers see std::span /
  * std::vector of raw bytes.
  */
-class MAHO_RESOURCE_API FResourceSystem final
+class MAHO_RESOURCE_API FResourceSystem
 	: public TExtension<EEngineStage, FResourceSystem>
 	, public FThreadedServer
 {
@@ -117,7 +117,7 @@ public:
 protected:
 	[[nodiscard]] const char* GetThreadName() const override;
 
-private:
+protected:
 	friend TSingleton<FResourceSystem>;
 	FResourceSystem();
 

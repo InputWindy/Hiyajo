@@ -11,14 +11,14 @@ namespace {{NAMESPACE}}
 {
 
 /** {{DESCRIPTION}} {{STAGE_LABEL}} */
-class MAHO_{{EXPORT_NAME}}_API {{CLASS}} final
+class MAHO_{{EXPORT_NAME}}_API {{CLASS}}
 	: public TExtension<{{STAGE}}, {{CLASS}}>
-	, public {{CLASS}}Dependencies
+{{INHERITS_BASES}}	, public {{CLASS}}Dependencies
 {
 public:
-	[[nodiscard]] bool ExecuteStage({{STAGE}} Stage) override;
+{{GET_USING}}	[[nodiscard]] bool ExecuteStage({{STAGE}} Stage) override;
 
-private:
+protected:
 	friend TSingleton<{{CLASS}}>;
 	{{CLASS}}() = default;
 };

@@ -11,7 +11,7 @@ namespace RHI
 {
 
 	/** Render hardware interface extension (GPU device). Engine extension (driven by EEngineStage). */
-	class MAHO_RHI_API FRHI final
+	class MAHO_RHI_API FRHI
 		: public TExtension<EEngineStage, FRHI>
 		, public FThreadedServer
 	{

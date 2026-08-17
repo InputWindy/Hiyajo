@@ -44,7 +44,7 @@ public:
  *
  * Headless when no backend is created. ExecuteStage(Tick) pumps events.
  */
-class MAHO_PLATFORM_API FPlatformSystem final : public TExtension<EEngineStage, FPlatformSystem>
+class MAHO_PLATFORM_API FPlatformSystem : public TExtension<EEngineStage, FPlatformSystem>
 {
 public:
 	[[nodiscard]] bool ExecuteStage(EEngineStage Stage) override;
@@ -64,7 +64,7 @@ public:
 	/** Window close request (false when headless or no events). */
 	[[nodiscard]] bool ShouldClose() const;
 
-private:
+protected:
 	friend TSingleton<FPlatformSystem>;
 	FPlatformSystem() = default;
 

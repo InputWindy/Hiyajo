@@ -10,12 +10,12 @@ namespace CommandParser
 {
 
 /** Command-line argument parser extension (key-value store). Pre-app toolkit (driven by EToolStage). */
-class MAHO_COMMANDPARSER_API FCommandParser final : public TExtension<EToolStage, FCommandParser>
+class MAHO_COMMANDPARSER_API FCommandParser : public TExtension<EToolStage, FCommandParser>
 {
 public:
 	[[nodiscard]] bool ExecuteStage(EToolStage Stage) override;
 
-private:
+protected:
 	friend TSingleton<FCommandParser>;
 	FCommandParser() = default;
 };

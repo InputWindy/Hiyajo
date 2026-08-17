@@ -47,7 +47,7 @@ private:
 };
 
 /** Global interned string pool (pre-app singleton). Init/Clear on lifecycle. */
-class MAHO_NAME_API FNamePool final : public TExtension<EToolStage, FNamePool>
+class MAHO_NAME_API FNamePool : public TExtension<EToolStage, FNamePool>
 {
 public:
 	[[nodiscard]] bool ExecuteStage(EToolStage Stage) override;
@@ -55,7 +55,7 @@ public:
 	/** Intern a string — returns the canonical FName (thread-safe). */
 	[[nodiscard]] FName Intern(std::string_view Str);
 
-private:
+protected:
 	friend TSingleton<FNamePool>;
 	FNamePool() = default;
 };

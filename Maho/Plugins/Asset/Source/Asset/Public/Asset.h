@@ -62,7 +62,7 @@ struct FAssetData
  * and indexes every asset file; Find() resolves a logical path.
  * Pre-app toolkit (driven by EToolStage).
  */
-class MAHO_ASSET_API FAssetRegistry final
+class MAHO_ASSET_API FAssetRegistry
 	: public TExtension<EToolStage, FAssetRegistry>
 	, public FAssetRegistryDependencies
 {
@@ -86,7 +86,7 @@ public:
 
 	[[nodiscard]] std::size_t GetAssetCount() const;
 
-private:
+protected:
 	friend TSingleton<FAssetRegistry>;
 	FAssetRegistry() = default;
 

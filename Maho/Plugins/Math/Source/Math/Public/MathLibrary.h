@@ -24,12 +24,12 @@ template <typename T> [[nodiscard]] constexpr T Clamp(const T& Value, const T& M
 [[nodiscard]] inline constexpr float RadiansToDegrees(float Rad) { return Rad * 57.29577951308232f; }
 
 /** Math library extension (GLM + math helpers). Pre-app toolkit (driven by EToolStage). */
-class MAHO_MATH_API FMath final : public TExtension<EToolStage, FMath>
+class MAHO_MATH_API FMath : public TExtension<EToolStage, FMath>
 {
 public:
 	[[nodiscard]] bool ExecuteStage(EToolStage Stage) override;
 
-private:
+protected:
 	friend TSingleton<FMath>;
 	FMath() = default;
 };

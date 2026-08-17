@@ -26,7 +26,7 @@ namespace Timer
  *
  *   Maho::Timer::FTimer::Get().DumpToString();   // "Render: 1.23 ms (n calls, avg, max)"
  */
-class MAHO_TIMER_API FTimer final : public TExtension<EToolStage, FTimer>
+class MAHO_TIMER_API FTimer : public TExtension<EToolStage, FTimer>
 {
 public:
 	[[nodiscard]] bool ExecuteStage(EToolStage Stage) override;
@@ -43,7 +43,7 @@ public:
 	/** Format the timing tree as text (milliseconds). */
 	[[nodiscard]] std::string DumpToString() const;
 
-private:
+protected:
 	friend TSingleton<FTimer>;
 	FTimer() = default;
 
@@ -95,7 +95,7 @@ public:
 	[[nodiscard]] double GetTimeScale() const;
 	[[nodiscard]] bool IsPaused() const;
 
-private:
+protected:
 	friend TSingleton<FGameClock>;
 	FGameClock() = default;
 

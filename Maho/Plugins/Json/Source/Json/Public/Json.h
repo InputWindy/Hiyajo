@@ -15,12 +15,12 @@ namespace Json
 using FJsonValue = nlohmann::json;
 
 /** JSON serialization extension (nlohmann/json). Pre-app toolkit (driven by EToolStage). */
-class MAHO_JSON_API FJson final : public TExtension<EToolStage, FJson>
+class MAHO_JSON_API FJson : public TExtension<EToolStage, FJson>
 {
 public:
 	[[nodiscard]] bool ExecuteStage(EToolStage Stage) override;
 
-private:
+protected:
 	friend TSingleton<FJson>;
 	FJson() = default;
 };

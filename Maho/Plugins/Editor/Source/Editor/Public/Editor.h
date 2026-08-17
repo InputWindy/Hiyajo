@@ -10,7 +10,7 @@ namespace Editor
 {
 
 	/** Editor tooling extension (ImGui editor UI). Engine extension (driven by EEngineStage). */
-	class MAHO_EDITOR_API FEditorSystem final : public TExtension<EEngineStage, FEditorSystem>
+	class MAHO_EDITOR_API FEditorSystem : public TExtension<EEngineStage, FEditorSystem>
 	{
 	public:
 		[[nodiscard]] bool ExecuteStage(EEngineStage Stage) override;

@@ -96,7 +96,7 @@ public:
 };
 
 /** Reader over an existing byte buffer (the buffer must outlive the reader). */
-class MAHO_ARCHIVE_API FMemoryReader final : public FArchive
+class MAHO_ARCHIVE_API FMemoryReader : public FArchive
 {
 public:
 	explicit FMemoryReader(const std::vector<std::uint8_t>& InData);
@@ -111,7 +111,7 @@ private:
 };
 
 /** Writer that accumulates into an owned byte buffer. */
-class MAHO_ARCHIVE_API FMemoryWriter final : public FArchive
+class MAHO_ARCHIVE_API FMemoryWriter : public FArchive
 {
 public:
 	FMemoryWriter();
@@ -128,12 +128,12 @@ private:
 };
 
 /** Serialization extension (pre-app toolkit, no state). */
-class MAHO_ARCHIVE_API FArchiveSystem final : public TExtension<EToolStage, FArchiveSystem>
+class MAHO_ARCHIVE_API FArchiveSystem : public TExtension<EToolStage, FArchiveSystem>
 {
 public:
 	[[nodiscard]] bool ExecuteStage(EToolStage Stage) override;
 
-private:
+protected:
 	friend TSingleton<FArchiveSystem>;
 	FArchiveSystem() = default;
 };

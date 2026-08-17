@@ -64,7 +64,7 @@ private:
 };
 
 /** Localization manager: current culture + translation catalog (pre-app singleton). */
-class MAHO_TEXT_API FTextManager final
+class MAHO_TEXT_API FTextManager
 	: public TExtension<EToolStage, FTextManager>
 	, public FTextManagerDependencies
 {
@@ -86,7 +86,7 @@ public:
 	/** Look up a translation; returns nullptr when absent. Thread-safe. */
 	[[nodiscard]] const std::string* FindTranslation(std::string_view InNamespace, std::string_view InKey, std::string_view InCulture) const;
 
-private:
+protected:
 	friend TSingleton<FTextManager>;
 	FTextManager() = default;
 

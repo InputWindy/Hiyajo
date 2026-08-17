@@ -10,12 +10,12 @@ namespace Audio
 {
 
 /** Audio playback library extension (device + sources). Pre-app toolkit (driven by EToolStage). */
-class MAHO_AUDIO_API FAudio final : public TExtension<EToolStage, FAudio>
+class MAHO_AUDIO_API FAudio : public TExtension<EToolStage, FAudio>
 {
 public:
 	[[nodiscard]] bool ExecuteStage(EToolStage Stage) override;
 
-private:
+protected:
 	friend TSingleton<FAudio>;
 	FAudio() = default;
 };

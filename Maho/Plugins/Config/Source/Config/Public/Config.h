@@ -27,7 +27,7 @@ namespace Config
  *
  *   FConfig::Get().GetString("/Script/Engine.Engine", "GameName"); Game"
  */
-class MAHO_CONFIG_API FConfig final : public TExtension<EToolStage, FConfig>
+class MAHO_CONFIG_API FConfig : public TExtension<EToolStage, FConfig>
 {
 public:
 	[[nodiscard]] bool ExecuteStage(EToolStage Stage) override;
@@ -49,7 +49,7 @@ public:
 	[[nodiscard]] bool HasSection(std::string_view Section) const;
 	[[nodiscard]] bool HasKey(std::string_view Section, std::string_view Key) const;
 
-private:
+protected:
 	friend TSingleton<FConfig>;
 	FConfig() = default;
 

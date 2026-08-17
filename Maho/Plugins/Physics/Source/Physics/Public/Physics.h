@@ -10,12 +10,12 @@ namespace Physics
 {
 
 /** Physics simulation library extension (rigid body solver). Pre-app toolkit (driven by EToolStage). */
-class MAHO_PHYSICS_API FPhysics final : public TExtension<EToolStage, FPhysics>
+class MAHO_PHYSICS_API FPhysics : public TExtension<EToolStage, FPhysics>
 {
 public:
 	[[nodiscard]] bool ExecuteStage(EToolStage Stage) override;
 
-private:
+protected:
 	friend TSingleton<FPhysics>;
 	FPhysics() = default;
 };

@@ -25,7 +25,7 @@ namespace Exception
  *   });
  *   FException::Get().ReportException("failed to load texture");
  */
-class MAHO_EXCEPTION_API FException final : public TExtension<EEngineStage, FException>
+class MAHO_EXCEPTION_API FException : public TExtension<EEngineStage, FException>
 {
 public:
 	[[nodiscard]] bool ExecuteStage(EEngineStage Stage) override;
@@ -39,7 +39,7 @@ public:
 	/** Subscribers receive every reported exception message. */
 	TDelegate<void(const std::string&)> OnException;
 
-private:
+protected:
 	friend TSingleton<FException>;
 	FException() = default;
 };

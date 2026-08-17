@@ -10,12 +10,12 @@ namespace Compress
 {
 
 /** Compression extension (zlib/zstd). Pre-app toolkit (driven by EToolStage). */
-class MAHO_COMPRESS_API FCompress final : public TExtension<EToolStage, FCompress>
+class MAHO_COMPRESS_API FCompress : public TExtension<EToolStage, FCompress>
 {
 public:
 	[[nodiscard]] bool ExecuteStage(EToolStage Stage) override;
 
-private:
+protected:
 	friend TSingleton<FCompress>;
 	FCompress() = default;
 };

@@ -66,7 +66,7 @@ public:
  * globals register here at static-init; FindConsoleVariable looks them up.
  * Pre-app toolkit (driven by EToolStage).
  */
-class MAHO_CONSOLEVARIABLE_API FConsoleVariable final : public TExtension<EToolStage, FConsoleVariable>
+class MAHO_CONSOLEVARIABLE_API FConsoleVariable : public TExtension<EToolStage, FConsoleVariable>
 {
 public:
 	[[nodiscard]] bool ExecuteStage(EToolStage Stage) override;
@@ -82,7 +82,7 @@ public:
 		std::string_view Description,
 		ECVarFlags Flags);
 
-private:
+protected:
 	friend TSingleton<FConsoleVariable>;
 	FConsoleVariable() = default;
 

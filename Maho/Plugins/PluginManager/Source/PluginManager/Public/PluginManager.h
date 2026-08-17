@@ -30,7 +30,7 @@ using FCreateExtensionFn = IExtension<EEngineStage>* (*)();
  * The manager drives every loaded extension through the SAME stage enum as
  * static extensions: ExecuteStage(EEngineStage::PreInit/Init/Tick/...).
  */
-class MAHO_PLUGINMANAGER_API FPluginManager final : public TExtension<EEngineStage, FPluginManager>
+class MAHO_PLUGINMANAGER_API FPluginManager : public TExtension<EEngineStage, FPluginManager>
 {
 public:
 	[[nodiscard]] bool ExecuteStage(EEngineStage Stage) override;
@@ -41,7 +41,7 @@ public:
 	/** Queue an uninstall request (Shutdown + FreeLibrary at the next stage boundary). */
 	void Uninstall(std::string_view Name);
 
-private:
+protected:
 	friend TSingleton<FPluginManager>;
 	FPluginManager() = default;
 };

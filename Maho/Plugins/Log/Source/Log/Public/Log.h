@@ -17,12 +17,12 @@ namespace Log
 enum class ELogLevel : std::uint8_t { Debug = 0, Info, Warn, Error, Off };
 
 /** Logging extension (spdlog). Pre-app toolkit (driven by EToolStage). */
-class MAHO_LOG_API FLogger final : public TExtension<EToolStage, FLogger>
+class MAHO_LOG_API FLogger : public TExtension<EToolStage, FLogger>
 {
 public:
 	[[nodiscard]] bool ExecuteStage(EToolStage Stage) override;
 
-private:
+protected:
 	friend TSingleton<FLogger>;
 	FLogger() = default;
 };

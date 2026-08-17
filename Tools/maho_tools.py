@@ -724,6 +724,18 @@ def create_plugin(
 		else "pre-app toolkit (driven by EToolStage)"
 	)
 
+	# Resolve parent plugin names → fully-qualified class names (C++ bases).
+	parent_classes: list[str] = []
+	if inherits:
+		existing = {
+			p["Name"]: (p.get("Extension") or {}).get("Class", "")
+			for p in list_engine_plugins(engine_root)
+		}
+		parent_classes = [existing[p] for p in inherits if existing.get(p)]
+
+	inherits_bases = "".join(f"\t, public {pc}\n" for pc in parent_classes)
+	get_using = f"\tusing TSingleton<{class_name}>::Get;\n" if parent_classes else ""
+
 	# Dynamic factory — exported via the plugin's API macro. The signature is
 	# stage-parameterized: IExtension<EEngineStage> or IExtension<EToolStage>.
 	factory_block = (
@@ -759,6 +771,8 @@ def create_plugin(
 		"DESCRIPTION": description,
 		"STAGE_LABEL": stage_label,
 		"FACTORY_BLOCK": factory_block,
+		"INHERITS_BASES": inherits_bases,
+		"GET_USING": get_using,
 		"INHERITS_LINE": (
 			f'"Inherits": {json.dumps(inherits)},\n'
 			if inherits

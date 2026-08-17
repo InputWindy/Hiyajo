@@ -10,7 +10,7 @@ namespace Network
 {
 
 	/** Network communication extension (client/server). Engine extension (driven by EEngineStage). */
-	class MAHO_NETWORK_API FNetworkSystem final : public TExtension<EEngineStage, FNetworkSystem>
+	class MAHO_NETWORK_API FNetworkSystem : public TExtension<EEngineStage, FNetworkSystem>
 	{
 	public:
 		[[nodiscard]] bool ExecuteStage(EEngineStage Stage) override;

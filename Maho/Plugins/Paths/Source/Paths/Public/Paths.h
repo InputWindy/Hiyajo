@@ -14,7 +14,7 @@ namespace Paths
 {
 
 /** Path resolution extension (project/engine roots). Pre-app toolkit (driven by EToolStage). */
-class MAHO_PATHS_API FPaths final : public TExtension<EToolStage, FPaths>
+class MAHO_PATHS_API FPaths : public TExtension<EToolStage, FPaths>
 {
 public:
 	[[nodiscard]] bool ExecuteStage(EToolStage Stage) override;
@@ -28,7 +28,7 @@ public:
 	/** True when the alias is registered. */
 	[[nodiscard]] bool HasRoot(std::string_view Alias) const;
 
-private:
+protected:
 	friend TSingleton<FPaths>;
 	FPaths() = default;
 

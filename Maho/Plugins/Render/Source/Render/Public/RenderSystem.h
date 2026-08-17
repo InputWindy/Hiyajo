@@ -11,7 +11,7 @@ namespace Render
 {
 
 	/** Render/RHI/RDG/Shader/UI extension. Engine extension (driven by EEngineStage). */
-	class MAHO_RENDER_API FRenderSystem final
+	class MAHO_RENDER_API FRenderSystem
 		: public TExtension<EEngineStage, FRenderSystem>
 		, public FThreadedServer
 	{
