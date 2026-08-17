@@ -129,7 +129,15 @@ class CreatePluginApp(tk.Tk):
 			name = p["Name"]
 			self._inheritables.append(name)
 			self._checked[name] = False
-			self.inherit_tree.insert("", tk.END, iid=name, text=self._label(name), open=True)
+			# Mirror the directory hierarchy (collapsible group nodes).
+			parent = ""
+			group = p.get("Group") or []
+			for i in range(len(group)):
+				gid = "group:" + "/".join(group[: i + 1])
+				if not self.inherit_tree.exists(gid):
+					self.inherit_tree.insert(parent, tk.END, iid=gid, text=group[i], open=True)
+				parent = gid
+			self.inherit_tree.insert(parent, tk.END, iid=name, text=self._label(name), open=True)
 
 	def _label(self, name: str) -> str:
 		mark = _CHECKED if self._checked.get(name) else _UNCHECKED
