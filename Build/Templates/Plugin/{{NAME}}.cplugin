@@ -8,6 +8,7 @@
 		{
 			"Name": "{{NAME}}",
 			"Type": "Runtime",
+			"Dependencies": [],
 			"Extension": {
 				"Class": "{{NAMESPACE}}::{{CLASS}}",
 				"Header": "{{NAME}}.h",

@@ -410,7 +410,7 @@ def codegen_plugin_dependencies(engine_root: Path) -> list[Path]:
 		cplugin_path = plugins_dir / name / f"{name}.cplugin"
 		deps = (read_cplugin(cplugin_path).get("Modules", [{}])[0]).get("Dependencies", [])
 		if not deps:
-			continue
+			continue   # no deps — keep the scaffold's static <Name>.gen.h (empty pack)
 
 		cls = info["Class"]
 		class_short = cls.split("::")[-1]
