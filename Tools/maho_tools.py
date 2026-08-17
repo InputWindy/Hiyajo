@@ -453,6 +453,145 @@ def codegen_plugin_dependencies(engine_root: Path) -> list[Path]:
 	return generated
 
 
+# ───────────────────────────────────────────────────────────────────────
+# Plugin health: validate (pre-compile check) + fix (regenerate missing files).
+# ───────────────────────────────────────────────────────────────────────
+
+def _api_header_text(name: str) -> str:
+	"""<Name>Api.h body — the plugin's MAHO_<NAME>_API export macro."""
+	export = name.upper()
+	return (
+		"#pragma once\n\n"
+		"#include <Core/Export.h>\n\n"
+		f"#ifdef MAHO_{export}_MODULE_EXPORTS\n"
+		f"#	define MAHO_{export}_API MAHO_EXPORT\n"
+		"#else\n"
+		f"#	define MAHO_{export}_API MAHO_IMPORT\n"
+		"#endif\n"
+	)
+
+
+def _empty_gen_header_text(name: str, namespace: str, class_short: str) -> str:
+	"""<Name>.gen.h body for a plugin with no Dependencies (empty FDependsPack)."""
+	return (
+		f"// Generated from {name}.cplugin Dependencies — do not edit by hand.\n"
+		"#pragma once\n"
+		"#include <Engine.h>\n\n"
+		"namespace Maho\n{\n\n"
+		f"namespace {namespace}\n{{\n\n"
+		"/** Scheduler-level dependency declaration, synced from .cplugin. */\n"
+		f"struct {class_short}Dependencies\n"
+		"{\n"
+		"\tusing FDependsPack = TDependsPack<>;\n"
+		"};\n\n"
+		f"}} // namespace {namespace}\n\n"
+		"} // namespace Maho\n"
+	)
+
+
+def validate_plugins(
+	engine_root: Path,
+	enabled: set[str] | None = None,
+) -> list[tuple[str, str]]:
+	"""
+	Check every plugin (or only the enabled set) for missing headers that would
+	break compilation. Returns [(severity, message)] — severity is 'error' or
+	'warning'. Empty list = all healthy.
+	"""
+	plugins_dir = (engine_root / "Maho" / "Plugins").resolve()
+	if not plugins_dir.is_dir():
+		return [("error", f"Plugins dir not found: {plugins_dir}")]
+
+	problems: list[tuple[str, str]] = []
+	for cplugin_path in discover_cplugin_files([plugins_dir]):
+		data = read_cplugin(cplugin_path)
+		name = cplugin_path.parent.name
+		if enabled is not None and name not in enabled:
+			continue
+		mod = data.get("Modules", [{}])[0]
+		ext = mod.get("Extension") or {}
+		header = ext.get("Header", f"{name}.h")
+		public_dir = cplugin_path.parent / "Source" / name / "Public"
+		private_dir = cplugin_path.parent / "Source" / name / "Private"
+
+		# Skip empty scaffolding — no implementation (.cpp) means nothing to compile.
+		if not private_dir.is_dir() or not any(p.suffix == ".cpp" for p in private_dir.glob("*.cpp")):
+			continue
+
+		if not (public_dir / header).is_file():
+			problems.append(("error", f"{name}: Extension.Header '{header}' missing"))
+		if not (public_dir / f"{name}Api.h").is_file():
+			problems.append(("error", f"{name}: {name}Api.h missing (export macro)"))
+		if not (public_dir / f"{name}.gen.h").is_file():
+			problems.append(("warning", f"{name}: {name}.gen.h missing (FDependsPack)"))
+
+		for dep in mod.get("Dependencies", []) or []:
+			if not (plugins_dir / dep / f"{dep}.cplugin").is_file():
+				problems.append(("error", f"{name}: dependency plugin '{dep}' not found"))
+
+	return problems
+
+
+def fix_plugin(cplugin_path: Path, engine_root: Path | None = None) -> list[str]:
+	"""
+	Auto-fix one plugin's missing generated headers (Api.h + .gen.h).
+	Returns human-readable messages ('FIXED ...' / 'UNFIXABLE ...').
+	"""
+	engine_root = (engine_root or ENGINE_ROOT).resolve()
+	cplugin_path = cplugin_path.resolve()
+	data = read_cplugin(cplugin_path)
+	name = cplugin_path.parent.name
+	mod = data.get("Modules", [{}])[0]
+	ext = mod.get("Extension") or {}
+	header = ext.get("Header", f"{name}.h")
+	cls = ext.get("Class", f"Maho::{name}::F{name}")
+	deps = mod.get("Dependencies", []) or []
+
+	parts = cls.split("::")
+	class_short = parts[-1]
+	namespace = parts[-2] if len(parts) >= 3 else name
+
+	public_dir = cplugin_path.parent / "Source" / name / "Public"
+	public_dir.mkdir(parents=True, exist_ok=True)
+
+	messages: list[str] = []
+
+	api = public_dir / f"{name}Api.h"
+	if not api.is_file():
+		api.write_text(_api_header_text(name), encoding="utf-8", newline="\n")
+		messages.append(f"FIXED {api.relative_to(engine_root)}")
+
+	gen = public_dir / f"{name}.gen.h"
+	if not gen.is_file():
+		if deps:
+			codegen_plugin_dependencies(engine_root)
+			messages.append(f"FIXED {name}.gen.h (from Dependencies)")
+		else:
+			gen.write_text(_empty_gen_header_text(name, namespace, class_short), encoding="utf-8", newline="\n")
+			messages.append(f"FIXED {gen.relative_to(engine_root)}")
+
+	main = public_dir / header
+	if not main.is_file():
+		messages.append(f"UNFIXABLE {name}: Extension.Header '{header}' missing — content unknown")
+
+	return messages
+
+
+def fix_plugins(engine_root: Path | None = None) -> list[str]:
+	"""Batch-fix all plugins (Api.h + .gen.h), then regenerate dep .gen.h files."""
+	engine_root = (engine_root or ENGINE_ROOT).resolve()
+	plugins_dir = engine_root / "Maho" / "Plugins"
+	if not plugins_dir.is_dir():
+		return [f"ERROR Plugins dir not found: {plugins_dir}"]
+
+	messages: list[str] = []
+	for cplugin_path in discover_cplugin_files([plugins_dir]):
+		messages.extend(fix_plugin(cplugin_path, engine_root))
+	# Regenerate dependency packs for every plugin that declares Dependencies.
+	codegen_plugin_dependencies(engine_root)
+	return messages
+
+
 def codegen_game_app(cproject_path: Path) -> Path:
 	"""
 	Regenerate Source/GameApp.cpp from the .cproject's current plugin selection.
@@ -829,6 +968,25 @@ def generate_from_cproject(
 	# Sync .cplugin Dependencies → <Name>.gen.h (scheduler-level FDependsPack).
 	codegen_plugin_dependencies(engine_root)
 
+	# Pre-compile health check — fail fast on missing headers before cmake does.
+	overrides = parse_cproject_plugin_overrides(data)
+	if overrides is None:
+		enabled_names = {p["Name"] for p in list_engine_plugins(engine_root) if p.get("EnabledByDefault", True)}
+	else:
+		enabled_names = {name for name, on in overrides.items() if on}
+	problems = validate_plugins(engine_root, enabled=enabled_names)
+	hard_errors = 0
+	for severity, msg in problems:
+		tag = "ERROR" if severity == "error" else "WARN"
+		log(f"[Maho][{tag}] {msg}")
+		if severity == "error":
+			hard_errors += 1
+	if hard_errors:
+		raise RuntimeError(
+			f"Plugin validation failed ({hard_errors} error(s)) — "
+			"run fix_plugins.bat, or double-click the broken .cplugin to auto-fix."
+		)
+
 	lock = _GenerateLock(intermediate)
 	lock.acquire()
 	try:
@@ -1135,6 +1293,143 @@ def install_cproject_association(*, log: Any = print) -> None:
 		install_windows_cproject_association(log=log)
 	else:
 		install_linux_cproject_association(log=log)
+
+
+def install_windows_cplugin_association(*, log: Any = print) -> None:
+	if sys.platform != "win32":
+		raise RuntimeError("File association is only implemented for Windows.")
+
+	import winreg
+
+	fix_vbs = ENGINE_ROOT / "Tools" / "launch_fix_plugin.vbs"
+	if not fix_vbs.is_file():
+		raise FileNotFoundError(f"Missing {fix_vbs}")
+
+	prog_id = "Maho.CPlugin"
+	wscript = str(Path(os.environ.get("SystemRoot", r"C:\Windows")) / "System32" / "wscript.exe")
+	open_command = f"\"{wscript}\" //nologo \"{fix_vbs}\" \"%1\""
+
+	# Clear Explorer "chosen app" state for .cplugin.
+	_winreg_delete_tree(
+		winreg.HKEY_CURRENT_USER,
+		r"Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.cplugin\UserChoice",
+	)
+	try:
+		with winreg.CreateKeyEx(
+			winreg.HKEY_CURRENT_USER,
+			r"Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\.cplugin\OpenWithProgids",
+		) as key:
+			winreg.SetValueEx(key, prog_id, 0, winreg.REG_NONE, b"")
+	except OSError as ex:
+		log(f"[Maho] OpenWithProgids cleanup warning: {ex}")
+
+	with winreg.CreateKeyEx(winreg.HKEY_CURRENT_USER, r"Software\Classes\.cplugin") as key:
+		winreg.SetValueEx(key, None, 0, winreg.REG_SZ, prog_id)
+
+	with winreg.CreateKeyEx(
+		winreg.HKEY_CURRENT_USER,
+		r"Software\Classes\.cplugin\OpenWithProgids",
+	) as key:
+		winreg.SetValueEx(key, prog_id, 0, winreg.REG_NONE, b"")
+
+	with winreg.CreateKeyEx(winreg.HKEY_CURRENT_USER, rf"Software\Classes\{prog_id}") as key:
+		winreg.SetValueEx(key, None, 0, winreg.REG_SZ, "Maho Plugin")
+
+	with winreg.CreateKeyEx(
+		winreg.HKEY_CURRENT_USER,
+		rf"Software\Classes\{prog_id}\shell\open\command",
+	) as key:
+		winreg.SetValueEx(key, None, 0, winreg.REG_SZ, open_command)
+
+	log("[Maho] Associated .cplugin → launch_fix_plugin.vbs (current user)")
+	log(f"[Maho] Open: {open_command}")
+
+
+def install_linux_cplugin_association(*, log: Any = print) -> None:
+	if sys.platform == "win32":
+		raise RuntimeError("Linux file association called on Windows.")
+
+	fix_sh = ENGINE_ROOT / "Tools" / "fix_plugin.sh"
+	if not fix_sh.is_file():
+		raise FileNotFoundError(f"Missing {fix_sh}")
+
+	data_home = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share"))
+	config_home = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
+	apps_dir = data_home / "applications"
+	mime_pkg_dir = data_home / "mime" / "packages"
+	apps_dir.mkdir(parents=True, exist_ok=True)
+	mime_pkg_dir.mkdir(parents=True, exist_ok=True)
+
+	desktop = apps_dir / "maho-cplugin.desktop"
+	desktop.write_text(
+		"[Desktop Entry]\n"
+		"Type=Application\n"
+		"Name=Fix Maho Plugin\n"
+		"Comment=Auto-fix missing headers in a Maho .cplugin\n"
+		f'Exec="{fix_sh}" %f\n'
+		"MimeType=application/x-maho-cplugin;\n"
+		"Terminal=false\n"
+		"NoDisplay=true\n",
+		encoding="utf-8",
+		newline="\n",
+	)
+
+	mime_xml = mime_pkg_dir / "maho-cplugin.xml"
+	mime_xml.write_text(
+		'<?xml version="1.0" encoding="UTF-8"?>\n'
+		'<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">\n'
+		'\t<mime-type type="application/x-maho-cplugin">\n'
+		'\t\t<comment>Maho Plugin</comment>\n'
+		'\t\t<glob pattern="*.cplugin"/>\n'
+		'\t</mime-type>\n'
+		'</mime-info>\n',
+		encoding="utf-8",
+		newline="\n",
+	)
+
+	update_mime = shutil.which("update-mime-database")
+	if update_mime:
+		subprocess.run([update_mime, str(data_home / "mime")], check=False)
+	update_desktop = shutil.which("update-desktop-database")
+	if update_desktop:
+		subprocess.run([update_desktop, str(apps_dir)], check=False)
+
+	apps_list = config_home / "mimeapps.list"
+	lines = apps_list.read_text(encoding="utf-8").splitlines() if apps_list.is_file() else []
+	section = "[Default Applications]"
+	entry = "application/x-maho-cplugin=maho-cplugin.desktop;"
+	out: list[str] = []
+	in_default = False
+	wrote = False
+	for line in lines:
+		if line.strip() == section:
+			in_default = True
+			out.append(line)
+			continue
+		if in_default and line.strip().startswith("["):
+			in_default = False
+		if in_default and line.startswith("application/x-maho-cplugin="):
+			out.append(entry)
+			wrote = True
+			continue
+		out.append(line)
+	if section not in {l.strip() for l in out}:
+		out.append(section)
+	if not wrote:
+		out.append(entry)
+	apps_list.write_text("\n".join(out) + "\n", encoding="utf-8", newline="\n")
+
+	log("[Maho] Associated .cplugin → fix_plugin.sh (current user)")
+	log(f"[Maho] Desktop: {desktop}")
+	log(f"[Maho] Mime:    {mime_xml}")
+
+
+def install_cplugin_association(*, log: Any = print) -> None:
+	"""Register the .cplugin file association for the current platform."""
+	if sys.platform == "win32":
+		install_windows_cplugin_association(log=log)
+	else:
+		install_linux_cplugin_association(log=log)
 
 
 

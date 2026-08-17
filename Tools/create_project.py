@@ -16,6 +16,7 @@ from maho_tools import (  # noqa: E402
 	ENGINE_ROOT,
 	create_project,
 	install_cproject_association,
+	install_cplugin_association,
 	is_valid_project_name,
 	list_engine_plugins,
 	open_in_file_manager,
@@ -241,6 +242,7 @@ class CreateProjectApp(tk.Tk):
 	def _run_associate(self) -> None:
 		try:
 			install_cproject_association(log=self.log_line)
+			install_cplugin_association(log=self.log_line)
 		except Exception as ex:  # noqa: BLE001
 			self.log_line(f"[Maho] Associate failed: {ex}")
 
