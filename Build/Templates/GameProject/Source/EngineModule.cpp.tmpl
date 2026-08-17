@@ -19,15 +19,23 @@ protected:
 		(void)Argv;
 	}
 
-	void PreInit() override      { Execute<Maho::EEngineStage::PreInit, FList>(); }
-	void Init() override         { Execute<Maho::EEngineStage::Init, FList>(); }
-	void PostInit() override     { Execute<Maho::EEngineStage::PostInit, FList>(); }
-	void PreTick() override      { Execute<Maho::EEngineStage::PreTick, FList>(); }
-	void Tick() override         { Execute<Maho::EEngineStage::Tick, FList>(); }
-	void PostTick() override     { Execute<Maho::EEngineStage::PostTick, FList>(); }
-	void PreShutdown() override  { Execute<Maho::EEngineStage::PreShutdown, FList, Maho::FReverseTopology>(); }
-	void Shutdown() override     { Execute<Maho::EEngineStage::Shutdown, FList, Maho::FReverseTopology>(); }
-	void PostShutdown() override { Execute<Maho::EEngineStage::PostShutdown, FList, Maho::FReverseTopology>(); }
+public:
+	bool ExecuteStage(Maho::EEngineStage Stage) override
+	{
+		switch (Stage)
+		{
+		case Maho::EEngineStage::PreInit:      Execute<Maho::EEngineStage::PreInit, FList>(); break;
+		case Maho::EEngineStage::Init:         Execute<Maho::EEngineStage::Init, FList>(); break;
+		case Maho::EEngineStage::PostInit:     Execute<Maho::EEngineStage::PostInit, FList>(); break;
+		case Maho::EEngineStage::PreTick:      Execute<Maho::EEngineStage::PreTick, FList>(); break;
+		case Maho::EEngineStage::Tick:         Execute<Maho::EEngineStage::Tick, FList>(); break;
+		case Maho::EEngineStage::PostTick:     Execute<Maho::EEngineStage::PostTick, FList>(); break;
+		case Maho::EEngineStage::PreShutdown:  Execute<Maho::EEngineStage::PreShutdown, FList, Maho::FReverseTopology>(); break;
+		case Maho::EEngineStage::Shutdown:     Execute<Maho::EEngineStage::Shutdown, FList, Maho::FReverseTopology>(); break;
+		case Maho::EEngineStage::PostShutdown: Execute<Maho::EEngineStage::PostShutdown, FList, Maho::FReverseTopology>(); break;
+		}
+		return true;
+	}
 };
 
 extern "C" Maho::IExtension<Maho::EEngineStage>* CreateEngine()

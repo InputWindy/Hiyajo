@@ -34,16 +34,6 @@ protected:
 		GApp = this;
 	}
 
-	virtual void PreInit() = 0;
-	virtual void Init() = 0;
-	virtual void PostInit() = 0;
-	virtual void PreTick() = 0;
-	virtual void Tick() = 0;
-	virtual void PostTick() = 0;
-	virtual void PreShutdown() = 0;
-	virtual void Shutdown() = 0;
-	virtual void PostShutdown() = 0;
-
 public:
 	virtual ~FEngineBase() = default;
 
@@ -51,24 +41,6 @@ public:
 	void RequestShutdown() override
 	{
 		CurrentStage = EEngineStage::PreShutdown;
-	}
-
-	/** Unified stage drive: dispatches to the 9 stage virtuals. */
-	bool ExecuteStage(EEngineStage Stage) override
-	{
-		switch (Stage)
-		{
-		case EEngineStage::PreInit: PreInit(); break;
-		case EEngineStage::Init: Init(); break;
-		case EEngineStage::PostInit: PostInit(); break;
-		case EEngineStage::PreTick: PreTick(); break;
-		case EEngineStage::Tick: Tick(); break;
-		case EEngineStage::PostTick: PostTick(); break;
-		case EEngineStage::PreShutdown: PreShutdown(); break;
-		case EEngineStage::Shutdown: Shutdown(); break;
-		case EEngineStage::PostShutdown: PostShutdown(); break;
-		}
-		return true;
 	}
 
 	/** Convenience: run the full lifecycle loop via ExecuteStage. */
