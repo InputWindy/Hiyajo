@@ -23,12 +23,10 @@ from maho_tools import (  # noqa: E402
 _CHECKED = "☑"
 _UNCHECKED = "☐"
 
-_PRODUCT_DLL = "动态链接库 (DLL)"
-_PRODUCT_EXE = "可执行文件 (EXE)"
+_PRODUCT_DLL = "动态链接库"
+_PRODUCT_EXE = "可执行程序"
 _KIND_TOOL = "工具 (Tool)"
-_KIND_LAYER = "层 (Layer)"
-
-_PLATFORMS = ["Windows", "Linux", "Android", "IOS", "Xbox"]
+_KIND_APP = "应用 (App)"
 
 
 class CreateAssemblyApp(tk.Tk):
@@ -43,11 +41,11 @@ class CreateAssemblyApp(tk.Tk):
 		self.var_dir = tk.StringVar(value=str(ENGINE_ROOT / "Maho" / "Plugins"))
 		self.var_product = tk.StringVar(value=_PRODUCT_DLL)
 		self.var_kind = tk.StringVar(value=_KIND_TOOL)
-		self.var_platform = tk.StringVar(value="Windows")
 
 		self._plugins: list[dict] = []
-		self._inheritables: list[str] = []
 		self._checked: dict[str, bool] = {}
+		self._tool_tree: ttk.Treeview
+		self._app_tree: ttk.Treeview
 
 		self._build()
 		self.protocol("WM_DELETE_WINDOW", self.destroy)
@@ -68,45 +66,43 @@ class CreateAssemblyApp(tk.Tk):
 		ttk.Entry(frm, textvariable=self.var_dir).grid(row=2, column=1, sticky="ew", **pad)
 		ttk.Button(frm, text="浏览…", command=self._browse_dir).grid(row=2, column=2, sticky="e", **pad)
 
-		ttk.Label(frm, text="产物").grid(row=3, column=0, sticky="w", **pad)
+		ttk.Label(frm, text="项目").grid(row=3, column=0, sticky="w", **pad)
 		self.cmb_product = ttk.Combobox(frm, state="readonly", values=[_PRODUCT_DLL, _PRODUCT_EXE])
 		self.cmb_product.grid(row=3, column=1, columnspan=2, sticky="ew", **pad)
 		self.cmb_product.bind("<<ComboboxSelected>>", self._on_product_change)
 
-		# 种类（DLL 时显示：工具 / 层）
+		# 种类（仅 DLL 时显示：工具 / 应用）
 		self.lbl_kind = ttk.Label(frm, text="种类")
 		self.lbl_kind.grid(row=4, column=0, sticky="w", **pad)
-		self.cmb_kind = ttk.Combobox(frm, state="readonly", values=[_KIND_TOOL, _KIND_LAYER])
+		self.cmb_kind = ttk.Combobox(frm, state="readonly", values=[_KIND_TOOL, _KIND_APP])
 		self.cmb_kind.grid(row=4, column=1, columnspan=2, sticky="ew", **pad)
+		self.cmb_kind.bind("<<ComboboxSelected>>", self._on_kind_change)
 
-		# 开发平台（EXE 时显示）
-		self.lbl_platform = ttk.Label(frm, text="开发平台")
-		self.cmb_platform = ttk.Combobox(frm, state="readonly", values=_PLATFORMS)
-		self.cmb_platform.set("Windows")
-
+		# 继承：两个页签（工具 / 应用）
 		ttk.Label(frm, text="继承").grid(row=5, column=0, sticky="nw", **pad)
-		self.inherit_panel = ttk.LabelFrame(frm, text="可继承")
-		self.inherit_panel.grid(row=5, column=1, columnspan=2, sticky="nsew", **pad)
-		self.inherit_panel.columnconfigure(0, weight=1)
-		self.inherit_panel.rowconfigure(0, weight=1)
-		self.inherit_tree = ttk.Treeview(self.inherit_panel, show="tree", selectmode="none")
-		scroll = ttk.Scrollbar(self.inherit_panel, orient=tk.VERTICAL, command=self.inherit_tree.yview)
-		self.inherit_tree.configure(yscrollcommand=scroll.set)
-		self.inherit_tree.grid(row=0, column=0, sticky="nsew")
-		scroll.grid(row=0, column=1, sticky="ns")
-		self.inherit_tree.bind("<Button-1>", self._on_tree_click)
+		self.notebook = ttk.Notebook(frm)
+		self.notebook.grid(row=5, column=1, columnspan=2, sticky="nsew", **pad)
 
-		ttk.Label(frm, text="说明").grid(row=6, column=0, sticky="nw", **pad)
-		self.txt_desc = tk.Text(frm, height=2, wrap=tk.WORD)
-		self.txt_desc.grid(row=6, column=1, columnspan=2, sticky="nsew", **pad)
+		self._tool_tab = ttk.Frame(self.notebook)
+		self._app_tab = ttk.Frame(self.notebook)
+		self.notebook.add(self._tool_tab, text="工具")
+		self.notebook.add(self._app_tab, text="应用")
 
-		ttk.Button(frm, text="创建", command=self._create).grid(row=7, column=1, columnspan=2, sticky="e", **pad)
+		self._tool_tree = ttk.Treeview(self._tool_tab, show="tree", selectmode="none")
+		self._app_tree = ttk.Treeview(self._app_tab, show="tree", selectmode="none")
+		for tree in (self._tool_tree, self._app_tree):
+			scroll = ttk.Scrollbar(tree.master, orient=tk.VERTICAL, command=tree.yview)
+			tree.configure(yscrollcommand=scroll.set)
+			tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+			scroll.pack(side=tk.RIGHT, fill=tk.Y)
+			tree.bind("<Button-1>", self._on_tree_click)
+
+		ttk.Button(frm, text="创建", command=self._create).grid(row=6, column=1, columnspan=2, sticky="e", **pad)
 
 		frm.columnconfigure(1, weight=1)
 		frm.rowconfigure(5, weight=1)
 
 		self._reload_plugins()
-		self._apply_product()
 
 	def _browse_dir(self) -> None:
 		path = filedialog.askdirectory(initialdir=self.var_dir.get() or str(ENGINE_ROOT))
@@ -117,7 +113,7 @@ class CreateAssemblyApp(tk.Tk):
 		plugins_dir = Path(self.var_dir.get().strip())
 		engine_root = self._engine_root_of(plugins_dir)
 		self._plugins = list_engine_plugins(engine_root)
-		self._apply_product()
+		self._apply()
 
 	def _engine_root_of(self, plugins_dir: Path) -> Path:
 		plugins_dir = Path(plugins_dir)
@@ -126,49 +122,50 @@ class CreateAssemblyApp(tk.Tk):
 		return ENGINE_ROOT
 
 	def _on_product_change(self, _event=None) -> None:
-		self._apply_product()
+		self._apply()
 
-	def _apply_product(self) -> None:
-		for item in self.inherit_tree.get_children():
-			self.inherit_tree.delete(item)
-		self._inheritables = []
+	def _on_kind_change(self, _event=None) -> None:
+		self._apply()
+
+	def _apply(self) -> None:
+		for tree in (self._tool_tree, self._app_tree):
+			for item in tree.get_children():
+				tree.delete(item)
 		self._checked = {}
 
 		is_exe = self.cmb_product.get() == _PRODUCT_EXE
+		is_tool = (not is_exe) and self.cmb_kind.get() == _KIND_TOOL
 
-		# 种类/平台行的显隐
+		# 种类行：EXE 隐藏（本身就是应用）
 		if is_exe:
 			self.lbl_kind.grid_remove()
 			self.cmb_kind.grid_remove()
-			self.lbl_platform.grid(row=4, column=0, sticky="w", padx=12, pady=6)
-			self.cmb_platform.grid(row=4, column=1, columnspan=2, sticky="ew", padx=12, pady=6)
 		else:
 			self.lbl_kind.grid(row=4, column=0, sticky="w", padx=12, pady=6)
 			self.cmb_kind.grid(row=4, column=1, columnspan=2, sticky="ew", padx=12, pady=6)
-			self.lbl_platform.grid_remove()
-			self.cmb_platform.grid_remove()
 
-		# 继承列表：EXE 继承全部；DLL 只继承同类
-		stage = None
-		if not is_exe:
-			stage = "EToolStage" if self.cmb_kind.get() == _KIND_TOOL else "EEngineStage"
-		self.inherit_panel.configure(text="可继承" if is_exe else ("可继承 Tool" if stage == "EToolStage" else "可继承 Layer"))
+		# 工具页签：总是显示工具；应用页签：仅应用/EXE 时可用
+		self.notebook.tab(self._tool_tab, state="normal")
+		if is_tool:
+			self.notebook.tab(self._app_tab, state="disabled")
+		else:
+			self.notebook.tab(self._app_tab, state="normal")
 
 		for p in self._plugins:
 			ext = p.get("Extension") or {}
-			if stage is not None and ext.get("Stage") != stage:
-				continue
+			stage = ext.get("Stage", "EEngineStage")
 			name = p["Name"]
-			self._inheritables.append(name)
+			group = p.get("Group") or []
+
+			tree = self._tool_tree if stage == "EToolStage" else self._app_tree
 			self._checked[name] = False
 			parent = ""
-			group = p.get("Group") or []
 			for i in range(len(group)):
-				gid = "group:" + "/".join(group[: i + 1])
-				if not self.inherit_tree.exists(gid):
-					self.inherit_tree.insert(parent, tk.END, iid=gid, text=group[i], open=True)
+				gid = f"{stage}:group:" + "/".join(group[: i + 1])
+				if not tree.exists(gid):
+					tree.insert(parent, tk.END, iid=gid, text=group[i], open=True)
 				parent = gid
-			self.inherit_tree.insert(parent, tk.END, iid=name, text=self._label(name), open=True)
+			tree.insert(parent, tk.END, iid=name, text=self._label(name), open=True)
 
 	def _label(self, name: str) -> str:
 		mark = _CHECKED if self._checked.get(name) else _UNCHECKED
@@ -178,7 +175,7 @@ class CreateAssemblyApp(tk.Tk):
 		item = event.widget.identify_row(event.y)
 		if item and item in self._checked:
 			self._checked[item] = not self._checked[item]
-			self.inherit_tree.item(item, text=self._label(item))
+			event.widget.item(item, text=self._label(item))
 
 	def _create(self) -> None:
 		name = self.var_name.get().strip()
@@ -193,8 +190,7 @@ class CreateAssemblyApp(tk.Tk):
 				messagebox.showerror("Maho", f"无法创建目录：\n{target_dir}\n\n{ex}")
 				return
 
-		inherits = sorted(n for n in self._inheritables if self._checked.get(n))
-		desc = self.txt_desc.get("1.0", tk.END).strip()
+		inherits = sorted(n for n in self._checked if self._checked[n])
 		engine_root = self._engine_root_of(target_dir)
 
 		problems = inheritance_problems(engine_root, name, inherits)
@@ -203,16 +199,18 @@ class CreateAssemblyApp(tk.Tk):
 			return
 
 		is_exe = self.cmb_product.get() == _PRODUCT_EXE
+		# 开发平台：.bat 打开 = Windows，.sh 打开 = Linux。
+		dev_platform = "Windows" if sys.platform == "win32" else "Linux"
 		try:
 			if is_exe:
 				path = create_project(
 					name,
 					target_dir,
 					engine_root,
-					description=desc,
+					description="",
 					author="土豆泥大王",
 					plugins=inherits,
-					dev_platform=self.cmb_platform.get(),
+					dev_platform=dev_platform,
 					app_type="IDE",
 				)
 			else:
@@ -220,7 +218,7 @@ class CreateAssemblyApp(tk.Tk):
 				path = create_plugin(
 					name,
 					engine_root,
-					description=desc,
+					description="",
 					stage=stage,
 					inherits=inherits,
 					plugins_dir=target_dir,
