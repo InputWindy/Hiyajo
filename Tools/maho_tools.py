@@ -555,10 +555,211 @@ def validate_plugins(
 	return problems
 
 
+def _plugin_doc_info(cplugin_path: Path, data: dict[str, Any]) -> dict[str, str]:
+	"""Metadata for the auto-generated .md / .html plugin docs."""
+	name = cplugin_path.parent.name
+	mod = data.get("Modules", [{}])[0]
+	ext = mod.get("Extension") or {}
+	deps = mod.get("Dependencies", []) or []
+	inherits = mod.get("Inherits", []) or []
+	if isinstance(inherits, str):
+		inherits = [inherits]
+	stage = ext.get("Stage", "EEngineStage")
+	return {
+		"Name": name,
+		"FriendlyName": data.get("FriendlyName", name),
+		"Description": data.get("Description", ""),
+		"Class": ext.get("Class", f"Maho::{name}::F{name}"),
+		"Header": ext.get("Header", f"{name}.h"),
+		"Stage": stage,
+		"StageLabel": (
+			"engine extension (driven by EEngineStage)"
+			if stage == "EEngineStage"
+			else "pre-app toolkit (driven by EToolStage)"
+		),
+		"Priority": ext.get("Priority", "System"),
+		"Dependencies": ", ".join(deps) or "—",
+		"Inherits": ", ".join(inherits) or "—",
+	}
+
+
+def _plugin_md_text(info: dict[str, str]) -> str:
+	title = info["Name"]
+	if info["FriendlyName"] and info["FriendlyName"] != info["Name"]:
+		title = f"{info['Name']} — {info['FriendlyName']}"
+	return (
+		f"# {title}\n\n"
+		f"{info['Description']}\n\n"
+		"## 扩展类\n\n"
+		"| 字段 | 值 |\n"
+		"|------|-----|\n"
+		f"| Class | `{info['Class']}` |\n"
+		f"| Header | `{info['Header']}` |\n"
+		f"| Stage | `{info['Stage']}` |\n"
+		f"| Priority | `{info['Priority']}` |\n"
+		f"| Dependencies | {info['Dependencies']} |\n"
+		f"| Inherits | {info['Inherits']} |\n\n"
+		"## 说明\n\n"
+		f"{info['StageLabel']}。\n\n"
+		"## 用法\n\n"
+		"（此处补充使用示例）\n\n"
+		"## 相关文档\n\n"
+		f"- [{info['Name']}.html]({info['Name']}.html) — API 文档\n"
+		"- [../README.md](../README.md) — 插件总览\n"
+		"- [../../Source/Public/Maho.md](../../Source/Public/Maho.md) — 引擎核心\n"
+		"- [../../Source/Public/Core/Core.md](../../Source/Public/Core/Core.md) — 基础设施\n"
+	)
+
+
+def _plugin_html_text(info: dict[str, str]) -> str:
+	return f"""<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{info['Name']} — API 文档</title>
+<style>
+	:root {{
+		--bg: #14181f;
+		--panel: #1b2130;
+		--code-bg: #0d1117;
+		--text: #d8e1f0;
+		--muted: #8b96a8;
+		--accent: #5b8dd9;
+		--border: #2c3444;
+		--border-strong: #3d4a61;
+		--kw: #ff7b72;
+		--type: #79c0ff;
+		--field: #e6c07b;
+	}}
+	* {{ box-sizing: border-box; }}
+	body {{
+		margin: 0;
+		padding: 32px 40px;
+		background: var(--bg);
+		color: var(--text);
+		font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
+		line-height: 1.7;
+		max-width: 1040px;
+	}}
+	h1 {{ font-size: 26px; border-bottom: 2px solid var(--border-strong); padding-bottom: 12px; }}
+	h2 {{ font-size: 22px; margin-top: 44px; color: var(--accent); border-bottom: 1px solid var(--border); padding-bottom: 8px; }}
+	a {{ color: var(--accent); text-decoration: none; }}
+	a:hover {{ text-decoration: underline; }}
+	code {{
+		font-family: "Cascadia Code", Consolas, monospace;
+		background: var(--code-bg);
+		padding: 2px 6px;
+		border-radius: 4px;
+		font-size: 13px;
+	}}
+	.kw {{ color: var(--kw); }}
+	.type {{ color: var(--type); }}
+	.field {{ color: var(--field); }}
+	.muted {{ color: var(--muted); }}
+	.class-panel {{
+		background: var(--panel);
+		border: 1px solid var(--border);
+		border-left: 4px solid var(--accent);
+		border-radius: 8px;
+		padding: 20px 24px;
+		margin: 20px 0;
+	}}
+	.class-name {{
+		font-family: "Cascadia Code", Consolas, monospace;
+		font-size: 18px;
+		color: var(--accent);
+		margin: 0 0 4px 0;
+	}}
+	.class-kind {{
+		font-family: "Cascadia Code", Consolas, monospace;
+		font-size: 12px;
+		color: var(--muted);
+		border: 1px solid var(--border);
+		border-radius: 4px;
+		padding: 1px 6px;
+		margin-left: 8px;
+		vertical-align: middle;
+	}}
+	.class-desc {{ margin: 8px 0 0 0; color: var(--text); }}
+	.api-table {{ width: 100%; border-collapse: collapse; margin-top: 12px; }}
+	.api-table th, .api-table td {{
+		border: 1px solid var(--border);
+		padding: 8px 10px;
+		text-align: left;
+		vertical-align: top;
+	}}
+	.api-table th {{ background: var(--code-bg); color: var(--muted); font-weight: normal; }}
+	.sig {{ font-family: "Cascadia Code", Consolas, monospace; font-size: 13px; }}
+	.group {{
+		text-transform: uppercase;
+		letter-spacing: 1px;
+		font-size: 13px;
+		color: var(--muted);
+		margin: 20px 0 8px 0;
+		border-bottom: 1px dashed var(--border);
+		padding-bottom: 4px;
+	}}
+</style>
+</head>
+<body>
+<h1>{info['Name']} — API 文档</h1>
+<p class="muted">{info['Description']}</p>
+
+<section class="class-panel">
+	<h2 class="class-name">{info['Class']}<span class="class-kind">class</span></h2>
+	<p class="class-desc">{info['StageLabel']}。</p>
+	<p class="class-desc">
+		继承 <code>TExtension&lt;{info['Stage']}, {info['Class'].split('::')[-1]}&gt;</code>
+		+ <code>{info['Class'].split('::')[-1]}Dependencies</code>（依赖声明）。
+	</p>
+
+	<h3 class="group">接口</h3>
+	<table class="api-table">
+		<tr><th style="width:48%">签名</th><th>说明</th></tr>
+		<tr>
+			<td class="sig"><code><span class="kw">bool</span> ExecuteStage(<span class="type">{info['Stage']}</span> Stage)</code></td>
+			<td>每阶段行为，调度器按依赖序调用。</td>
+		</tr>
+		<tr>
+			<td class="sig"><code><span class="kw">static</span> {info['Class'].split('::')[-1]}&amp; Get()</code></td>
+			<td>单例访问（<code>TSingleton</code>）。</td>
+		</tr>
+	</table>
+
+	<h3 class="group">成员变量</h3>
+	<table class="api-table">
+		<tr><th style="width:28%">字段</th><th style="width:28%">类型</th><th>说明</th></tr>
+		<tr><td colspan="3" class="muted">（此处补充成员变量）</td></tr>
+	</table>
+</section>
+
+<h2>元数据</h2>
+<table class="api-table">
+	<tr><th style="width:24%">字段</th><th>值</th></tr>
+	<tr><td>Header</td><td><code>{info['Header']}</code></td></tr>
+	<tr><td>Stage</td><td><code>{info['Stage']}</code></td></tr>
+	<tr><td>Priority</td><td><code>{info['Priority']}</code></td></tr>
+	<tr><td>Dependencies</td><td>{info['Dependencies']}</td></tr>
+	<tr><td>Inherits</td><td>{info['Inherits']}</td></tr>
+</table>
+
+<h2>相关文档</h2>
+<p>
+	<a href="{info['Name']}.md">{info['Name']}.md</a> — 概念文档 ·
+	<a href="../README.md">插件总览</a> ·
+	<a href="../../Source/Public/Maho.md">引擎核心</a>
+</p>
+</body>
+</html>
+"""
+
+
 def fix_plugin(cplugin_path: Path, engine_root: Path | None = None) -> list[str]:
 	"""
-	Auto-fix one plugin's missing generated headers (Api.h). .gen.h is generated
-	per-project into Intermediate at .cproject sync — not stored in Public/.
+	Auto-fix one plugin: regenerate missing Api.h, and generate starter docs
+	(<Name>.md + <Name>.html) at the plugin root. .gen.h is generated per-project
+	into Intermediate at .cproject sync — not stored in Public/.
 	Returns human-readable messages ('FIXED ...' / 'UNFIXABLE ...').
 	"""
 	engine_root = (engine_root or ENGINE_ROOT).resolve()
@@ -582,6 +783,19 @@ def fix_plugin(cplugin_path: Path, engine_root: Path | None = None) -> list[str]
 	main = public_dir / header
 	if not main.is_file():
 		messages.append(f"UNFIXABLE {name}: Extension.Header '{header}' missing — content unknown")
+
+	# Starter docs at the plugin root — generated only when missing, never
+	# overwriting a hand-edited doc.
+	info = _plugin_doc_info(cplugin_path, data)
+	md = cplugin_path.parent / f"{name}.md"
+	if not md.is_file():
+		md.write_text(_plugin_md_text(info), encoding="utf-8", newline="\n")
+		messages.append(f"FIXED {md.relative_to(engine_root)}")
+
+	html = cplugin_path.parent / f"{name}.html"
+	if not html.is_file():
+		html.write_text(_plugin_html_text(info), encoding="utf-8", newline="\n")
+		messages.append(f"FIXED {html.relative_to(engine_root)}")
 
 	return messages
 
