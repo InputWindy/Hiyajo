@@ -131,6 +131,13 @@ class CreateAssemblyApp(tk.Tk):
 		return ENGINE_ROOT
 
 	def _on_product_change(self, _event=None) -> None:
+		# EXE (project) lives outside the engine; DLL lives in Maho/Plugins.
+		if self.cmb_product.get() == _PRODUCT_EXE:
+			if self.var_dir.get() == str(ENGINE_ROOT / "Maho" / "Plugins"):
+				self.var_dir.set(str(ENGINE_ROOT.parent))
+		else:
+			if self.var_dir.get() == str(ENGINE_ROOT.parent):
+				self.var_dir.set(str(ENGINE_ROOT / "Maho" / "Plugins"))
 		self._apply()
 
 	def _apply(self) -> None:
