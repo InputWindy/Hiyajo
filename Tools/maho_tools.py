@@ -574,10 +574,11 @@ def validate_plugins(
 	'warning'. Empty list = all healthy.
 	"""
 	plugins_dir = (engine_root / "Maho" / "Plugins").resolve()
+	basic_dir = (engine_root / "Maho" / "Source" / "Public" / "Basic").resolve()
 	if not plugins_dir.is_dir():
 		return [("error", f"Plugins dir not found: {plugins_dir}")]
 
-	all_cplugins = discover_cplugin_files([plugins_dir])
+	all_cplugins = discover_cplugin_files([plugins_dir, basic_dir])
 	all_names = {p.parent.name for p in all_cplugins}
 
 	problems: list[tuple[str, str]] = []
@@ -2126,12 +2127,15 @@ def scan_plugin_modules(
 
 
 def resolve_plugin_roots_for_cproject(cproject_path: Path) -> list[Path]:
-	"""Engine Maho/Plugins + game Project/Plugins (or Plugins/) when present."""
+	"""Engine Maho/Plugins + Basic (infra) + game Project/Plugins when present."""
 	cproject_path = cproject_path.resolve()
 	data = read_cproject(cproject_path)
 	engine_root = resolve_engine_directory(cproject_path, data)
 	project_dir = cproject_path.parent
-	roots = [engine_root / "Maho" / "Plugins"]
+	roots = [
+		engine_root / "Maho" / "Plugins",
+		engine_root / "Maho" / "Source" / "Public" / "Basic",
+	]
 	for candidate in (project_dir / "Plugins", project_dir / "Project" / "Plugins"):
 		if candidate.is_dir():
 			roots.append(candidate)
