@@ -398,8 +398,9 @@ def codegen_plugin_dependencies(engine_root: Path, out_dir: Path) -> list[Path]:
 			"Class": ext.get("Class", ""),
 			"Stage": ext.get("Stage", "EEngineStage"),
 			"Header": ext.get("Header", f"{name}.h"),
+			"CPlugin": str(cplugin_path),
 		}
-		public_dir = plugins_dir / name / "Source" / name / "Public"
+		public_dir = cplugin_path.parent / "Source" / name / "Public"
 		has_source[name] = public_dir.is_dir() and any(p.suffix == ".h" for p in public_dir.glob("*.h"))
 
 	out_dir = out_dir.resolve()
@@ -410,7 +411,7 @@ def codegen_plugin_dependencies(engine_root: Path, out_dir: Path) -> list[Path]:
 		if not has_source[name]:
 			continue   # empty scaffolding — no class to attach deps to
 
-		cplugin_path = plugins_dir / name / f"{name}.cplugin"
+		cplugin_path = Path(info["CPlugin"])
 		mod_data = read_cplugin(cplugin_path).get("Modules", [{}])[0]
 		deps = mod_data.get("Dependencies", []) or []
 		inherits = mod_data.get("Inherits", []) or []
@@ -1531,34 +1532,17 @@ DEFAULT_ENGINE_PLUGINS_DIR = ENGINE_ROOT / "Maho" / "Plugins"
 
 
 def discover_cplugin_files(plugin_roots: list[Path]) -> list[Path]:
-	"""Find *.cplugin under each root (one level of plugin folders, or loose files)."""
+	"""Find *.cplugin recursively under each root (flat or nested group dirs)."""
 	found: list[Path] = []
 	seen: set[Path] = set()
 	for root in plugin_roots:
 		root = root.resolve()
 		if not root.is_dir():
 			continue
-		# Prefer <PluginName>/<PluginName>.cplugin
-		for child in sorted(root.iterdir()):
-			if not child.is_dir():
+		for cplugin in sorted(root.rglob("*.cplugin")):
+			rel = cplugin.relative_to(root)
+			if any(part.startswith(".") for part in rel.parts):
 				continue
-			if child.name.startswith("."):
-				continue
-			candidate = child / f"{child.name}.cplugin"
-			if candidate.is_file():
-				resolved = candidate.resolve()
-				if resolved not in seen:
-					seen.add(resolved)
-					found.append(resolved)
-				continue
-			# Fallback: any .cplugin directly in the plugin folder
-			for cplugin in sorted(child.glob("*.cplugin")):
-				resolved = cplugin.resolve()
-				if resolved not in seen:
-					seen.add(resolved)
-					found.append(resolved)
-		# Loose .cplugin at root (discouraged, still accepted)
-		for cplugin in sorted(root.glob("*.cplugin")):
 			resolved = cplugin.resolve()
 			if resolved not in seen:
 				seen.add(resolved)
