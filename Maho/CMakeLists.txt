@@ -48,11 +48,12 @@ target_include_directories(Maho
 		"${MAHO_PRIVATE_DIR}"
 )
 
-# Engine core links only the system threads library (std::thread). All
-# third-party libraries live in their plugins.
+# Engine core links only the system threads + dl libraries (std::thread,
+# LoadLibrary/dlopen). All third-party libraries live in their plugins.
 target_link_libraries(Maho
 	PRIVATE
 		Threads::Threads
+		${CMAKE_DL_LIBS}
 )
 
 # Absolute engine root for locating Tools/AgentBridge at runtime (dev builds).

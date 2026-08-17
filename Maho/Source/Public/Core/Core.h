@@ -7,5 +7,6 @@
 #include <Core/Topology.h>
 #include <Core/Delegate.h>
 #include <Core/Extension.h>
+#include <Core/Assembly.h>
 #include <Core/Fatal.h>
 #include <Core/Async/Async.h>
