@@ -1756,6 +1756,7 @@ def list_engine_plugins(engine_root: Path | None = None) -> list[dict[str, Any]]
 				"Description": data.get("Description", ""),
 				"EnabledByDefault": bool(data.get("EnabledByDefault", True)),
 				"Extension": extension,
+				"Group": list(cplugin_path.parent.relative_to(root).parts[:-1]),
 			}
 		)
 	out.sort(key=lambda p: p["Name"])

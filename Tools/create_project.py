@@ -165,8 +165,16 @@ class CreateProjectApp(tk.Tk):
 		name = p["Name"]
 		name_list.append(name)
 		self._checked[name] = default
-		# Use the plugin name as the item id — unique across both trees.
-		tree.insert("", tk.END, iid=name, text=self._label(name), open=True)
+		# Mirror the directory hierarchy: create collapsible group nodes, then
+		# hang the plugin leaf under its group. iid = plugin name (unique).
+		parent = ""
+		group = p.get("Group") or []
+		for i in range(len(group)):
+			gid = "group:" + "/".join(group[: i + 1])
+			if not tree.exists(gid):
+				tree.insert(parent, tk.END, iid=gid, text=group[i], open=True)
+			parent = gid
+		tree.insert(parent, tk.END, iid=name, text=self._label(name), open=True)
 
 	def _label(self, name: str) -> str:
 		mark = _CHECKED if self._checked.get(name) else _UNCHECKED
