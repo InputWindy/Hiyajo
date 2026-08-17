@@ -15,10 +15,10 @@ enum class EToolStage : std::uint8_t
 	Shutdown = 1,
 };
 
-/** Pre-app toolkit: serial drive (no thread pool, no loop). */
+/** Pre-app toolkit: parallel drive (owns its thread pool). */
 class MAHO_TOOLKIT_API FToolkitBase
 	: public ICommandLine
-	, public TSerialScheduler<EToolStage>
+	, public TParallelScheduler<EToolStage>
 	, public IExtension<EToolStage>
 {
 protected:

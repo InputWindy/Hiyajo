@@ -134,36 +134,6 @@ protected:
 	}
 };
 
-template <typename TStage>
-class TSerialScheduler : public TScheduler<TStage>
-{
-protected:
-	explicit TSerialScheduler()
-		: TScheduler<TStage>()
-	{
-	}
-
-public:
-	/**
-	 * Drive every extension for one stage value (level-parallel).
-	 * Stage is a compile-time constant; TTopology picks forward / reverse.
-	 */
-	template <TStage Stage, typename TExtensions, typename TTopology = FForwardTopology>
-	void Execute()
-	{
-		using FLevels = typename TTopology::template Apply<Topo::TLevels_t<TExtensions, Stage>>;
-		// Outer: levels run serially (level 0 before level 1 ...).
-		ForEach<FLevels>(FSerialTraversePolicy{}, [&](auto LevelTag) {
-			using FLevel = typename decltype(LevelTag)::Type;
-			// Inner: same-level extensions run in parallel.
-			ForEach<FLevel>(FSerialTraversePolicy{}, [](auto Tag) {
-				using T = typename decltype(Tag)::Type;
-				T::Get().ExecuteStage(Stage);
-			});
-		});
-	}
-};
-
 // ───────────────────────────────────────────────────────────────────────
 // Parallel extension scheduler: drives a group of TExtension by
 // dependency levels — within a level, extensions run in parallel; between

@@ -9,7 +9,7 @@ Maho 的编译期基础设施 + 并发基础设施。**零 app 假设、零三�
 | [TypeList.h](TypeList.h) | 编译期类型列表 `TTypeList` + 运行时遍历 `ForEach` |
 | [Topology.h](Topology.h) | 依赖声明（`TDependsOn`/`TDependsPack`/`TPackConcat`）+ 编译期拓扑排序 / 环检测 / 分层 / 逆序 |
 | [Delegate.h](Delegate.h) | 单播 `TDelegate` / 多播 `TMulticastDelegate` + 句柄 `FDelegateHandle` |
-| [Extension.h](Extension.h) | `IExtension<TStage>`（运行时接口）+ `TExtension`（单例 CRTP）+ 串行/并行调度器 + `FExtensions` 装配 |
+| [Extension.h](Extension.h) | `IExtension<TStage>`（运行时接口）+ `TExtension`（单例 CRTP）+ 并行调度器 + `FExtensions` 装配 |
 | [Assembly.h](Assembly.h) | `FAssembly` 动态加载原语（句柄 + 符号探测，纯加载无解释） |
 | [Fatal.h](Fatal.h) | 致命路径 `ReportFatal` + `InstallFatalHandlers`（零依赖崩溃兜底） |
 | [Export.h](Export.h) | DLL 导出宏 `MAHO_API` |
