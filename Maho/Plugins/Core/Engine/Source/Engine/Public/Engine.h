@@ -22,23 +22,11 @@ enum class EEngineStage : std::uint8_t
 	PostShutdown
 };
 
-/** The running app — extensions request shutdown through it. */
-class MAHO_ENGINE_API IAppContext
-{
-public:
-	virtual ~IAppContext() = default;
-	virtual void RequestShutdown() = 0;
-};
-
-/** The running app instance — set by FEngineBase's ctor. */
-inline IAppContext* GApp = nullptr;
-
 /** Engine base: parallel drive (owns its thread pool). */
 class MAHO_ENGINE_API FEngineBase
 	: public TParallelScheduler<EEngineStage>
 	, public IRunable
 	, public IExtension<EEngineStage>
-	, public IAppContext
 {
 protected:
 	FEngineBase()
