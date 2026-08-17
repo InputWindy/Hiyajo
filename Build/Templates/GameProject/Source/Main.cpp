@@ -1,16 +1,15 @@
 #include <Maho.h>
 #include <AssemblyImporter.h>
+#include <{{ENTRY_POINT_INCLUDE}}>
 
-#ifndef NOMINMAX
-#	define NOMINMAX
-#endif
-#include <Windows.h>
-
-// Thin launcher: install the AssemblyImporter (linked), import the two
+// Thin launcher driver: install the AssemblyImporter (linked), import the two
 // aggregate assemblies, and run the engine's main loop. No project logic here.
-
-static int RunDynamic()
+// The platform entry shim (included above) calls this.
+int Maho::RunDynamic(int Argc, char** Argv)
 {
+	(void)Argc;
+	(void)Argv;
+
 	Maho::InstallFatalHandlers();
 
 	auto& Importer = Maho::AssemblyImporter::FAssemblyImporter::Get();
@@ -37,17 +36,4 @@ static int RunDynamic()
 
 	Importer.ExecuteStage(Maho::EEngineStage::Shutdown);
 	return 0;
-}
-
-int WINAPI WinMain(HINSTANCE /*Instance*/, HINSTANCE /*Prev*/, LPSTR /*CmdLine*/, int /*Show*/)
-{
-	FreeConsole();
-	return RunDynamic();
-}
-
-int main(int Argc, char** Argv)
-{
-	(void)Argc;
-	(void)Argv;
-	return RunDynamic();
 }

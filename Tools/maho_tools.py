@@ -369,7 +369,13 @@ def build_gameapp_mapping(project_name: str, engine_root: Path, plugin_names: li
 		"ENGINE_INCLUDES": "\n".join(engine_includes),
 		"TOOL_EXTENSIONS": _format_extensions_list(tool_classes),
 		"ENGINE_EXTENSIONS": _format_extensions_list(engine_classes),
-		"ENTRY_POINT_INCLUDE": "EntryPointWindows.h" if dev_platform == "Windows" else "EntryPointLinux.h",
+		"ENTRY_POINT_INCLUDE": {
+			"Windows": "EntryPointWindows.h",
+			"Linux": "EntryPointLinux.h",
+			"Android": "EntryPointAndroid.h",
+			"IOS": "EntryPointIOS.h",
+			"Xbox": "EntryPointXbox.h",
+		}.get(dev_platform, "EntryPointWindows.h"),
 		"PARSE_COMMAND_LINE": parse_body,
 	}
 
