@@ -102,6 +102,36 @@ struct TResolveDependsPack<T, std::void_t<typename T::FDependsPack>>
 	using Type = typename T::FDependsPack;
 };
 
+/**
+ * Concatenate multiple TDependsPack instances into one.
+ * Lets a child extension extend its parent's dependency pack:
+ *
+ *   using FDependsPack = typename TPackConcat<
+ *       typename TResolveDependsPack<FParent>::Type,
+ *       TDependsPack<TDependsOn<EEngineStage::Init, TTypeList<FC>>>  // own
+ *   >::Type;
+ */
+template <typename... TPacks>
+struct TPackConcat;
+
+template <>
+struct TPackConcat<>
+{
+	using Type = TDependsPack<>;
+};
+
+template <typename... TSlots>
+struct TPackConcat<TDependsPack<TSlots...>>
+{
+	using Type = TDependsPack<TSlots...>;
+};
+
+template <typename... TSlotsA, typename... TSlotsB, typename... TRest>
+struct TPackConcat<TDependsPack<TSlotsA...>, TDependsPack<TSlotsB...>, TRest...>
+{
+	using Type = typename TPackConcat<TDependsPack<TSlotsA..., TSlotsB...>, TRest...>::Type;
+};
+
 // ───────────────────────────────────────────────────────────────────────
 // Topo namespace: the compile-time algorithms.
 // ───────────────────────────────────────────────────────────────────────

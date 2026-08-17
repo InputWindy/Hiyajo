@@ -411,7 +411,9 @@ def codegen_plugin_dependencies(engine_root: Path, out_dir: Path) -> list[Path]:
 			continue   # empty scaffolding — no class to attach deps to
 
 		cplugin_path = plugins_dir / name / f"{name}.cplugin"
-		deps = (read_cplugin(cplugin_path).get("Modules", [{}])[0]).get("Dependencies", [])
+		mod_data = read_cplugin(cplugin_path).get("Modules", [{}])[0]
+		deps = mod_data.get("Dependencies", []) or []
+		inherits = mod_data.get("Inherits", "")
 
 		cls = info["Class"]
 		class_short = cls.split("::")[-1]
@@ -420,9 +422,34 @@ def codegen_plugin_dependencies(engine_root: Path, out_dir: Path) -> list[Path]:
 
 		dep_classes = [meta[d]["Class"] for d in deps if d in meta and has_source[d]]
 		dep_headers = [meta[d]["Header"] for d in deps if d in meta and has_source[d]]
-		dep_includes = "\n".join(f"#include <{h}>" for h in dep_headers)
 
-		if dep_classes:
+		# Inherits: pull in the parent's .gen.h (FDependsPack struct) + header
+		# (class declaration) so TResolveDependsPack<FParent> resolves correctly.
+		parent_class = ""
+		inherits_includes: list[str] = []
+		if inherits and inherits in meta and has_source[inherits]:
+			parent_class = meta[inherits]["Class"]
+			inherits_includes = [f"{inherits}.gen.h", meta[inherits]["Header"]]
+
+		dep_includes = "\n".join(f"#include <{h}>" for h in (inherits_includes + dep_headers))
+
+		if parent_class:
+			parent_pack = f"typename TResolveDependsPack<{parent_class}>::Type"
+			if dep_classes:
+				dep_list = ",\n".join(f"\t\t\t\t{dc}" for dc in dep_classes)
+				pack_body = (
+					f"\tusing FDependsPack = typename TPackConcat<\n"
+					f"\t\t{parent_pack},\n"
+					"\t\tTDependsPack<\n"
+					f"\t\t\tTDependsOn<{stage}::Init, TTypeList<\n"
+					f"{dep_list}\n"
+					"\t\t\t>>\n"
+					"\t\t>\n"
+					"\t>::Type;\n"
+				)
+			else:
+				pack_body = f"\tusing FDependsPack = {parent_pack};\n"
+		elif dep_classes:
 			dep_list = ",\n".join(f"\t\t\t{dc}" for dc in dep_classes)
 			pack_body = (
 				"\tusing FDependsPack = TDependsPack<\n"
