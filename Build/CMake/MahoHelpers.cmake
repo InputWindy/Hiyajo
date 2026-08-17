@@ -256,9 +256,11 @@ function(maho_add_plugin_modules)
 
 		target_include_directories(${_MOD_TARGET}
 			PUBLIC "${_MOD_SOURCE_DIR}/Public"
+			PUBLIC "${CMAKE_BINARY_DIR}/Generated"
 		)
 		# Also on MahoModules so game EXE always sees plugin Public (Generated App includes).
 		target_include_directories(MahoModules INTERFACE "${_MOD_SOURCE_DIR}/Public")
+		target_include_directories(MahoModules INTERFACE "${CMAKE_BINARY_DIR}/Generated")
 		target_link_libraries(${_MOD_TARGET} PUBLIC ${_MAHO_PM_ENGINE_TARGET})
 		if(TARGET glfw)
 			target_link_libraries(${_MOD_TARGET} PRIVATE glfw)

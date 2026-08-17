@@ -377,11 +377,11 @@ def _write_game_app(project_dir: Path, mapping: dict[str, str], app_type: str) -
 	return dst
 
 
-def codegen_plugin_dependencies(engine_root: Path) -> list[Path]:
+def codegen_plugin_dependencies(engine_root: Path, out_dir: Path) -> list[Path]:
 	"""
-	Regenerate <Name>.gen.h for every plugin that has .cplugin Dependencies.
-	The generated header declares FDependsPack (scheduler-level) mirroring the
-	build-level Dependencies list; plugin classes inherit the generated struct.
+	Regenerate <Name>.gen.h for every plugin (with source) into out_dir — the
+	project's Intermediate/Generated. Plugin headers only `#include <Name>.gen.h>`;
+	the file itself is generated per-project and never committed.
 	"""
 	plugins_dir = (engine_root / "Maho" / "Plugins").resolve()
 	if not plugins_dir.is_dir():
@@ -402,6 +402,9 @@ def codegen_plugin_dependencies(engine_root: Path) -> list[Path]:
 		public_dir = plugins_dir / name / "Source" / name / "Public"
 		has_source[name] = public_dir.is_dir() and any(p.suffix == ".h" for p in public_dir.glob("*.h"))
 
+	out_dir = out_dir.resolve()
+	out_dir.mkdir(parents=True, exist_ok=True)
+
 	generated: list[Path] = []
 	for name, info in meta.items():
 		if not has_source[name]:
@@ -409,8 +412,6 @@ def codegen_plugin_dependencies(engine_root: Path) -> list[Path]:
 
 		cplugin_path = plugins_dir / name / f"{name}.cplugin"
 		deps = (read_cplugin(cplugin_path).get("Modules", [{}])[0]).get("Dependencies", [])
-		if not deps:
-			continue   # no deps — keep the scaffold's static <Name>.gen.h (empty pack)
 
 		cls = info["Class"]
 		class_short = cls.split("::")[-1]
@@ -418,13 +419,21 @@ def codegen_plugin_dependencies(engine_root: Path) -> list[Path]:
 		stage = info["Stage"]
 
 		dep_classes = [meta[d]["Class"] for d in deps if d in meta and has_source[d]]
-		if not dep_classes:
-			continue
-
 		dep_headers = [meta[d]["Header"] for d in deps if d in meta and has_source[d]]
 		dep_includes = "\n".join(f"#include <{h}>" for h in dep_headers)
 
-		dep_list = ",\n".join(f"\t\t\t{dc}" for dc in dep_classes)
+		if dep_classes:
+			dep_list = ",\n".join(f"\t\t\t{dc}" for dc in dep_classes)
+			pack_body = (
+				"\tusing FDependsPack = TDependsPack<\n"
+				f"\t\tTDependsOn<{stage}::Init, TTypeList<\n"
+				f"{dep_list}\n"
+				"\t\t>>\n"
+				"\t>;\n"
+			)
+		else:
+			pack_body = "\tusing FDependsPack = TDependsPack<>;\n"
+
 		opens = "\n".join(f"namespace {p}\n{{" for p in ns_parts)
 		closes = "\n".join(f"}} // namespace {p}" for p in reversed(ns_parts))
 
@@ -437,16 +446,12 @@ def codegen_plugin_dependencies(engine_root: Path) -> list[Path]:
 			f"/** Scheduler-level dependency declaration, synced from .cplugin. */\n"
 			f"struct {class_short}Dependencies\n"
 			"{\n"
-			f"\tusing FDependsPack = TDependsPack<\n"
-			f"\t\tTDependsOn<{stage}::Init, TTypeList<\n"
-			f"{dep_list}\n"
-			"\t\t>>\n"
-			"\t>;\n"
+			f"{pack_body}"
 			"};\n\n"
 			f"{closes}\n"
 		)
 
-		out = plugins_dir / name / "Source" / name / "Public" / f"{name}.gen.h"
+		out = out_dir / f"{name}.gen.h"
 		out.write_text(text, encoding="utf-8", newline="\n")
 		generated.append(out)
 
@@ -468,24 +473,6 @@ def _api_header_text(name: str) -> str:
 		"#else\n"
 		f"#	define MAHO_{export}_API MAHO_IMPORT\n"
 		"#endif\n"
-	)
-
-
-def _empty_gen_header_text(name: str, namespace: str, class_short: str) -> str:
-	"""<Name>.gen.h body for a plugin with no Dependencies (empty FDependsPack)."""
-	return (
-		f"// Generated from {name}.cplugin Dependencies — do not edit by hand.\n"
-		"#pragma once\n"
-		"#include <Engine.h>\n\n"
-		"namespace Maho\n{\n\n"
-		f"namespace {namespace}\n{{\n\n"
-		"/** Scheduler-level dependency declaration, synced from .cplugin. */\n"
-		f"struct {class_short}Dependencies\n"
-		"{\n"
-		"\tusing FDependsPack = TDependsPack<>;\n"
-		"};\n\n"
-		f"}} // namespace {namespace}\n\n"
-		"} // namespace Maho\n"
 	)
 
 
@@ -522,8 +509,6 @@ def validate_plugins(
 			problems.append(("error", f"{name}: Extension.Header '{header}' missing"))
 		if not (public_dir / f"{name}Api.h").is_file():
 			problems.append(("error", f"{name}: {name}Api.h missing (export macro)"))
-		if not (public_dir / f"{name}.gen.h").is_file():
-			problems.append(("warning", f"{name}: {name}.gen.h missing (FDependsPack)"))
 
 		for dep in mod.get("Dependencies", []) or []:
 			if not (plugins_dir / dep / f"{dep}.cplugin").is_file():
@@ -534,7 +519,8 @@ def validate_plugins(
 
 def fix_plugin(cplugin_path: Path, engine_root: Path | None = None) -> list[str]:
 	"""
-	Auto-fix one plugin's missing generated headers (Api.h + .gen.h).
+	Auto-fix one plugin's missing generated headers (Api.h). .gen.h is generated
+	per-project into Intermediate at .cproject sync — not stored in Public/.
 	Returns human-readable messages ('FIXED ...' / 'UNFIXABLE ...').
 	"""
 	engine_root = (engine_root or ENGINE_ROOT).resolve()
@@ -544,12 +530,6 @@ def fix_plugin(cplugin_path: Path, engine_root: Path | None = None) -> list[str]
 	mod = data.get("Modules", [{}])[0]
 	ext = mod.get("Extension") or {}
 	header = ext.get("Header", f"{name}.h")
-	cls = ext.get("Class", f"Maho::{name}::F{name}")
-	deps = mod.get("Dependencies", []) or []
-
-	parts = cls.split("::")
-	class_short = parts[-1]
-	namespace = parts[-2] if len(parts) >= 3 else name
 
 	public_dir = cplugin_path.parent / "Source" / name / "Public"
 	public_dir.mkdir(parents=True, exist_ok=True)
@@ -561,15 +541,6 @@ def fix_plugin(cplugin_path: Path, engine_root: Path | None = None) -> list[str]
 		api.write_text(_api_header_text(name), encoding="utf-8", newline="\n")
 		messages.append(f"FIXED {api.relative_to(engine_root)}")
 
-	gen = public_dir / f"{name}.gen.h"
-	if not gen.is_file():
-		if deps:
-			codegen_plugin_dependencies(engine_root)
-			messages.append(f"FIXED {name}.gen.h (from Dependencies)")
-		else:
-			gen.write_text(_empty_gen_header_text(name, namespace, class_short), encoding="utf-8", newline="\n")
-			messages.append(f"FIXED {gen.relative_to(engine_root)}")
-
 	main = public_dir / header
 	if not main.is_file():
 		messages.append(f"UNFIXABLE {name}: Extension.Header '{header}' missing — content unknown")
@@ -578,7 +549,7 @@ def fix_plugin(cplugin_path: Path, engine_root: Path | None = None) -> list[str]
 
 
 def fix_plugins(engine_root: Path | None = None) -> list[str]:
-	"""Batch-fix all plugins (Api.h + .gen.h), then regenerate dep .gen.h files."""
+	"""Batch-fix all plugins (Api.h). .gen.h is generated per-project at .cproject sync."""
 	engine_root = (engine_root or ENGINE_ROOT).resolve()
 	plugins_dir = engine_root / "Maho" / "Plugins"
 	if not plugins_dir.is_dir():
@@ -587,8 +558,6 @@ def fix_plugins(engine_root: Path | None = None) -> list[str]:
 	messages: list[str] = []
 	for cplugin_path in discover_cplugin_files([plugins_dir]):
 		messages.extend(fix_plugin(cplugin_path, engine_root))
-	# Regenerate dependency packs for every plugin that declares Dependencies.
-	codegen_plugin_dependencies(engine_root)
 	return messages
 
 
@@ -965,8 +934,8 @@ def generate_from_cproject(
 	game_app = codegen_game_app(cproject_path)
 	log(f"[Maho] GameApp : {game_app.relative_to(project_dir)}")
 
-	# Sync .cplugin Dependencies → <Name>.gen.h (scheduler-level FDependsPack).
-	codegen_plugin_dependencies(engine_root)
+	# Sync .cplugin Dependencies → <Name>.gen.h into the project's Intermediate.
+	codegen_plugin_dependencies(engine_root, intermediate / "Generated")
 
 	# Pre-compile health check — fail fast on missing headers before cmake does.
 	overrides = parse_cproject_plugin_overrides(data)
@@ -1020,6 +989,8 @@ def generate_engine_workspace(
 	if not (source_dir / "CMakeLists.txt").is_file():
 		raise FileNotFoundError(f"Engine CMake entry missing: {source_dir / 'CMakeLists.txt'}")
 	intermediate = engine_root / "Maho" / "Intermediate"
+	# Generate per-plugin .gen.h into the workspace Intermediate before configure.
+	codegen_plugin_dependencies(engine_root, intermediate / "Generated")
 	run_cmake_generate(
 		source_dir,
 		intermediate,

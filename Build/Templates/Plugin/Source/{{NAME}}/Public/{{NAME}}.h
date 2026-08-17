@@ -1,7 +1,7 @@
 #pragma once
 
 #include "{{NAME}}Api.h"
-#include "{{NAME}}.gen.h"
+#include <{{NAME}}.gen.h>
 #include <Engine.h>
 
 namespace Maho
