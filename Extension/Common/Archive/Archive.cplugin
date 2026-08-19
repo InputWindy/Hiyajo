@@ -1,0 +1,6 @@
+{
+  "FileVersion": 1,
+  "Name": "Archive",
+  "Description": "Serialization archive extension.",
+  "Dependencies": []
+}
