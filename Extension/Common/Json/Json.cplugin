@@ -1,0 +1,6 @@
+{
+  "FileVersion": 1,
+  "Name": "Json",
+  "Description": "JSON serialization extension (nlohmann/json).",
+  "Dependencies": []
+}
