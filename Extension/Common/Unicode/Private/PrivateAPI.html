@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Unicode（Private）— 实现算法字典</title>
+<style>
+	:root { --bg:#14181f; --panel:#1b2130; --code-bg:#0d1117; --text:#d8e1f0; --muted:#8b96a8; --accent:#5b8dd9; --accent2:#3f8f63; --border:#2c3444; }
+	body { margin:0; padding:32px 40px; background:var(--bg); color:var(--text);
+		font-family:"Segoe UI","Microsoft YaHei",sans-serif; line-height:1.7; max-width:1040px; }
+	h1 { font-size:26px; border-bottom:2px solid var(--border); padding-bottom:12px; }
+	h2 { font-size:20px; margin-top:32px; color:var(--accent); }
+	.fn-panel { background:var(--panel); border:1px solid var(--border); border-left:4px solid var(--accent2);
+		border-radius:8px; padding:16px 20px; margin:16px 0; }
+	.fn-name { font-family:Consolas,monospace; font-size:16px; color:var(--accent2); }
+	.pseudo { font-family:Consolas,monospace; background:var(--code-bg); border:1px solid var(--border);
+		border-radius:6px; padding:12px 16px; margin:10px 0; font-size:13px; white-space:pre; line-height:1.6; }
+	a { color:var(--accent); text-decoration:none; }
+	.muted { color:var(--muted); }
+	.back-link { font-size:13px; color:var(--muted); }
+</style>
+</head>
+<body>
+<h1>Unicode（Private）— 实现算法字典</h1>
+
+<section class="fn-panel" id="fn-unicode-isvalid">
+	<h3 class="fn-name">IsValidUtf8(string_view)</h3>
+	<p class="back-link">← <a href="../API.html">公开 API</a></p>
+	<div class="pseudo">IsValidUtf8(In):
+	1. return utf8::is_valid(In.begin(), In.end())</div>
+</section>
+
+<section class="fn-panel" id="fn-unicode-utf8to16">
+	<h3 class="fn-name">Utf8ToUtf16(string_view)</h3>
+	<p class="back-link">← <a href="../API.html">公开 API</a></p>
+	<div class="pseudo">Utf8ToUtf16(In):
+	1. Out = u16string{}
+	2. utf8::utf8to16(In.begin(), In.end(), back_inserter(Out))
+	3. return Out</div>
+</section>
+
+<section class="fn-panel" id="fn-unicode-utf16to8">
+	<h3 class="fn-name">Utf16ToUtf8(u16string_view)</h3>
+	<p class="back-link">← <a href="../API.html">公开 API</a></p>
+	<div class="pseudo">Utf16ToUtf8(In):
+	1. Out = string{}
+	2. utf8::utf16to8(In.begin(), In.end(), back_inserter(Out))
+	3. return Out</div>
+</section>
+
+<section class="fn-panel" id="fn-unicode-utf8to32">
+	<h3 class="fn-name">Utf8ToUtf32(string_view) / Utf32ToUtf8(u32string_view)</h3>
+	<p class="back-link">← <a href="../API.html">公开 API</a></p>
+	<div class="pseudo">Utf8ToUtf32(In):  utf8::utf8to32 → u32string
+	Utf32ToUtf8(In):  utf8::utf32to8 → string</div>
+</section>
+
+<section class="fn-panel" id="fn-unicode-native">
+	<h3 class="fn-name">ToNative / FromNative</h3>
+	<p class="back-link">← <a href="../API.html">公开 API</a></p>
+	<div class="pseudo">ToNative(Utf8):
+	1. Windows: Utf8ToUtf16 → wstring
+	   others:  passthrough → string
+
+	FromNative(Native):
+	1. Windows: wstring → Utf16ToUtf8
+	   others:  passthrough → string</div>
+</section>
+
+<section class="fn-panel" id="fn-unicode-console">
+	<h3 class="fn-name">EnsureConsoleUtf8()</h3>
+	<p class="back-link">← <a href="../API.html">公开 API</a></p>
+	<div class="pseudo">EnsureConsoleUtf8():
+	1. Windows: SetConsoleOutputCP(CP_UTF8)
+	2. others:  no-op</div>
+</section>
+
+<p class="muted"><a href="PrivateDoc.md">PrivateDoc.md</a> — 实现目录 · <a href="../API.html">公开 API</a> — 签名入口</p>
+</body>
+</html>
