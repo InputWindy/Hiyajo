@@ -1,0 +1,6 @@
+{
+  "FileVersion": 1,
+  "Name": "Math",
+  "Description": "Math library extension (GLM).",
+  "Dependencies": []
+}
