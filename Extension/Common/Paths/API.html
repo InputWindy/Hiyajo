@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Paths — API 文档</title>
+<style>
+	:root {
+			--bg: #14181f; --panel: #1b2130; --code-bg: #0d1117;
+			--text: #d8e1f0; --muted: #8b96a8; --accent: #5b8dd9;
+			--border: #2c3444; --border-strong: #3d4a61;
+			--kw: #ff7b72; --type: #79c0ff; --field: #e6c07b;
+	}
+	* { box-sizing: border-box; }
+	body { margin:0; padding:32px 40px; background:var(--bg); color:var(--text);
+		font-family:"Segoe UI","Microsoft YaHei",sans-serif; line-height:1.7; max-width:1040px; }
+	h1 { font-size:28px; border-bottom:2px solid var(--border-strong); padding-bottom:12px; }
+	h2 { font-size:20px; margin-top:32px; text-transform:uppercase; letter-spacing:1px;
+		border-bottom:1px solid var(--border); padding-bottom:6px; color:var(--accent); }
+	.panel { background:var(--panel); border:1px solid var(--border); border-radius:8px;
+		padding:20px 24px; margin:16px 0; border-left:4px solid var(--accent); }
+	.class-name { font-family:Consolas,"Cascadia Code",monospace; font-size:20px; font-weight:600; }
+	.badge { display:inline-block; font-size:11px; padding:2px 8px; border-radius:10px;
+		background:#2a3346; color:var(--muted); margin-left:8px; vertical-align:middle; }
+	code { font-family:Consolas,"Cascadia Code",monospace; background:var(--code-bg);
+		padding:2px 6px; border-radius:4px; }
+	.kw { color:var(--kw); } .type { color:var(--type); } .field { color:var(--field); }
+	.impl-link { color:#3f8f63; font-size:13px; }
+	table { width:100%; border-collapse:collapse; margin:12px 0; }
+	th, td { text-align:left; padding:8px 12px; border-bottom:1px solid var(--border); vertical-align:top; }
+	th { color:var(--muted); font-weight:500; font-size:13px; text-transform:uppercase; letter-spacing:0.5px; }
+	.signature { font-family:Consolas,"Cascadia Code",monospace; }
+</style>
+</head>
+<body>
+<h1>Paths — API</h1>
+
+<div class="panel">
+	<div><span class="class-name">FPaths</span><span class="badge">class</span><span class="badge">singleton</span></div>
+	<p style="color:var(--muted)">路径解析扩展（&lt;filesystem&gt;）。别名 → 根路径，被调度器驱动。</p>
+
+	<h2>接口</h2>
+	<table>
+		<tr><th style="width:50%">签名</th><th>说明</th></tr>
+		<tr>
+			<td class="signature"><span class="kw">bool</span> ExecuteStage(<span class="type">EPathsStage</span> Stage)</td>
+			<td>阶段分发（Init / Shutdown → clear） <a class="impl-link" href="Private/PrivateAPI.html#fn-paths-executestage">→ 实现</a></td>
+		</tr>
+		<tr><td class="signature"><span class="kw">void</span> SetRoot(<span class="type">string_view</span> Alias, <span class="type">path</span> Path)</td><td>注册根路径别名 <a class="impl-link" href="Private/PrivateAPI.html#fn-paths-setroot">→ 实现</a></td></tr>
+		<tr><td class="signature"><span class="type">path</span> Resolve(<span class="type">string_view</span> VirtualPath)</td><td>解析虚拟路径 <a class="impl-link" href="Private/PrivateAPI.html#fn-paths-resolve">→ 实现</a></td></tr>
+		<tr><td class="signature"><span class="kw">bool</span> HasRoot(<span class="type">string_view</span> Alias)</td><td>别名是否注册 <a class="impl-link" href="Private/PrivateAPI.html#fn-paths-hasroot">→ 实现</a></td></tr>
+	</table>
+</div>
+
+<div class="panel">
+	<div><span class="class-name">EPathsStage</span><span class="badge">enum class</span></div>
+	<table>
+		<tr><th style="width:30%">成员</th><th>说明</th></tr>
+		<tr><td><code>Init</code></td><td>初始化阶段　→ 清空根路径表</td></tr>
+		<tr><td><code>Shutdown</code></td><td>关闭阶段　→ 清空根路径表</td></tr>
+	</table>
+</div>
+
+<h2>相关文档</h2>
+<p><a href="Paths.md">Paths.md</a> — 概念 + 用法 · <a href="Private/PrivateDoc.md">实现字典</a> — 算法伪代码</p>
+</body>
+</html>

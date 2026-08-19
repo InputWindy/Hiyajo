@@ -1,0 +1,6 @@
+{
+  "FileVersion": 1,
+  "Name": "Paths",
+  "Description": "Path resolution extension (project/engine roots).",
+  "Dependencies": []
+}
