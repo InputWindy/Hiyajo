@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Timer（Private）— 实现算法字典</title>
+<style>
+	:root {
+		--bg: #14181f; --panel: #1b2130; --code-bg: #0d1117;
+		--text: #d8e1f0; --muted: #8b96a8; --accent: #5b8dd9;
+		--accent2: #3f8f63; --border: #2c3444; --border-strong: #3d4a61;
+		--kw: #ff7b72; --type: #79c0ff;
+	}
+	* { box-sizing: border-box; }
+	body { margin:0; padding:32px 40px; background:var(--bg); color:var(--text);
+		font-family:"Segoe UI","Microsoft YaHei",sans-serif; line-height:1.7; max-width:1040px; }
+	h1 { font-size:26px; border-bottom:2px solid var(--border-strong); padding-bottom:12px; }
+	h2 { font-size:22px; margin-top:44px; color:var(--accent); border-bottom:1px solid var(--border); padding-bottom:8px; }
+	a { color:var(--accent); text-decoration:none; }
+	a:hover { text-decoration:underline; }
+	.fn-panel { background:var(--panel); border:1px solid var(--border);
+		border-left:4px solid var(--accent2); border-radius:8px; padding:20px 24px; margin:24px 0; }
+	.fn-name { font-family:Consolas,"Cascadia Code",monospace; font-size:18px; color:var(--accent2); margin:0 0 4px 0; }
+	.back-link { font-size:13px; color:var(--muted); }
+	.pseudo { font-family:Consolas,"Cascadia Code",monospace; background:var(--code-bg);
+		border:1px solid var(--border); border-radius:6px; padding:14px 18px;
+		margin:12px 0; font-size:13px; white-space:pre; overflow-x:auto; line-height:1.6; }
+	code { font-family:Consolas,"Cascadia Code",monospace; background:var(--code-bg);
+		padding:2px 6px; border-radius:4px; }
+	.muted { color:var(--muted); }
+</style>
+</head>
+<body>
+
+<h1>Timer（Private）— 实现算法字典</h1>
+<p class="muted">cpp 侧每个函数的算法伪代码。Public 侧 API 通过跳转链接落到这里。</p>
+
+<h2>Timer.cpp</h2>
+
+<section class="fn-panel" id="fn-timer-executestage">
+	<h3 class="fn-name">FTimer::ExecuteStage(ETimerStage Stage)</h3>
+	<p class="back-link">← <a href="../API.html">公开 API</a> · <code>bool</code></p>
+	<p>阶段分发：Init / Shutdown 都清空计时树。</p>
+	<div class="pseudo">ExecuteStage(Stage):
+	1. switch Stage:
+	   case Init / Shutdown:
+	       Reset()
+	2. return true</div>
+</section>
+
+<section class="fn-panel" id="fn-timer-beginscope">
+	<h3 class="fn-name">FTimer::BeginScope(string_view Name)</h3>
+	<p class="back-link">← <a href="../API.html">公开 API</a> · <code>void</code></p>
+	<div class="pseudo">BeginScope(Name):
+	1. Child = Current->Children[Name]   // 建/取子节点
+	2. Child.Name = Name
+	3. Child.Start = steady_clock::now()
+	4. Current = &Child                   // 下移</div>
+</section>
+
+<section class="fn-panel" id="fn-timer-endscope">
+	<h3 class="fn-name">FTimer::EndScope()</h3>
+	<p class="back-link">← <a href="../API.html">公开 API</a> · <code>void</code></p>
+	<div class="pseudo">EndScope():
+	1. if Current == &Root: return        // 不平衡，忽略
+	2. Elapsed = now() - Current->Start
+	3. Current->TotalSeconds += Elapsed
+	4. Current->MaxSeconds = max(MaxSeconds, Elapsed)
+	5. Current->Count++
+	6. Current = Current->Parent          // 回父节点</div>
+</section>
+
+<section class="fn-panel" id="fn-timer-reset">
+	<h3 class="fn-name">FTimer::Reset()</h3>
+	<p class="back-link">← <a href="../API.html">公开 API</a> · <code>void</code></p>
+	<div class="pseudo">Reset():
+	1. Root = FNode{"Root"}
+	2. Current = &Root</div>
+</section>
+
+<section class="fn-panel" id="fn-timer-dump">
+	<h3 class="fn-name">FTimer::DumpToString()</h3>
+	<p class="back-link">← <a href="../API.html">公开 API</a> · <code>string</code></p>
+	<div class="pseudo">DumpToString():
+	1. 递归 Format(Node, Depth):
+	   - 输出缩进 + Name + ": "
+	   - 若 Count > 0: 输出 Total*1000 ms (Count calls, avg, max)
+	   - 遍历 Children 递归 Format(Child, Depth+1)
+	2. Format(Root, 0)
+	3. 返回结果</div>
+</section>
+
+<section class="fn-panel" id="fn-timer-scoped-ctor">
+	<h3 class="fn-name">FScopedTimer::FScopedTimer(string_view Name)</h3>
+	<p class="back-link">← <a href="../API.html">公开 API</a> · ctor</p>
+	<div class="pseudo">FScopedTimer(Name):
+	1. FTimer::Get().BeginScope(Name)</div>
+</section>
+
+<section class="fn-panel" id="fn-timer-scoped-dtor">
+	<h3 class="fn-name">FScopedTimer::~FScopedTimer()</h3>
+	<p class="back-link">← <a href="../API.html">公开 API</a> · dtor</p>
+	<div class="pseudo">~FScopedTimer():
+	1. FTimer::Get().EndScope()</div>
+</section>
+
+<h2>FGameClock</h2>
+
+<section class="fn-panel" id="fn-clock-realseconds">
+	<h3 class="fn-name">FGameClock::GetRealSeconds()</h3>
+	<p class="back-link">← <a href="../API.html">公开 API</a> · <code>double</code></p>
+	<div class="pseudo">GetRealSeconds():
+	1. return duration(now() - InitTime).count()</div>
+</section>
+
+<section class="fn-panel" id="fn-clock-gameseconds">
+	<h3 class="fn-name">FGameClock::GetGameSeconds()</h3>
+	<p class="back-link">← <a href="../API.html">公开 API</a> · <code>double</code></p>
+	<div class="pseudo">GetGameSeconds():
+	1. Now = now()
+	2. if !bPaused:
+	       RealDelta = Now - LastReal
+	       GameSeconds += RealDelta * TimeScale
+	       DeltaSeconds = RealDelta * TimeScale
+	3. LastReal = Now
+	4. return GameSeconds</div>
+</section>
+
+<section class="fn-panel" id="fn-clock-deltaseconds">
+	<h3 class="fn-name">FGameClock::GetDeltaSeconds()</h3>
+	<p class="back-link">← <a href="../API.html">公开 API</a> · <code>double</code></p>
+	<div class="pseudo">GetDeltaSeconds():
+	1. GetGameSeconds()   // 先推进
+	2. return DeltaSeconds</div>
+</section>
+
+<section class="fn-panel" id="fn-clock-settimescale">
+	<h3 class="fn-name">FGameClock::SetTimeScale(double InScale)</h3>
+	<p class="back-link">← <a href="../API.html">公开 API</a> · <code>void</code></p>
+	<div class="pseudo">SetTimeScale(InScale):
+	1. TimeScale = InScale</div>
+</section>
+
+<section class="fn-panel" id="fn-clock-setpaused">
+	<h3 class="fn-name">FGameClock::SetPaused(bool bInPaused)</h3>
+	<p class="back-link">← <a href="../API.html">公开 API</a> · <code>void</code></p>
+	<div class="pseudo">SetPaused(bInPaused):
+	1. if bInPaused && !bPaused:
+	       GetGameSeconds()   // 冻结前先推进
+	2. bPaused = bInPaused</div>
+</section>
+
+<section class="fn-panel" id="fn-clock-gettimescale">
+	<h3 class="fn-name">FGameClock::GetTimeScale()</h3>
+	<p class="back-link">← <a href="../API.html">公开 API</a> · <code>double</code></p>
+	<div class="pseudo">GetTimeScale():
+	1. return TimeScale</div>
+</section>
+
+<section class="fn-panel" id="fn-clock-ispaused">
+	<h3 class="fn-name">FGameClock::IsPaused()</h3>
+	<p class="back-link">← <a href="../API.html">公开 API</a> · <code>bool</code></p>
+	<div class="pseudo">IsPaused():
+	1. return bPaused</div>
+</section>
+
+<p class="muted"><a href="PrivateDoc.md">PrivateDoc.md</a> — 实现目录 · <a href="../API.html">公开 API</a> — 签名入口</p>
+
+</body>
+</html>
