@@ -1,0 +1,6 @@
+{
+  "FileVersion": 1,
+  "Name": "ConsoleVariable",
+  "Description": "Console variable registry extension.",
+  "Dependencies": []
+}
