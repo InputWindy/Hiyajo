@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Core — API 文档</title>
+<style>
+	:root {
+		--bg: #14181f; --panel: #1b2130; --code-bg: #0d1117;
+		--text: #d8e1f0; --muted: #8b96a8; --accent: #5b8dd9;
+		--accent2: #3f8f63; --border: #2c3444; --border-strong: #3d4a61;
+		--kw: #ff7b72; --type: #79c0ff; --field: #e6c07b; --link: #3f8f63;
+	}
+	* { box-sizing: border-box; }
+	body { margin:0; padding:32px 40px; background:var(--bg); color:var(--text);
+		font-family:"Segoe UI","Microsoft YaHei",sans-serif; line-height:1.7; max-width:1040px; }
+	h1 { font-size:26px; border-bottom:2px solid var(--border-strong); padding-bottom:12px; }
+	h2 { font-size:22px; margin-top:44px; color:var(--accent); border-bottom:1px solid var(--border); padding-bottom:8px; }
+	a { color:var(--accent); text-decoration:none; }
+	a:hover { text-decoration:underline; }
+	.impl-link { color:var(--link); font-size:13px; }
+	code { font-family:Consolas,"Cascadia Code",monospace; background:var(--code-bg);
+		padding:2px 6px; border-radius:4px; font-size:13px; }
+	.kw { color:var(--kw); } .type { color:var(--type); } .field { color:var(--field); }
+	.muted { color:var(--muted); }
+	.class-panel { background:var(--panel); border:1px solid var(--border);
+		border-left:4px solid var(--accent); border-radius:8px; padding:20px 24px; margin:20px 0; }
+	.class-name { font-family:Consolas,"Cascadia Code",monospace; font-size:18px; color:var(--accent); margin:0 0 4px 0; }
+	.class-kind { font-size:12px; color:var(--muted); border:1px solid var(--border);
+		border-radius:4px; padding:1px 8px; margin-left:8px; vertical-align:middle; }
+	.class-desc { color:var(--muted); margin:4px 0 16px 0; }
+	.api-table { width:100%; border-collapse:collapse; margin:8px 0; }
+	.api-table th { text-align:left; background:var(--code-bg); color:var(--muted);
+		font-weight:normal; padding:6px 10px; border:1px solid var(--border); }
+	.api-table td { padding:6px 10px; border:1px solid var(--border); vertical-align:top; }
+	.sig { font-family:Consolas,"Cascadia Code",monospace; font-size:13px; }
+	.group { text-transform:uppercase; letter-spacing:1px; font-size:13px; color:var(--muted);
+		margin:20px 0 8px 0; border-bottom:1px dashed var(--border); padding-bottom:4px; }
+</style>
+</head>
+<body>
+
+<h1>Core — API 文档</h1>
+<p class="muted">编译期 + 运行时基础设施。函数带 <span class="impl-link">→ 实现</span> 的跳转到 Private 侧算法字典。</p>
+
+<h2>TypeList</h2>
+
+<section class="class-panel">
+	<h3 class="class-name">TTypeList&lt;TTypes...&gt;<span class="class-kind">struct</span></h3>
+	<p class="class-desc">编译期有序类型列表。顺序即语义：<code>TTypeList&lt;A,B&gt;</code> ≠ <code>TTypeList&lt;B,A&gt;</code>。</p>
+	<h3 class="group">成员变量</h3>
+	<table class="api-table">
+		<tr><th style="width:46%">字段</th><th style="width:22%">类型</th><th>说明</th></tr>
+		<tr><td class="sig"><code>Count</code></td><td><span class="type">constexpr size_t</span></td><td>类型个数</td></tr>
+	</table>
+</section>
+
+<section class="class-panel">
+	<h3 class="class-name">TCons / TAppend / TContains<span class="class-kind">struct</span></h3>
+	<p class="class-desc">列表操作：前插、后插、成员判断。</p>
+	<h3 class="group">接口</h3>
+	<table class="api-table">
+		<tr><th style="width:46%">签名</th><th>说明</th></tr>
+		<tr><td class="sig"><code><span class="kw">struct</span> TCons&lt;T, TList&gt;</code></td><td>前插</td></tr>
+		<tr><td class="sig"><code><span class="kw">struct</span> TAppend&lt;TList, T&gt;</code></td><td>后插：<code>TAppend_t</code></td></tr>
+		<tr><td class="sig"><code><span class="kw">struct</span> TContains&lt;TList, T&gt;</code></td><td>成员判断：<code>TContains_v</code></td></tr>
+	</table>
+</section>
+
+<section class="class-panel">
+	<h3 class="class-name">TTag / ForEach&lt;TList&gt;<span class="class-kind">struct / function</span></h3>
+	<p class="class-desc">运行时遍历列表：每个类型转成 <code>TTag&lt;T&gt;</code> 喂给 Visitor。Scheduler 满足 <code>FForEachScheduler</code>（有 <code>Run(callables...)</code>），决定串/并行。</p>
+	<h3 class="group">接口</h3>
+	<table class="api-table">
+		<tr><th style="width:46%">签名</th><th>说明</th></tr>
+		<tr><td class="sig"><code>TTag&lt;T&gt;::Type</code></td><td>还原类型 T</td></tr>
+		<tr><td class="sig"><code><span class="kw">void</span> ForEach(Scheduler&amp;&amp;, Visitor&amp;&amp;, Args&amp;&amp;...)</code></td><td>逐个类型调 <code>Visitor(TTag&lt;T&gt;{}, args...)</code></td></tr>
+	</table>
+</section>
+
+<h2>Topology</h2>
+
+<section class="class-panel">
+	<h3 class="class-name">TDependsOn&lt;Key, TList&gt;<span class="class-kind">struct</span></h3>
+	<p class="class-desc">一个依赖槽：在 <code>Key</code> 阶段，Self 依赖 <code>TList</code> 里的每个类型（依赖先完成，Self 后跑）。</p>
+	<h3 class="group">成员变量</h3>
+	<table class="api-table">
+		<tr><th style="width:46%">字段</th><th style="width:22%">类型</th><th>说明</th></tr>
+		<tr><td class="sig"><code>Key</code></td><td><span class="type">constexpr auto</span></td><td>阶段值</td></tr>
+		<tr><td class="sig"><code>FDeps</code></td><td><span class="type">TList</span></td><td>该阶段依赖的类型列表</td></tr>
+	</table>
+</section>
+
+<section class="class-panel">
+	<h3 class="class-name">TDependsPack&lt;TSlots...&gt;<span class="class-kind">struct</span></h3>
+	<p class="class-desc">多个 <code>TDependsOn</code> 槽的变参包。扩展声明 <code>using FDependsPack = TDependsPack&lt;...&gt;</code>。</p>
+	<h3 class="group">接口</h3>
+	<table class="api-table">
+		<tr><th style="width:46%">签名</th><th>说明</th></tr>
+		<tr><td class="sig"><code><span class="kw">static void</span> ForEachSlot(Visitor)</code></td><td>逐槽调 <code>Visitor(Key, TList*)</code></td></tr>
+	</table>
+</section>
+
+<section class="class-panel">
+	<h3 class="class-name">Topo 排序算法<span class="class-kind">namespace</span></h3>
+	<p class="class-desc">编译期拓扑排序 / 分层 / 环检测 / 逆序。只吃每个节点的直接依赖，递归展开传递依赖。</p>
+	<h3 class="group">接口</h3>
+	<table class="api-table">
+		<tr><th style="width:46%">签名</th><th>说明</th></tr>
+		<tr><td class="sig"><code>Topo::TTopoSort_t&lt;TNodes, Key&gt;</code></td><td>线性拓扑序</td></tr>
+		<tr><td class="sig"><code>Topo::TLevels_t&lt;TNodes, Key&gt;</code></td><td>按依赖层级分组</td></tr>
+		<tr><td class="sig"><code>Topo::TIsAcyclic_v&lt;TNodes, Key&gt;</code></td><td>环检测</td></tr>
+		<tr><td class="sig"><code>Topo::TReverse_t&lt;TList&gt;</code></td><td>反转列表</td></tr>
+	</table>
+</section>
+
+<section class="class-panel">
+	<h3 class="class-name">FDefaultSlot / FForwardTopology / FReverseTopology<span class="class-kind">常量 / struct</span></h3>
+	<p class="class-desc"><code>FDefaultSlot</code> = lambda 版 Execute 的默认排序 key（无 stage）。拓扑策略：正序 / 逆序。</p>
+</section>
+
+<h2>Delegate</h2>
+
+<section class="class-panel">
+	<h3 class="class-name">TDelegate&lt;Ret(Args...)&gt;<span class="class-kind">class</span></h3>
+	<p class="class-desc">单播委托：恰好一个绑定，可返回值。</p>
+	<h3 class="group">接口</h3>
+	<table class="api-table">
+		<tr><th style="width:46%">签名</th><th>说明</th></tr>
+		<tr><td class="sig"><code><span class="kw">void</span> Bind(FFunction)</code></td><td>绑定可调用对象</td></tr>
+		<tr><td class="sig"><code><span class="kw">void</span> BindRaw(Object*, Method)</code></td><td>绑定成员函数</td></tr>
+		<tr><td class="sig"><code>Ret Execute(Args...)</code></td><td>调用</td></tr>
+		<tr><td class="sig"><code>Ret ExecuteIfBound(Args...)</code></td><td>调用，未绑定时返回默认值</td></tr>
+	</table>
+</section>
+
+<section class="class-panel">
+	<h3 class="class-name">TMulticastDelegate&lt;Args...&gt;<span class="class-kind">class</span></h3>
+	<p class="class-desc">多播委托：多个绑定，逐个广播。</p>
+	<h3 class="group">接口</h3>
+	<table class="api-table">
+		<tr><th style="width:46%">签名</th><th>说明</th></tr>
+		<tr><td class="sig"><code>FDelegateHandle Add(Fn)</code></td><td>添加绑定</td></tr>
+		<tr><td class="sig"><code>FDelegateHandle AddRaw(Object*, Method)</code></td><td>添加成员绑定</td></tr>
+		<tr><td class="sig"><code><span class="kw">void</span> Broadcast(Args...)</code></td><td>广播</td></tr>
+		<tr><td class="sig"><code><span class="kw">void</span> Remove(Handle)</code></td><td>移除</td></tr>
+	</table>
+</section>
+
+<h2>Singleton / Scheduler</h2>
+
+<section class="class-panel">
+	<h3 class="class-name">TSingleton&lt;TDerived&gt;<span class="class-kind">class</span></h3>
+	<p class="class-desc">CRTP Meyers 单例。与扩展体系平级——谁想单例谁继承。</p>
+	<h3 class="group">接口</h3>
+	<table class="api-table">
+		<tr><th style="width:46%">签名</th><th>说明</th></tr>
+		<tr><td class="sig"><code><span class="kw">static</span> TDerived&amp; Get()</code></td><td>唯一实例（懒初始化，线程安全）</td></tr>
+	</table>
+</section>
+
+<section class="class-panel">
+	<h3 class="class-name">IScheduler<span class="class-kind">class</span></h3>
+	<p class="class-desc">调度器基类，声明 <code>Run</code> + 双 <code>Execute</code> 契约（= delete）。具体串/并行在 <code>Engine/</code>。</p>
+	<h3 class="group">接口</h3>
+	<table class="api-table">
+		<tr><th style="width:46%">签名</th><th>说明</th></tr>
+		<tr><td class="sig"><code><span class="kw">void</span> Run(Callables...)</code></td><td>驱动一组可调用（串/并行）</td></tr>
+		<tr><td class="sig"><code><span class="kw">void</span> Execute&lt;Stage, TExtensions&gt;()</code></td><td>按 stage 分发（调 ExecuteStage(Stage)）</td></tr>
+		<tr><td class="sig"><code><span class="kw">void</span> Execute&lt;TExtensions&gt;(Visitor)</code></td><td>按 lambda 分发（FDefaultSlot 排序）</td></tr>
+	</table>
+</section>
+
+<h2>Extension</h2>
+
+<section class="class-panel">
+	<h3 class="class-name">TExtension&lt;TDerived&gt;<span class="class-kind">class</span></h3>
+	<p class="class-desc">单例扩展。只继承 <code>TSingleton</code>——<b>不继承 IAssembly</b>；插件不需要动态加载，只有应用（宿主）显式继承 IAssembly。</p>
+</section>
+
+<section class="class-panel">
+	<h3 class="class-name">TExtensionList&lt;TDerived, TExtensions...&gt;<span class="class-kind">class</span></h3>
+	<p class="class-desc">单例 + 组装：同时是 <code>TExtension</code>（可驱动）和 <code>TTypeList</code>（一组扩展）。因为本身是 TExtension，可递归嵌套。</p>
+	<h3 class="group">成员变量</h3>
+	<table class="api-table">
+		<tr><th style="width:46%">字段</th><th style="width:22%">类型</th><th>说明</th></tr>
+		<tr><td class="sig"><code>FExtensions</code></td><td><span class="type">TTypeList&lt;TExtensions...&gt;</span></td><td>这组扩展</td></tr>
+	</table>
+</section>
+
+<h2>Assembly</h2>
+
+<section class="class-panel">
+	<h3 class="class-name">FAssembly<span class="class-kind">class</span></h3>
+	<p class="class-desc">动态加载原语：OS 模块句柄 + 符号探测。不认识插件/manifest/工厂，怎么解释符号是消费方的事。</p>
+	<h3 class="group">接口</h3>
+	<table class="api-table">
+		<tr><th style="width:46%">签名</th><th>说明</th></tr>
+		<tr><td class="sig"><code><span class="kw">bool</span> Load(string_view Path)</code> <a class="impl-link" href="../../Private/Core/CoreAPI.html#fn-assembly-load">→ 实现</a></td><td>LoadLibrary / dlopen</td></tr>
+		<tr><td class="sig"><code><span class="kw">void</span> Unload()</code> <a class="impl-link" href="../../Private/Core/CoreAPI.html#fn-assembly-unload">→ 实现</a></td><td>FreeLibrary / dlclose</td></tr>
+		<tr><td class="sig"><code><span class="type">void</span>* GetProcAddress(const char*)</code> <a class="impl-link" href="../../Private/Core/CoreAPI.html#fn-assembly-getproc">→ 实现</a></td><td>符号探测</td></tr>
+		<tr><td class="sig"><code>IsLoaded()</code></td><td>是否已加载</td></tr>
+		<tr><td class="sig"><code>T* GetProc&lt;T&gt;(const char*)</code></td><td>类型化符号探测</td></tr>
+	</table>
+</section>
+
+<section class="class-panel">
+	<h3 class="class-name">IAssembly<span class="class-kind">interface</span></h3>
+	<p class="class-desc">已加载装配件的契约——有 Main 入口。DLL 导出 <code>CreateExtension</code> 返回它。</p>
+	<h3 class="group">接口</h3>
+	<table class="api-table">
+		<tr><th style="width:46%">签名</th><th>说明</th></tr>
+		<tr><td class="sig"><code><span class="kw">virtual int</span> Main(int Argc, char** Argv) = 0</code></td><td>装配件入口</td></tr>
+	</table>
+</section>
+
+<h2>Fatal</h2>
+
+<section class="class-panel">
+	<h3 class="class-name">ReportFatal / InstallFatalHandlers<span class="class-kind">function</span></h3>
+	<p class="class-desc">致命路径 + 崩溃兜底（零依赖）。</p>
+	<h3 class="group">接口</h3>
+	<table class="api-table">
+		<tr><th style="width:46%">签名</th><th>说明</th></tr>
+		<tr><td class="sig"><code><span class="kw">void</span> ReportFatal(const char*)</code> <a class="impl-link" href="../../Private/Core/CoreAPI.html#fn-fatal-report">→ 实现</a></td><td>输出致命信息并终止</td></tr>
+		<tr><td class="sig"><code><span class="kw">void</span> InstallFatalHandlers()</code> <a class="impl-link" href="../../Private/Core/CoreAPI.html#fn-fatal-install">→ 实现</a></td><td>装 std::terminate 兜底</td></tr>
+	</table>
+</section>
+
+<p class="muted"><a href="CoreDoc.md">CoreDoc.md</a> — 概念 · <a href="../../Private/Core/CoreDoc.md">实现字典</a> — 算法伪代码</p>
+
+</body>
+</html>

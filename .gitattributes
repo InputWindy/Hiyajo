@@ -1,0 +1,13 @@
+# Windows batch / script files MUST stay CRLF — cmd.exe misparses LF-only files.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.vbs text eol=crlf
+*.ps1 text eol=crlf
+
+# Source stays LF (C++ headers / cpp / cmake / python).
+*.h text eol=lf
+*.cpp text eol=lf
+*.cmake text eol=lf
+*.cplugin text eol=lf
+*.py text eol=lf
+*.md text eol=lf
