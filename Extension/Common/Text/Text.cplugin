@@ -1,0 +1,6 @@
+{
+  "FileVersion": 1,
+  "Name": "Text",
+  "Description": "Localized text (culture-aware).",
+  "Dependencies": ["Json"]
+}
