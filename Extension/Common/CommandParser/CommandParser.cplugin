@@ -1,0 +1,6 @@
+{
+  "FileVersion": 1,
+  "Name": "CommandParser",
+  "Description": "Command-line argument parser extension (key-value store).",
+  "Dependencies": []
+}
