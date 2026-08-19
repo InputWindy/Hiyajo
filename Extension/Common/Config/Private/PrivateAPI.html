@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Config（Private）— 实现算法字典</title>
+<style>
+	:root {
+		--bg: #14181f; --panel: #1b2130; --code-bg: #0d1117;
+		--text: #d8e1f0; --muted: #8b96a8; --accent: #5b8dd9;
+		--accent2: #3f8f63; --border: #2c3444; --border-strong: #3d4a61;
+		--kw: #ff7b72; --type: #79c0ff;
+	}
+	* { box-sizing: border-box; }
+	body { margin:0; padding:32px 40px; background:var(--bg); color:var(--text);
+		font-family:"Segoe UI","Microsoft YaHei",sans-serif; line-height:1.7; max-width:1040px; }
+	h1 { font-size:26px; border-bottom:2px solid var(--border-strong); padding-bottom:12px; }
+	h2 { font-size:22px; margin-top:44px; color:var(--accent); border-bottom:1px solid var(--border); padding-bottom:8px; }
+	a { color:var(--accent); text-decoration:none; }
+	a:hover { text-decoration:underline; }
+	.fn-panel { background:var(--panel); border:1px solid var(--border);
+		border-left:4px solid var(--accent2); border-radius:8px; padding:20px 24px; margin:24px 0; }
+	.fn-name { font-family:Consolas,"Cascadia Code",monospace; font-size:18px; color:var(--accent2); margin:0 0 4px 0; }
+	.back-link { font-size:13px; color:var(--muted); }
+	.pseudo { font-family:Consolas,"Cascadia Code",monospace; background:var(--code-bg);
+		border:1px solid var(--border); border-radius:6px; padding:14px 18px;
+		margin:12px 0; font-size:13px; white-space:pre; overflow-x:auto; line-height:1.6; }
+	code { font-family:Consolas,"Cascadia Code",monospace; background:var(--code-bg);
+		padding:2px 6px; border-radius:4px; }
+	.muted { color:var(--muted); }
+</style>
+</head>
+<body>
+
+<h1>Config（Private）— 实现算法字典</h1>
+<p class="muted">cpp 侧每个函数的算法伪代码。Public 侧 API 通过跳转链接落到这里。</p>
+
+<h2>Config.cpp</h2>
+
+<section class="fn-panel" id="fn-config-executestage">
+	<h3 class="fn-name">FConfig::ExecuteStage(EConfigStage Stage)</h3>
+	<p class="back-link">← <a href="../API.html">公开 API</a> · <code>bool</code></p>
+	<p>阶段分发：Init / Shutdown 均清空所有 section。</p>
+	<div class="pseudo">ExecuteStage(Stage):
+	1. if Stage == Init or Shutdown:
+	       Sections.clear()
+	2. return true</div>
+</section>
+
+<section class="fn-panel" id="fn-config-load">
+	<h3 class="fn-name">FConfig::Load(string_view Path)</h3>
+	<p class="back-link">← <a href="../API.html">公开 API</a> · <code>bool</code></p>
+	<p>逐行解析 INI。空行/`;`/`#` 跳过；`[section]` 切段；`key=value` 存 map。</p>
+	<div class="pseudo">Load(Path):
+	1. open ifstream(Path); if fail return false
+	2. CurrentSection = ""
+	3. for each Line:
+	       T = Trim(Line)
+	       if T empty or starts ';'/'#' : continue
+	       if T starts '[' and ends ']': CurrentSection = T[1:-1]; continue
+	       i = T.find('='); if npos: continue
+	       Sections[CurrentSection][Trim(T[:i])] = Trim(T[i+1:])
+	4. return true</div>
+</section>
+
+<section class="fn-panel" id="fn-config-getstring">
+	<h3 class="fn-name">FConfig::GetString(Section, Key)</h3>
+	<p class="back-link">← <a href="../API.html">公开 API</a> · <code>optional&lt;string&gt;</code></p>
+	<div class="pseudo">GetString(Section, Key):
+	1. it = Sections.find(Section); if end return nullopt
+	2. k = it->second.find(Key);  if end return nullopt
+	3. return k->second</div>
+</section>
+
+<section class="fn-panel" id="fn-config-getint">
+	<h3 class="fn-name">FConfig::GetInt(Section, Key, Default)</h3>
+	<p class="back-link">← <a href="../API.html">公开 API</a> · <code>int64_t</code></p>
+	<div class="pseudo">GetInt(S, K, Def):
+	1. V = GetString(S, K); if !V return Def
+	2. try return std::stoll(*V)
+	3. catch return Def</div>
+</section>
+
+<section class="fn-panel" id="fn-config-getfloat">
+	<h3 class="fn-name">FConfig::GetFloat(Section, Key, Default)</h3>
+	<p class="back-link">← <a href="../API.html">公开 API</a> · <code>double</code></p>
+	<div class="pseudo">GetFloat(S, K, Def):
+	1. V = GetString(S, K); if !V return Def
+	2. try return std::stod(*V)
+	3. catch return Def</div>
+</section>
+
+<section class="fn-panel" id="fn-config-getbool">
+	<h3 class="fn-name">FConfig::GetBool(Section, Key, Default)</h3>
+	<p class="back-link">← <a href="../API.html">公开 API</a> · <code>bool</code></p>
+	<div class="pseudo">GetBool(S, K, Def):
+	1. V = GetString(S, K); if !V return Def
+	2. Lower = lowercase(*V)
+	3. return Lower in {"true","1","yes","on"}</div>
+</section>
+
+<section class="fn-panel" id="fn-config-setstring">
+	<h3 class="fn-name">FConfig::SetString(Section, Key, Value)</h3>
+	<p class="back-link">← <a href="../API.html">公开 API</a> · <code>void</code></p>
+	<div class="pseudo">SetString(S, K, Value):
+	1. Sections[S][K] = move(Value)</div>
+</section>
+
+<section class="fn-panel" id="fn-config-has">
+	<h3 class="fn-name">FConfig::HasSection / HasKey</h3>
+	<p class="back-link">← <a href="../API.html">公开 API</a> · <code>bool</code></p>
+	<div class="pseudo">HasSection(S):
+	1. return Sections.find(S) != end
+
+HasKey(S, K):
+	1. return GetString(S, K).has_value()</div>
+</section>
+
+<p class="muted"><a href="PrivateDoc.md">PrivateDoc.md</a> — 实现目录 · <a href="../API.html">公开 API</a> — 签名入口</p>
+
+</body>
+</html>
