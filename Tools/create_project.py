@@ -19,6 +19,7 @@ from maho_tools import (  # noqa: E402
 	install_cplugin_association,
 	is_valid_project_name,
 	list_engine_plugins,
+	list_engine_templates,
 	open_in_file_manager,
 )
 
@@ -39,9 +40,11 @@ class CreateProjectApp(tk.Tk):
 		self.var_engine = tk.StringVar(value=str(ENGINE_ROOT))
 		self.var_author = tk.StringVar(value="土豆泥大王")
 		self.var_open_folder = tk.BooleanVar(value=True)
+		self.var_template = tk.StringVar(value="")
 
 		self._plugins: list[dict] = []
 		self._checked: dict[str, bool] = {}
+		self._templates: list[str] = []
 
 		self._build()
 		self.protocol("WM_DELETE_WINDOW", self.destroy)
@@ -75,30 +78,53 @@ class CreateProjectApp(tk.Tk):
 		self.txt_desc.grid(row=5, column=1, columnspan=2, sticky="nsew", **pad)
 		self.txt_desc.insert("1.0", "哈哈，我是土豆泥大王！")
 
-		# Plugins — single tree, all checkboxes.
-		ttk.Label(frm, text="Plugins").grid(row=6, column=0, sticky="nw", **pad)
+		# Project template — scan engine Extension/Engine/.
+		ttk.Label(frm, text="Project Template").grid(row=6, column=0, sticky="w", **pad)
+		self.cmb_template = ttk.Combobox(frm, textvariable=self.var_template, state="readonly", values=[])
+		self.cmb_template.grid(row=6, column=1, sticky="ew", **pad)
+		ttk.Button(frm, text="↻", width=2, command=self._reload_templates).grid(row=6, column=2, sticky="e", **pad)
+
+		# Plugins — split into Tool (left) + Layer (right) columns.
+		ttk.Label(frm, text="Plugins").grid(row=7, column=0, sticky="nw", **pad)
 		plugins_frame = ttk.Frame(frm)
-		plugins_frame.grid(row=6, column=1, columnspan=2, sticky="nsew", **pad)
+		plugins_frame.grid(row=7, column=1, columnspan=2, sticky="nsew", **pad)
 		plugins_frame.columnconfigure(0, weight=1)
+		plugins_frame.columnconfigure(1, weight=1)
 		plugins_frame.rowconfigure(0, weight=1)
 
-		self.ext_tree = ttk.Treeview(plugins_frame, show="tree", selectmode="none")
-		ext_scroll = ttk.Scrollbar(plugins_frame, orient=tk.VERTICAL, command=self.ext_tree.yview)
-		self.ext_tree.configure(yscrollcommand=ext_scroll.set)
-		self.ext_tree.grid(row=0, column=0, sticky="nsew")
-		ext_scroll.grid(row=0, column=1, sticky="ns")
-		self.ext_tree.bind("<Button-1>", self._on_tree_click)
+		# Left: tools.
+		tool_col = ttk.Frame(plugins_frame)
+		tool_col.grid(row=0, column=0, sticky="nsew", padx=(0, 6))
+		ttk.Label(tool_col, text="Tool").pack(anchor="w")
+		self.tool_tree = ttk.Treeview(tool_col, show="tree", selectmode="none")
+		tool_scroll = ttk.Scrollbar(tool_col, orient=tk.VERTICAL, command=self.tool_tree.yview)
+		self.tool_tree.configure(yscrollcommand=tool_scroll.set)
+		self.tool_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+		tool_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+		self.tool_tree.bind("<Button-1>", self._on_tree_click)
+
+		# Right: layers.
+		layer_col = ttk.Frame(plugins_frame)
+		layer_col.grid(row=0, column=1, sticky="nsew")
+		ttk.Label(layer_col, text="Layer").pack(anchor="w")
+		self.layer_tree = ttk.Treeview(layer_col, show="tree", selectmode="none")
+		layer_scroll = ttk.Scrollbar(layer_col, orient=tk.VERTICAL, command=self.layer_tree.yview)
+		self.layer_tree.configure(yscrollcommand=layer_scroll.set)
+		self.layer_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+		layer_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+		self.layer_tree.bind("<Button-1>", self._on_tree_click)
 
 		# Bottom row: open-folder checkbox (left) + Create Project (right).
 		bottom = ttk.Frame(frm)
-		bottom.grid(row=7, column=0, columnspan=3, sticky="ew", **pad)
+		bottom.grid(row=8, column=0, columnspan=3, sticky="ew", **pad)
 		ttk.Checkbutton(bottom, text="Open project folder", variable=self.var_open_folder).pack(side=tk.LEFT)
 		ttk.Button(bottom, text="Create Project", command=self._create).pack(side=tk.RIGHT)
 
 		frm.columnconfigure(1, weight=1)
 		frm.rowconfigure(5, weight=1)
-		frm.rowconfigure(6, weight=3)
+		frm.rowconfigure(7, weight=3)
 
+		self._reload_templates()
 		self._reload_plugins()
 
 	# ── plugin tree ──────────────────────────────────────────────────────
@@ -109,22 +135,32 @@ class CreateProjectApp(tk.Tk):
 				return p["Dependencies"]
 		return []
 
+	def _reload_templates(self) -> None:
+		engine = Path(self.var_engine.get().strip())
+		self._templates = list_engine_templates(engine)
+		self.cmb_template["values"] = self._templates
+		if self._templates and not self.var_template.get():
+			self.var_template.set(self._templates[0])
+
 	def _reload_plugins(self) -> None:
-		for item in self.ext_tree.get_children():
-			self.ext_tree.delete(item)
+		for tree in (self.tool_tree, self.layer_tree):
+			for item in tree.get_children():
+				tree.delete(item)
 		engine = Path(self.var_engine.get().strip())
 		self._plugins = list_engine_plugins(engine)
 		self._checked = {}
 
 		for p in self._plugins:
-			self._insert_plugin(self.ext_tree, p, default=False)
+			tree = self.tool_tree if p.get("Kind") == "tool" else self.layer_tree
+			self._insert_plugin(tree, p, default=False)
 
 	def _insert_plugin(self, tree: ttk.Treeview, p: dict, default: bool) -> None:
 		name = p["Name"]
 		self._checked[name] = default
-		# Mirror the directory hierarchy: collapsible group nodes, then the leaf.
 		parent = ""
-		group = p.get("Group") or []
+		# Skip the first group element — it is the Tool/Layer dir, already
+		# implied by which column the plugin lives in.
+		group = (p.get("Group") or [])[1:]
 		for i in range(len(group)):
 			gid = "group:" + "/".join(group[: i + 1])
 			if not tree.exists(gid):
@@ -137,8 +173,9 @@ class CreateProjectApp(tk.Tk):
 		return f"{mark} {name}"
 
 	def _refresh_item(self, name: str) -> None:
-		if self.ext_tree.exists(name):
-			self.ext_tree.item(name, text=self._label(name))
+		for tree in (self.tool_tree, self.layer_tree):
+			if tree.exists(name):
+				tree.item(name, text=self._label(name))
 
 	def _on_tree_click(self, event: tk.Event) -> None:
 		item = event.widget.identify_row(event.y)
@@ -187,6 +224,7 @@ class CreateProjectApp(tk.Tk):
 		path = filedialog.askdirectory(initialdir=self.var_engine.get() or str(ENGINE_ROOT))
 		if path:
 			self.var_engine.set(path)
+			self._reload_templates()
 			self._reload_plugins()
 
 	def log_line(self, message: str) -> None:
@@ -214,6 +252,7 @@ class CreateProjectApp(tk.Tk):
 		want_open = self.var_open_folder.get()
 
 		checked_plugins = sorted(n for n in self._checked if self._checked[n])
+		template = self.var_template.get().strip()
 
 		if not is_valid_project_name(name):
 			messagebox.showerror("Maho", "Invalid project name.\nUse Letter + A-Z a-z 0-9 _ -")
@@ -240,6 +279,7 @@ class CreateProjectApp(tk.Tk):
 				description=desc,
 				author=author,
 				plugins=checked_plugins,
+				template=template,
 			)
 		except Exception as ex:  # noqa: BLE001
 			messagebox.showerror("Maho", str(ex))

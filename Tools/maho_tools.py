@@ -940,6 +940,7 @@ def create_project(
 	description: str = "",
 	author: str = "",
 	plugins: list[str] | None = None,
+	template: str = "",
 ) -> Path:
 	if not is_valid_project_name(project_name):
 		raise ValueError(
@@ -2082,10 +2083,24 @@ def list_engine_plugins(engine_root: Path | None = None) -> list[dict[str, Any]]
 				"EnabledByDefault": True,
 				"Extension": extension,
 				"Group": list(cplugin_path.parent.relative_to(root).parts[:-1]),
+				# Kind: the top-level category dir — Tool / Layer / Engine.
+				"Kind": (
+					cplugin_path.parent.relative_to(root).parts[0].lower()
+					if cplugin_path.parent.relative_to(root).parts
+					else "tool"
+				),
 			}
 		)
 	out.sort(key=lambda p: p["Name"])
 	return out
+
+
+def list_engine_templates(engine_root: Path | None = None) -> list[str]:
+	"""Enumerate Engine plugin templates under Extension/Engine/ (names only)."""
+	root = (engine_root or ENGINE_ROOT).resolve() / "Extension" / "Engine"
+	if not root.is_dir():
+		return []
+	return sorted(p.parent.name for p in discover_cplugin_files([root]))
 
 
 def scan_plugin_modules(
