@@ -423,8 +423,19 @@ public:
 
 	int Main(int Argc, char** Argv) override;
 
-	// TODO: define your stage enum (e.g. enum class EStage {{ Init, Tick }})
-	// and drive it in Main:  Execute<Stage::Tick, FExtensions>();
+	// TODO: split the extension list and drive the two halves separately:
+	//
+	//   using FRunables    = typename Maho::TFilter<FExtensions, Maho::TIsRunable>::Type;
+	//   using FNonRunables = typename Maho::TFilter<FExtensions, Maho::TIsNotRunable>::Type;
+	//
+	//   // ① tools: drive by your own stage enum (specialise ExecuteExtension<T, EStage>)
+	//   Execute<EStage::Init, FNonRunables>();
+	//
+	//   // ② runnables: each runs its own Main (nested hosts)
+	//   ForEach<FRunables>(*this, [&](auto Tag) {{
+	//       using T = typename decltype(Tag)::Type;
+	//       T::Get().Main(Argc, Argv);
+	//   }});
 }};
 
 // Compile-time contract: an IAssembly MUST provide CreateExtension.

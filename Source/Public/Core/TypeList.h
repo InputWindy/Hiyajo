@@ -85,6 +85,35 @@ public:
 		FTail>;
 };
 
+/**
+ * Filter a list by a unary type predicate: keep the elements for which
+ * FPredicate<T>::value is true, preserving order.
+ *
+ *   template <typename T> using TIsRunable = std::is_base_of<IRunable, T>;
+ *   using FRunables = typename TFilter<TTypeList<A, B, C>, TIsRunable>::Type;
+ */
+template <typename TList, template <typename> typename FPredicate>
+struct TFilter;
+
+template <template <typename> typename FPredicate>
+struct TFilter<TTypeList<>, FPredicate>
+{
+	using Type = TTypeList<>;
+};
+
+template <typename THead, typename... TRest, template <typename> typename FPredicate>
+struct TFilter<TTypeList<THead, TRest...>, FPredicate>
+{
+private:
+	using FTail = typename TFilter<TTypeList<TRest...>, FPredicate>::Type;
+
+public:
+	using Type = std::conditional_t<
+		FPredicate<THead>::value,
+		typename TCons<THead, FTail>::Type,
+		FTail>;
+};
+
 // (Traversal — TTag / ForEach / the scheduler contract — lives in
 //  Scheduler.h, where the drive protocol is defined.)
 
