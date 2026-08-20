@@ -9,6 +9,7 @@
 - [Export.h](Export.h)
 - [Extension.h](Extension.h)
 - [Fatal.h](Fatal.h)
+- [Runable.h](Runable.h)
 - [Scheduler.h](Scheduler.h)
 - [Singleton.h](Singleton.h)
 - [Topology.h](Topology.h)
@@ -17,29 +18,18 @@
 
 ## 概念——引擎基础设施
 
-Maho 核心是**零 app 假设、零三方依赖、零 stage 预设**的纯积木。不定义 stage 枚举、不定义 app 形态，调度策略全部下放插件。
+Maho 核心是**零 app 假设、零三方依赖、零 stage 预设**的纯积木。下面从"身份 → 能力 → 协议 → 列表"四层讲清每个概念。
 
-### 核心抽象
+### ① 扩展身份与依赖表
 
-**① `TExtension<TDerived>` —— 单例扩展**
+**`IExtension`** —— 所有扩展的根身份（只有一个虚析构）。
 
-```cpp
-template <typename TDerived>
-class TExtension : public TSingleton<TDerived>
-{
-public:
-    virtual ~TExtension() = default;
-};
-```
-
-一切可被驱动的东西都是它。只继承 `TSingleton`（CRTP Meyer's 单例）——**不继承 `IAssembly`**；插件不需要被动态加载，只有应用（宿主）显式继承 `IAssembly`。
-
-**② `TExtensionList<TDerived, TExtensions...>` —— 单例 + 组装**
+**`TExtension<TExtensions...>`** —— **依赖表 + 管理者**。它继承 `IExtension`（于是隐式地把自己变成扩展）和 `TTypeList<TExtensions...>`（工具列表）。
 
 ```cpp
-template <typename TDerived, typename... TExtensions>
-class TExtensionList
-    : public virtual TExtension<TDerived>
+template <typename... TExtensions>
+class TExtension
+    : public virtual IExtension
     , public TTypeList<TExtensions...>
 {
 public:
@@ -47,46 +37,70 @@ public:
 };
 ```
 
-同时是 `TExtension`（单例可驱动）和 `TTypeList`（一组扩展）。因为还是 `TExtension`，能递归嵌套——父 host 作为元素塞进子 host 列表，子 host 是父出边，整体永无环。
+关键语义：**`TExtensions` 列表里的插件跟 `TExtension` 不是平级、也不是继承——它是"管理者"声明的"我要用到这些工具"**。真正的"拓展"（继承一个插件扩展它的能力）是直接继承 `class FMyPlugin : public FBasePlugin`，跟这个列表无关。
 
-### 驱动机制
+### ② 能力（可选，各自独立）
 
-**`ForEach<TList>(Scheduler, Visitor, Args...)`** —— 编译期遍历：展开 `TTypeList`，每个类型喂 `TTag<T>` 给 Visitor，Scheduler 控制串/并行。
+| 概念 | 语义 | 与单例 |
+|------|------|--------|
+| `TSingleton<T>` | 进程内唯一实例（Meyers 单例） | — |
+| `IRunable` | 可运行（有 `Main`） | ✅ 兼容 |
+| `IAssembly` | 可动态安装（`IRunable` + 导出 `CreateExtension`） | ❌ 互斥 |
 
-**`IScheduler` 双 Execute**：
+`TSingleton` 和 `IRunable`/`IAssembly` 是**独立的可选能力**，插件自己决定要哪个：工具要单例、Layer 要"单例 + Main"、应用要"Assembly（导出）"。
 
-```cpp
-// ① 按 stage 分发（硬编码 ExecuteStage）
-template <auto Stage, typename TExtensions, typename TTopology = FForwardTopology>
-void Execute();
+### ③ 调度协议
 
-// ② 按 lambda 分发（Visitor 自定义，用 FDefaultSlot 排序）
-template <typename TExtensions, typename TVisitor>
-void Execute(TVisitor&& Visitor);
-```
+**`IScheduler`** —— 调度器契约：`Run`（驱动一组可调用）+ `Execute<Stage, TExtensions>()`（按 stage 驱动扩展，外层 level 串行、内层并行/串行）。
 
-两者都走"外层 level 串行 + 内层同 level 并行/串行"，用 `Topo::TLevels_t` 分层排序。
-
-### 依赖声明（一层）
+**`ExecuteExtension<T>(Stage)`** —— 扩展与调度器的**唯一交互协议**。主模板是 no-op 兜底，应用侧对具体的 `(T, Stage)` 偏特化决定行为：
 
 ```cpp
-struct FMyExtension
-{
-    using FDependsPack = TDependsPack<
-        TDependsOn<MyStage::Init, TTypeList<FDep1, FDep2>>
-    >;
-};
+// 应用侧（Driver）偏特化：FLog 在 EStage 下干什么
+template <>
+bool ExecuteExtension<Maho::Log::FLog, EStage>(EStage Stage) { /* ... */ }
 ```
 
-每个扩展只声明**直接依赖**（一层）。排序递归展开传递依赖。
+调度器只负责 `ExecuteExtension<T>(Stage)` 的调用，stage 枚举和每个扩展的 stage 行为完全由应用侧决定。
 
-### 线程池
+### ④ 列表代数
 
-`FThreadPool`（`Engine/ThreadPool.h`）：构造 0 线程，首次 `Run` 懒启动到 `min(任务数, hardware_concurrency)`，15 任务 5 核自动 5+5+5 分批。`Run` 带 barrier，任务异常保证 barrier 释放、跑完 rethrow。
+`TTypeList` / `TCons` / `TAppend` / `TContains` / `TFilter<TList, TBase>`（按基类过滤，`is_base_of` 内联）。
+
+## 关系图
+
+```mermaid
+graph TD
+    subgraph 身份与依赖
+        IExtension["IExtension<br/>扩展身份"]
+        TExtension["TExtension&lt;Ts...&gt;<br/>依赖表 = 管理者 + 工具列表"]
+        TTypeList["TTypeList&lt;Ts...&gt;<br/>工具列表"]
+        TExtension --> IExtension
+        TExtension --> TTypeList
+    end
+
+    subgraph 可选能力
+        TSingleton["TSingleton&lt;T&gt;<br/>单例"]
+        IRunable["IRunable<br/>可运行(Main)"]
+        IAssembly["IAssembly<br/>可动态安装"]
+        IAssembly --> IRunable
+    end
+
+    subgraph 调度协议
+        IScheduler["IScheduler<br/>Run + Execute"]
+        ExecuteExt["ExecuteExtension&lt;T,Stage&gt;<br/>交互协议"]
+        IScheduler --> ExecuteExt
+    end
+
+    TExtension -.装配.-> TSingleton
+    TExtension -.装配.-> IRunable
+    TExtension -.装配.-> IAssembly
+```
 
 ## 相关文档
 
 - [Core.h](Core.h) — 聚合头
 - [CoreAPI.html](CoreAPI.html) — API 文档
+- [../Engine/EngineDoc.md](../Engine/EngineDoc.md) — 插件模板（Tool/Layer/Engine）
 - [../../Private/Core/CoreDoc.md](../../Private/Core/CoreDoc.md) — 实现算法字典
 - [../../SourceDoc.md](../../SourceDoc.md) — 源码根
