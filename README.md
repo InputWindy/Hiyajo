@@ -8,18 +8,18 @@
 
 ## 简介
 
-Maho 是一个纯 C++20 的游戏引擎，核心设计围绕**并行调度**与**插件式架构**展开。它借鉴 Unity DOTS 的理念：把应用拆解成一组职责单一的功能层，由调度器在每一帧自动编排执行——跨层串行、同层并行，层间依赖自动插入同步点。
+Maho 是一个纯 C++20 的游戏引擎，核心设计围绕**并行调度**与**插件式架构**展开。它借鉴 Unity DOTS 的理念：把应用拆解成一组职责单一的功能层，由调度器按 stage 自动编排执行——外层跨层串行、同层并行，层间屏障同步。
 
 一个功能就是一个插件，一个插件就是一个 DLL。引擎核心只提供少量通用积木，所有能力——日志、序列化、物理、渲染——都以插件形式存在，按需安装。
 
 ## 特性
 
-- **并行调度**：`IScheduler` 双模式驱动——按阶段（stage）分发，或按 lambda 分发。同层插件在自适应的线程池上并行执行，层间屏障同步。
-- **插件即一切**：工具、功能模块、应用程序，都是插件。宿主本身也是插件，支持递归嵌套。
-- **编译期组装**：插件组合、依赖排序、遍历展开全部在编译期由模板完成，运行时零反射、零排序开销。
-- **单例直调**：所有插件是懒加载单例，`T::Get()` 触发构造，无 `new`、无运行时容器。
-- **零三方依赖的核心**：引擎核心不含任何第三方库，每个插件在自己的 `.cmake` 里用 FetchContent 拉取所需依赖，镜像与代理可配置。
-- **纯通用核心**：核心不预设 stage 枚举、不预设应用形态，全部下放插件层。
+- **三类插件**：工具（`TTool`）、层（`TLayer`）、引擎（`TEngine`）——按角色选模板，语义清晰。
+- **stage 驱动**：调度器唯一的执行路径是 `ExecuteExtension<T, Stage>`，应用侧偏特化决定每个扩展在每个 stage 干什么。
+- **编译期组装**：插件组合、品种过滤（`TFilter`）、遍历展开全部在编译期由模板完成，运行时零反射、零排序开销。
+- **能力可选**：单例（`TSingleton`）、可运行（`IRunable`）、可安装（`IAssembly`）——插件自己决定要哪些，编译器强制互斥约束。
+- **零三方依赖的核心**：引擎核心不含任何第三方库，每个插件在自己的 `.cmake` 里用 FetchContent 拉取依赖，镜像与代理可配置。
+- **纯通用核心**：核心不预设 stage 枚举、不预设应用形态，全部下放应用层。
 
 ## 构建流程
 
@@ -80,39 +80,76 @@ Release 构建并拷贝 exe + 全部 DLL 到 `Packaged/Win64/Release/`。
 
 ## 核心概念
 
-### 插件
+### 三类插件
 
-一个功能就是一个插件。日志、网络、渲染、物理、脚本……都是平级的功能层，在主循环里被调度器按帧驱动。
+新建插件时按角色选模板：
 
-- **引擎插件**：Maho 自带一组通用插件（Log / Json / Math / Physics ……），建项目时勾选即可安装。
-- **三方插件**：外部获取的现成插件，整个拷进项目 `Extension/` 目录，构建时自动接入。
-- **项目插件**：自己写的功能，用 `CreatePlugin.bat` 创建，自动继承引擎插件与三方插件。
+| 模板 | 角色 | 单例 | 调度器 | 说明 |
+|------|------|------|--------|------|
+| `TTool<T, Ts...>` | 工具 | ✅ | ❌ | 被 Manager 调度的功能模块（Log / Json / Math） |
+| `TLayer<T, Ts...>` | 层 | ✅ | ✅ 并行 | 单例 + Main，调度自己的工具 |
+| `TEngine<Ts...>` | 应用根 | ❌ | ✅ 并行 | 可动态安装（导出 CreateExtension） |
 
-### 并行调度
-
-一组平级插件，调度器遍历执行；插件之间有依赖时，显式声明依赖关系，调度器自动插入同步节点。
-
-- 外层跨层串行，同层内并行，线程池自适应（构造零线程，按需懒启动到 CPU 核数上限）。
-- 屏障同步：每层执行完才进入下一层；任务异常不会卡死屏障，跑完统一抛出。
-- 两种驱动方式：按 stage 分发（`ExecuteStage`），或按 lambda 分发（自定义回调）。
-
-### 沙漏依赖
-
-```
-引擎插件 ──┐
-          ├──→ 项目入口插件 ──┬──→ 功能子插件
-三方插件 ──┘                 ├──→ 更多子插件
-                            └──→ ...
+```cpp
+class FLog      : public Maho::TTool<FLog> { ... };
+class FRenderer : public Maho::TLayer<FRenderer, FLog, FRDG> { ... };
+class FMyGame   : public Maho::TEngine<FLog, FRDG, FRenderer> { ... };
 ```
 
-项目入口插件是唯一的"枢纽"——它只依赖引擎插件与三方插件，而项目自己写的功能子插件都依赖它。依赖方向单向，永无环。
+### 管理者 vs 拓展
+
+**关键语义**：`TExtension<TExtensions...>` 列表里的插件，跟管理者**既不是平级、也不是继承**——它们是"我要用到的工具"。
+
+- **使用**：`TEngine<FLog, FRDG>` 声明"我调度这两个工具"
+- **拓展**：`class FMyPlugin : public FBase` 才是真正扩展基类的能力
+
+所以引擎插件分三类目录存放：
+
+```
+Extension/     ← 工具（TTool）
+Extension/Layer/    ← 层（TLayer）
+Extension/Engine/   ← 应用根（TEngine）
+```
+
+### stage 驱动
+
+调度器唯一的执行路径是 stage 驱动，应用侧定义 stage 枚举并偏特化协议：
+
+```cpp
+enum class EStage { Init, Tick, Shutdown };
+
+// 应用侧偏特化：FLog 在 EStage 下干什么
+template <>
+bool ExecuteExtension<Maho::Log::FLog, EStage>(EStage Stage) { /* ... */ }
+
+// Main 里按生命周期对称驱动
+int Main(int Argc, char** Argv) override
+{
+    Execute<EStage::Init,     FTools>();   // 工具先初始化
+    Execute<EStage::Init,     FLayers>();  // 层后初始化
+    Execute<EStage::Tick,     FLayers>();  // 只有层有帧流程
+    Execute<EStage::Shutdown, FLayers>();  // 层先停
+    Execute<EStage::Shutdown, FTools>();   // 工具最后关
+    return 0;
+}
+```
+
+### 能力可选
+
+引擎不强制任何能力，插件自己决定：
+
+- **单例**（`TSingleton`）：进程内唯一实例，工具和层要
+- **可运行**（`IRunable`）：有 `Main` 入口，层要
+- **可安装**（`IAssembly`）：导出 `CreateExtension` 可被动态加载，只有应用根要
+
+`IAssembly` 与 `TSingleton` **互斥**（动态加载可 new 多个 vs 单例唯一），codegen 自动生成 `static_assert` 强制。
 
 ### 编译期组装
 
-- `TExtensionList<TDerived, TExtensions...>`：编译期组合插件，同时是"可被驱动的单例"和"一组扩展"。
-- `Topology.h`：每个插件声明一层直接依赖，编译期递归展开传递依赖，算出分层（哪些可并行、哪些要串行）。
-- `ForEach<TList>`：把插件列表摊平成若干次回调，由调度器决定串行或并行——没有运行时容器，没有反射。
-- 单例直调：所有插件是懒加载单例，`T::Get()` 首次访问才构造。
+- `TExtension<TExtensions...>`：依赖表，编译期组合工具列表
+- `TFilter<TList, TBase>`：按基类过滤品种（`FToolTag` / `FLayerTag`），分半调度
+- `ForEach<TList>`：把插件列表摊平成若干次回调，由调度器决定串行或并行——没有运行时容器，没有反射
+- 单例直调：`T::Get()` 首次访问才构造
 
 ### 接口与实现分离
 
