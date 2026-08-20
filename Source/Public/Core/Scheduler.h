@@ -15,7 +15,7 @@ namespace Maho
 //   concept FExtensionExecute     — "Extension.h declares ExecuteExtension<T>(Stage)"
 //   concept FForEachScheduler     — "S has Run(Callables...)"
 //   ForEach / TTag                — unpacks a TTypeList to per-type visits
-//   IScheduler                    — Run + dual Execute (stage / lambda)
+//   IScheduler                    — Run + Execute (stage drive)
 //
 // ExecuteExtension<T>(Stage) itself lives in Extension.h — beside the type it
 // declares the interaction protocol for. The driver specialises it.
@@ -95,10 +95,6 @@ public:
 	/** Drive the extensions by stage (calls ExecuteExtension<T>(Stage) per level). */
 	template <auto Stage, typename TExtensions, typename TTopology = FForwardTopology>
 	void Execute() = delete;
-
-	/** Drive the extensions by lambda (Visitor decides what to call — no stage). */
-	template <typename TExtensions, typename TVisitor>
-	void Execute(TVisitor&& Visitor) = delete;
 };
 
 } // namespace Maho

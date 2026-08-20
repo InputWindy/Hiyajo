@@ -46,16 +46,6 @@ public:
 		});
 	}
 
-	template <typename TExtensions, typename TVisitor>
-	void Execute(TVisitor&& Visitor)
-	{
-		using FLevels = typename FForwardTopology::template Apply<Topo::TLevels_t<TExtensions, FDefaultSlot>>;
-		ForEach<FLevels>(FSerialTraversePolicy{}, [&](auto LevelTag) {
-			using FLevel = typename decltype(LevelTag)::Type;
-			ForEach<FLevel>(*this, Visitor);
-		});
-	}
-
 private:
 	std::unique_ptr<FThreadPool> Pool;
 };
