@@ -2,6 +2,7 @@
 
 #include <Core/Assembly.h>
 #include <Core/Extension.h>
+#include <Core/Runable.h>
 #include <Engine/ParallelScheduler.h>
 
 namespace Maho
