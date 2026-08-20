@@ -1,6 +1,5 @@
 #pragma once
 
-#include <Core/Singleton.h>
 #include <Core/TypeList.h>
 
 namespace Maho

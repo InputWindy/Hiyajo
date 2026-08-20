@@ -538,6 +538,7 @@ target_include_directories({name} PUBLIC
 {plugin_dirs}
 )
 add_dependencies({name} {plugin_link_names})
+target_link_libraries({name} PUBLIC {plugin_link_names})
 
 # Cycle check — runs before every in-IDE build (host + entry depend on it).
 # Prefer the engine-local venv (Setup.bat); fall back to any system python.
@@ -808,14 +809,19 @@ def _plugin_targets(
 			f"{dep_public_dirs}"
 			f")\n"
 			f"set_target_properties({name} PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)\n"
+			f"target_compile_definitions({name} PRIVATE MAHO_{name.upper()}_MODULE_EXPORTS)\n"
 			f"{cmake_include}"
 		)
-		# Plugin → its in-chain deps (host + disabled plugins excluded).
+		# Plugin → its in-chain deps (host + disabled plugins excluded). Link,
+		# not just add_dependencies — PUBLIC include dirs + third-party targets
+		# (nlohmann_json, glm, …) must propagate to dependents.
 		deps_in_chain = [
 			d for d in info.get("Dependencies", []) if d in name_set and d != name
 		]
 		if deps_in_chain:
-			targets.append(f"add_dependencies({name} {' '.join(deps_in_chain)})\n")
+			targets.append(
+				f"target_link_libraries({name} PUBLIC {' '.join(deps_in_chain)})\n"
+			)
 		group = info["group"]
 		folder = f"{project_name}/{group}" if group else project_name
 		folders.append(

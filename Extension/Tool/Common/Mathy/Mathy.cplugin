@@ -1,0 +1,6 @@
+{
+  "FileVersion": 1,
+  "Name": "Mathy",
+  "Description": "Math library extension (GLM).",
+  "Dependencies": []
+}

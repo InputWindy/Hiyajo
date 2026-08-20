@@ -5,3 +5,7 @@ Packaged/
 
 # OpenSpec — not used; leave the spec-driven framework out of the repo.
 /openspec/
+
+# Local test projects.
+/Mini/
+/MyGame/

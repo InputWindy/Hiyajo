@@ -4,7 +4,9 @@
 ## 代码文件
 
 - [ParallelScheduler.h](ParallelScheduler.h)
-- [PluginTemplates.h](PluginTemplates.h)
+- [Engine.h](Engine.h)
+- [Layer.h](Layer.h)
+- [Tool.h](Tool.h)
 - [SerialScheduler.h](SerialScheduler.h)
 - [ThreadPool.h](ThreadPool.h)
 <!-- mahogen end -->
@@ -12,6 +14,8 @@
 ## 概念——插件模板与调度策略
 
 Engine 层放**具体调度策略**和**三类插件模板**。核心 `Core/Scheduler.h` 只给 `IScheduler` 契约，串/并行在这里。
+
+三个模板各占一个头文件：`Tool.h`（`TTool`，C++14）、`Layer.h`（`TLayer`，C++20）、`Engine.h`（`TEngine`，C++20）。工具模板不拉任何 concept 头，标准要求最低，方便像 Math（GLM）这类要降标的插件单独使用。
 
 ### 三类插件模板
 

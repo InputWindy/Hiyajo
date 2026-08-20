@@ -151,6 +151,10 @@ class CreateProjectApp(tk.Tk):
 		self._checked = {}
 
 		for p in self._plugins:
+			# Engines (Extension/Engine/) are project templates, not selectable
+			# plugins — they live in the Project Template dropdown, not here.
+			if p.get("Kind") == "engine":
+				continue
 			tree = self.tool_tree if p.get("Kind") == "tool" else self.layer_tree
 			self._insert_plugin(tree, p, default=False)
 

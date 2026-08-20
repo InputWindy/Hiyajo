@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Asset（Private）—?实现算法字典</title>
+<style>
+	:root {
+		--bg: #14181f; --panel: #1b2130; --code-bg: #0d1117;
+		--text: #d8e1f0; --muted: #8b96a8; --accent: #5b8dd9;
+		--accent2: #3f8f63; --border: #2c3444; --border-strong: #3d4a61;
+		--kw: #ff7b72; --type: #79c0ff;
+	}
+	* { box-sizing: border-box; }
+	body { margin:0; padding:32px 40px; background:var(--bg); color:var(--text);
+		font-family:"Segoe UI","Microsoft YaHei",sans-serif; line-height:1.7; max-width:1040px; }
+	h1 { font-size:26px; border-bottom:2px solid var(--border-strong); padding-bottom:12px; }
+	h2 { font-size:22px; margin-top:44px; color:var(--accent); border-bottom:1px solid var(--border); padding-bottom:8px; }
+	a { color:var(--accent); text-decoration:none; }
+	a:hover { text-decoration:underline; }
+	.fn-panel { background:var(--panel); border:1px solid var(--border);
+		border-left:4px solid var(--accent2); border-radius:8px; padding:20px 24px; margin:24px 0; }
+	.fn-name { font-family:Consolas,"Cascadia Code",monospace; font-size:18px; color:var(--accent2); margin:0 0 4px 0; }
+	.back-link { font-size:13px; color:var(--muted); }
+	.pseudo { font-family:Consolas,"Cascadia Code",monospace; background:var(--code-bg);
+		border:1px solid var(--border); border-radius:6px; padding:14px 18px;
+		margin:12px 0; font-size:13px; white-space:pre; overflow-x:auto; line-height:1.6; }
+	code { font-family:Consolas,"Cascadia Code",monospace; background:var(--code-bg);
+		padding:2px 6px; border-radius:4px; }
+	.muted { color:var(--muted); }
+</style>
+</head>
+<body>
+
+<h1>Asset（Private）—?实现算法字典</h1>
+<p class="muted">cpp 侧每个函数的算法伪代码。Public �?API 通过跳转链接落到这里�?/p>
+
+<h2>Asset.cpp</h2>
+
+<section class="fn-panel" id="fn-asset-executestage">
+	<h3 class="fn-name">FAsset::ExecuteStage(EAssetStage Stage)</h3>
+	<p class="back-link">→?<a href="../API.html">公开 API</a> · <code>bool</code></p>
+	<div class="pseudo">ExecuteStage(Stage):
+	1. lock(Mutex)
+	2. switch Stage:
+	   Init:     Assets.clear(); MountRoots.clear()
+	   Shutdown: Assets.clear(); MountRoots.clear()
+	3. return true</div>
+</section>
+
+<section class="fn-panel" id="fn-asset-scan">
+	<h3 class="fn-name">FAsset::Scan(ContentDir, MountAlias)</h3>
+	<p class="back-link">→?<a href="../API.html">公开 API</a> · <code>void</code></p>
+	<div class="pseudo">Scan(ContentDir, Alias):
+	1. if ContentDir not a directory: return
+	2. lock(Mutex)
+	3. MountRoots[Alias] = ContentDir
+	4. for Entry in recursive_directory_iterator(ContentDir):
+	       if !Entry.is_regular_file(): continue
+	       Relative = relative(Entry.path(), ContentDir).generic_string()
+	       Dot = Relative.find_last_of('.'); if npos: continue
+	       Data.Path   = "/" + Alias + "/" + Relative[:Dot]
+	       Data.Type   = TypeFromExtension(Relative[Dot:])
+	       Data.File   = Entry.path()
+	       Assets[Data.Path] = move(Data)</div>
+</section>
+
+<section class="fn-panel" id="fn-asset-find">
+	<h3 class="fn-name">FAsset::Find(Path)</h3>
+	<p class="back-link">→?<a href="../API.html">公开 API</a> · <code>const FAssetData*</code></p>
+	<div class="pseudo">Find(Path):
+	1. lock(Mutex)
+	2. it = Assets.find(string(Path.GetPath()))
+	3. return it != end ? &it->second : nullptr</div>
+</section>
+
+<section class="fn-panel" id="fn-asset-resolve">
+	<h3 class="fn-name">FAsset::Resolve(Path)</h3>
+	<p class="back-link">→?<a href="../API.html">公开 API</a> · <code>path</code></p>
+	<div class="pseudo">Resolve(Path):
+	1. P = Path.GetPath(); 去前�?'/'
+	2. Sep = P.find_first_of("/:"); if npos: return path(P)
+	3. lock(Mutex)
+	4. Alias = P[:Sep]
+	5. it = MountRoots.find(Alias); if end: return path(P)
+	6. Result = it->second; Result /= P[Sep+1:]
+	7. return Result</div>
+</section>
+
+<section class="fn-panel" id="fn-asset-load">
+	<h3 class="fn-name">FAsset::Load(Path)</h3>
+	<p class="back-link">→?<a href="../API.html">公开 API</a> · <code>optional&lt;vector&lt;uint8_t&gt;&gt;</code></p>
+	<div class="pseudo">Load(Path):
+	1. Data = Find(Path); if null: return nullopt
+	2. open ifstream(Data.File, binary); if fail: return nullopt
+	3. read all bytes into vector; return Bytes</div>
+</section>
+
+<section class="fn-panel" id="fn-asset-count">
+	<h3 class="fn-name">FAsset::GetAssetCount()</h3>
+	<p class="back-link">→?<a href="../API.html">公开 API</a> · <code>size_t</code></p>
+	<div class="pseudo">GetAssetCount():
+	1. lock(Mutex)
+	2. return Assets.size()</div>
+</section>
+
+<p class="muted"><a href="PrivateDoc.md">PrivateDoc.md</a> —?实现目录 · <a href="../API.html">公开 API</a> —?签名入口</p>
+
+</body>
+</html>
