@@ -7,54 +7,44 @@ namespace Maho
 {
 
 // ───────────────────────────────────────────────────────────────────────
-// ① Capability: an extension is anything the scheduler can drive.
+// ① Extension contract — the identity every driven extension shares.
 //
-// TExtension is a PURE marker — it carries no singleton, no IAssembly, no
-// stage. A plugin decides for itself whether it wants process-wide
-// single-instance access (see TSingletonExtensionList) or not (an
-// application, loadable dynamically, can be instantiated many times).
+// Subclasses must implement `Execute(TStage Stage)` for their own stage
+// type. A template member cannot be virtual, so the contract is enforced at
+// compile time by FExtensionExecute (below) instead of the vtable.
 // ───────────────────────────────────────────────────────────────────────
 
-template <typename TDerived>
-class TExtension
+class IExtension
 {
 public:
-	virtual ~TExtension() = default;
+	virtual ~IExtension() = default;
+};
+
+// IExtension's contract: T must expose Execute(Stage) for the stage type
+// the drive passes. The drive static_asserts this so a missing Execute is a
+// clear compile-time error, not a runtime/link-time surprise.
+template <typename T, typename TStage>
+concept FExtensionExecute = requires(T& Ext, TStage Stage)
+{
+	{ Ext.Execute(Stage) };
 };
 
 // ───────────────────────────────────────────────────────────────────────
-// ② + ③ Assembly: one class inher capability and the list.
+// ② Assembly: one class inher the contract and the list.
 //
-// TExtensionList<TDerived, TExtensions...> is a TExtension (drivable) and a
-// TTypeList (the assembled group) at once. NOT a singleton — being a
+// TExtension<TExtensions...> is an IExtension (drivable) and a TTypeList
+// (the assembled group) at once. NOT a singleton — single-instance access is
+// a plugin's own choice (derive TSingleton<Self> alongside). Being a
 // TExtension, it nests recursively.
 // ───────────────────────────────────────────────────────────────────────
 
-template <typename TDerived, typename... TExtensions>
-class TExtensionList
-	: public virtual TExtension<TDerived>
+template <typename... TExtensions>
+class TExtension
+	: public virtual IExtension
 	, public TTypeList<TExtensions...>
 {
 public:
 	using FExtensions = TTypeList<TExtensions...>;
-};
-
-// ───────────────────────────────────────────────────────────────────────
-// ④ Singleton assembly — the convenience form for plugins that DO want
-// process-wide single-instance access. Tool plugins (Log, Json, …) derive
-// from this; the compile-time drive reaches them via T::Get().
-//
-//   class FLog : public TSingletonExtensionList<FLog> { ... };
-//
-// An application (host) that is loaded dynamically and may have many
-// instances derives from plain TExtensionList instead (no singleton).
-// ───────────────────────────────────────────────────────────────────────
-
-template <typename TDerived, typename... TExtensions>
-class TSingletonExtensionList
-	: public TExtensionList<TDerived, TExtensions...>
-	, public TSingleton<TDerived>
-{
 };
 
 } // namespace Maho

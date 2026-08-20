@@ -39,7 +39,9 @@ public:
 			using FLevel = typename decltype(LevelTag)::Type;
 			ForEach<FLevel>(*this, [](auto Tag) {
 				using T = typename decltype(Tag)::Type;
-				T::Get().ExecuteStage(Stage);
+				static_assert(FExtensionExecute<T, decltype(Stage)>,
+					"Extension must implement Execute(Stage)");
+				T::Get().Execute(Stage);
 			});
 		});
 	}
