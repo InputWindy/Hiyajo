@@ -10,18 +10,20 @@ namespace Maho
 {
 
 // ───────────────────────────────────────────────────────────────────────
-// The drive protocol: ExecuteExtension concept + ForEach traversal + the
-// scheduler contract — all one family, all in this header.
+// The drive protocol: the traversal machinery + the scheduler contract.
 //
-//   concept FExtensionExecute     — "T has an ExecuteExtension<T>(Stage)"
+//   concept FExtensionExecute     — "Extension.h declares ExecuteExtension<T>(Stage)"
 //   concept FForEachScheduler     — "S has Run(Callables...)"
 //   ForEach / TTag                — unpacks a TTypeList to per-type visits
 //   IScheduler                    — Run + dual Execute (stage / lambda)
+//
+// ExecuteExtension<T>(Stage) itself lives in Extension.h — beside the type it
+// declares the interaction protocol for. The driver specialises it.
 // ───────────────────────────────────────────────────────────────────────
 
-// The per-extension execution hook: an extension is executed by a FREE
-// function template, not a member — the host/plugin layer provides the
-// overload/specialisation for each concrete (Extension, Stage) pair.
+// An extension T is executable at Stage when ExecuteExtension<T>(Stage) is a
+// valid call (the primary template always matches; the driver's specialisation
+// decides the actual behaviour).
 template <typename T, typename TStage>
 concept FExtensionExecute = requires(TStage Stage)
 {

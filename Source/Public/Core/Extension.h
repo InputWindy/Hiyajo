@@ -38,4 +38,23 @@ public:
 	using FExtensions = TTypeList<TExtensions...>;
 };
 
+// ───────────────────────────────────────────────────────────────────────
+// ③ The extension → scheduler interaction protocol.
+//
+// ExecuteExtension<T>(Stage) is the ONE entry point through which an unknown
+// scheduler interacts with extension T. It lives beside T (the extension
+// declares it), and the driver (scheduler) SPECIALISES it for its own stage
+// enum — deciding what T does at each stage.
+//
+// The primary template is the no-op fallback: any (Extension, Stage) pair
+// the driver does NOT specialise simply does nothing.
+// ───────────────────────────────────────────────────────────────────────
+
+template <typename TExtension, typename TStage>
+bool ExecuteExtension(TStage Stage)
+{
+	(void)Stage;
+	return true;
+}
+
 } // namespace Maho
