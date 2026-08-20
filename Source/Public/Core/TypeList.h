@@ -86,30 +86,30 @@ public:
 };
 
 /**
- * Filter a list by a unary type predicate: keep the elements for which
- * FPredicate<T>::value is true, preserving order.
+ * Filter a list by base class: keep the elements deriving from TBase,
+ * preserving order (std::is_base_of inlined — no predicate alias needed).
  *
- *   template <typename T> using TIsRunable = std::is_base_of<IRunable, T>;
- *   using FRunables = typename TFilter<TTypeList<A, B, C>, TIsRunable>::Type;
+ *   using FT typename TFilter<TTypeList<A, B, C>, FToolTag>::Type;
+ *   using FLayers = typename TFilter<TTypeList<A, B, C>, FLayerTag>::Type;
  */
-template <typename TList, template <typename> typename FPredicate>
+template <typename TList, typename TBase>
 struct TFilter;
 
-template <template <typename> typename FPredicate>
-struct TFilter<TTypeList<>, FPredicate>
+template <typename TBase>
+struct TFilter<TTypeList<>, TBase>
 {
 	using Type = TTypeList<>;
 };
 
-template <typename THead, typename... TRest, template <typename> typename FPredicate>
-struct TFilter<TTypeList<THead, TRest...>, FPredicate>
+template <typename THead, typename... TRest, typename TBase>
+struct TFilter<TTypeList<THead, TRest...>, TBase>
 {
 private:
-	using FTail = typename TFilter<TTypeList<TRest...>, FPredicate>::Type;
+	using FTail = typename TFilter<TTypeList<TRest...>, TBase>::Type;
 
 public:
 	using Type = std::conditional_t<
-		FPredicate<THead>::value,
+		std::is_base_of_v<TBase, THead>,
 		typename TCons<THead, FTail>::Type,
 		FTail>;
 };

@@ -15,12 +15,19 @@ namespace Maho
 //   TTool  — singleton, no scheduler (driven via ExecuteExtension)
 //   TLayer — singleton + Main + parallel scheduler (a nested host)
 //   TEngine— assembly + parallel scheduler (the top-level app, not singleton)
+//
+// FToolTag / FLayerTag mark the two "kinds" so a host can split its
+// dependency list into tools vs layers for separate drives (TFilter).
 // ───────────────────────────────────────────────────────────────────────
+
+struct FToolTag {};
+struct FLayerTag {};
 
 /** Tool plugin: a singleton with a dependency table. Driven by a host. */
 template <typename TDerived, typename... TExtensions>
 class TTool
-	: public TExtension<TExtensions...>
+	: public FToolTag
+	, public TExtension<TExtensions...>
 	, public TSingleton<TDerived>
 {
 };
@@ -28,15 +35,16 @@ class TTool
 /** Layer plugin: a singleton host — Main + parallel drive over its own list. */
 template <typename TDerived, typename... TExtensions>
 class TLayer
-	: public TExtension<TExtensions...>
+	: public FLayerTag
+	, public TExtension<TExtensions...>
 	, public IRunable
 	, public Parallel::FParallelScheduler
 	, public TSingleton<TDerived>
 {
 public:
 	using FExtensions = typename TExtension<TExtensions...>::FExtensions;
-	using FTools = typename TFilter<FExtensions, TIsNotRunable>::Type;
-	using FLayers = typename TFilter<FExtensions, TIsRunable>::Type;
+	using FTools = typename TFilter<FExtensions, FToolTag>::Type;
+	using FLayers = typename TFilter<FExtensions, FLayerTag>::Type;
 };
 
 /** Engine plugin: the loadable application root — assembly + parallel drive. */
@@ -48,8 +56,8 @@ class TEngine
 {
 public:
 	using FExtensions = typename TExtension<TExtensions...>::FExtensions;
-	using FTools = typename TFilter<FExtensions, TIsNotRunable>::Type;
-	using FLayers = typename TFilter<FExtensions, TIsRunable>::Type;
+	using FTools = typename TFilter<FExtensions, FToolTag>::Type;
+	using FLayers = typename TFilter<FExtensions, FLayerTag>::Type;
 };
 
 } // namespace Maho

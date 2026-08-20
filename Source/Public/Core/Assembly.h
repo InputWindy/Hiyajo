@@ -4,7 +4,6 @@
 
 #include <concepts>
 #include <string_view>
-#include <type_traits>
 
 namespace Maho
 {
@@ -84,14 +83,5 @@ concept FAssemblyExport = requires
 {
 	{ T::CreateExtension() } -> std::convertible_to<IAssembly*>;
 };
-
-// Predicates for splitting an extension list by "is runnable" (has a Main /
-// drives its own execution) vs "is drivable" (a stage-agnostic tool the
-// host's schedule drives via ExecuteExtension<T, Stage>).
-template <typename T>
-using TIsRunable = std::is_base_of<IRunable, T>;
-
-template <typename T>
-using TIsNotRunable = std::negation<TIsRunable<T>>;
 
 } // namespace Maho
