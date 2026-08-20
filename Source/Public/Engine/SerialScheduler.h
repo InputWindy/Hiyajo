@@ -32,8 +32,8 @@ public:
 			ForEach<FLevel>(FSerialTraversePolicy{}, [](auto Tag) {
 				using T = typename decltype(Tag)::Type;
 				static_assert(FExtensionExecute<T, decltype(Stage)>,
-					"Extension must implement Execute(Stage)");
-				T::Get().Execute(Stage);
+					"Extension must provide ExecuteExtension<T>(Stage)");
+				ExecuteExtension<T>(Stage);
 			});
 		});
 	}

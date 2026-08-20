@@ -7,11 +7,11 @@ namespace Maho
 {
 
 // ───────────────────────────────────────────────────────────────────────
-// ① Extension contract — the identity every driven extension shares.
+// ① Extension contract — the identity every extension shares.
 //
-// Subclasses must implement `Execute(TStage Stage)` for their own stage
-// type. A template member cannot be virtual, so the contract is enforced at
-// compile time by FExtensionExecute (below) instead of the vtable.
+// An extension is NOTHING but a dependency table: which extensions it
+// assembles. How it executes (ExecuteExtension<T>(Stage)) is the scheduler's
+// protocol, declared in Scheduler.h — not here.
 // ───────────────────────────────────────────────────────────────────────
 
 class IExtension
@@ -20,19 +20,10 @@ public:
 	virtual ~IExtension() = default;
 };
 
-// IExtension's contract: T must expose Execute(Stage) for the stage type
-// the drive passes. The drive static_asserts this so a missing Execute is a
-// clear compile-time error, not a runtime/link-time surprise.
-template <typename T, typename TStage>
-concept FExtensionExecute = requires(T& Ext, TStage Stage)
-{
-	{ Ext.Execute(Stage) };
-};
-
 // ───────────────────────────────────────────────────────────────────────
-// ② Assembly: one class inher the contract and the list.
+// ② Assembly: the dependency table.
 //
-// TExtension<TExtensions...> is an IExtension (drivable) and a TTypeList
+// TExtension<TExtensions...> is an IExtension (identity) and a TTypeList
 // (the assembled group) at once. NOT a singleton — single-instance access is
 // a plugin's own choice (derive TSingleton<Self> alongside). Being a
 // TExtension, it nests recursively.

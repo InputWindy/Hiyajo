@@ -85,53 +85,7 @@ public:
 		FTail>;
 };
 
-// ───────────────────────────────────────────────────────────────────────
-// Runtime traversal: ForEach unpacks a TTypeList and feeds each type to a
-// Visitor, with a Scheduler controlling serial / parallel dispatch.
-// ───────────────────────────────────────────────────────────────────────
-
-/** Type tag: lets a generic callable recover T via decltype(Tag)::Type. */
-template <typename T>
-struct TTag
-{
-	using Type = T;
-};
-
-/**
- * ForEach scheduler contract: a callable object with Run(Callables...) —
- * serial / parallel are concrete schedulers, ForEach knows nothing about the
- * scheme. A scheduler may carry runtime state (e.g. FParallelScheduler holds
- * the thread pool it dispatches to).
- */
-template <typename TScheduler>
-concept FForEachScheduler = requires(TScheduler& S)
-{
-	S.Run([]{});
-};
-
-/**
- * Unpack a TTypeList, schedule per-type visits, and feed each type to Visitor
- * as a TTag<T>. TList is a compile-time policy (angle brackets); the scheduler
- * is a runtime value (parentheses) because it may carry state (the pool).
- *
- *   ForEach<FList>(FSerialScheduler{}, [](auto Tag, FWorld& W) {
- *       using T = typename decltype(Tag)::Type;
- *       // per-type work
- *   }, World);
- *
- *   ForEach<FList>(FParallelScheduler{Pool}, Visitor, World);
- */
-template <typename TScheduler, typename TVisitor, typename... TArgs, typename... Ts>
-void ForEachImpl(TTypeList<Ts...>, TScheduler&& Scheduler, TVisitor&& Visitor, TArgs&&... Args)
-{
-	Scheduler.Run([&] { Visitor(TTag<Ts>{}, Args...); }...);
-}
-
-template <typename TList, typename TScheduler, typename TVisitor, typename... TArgs>
-	requires FForEachScheduler<TScheduler>
-void ForEach(TScheduler&& Scheduler, TVisitor&& Visitor, TArgs&&... Args)
-{
-	ForEachImpl(TList{}, std::forward<TScheduler>(Scheduler), std::forward<TVisitor>(Visitor), std::forward<TArgs>(Args)...);
-}
+// (Traversal — TTag / ForEach / the scheduler contract — lives in
+//  Scheduler.h, where the drive protocol is defined.)
 
 } // namespace Maho
