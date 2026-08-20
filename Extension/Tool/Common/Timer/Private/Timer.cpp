@@ -11,19 +11,7 @@ namespace Maho
 namespace Timer
 {
 
-bool FTimer::ExecuteStage(ETimerStage Stage)
-{
-	switch (Stage)
-	{
-	case ETimerStage::Init:
-	case ETimerStage::Shutdown:
-		Reset();
-		break;
-	}
-	return true;
-}
-
-void FTimer::BeginScope(std::string_view Name)
+void FTimerTool::BeginScope(std::string_view Name)
 {
 	FNode& Child = Current->Children[std::string(Name)];
 	Child.Name = Name;
@@ -31,7 +19,7 @@ void FTimer::BeginScope(std::string_view Name)
 	Current = &Child;
 }
 
-void FTimer::EndScope()
+void FTimerTool::EndScope()
 {
 	if (Current == &Root)
 	{
@@ -46,13 +34,13 @@ void FTimer::EndScope()
 	Current = Current->Parent;
 }
 
-void FTimer::Reset()
+void FTimerTool::Reset()
 {
 	Root = FNode{"Root"};
 	Current = &Root;
 }
 
-std::string FTimer::DumpToString() const
+std::string FTimerTool::DumpToString() const
 {
 	std::ostringstream Out;
 	std::function<void(const FNode&, int)> Format = [&](const FNode& Node, int Depth)
@@ -78,12 +66,12 @@ std::string FTimer::DumpToString() const
 
 FScopedTimer::FScopedTimer(std::string_view Name)
 {
-	FTimer::Get().BeginScope(Name);
+	FTimerTool::Get().BeginScope(Name);
 }
 
 FScopedTimer::~FScopedTimer()
 {
-	FTimer::Get().EndScope();
+	FTimerTool::Get().EndScope();
 }
 
 // ── FGameClock ──

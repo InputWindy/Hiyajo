@@ -1,4 +1,4 @@
-# Mathy
+# MathTool
 
 Math library extension (GLM).
 

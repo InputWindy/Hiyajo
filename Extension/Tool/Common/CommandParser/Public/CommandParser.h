@@ -2,7 +2,7 @@
 
 #include "CommandParserApi.h"
 #include <Maho.h>
-#include <Engine/PluginTemplates.h>
+#include <Engine/Tool.h>
 
 #include <cstdint>
 #include <string>
@@ -15,19 +15,12 @@ namespace Maho
 namespace CommandParser
 {
 
-/** CommandParser plugin's own drive stage — the host passes it to Execute<Stage>(). */
-enum class ECommandParserStage : std::uint8_t
-{
-	Init = 0,
-	Shutdown,
-};
-
 /** Command-line argument parser extension (key-value store). */
-class MAHO_COMMANDPARSER_API FCommandParser : public Maho::TTool<FCommandParser>
+class MAHO_COMMANDPARSER_API FCommandParserTool : public Maho::TTool<FCommandParserTool>
 {
 public:
-	/** Stage dispatch — called by `scheduler.Execute<ECommandParserStage, ...>()`. */
-	[[nodiscard]] bool ExecuteStage(ECommandParserStage Stage);
+	/** Identity tag — this is a Tool. */
+	using FTags = TTypeList<FToolTag>;
 
 	/**
 	 * Get a value from the parsed command line by name. Supports both `-name=value`
@@ -41,17 +34,22 @@ public:
 	/** Number of parsed entries. */
 	[[nodiscard]] int Count() const;
 
-	/** Reset the store (kept idempotent — ParseCommandLine overwrites entries). */
+protected:
+	/** Reset the store (kept idempotent — Parse overwrites entries). */
 	void Reset();
 
+	/** Parse argc/argv into the shared store (idempotent; later calls overwrite). */
+	void Parse(int Argc, char** Argv);
+
+	/** Lifecycle write (Init/Shutdown): drop all parsed entries. */
+	void Clear();
+
 private:
-	friend MAHO_COMMANDPARSER_API void ParseCommandLine(int Argc, char** Argv);
+	template <typename TExtension, typename TStage>
+	friend bool Maho::ExecuteExtension(TStage Stage);
 
 	std::unordered_map<std::string, std::string> Storage;
 };
-
-/** Parse argc/argv into FCommandParser's shared store (idempotent; later calls overwrite). */
-MAHO_COMMANDPARSER_API void ParseCommandLine(int Argc, char** Argv);
 
 } // namespace CommandParser
 

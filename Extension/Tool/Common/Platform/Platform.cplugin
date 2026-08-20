@@ -1,0 +1,6 @@
+{
+  "FileVersion": 1,
+  "Name": "Platform",
+  "Description": "OS window + input extension (GLFW + platform window).",
+  "Dependencies": []
+}

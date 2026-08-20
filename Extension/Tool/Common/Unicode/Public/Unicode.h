@@ -2,7 +2,7 @@
 
 // ───────────────────────────────────────────────────────────────────────
 // Text encoding layer. Engine-internal strings are always UTF-8 std::string;
-// FUnicode only converts at platform boundaries.
+// FUnicodeTool only converts at platform boundaries.
 //
 //   using namespace Maho::Unicode;
 //
@@ -19,7 +19,7 @@
 
 #include "UnicodeApi.h"
 #include <Maho.h>
-#include <Engine/PluginTemplates.h>
+#include <Engine/Tool.h>
 
 #include <string>
 #include <string_view>
@@ -55,10 +55,16 @@ namespace Unicode
 MAHO_UNICODE_API void EnsureConsoleUtf8();
 
 /** Text encoding extension (UTF-8/16/32). A plain singleton, pure function library. */
-class MAHO_UNICODE_API FUnicode : public Maho::TTool<FUnicode>
+class MAHO_UNICODE_API FUnicodeTool : public Maho::TTool<FUnicodeTool>
 {
 public:
+	/** Identity tag — this is a Tool. */
+	using FTags = TTypeList<FToolTag>;
+
 	// Pure function library — no lifecycle, no stage.
+
+	template <typename TExtension, typename TStage>
+	friend bool Maho::ExecuteExtension(TStage Stage);
 };
 
 } // namespace Unicode

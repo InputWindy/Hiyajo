@@ -1,6 +1,6 @@
 #pragma once
 
-#include "MathyApi.h"
+#include "MathToolApi.h"
 #include <Engine/Tool.h>
 
 #include <glm/glm.hpp>
@@ -9,7 +9,7 @@
 namespace Maho
 {
 
-namespace Mathy
+namespace Math
 {
 
 // GLM type aliases.
@@ -26,12 +26,18 @@ template <typename T> [[nodiscard]] constexpr T Clamp(const T& Value, const T& M
 [[nodiscard]] inline constexpr float RadiansToDegrees(float Rad) { return Rad * 57.29577951308232f; }
 
 /** Math library extension (GLM + helpers). A plain singleton type provider, header-only. */
-class MAHO_MATHY_API FMathy : public Maho::TTool<FMathy>
+class MAHO_MATH_API FMathTool : public Maho::TTool<FMathTool>
 {
 public:
-	// Pure function library — no lifecycle, no stage.
+	/** Identity tag — this is a Tool. */
+	using FTags = TTypeList<FToolTag>;
+
+protected:
+	// The ONLY external write interaction — the scheduler's ExecuteExtension.
+	template <typename TExtension, typename TStage>
+	friend bool Maho::ExecuteExtension(TStage Stage);
 };
 
-} // namespace Mathy
+} // namespace Math
 
 } // namespace Maho

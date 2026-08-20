@@ -2,7 +2,7 @@
 
 #include "AssetApi.h"
 #include <Maho.h>
-#include <Engine/PluginTemplates.h>
+#include <Engine/Tool.h>
 
 #include <cstdint>
 #include <filesystem>
@@ -19,13 +19,6 @@ namespace Maho
 
 namespace Asset
 {
-
-/** Asset plugin's own drive stage —?the host passes it to Execute<Stage>(). */
-enum class EAssetStage : std::uint8_t
-{
-	Init = 0,
-	Shutdown,
-};
 
 /** Asset type (extensible; inferred from the on-disk extension). */
 enum class EAssetType : std::uint8_t
@@ -68,17 +61,11 @@ struct FAssetData
  * Asset registry: logical path →?metadata. Scan() walks a content directory
  * and indexes every asset file; Find() resolves a logical path.
  */
-class MAHO_ASSET_API FAsset : public Maho::TTool<FAsset>
+class MAHO_ASSET_API FAssetTool : public Maho::TTool<FAssetTool>
 {
 public:
-	/** Stage dispatch —?called by `scheduler.Execute<EAssetStage, ...>()`. */
-	[[nodiscard]] bool ExecuteStage(EAssetStage Stage);
-
-	/**
-	 * Recursively index a content directory.
-	 * Content/Materials/M_Metal.material →?/Game/Materials/M_Metal (Material).
-	 */
-	void Scan(const std::filesystem::path& ContentDir, std::string_view MountAlias = "Game");
+	/** Identity tag — this is a Tool. */
+	using FTags = TTypeList<FToolTag>;
 
 	/** Look up an asset by logical path; nullptr when absent. */
 	[[nodiscard]] const FAssetData* Find(const FAssetPath& Path) const;
@@ -91,7 +78,21 @@ public:
 
 	[[nodiscard]] std::size_t GetAssetCount() const;
 
+protected:
+	/**
+	 * Recursively index a content directory.
+	 * Content/Materials/M_Metal.material →?/Game/Materials/M_Metal (Material).
+	 * Lifecycle write (Init index); only the scheduler may call it.
+	 */
+	void Scan(const std::filesystem::path& ContentDir, std::string_view MountAlias = "Game");
+
+	/** Lifecycle write (Init/Shutdown): drop all indexed assets and mount roots. */
+	void Clear();
+
 private:
+	template <typename TExtension, typename TStage>
+	friend bool Maho::ExecuteExtension(TStage Stage);
+
 	mutable std::mutex Mutex;
 	std::map<std::string, FAssetData> Assets;          // logical path string →?metadata
 	std::map<std::string, std::filesystem::path> MountRoots;   // mount alias →?root dir (thread-guarded by Mutex)

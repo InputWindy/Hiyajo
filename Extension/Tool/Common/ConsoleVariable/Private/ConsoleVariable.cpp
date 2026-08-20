@@ -10,10 +10,17 @@ namespace Maho
 namespace ConsoleVariable
 {
 
+void FConsoleVariableTool::Clear()
+{
+	// Shutdown only: Init does NOT clear — static TAutoConsoleVariable globals
+	// registered at static-init must survive the app's Init stage. The host
+	// decides when to call Clear().
+	std::lock_guard<std::mutex> Lock(Mutex);
+	Registry.clear();
+}
+
 namespace
 {
-	std::mutex GMutex;
-
 	[[nodiscard]] std::string ToLower(std::string_view S)
 	{
 		std::string Out(S);
@@ -86,35 +93,23 @@ namespace
 	};
 }
 
-// ── FConsoleVariable ──
+// ── FConsoleVariableTool ──
 
-bool FConsoleVariable::ExecuteStage(EConsoleVariableStage Stage)
+IConsoleVariable* FConsoleVariableTool::Find(std::string_view Name)
 {
-	if (Stage == EConsoleVariableStage::Shutdown)
-	{
-		std::lock_guard<std::mutex> Lock(GMutex);
-		Registry.clear();
-	}
-	// NOTE: Init does NOT clear — static TAutoConsoleVariable globals registered
-	// at static-init must survive the app's Init stage.
-	return true;
-}
-
-IConsoleVariable* FConsoleVariable::Find(std::string_view Name)
-{
-	std::lock_guard<std::mutex> Lock(GMutex);
+	std::lock_guard<std::mutex> Lock(Mutex);
 	const auto It = Registry.find(std::string(Name));
 	return It != Registry.end() ? It->second.get() : nullptr;
 }
 
-IConsoleVariable* FConsoleVariable::Register(
+IConsoleVariable* FConsoleVariableTool::Register(
 	std::string_view Name,
 	ECVarType Type,
 	std::string DefaultValue,
 	std::string_view Description,
 	ECVarFlags Flags)
 {
-	std::lock_guard<std::mutex> Lock(GMutex);
+	std::lock_guard<std::mutex> Lock(Mutex);
 	auto Entry = std::make_unique<FCVarEntry>(
 		std::string(Name), Type, std::move(DefaultValue), std::string(Description), Flags);
 	IConsoleVariable* Result = Entry.get();

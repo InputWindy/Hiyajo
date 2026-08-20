@@ -8,25 +8,20 @@ namespace Maho
 namespace Log
 {
 
-bool FLog::ExecuteStage(ELogStage Stage)
+void FLogTool::Initialize()
 {
-	switch (Stage)
-	{
-	case ELogStage::Init:
-		spdlog::set_level(spdlog::level::info);
-		break;
+	spdlog::set_level(spdlog::level::info);
+}
 
-	case ELogStage::Shutdown:
-		// Flush buffered stdout before tearing the logger down — GUI apps
-		// (WinMain + FreeConsole) lose buffered messages at exit otherwise.
-		if (spdlog::default_logger() != nullptr)
-		{
-			spdlog::default_logger()->flush();
-		}
-		spdlog::shutdown();
-		break;
+void FLogTool::Shutdown()
+{
+	// Flush buffered stdout before tearing the logger down — GUI apps
+	// (WinMain + FreeConsole) lose buffered messages at exit otherwise.
+	if (spdlog::default_logger() != nullptr)
+	{
+		spdlog::default_logger()->flush();
 	}
-	return true;
+	spdlog::shutdown();
 }
 
 void SetLogLevel(ELogLevel Level)

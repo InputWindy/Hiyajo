@@ -2,24 +2,21 @@
 
 #include "NameApi.h"
 #include <Maho.h>
-#include <Engine/PluginTemplates.h>
+#include <Engine/Tool.h>
 
 #include <cstdint>
 #include <functional>
+#include <mutex>
+#include <string>
 #include <string_view>
+#include <unordered_map>
+#include <vector>
 
 namespace Maho
 {
 
 namespace Name
 {
-
-/** Name plugin's own drive stage — the host passes it to Execute<Stage>(). */
-enum class ENameStage : std::uint8_t
-{
-	Init = 0,
-	Shutdown,
-};
 
 /**
  * Interned immutable string identifier — pooled storage, O(1) compare.
@@ -48,21 +45,38 @@ public:
 	[[nodiscard]] bool operator<(const FName& Other) const { return Id < Other.Id; }
 
 private:
-	friend class FNamePool;
+	friend class FNameTool;
 	explicit FName(std::uint32_t InId) : Id(InId) {}
 
 	std::uint32_t Id = 0;
 };
 
 /** Global interned string pool (pre-app singleton). Init/Clear on lifecycle. */
-class MAHO_NAME_API FNamePool : public TTool<FNamePool>
+class MAHO_NAME_API FNameTool : public TTool<FNameTool>
 {
 public:
-	/** Stage dispatch — called by `scheduler.Execute<ENameStage, ...>()`. */
-	[[nodiscard]] bool ExecuteStage(ENameStage Stage);
+	/** Identity tag — this is a Tool. */
+	using FTags = TTypeList<FToolTag>;
 
 	/** Intern a string — returns the canonical FName (thread-safe). */
 	[[nodiscard]] FName Intern(std::string_view Str);
+
+	/** Look up a pooled string by index. */
+	[[nodiscard]] std::string_view ToString(std::uint32_t Id) const;
+
+protected:
+	// ── 写（protected，仅调度器）──
+
+	/** Clear the intern pool and reserve index 0 = None. Lifecycle write. */
+	void Clear();
+
+private:
+	template <typename TExtension, typename TStage>
+	friend bool Maho::ExecuteExtension(TStage Stage);
+
+	mutable std::mutex Mutex;
+	std::vector<std::string> Pool;                            // index → string (0 = None)
+	std::unordered_map<std::string, std::uint32_t> Lookup;    // string → index
 };
 
 } // namespace Name

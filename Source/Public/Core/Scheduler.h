@@ -12,7 +12,7 @@ namespace Maho
 // ───────────────────────────────────────────────────────────────────────
 // The drive protocol: the traversal machinery + the scheduler contract.
 //
-//   concept FExtensionExecute     — "Extension.h declares ExecuteExtension<T>(Stage)"
+//   concept FExtensionExecute     — "Extension.h declares ExecuteExtension<T, Stage>(Stage)"
 //   concept FForEachScheduler     — "S has Run(Callables...)"
 //   ForEach / TTag                — unpacks a TTypeList to per-type visits
 //   IScheduler                    — Run + Execute (stage drive)
@@ -21,13 +21,13 @@ namespace Maho
 // declares the interaction protocol for. The driver specialises it.
 // ───────────────────────────────────────────────────────────────────────
 
-// An extension T is executable at Stage when ExecuteExtension<T>(Stage) is a
-// valid call (the primary template always matches; the driver's specialisation
-// decides the actual behaviour).
+// An extension T is executable at Stage when ExecuteExtension<T, TStage>(Stage)
+// is a valid call (the primary template always matches; the driver's
+// specialisation decides the actual behaviour).
 template <typename T, typename TStage>
 concept FExtensionExecute = requires(TStage Stage)
 {
-	{ ExecuteExtension<T>(Stage) };
+	{ ExecuteExtension<T, TStage>(Stage) };
 };
 
 /** Type tag: lets a generic callable recover T via decltype(Tag)::Type. */
@@ -92,7 +92,7 @@ public:
 	template <typename... FCallables>
 	void Run(FCallables&&... Callables) const = delete;
 
-	/** Drive the extensions by stage (calls ExecuteExtension<T>(Stage) per level). */
+	/** Drive the extensions by stage (calls ExecuteExtension<T, Stage>(Stage) per level). */
 	template <auto Stage, typename TExtensions, typename TTopology = FForwardTopology>
 	void Execute() = delete;
 };

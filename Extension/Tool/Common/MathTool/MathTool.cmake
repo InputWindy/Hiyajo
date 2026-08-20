@@ -1,6 +1,6 @@
-# Mathy plugin: GLM (header-only, self-contained).
+# Math plugin: GLM (header-only, self-contained).
 # The DLL target is built by codegen; this file only pulls FetchContent
-# deps and links them into the Mathy target.
+# deps and links them into the Math target.
 
 include(FetchContent)
 
@@ -10,7 +10,7 @@ if(NOT DEFINED glm_SOURCE_DIR)
 	maho_fetchcontent_populate_or_reuse(glm ${_GLM_URL} 1.0.0 glm/glm.hpp)
 endif()
 
-target_include_directories(Mathy PUBLIC "${glm_SOURCE_DIR}")
+target_include_directories(Math PUBLIC "${glm_SOURCE_DIR}")
 
-set_property(TARGET Mathy PROPERTY CXX_STANDARD 17)
-set_property(TARGET Mathy PROPERTY CXX_STANDARD_REQUIRED ON)
+set_property(TARGET Math PROPERTY CXX_STANDARD 17)
+set_property(TARGET Math PROPERTY CXX_STANDARD_REQUIRED ON)

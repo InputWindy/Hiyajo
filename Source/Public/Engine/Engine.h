@@ -23,6 +23,13 @@ public:
 	using FExtensions = typename TExtension<TExtensions...>::FExtensions;
 	using FTools = typename TFilter<FExtensions, FToolTag>::Type;
 	using FLayers = typename TFilter<FExtensions, FLayerTag>::Type;
+
+	/** Identity tag FEngineTag is always present. */
+	using FTags = TTypeList<FEngineTag>;
+
+	/** Append extra tags while keeping the identity tag. */
+	template <typename... TExtra>
+	using WithTags = FWithTags<FTags, TExtra...>;
 };
 
 } // namespace Maho

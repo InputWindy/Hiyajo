@@ -2,6 +2,7 @@
 
 #include <Core/Extension.h>
 #include <Core/Singleton.h>
+#include <Core/Tags.h>
 
 namespace Maho
 {
@@ -23,6 +24,14 @@ class TTool
 	, public TExtension<TExtensions...>
 	, public TSingleton<TDerived>
 {
+public:
+	/** UCLASS-style markers — the identity tag FToolTag is always present. A
+	 *  plugin appends more via WithTags (e.g. FStandaloneTag for self-managed). */
+	using FTags = TTypeList<FToolTag>;
+
+	/** Append extra tags while keeping the identity tag. */
+	template <typename... TExtra>
+	using WithTags = FWithTags<FTags, TExtra...>;
 };
 
 } // namespace Maho

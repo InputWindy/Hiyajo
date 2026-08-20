@@ -10,24 +10,17 @@ namespace Maho
 namespace Paths
 {
 
-bool FPaths::ExecuteStage(EPathsStage Stage)
+void FPathsTool::Clear()
 {
-	switch (Stage)
-	{
-	case EPathsStage::Init:
-	case EPathsStage::Shutdown:
-		Roots.clear();
-		break;
-	}
-	return true;
+	Roots.clear();
 }
 
-void FPaths::SetRoot(std::string_view Alias, std::filesystem::path Path)
+void FPathsTool::SetRoot(std::string_view Alias, std::filesystem::path Path)
 {
 	Roots[std::string(Alias)] = std::move(Path);
 }
 
-std::filesystem::path FPaths::Resolve(std::string_view VirtualPath) const
+std::filesystem::path FPathsTool::Resolve(std::string_view VirtualPath) const
 {
 	const std::size_t Separator = VirtualPath.find_first_of("/:");
 	if (Separator == std::string_view::npos)
@@ -52,7 +45,7 @@ std::filesystem::path FPaths::Resolve(std::string_view VirtualPath) const
 	return Result;
 }
 
-bool FPaths::HasRoot(std::string_view Alias) const
+bool FPathsTool::HasRoot(std::string_view Alias) const
 {
 	return Roots.find(std::string(Alias)) != Roots.end();
 }

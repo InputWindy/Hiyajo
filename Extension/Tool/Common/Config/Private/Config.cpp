@@ -3,8 +3,16 @@
 #include <fstream>
 #include <string>
 
-namespace Maho::Config
+namespace Maho
 {
+
+namespace Config
+{
+
+void FConfigTool::Clear()
+{
+	Sections.clear();
+}
 
 namespace
 {
@@ -20,16 +28,7 @@ namespace
 	}
 }
 
-bool FConfig::ExecuteStage(EConfigStage Stage)
-{
-	if (Stage == EConfigStage::Init || Stage == EConfigStage::Shutdown)
-	{
-		Sections.clear();
-	}
-	return true;
-}
-
-bool FConfig::Load(std::string_view Path)
+bool FConfigTool::Load(std::string_view Path)
 {
 	std::ifstream Stream{ std::string(Path) };
 	if (!Stream)
@@ -64,7 +63,7 @@ bool FConfig::Load(std::string_view Path)
 	return true;
 }
 
-std::optional<std::string> FConfig::GetString(std::string_view Section, std::string_view Key) const
+std::optional<std::string> FConfigTool::GetString(std::string_view Section, std::string_view Key) const
 {
 	const auto SectionIt = Sections.find(std::string(Section));
 	if (SectionIt == Sections.end())
@@ -79,7 +78,7 @@ std::optional<std::string> FConfig::GetString(std::string_view Section, std::str
 	return KeyIt->second;
 }
 
-std::int64_t FConfig::GetInt(std::string_view Section, std::string_view Key, std::int64_t Default) const
+std::int64_t FConfigTool::GetInt(std::string_view Section, std::string_view Key, std::int64_t Default) const
 {
 	const auto Value = GetString(Section, Key);
 	if (!Value)
@@ -96,7 +95,7 @@ std::int64_t FConfig::GetInt(std::string_view Section, std::string_view Key, std
 	}
 }
 
-double FConfig::GetFloat(std::string_view Section, std::string_view Key, double Default) const
+double FConfigTool::GetFloat(std::string_view Section, std::string_view Key, double Default) const
 {
 	const auto Value = GetString(Section, Key);
 	if (!Value)
@@ -113,7 +112,7 @@ double FConfig::GetFloat(std::string_view Section, std::string_view Key, double 
 	}
 }
 
-bool FConfig::GetBool(std::string_view Section, std::string_view Key, bool Default) const
+bool FConfigTool::GetBool(std::string_view Section, std::string_view Key, bool Default) const
 {
 	const auto Value = GetString(Section, Key);
 	if (!Value)
@@ -131,20 +130,22 @@ bool FConfig::GetBool(std::string_view Section, std::string_view Key, bool Defau
 	return Lower == "true" || Lower == "1" || Lower == "yes" || Lower == "on";
 }
 
-void FConfig::SetString(std::string_view Section, std::string_view Key, std::string Value)
+void FConfigTool::SetString(std::string_view Section, std::string_view Key, std::string Value)
 {
 	Sections[std::string(Section)][std::string(Key)] = std::move(Value);
 }
 
-bool FConfig::HasSection(std::string_view Section) const
+bool FConfigTool::HasSection(std::string_view Section) const
 {
 	return Sections.find(std::string(Section)) != Sections.end();
 }
 
-bool FConfig::HasKey(std::string_view Section, std::string_view Key) const
+bool FConfigTool::HasKey(std::string_view Section, std::string_view Key) const
 {
 	return GetString(Section, Key).has_value();
 }
 
-} // namespace Maho::Config
+} // namespace Config
+
+} // namespace Maho
 

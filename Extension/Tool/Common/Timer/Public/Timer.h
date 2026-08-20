@@ -1,12 +1,12 @@
 #pragma once
 
 #include "TimerApi.h"
-#include <Maho.h>
-#include <Engine/PluginTemplates.h>
+#include <Engine/Tool.h>
 
 #include <chrono>
 #include <cstdint>
 #include <map>
+#include <mutex>
 #include <string>
 #include <string_view>
 
@@ -16,15 +16,12 @@ namespace Maho
 namespace Timer
 {
 
-/** Timer plugin's own drive stage — the host passes it to Execute<Stage>(). */
-enum class ETimerStage : std::uint8_t
-{
-	Init = 0,
-	Shutdown,
-};
-
 /**
  * Stack-based scope profiler — hierarchical timing instrumentation.
+ *
+ * A Tool marked Standalone: diagnostic, append-only, self-managed — it lives
+ * outside the scheduler's write model (FTags = FStandaloneTag) and guards its
+ * own concurrency. FScopedTimer (RAII) drives it via public methods.
  *
  *   void Render()
  *   {
@@ -32,13 +29,16 @@ enum class ETimerStage : std::uint8_t
  *       // ... work ...
  *   }                                    // EndScope on destruction
  *
- *   Maho::Timer::FTimer::Get().DumpToString();   // "Render: 1.23 ms (n calls, avg, max)"
+ *   Maho::Timer::FTimerTool::Get().DumpToString();   // "Render: 1.23 ms (n calls, avg, max)"
  */
-class MAHO_TIMER_API FTimer : public TTool<FTimer>
+class MAHO_TIMER_API FTimerTool : public Maho::TTool<FTimerTool>
 {
 public:
-	/** Stage dispatch — called by `scheduler.Execute<ETimerStage, ...>()`. */
-	[[nodiscard]] bool ExecuteStage(ETimerStage Stage);
+	/** FToolTag (identity) + FStandaloneTag (self-managed — linter leaves it alone). */
+	using FTags = FWithTags<Maho::TTool<FTimerTool>::FTags, Maho::FStandaloneTag>;
+public:
+	/** Format the timing tree as text (milliseconds). */
+	[[nodiscard]] std::string DumpToString() const;
 
 	/** Push a scope (must be balanced with EndScope / FScopedTimer). */
 	void BeginScope(std::string_view Name);
@@ -48,9 +48,6 @@ public:
 
 	/** Clear all accumulated timings. */
 	void Reset();
-
-	/** Format the timing tree as text (milliseconds). */
-	[[nodiscard]] std::string DumpToString() const;
 
 	struct FNode
 	{
@@ -64,6 +61,7 @@ public:
 	};
 
 private:
+	mutable std::mutex Mutex;
 	FNode Root{"Root"};
 	FNode* Current = &Root;
 };

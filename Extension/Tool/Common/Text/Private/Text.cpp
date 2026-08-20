@@ -33,47 +33,30 @@ FText::FText(std::string InNamespace, std::string InKey, std::string InSource)
 
 std::string FText::Resolve() const
 {
-	const FTextManager& Manager = FTextManager::Get();
+	const FTextTool& Manager = FTextTool::Get();
 	const std::string* Translated = Manager.FindTranslation(Namespace, Key, Manager.GetCulture());
 	return Translated ? *Translated : Source;
 }
 
-bool FTextManager::ExecuteStage(ETextStage Stage)
-{
-	std::lock_guard<std::mutex> Lock(Mutex);
-	switch (Stage)
-	{
-	case ETextStage::Init:
-		Catalog.clear();
-		CurrentCulture = "en-US";
-		break;
-
-	case ETextStage::Shutdown:
-		Catalog.clear();
-		break;
-	}
-	return true;
-}
-
-std::string_view FTextManager::GetCulture() const
+std::string_view FTextTool::GetCulture() const
 {
 	std::lock_guard<std::mutex> Lock(Mutex);
 	return CurrentCulture;
 }
 
-void FTextManager::SetCulture(std::string InCulture)
+void FTextTool::SetCulture(std::string InCulture)
 {
 	std::lock_guard<std::mutex> Lock(Mutex);
 	CurrentCulture = std::move(InCulture);
 }
 
-void FTextManager::AddTranslation(std::string_view InNamespace, std::string_view InKey, std::string_view InCulture, std::string Text)
+void FTextTool::AddTranslation(std::string_view InNamespace, std::string_view InKey, std::string_view InCulture, std::string Text)
 {
 	std::lock_guard<std::mutex> Lock(Mutex);
 	Catalog[MakeKey(InNamespace, InKey, InCulture)] = std::move(Text);
 }
 
-void FTextManager::LoadTranslationsFromJson(std::string_view JsonText)
+void FTextTool::LoadTranslationsFromJson(std::string_view JsonText)
 {
 	const Maho::Json::FJsonValue Root = Maho::Json::FJsonValue::parse(JsonText.begin(), JsonText.end());
 	for (const auto& Entry : Root)
@@ -86,11 +69,18 @@ void FTextManager::LoadTranslationsFromJson(std::string_view JsonText)
 	}
 }
 
-const std::string* FTextManager::FindTranslation(std::string_view InNamespace, std::string_view InKey, std::string_view InCulture) const
+const std::string* FTextTool::FindTranslation(std::string_view InNamespace, std::string_view InKey, std::string_view InCulture) const
 {
 	std::lock_guard<std::mutex> Lock(Mutex);
 	const auto It = Catalog.find(MakeKey(InNamespace, InKey, InCulture));
 	return It != Catalog.end() ? &It->second : nullptr;
+}
+
+void FTextTool::Clear()
+{
+	std::lock_guard<std::mutex> Lock(Mutex);
+	Catalog.clear();
+	CurrentCulture = "en-US";
 }
 
 } // namespace Text

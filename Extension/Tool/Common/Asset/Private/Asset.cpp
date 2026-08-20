@@ -4,8 +4,18 @@
 #include <fstream>
 #include <iterator>
 
-namespace Maho::Asset
+namespace Maho
 {
+
+namespace Asset
+{
+
+void FAssetTool::Clear()
+{
+	std::lock_guard<std::mutex> Lock(Mutex);
+	Assets.clear();
+	MountRoots.clear();
+}
 
 namespace
 {
@@ -23,25 +33,7 @@ namespace
 	}
 }
 
-bool FAsset::ExecuteStage(EAssetStage Stage)
-{
-	std::lock_guard<std::mutex> Lock(Mutex);
-	switch (Stage)
-	{
-	case EAssetStage::Init:
-		Assets.clear();
-		MountRoots.clear();
-		break;
-
-	case EAssetStage::Shutdown:
-		Assets.clear();
-		MountRoots.clear();
-		break;
-	}
-	return true;
-}
-
-void FAsset::Scan(const std::filesystem::path& ContentDir, std::string_view MountAlias)
+void FAssetTool::Scan(const std::filesystem::path& ContentDir, std::string_view MountAlias)
 {
 	std::error_code Error;
 	if (!std::filesystem::is_directory(ContentDir, Error))
@@ -77,14 +69,14 @@ void FAsset::Scan(const std::filesystem::path& ContentDir, std::string_view Moun
 	}
 }
 
-const FAssetData* FAsset::Find(const FAssetPath& Path) const
+const FAssetData* FAssetTool::Find(const FAssetPath& Path) const
 {
 	std::lock_guard<std::mutex> Lock(Mutex);
 	const auto It = Assets.find(std::string(Path.GetPath()));
 	return It != Assets.end() ? &It->second : nullptr;
 }
 
-std::filesystem::path FAsset::Resolve(const FAssetPath& Path) const
+std::filesystem::path FAssetTool::Resolve(const FAssetPath& Path) const
 {
 	// "/Game/Materials/M_Metal" →?mount root "Game" + "Materials/M_Metal".
 	std::string_view P = Path.GetPath();
@@ -111,7 +103,7 @@ std::filesystem::path FAsset::Resolve(const FAssetPath& Path) const
 	return Result;
 }
 
-std::optional<std::vector<std::uint8_t>> FAsset::Load(const FAssetPath& Path) const
+std::optional<std::vector<std::uint8_t>> FAssetTool::Load(const FAssetPath& Path) const
 {
 	const FAssetData* Data = Find(Path);
 	if (Data == nullptr)
@@ -130,11 +122,12 @@ std::optional<std::vector<std::uint8_t>> FAsset::Load(const FAssetPath& Path) co
 	return Bytes;
 }
 
-std::size_t FAsset::GetAssetCount() const
+std::size_t FAssetTool::GetAssetCount() const
 {
 	std::lock_guard<std::mutex> Lock(Mutex);
 	return Assets.size();
 }
 
-} // namespace Maho::Asset
+} // namespace Asset
 
+} // namespace Maho

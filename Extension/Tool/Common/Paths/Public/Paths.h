@@ -2,7 +2,7 @@
 
 #include "PathsApi.h"
 #include <Maho.h>
-#include <Engine/PluginTemplates.h>
+#include <Engine/Tool.h>
 
 #include <cstdint>
 #include <filesystem>
@@ -16,22 +16,12 @@ namespace Maho
 namespace Paths
 {
 
-/** Paths plugin's own drive stage — the host passes it to Execute<Stage>(). */
-enum class EPathsStage : std::uint8_t
-{
-	Init = 0,
-	Shutdown,
-};
-
-/** Path resolution extension (project/engine roots). Driven by EPathsStage. */
-class MAHO_PATHS_API FPaths : public TTool<FPaths>
+/** Path resolution extension (project/engine roots). */
+class MAHO_PATHS_API FPathsTool : public TTool<FPathsTool>
 {
 public:
-	/** Stage dispatch — called by `scheduler.Execute<EPathsStage, ...>()`. */
-	[[nodiscard]] bool ExecuteStage(EPathsStage Stage);
-
-	/** Register a root alias (e.g. "Engine" -> <engine dir>). */
-	void SetRoot(std::string_view Alias, std::filesystem::path Path);
+	/** Identity tag — this is a Tool. */
+	using FTags = TTypeList<FToolTag>;
 
 	/** Resolve a virtual path "Alias/Sub/Path" (or "Alias:Sub/Path") to a physical path. */
 	[[nodiscard]] std::filesystem::path Resolve(std::string_view VirtualPath) const;
@@ -39,7 +29,17 @@ public:
 	/** True when the alias is registered. */
 	[[nodiscard]] bool HasRoot(std::string_view Alias) const;
 
+protected:
+	/** Register a root alias (e.g. "Engine" -> <engine dir>). Lifecycle write. */
+	void SetRoot(std::string_view Alias, std::filesystem::path Path);
+
+	/** Clear all registered root aliases. Lifecycle write. */
+	void Clear();
+
 private:
+	template <typename TExtension, typename TStage>
+	friend bool Maho::ExecuteExtension(TStage Stage);
+
 	std::map<std::string, std::filesystem::path> Roots;
 };
 

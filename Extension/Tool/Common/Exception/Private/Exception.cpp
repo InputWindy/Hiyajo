@@ -6,24 +6,17 @@ namespace Maho
 namespace Exception
 {
 
-bool FException::ExecuteStage(EExceptionStage Stage)
+void FExceptionTool::Clear()
 {
-	switch (Stage)
-	{
-	case EExceptionStage::Init:
-	case EExceptionStage::Shutdown:
-		OnException.Clear();
-		break;
-	}
-	return true;
+	OnException.Clear();
 }
 
-void FException::ReportException(std::string_view Message)
+void FExceptionTool::ReportException(std::string_view Message)
 {
 	OnException.Broadcast(std::string(Message));
 }
 
-void FException::ReportException(const std::exception& Error)
+void FExceptionTool::ReportException(const std::exception& Error)
 {
 	ReportException(Error.what());
 }

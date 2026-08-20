@@ -2,7 +2,7 @@
 
 #include "TextApi.h"
 #include <Maho.h>
-#include <Engine/PluginTemplates.h>
+#include <Engine/Tool.h>
 
 #include <cstdint>
 #include <mutex>
@@ -16,13 +16,6 @@ namespace Maho
 
 namespace Text
 {
-
-/** Text plugin's own drive stage — the host passes it to Execute<Stage>(). */
-enum class ETextStage : std::uint8_t
-{
-	Init = 0,
-	Shutdown,
-};
 
 /** Supported cultures. Strings are UTF-8. */
 namespace Culture
@@ -61,13 +54,22 @@ private:
 };
 
 /** Localization manager: current culture + translation catalog (a plain singleton). */
-class MAHO_TEXT_API FTextManager : public Maho::TTool<FTextManager>
+class MAHO_TEXT_API FTextTool : public Maho::TTool<FTextTool>
 {
 public:
-	/** Stage dispatch — called by `scheduler.Execute<ETextStage, ...>()`. */
-	[[nodiscard]] bool ExecuteStage(ETextStage Stage);
+	/** Identity tag — this is a Tool. */
+	using FTags = TTypeList<FToolTag>;
+
+	// ── 读（const，public——任意方可读）──
 
 	[[nodiscard]] std::string_view GetCulture() const;
+
+	/** Look up a translation; returns nullptr when absent. Thread-safe. */
+	[[nodiscard]] const std::string* FindTranslation(std::string_view InNamespace, std::string_view InKey, std::string_view InCulture) const;
+
+protected:
+	// ── 写（protected，仅调度器 / friend 自由函数）──
+
 	void SetCulture(std::string InCulture);
 
 	/** Register one translation for (Namespace, Key) under a culture. Thread-safe. */
@@ -76,8 +78,11 @@ public:
 	/** Load translations from a JSON array of objects. */
 	void LoadTranslationsFromJson(std::string_view JsonText);
 
-	/** Look up a translation; returns nullptr when absent. Thread-safe. */
-	[[nodiscard]] const std::string* FindTranslation(std::string_view InNamespace, std::string_view InKey, std::string_view InCulture) const;
+	/** Clear the translation catalog and reset culture to "en-US". Lifecycle write. */
+	void Clear();
+
+	template <typename TExtension, typename TStage>
+	friend bool Maho::ExecuteExtension(TStage Stage);
 
 private:
 	mutable std::mutex Mutex;

@@ -1,12 +1,12 @@
 #pragma once
 
 #include "ConsoleVariableApi.h"
-#include <Maho.h>
-#include <Engine/PluginTemplates.h>
+#include <Engine/Tool.h>
 
 #include <cstdint>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <string_view>
 #include <type_traits>
@@ -17,13 +17,6 @@ namespace Maho
 
 namespace ConsoleVariable
 {
-
-/** ConsoleVariable plugin's own drive stage — the host passes it to Execute<Stage>(). */
-enum class EConsoleVariableStage : std::uint8_t
-{
-	Init = 0,
-	Shutdown,
-};
 
 /** Console variable flags (UE ECVF_* style). */
 enum class ECVarFlags : std::uint32_t
@@ -70,19 +63,20 @@ public:
 };
 
 /**
- * Console variable registry (UE IConsoleManager). Static TAutoConsoleVariable
- * globals register here at static-init; FindConsoleVariable looks them up.
+ * Console variable registry (UE IConsoleManager). A Tool marked Standalone: static
+ * TAutoConsoleVariable globals register at static-init, before the scheduler runs.
+ * FTags = FStandaloneTag → the linter leaves it alone; it guards itself (mutex).
  */
-class MAHO_CONSOLEVARIABLE_API FConsoleVariable : public Maho::TTool<FConsoleVariable>
+class MAHO_CONSOLEVARIABLE_API FConsoleVariableTool : public Maho::TTool<FConsoleVariableTool>
 {
 public:
-	/** Stage dispatch — called by `scheduler.Execute<EConsoleVariableStage, ...>()`. */
-	[[nodiscard]] bool ExecuteStage(EConsoleVariableStage Stage);
-
-	/** Find a registered variable; nullptr when absent. */
+	/** FToolTag (identity) + FStandaloneTag (self-managed — linter leaves it alone). */
+	using FTags = FWithTags<Maho::TTool<FConsoleVariableTool>::FTags, Maho::FStandaloneTag>;
+public:
+	/** Find a registered variable; nullptr when absent. (read) */
 	[[nodiscard]] IConsoleVariable* Find(std::string_view Name);
 
-	/** Register (used by TAutoConsoleVariable). Returns the interface. */
+	/** Register (used by static TAutoConsoleVariable globals at static-init). */
 	IConsoleVariable* Register(
 		std::string_view Name,
 		ECVarType Type,
@@ -90,7 +84,11 @@ public:
 		std::string_view Description,
 		ECVarFlags Flags);
 
+	/** Drop all registered variables (host decides when). */
+	void Clear();
+
 private:
+	mutable std::mutex Mutex;
 	std::map<std::string, std::unique_ptr<IConsoleVariable>> Registry;
 };
 
@@ -118,7 +116,7 @@ public:
 	TAutoConsoleVariable(std::string_view InName, T Default, std::string_view Description, ECVarFlags Flags = ECVarFlags::None)
 		: Name(InName)
 	{
-		Handle = FConsoleVariable::Get().Register(
+		Handle = FConsoleVariableTool::Get().Register(
 			InName,
 			TCVarType<T>::Value,
 			ToString(Default),

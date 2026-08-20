@@ -2,7 +2,7 @@
 
 #include "LogApi.h"
 #include <Maho.h>
-#include <Engine/PluginTemplates.h>
+#include <Engine/Tool.h>
 
 #include <cstdint>
 
@@ -11,13 +11,6 @@ namespace Maho
 
 namespace Log
 {
-
-/** Log plugin's own drive stage — the host passes it to Execute<Stage>(). */
-enum class ELogStage : std::uint8_t
-{
-	Init = 0,
-	Shutdown,
-};
 
 enum class ELogLevel : std::uint8_t
 {
@@ -29,11 +22,25 @@ enum class ELogLevel : std::uint8_t
 };
 
 /** Logging extension (spdlog). A plain singleton, driven by the scheduler. */
-class MAHO_LOG_API FLog : public Maho::TTool<FLog>
+class MAHO_LOG_API FLogTool : public Maho::TTool<FLogTool>
 {
 public:
-	/** Stage dispatch — called by `scheduler.Execute<ELogStage, ...>()`. */
-	[[nodiscard]] bool ExecuteStage(ELogStage Stage);
+	/** Identity tag — this is a Tool. */
+	using FTags = TTypeList<FToolTag>;
+
+	// Services are namespace-level free functions (SetLogLevel/Debug/Info/Warn/Error).
+
+protected:
+	// ── 写（protected，仅调度器 / friend 自由函数）──
+
+	/** Set the default spdlog level. Called by the host at Init. */
+	void Initialize();
+
+	/** Flush and tear down spdlog. Called by the host at Shutdown. */
+	void Shutdown();
+
+	template <typename TExtension, typename TStage>
+	friend bool Maho::ExecuteExtension(TStage Stage);
 };
 
 MAHO_LOG_API void SetLogLevel(ELogLevel Level);

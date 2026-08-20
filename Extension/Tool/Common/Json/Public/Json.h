@@ -2,7 +2,7 @@
 
 #include "JsonApi.h"
 #include <Maho.h>
-#include <Engine/PluginTemplates.h>
+#include <Engine/Tool.h>
 
 #include <nlohmann/json.hpp>
 
@@ -16,10 +16,16 @@ namespace Json
 using FJsonValue = nlohmann::json;
 
 /** JSON serialization extension (nlohmann/json). A plain singleton type provider. */
-class MAHO_JSON_API FJson : public Maho::TTool<FJson>
+class MAHO_JSON_API FJsonTool : public Maho::TTool<FJsonTool>
 {
 public:
+	/** Identity tag — this is a Tool. */
+	using FTags = TTypeList<FToolTag>;
+
 	// header-only — no lifecycle, no stage.
+
+	template <typename TExtension, typename TStage>
+	friend bool Maho::ExecuteExtension(TStage Stage);
 };
 
 } // namespace Json

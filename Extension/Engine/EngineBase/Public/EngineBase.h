@@ -2,7 +2,7 @@
 
 #include "EngineBaseApi.h"
 #include <Maho.h>
-#include <Engine/PluginTemplates.h>
+#include <Engine/Engine.h>
 
 #include <type_traits>
 

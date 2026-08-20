@@ -11,64 +11,51 @@ namespace Maho
 namespace Name
 {
 
-namespace
+void FNameTool::Clear()
 {
-	std::mutex GPoolMutex;
-	std::vector<std::string> GPool;                            // index → string (0 = None)
-	std::unordered_map<std::string, std::uint32_t> GLookup;    // string → index
+	std::lock_guard<std::mutex> Lock(Mutex);
+	Pool.clear();
+	Lookup.clear();
+	Pool.emplace_back();   // reserve index 0 = None (empty)
 }
 
 FName::FName(std::string_view Str)
-	: Id(FNamePool::Get().Intern(Str).Id)
+	: Id(FNameTool::Get().Intern(Str).Id)
 {
 }
 
 std::string_view FName::ToString() const
 {
-	return GPool[Id];
+	return FNameTool::Get().ToString(Id);
 }
 
-bool FNamePool::ExecuteStage(ENameStage Stage)
+std::string_view FNameTool::ToString(std::uint32_t Id) const
 {
-	std::lock_guard<std::mutex> Lock(GPoolMutex);
-	switch (Stage)
-	{
-	case ENameStage::Init:
-		GPool.clear();
-		GLookup.clear();
-		GPool.emplace_back();   // reserve index 0 = None (empty)
-		break;
-
-	case ENameStage::Shutdown:
-		GPool.clear();
-		GLookup.clear();
-		break;
-	}
-	return true;
+	return Pool[Id];
 }
 
-FName FNamePool::Intern(std::string_view Str)
+FName FNameTool::Intern(std::string_view Str)
 {
 	if (Str.empty())
 	{
 		return FName(0);
 	}
 
-	std::lock_guard<std::mutex> Lock(GPoolMutex);
-	if (GPool.empty())
+	std::lock_guard<std::mutex> Lock(Mutex);
+	if (Pool.empty())
 	{
-		GPool.emplace_back();   // lazily reserve index 0 = None before first intern
+		Pool.emplace_back();   // lazily reserve index 0 = None before first intern
 	}
 
-	const auto It = GLookup.find(std::string(Str));
-	if (It != GLookup.end())
+	const auto It = Lookup.find(std::string(Str));
+	if (It != Lookup.end())
 	{
 		return FName(It->second);
 	}
 
-	const std::uint32_t Id = static_cast<std::uint32_t>(GPool.size());
-	GPool.emplace_back(Str);
-	GLookup.emplace(GPool.back(), Id);
+	const std::uint32_t Id = static_cast<std::uint32_t>(Pool.size());
+	Pool.emplace_back(Str);
+	Lookup.emplace(Pool.back(), Id);
 	return FName(Id);
 }
 

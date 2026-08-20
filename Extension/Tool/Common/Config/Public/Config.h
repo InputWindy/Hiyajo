@@ -2,7 +2,7 @@
 
 #include "ConfigApi.h"
 #include <Maho.h>
-#include <Engine/PluginTemplates.h>
+#include <Engine/Tool.h>
 
 #include <cstdint>
 #include <map>
@@ -16,13 +16,6 @@ namespace Maho
 namespace Config
 {
 
-/** Config plugin's own drive stage — the host passes it to Execute<Stage>(). */
-enum class EConfigStage : std::uint8_t
-{
-	Init = 0,
-	Shutdown,
-};
-
 /**
  * INI-style configuration — UE DefaultEngine.ini format (sections + key=value).
  *
@@ -33,16 +26,13 @@ enum class EConfigStage : std::uint8_t
  *   [/Script/EngineSettings.GameMapsSettings]
  *   EditorStartupMap=/Game/Maps/Startup
  *
- *   FConfig::Get().GetString("/Script/Engine.Engine", "GameName");
+ *   FConfigTool::Get().GetString("/Script/Engine.Engine", "GameName");
  */
-class MAHO_CONFIG_API FConfig : public Maho::TTool<FConfig>
+class MAHO_CONFIG_API FConfigTool : public Maho::TTool<FConfigTool>
 {
 public:
-	/** Stage dispatch — called by `scheduler.Execute<EConfigStage, ...>()`. */
-	[[nodiscard]] bool ExecuteStage(EConfigStage Stage);
-
-	/** Parse an INI file; returns false on failure. */
-	bool Load(std::string_view Path);
+	/** Identity tag — this is a Tool. */
+	using FTags = TTypeList<FToolTag>;
 
 	/** Raw string lookup by section + key; nullopt when absent. */
 	[[nodiscard]] std::optional<std::string> GetString(std::string_view Section, std::string_view Key) const;
@@ -52,11 +42,21 @@ public:
 	[[nodiscard]] double GetFloat(std::string_view Section, std::string_view Key, double Default = 0.0) const;
 	[[nodiscard]] bool GetBool(std::string_view Section, std::string_view Key, bool Default = false) const;
 
-	/** Set a value (runtime override). */
-	void SetString(std::string_view Section, std::string_view Key, std::string Value);
-
 	[[nodiscard]] bool HasSection(std::string_view Section) const;
 	[[nodiscard]] bool HasKey(std::string_view Section, std::string_view Key) const;
+
+protected:
+	/** Parse an INI file; returns false on failure. Lifecycle write. */
+	bool Load(std::string_view Path);
+
+	/** Set a value (runtime override). Only the scheduler/free fn may write. */
+	void SetString(std::string_view Section, std::string_view Key, std::string Value);
+
+	/** Lifecycle write (Init/Shutdown): drop all loaded sections. */
+	void Clear();
+
+	template <typename TExtension, typename TStage>
+	friend bool Maho::ExecuteExtension(TStage Stage);
 
 private:
 	using FSection = std::map<std::string, std::string>;   // key → value

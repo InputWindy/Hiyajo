@@ -6,51 +6,40 @@ namespace Maho
 namespace CommandParser
 {
 
-bool FCommandParser::ExecuteStage(ECommandParserStage Stage)
+void FCommandParserTool::Clear()
 {
-	switch (Stage)
-	{
-	case ECommandParserStage::Init:
-		Storage.clear();
-		break;
-
-	case ECommandParserStage::Shutdown:
-		Storage.clear();
-		break;
-	}
-	return true;
+	Storage.clear();
 }
 
-const std::string* FCommandParser::Find(std::string_view Name) const
+const std::string* FCommandParserTool::Find(std::string_view Name) const
 {
 	const auto It = Storage.find(std::string(Name));
 	return It != Storage.end() ? &It->second : nullptr;
 }
 
-bool FCommandParser::Has(std::string_view Name) const
+bool FCommandParserTool::Has(std::string_view Name) const
 {
 	return Storage.find(std::string(Name)) != Storage.end();
 }
 
-int FCommandParser::Count() const
+int FCommandParserTool::Count() const
 {
 	return static_cast<int>(Storage.size());
 }
 
-void FCommandParser::Reset()
+void FCommandParserTool::Reset()
 {
 	Storage.clear();
 }
 
-void ParseCommandLine(int Argc, char** Argv)
+void FCommandParserTool::Parse(int Argc, char** Argv)
 {
 	if (Argv == nullptr)
 	{
 		return;
 	}
 
-	FCommandParser& Parser = FCommandParser::Get();
-	Parser.Reset();
+	Reset();
 
 	for (int I = 1; I < Argc; ++I)
 	{
@@ -80,7 +69,7 @@ void ParseCommandLine(int Argc, char** Argv)
 		{
 			const std::string Name(Token.substr(0, Eq));
 			const std::string Value(Token.substr(Eq + 1));
-			Parser.Storage[Name] = Value;
+			Storage[Name] = Value;
 		}
 		else
 		{
@@ -92,12 +81,12 @@ void ParseCommandLine(int Argc, char** Argv)
 				const bool NextIsValue = Next.empty() || Next.front() != '-';
 				if (NextIsValue)
 				{
-					Parser.Storage[Name] = std::string(Next);
+					Storage[Name] = std::string(Next);
 					++I;
 					continue;
 				}
 			}
-			Parser.Storage[Name] = std::string();
+			Storage[Name] = std::string();
 		}
 	}
 }

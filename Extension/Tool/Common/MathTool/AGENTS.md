@@ -1,4 +1,4 @@
-# Mathy — Agent 入口
+# MathTool — Agent 入口
 
 所有 AI Agent 进本插件前先读本文件。
 

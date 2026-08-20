@@ -12,6 +12,52 @@
 - stage 枚举、app 形态、线程池策略**全部下放插件层**，不写回 core（`Engine/` 只放可选的 `FSerialScheduler`/`FParallelScheduler` 示例）。
 - 遵循根 [AGENTS.md](../AGENTS.md)。
 
+## 接口分层（强约束，违反 = 违背引擎架构）
+
+Tool / Layer 全是单例，`Get()` 是 public——任意插件都能拿到对方单例。
+
+**核心规则**：
+
+- `const` 读接口 → **public**。读不改状态，无多线程竞争，任意方可读。
+- 非 `const` 写接口 → **protected**。写改变自身状态，多线程下危险，**只有调度器能写**。
+- 调度器唯一的写入口 = `ExecuteExtension<T, TStage>(TStage)`，通过类内 friend 模板声明授权：
+
+```cpp
+template <typename TExtension, typename TStage>
+friend bool Maho::ExecuteExtension(TStage Stage);
+```
+
+**为什么**：若 Tool/Layer 直接 `Get()` 对方单例 + 调 public 写接口，等于绕过调度器去写别的插件，破坏调度器的线程安全写入模型。所以写接口必须收进 protected，只有调度器（经 friend `ExecuteExtension`）能触达。
+
+**插件不感知 stage**：Tool/Layer 不定义 stage 枚举、不特化 `ExecuteExtension`，只提供能力方法。stage 由宿主（Engine/Layer）定义，宿主特化 `ExecuteExtension<Plugin, HostStage>(HostStage)` 把 stage 映射到插件的能力方法。
+
+```cpp
+// 插件（Tool）：只提供能力，读 public / 写 protected
+class FPlatformSystem : public Maho::TTool<FPlatformSystem>
+{
+public:
+	[[nodiscard]] FNativeSurface GetNativeWindow() const;  // 读 → public
+protected:
+	bool CreateWindow(int, int, std::string_view);         // 写 → protected
+	void PollEvents();                                     // 写 → protected
+
+	template <typename TExtension, typename TStage>
+	friend bool Maho::ExecuteExtension(TStage Stage);
+};
+
+// 宿主（Engine）：定义 stage，特化映射
+template <>
+bool ExecuteExtension<Platform::FPlatformSystem, EEngineStage>(EEngineStage Stage)
+{
+	switch (Stage)
+	{
+	case EEngineStage::Tick:     Platform::FPlatformSystem::Get().PollEvents(); break;
+	case EEngineStage::Shutdown: Platform::FPlatformSystem::Get().DestroyWindow(); break;
+	}
+	return true;
+}
+```
+
 ## 项目侧开发约束（强约束）
 
 拓展项目侧代码时，遵守以下三条：

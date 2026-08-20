@@ -40,8 +40,8 @@ public:
 			ForEach<FLevel>(*this, [](auto Tag) {
 				using T = typename decltype(Tag)::Type;
 				static_assert(FExtensionExecute<T, decltype(Stage)>,
-					"Extension must provide ExecuteExtension<T>(Stage)");
-				ExecuteExtension<T>(Stage);
+					"Extension must provide ExecuteExtension<T, Stage>(Stage)");
+				ExecuteExtension<T, decltype(Stage)>(Stage);
 			});
 		});
 	}

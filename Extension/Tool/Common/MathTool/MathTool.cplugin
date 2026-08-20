@@ -1,6 +1,7 @@
 {
   "FileVersion": 1,
-  "Name": "Mathy",
+  "Name": "Math",
+  "Header": "MathTool",
   "Description": "Math library extension (GLM).",
   "Dependencies": []
 }
