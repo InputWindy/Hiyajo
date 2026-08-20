@@ -42,10 +42,11 @@ CreateProject.bat
 ```
 <项目>/
   <项目>.cproject
-  <项目>/Public/             ← 入口插件接口
-  <项目>/Private/            ← 入口插件实现
-  <子插件>/Public/           ← 功能插件（平铺项目根）
-  Extension/                  ← 三方插件目录
+  Source/                     ← 项目自己的插件（入口 + 子插件）
+    <项目>/Public/            ← 入口插件接口
+    <项目>/Private/           ← 入口插件实现
+    <子插件>/Public/          ← 功能插件
+  Extension/                  ← 三方插件目录（与 Source 同级）
   Intermediate/Main.cpp       ← 入口（code-gen，不改）
   CMakeLists.txt / package.bat / CreatePlugin.bat
 ```

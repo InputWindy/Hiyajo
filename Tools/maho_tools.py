@@ -524,16 +524,16 @@ file(GLOB MAHO_HEADERS CONFIGURE_DEPENDS "${{ENGINE_DIR}}/Source/Public/**/*.h")
 file(GLOB MAHO_PRIVATE CONFIGURE_DEPENDS "${{ENGINE_DIR}}/Source/Private/**/*.cpp")
 
 {plugin_targets}
-# The project — the entry plugin (flat at the root, Public header + Private impl).
+# The project — the entry plugin (under Source/, Public header + Private impl).
 add_library({name} SHARED
-	{name}/Public/{name}.h
-	{name}/Private/{name}.cpp
+	Source/{name}/Public/{name}.h
+	Source/{name}/Private/{name}.cpp
 {host_aux}
 )
 {host_aux_props}
 target_include_directories({name} PUBLIC
 	"${{ENGINE_DIR}}/Source/Public"
-	"${{CMAKE_CURRENT_SOURCE_DIR}}/{name}/Public"
+	"${{CMAKE_CURRENT_SOURCE_DIR}}/Source/{name}/Public"
 	"${{CMAKE_CURRENT_SOURCE_DIR}}/Intermediate/Generated"
 {plugin_dirs}
 )
@@ -634,7 +634,7 @@ if not exist "%PYW%" (
 	exit /b 1
 )
 
-start "" "%PYW%" "{engine_rel}/Tools/create_plugin_ui.py" "%CD%"
+start "" "%PYW%" "{engine_rel}/Tools/create_plugin_ui.py" "%CD%\\Source"
 exit /b 0
 """
 
@@ -682,14 +682,15 @@ def _all_plugin_infos(
 		_register(cplugin, "${ENGINE_DIR}", f"Extension/{rel}", group)
 
 	if project_dir is not None:
-		# Project plugins: flat at the project root (entry + child plugins),
-		# each dir named after the plugin with <name>.cplugin inside.
-		for child in sorted(project_dir.iterdir()):
-			if not child.is_dir() or child.name in ("Extension", "Intermediate", "Tools"):
+		# Project plugins: Source/<name>/ (entry + child plugins), each dir
+		# named after the plugin with <name>.cplugin inside.
+		proj_src = project_dir / "Source"
+		for child in sorted(proj_src.iterdir()):
+			if not child.is_dir():
 				continue
 			cplugin = child / f"{child.name}.cplugin"
 			if cplugin.is_file():
-				_register(cplugin, "${CMAKE_CURRENT_SOURCE_DIR}", child.name, "")
+				_register(cplugin, "${CMAKE_CURRENT_SOURCE_DIR}", f"Source/{child.name}", "")
 		# Third-party plugins: Extension/<name>/.
 		proj_ext = project_dir / "Extension"
 		for cplugin in discover_cplugin_files([proj_ext]):
@@ -781,7 +782,7 @@ def _plugin_targets(
 		)
 		# A project-side plugin depends on the project's entry plugin → also
 		# include the entry plugin's Public/ (the parent interfaces it implements).
-		entry_public = f"\"${{CMAKE_CURRENT_SOURCE_DIR}}/{project_name}/Public\""
+		entry_public = f"\"${{CMAKE_CURRENT_SOURCE_DIR}}/Source/{project_name}/Public\""
 		# Dependency plugins' Public/ include dirs (engine + project plugins).
 		dep_public_dirs = "".join(
 			f'\t"{infos[d]["public_dir"]}"\n'
@@ -899,7 +900,7 @@ def _write_cmake_lists(
 	)
 
 	# Host aux files (the project's own plugin manifest/docs) shown in the IDE.
-	host_dir = project_dir / project_name
+	host_dir = project_dir / "Source" / project_name
 	host_aux: list[str] = []
 	for fn in (
 		f"{project_name}.cplugin",
@@ -909,7 +910,7 @@ def _write_cmake_lists(
 		f"{project_name}API.html",
 	):
 		if (host_dir / fn).is_file():
-			host_aux.append(f"{project_name}/{fn}")
+			host_aux.append(f"Source/{project_name}/{fn}")
 	host_aux_block = "\n".join(f"\t{p}" for p in host_aux)
 	host_aux_props = (
 		f'set_source_files_properties({", ".join(host_aux)} PROPERTIES HEADER_FILE_ONLY ON)\n'
@@ -971,16 +972,16 @@ def create_project(
 	cproject_path = project_dir / f"{project_name}.cproject"
 	write_cproject(cproject_path, cproject)
 
-	# The entry plugin lives flat at the project root (same level as .cproject);
-	# Intermediate/Main.cpp is the code-gen entry.
+	# Project plugins live under Source/ (the entry + child plugins); Extension/
+	# holds third-party plugins (same level). Intermediate/Main.cpp is code-gen.
 	create_plugin(
-		project_name, engine_root, description=description, plugins_dir=project_dir
+		project_name, engine_root, description=description, plugins_dir=project_dir / "Source"
 	)
 
 	# Overwrite the default plugin's code with the project host (the .gen.h macro
 	# injects the plugin extensions).
-	plugin_public = project_dir / project_name / "Public"
-	plugin_private = project_dir / project_name / "Private"
+	plugin_public = project_dir / "Source" / project_name / "Public"
+	plugin_private = project_dir / "Source" / project_name / "Private"
 	(plugin_public / f"{project_name}.h").write_text(
 		PUBLIC_HEADER.format(name=project_name, name_upper=project_name.upper()),
 		encoding="utf-8", newline="\n",
@@ -1037,10 +1038,10 @@ def create_plugin(
 
 	deps = [d for d in (inherits or []) if d and d != plugin_name]
 
-	# Project-side plugins (created at the project root, beside the .cproject)
-	# automatically depend on the project's entry plugin (the anchor): the child
-	# includes the parent's Public/ interfaces and implements them in its own
-	# Private/. Engine-side plugins (under <engine>/Extension/) have no anchor.
+	# Project-side plugins (created under a project's Source/) automatically
+	# depend on the project's entry plugin (the anchor): the child includes the
+	# parent's Public/ interfaces and implements them in its own Private/.
+	# Engine-side plugins (under <engine>/Extension/) have no anchor.
 	for candidate_cproject in list(plugins_dir.glob("*.cproject")) + list(plugins_dir.parent.glob("*.cproject")):
 		project_data = read_cproject(candidate_cproject)
 		anchor = str(project_data.get("ProjectName", ""))
@@ -1166,8 +1167,8 @@ def create_plugin(
 		encoding="utf-8", newline="\n",
 	)
 
-	# Auto-register into the project's .cproject (when the plugin lives at the
-	# project root, beside the .cproject).
+	# Auto-register into the project's .cproject (when the plugin lives under
+	# the project's Source/).
 	for cproject in list(plugins_dir.glob("*.cproject")) + list(plugins_dir.parent.glob("*.cproject")):
 		data = read_cproject(cproject)
 		entries = data.get("Plugins", [])
