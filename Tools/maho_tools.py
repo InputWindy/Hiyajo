@@ -423,19 +423,23 @@ public:
 
 	int Main(int Argc, char** Argv) override;
 
-	// TODO: split the extension list and drive the two halves separately:
+	// TODO: split the list and drive the two halves through your stage enum:
 	//
 	//   using FRunables    = typename Maho::TFilter<FExtensions, Maho::TIsRunable>::Type;
 	//   using FNonRunables = typename Maho::TFilter<FExtensions, Maho::TIsNotRunable>::Type;
 	//
-	//   // ① tools: drive by your own stage enum (specialise ExecuteExtension<T, EStage>)
-	//   Execute<EStage::Init, FNonRunables>();
+	//   enum class EStage {{ Init, Tick, Shutdown }};
 	//
-	//   // ② runnables: each runs its own Main (nested hosts)
-	//   ForEach<FRunables>(*this, [&](auto Tag) {{
-	//       using T = typename decltype(Tag)::Type;
-	//       T::Get().Main(Argc, Argv);
-	//   }});
+	//   // Init: tools first, runnables after (they depend on the tools).
+	//   Execute<EStage::Init, FNonRunables>();
+	//   Execute<EStage::Init, FRunables>();
+	//   // Tick: only runnables have a per-frame execution flow.
+	//   Execute<EStage::Tick, FRunables>();
+	//   // Shutdown: runnables first, tools last (mirror of Init).
+	//   Execute<EStage::Shutdown, FRunables>();
+	//   Execute<EStage::Shutdown, FNonRunables>();
+	//
+	// and specialise ExecuteExtension<T, EStage> for each (T, stage) pair.
 }};
 
 // Compile-time contract: an IAssembly MUST provide CreateExtension.
