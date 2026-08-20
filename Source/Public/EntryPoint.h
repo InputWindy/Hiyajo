@@ -16,7 +16,7 @@ namespace Maho
  *     InstallFatalHandlers()
  *     FAssembly Load(argv[1])       // install
  *     CreateExtension() → IAssembly* // create the assembly instance
- *     IAssembly->Main(Argc, Argv)    // execute
+ *     IRunable->Main(Argc, Argv)     // execute (IAssembly is-a IRunable)
  */
 inline int Main(int Argc, char** Argv)
 {

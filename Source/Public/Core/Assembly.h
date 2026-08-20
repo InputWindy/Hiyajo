@@ -2,6 +2,7 @@
 
 #include <Core/Export.h>
 
+#include <concepts>
 #include <string_view>
 
 namespace Maho
@@ -50,18 +51,37 @@ private:
 };
 
 /**
- * Loaded assembly contract — an installed extension with a Main entry.
- *
- * The extension DLL's CreateExtension returns this; the entry point calls
- * Main(Argc, Argv) and owns the instance (deletes it after). No stage, no
- * runnable preset — the assembly decides its whole shape.
+ * Runnable contract — anything with a Main entry. Compatible with TSingleton
+ * (a Renderer can be a singleton AND runnable); it says nothing about how the
+ * object is created.
  */
-class MAHO_API IAssembly
+class MAHO_API IRunable
+{
+public:
+	virtual ~IRunable() = default;
+
+	virtual int Main(int Argc, char** Argv) = 0;
+};
+
+/**
+ * Installable assembly contract — a runnable that is ALSO dynamically
+ * installable: its DLL exports `CreateExtension` returning an IAssembly*.
+ * Mutually exclusive with TSingleton (an installable app may be instantiated
+ * many times; a singleton may not).
+ */
+class MAHO_API IAssembly : public virtual IRunable
 {
 public:
 	virtual ~IAssembly() = default;
+};
 
-	virtual int Main(int Argc, char** Argv) = 0;
+// The assembly-export contract: T must provide `static IAssembly* CreateExtension()`.
+// codegen emits a static_assert against this so a missing CreateExtension is a
+// compile-time error, not a link/load-time surprise.
+template <typename T>
+concept FAssemblyExport = requires
+{
+	{ T::CreateExtension() } -> std::convertible_to<IAssembly*>;
 };
 
 } // namespace Maho
