@@ -157,16 +157,10 @@ class CreateProjectApp(tk.Tk):
 	def _insert_plugin(self, tree: ttk.Treeview, p: dict, default: bool) -> None:
 		name = p["Name"]
 		self._checked[name] = default
-		parent = ""
-		# Skip the first group element — it is the Tool/Layer dir, already
-		# implied by which column the plugin lives in.
-		group = (p.get("Group") or [])[1:]
-		for i in range(len(group)):
-			gid = "group:" + "/".join(group[: i + 1])
-			if not tree.exists(gid):
-				tree.insert(parent, tk.END, iid=gid, text=group[i], open=True)
-			parent = gid
-		tree.insert(parent, tk.END, iid=name, text=self._label(name), open=True)
+		# Flat list — ttk.Treeview has a fixed 20px indent that cannot be tuned,
+		# and the Tool/Layer category dir is already the column, so we drop the
+		# remaining group nodes entirely and list plugins directly.
+		tree.insert("", tk.END, iid=name, text=self._label(name), open=True)
 
 	def _label(self, name: str) -> str:
 		mark = _CHECKED if self._checked.get(name) else _UNCHECKED
