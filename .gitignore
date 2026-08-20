@@ -2,3 +2,6 @@ Intermediate/
 Binaries/
 Saved/
 Packaged/
+
+# OpenSpec — not used; leave the spec-driven framework out of the repo.
+/openspec/
