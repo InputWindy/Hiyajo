@@ -130,8 +130,8 @@ using FOrderIA = Topo::TTopoSort_t<FIA, IA>;
 static_assert(Topo::TIsAcyclic_v<FIA, IA>);
 static_assert(std::is_same_v<FOrderIA, TTypeList<SA, SB, SD, SE, SF, SG>>,
 	"IA set topo order keeps deps first");
-// MAHO_LEVELS: bare-type macro → dependency-level bands at IA.
-using FMacroLevels = MAHO_LEVELS(IA, SA, SC, SD, SE);
+// MAHO_SORT_LEVEL: bare-type macro → dependency-level bands at IA.
+using FMacroLevels = MAHO_SORT_LEVEL(IA, SA, SC, SD, SE);
 static_assert(std::is_same_v<FMacroLevels,
 	Topo::TLevels_t<TTypeList<SA, SC, SD, SE>, IA>>, "macro == TLevels_t");
 // A scrambled input still yields a valid order (deps before dependents).

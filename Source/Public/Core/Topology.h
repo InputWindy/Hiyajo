@@ -603,9 +603,9 @@ struct FReverseTopology
  * Dependency-level bands (Topo::TLevels_t) for a bare list of types at a Key,
  * without spelling out TTypeList<Ts...>.
  *
- *   using FLevels = MAHO_LEVELS(IA, SA, SC, SD, SE);
+ *   using FLevels = MAHO_SORT_LEVEL(IA, SA, SC, SD, SE);
  *   // == Topo::TLevels_t<TTypeList<SA, SC, SD, SE>, IA>  (the parallel bands)
  */
-#define MAHO_LEVELS(Key, ...) \
+#define MAHO_SORT_LEVEL(Key, ...) \
 	::Maho::Topo::TLevels_t<::Maho::TTypeList<__VA_ARGS__>, Key>
 
