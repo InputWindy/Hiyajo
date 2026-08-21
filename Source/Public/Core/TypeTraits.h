@@ -1,13 +1,10 @@
 #pragma once
 
+#include <Core/Singleton.h>
 #include <type_traits>
 
 namespace Maho
 {
-
-// Forward decl — TIsSingleton only needs the template, not a full definition.
-template <typename TDerived>
-class TSingleton;
 
 // ───────────────────────────────────────────────────────────────────────
 // TypeTraits — compile-time predicates on a TYPE (not runtime state).

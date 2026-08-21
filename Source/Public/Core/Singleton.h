@@ -3,17 +3,22 @@
 namespace Maho
 {
 
+/** Identity marker: a class is a singleton (static T::Get() access). */
+class ISingleton
+{
+public:
+	virtual ~ISingleton() = default;
+};
+
 /**
- * Singleton base (CRTP Meyers singleton).
- *
- * A standalone concept — unrelated to the extension system. Anything that
- * wants process-wide single-instance access derives from it:
+ * CRTP singleton — the single-instance mechanism behind Tools. Deriving from
+ * TSingleton<TDerived> gives `static TDerived& Get()`.
  *
  *   class FLog final : public TSingleton<FLog> { ... };
  *   FLog::Get();
  */
 template <typename TDerived>
-class TSingleton
+class TSingleton: public ISingleton
 {
 protected:
 	TSingleton() = default;
