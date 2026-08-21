@@ -41,8 +41,8 @@ public:
 	using FTools = typename TFilter<FExtensions, FToolTag>::Type;
 	using FLayers = typename TFilter<FExtensions, FLayerTag>::Type;
 
-	/** Identity tag FLayerTag is always present. */
-	using FTags = TTypeList<FLayerTag>;
+	/** Identity tag — concatenate extra tag lists as needed. */
+	using FTags = TCatch<TTypeList<FLayerTag>>::Type;
 };
 
 } // namespace Maho

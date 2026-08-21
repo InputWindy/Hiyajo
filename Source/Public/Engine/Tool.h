@@ -25,8 +25,8 @@ class TTool
 	, public TSingleton<TDerived>
 {
 public:
-	/** UCLASS-style markers — the identity tag FToolTag is always present. */
-	using FTags = TTypeList<FToolTag>;
+	/** Identity tag — concatenate extra tag lists as needed. */
+	using FTags = TCatch<TTypeList<FToolTag>>::Type;
 };
 
 } // namespace Maho

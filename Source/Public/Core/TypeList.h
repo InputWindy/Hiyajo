@@ -117,4 +117,24 @@ public:
 // (Traversal — TTag / ForEach / the scheduler contract — lives in
 //  Scheduler.h, where the drive protocol is defined.)
 
+/**
+ * Concatenate multiple TTypeLists into one, in order.
+ *
+ *   using FTags = TCatch<TTypeList<A>, TTypeList<B, C>>::Type;   // TTypeList<A, B, C>
+ */
+template <typename... TLists>
+struct TCatch;
+
+template <typename... T>
+struct TCatch<TTypeList<T...>>
+{
+	using Type = TTypeList<T...>;
+};
+
+template <typename... T1, typename... T2, typename... TRest>
+struct TCatch<TTypeList<T1...>, TTypeList<T2...>, TRest...>
+{
+	using Type = typename TCatch<TTypeList<T1..., T2...>, TRest...>::Type;
+};
+
 } // namespace Maho
