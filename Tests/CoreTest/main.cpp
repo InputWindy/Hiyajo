@@ -36,17 +36,13 @@ struct SC : TExtension<TDependsPack<TDependsOn<IA, TTypeList<SA>>>>, IC
 // SD : SC → inherits SC's deps (via SC::FDependsPack) + its own; we add IA+IB.
 struct SD : SC, IA, IB
 {
-	using FDependsPack = Topo::TConcatPacks_t<SC::FDependsPack,
-		TDependsPack<TDependsOn<IA, TTypeList<SB, SC>>>>;
+	MAHO_EXTEND_DEPS(SC, IA, SB, SC)
 };
 
-// SE : SD → inherits + its own; nothing extra. Manual union (dedup) at the
-// class site — TUnionList_t is standalone-clean (MSVC-safe here, unlike inside
-// TConcatPacks).
+// SE : SD → inherits + its own; nothing extra.
 struct SE : SD
 {
-	using FDependsPack = TDependsPack<
-		TDependsOn<IA, Maho::TUnionList_t<Topo::TNodeDeps_t<SD, IA>, TTypeList<SD, SA>>>>;
+	MAHO_EXTEND_DEPS(SD, IA, SD, SA)
 };
 
 struct SF : TExtension<TDependsPack<TDependsOn<IA, TTypeList<SB>>>>, IA, IC
@@ -56,8 +52,7 @@ struct SF : TExtension<TDependsPack<TDependsOn<IA, TTypeList<SB>>>>, IA, IC
 // SG : SF → inherits SF's deps + its own; we add IB.
 struct SG : SF, IB
 {
-	using FDependsPack = Topo::TConcatPacks_t<SF::FDependsPack,
-		TDependsPack<TDependsOn<IA, TTypeList<SD>>>>;
+	MAHO_EXTEND_DEPS(SF, IA, SD)
 };
 
 // All extension types (the Query FROM list).
