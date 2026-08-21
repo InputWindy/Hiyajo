@@ -164,6 +164,19 @@ using FClosureLevels = Topo::TLevels_t<TTypeList<SC, SD, SA, SB>, IA>;
 static_assert(std::is_same_v<FClosureLevels,
 	TTypeList<TTypeList<SA, SB>, TTypeList<SC, SD>>>);
 
+// ── MAHO_CLOSURE: code-gen writes per-(Class,Key) closure macros into .gen.h ──
+// (simulated here). MAHO_CLOSURE(Class, Key) pastes to MAHO_CLOSURE_0_<C>_<K>.
+#define MAHO_CLOSURE_0_SD_IA ::Maho::TTypeList<SA, SB, SC>      // closure of SD@IA
+#define MAHO_CLOSURE_0_SD_IB ::Maho::TTypeList<SA>              // closure of SD@IB
+using FClosSD = MAHO_CLOSURE(SD, IA);
+using FClosSDB = MAHO_CLOSURE(SD, IB);
+static_assert(std::is_same_v<FClosSD, TTypeList<SA, SB, SC>>, "closure of SD@IA");
+static_assert(std::is_same_v<FClosSDB, TTypeList<SA>>, "closure of SD@IB");
+// level the code-gen closure — correct, complete (mid-chain SC present).
+using FClosLevels = Topo::TLevels_t<FClosSD, IA>;
+static_assert(std::is_same_v<FClosLevels,
+	TTypeList<TTypeList<SA, SB>, TTypeList<SC>>>, "closure levels correct");
+
 // ── Instance drive: apply the static levels to a runtime instance array ──
 // Concrete, instantiable layers that implement IA and derive IAssembly, with a
 // dependency chain (like SA→SC→SD→SE): level0 {L0,L1} → level1 {L2} → level2 {L3}.

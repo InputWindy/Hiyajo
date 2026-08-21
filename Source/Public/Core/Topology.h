@@ -609,3 +609,24 @@ struct FReverseTopology
 #define MAHO_SORT_LEVEL(Key, ...) \
 	::Maho::Topo::TLevels_t<::Maho::TTypeList<__VA_ARGS__>, Key>
 
+// ───────────────────────────────────────────────────────────────────────
+// MAHO_CLOSURE — read a code-gen closure (a pre-computed, deduplicated,
+// acyclic dependency closure recorded per (Class, Key)).
+//
+// code-gen parses each class's MAHO_EXTEND_DEPS, builds the global graph,
+// computes the transitive closure per (Class, Key), runs an acyclic pass, and
+// writes a generated macro into the project's .gen.h:
+//
+//   #define MAHO_CLOSURE_0_SA_IA   ::Maho::TTypeList<>
+//   #define MAHO_CLOSURE_0_SD_IA   ::Maho::TTypeList<SA, SB, SC>
+//
+// C++ users just write:
+//
+//   using FC = MAHO_CLOSURE(SD, IA);         // → TTypeList<SA, SB, SC>
+//   using FL = Topo::TLevels_t<FC, IA>;      // correct bands (closure complete)
+//   static_assert(Topo::TIsAcyclic_v<FC, IA>);   // closure is acyclic by code-gen
+// ───────────────────────────────────────────────────────────────────────
+#define MAHO_CLOSURE_CAT(A, B) MAHO_CLOSURE_CAT_I(A, B)
+#define MAHO_CLOSURE_CAT_I(A, B) A##B
+#define MAHO_CLOSURE(Class, Key) MAHO_CLOSURE_CAT(MAHO_CLOSURE_CAT(MAHO_CLOSURE_0_, Class), MAHO_CLOSURE_CAT(_, Key))
+
