@@ -33,16 +33,17 @@ struct SC : TExtension<TDependsPack<TDependsOn<IA, TTypeList<SA>>>>, IC
 {
 };
 
-// SD : SC → inherits SC's deps (via SC::FDependsPack) + its own; we add IA+IB.
+// SD : SC → inherits SC's deps (its edges, NOT SC itself — parent & child are
+// the SAME node in the 3D graph) + its own; we add IA+IB.
 struct SD : SC, IA, IB
 {
-	MAHO_EXTEND_DEPS(SC, IA, SB, SC)
+	MAHO_EXTEND_DEPS(SC, IA, SB)
 };
 
-// SE : SD → inherits + its own; nothing extra.
+// SE : SD → inherits SD's edges + its own (SA); nothing extra.
 struct SE : SD
 {
-	MAHO_EXTEND_DEPS(SD, IA, SD, SA)
+	MAHO_EXTEND_DEPS(SD, IA, SA)
 };
 
 struct SF : TExtension<TDependsPack<TDependsOn<IA, TTypeList<SB>>>>, IA, IC
@@ -58,17 +59,16 @@ struct SG : SF, IB
 // All extension types (the Query FROM list).
 using FAll = TTypeList<SA, SB, SC, SD, SE, SF, SG>;
 
-// ── 3D dependency assertions (unchanged from the inheritance model) ──
+// ── 3D dependency assertions ──
+// sub-class deps = parent's EDGES (not the parent itself — same node on the
+// 3D graph) ∪ its own edges.
 static_assert(std::is_same_v<Topo::TNodeDeps_t<SA, IA>, TTypeList<>>);
-// standalone TUnionList_t (dedup) — is it the dedup helper that's broken?
-using UProbe = Maho::TUnionList_t<TTypeList<SA, SB, SC>, TTypeList<SD, SA>>;
-static_assert(std::is_same_v<UProbe, TTypeList<SA, SB, SC, SD>>, "TUnionList_t dedup");
 static_assert(std::is_same_v<Topo::TNodeDeps_t<SB, IA>, TTypeList<>>);
 static_assert(std::is_same_v<Topo::TNodeDeps_t<SC, IA>, TTypeList<SA>>);
-static_assert(std::is_same_v<Topo::TNodeDeps_t<SD, IA>, TTypeList<SA, SB, SC>>);
-static_assert(std::is_same_v<Topo::TNodeDeps_t<SE, IA>, TTypeList<SA, SB, SC, SD>>);
+static_assert(std::is_same_v<Topo::TNodeDeps_t<SD, IA>, TTypeList<SA, SB>>);   // parent SC's {SA} ∪ own {SB}
+static_assert(std::is_same_v<Topo::TNodeDeps_t<SE, IA>, TTypeList<SA, SB>>);   // parent SD's {SA,SB} ∪ own {SA}
 static_assert(std::is_same_v<Topo::TNodeDeps_t<SF, IA>, TTypeList<SB>>);
-static_assert(std::is_same_v<Topo::TNodeDeps_t<SG, IA>, TTypeList<SB, SD>>);
+static_assert(std::is_same_v<Topo::TNodeDeps_t<SG, IA>, TTypeList<SB, SD>>);   // parent SF's {SB} ∪ own {SD}
 using FNodes = TTypeList<SE, SD, SC, SB, SA, SG, SF>;
 static_assert(Topo::TIsAcyclic_v<FNodes, IA>);
 
@@ -107,7 +107,7 @@ static_assert(FIAIB::Count == 4, "IA+IB: SB, SD, SE, SG");
 
 // ── Query result → Topology: order the IA set by its IA dependency edges ──
 // FIA's IA-graph edges (after Query filters SC out of the node set):
-//   SA:[]  SB:[]  SD:[SA,SB]  SE:[SA,SB,SD]  SF:[SB]  SG:[SB,SD]
+//   SA:[]  SB:[]  SD:[SA,SB]  SE:[SA,SB]  SF:[SB]  SG:[SB,SD]
 using FOrderIA = Topo::TTopoSort_t<FIA, IA>;
 static_assert(Topo::TIsAcyclic_v<FIA, IA>);
 static_assert(std::is_same_v<FOrderIA, TTypeList<SA, SB, SD, SE, SF, SG>>,
@@ -117,21 +117,19 @@ using FScrambled = TTypeList<SE, SG, SD, SF, SA, SB>;
 using FOrderScrambled = Topo::TTopoSort_t<FScrambled, IA>;
 static_assert(FOrderScrambled::Count == 6);
 static_assert(Topo::TIsAcyclic_v<FOrderScrambled, IA>);
-// dep-before-dependent spot checks on the scrambled result:
 static_assert(TContains_v<FOrderScrambled, SA>);
-// SD before SE (SE deps SD); SB before SG (SG deps SB).
 static_assert(FOrderScrambled::Count == 6);
 
 // ── Query result → Topology levels: parallel bands by IA dependency depth ──
-// IA-graph: level0 {SA, SB} (no deps) → level1 {SD, SF} → level2 {SE, SG}.
+// IA-graph: level0 {SA, SB} (no deps) → level1 {SD, SE, SF} → level2 {SG} (deps SD).
 // Each band's members are mutually independent (runnable in parallel); bands
 // are separated by dependency barriers.
 using FLevelsIA = Topo::TLevels_t<FIA, IA>;
 static_assert(std::is_same_v<FLevelsIA,
 	TTypeList<
-		TTypeList<SA, SB>,    // level 0 — no deps
-		TTypeList<SD, SF>,    // level 1 — deps SA/SB
-		TTypeList<SE, SG>>>,  // level 2 — deps SD/SF
+		TTypeList<SA, SB>,      // level 0 — no deps
+		TTypeList<SD, SE, SF>,  // level 1 — deps level0
+		TTypeList<SG>>>,        // level 2 — deps SD (level1)
 	"IA set splits into 3 parallel dependency levels");
 
 // ── Instance drive: apply the static levels to a runtime instance array ──
