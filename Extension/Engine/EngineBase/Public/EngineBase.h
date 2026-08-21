@@ -12,6 +12,16 @@ namespace Maho
 namespace EngineBase
 {
 
+// Host-local stage enum — the host (FEngineBase) subdivides the coarse
+// IAssembly::Main into EEngineStage and dispatches each stage to the extensions
+// it schedules (tools by type, child layers by instance) via visitor lambdas.
+enum class EEngineStage
+{
+	Init,
+	Tick,
+	Shutdown,
+};
+
 // The minimal Layer — an installable application root with a parallel drive,
 // no tools and no child layers. Engine and Layer are unified into one template
 // (TLayer): this is the default starting point picked from Create Project.
@@ -23,6 +33,9 @@ public:
 	static Maho::IAssembly* CreateExtension();
 
 	int Main(int Argc, char** Argv) override;
+
+	/** Per-frame keep-going query; the app's run loop exits when false. */
+	[[nodiscard]] bool ShouldContinue() const;
 };
 
 // Compile-time contract: an IAssembly MUST provide CreateExtension.

@@ -8,9 +8,9 @@ namespace Maho
 // ───────────────────────────────────────────────────────────────────────
 // ① Extension contract — the identity every extension shares.
 //
-// An extension is NOTHING but a dependency table: which extensions it
-// assembles. How it executes (ExecuteExtension<T>(Stage)) is the scheduler's
-// protocol, declared in Scheduler.h — not here.
+// An extension is a dependency table: which extensions it assembles. How it is
+// driven it is NOT part of the extension — the scheduler traverses the lists
+// (compile-time) or the instances (runtime) and passes a visitor lambda.
 // ───────────────────────────────────────────────────────────────────────
 
 class IExtension
@@ -36,24 +36,5 @@ class TExtension
 public:
 	using Type = TTypeList<TExtensions...>;
 };
-
-// ───────────────────────────────────────────────────────────────────────
-// ③ The extension → scheduler interaction protocol.
-//
-// ExecuteExtension<T>(Stage) is the ONE entry point through which an unknown
-// scheduler interacts with extension T. It lives beside T (the extension
-// declares it), and the driver (scheduler) SPECIALISES it for its own stage
-// enum — deciding what T does at each stage.
-//
-// The primary template is the no-op fallback: any (Extension, Stage) pair
-// the driver does NOT specialise simply does nothing.
-// ───────────────────────────────────────────────────────────────────────
-
-template <typename TExtension, typename TStage>
-bool ExecuteExtension(TStage Stage)
-{
-	(void)Stage;
-	return true;
-}
 
 } // namespace Maho

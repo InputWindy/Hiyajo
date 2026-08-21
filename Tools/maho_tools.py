@@ -425,16 +425,18 @@ public:
 	//
 	//   enum class EStage {{ Init, Tick, Shutdown }};
 	//
-	//   // Init: tools first, layers after (they depend on the tools).
-	//   Execute<EStage::Init, FTools>();
-	//   Execute<EStage::Init, FLayers>();
-	//   // Tick: only layers have a per-frame execution flow.
-	//   Execute<EStage::Tick, FLayers>();
-	//   // Shutdown: layers first, tools last (mirror of Init).
-	//   Execute<EStage::Shutdown, FLayers>();
-	//   Execute<EStage::Shutdown, FTools>();
+	//   CreateLayers();   // instantiate child layers (CreateExtension) into this->Layers
 	//
-	// and specialise ExecuteExtension<T, EStage> for each (T, stage) pair.
+	//   // Tools: compile-time singletons — visitor recovers T, calls T::Get().xxx().
+	//   Execute<EStage::Init, FTools>([](auto Tag, EStage) {{
+	//       using T = typename decltype(Tag)::Type;
+	//       T::Get().Initialize();
+	//   }});
+	//
+	//   // Layers: runtime instances — visitor gets each IAssembly*.
+	//   Execute<EStage::Tick>(Layers, [](Maho::IAssembly* Layer, EStage) {{ ... }});
+	//
+	// And DispatchShutdown similarly (layers/Tools, mirror of Init).
 }};
 
 // Compile-time contract: an IAssembly MUST provide CreateExtension.

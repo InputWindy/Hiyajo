@@ -12,23 +12,15 @@ namespace Maho
 // ───────────────────────────────────────────────────────────────────────
 // The drive protocol: the traversal machinery + the scheduler contract.
 //
-//   concept FExtensionExecute     — "Extension.h declares ExecuteExtension<T, Stage>(Stage)"
-//   concept FForEachScheduler     — "S has Run(Callables...)"
-//   ForEach / TTag                — unpacks a TTypeList to per-type visits
-//   IScheduler                    — Run + Execute (stage drive)
+//   forall FForEachScheduler   — "S has Run(Callables...)"
+//   ForEach / TTag             — unpacks a TTypeList to per-type visits
+//   IScheduler                 — Run + Execute (stage drive)
 //
-// ExecuteExtension<T>(Stage) itself lives in Extension.h — beside the type it
-// declares the interaction protocol for. The driver specialises it.
+// There is NO extension-interaction protocol beside the visitor lambda: the
+// scheduler only traverses lists (compile-time) or instances (runtime) and
+// hands each target to a visitor the host passes in. Extensions expose only
+// capability methods; the host decides what each stage does in the lambda.
 // ───────────────────────────────────────────────────────────────────────
-
-// An extension T is executable at Stage when ExecuteExtension<T, TStage>(Stage)
-// is a valid call (the primary template always matches; the driver's
-// specialisation decides the actual behaviour).
-template <typename T, typename TStage>
-concept FExtensionExecute = requires(TStage Stage)
-{
-	{ ExecuteExtension<T, TStage>(Stage) };
-};
 
 /** Type tag: lets a generic callable recover T via decltype(Tag)::Type. */
 template <typename T>
@@ -92,9 +84,7 @@ public:
 	template <typename... FCallables>
 	void Run(FCallables&&... Callables) const = delete;
 
-	/** Drive the extensions by stage (calls ExecuteExtension<T, Stage>(Stage) per level). */
-	template <auto Stage, typename TExtensions, typename TTopology = FForwardTopology>
-	void Execute() = delete;
+	/** (See the derived policy for the two Execute overloads.) */
 };
 
 } // namespace Maho

@@ -47,25 +47,28 @@ public:
 | `IRunable` | 可运行（有 `Main`） | ✅ 兼容 |
 | `IAssembly` | 可动态安装（`IRunable` + 导出 `CreateExtension`） | ❌ 互斥 |
 
-`TSingleton` 和 `IRunable`/`IAssembly` 是**独立的可选能力**，插件自己决定要哪个：工具要单例、Layer 要"单例 + Main"、应用要"Assembly（导出）"。
+`TSingleton` 和 `IRunable`/`IAssembly` 是**独立的可选能力**，插件自己决定要哪个：工具要单例、Layer 要 "Assembly（导出，实例驱动）"、应用根就是一个 Layer。
 
 ### ③ 调度协议
 
-**`IScheduler`** —— 调度器契约：`Run`（驱动一组可调用）+ `Execute<Stage, TExtensions>()`（按 stage 驱动扩展，外层 level 串行、内层并行/串行）。
+**`IScheduler`** —— 调度器契约：`Run`（驱动一组可调用）+ 双 `Execute`（按 stage 驱动扩展，外层 level 串行、内层并行/串行）。
 
-**`ExecuteExtension<T>(Stage)`** —— 扩展与调度器的**唯一交互协议**。主模板是 no-op 兜底，应用侧对具体的 `(T, Stage)` 偏特化决定行为：
+**`Execute<Stage, FTools>(visitor)`** —— 编译期版本：对每个扩展类型 T，visitor 拿 `TTag<T>` 恢复类型并调用其能力。工具是单例，`T::Get().xxx()`：
 
 ```cpp
-// 应用侧（Driver）偏特化：FLog 在 EStage 下干什么
-template <>
-bool ExecuteExtension<Maho::Log::FLog, EStage>(EStage Stage) { /* ... */ }
+Execute<EStage::Init, FTools>([](auto Tag, EStage) {
+	using T = typename decltype(Tag)::Type;
+	T::Get().Initialize();
+});
 ```
 
-调度器只负责 `ExecuteExtension<T>(Stage)` 的调用，stage 枚举和每个扩展的 stage 行为完全由应用侧决定。
+**`Execute<Stage>(Layers, visitor)`** —— 运行时实例版本：对 `std::vector<IAssembly*>` 内的每个层实例并行调用 visitor，宿主在 lambda 里把 `(实例, Stage)` 分发到该层能力方法。
+
+stage 枚举与每个扩展在每个 stage 干什么完全由宿主决定；扩展只提供能力方法，不感知 stage。
 
 ### ④ 列表代数
 
-`TTypeList` / `TCons` / `TAppend` / `TContains` / `TFilter<TList, TBase>`（按基类过滤，`is_base_of` 内联）。
+`TTypeList` / `TCons` / `TAppend` / `TContains` / `TFilter<TList, TBase>`（按基类过滤，`is_base_of` 内联）/ `TFilterWhere<TList, TPredicate>`（按谓词过滤）/ `TCatch<TLists...>`（拼接多个 TTypeList）。
 
 ## 关系图
 
@@ -88,8 +91,8 @@ graph TD
 
     subgraph 调度协议
         IScheduler["IScheduler<br/>Run + Execute"]
-        ExecuteExt["ExecuteExtension&lt;T,Stage&gt;<br/>交互协议"]
-        IScheduler --> ExecuteExt
+        ForEach["ForEach&lt;TList&gt;<br/>遍历 + visitor lambda"]
+        IScheduler --> ForEach
     end
 
     TExtension -.装配.-> TSingleton

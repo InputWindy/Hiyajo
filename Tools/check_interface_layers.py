@@ -6,11 +6,11 @@
 #   Layer — the heavy engine logic, owned by the scheduler:
 #           * const read  methods → public
 #           * non-const write methods → protected (NOT public)
-#           * the scheduler's ONLY write entry = friend ExecuteExtension<T, TStage>
 #
 # A Layer must never expose a non-const method publicly: another plugin could
-# Get() the singleton and write it behind the scheduler's back, breaking the
-# thread-safe write model.
+# reach in and write it behind the host's back, breaking the thread-safe write
+# model. Write access goes through the host's visitor lambdas, which only call
+# a Layer's protected capability methods.
 #
 # Usage:
 #   python check_interface_layers.py path\\Game.cproject
@@ -37,14 +37,6 @@ _METHOD_RE = re.compile(
 )
 
 _SECTION_RE = re.compile(r"^\s*(public|protected|private)\s*:")
-
-_FRIEND_RE = re.compile(
-    r"friend\s+bool\s+Maho::ExecuteExtension\s*\(TStage\s+Stage\)"
-)
-
-# Any other friend (class / function / FreeService bridge) inside a Layer is a
-# backdoor around the scheduler — must be rejected.
-_ANY_FRIEND_RE = re.compile(r"\bfriend\b")
 
 
 def _is_layer(base: str) -> bool:
@@ -117,7 +109,6 @@ def check_header(path: Path) -> list[str]:
 
         # Walk the class body, tracking access section + nested depth.
         section = "private"
-        scheduler_friends = 0
 
         for j in range(open_idx + 1, end_idx):
             if _brace_depth(lines, open_idx, j) != 0:
@@ -128,39 +119,14 @@ def check_header(path: Path) -> list[str]:
                 section = sec.group(1)
                 continue
 
-            if _FRIEND_RE.search(lines[j]):
-                scheduler_friends += 1
-                continue
-
-            if _ANY_FRIEND_RE.search(lines[j].split("//")[0]):
-                problems.append(
-                    f"{path}:{j + 1}: extra friend (backdoor) — a Layer may "
-                    f"declare ONLY 'template <typename TExtension, typename TStage> "
-                    f"friend bool Maho::ExecuteExtension(TStage Stage);'; remove it "
-                    f"(external callers go through the scheduler)"
-                )
-                continue
-
             mm = _METHOD_RE.search(lines[j].split("//")[0])
             if mm and section == "public":
                 if not mm.group("qualifiers"):
                     problems.append(
                         f"{path}:{j + 1}: public write method "
                         f"'{mm.group('name')}' is non-const — move it to protected "
-                        f"(only the scheduler may write via ExecuteExtension)"
+                        f"(the host writes Layers only via its visitor lambdas)"
                     )
-
-        if scheduler_friends == 0:
-            problems.append(
-                f"{path}:{i + 1}: Layer class missing friend "
-                f"'template <typename TExtension, typename TStage> "
-                f"friend bool Maho::ExecuteExtension(TStage Stage);'"
-            )
-        elif scheduler_friends > 1:
-            problems.append(
-                f"{path}:{i + 1}: Layer class declares "
-                f"{scheduler_friends} friend ExecuteExtension — exactly one required"
-            )
 
         i = end_idx + 1
 
@@ -201,7 +167,7 @@ def main(argv: list[str]) -> int:
                 print(f"  {p}", file=sys.stderr)
             return 1
 
-        print("[Maho] Interface layering OK (Tools self-managed; Layer writes protected, friend present)")
+        print("[Maho] Interface layering OK (Tools self-managed; Layer writes protected)")
         return 0
     except Exception as ex:  # noqa: BLE001
         print(f"[ERROR] {ex}", file=sys.stderr)

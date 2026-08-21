@@ -101,6 +101,61 @@ public:
 		}
 	}
 
+	/** Run a runtime-length list of callables concurrently; block until done. */
+	void RunTasks(std::vector<std::function<void()>> Tasks)
+	{
+		const std::size_t Count = Tasks.size();
+		if (Count == 0)
+		{
+			return;
+		}
+		if (Count == 1)
+		{
+			Tasks[0]();
+			return;
+		}
+
+		EnsureThreads(static_cast<std::uint32_t>(Count));
+
+		std::atomic<std::uint32_t> Remaining{static_cast<std::uint32_t>(Count)};
+		std::mutex BarrierMutex;
+		std::condition_variable BarrierCv;
+		std::exception_ptr FirstError;
+		std::mutex ErrorMutex;
+
+		for (auto& Task : Tasks)
+		{
+			Submit([&, Task = std::move(Task)]() mutable
+			{
+				try
+				{
+					Task();
+				}
+				catch (...)
+				{
+					std::lock_guard Lock(ErrorMutex);
+					if (!FirstError)
+					{
+						FirstError = std::current_exception();
+					}
+				}
+				if (--Remaining == 0)
+				{
+					std::lock_guard Lock(BarrierMutex);
+					BarrierCv.notify_all();
+				}
+			});
+		}
+
+		std::unique_lock Lock(BarrierMutex);
+		BarrierCv.wait(Lock, [&] { return Remaining == 0; });
+
+		if (FirstError)
+		{
+			std::rethrow_exception(FirstError);
+		}
+	}
+
 	[[nodiscard]] std::uint32_t GetNumThreads() const
 	{
 		return NumThreads;
