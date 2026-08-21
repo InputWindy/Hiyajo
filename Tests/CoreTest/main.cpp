@@ -63,6 +63,13 @@ struct SG : SF, IB
 	MAHO_EXTEND_DEPS((IA, SF, SD))
 };
 
+// SNoExtend : SD → no extra deps; FDependsPack is inherited from SD (nested
+// type aliases inherit) so no MAHO_EXTEND_DEPS is needed — and that is exactly
+// the 3D semantics: parent & child are the same node, edges are identical.
+struct SNoExtend : SD
+{
+};
+
 // All extension types (the Query FROM list).
 using FAll = TTypeList<SA, SB, SC, SD, SE, SF, SG>;
 
@@ -77,6 +84,9 @@ static_assert(std::is_same_v<Topo::TNodeDeps_t<SD, IB>, TTypeList<SA>>);       /
 static_assert(std::is_same_v<Topo::TNodeDeps_t<SE, IA>, TTypeList<SA, SB>>);   // parent SD's {SA,SB} ∪ own {SA}
 static_assert(std::is_same_v<Topo::TNodeDeps_t<SF, IA>, TTypeList<SB>>);
 static_assert(std::is_same_v<Topo::TNodeDeps_t<SG, IA>, TTypeList<SB, SD>>);   // parent SF's {SB} ∪ own {SD}
+// a bare subclass (no macro) inherits FDependsPack — nested aliases inherit.
+static_assert(std::is_same_v<Topo::TNodeDeps_t<SNoExtend, IA>, TTypeList<SA, SB>>);
+static_assert(std::is_same_v<Topo::TNodeDeps_t<SNoExtend, IB>, TTypeList<SA>>);
 using FNodes = TTypeList<SE, SD, SC, SB, SA, SG, SF>;
 static_assert(Topo::TIsAcyclic_v<FNodes, IA>);
 
