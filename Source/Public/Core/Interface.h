@@ -48,4 +48,22 @@ public:
 	virtual ~IExtension() = default;
 };
 
+/**
+ * Scheduler contract — declares the traverse API; the derived policy
+ * (FParallelScheduler / FSerialScheduler) provides the implementation.
+ * State-free: only Run (drive callables) + Execute (drive extensions) are
+ * declared here, as pure contracts.
+ */
+class IScheduler
+{
+public:
+	virtual ~IScheduler() = default;
+
+	/** Drive every callable (serial / parallel — derived policy). */
+	template <typename... FCallables>
+	void Run(FCallables&&... Callables) const = delete;
+
+	/** (See the derived policy for the two Execute overloads.) */
+};
+
 } // namespace Maho

@@ -2,6 +2,7 @@
 
 #include <Core/Assembly.h>
 #include <Core/Extension.h>
+#include <Core/Interface.h>
 #include <Core/Topology.h>
 
 #include <concepts>
@@ -68,25 +69,6 @@ void ForEach(TScheduler&& Scheduler, TVisitor&& Visitor, TArgs&&... Args)
 {
 	ForEachImpl(TList{}, std::forward<TScheduler>(Scheduler), std::forward<TVisitor>(Visitor), std::forward<TArgs>(Args)...);
 }
-
-/**
- * Scheduler base — declares the Run + Execute contracts.
- *
- * Run    — drives a set of callables (serial / parallel — derived policy).
- * Execute — drives a group of extensions by dependency levels: within a level
- *           the extensions run by the derived policy, between levels serially.
- */
-class IScheduler
-{
-public:
-	virtual ~IScheduler() = default;
-
-	/** Drive every callable (serial / parallel — derived policy). */
-	template <typename... FCallables>
-	void Run(FCallables&&... Callables) const = delete;
-
-	/** (See the derived policy for the two Execute overloads.) */
-};
 
 // ───────────────────────────────────────────────────────────────────────
 // Runtime instance dispatch (shared by the serial & parallel schedulers).
