@@ -1,6 +1,0 @@
-{
-  "FileVersion": 1,
-  "Name": "Asset",
-  "Description": "Asset path + registry (logical path → physical file + type).",
-  "Dependencies": []
-}

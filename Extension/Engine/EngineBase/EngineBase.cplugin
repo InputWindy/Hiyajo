@@ -1,6 +1,0 @@
-{
-  "FileVersion": 1,
-  "Name": "EngineBase",
-  "Description": "Minimal engine template (no tools, no layers).",
-  "Dependencies": []
-}

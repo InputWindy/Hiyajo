@@ -1,7 +1,0 @@
-{
-  "FileVersion": 1,
-  "Name": "Math",
-  "Header": "MathTool",
-  "Description": "Math library extension (GLM).",
-  "Dependencies": []
-}

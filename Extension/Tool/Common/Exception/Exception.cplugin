@@ -1,6 +1,0 @@
-{
-  "FileVersion": 1,
-  "Name": "Exception",
-  "Description": "Exception handling extension (non-fatal exception events).",
-  "Dependencies": []
-}

@@ -1,6 +1,0 @@
-{
-  "FileVersion": 1,
-  "Name": "Log",
-  "Description": "Logging extension (spdlog).",
-  "Dependencies": []
-}

@@ -1,9 +1,0 @@
-{
-  "FileVersion": 1,
-  "Name": "Resource",
-  "Description": "Async resource system + package IO extension.",
-  "Dependencies": [
-    "Paths",
-    "Name"
-  ]
-}
