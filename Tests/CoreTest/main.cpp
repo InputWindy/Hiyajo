@@ -38,15 +38,19 @@ struct SC : TExtension<TDependsPack<TDependsOn<IA, TTypeList<SA>>>>, IC
 
 // SD : SC → inherits SC's edges (parent & child are the SAME node on the 3D
 // graph — SD runs after SC at IA; SC itself is never a dep) + own {SB}.
+// Multi-slot: also declares its IB scheduling (SC has no IB edges → {SA} own).
 struct SD : SC, IA, IB
 {
-	MAHO_EXTEND_DEPS(IA, SC, SB)
+	MAHO_EXTEND_DEPS(
+		(IA, SC, SB),
+		(IB, SC, SA)
+	)
 };
 
 // SE : SD → inherits SD's edges + its own (SA); nothing extra.
 struct SE : SD
 {
-	MAHO_EXTEND_DEPS(IA, SD, SA)
+	MAHO_EXTEND_DEPS((IA, SD, SA))
 };
 
 struct SF : TExtension<TDependsPack<TDependsOn<IA, TTypeList<SB>>>>, IA, IC
@@ -56,7 +60,7 @@ struct SF : TExtension<TDependsPack<TDependsOn<IA, TTypeList<SB>>>>, IA, IC
 // SG : SF → inherits SF's edges + its own {SD}; we add IB.
 struct SG : SF, IB
 {
-	MAHO_EXTEND_DEPS(IA, SF, SD)
+	MAHO_EXTEND_DEPS((IA, SF, SD))
 };
 
 // All extension types (the Query FROM list).
@@ -69,6 +73,7 @@ static_assert(std::is_same_v<Topo::TNodeDeps_t<SA, IA>, TTypeList<>>);
 static_assert(std::is_same_v<Topo::TNodeDeps_t<SB, IA>, TTypeList<>>);
 static_assert(std::is_same_v<Topo::TNodeDeps_t<SC, IA>, TTypeList<SA>>);
 static_assert(std::is_same_v<Topo::TNodeDeps_t<SD, IA>, TTypeList<SA, SB>>);   // parent SC's {SA} ∪ own {SB}
+static_assert(std::is_same_v<Topo::TNodeDeps_t<SD, IB>, TTypeList<SA>>);       // own IB slot {SA} (SC has no IB edges)
 static_assert(std::is_same_v<Topo::TNodeDeps_t<SE, IA>, TTypeList<SA, SB>>);   // parent SD's {SA,SB} ∪ own {SA}
 static_assert(std::is_same_v<Topo::TNodeDeps_t<SF, IA>, TTypeList<SB>>);
 static_assert(std::is_same_v<Topo::TNodeDeps_t<SG, IA>, TTypeList<SB, SD>>);   // parent SF's {SB} ∪ own {SD}

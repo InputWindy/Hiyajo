@@ -51,17 +51,40 @@ public:
 };
 
 /**
- * Extend a parent extension's deps: inherit the parent's deps at Key, union in
- * the extra types, dedup — then declare FDependsPack.
+ * Extend a parent extension's deps across one or more interface Keys.
  *
- *   MAHO_EXTEND_DEPS(IA, SC, SB)   // Key=IA, parent=SC, extras={SB}
- *   // SD (derived from SC) runs after SC at IA — its edges are inherited —
- *   // and additionally after SB. The parent itself is NOT a dep (parent and
- *   // child are the same node on the 3D graph); its EDGES are.
+ * Each group (Key, Parent, extras...) declares one dependency slot: at Key this
+ * class runs after its parent's edges (parent & child are the SAME 3D node, so
+ * the parent node is never a dep — only its EDGES are inherited) and after the
+ * extra types. All slots land in one FDependsPack.
+ *
+ *   struct SD : SC, IA, IB
+ *   {
+ *       MAHO_EXTEND_DEPS(
+ *           (IA, SC, SB),   // IA 调度：排在 SC（边）、SB 之后
+ *           (IB, SD, X));   // IB 调度：排在 SD（边）、X 之后
+ *   };
  */
-#define MAHO_EXTEND_DEPS(Key, Parent, ...) \
-	using FDependsPack = ::Maho::TDependsPack<::Maho::TDependsOn<Key, \
+#define MAHO_DEPEND_ONE_IMPL(Key, Parent, ...) \
+	::Maho::TDependsOn<Key, \
 		::Maho::TUnionList_t<::Maho::Topo::TNodeDeps_t<Parent, Key>, \
-			::Maho::TTypeList<__VA_ARGS__>>>>;
+			::Maho::TTypeList<__VA_ARGS__>>>
+#define MAHO_DEPEND_ONE(Group) MAHO_DEPEND_ONE_IMPL Group
+
+// MSVC-friendly 1..4 FOR_EACH: emit `Name(arg), Name(arg), ...`.
+#define MAHO_DEPS_EXPAND(...) __VA_ARGS__
+#define MAHO_DEPS_FE1(F, A)                    F(A)
+#define MAHO_DEPS_FE2(F, A, ...)               F(A), MAHO_DEPS_EXPAND(MAHO_DEPS_FE1(F, __VA_ARGS__))
+#define MAHO_DEPS_FE3(F, A, ...)               F(A), MAHO_DEPS_EXPAND(MAHO_DEPS_FE2(F, __VA_ARGS__))
+#define MAHO_DEPS_FE4(F, A, ...)               F(A), MAHO_DEPS_EXPAND(MAHO_DEPS_FE3(F, __VA_ARGS__))
+#define MAHO_DEPS_SELECT(_1, _2, _3, _4, NAME, ...) NAME
+#define MAHO_DEPS_FOR_EACH(F, ...) \
+	MAHO_DEPS_EXPAND( \
+		MAHO_DEPS_SELECT(__VA_ARGS__, \
+			MAHO_DEPS_FE4, MAHO_DEPS_FE3, MAHO_DEPS_FE2, MAHO_DEPS_FE1)(F, __VA_ARGS__))
+
+#define MAHO_EXTEND_DEPS(...) \
+	using FDependsPack = ::Maho::TDependsPack< \
+		MAHO_DEPS_EXPAND(MAHO_DEPS_FOR_EACH(MAHO_DEPEND_ONE, __VA_ARGS__))>;
 
 } // namespace Maho
