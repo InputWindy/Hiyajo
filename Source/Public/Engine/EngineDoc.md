@@ -3,10 +3,7 @@
 
 ## 代码文件
 
-- [ParallelScheduler.h](ParallelScheduler.h)
-- [Layer.h](Layer.h)
-- [Tool.h](Tool.h)
-- [SerialScheduler.h](SerialScheduler.h)
+- [Schedulers.h](Schedulers.h) — 串行 / 并行调度器
 - [ThreadPool.h](ThreadPool.h)
 <!-- mahogen end -->
 

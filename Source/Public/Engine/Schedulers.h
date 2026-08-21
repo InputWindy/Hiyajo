@@ -1,10 +1,10 @@
 #pragma once
 
+#include <Core/Scheduler.h>
 #include <Engine/ThreadPool.h>
-#include <Maho.h>
 
-#include <memory>
 #include <functional>
+#include <memory>
 #include <vector>
 
 namespace Maho
@@ -14,12 +14,12 @@ namespace Parallel
 {
 
 /**
- * Parallel scheduler — the parallel traverse base.
+ * Parallel scheduler — the parallel traverse base (thread pool).
  *
  * The scheduler is parameterized over its extension scan table (FExtensions),
  * a TTypeList a Layer passes in so Query can filter the candidates it drives:
  *   Query<FExtensions>().Select<ISingleton>()  — the Tools it schedules
- *   Query<FExtensions>().Select<ILayer>()   — the child Layers it drives
+ *   Query<FExtensions>().Select<ILayer>()      — the child Layers it drives
  *
  * Two Execute overloads, matching the two extension kinds:
  *
@@ -49,6 +49,12 @@ public:
 	void Run(FCallables&&... Callables) const
 	{
 		Pool->Run(std::forward<FCallables>(Callables)...);
+	}
+
+	/** Runtime task array — run on the thread pool (parallel, barrier at end). */
+	void RunTasks(std::vector<std::function<void()>> Tasks) const
+	{
+		Pool->RunTasks(std::move(Tasks));
 	}
 
 	/** Singleton traverse: every T in TQueryTypes sees Visitor(T::Get()&). */
@@ -84,5 +90,56 @@ private:
 };
 
 } // namespace Parallel
+
+namespace Serial
+{
+
+/**
+ * Serial scheduler — the serial traverse base (no threads). Mirrors the
+ * parallel scheduler's API so the two are interchangeable:
+ *   Execute<TQueryTypes>(visitor)          — singletons (T::Get()).
+ *   Execute<TQueryTypes>(Instances, vis)   — instances (dispatch by runtime type).
+ * Dependency LEVELS are the host's job: ForEach<TLevels> + Execute per level.
+ */
+class FSerialScheduler : public IScheduler
+{
+public:
+	template <typename... FCallables>
+	void Run(FCallables&&... Callables) const
+	{
+		(Callables(), ...);
+	}
+
+	/** Runtime task array — run in order (serial). */
+	void RunTasks(std::vector<std::function<void()>> Tasks) const
+	{
+		for (auto& Task : Tasks)
+		{
+			Task();
+		}
+	}
+
+	/** Singleton traverse: every T in TQueryTypes sees Visitor(T::Get()&). */
+	template <typename TQueryTypes, typename TVisitor>
+	void Execute(TVisitor&& Visitor)
+	{
+		ForEach<TQueryTypes>(*this, [&](auto Tag) {
+			using T = typename decltype(Tag)::Type;
+			Visitor(T::Get());
+		});
+	}
+
+	/** Instance traverse: first matching type in TQueryTypes sees Visitor(T&). */
+	template <typename TQueryTypes, typename TVisitor>
+	void Execute(std::vector<ILayer*>& Instances, TVisitor&& Visitor)
+	{
+		for (ILayer* Instance : Instances)
+		{
+			DispatchInstance<TQueryTypes>(Instance, Visitor);
+		}
+	}
+};
+
+} // namespace Serial
 
 } // namespace Maho

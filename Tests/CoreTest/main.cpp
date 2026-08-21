@@ -7,7 +7,7 @@
 //   parallel (barrier between bands).
 //
 #include <Maho.h>
-#include <Engine/ParallelScheduler.h>
+#include <Engine/Schedulers.h>
 
 #include <algorithm>
 #include <atomic>
