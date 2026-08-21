@@ -4,7 +4,6 @@
 ## 代码文件
 
 - [ParallelScheduler.h](ParallelScheduler.h)
-- [Engine.h](Engine.h)
 - [Layer.h](Layer.h)
 - [Tool.h](Tool.h)
 - [SerialScheduler.h](SerialScheduler.h)
@@ -13,34 +12,35 @@
 
 ## 概念——插件模板与调度策略
 
-Engine 层放**具体调度策略**和**三类插件模板**。核心 `Core/Scheduler.h` 只给 `IScheduler` 契约，串/并行在这里。
+Engine 层放**具体调度策略**和**两类插件模板**。核心 `Core/Scheduler.h` 只给 `IScheduler` 契约，串/并行在这里。
 
-三个模板各占一个头文件：`Tool.h`（`TTool`，C++14）、`Layer.h`（`TLayer`，C++20）、`Engine.h`（`TEngine`，C++20）。工具模板不拉任何 concept 头，标准要求最低，方便像 Math（GLM）这类要降标的插件单独使用。
+两个模板各占一个头文件：`Tool.h`（`TTool`，C++14）、`Layer.h`（`TLayer`，C++20）。工具模板不拉任何 concept 头，标准要求最低，方便像 Math（GLM）这类要降标的插件单独使用。
 
-### 三类插件模板
+### 两类插件模板
 
 新建插件时，按角色选择继承哪个模板：
 
 | 模板 | 标记 | 身份 | 单例 | 调度器 | 说明 |
 |------|------|------|------|--------|------|
-| `TTool<TDerived, Ts...>` | `FToolTag` | 工具 | ✅ | ❌ | 被 Driver 调度的神秘妙妙工具 |
-| `TLayer<TDerived, Ts...>` | `FLayerTag` | 层 | ✅ | ✅ 并行 | 单例 + Main，调度自己的工具 |
-| `TEngine<Ts...>` | — | 应用根 | ❌ | ✅ 并行 | Assembly（导出），可动态安装 |
+| `TTool<TDerived>` | `FToolTag` | 工具 | ✅ | ❌ | 即插即用，全 public，谁用谁 `Get().xxx()` |
+| `TLayer<Ts...>` | `FLayerTag` | 应用根/嵌套宿主 | ❌ | ✅ 并行 | Assembly（导出 CreateExtension），可动态安装，并行调度自己 FExtensions |
+
+Engine 与 Layer 已统一为 `TLayer`：应用根就是一个 Layer（导出 CreateExtension → 可多实例），它内部再驱动自己的工具/子层。不再有单独的 Engine 分类。
 
 ```cpp
-// 工具：单例，不调度别人
+// 工具：单例，全 public，不调度别人
 class FLog : public Maho::TTool<FLog> { ... };
 
-// 层：单例 + Main + 并行调度 + 工具列表
-class FRenderer : public Maho::TLayer<FRenderer, FLog, FRDG> { ... };
+// 嵌套层：宿主，调度自己的工具/子层
+class FRenderer : public Maho::TLayer<FLog, FRDG> { ... };
 
-// 应用根：Assembly + 并行调度
-class FMyGame : public Maho::TEngine<FLog, FRDG, FRenderer> { ... };
+// 应用根：也是一个 Layer（Assembly，导出）
+class FMyGame : public Maho::TLayer<FLog, FRDG, FRenderer> { ... };
 ```
 
 ### 分类与调度
 
-`TLayer` / `TEngine` 内置两个分半别名，Manager 在 `Main` 里分别驱动：
+`TLayer` 内置两个分半别名，Manager 在 `Main` 里分别驱动：
 
 ```cpp
 using FTools = typename TFilter<FExtensions, FToolTag>::Type;   // 工具

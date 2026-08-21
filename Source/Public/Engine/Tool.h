@@ -8,12 +8,13 @@ namespace Maho
 {
 
 // ───────────────────────────────────────────────────────────────────────
-// Tool — the driven plugin. A singleton with a dependency table, no
-// scheduler of its own; a host drives it via ExecuteExtension.
+// Tool — the plug-in-and-play service. A singleton with a dependency table,
+// self-managed: read AND write are public, no scheduler ownership. Callers
+// call T::Get().xxx() directly whenever they need it.
 //
 // C++14-compatible: depends only on TExtension + TSingleton + a marker tag,
 // so a plugin that needs an older standard (e.g. Math + GLM) can derive from
-// it without pulling in the C++20 concept headers (Layer.h / Engine.h).
+// it without pulling in the C++20 concept headers (Layer.h).
 // ───────────────────────────────────────────────────────────────────────
 
 struct FToolTag {};

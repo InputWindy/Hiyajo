@@ -2,7 +2,7 @@
 
 #include "EngineBaseApi.h"
 #include <Maho.h>
-#include <Engine/Engine.h>
+#include <Engine/Layer.h>
 
 #include <type_traits>
 
@@ -12,11 +12,11 @@ namespace Maho
 namespace EngineBase
 {
 
-// The minimal engine template — an installable application root with a
-// parallel drive, no tools and no layers. Users pick this from the Create
-// Project dropdown as the default starting point.
+// The minimal Layer — an installable application root with a parallel drive,
+// no tools and no child layers. Engine and Layer are unified into one template
+// (TLayer): this is the default starting point picked from Create Project.
 class FEngineBase
-	: public Maho::TEngine<>
+	: public Maho::TLayer<>
 {
 public:
 	/** The assembly factory — the ONLY way an IAssembly is created. */

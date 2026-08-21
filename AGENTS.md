@@ -6,8 +6,8 @@
 
 - 本插件是**引擎核心**——纯通用基础设施：零 app 假设、零三方依赖、零 stage 预设。
 - 只提供积木：`TypeList`（`TTypeList` + `ForEach`）/ `Topology`（`TDependsOn`/`TDependsPack` + 排序/分层/环检测）/ `Delegate` / `Singleton` / `Scheduler`（`IScheduler` 空基 + 双 `Execute`）/ `Extension`（`TExtension` 单例 + `TExtensionList` 组装）/ `Assembly`（`IAssembly` + `FAssembly`）/ `Fatal`。
-- **插件 = 纯单例**：`TExtension<TDerived>` 只继承 `TSingleton`，**不继承 `IAssembly`**；只有应用（宿主）显式继承 `IAssembly` 并导出 `CreateExtension()`。
-- **驱动机制**：编译期 `ForEach`（`TTag<T>` + Scheduler 串/并行）+ `T::Get()` 单例直调；`IScheduler` 双 `Execute`——stage 版（硬编码 `ExecuteStage`）+ lambda 版（`FDefaultSlot` 排序 + Visitor 自定义）。
+- **插件 = 依赖表 + 身份**：`TExtension<TExtensions...>` 是纯依赖表（编译期 TTypeList），不预设单例/可安装。`TTool` 加 `TSingleton`（即插即用、全 public），`TLayer` 加 `IAssembly`（可动态安装、并行调度自己 FExtensions）。不再区分 Engine——应用根就是一个 Layer。
+- **驱动机制**：编译期 `ForEach`（`TTag<T>` + Scheduler 串/并行）+ Tool `T::Get()` 单例直调；`IScheduler` 双 `Execute`——stage 版（硬编码 `ExecuteStage`）+ lambda 版（`FDefaultSlot` 排序 + Visitor 自定义）。
 - **依赖声明两层**：编译期 `TDependsOn`/`TDependsPack`（插件内，level 排序）；项目装配 `.cplugin` `Dependencies`（CMake + codegen）。核心与核心之间走 `TDependsOn`，插件与宿主走 `.cplugin`。
 - stage 枚举、app 形态、线程池策略**全部下放插件层**，不写回 core（`Engine/` 只放可选的 `FSerialScheduler`/`FParallelScheduler` 示例）。
 - 遵循根 [AGENTS.md](../AGENTS.md)。

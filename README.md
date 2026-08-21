@@ -14,7 +14,7 @@ Maho 是一个纯 C++20 的游戏引擎，核心设计围绕**并行调度**与*
 
 ## 特性
 
-- **三类插件**：工具（`TTool`）、层（`TLayer`）、引擎（`TEngine`）——按角色选模板，语义清晰。
+- **两类插件**：工具（`TTool`）、层（`TLayer`）——Tool 即插即用（全 public 单例），Layer 是应用根/嵌套宿主（Assembly + 并行调度）。不再区分 Engine。
 - **stage 驱动**：调度器唯一的执行路径是 `ExecuteExtension<T, Stage>`，应用侧偏特化决定每个扩展在每个 stage 干什么。
 - **编译期组装**：插件组合、品种过滤（`TFilter`）、遍历展开全部在编译期由模板完成，运行时零反射、零排序开销。
 - **能力可选**：单例（`TSingleton`）、可运行（`IRunable`）、可安装（`IAssembly`）——插件自己决定要哪些，编译器强制互斥约束。
@@ -87,29 +87,28 @@ Release 构建并拷贝 exe + 全部 DLL 到 `Packaged/Win64/Release/`。
 
 | 模板 | 角色 | 单例 | 调度器 | 说明 |
 |------|------|------|--------|------|
-| `TTool<T, Ts...>` | 工具 | ✅ | ❌ | 被 Manager 调度的功能模块（Log / Json / Math） |
-| `TLayer<T, Ts...>` | 层 | ✅ | ✅ 并行 | 单例 + Main，调度自己的工具 |
-| `TEngine<Ts...>` | 应用根 | ❌ | ✅ 并行 | 可动态安装（导出 CreateExtension） |
+| `TTool<T>` | 工具 | ✅ | ❌ | 即插即用，全 public，谁用谁 `Get().xxx()` |
+| `TLayer<Ts...>` | 应用根/嵌套宿主 | ❌ | ✅ 并行 | 可动态安装（Assembly 导出 CreateExtension），并行调度自己 FExtensions 里的工具/子层 |
 
 ```cpp
-class FLog      : public Maho::TTool<FLog> { ... };
-class FRenderer : public Maho::TLayer<FRenderer, FLog, FRDG> { ... };
-class FMyGame   : public Maho::TEngine<FLog, FRDG, FRenderer> { ... };
+class FLog      : public Maho::TTool<FLog> { ... };                       // 工具，全 public
+class FRenderer : public Maho::TLayer<FLog, FRDG> { ... };                // 嵌套层
+class FMyGame   : public Maho::TLayer<FLog, FRDG, FRenderer> { ... };     // 应用根
 ```
 
 ### 管理者 vs 拓展
 
-**关键语义**：`TExtension<TExtensions...>` 列表里的插件，跟管理者**既不是平级、也不是继承**——它们是"我要用到的工具"。
+**关键语义**：`TExtension<TExtensions...>` 列表里的插件，跟管理者**既不是平级、也不是继承**——它们是"我要用到的工具 / 我要驱动的子层"。
 
-- **使用**：`TEngine<FLog, FRDG>` 声明"我调度这两个工具"
+- **使用**：`TLayer<FLog, FRDG>` 声明"我调度这两个工具"
 - **拓展**：`class FMyPlugin : public FBase` 才是真正扩展基类的能力
 
-所以引擎插件分三类目录存放：
+所以插件按角色放目录：
 
 ```
-Extension/     ← 工具（TTool）
-Extension/Layer/    ← 层（TLayer）
-Extension/Engine/   ← 应用根（TEngine）
+Extension/Tool/   ← 工具（TTool，单例）
+Extension/Layer/  ← 层/宿主（TLayer，Assembly）
+Extension/Engine/ ← （旧目录，现在也是 TLayer；创建工程的默认起点）
 ```
 
 ### stage 驱动

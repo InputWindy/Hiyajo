@@ -1,7 +1,9 @@
 #pragma once
 
+#include <Core/Assembly.h>
 #include <Core/Extension.h>
-#include <Core/Runable.h>
+#include <Core/Tags.h>
+#include <Core/Topology.h>
 #include <Engine/ParallelScheduler.h>
 #include <Engine/Tool.h>
 
@@ -9,19 +11,31 @@ namespace Maho
 {
 
 // ───────────────────────────────────────────────────────────────────────
-// Layer — a nested host. Singleton + Main + parallel drive over its own
-// dependency table. Requires C++20 (scheduler concepts).
+// Layer — the application root AND a nested host, unified into one template.
+//
+// A Layer is a dynamically-installable Assembly (exports CreateExtension → may
+// be instantiated many times) with a parallel drive over its own extension
+// table. NOT a singleton — the scheduler owns its instances.
+//
+//   Tools    — plug-in-and-play singletons (Get().xxx()) you call directly.
+//   Layers   — heavy, driven by a Layer's scheduler (writes via ExecuteExtension).
+//
+// A Layer's FExtensions may be anything (tools + child layers); the scheduler
+// drives them by dependency level, parallel within a level. Deep inheritance
+// is explicit: a parent Layer specialises per-project needs, then has its own
+// child Layer(s).
+//
+// Requires C++20 (scheduler concepts).
 // ───────────────────────────────────────────────────────────────────────
 
 struct FLayerTag {};
 
-template <typename TDerived, typename... TExtensions>
+template <typename... TExtensions>
 class TLayer
 	: public FLayerTag
 	, public TExtension<TExtensions...>
-	, public IRunable
+	, public IAssembly
 	, public Parallel::FParallelScheduler
-	, public TSingleton<TDerived>
 {
 public:
 	using FExtensions = typename TExtension<TExtensions...>::FExtensions;
