@@ -28,17 +28,17 @@ struct TCons<T, TTypeList<Ts...>>
 };
 
 /** Append T to the end of a TTypeList. */
-template <typename TList, typename T>
+template <typename TList, typename TValue>
 struct TAppend;
 
-template <typename... Ts, typename T>
-struct TAppend<TTypeList<Ts...>, T>
+template <typename... Ts, typename TValue>
+struct TAppend<TTypeList<Ts...>, TValue>
 {
-	using Type = TTypeList<Ts..., T>;
+	using Type = TTypeList<Ts..., TValue>;
 };
 
-template <typename TList, typename T>
-using TAppend_t = typename TAppend<TList, T>::Type;
+template <typename TList, typename TValue>
+using TAppend_t = typename TAppend<TList, TValue>::Type;
 
 /** Membership: is T an element of TList? */
 template <typename TList, typename T>
@@ -166,31 +166,32 @@ struct TCatch<TTypeList<T1...>, TTypeList<T2...>, TRest...>
 };
 
 /**
- * Left-fold a TTypeList: append each element to the accumulator unless already
- * present (order-preserving dedup). Base = the accumulated list. The recursion
- * inherits a conditional_t, so ::Type is inherited at each step (no alias side
- * type that MSVC struggles to instantiate lazily).
+ * Union of two TTypeLists (order-preserving, deduplicated). Fold appends each
+ * element to an accumulator unless already present.
  */
-template <typename TAcc, typename TList>
-struct TUnionFold;
-
-template <typename TAcc>
-struct TUnionFold<TAcc, TTypeList<>>
+namespace UnionDetail
 {
-	using Type = TAcc;
-};
+	template <typename TAcc, typename TList>
+	struct TFold;
 
-template <typename TAcc, typename THead, typename... TRest>
-struct TUnionFold<TAcc, TTypeList<THead, TRest...>>
-	: std::conditional_t<
-		TContains_v<TAcc, THead>,
-		TUnionFold<TAcc, TTypeList<TRest...>>,
-		TUnionFold<typename TAppend<TAcc, THead>::Type, TTypeList<TRest...>>>
-{
-};
+	template <typename TAcc>
+	struct TFold<TAcc, TTypeList<>>
+	{
+		using Type = TAcc;
+	};
+
+	template <typename TAcc, typename THead, typename... TRest>
+	struct TFold<TAcc, TTypeList<THead, TRest...>>
+	{
+		using FAcc = std::conditional_t<TContains_v<TAcc, THead>, TAcc,
+			typename TAppend<TAcc, THead>::Type>;
+		using Type = typename TFold<FAcc, TTypeList<TRest...>>::Type;
+	};
+}
 
 /** Union of two TTypeLists (order-preserving, deduplicated). */
 template <typename TListA, typename TListB>
-using TUnionList_t = typename TUnionFold<TListA, TListB>::Type;
+using TUnionList_t = typename UnionDetail::TFold<
+	typename UnionDetail::TFold<TTypeList<>, TListA>::Type, TListB>::Type;
 
 } // namespace Maho

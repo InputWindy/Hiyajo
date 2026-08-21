@@ -63,6 +63,9 @@ using FAll = TTypeList<SA, SB, SC, SD, SE, SF, SG>;
 
 // ── 3D dependency assertions (unchanged from the inheritance model) ──
 static_assert(std::is_same_v<Topo::TNodeDeps_t<SA, IA>, TTypeList<>>);
+// standalone TUnionList_t (dedup) — is it the dedup helper that's broken?
+using UProbe = Maho::TUnionList_t<TTypeList<SA, SB, SC>, TTypeList<SD, SA>>;
+static_assert(std::is_same_v<UProbe, TTypeList<SA, SB, SC, SD>>, "TUnionList_t dedup");
 static_assert(std::is_same_v<Topo::TNodeDeps_t<SB, IA>, TTypeList<>>);
 static_assert(std::is_same_v<Topo::TNodeDeps_t<SC, IA>, TTypeList<SA>>);
 static_assert(std::is_same_v<Topo::TNodeDeps_t<SD, IA>, TTypeList<SA, SB, SC>>);
