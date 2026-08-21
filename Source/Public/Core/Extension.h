@@ -66,6 +66,24 @@ class TPlug : public TInterfaces...
 };
 
 /**
+ * Empty dependency anchor for MAHO_EXTEND_DEPS — declares no FDependsPack, so
+ * TNodeDeps_t<FNoParent, Key> is empty at every Key. Use it as the Parent of a
+ * root layer (no parent edges) or when a dep is spelled purely in extras:
+ *
+ *   struct FWindow : FLayerBase, TPlug<IRender>
+ *   {
+ *       MAHO_EXTEND_DEPS((IRender, FNoParent));      // root — no deps
+ *   };
+ *   struct FScene : FLayerBase, TPlug<IRender>
+ *   {
+ *       MAHO_EXTEND_DEPS((IRender, FNoParent, FWindow));  // deps: FWindow
+ *   };
+ */
+struct FNoParent
+{
+};
+
+/**
  * Extend a parent extension's deps across one or more interface Keys.
  *
  * Each group (Key, Parent, extras...) declares one dependency slot: at Key this

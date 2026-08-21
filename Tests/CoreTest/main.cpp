@@ -29,34 +29,35 @@ struct FLayerBase : IAssembly
 	int Main(int, char**) override { return 0; }
 };
 
-// ── Layers, each a singleton-free Assembly + a set of interfaces ──
+// ── Layers, each a singleton-free Assembly + a set of interfaces. Deps via the
+//    MAHO_EXTEND_DEPS macro (Key, Parent, extras...) — FNoParent = root edge. ──
 struct FWindow : FLayerBase, TPlug<IRender>
 {
 	void Render() override {}
-	using FDependsPack = TDependsPack<>;                       // root
+	MAHO_EXTEND_DEPS((IRender, FNoParent));                       // root
 };
 struct FScene : FLayerBase, TPlug<IRender>
 {
 	void Render() override {}
-	using FDependsPack = TDependsPack<TDependsOn<IRender, TTypeList<FWindow>>>;
+	MAHO_EXTEND_DEPS((IRender, FNoParent, FWindow));              // deps FWindow
 };
 struct FPhysics : FLayerBase, TPlug<IPhysics>
 {
 	void Step() override {}
-	using FDependsPack = TDependsPack<TDependsOn<IPhysics, TTypeList<FWindow>>>;
+	MAHO_EXTEND_DEPS((IPhysics, FNoParent, FWindow));             // deps FWindow
 };
 struct FAudio : FLayerBase, TPlug<IAudio>
 {
 	void Play() override {}
-	using FDependsPack = TDependsPack<>;                       // root
+	MAHO_EXTEND_DEPS((IAudio, FNoParent));                        // root
 };
 struct FPlayer : FLayerBase, TPlug<IRender, IPhysics>
 {
 	void Render() override {}
 	void Step() override {}
-	using FDependsPack = TDependsPack<
-		TDependsOn<IPhysics, TTypeList<FPhysics>>,
-		TDependsOn<IRender, TTypeList<FScene>>>;
+	MAHO_EXTEND_DEPS(
+		(IPhysics, FNoParent, FPhysics),                          // deps FPhysics
+		(IRender, FNoParent, FScene));                            // deps FScene
 };
 
 // ── the app: a scheduler owning the extension scan table + the instances ──
