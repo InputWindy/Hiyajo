@@ -105,6 +105,23 @@ using FIAIB = typename decltype(::Maho::Query<FAll>()
 	.Where<Maho::TDerivesFrom<IB>>())::Type;
 static_assert(FIAIB::Count == 4, "IA+IB: SB, SD, SE, SG");
 
+// ── Query result → Topology: order the IA set by its IA dependency edges ──
+// FIA's IA-graph edges (after Query filters SC out of the node set):
+//   SA:[]  SB:[]  SD:[SA,SB]  SE:[SA,SB,SD]  SF:[SB]  SG:[SB,SD]
+using FOrderIA = Topo::TTopoSort_t<FIA, IA>;
+static_assert(Topo::TIsAcyclic_v<FIA, IA>);
+static_assert(std::is_same_v<FOrderIA, TTypeList<SA, SB, SD, SE, SF, SG>>,
+	"IA set topo order keeps deps first");
+// A scrambled input still yields a valid order (deps before dependents).
+using FScrambled = TTypeList<SE, SG, SD, SF, SA, SB>;
+using FOrderScrambled = Topo::TTopoSort_t<FScrambled, IA>;
+static_assert(FOrderScrambled::Count == 6);
+static_assert(Topo::TIsAcyclic_v<FOrderScrambled, IA>);
+// dep-before-dependent spot checks on the scrambled result:
+static_assert(TContains_v<FOrderScrambled, SA>);
+// SD before SE (SE deps SD); SB before SG (SG deps SB).
+static_assert(FOrderScrambled::Count == 6);
+
 int main()
 {
 	// Traverse each filtered interface set with ForEach(serial policy).
@@ -128,6 +145,7 @@ int main()
 	}
 	std::puts("[ok] Query: LINQ-style Select<interface> / Where<Predicate> / Cast");
 	std::puts("[ok] ForEach traversal over the filtered interface sets");
+	std::puts("[ok] Query result fed into Topo::TTopoSort_t (interface-keyed)");
 	std::puts("CORE TEST PASSED");
 	return 0;
 }

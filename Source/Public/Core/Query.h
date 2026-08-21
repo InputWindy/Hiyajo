@@ -18,12 +18,13 @@ namespace Maho
 //   using FMatched = decltype(Q);                          // TTypeList<...>
 //   static_assert(FMatched::Count > 0);
 //
-// - Select<TBases...>: keep types deriving every TBases (accumulates).
+// - Select<TBases...>: keep types deriving every TBases. This is the most
+//   common filter (interface query) — a shorthand for Where<TDerivesFrom<T>>.
 // - Where<TFilters...>: keep types where every filter's Apply<T>::value is true.
 //   Filters are type predicates carrying `template<typename T> struct Apply`;
 //   Not<TPredicate> negates a predicate template.
 // - Cast<TBase>: asserts every survivor derives TBase, returns the filtered
-//   TTypeList (a value, usable in ForEach<TList>).
+//   TTypeList (a value, usable in ForEach<TList> and Topo::TTopoSort_t<TList, Key>).
 //
 // Query only selects types — it never drives instances.
 // ───────────────────────────────────────────────────────────────────────
