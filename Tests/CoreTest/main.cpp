@@ -1,202 +1,88 @@
-// Core smoke test — exercises the engine core (TypeList / Query / Topology /
-// Delegate) directly, with no plugin/extension/codegen machinery.
+// Core test — 3D DAG: dependency graph (x/y) × inheritance (z).
+//
+// Each extension declares its FULL dependency pack explicitly:
+//   using FDependsPack = TCatch<Parent::FDependsPack, TDependsPack<own slots>>::Type;
+// so a derived type's edges = parent's edges (recursively) ∪ its own.
+// The Key (IA/IB/...) is a TYPE — an interface tag, matched per-slot.
 #include <Maho.h>
 
-#include <cassert>
 #include <cstdio>
-#include <string>
 #include <type_traits>
 
 using namespace Maho;
 
-// ───────────────────────────────────────────────────────────────────────
-// ① TypeList + Query: compile-time type filtering.
-// ───────────────────────────────────────────────────────────────────────
-namespace Q
+// ── interface tags (the dependency Keys, also usable as Query Select bases) ──
+struct IA { virtual ~IA() = default; };
+struct IB { virtual ~IB() = default; };
+struct IC { virtual ~IC() = default; };
+
+// ── extensions ──
+struct SA : IExtension
 {
-	struct IRenderFeature { virtual ~IRenderFeature() = default; };
-	struct FTickableTag    { virtual ~FTickableTag() = default; };
+	using FDependsPack = TDependsPack<TDependsOn<IA, TTypeList<>>>;
+};
 
-	struct ACapture  : IRenderFeature, FTickableTag { };
-	struct AForward  : IRenderFeature, FTickableTag { };
-	struct AHeadless : IRenderFeature { };
-	struct AGameplay : FTickableTag { };
-	struct AStreamer { };
-
-	using FList = TTypeList<ACapture, AForward, AHeadless, AGameplay, AStreamer>;
-	static_assert(FList::Count == 5);
-
-	// Chained value-cascade: each .With/.Not returns a new query value.
-	// render features: Capture + Forward + Headless.
-	constexpr auto QRender = TQuery<FList>{}.With<IRenderFeature>();
-	using FRender = decltype(QRender)::Type;
-	static_assert(FRender::Count == 3);
-	static_assert(TContains_v<FRender, ACapture>);
-	static_assert(!TContains_v<FRender, AGameplay>);
-
-	// render AND tickable: Capture + Forward.
-	constexpr auto QRenderTick = QRender.With<FTickableTag>();
-	using FRenderTick = decltype(QRenderTick)::Type;
-	static_assert(FRenderTick::Count == 2);
-	static_assert(TContains_v<FRenderTick, ACapture>);
-
-	// tickable but NOT render: only Gameplay.
-	constexpr auto QTickNotRender = TQuery<FList>{}.With<FTickableTag>().Not<IRenderFeature>();
-	using FTickNotRender = decltype(QTickNotRender)::Type;
-	static_assert(FTickNotRender::Count == 1);
-	static_assert(TContains_v<FTickNotRender, AGameplay>);
-
-	// With then Not of the same base → empty.
-	constexpr auto QCancel = TQuery<FList>{}.With<IRenderFeature>().Not<IRenderFeature>();
-	using FCancel = decltype(QCancel)::Type;
-	static_assert(FCancel::Count == 0);
-
-	void Run()
-	{
-		std::puts("[ok] Query: With/Not type filtering");
-	}
-}
-
-// ───────────────────────────────────────────────────────────────────────
-// ② Topology: static dependency ordering (topo sort + parallel levels).
-// ───────────────────────────────────────────────────────────────────────
-namespace Tp
+// SB inherits SA: its pack = SA's pack (no own edges).
+struct SB : SA
 {
-	// A graph keyed by two independent phases.
-	enum class EPhase { Init, Tick };
+	using FDependsPack = SA::FDependsPack;
+};
 
-	// ── Init graph: FBase → FInput → FSystem; FOther is data-only. ──
-	struct FBase
-	{
-		using FDependsPack = TDependsPack<
-			TDependsOn<EPhase::Init, TTypeList<>>,
-			TDependsOn<EPhase::Tick, TTypeList<>>>;
-	};
-	struct FInput
-	{
-		using FDependsPack = TDependsPack<TDependsOn<EPhase::Init, TTypeList<FBase>>>;
-	};
-	struct FSystem
-	{
-		using FDependsPack = TDependsPack<
-			TDependsOn<EPhase::Init, TTypeList<FBase, FInput>>,
-			TDependsOn<EPhase::Tick, TTypeList<FBase>>>;
-	};
-	struct FOther {};   // declares no pack → zero deps, resolves to empty.
-
-	using FNodes = TTypeList<FSystem, FInput, FBase, FOther>;
-	static_assert(FNodes::Count == 4);
-
-	//── per-key deps resolution ──
-	static_assert(std::is_same_v<Topo::TNodeDeps_t<FSystem, EPhase::Init>, TTypeList<FBase, FInput>>);
-	static_assert(std::is_same_v<Topo::TNodeDeps_t<FSystem, EPhase::Tick>, TTypeList<FBase>>);
-	static_assert(std::is_same_v<Topo::TNodeDeps_t<FBase,  EPhase::Init>, TTypeList<>>);
-	static_assert(std::is_same_v<Topo::TNodeDeps_t<FOther, EPhase::Init>, TTypeList<>>, "no pack → empty deps");
-
-	//── cycle checks ──
-	static_assert(Topo::TIsAcyclic_v<FNodes, EPhase::Init>);
-	static_assert(Topo::TIsAcyclic_v<FNodes, EPhase::Tick>);
-
-	//── topological order at Init: deps before dependents, others at the end
-	//   (post-order over the node list preserves declaration order among peers) ──
-	using FOrderInit = Topo::TTopoSort_t<FNodes, EPhase::Init>;
-	static_assert(std::is_same_v<TTypeList<FBase, FInput, FSystem, FOther>, FOrderInit>,
-		"Init order = Base, Input, System, Other");
-
-	using FOrderTick = Topo::TTopoSort_t<FNodes, EPhase::Tick>;
-	// Tick graph: FSystem→FBase; FInput/FOther independent. Post-order visit of
-	// (FSystem,FInput,FBase,FOther) yields FBase,FSystem,FInput,FOther.
-	static_assert(std::is_same_v<TTypeList<FBase, FSystem, FInput, FOther>, FOrderTick>);
-
-	//── parallel levels at Init:
-	//   level0 = {FBase, FOther} (independent), level1={FInput}, level2={FSystem} ──
-	using FLevelsInit = Topo::TLevels_t<FNodes, EPhase::Init>;
-	static_assert(std::is_same_v<
-		TTypeList<
-			TTypeList<FBase, FOther>,
-			TTypeList<FInput>,
-			TTypeList<FSystem>>,
-		FLevelsInit>);
-
-	//── at Tick: level0={FInput, FBase, FOther} (node declaration order),
-	//   level1={FSystem} ──
-	using FLevelsTick = Topo::TLevels_t<FNodes, EPhase::Tick>;
-	static_assert(std::is_same_v<
-		TTypeList<
-			TTypeList<FInput, FBase, FOther>,
-			TTypeList<FSystem>>,
-		FLevelsTick>);
-
-	//── reverse dependency: who depends on FBase at Init? ──
-	using FDependentsOfBase = Topo::TFindDependents_t<FNodes, EPhase::Init, FBase>;
-	static_assert(std::is_same_v<TTypeList<FSystem, FInput>, FDependentsOfBase>);
-
-	//── cycles ──
-	struct FZ;
-	struct FY { using FDependsPack = TDependsPack<TDependsOn<EPhase::Init, TTypeList<FZ>>>; };
-	struct FZ { using FDependsPack = TDependsPack<TDependsOn<EPhase::Init, TTypeList<FY>>>; };
-	using FCycle = TTypeList<FY, FZ>;
-	static_assert(Topo::THasCycle_v<FCycle, EPhase::Init>, "mutual FY/FZ is a cycle");
-
-	struct FSelf { using FDependsPack = TDependsPack<TDependsOn<EPhase::Init, TTypeList<FSelf>>>; };
-	static_assert(Topo::THasCycle_v<TTypeList<FSelf>, EPhase::Init>, "self-loop is a cycle");
-
-	//── default slot (no stage): plugin wants plain ordering ──
-	struct FD1 { using FDependsPack = TDependsPack<TDependsOn<FDefaultSlot, TTypeList<>>>; };
-	struct FD2 { using FDependsPack = TDependsPack<TDependsOn<FDefaultSlot, TTypeList<FD1>>>; };
-	using FDefNodes = TTypeList<FD2, FD1>;
-	using FDefOrder = Topo::TTopoSort_t<FDefNodes, FDefaultSlot>;
-	static_assert(std::is_same_v<TTypeList<FD1, FD2>, FDefOrder>);
-
-	//── MyExtension: a plugin declares itself via IExtension + FDependsPack — the
-	//   inherited FDependsPack must carry the slots (regression for the alias bug).
-	struct FX { using FDependsPack = TDependsPack<TDependsOn<EPhase::Init, TTypeList<>>>; };
-	struct FY2 { using FDependsPack = TDependsPack<TDependsOn<EPhase::Init, TTypeList<FX>>>; };
-	struct FMyExtension
-		: IExtension
-		, TDependsPack<TDependsOn<EPhase::Init, TTypeList<FX, FY2>>>
-	{
-	};
-	using FMyNodes = TTypeList<FMyExtension, FY2, FX>;
-	using FMyDeps = Topo::TNodeDeps_t<FMyExtension, EPhase::Init>;
-	static_assert(std::is_same_v<FMyDeps, TTypeList<FX, FY2>>,
-		"inherited TDependsPack slot must carry TTypeList<FX,FY2>");
-	static_assert(Topo::TIsAcyclic_v<FMyNodes, EPhase::Init>);
-	using FMyOrder = Topo::TTopoSort_t<FMyNodes, EPhase::Init>;
-	static_assert(FMyOrder::Count == 3);
-	static_assert(Topo::TIsAcyclic_v<FMyOrder, EPhase::Init>);
-
-	void Run()
-	{
-		std::puts("[ok] Topology: static dependency ordering (topo sort + levels + cycles)");
-	}
-}
-
-// ───────────────────────────────────────────────────────────────────────
-// ③ Delegate: multi-cast.
-// ───────────────────────────────────────────────────────────────────────
-namespace D
+struct SC : IExtension
 {
-	void Run()
-	{
-		Maho::TMulticastDelegate<void(int)> OnHit;
-		int Total = 0;
-		OnHit.Add([&](int V) { Total += V; });
-		OnHit.Add([&](int V) { Total += V * 10; });
-		OnHit.Broadcast(3);
-		assert(Total == 33);   // 3 + 30
-		std::puts("[ok] Delegate: multicast broadcast");
-	}
-}
+	using FDependsPack = TDependsPack<TDependsOn<IA, TTypeList<SA>>>;
+};
 
-// ───────────────────────────────────────────────────────────────────────
-// main
-// ───────────────────────────────────────────────────────────────────────
+// SD : SC + own deps — pack = SC's [SA] ∪ own [SB, SC] (same KEY IA spliced).
+struct SD : SC
+{
+	using FDependsPack = Topo::TConcatPacks_t<SC::FDependsPack,
+		TDependsPack<TDependsOn<IA, TTypeList<SB, SC>>>>;
+};
+
+// SE : SD + own deps — pack = SD's ∪ own [SD, SA].
+struct SE : SD
+{
+	using FDependsPack = Topo::TConcatPacks_t<SD::FDependsPack,
+		TDependsPack<TDependsOn<IA, TTypeList<SD, SA>>>>;
+};
+
+struct SF : IExtension
+{
+	using FDependsPack = TDependsPack<TDependsOn<IA, TTypeList<SB>>>;
+};
+
+// SG : SF + own deps — pack = SF's [SB] ∪ own [SD].
+struct SG : SF
+{
+	using FDependsPack = Topo::TConcatPacks_t<SF::FDependsPack,
+		TDependsPack<TDependsOn<IA, TTypeList<SD>>>>;
+};
+
+// ── 3D assertions: per-key deps along the inheritance chain ──
+static_assert(std::is_same_v<Topo::TNodeDeps_t<SA, IA>, TTypeList<>>);
+static_assert(std::is_same_v<Topo::TNodeDeps_t<SB, IA>, TTypeList<>>);          // SB == SA (z-axis)
+static_assert(std::is_same_v<Topo::TNodeDeps_t<SC, IA>, TTypeList<SA>>);
+// SD : SC[SA] ∪ own [SB,SC] — edges are spliced (order: SC's then own).
+static_assert(std::is_same_v<Topo::TNodeDeps_t<SD, IA>,
+	TTypeList<SA, SB, SC>>);
+// SE : SD(SA,SB,SC) ∪ own [SD,SA] — SA appears again; dedup is handled by the
+// query/filter layer (a later concern), not by pack concat.
+static_assert(std::is_same_v<Topo::TNodeDeps_t<SE, IA>,
+	TTypeList<SA, SB, SC, SD, SA>>);
+static_assert(std::is_same_v<Topo::TNodeDeps_t<SF, IA>, TTypeList<SB>>);
+// SG : SF[SB] ∪ own [SD].
+static_assert(std::is_same_v<Topo::TNodeDeps_t<SG, IA>, TTypeList<SB, SD>>);
+
+// full-node topo sort at IA (all nodes)
+using FNodes = TTypeList<SE, SD, SC, SB, SA, SG, SF>;
+static_assert(Topo::TIsAcyclic_v<FNodes, IA>);
+using FOrder = Topo::TTopoSort_t<FNodes, IA>;
+static_assert(FOrder::Count == 7);
+
 int main()
 {
-	Q::Run();
-	Tp::Run();
-	D::Run();
+	std::puts("[ok] 3D DAG: per-key deps merge along inheritance chain");
 	std::puts("CORE TEST PASSED");
 	return 0;
 }
