@@ -1,5 +1,6 @@
 #pragma once
 
+#include <Core/Interface.h>
 #include <Core/Topology.h>
 
 namespace Maho
@@ -32,12 +33,6 @@ namespace Maho
 // Driving the matched types (by instance or singleton) is the host/scheduler's
 // job — an extension is pure declaration (identity + dependency table).
 // ───────────────────────────────────────────────────────────────────────
-
-class IExtension
-{
-public:
-	virtual ~IExtension() = default;
-};
 
 /**
  * Assembled extension base: carries the IExtension identity and declares the

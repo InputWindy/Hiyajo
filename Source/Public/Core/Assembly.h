@@ -1,7 +1,7 @@
 #pragma once
 
 #include <Core/Export.h>
-#include <Core/Runable.h>
+#include <Core/Interface.h>
 
 #include <concepts>
 #include <string_view>
@@ -49,21 +49,6 @@ public:
 
 private:
 	void* Handle = nullptr;
-};
-
-/**
- * Installable assembly contract — a runnable that is ALSO dynamically
- * installable: its DLL exports `CreateExtension` returning an ILayer*.
- * Mutually exclusive with TSingleton (an installable app may be instantiated
- * many times; a singleton may not).
- */
-class MAHO_API ILayer : public virtual IRunable
-{
-public:
-	virtual ~ILayer() = default;
-
-	virtual void Initialize(int Argc, char** Argv) = 0;
-	virtual void Shutdown() = 0;
 };
 
 // The assembly-export contract: T must provide `static ILayer* CreateExtension()`.

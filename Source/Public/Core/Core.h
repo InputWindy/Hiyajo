@@ -4,6 +4,7 @@
 // Include this to use the whole Core module.
 
 #include <Core/TypeList.h>
+#include <Core/Interface.h>
 #include <Core/TypeTraits.h>
 #include <Core/Query.h>
 #include <Core/Topology.h>
