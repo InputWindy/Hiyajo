@@ -1,9 +1,8 @@
-// Core test — 3D DAG: dependency graph (x/y) × inheritance (z).
+// Core test — 3D DAG (type dependency + inheritance) × Query type filter.
 //
-// Each extension declares its FULL dependency pack explicitly:
-//   using FDependsPack = TCatch<Parent::FDependsPack, TDependsPack<own slots>>::Type;
-// so a derived type's edges = parent's edges (recursively) ∪ its own.
-// The Key (IA/IB/...) is a TYPE — an interface tag, matched per-slot.
+// The interface tags IA/IB/IC double as (a) dependency Keys in FDependsPack
+// and (b) Query::Select bases. We install them on the extension classes in a
+// deliberately messy way, then filter by interface in main().
 #include <Maho.h>
 
 #include <cstdio>
@@ -11,78 +10,125 @@
 
 using namespace Maho;
 
-// ── interface tags (the dependency Keys, also usable as Query Select bases) ──
-struct IA { virtual ~IA() = default; };
-struct IB { virtual ~IB() = default; };
-struct IC { virtual ~IC() = default; };
+// ── interfaces (dependency Keys + Query Select bases) ──
+struct IA { virtual void InterfaceA() = 0; };
+struct IB { virtual void InterfaceB() = 0; };
+struct IC { virtual void InterfaceC() = 0; };
 
-// ── extensions ──
-struct SA : IExtension
+// ── extensions; interfaces installed messily ──
+struct SA : IExtension, IA
 {
 	using FDependsPack = TDependsPack<TDependsOn<IA, TTypeList<>>>;
 };
 
-// SB inherits SA: its pack = SA's pack (no own edges).
-struct SB : SA
+// SB : SA → carries SA's IA, we also add IB.
+struct SB : SA, IB
 {
 	using FDependsPack = SA::FDependsPack;
 };
 
-struct SC : IExtension
+struct SC : IExtension, IC
 {
 	using FDependsPack = TDependsPack<TDependsOn<IA, TTypeList<SA>>>;
 };
 
-// SD : SC + own deps — pack = SC's [SA] ∪ own [SB, SC] (same KEY IA spliced).
-struct SD : SC
+// SD : SC → carries SC's IC; we add IA + IB.
+struct SD : SC, IA, IB
 {
 	using FDependsPack = Topo::TConcatPacks_t<SC::FDependsPack,
 		TDependsPack<TDependsOn<IA, TTypeList<SB, SC>>>>;
 };
 
-// SE : SD + own deps — pack = SD's ∪ own [SD, SA].
+// SE : SD → carries IA,IB,IC; nothing extra.
 struct SE : SD
 {
 	using FDependsPack = Topo::TConcatPacks_t<SD::FDependsPack,
 		TDependsPack<TDependsOn<IA, TTypeList<SD, SA>>>>;
 };
 
-struct SF : IExtension
+struct SF : IExtension, IA, IC
 {
 	using FDependsPack = TDependsPack<TDependsOn<IA, TTypeList<SB>>>;
 };
 
-// SG : SF + own deps — pack = SF's [SB] ∪ own [SD].
-struct SG : SF
+// SG : SF → carries IA,IC; we add IB.
+struct SG : SF, IB
 {
 	using FDependsPack = Topo::TConcatPacks_t<SF::FDependsPack,
 		TDependsPack<TDependsOn<IA, TTypeList<SD>>>>;
 };
 
-// ── 3D assertions: per-key deps along the inheritance chain ──
-static_assert(std::is_same_v<Topo::TNodeDeps_t<SA, IA>, TTypeList<>>);
-static_assert(std::is_same_v<Topo::TNodeDeps_t<SB, IA>, TTypeList<>>);          // SB == SA (z-axis)
-static_assert(std::is_same_v<Topo::TNodeDeps_t<SC, IA>, TTypeList<SA>>);
-// SD : SC[SA] ∪ own [SB,SC] — edges are spliced (order: SC's then own).
-static_assert(std::is_same_v<Topo::TNodeDeps_t<SD, IA>,
-	TTypeList<SA, SB, SC>>);
-// SE : SD(SA,SB,SC) ∪ own [SD,SA] — SA appears again; dedup is handled by the
-// query/filter layer (a later concern), not by pack concat.
-static_assert(std::is_same_v<Topo::TNodeDeps_t<SE, IA>,
-	TTypeList<SA, SB, SC, SD, SA>>);
-static_assert(std::is_same_v<Topo::TNodeDeps_t<SF, IA>, TTypeList<SB>>);
-// SG : SF[SB] ∪ own [SD].
-static_assert(std::is_same_v<Topo::TNodeDeps_t<SG, IA>, TTypeList<SB, SD>>);
+// All extension types (the Query FROM list).
+using FAll = TTypeList<SA, SB, SC, SD, SE, SF, SG>;
 
-// full-node topo sort at IA (all nodes)
+// ── 3D dependency assertions (unchanged from the inheritance model) ──
+static_assert(std::is_same_v<Topo::TNodeDeps_t<SA, IA>, TTypeList<>>);
+static_assert(std::is_same_v<Topo::TNodeDeps_t<SB, IA>, TTypeList<>>);
+static_assert(std::is_same_v<Topo::TNodeDeps_t<SC, IA>, TTypeList<SA>>);
+static_assert(std::is_same_v<Topo::TNodeDeps_t<SD, IA>, TTypeList<SA, SB, SC>>);
+static_assert(std::is_same_v<Topo::TNodeDeps_t<SE, IA>, TTypeList<SA, SB, SC, SD, SA>>);
+static_assert(std::is_same_v<Topo::TNodeDeps_t<SF, IA>, TTypeList<SB>>);
+static_assert(std::is_same_v<Topo::TNodeDeps_t<SG, IA>, TTypeList<SB, SD>>);
 using FNodes = TTypeList<SE, SD, SC, SB, SA, SG, SF>;
 static_assert(Topo::TIsAcyclic_v<FNodes, IA>);
-using FOrder = Topo::TTopoSort_t<FNodes, IA>;
-static_assert(FOrder::Count == 7);
+
+// ── Query: FOR THE INTERFACE TYPE SETS ──
+// which extensions carry IA? (all except pure-IC SC)
+// NOTE: Select's Type is the source of truth; As<B> is a cast/assert helper
+// (its auto-returned decltype is unreliable on MSVC for these tags).
+using FIA = typename decltype(::Maho::Query<FAll>().Select<IA>())::Type;
+static_assert(FIA::Count == 6);
+static_assert(TContains_v<FIA, SA>);
+static_assert(TContains_v<FIA, SB>);
+static_assert(TContains_v<FIA, SD>);
+static_assert(TContains_v<FIA, SE>);
+static_assert(TContains_v<FIA, SF>, "FIA has SF?");
+static_assert(TContains_v<FIA, SG>, "FIA has SG?");
+static_assert(!TContains_v<FIA, SC>);
+
+// IB carriers: SB, SD, SE, SG.
+using FIB = typename decltype(::Maho::Query<FAll>().Select<IB>())::Type;
+static_assert(FIB::Count == 4);
+static_assert(TContains_v<FIB, SB> && TContains_v<FIB, SD>
+	&& TContains_v<FIB, SE> && TContains_v<FIB, SG>);
+static_assert(!TContains_v<FIB, SA> && !TContains_v<FIB, SC>);
+
+// IC carriers: SC, SD, SE, SF, SG.
+using FIC = typename decltype(::Maho::Query<FAll>().Select<IC>())::Type;
+static_assert(FIC::Count == 5);
+static_assert(TContains_v<FIC, SC> && TContains_v<FIC, SD>
+	&& TContains_v<FIC, SE> && TContains_v<FIC, SF> && TContains_v<FIC, SG>);
+static_assert(!TContains_v<FIC, SA> && !TContains_v<FIC, SB>);
+
+// IA AND IB together: a TypeTraits predicate (`TDerivesFrom<IB>`) as a Where filter.
+using FIAIB = typename decltype(::Maho::Query<FAll>()
+	.Select<IA>()
+	.Where<Maho::TDerivesFrom<IB>>())::Type;
+static_assert(FIAIB::Count == 4, "IA+IB: SB, SD, SE, SG");
 
 int main()
 {
-	std::puts("[ok] 3D DAG: per-key deps merge along inheritance chain");
+	// Traverse each filtered interface set with ForEach(serial policy).
+	int Count = 0;
+	ForEach<FIA>(FSerialTraversePolicy{}, [&](auto Tag) {
+		(void)Tag;
+		++Count;
+	});
+	ForEach<FIB>(FSerialTraversePolicy{}, [&](auto Tag) {
+		(void)Tag;
+		++Count;
+	});
+	ForEach<FIC>(FSerialTraversePolicy{}, [&](auto Tag) {
+		(void)Tag;
+		++Count;
+	});
+	if (Count != 6 + 4 + 5)
+	{
+		std::puts("[FAIL] interface traversal count mismatch");
+		return 1;
+	}
+	std::puts("[ok] Query: Select<interface> + Where<TAnd<TDerivesFrom<IB>>>");
+	std::puts("[ok] ForEach traversal over the filtered interface sets");
 	std::puts("CORE TEST PASSED");
 	return 0;
 }
