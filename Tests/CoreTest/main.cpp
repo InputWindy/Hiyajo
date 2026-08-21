@@ -4,9 +4,11 @@
 // and (b) Query::Select bases. We install them on the extension classes in a
 // deliberately messy way, then filter by interface in main().
 #include <Maho.h>
+#include <Engine/SerialScheduler.h>
 
 #include <cstdio>
 #include <type_traits>
+#include <vector>
 
 using namespace Maho;
 
@@ -134,31 +136,90 @@ static_assert(std::is_same_v<FLevelsIA,
 		TTypeList<SE, SG>>>,  // level 2 — deps SD/SF
 	"IA set splits into 3 parallel dependency levels");
 
+// ── Instance drive: apply the static levels to a runtime instance array ──
+// Concrete, instantiable layers that implement IA and derive IAssembly, with a
+// dependency chain (like SA→SC→SD→SE): level0 {L0,L1} → level1 {L2} → level2 {L3}.
+namespace Inst
+{
+	struct AIBase { virtual ~AIBase() = default; virtual int Tag() const = 0; };
+	// Concrete layer base — satisfies every pure virtual of IAssembly.
+	struct FLayerBase : IAssembly
+	{
+		void Initialize(int, char**) override {}
+		void Shutdown() override {}
+		int Main(int, char**) override { return 0; }
+	};
+	// A concrete implementation of the interface + IAssembly.
+	struct LA : FLayerBase, AIBase
+	{
+		int Tag() const override { return 1; }
+		using FDependsPack = TDependsPack<TDependsOn<AIBase, TTypeList<>>>;
+	};
+	struct LB : FLayerBase, AIBase
+	{
+		int Tag() const override { return 2; }
+		using FDependsPack = TDependsPack<TDependsOn<AIBase, TTypeList<>>>;
+	};
+	struct LC : FLayerBase, AIBase
+	{
+		int Tag() const override { return 3; }
+		using FDependsPack = TDependsPack<TDependsOn<AIBase, TTypeList<LA, LB>>>;
+	};
+	struct LD : FLayerBase, AIBase
+	{
+		int Tag() const override { return 4; }
+		using FDependsPack = TDependsPack<TDependsOn<AIBase, TTypeList<LC>>>;
+	};
+	using FTypes = TTypeList<LA, LB, LC, LD>;
+	using FLevels = Topo::TLevels_t<FTypes, AIBase>;
+	static_assert(std::is_same_v<FLevels,
+		TTypeList<TTypeList<LA, LB>, TTypeList<LC>, TTypeList<LD>>>);
+}
+
 int main()
 {
-	// Traverse each filtered interface set with ForEach(serial policy).
-	int Count = 0;
-	ForEach<FIA>(FSerialTraversePolicy{}, [&](auto Tag) {
-		(void)Tag;
-		++Count;
-	});
-	ForEach<FIB>(FSerialTraversePolicy{}, [&](auto Tag) {
-		(void)Tag;
-		++Count;
-	});
-	ForEach<FIC>(FSerialTraversePolicy{}, [&](auto Tag) {
-		(void)Tag;
-		++Count;
-	});
-	if (Count != 6 + 4 + 5)
+	// Serial instance drive by levels: each concrete instance is visited exactly
+	// once, in dependency order (level0 before level1 before level2). The visitor
+	// is an overloaded function object — DispatchInstance calls the overload for
+	// the instance's concrete type.
+	struct FCollect
 	{
-		std::puts("[FAIL] interface traversal count mismatch");
-		return 1;
-	}
+		std::vector<int>& Out;
+		void operator()(Inst::LA&) const { Out.push_back(1); }
+		void operator()(Inst::LB&) const { Out.push_back(2); }
+		void operator()(Inst::LC&) const { Out.push_back(3); }
+		void operator()(Inst::LD&) const { Out.push_back(4); }
+	};
+
+	Inst::LA A; Inst::LB B; Inst::LC C; Inst::LD D;
+	std::vector<Maho::IAssembly*> Insts = { &D, &A, &C, &B };   // D(4) A(1) C(3) B(2)
+
+	std::vector<int> Saw;
+	Maho::Serial::FSerialScheduler Serial;
+	Serial.ExecuteLevels<Inst::FLevels>(Insts, FCollect{ Saw });
+
 	std::puts("[ok] Query: LINQ-style Select<interface> / Where<Predicate> / Cast");
 	std::puts("[ok] ForEach traversal over the filtered interface sets");
 	std::puts("[ok] Query result fed into Topo::TTopoSort_t (interface-keyed)");
 	std::puts("[ok] Query result split into parallel dependency levels (TLevels_t)");
+
+	if (Saw.size() != 4)
+	{
+		std::puts("[FAIL] ExecuteLevels visited the wrong number of instances");
+		return 1;
+	}
+	// Dependency levels must be respected in the visit order: level0 (1,2) before
+	// level1 (3) before level2 (4). Indices of each value must satisfy that.
+	int i1 = -1, i2 = -1, i3 = -1, i4 = -1;
+	for (int k = 0; k < (int)Saw.size(); ++k) { int v = Saw[k]; if (v==1) i1=k; else if (v==2) i2=k; else if (v==3) i3=k; else if (v==4) i4=k; }
+	bool ok = i1 != -1 && i2 != -1 && i3 != -1 && i4 != -1
+		&& i1 < i3 && i2 < i3 && i3 < i4;
+	if (!ok)
+	{
+		std::puts("[FAIL] ExecuteLevels violated dependency level order");
+		return 1;
+	}
+	std::puts("[ok] ExecuteLevels drives instances by static dependency levels");
 	std::puts("CORE TEST PASSED");
 	return 0;
 }

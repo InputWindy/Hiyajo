@@ -1,5 +1,6 @@
 #pragma once
 
+#include <Core/Assembly.h>
 #include <Core/Extension.h>
 #include <Core/Topology.h>
 
@@ -86,5 +87,53 @@ public:
 
 	/** (See the derived policy for the two Execute overloads.) */
 };
+
+// ───────────────────────────────────────────────────────────────────────
+// Runtime instance dispatch (shared by the serial & parallel schedulers).
+//
+// A std::vector<IAssembly*> holds polymorphic instances whose RUNTIME type is
+// known only at runtime. DispatchInstance<TList>(instance, visitor) dynamic_cast
+// to the first type in TList the instance binds to (order matters — list most
+// derived first) and calls visitor(T&). Each instance is driven at most once;
+// instances matching no candidate are skipped.
+// ───────────────────────────────────────────────────────────────────────
+namespace InstanceDispatchDetail
+{
+	template <typename THead, typename... TRest, typename TVisitor>
+	bool TCall(IAssembly* Instance, TVisitor& Visitor)
+	{
+		if (auto* Typed = dynamic_cast<THead*>(Instance))
+		{
+			Visitor(*Typed);
+			return true;
+		}
+		if constexpr (sizeof...(TRest) > 0)
+		{
+			return TCall<TRest...>(Instance, Visitor);
+		}
+		return false;
+	}
+}
+
+/** Drive Instance once: first matching type in TList sees Visitor(T&). */
+template <typename TList, typename TVisitor>
+void DispatchInstance(IAssembly* Instance, TVisitor& Visitor);
+
+template <typename... Ts, typename TVisitor>
+void DispatchInstance(TTypeList<Ts...>, IAssembly* Instance, TVisitor& Visitor)
+{
+	if (Instance == nullptr)
+	{
+		return;
+	}
+	InstanceDispatchDetail::TCall<Ts...>(Instance, Visitor);
+}
+
+/** Drive Instance once: first matching type in TList sees Visitor(T&). */
+template <typename TList, typename TVisitor>
+void DispatchInstance(IAssembly* Instance, TVisitor& Visitor)
+{
+	DispatchInstance(TList{}, Instance, Visitor);
+}
 
 } // namespace Maho
