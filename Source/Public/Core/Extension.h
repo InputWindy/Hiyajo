@@ -51,6 +51,21 @@ public:
 };
 
 /**
+ * Interface plug — a variadic base that installs any number of interfaces as
+ * its bases, so a class can carry them without spelling each out in its own
+ * inheritance list:
+ *
+ *   class FLog : public Maho::TSingleton<FLog>,
+ *                public Maho::TPlug<IA, IB>     // IA + IB
+ *   {
+ *   };
+ */
+template <typename... TInterfaces>
+class TPlug : public TInterfaces...
+{
+};
+
+/**
  * Extend a parent extension's deps across one or more interface Keys.
  *
  * Each group (Key, Parent, extras...) declares one dependency slot: at Key this

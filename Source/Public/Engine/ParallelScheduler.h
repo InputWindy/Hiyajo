@@ -16,6 +16,11 @@ namespace Parallel
 /**
  * Parallel scheduler — the parallel traverse base.
  *
+ * The scheduler is parameterized over its extension scan table (FExtensions),
+ * a TTypeList a Layer passes in so Query can filter the candidates it drives:
+ *   Query<FExtensions>().Select<ISingleton>()  — the Tools it schedules
+ *   Query<FExtensions>().Select<IAssembly>()   — the child Layers it drives
+ *
  * Two Execute overloads, matching the two extension kinds:
  *
  *   Execute<TQueryTypes>(visitor)          — singletons: each type's T::Get() is
@@ -29,9 +34,12 @@ namespace Parallel
  * a serial ForEach and call Execute per level (barrier between, parallel
  * within) — the host owns phasing.
  */
+template <typename FExtensions = TTypeList<>>
 class FParallelScheduler : public IScheduler
 {
 public:
+	using FExtensionList = FExtensions;
+
 	FParallelScheduler()
 		: Pool(std::make_unique<FThreadPool>())
 	{

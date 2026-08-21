@@ -6,6 +6,7 @@
 #include <Maho.h>
 #include <Engine/SerialScheduler.h>
 #include <Engine/ParallelScheduler.h>
+#include <Engine/Tool.h>
 
 #include <algorithm>
 #include <atomic>
@@ -26,6 +27,20 @@ struct IC { virtual void InterfaceC() = 0; };
 #define MAHO_CLOSURE_0_SD_IB ::Maho::TTypeList<SA>
 #define MAHO_CLOSURE_0_SE_IA ::Maho::TTypeList<SA, SB>       // SE deps {SA,SB}
 #define MAHO_CLOSURE_0_SF_IA ::Maho::TTypeList<SB>           // SF deps {SB}
+
+// ── TTool: a CRTP singleton Tool, deps via MAHO_EXTEND_DEPS ──
+struct FLogger : Maho::TTool<FLogger>
+{
+	int Initialize() { return 42; }   // self-managed public write
+};
+static_assert(Maho::TIsSingleton<FLogger>::value, "TTool is a CRTP singleton");
+static_assert(std::is_base_of_v<Maho::ISingleton, FLogger>, "Tool filters as ISingleton");
+
+// ── TPlug: a variadic base that installs interfaces by pack ──
+struct FApi : Maho::TPlug<IA, IB, IC> { };
+static_assert(std::is_base_of_v<IA, FApi>);
+static_assert(std::is_base_of_v<IB, FApi>);
+static_assert(std::is_base_of_v<IC, FApi>, "TPlug splices interfaces into the base list");
 
 // ── extensions; interfaces installed messily.
 // Leaf/non-inherited extensions use the assembled base TExtension<TDeps> —
@@ -220,7 +235,7 @@ namespace Inst
 
 // A host that owns the parallel scheduler. It filters the IExtension extensions
 // (Query), orders them into parallel levels, drives the LIVE instances, counts.
-struct FParallelHost : Maho::Parallel::FParallelScheduler
+struct FParallelHost : Maho::Parallel::FParallelScheduler<>
 {
 	// Compile-time: which instance types are extensions (derive IExtension)?
 	using FExtended = typename decltype(::Maho::Query<Inst::FTypes>().Select<Maho::IExtension>())::Type;
@@ -348,6 +363,20 @@ int main()
 		return 1;
 	}
 	std::puts("[ok] FParallelHost: Query<IExtension> + level-wise Execute counted 4 layers");
+
+	// ── TTool: CRTP singleton Get() + Query<ISingleton> filters tools ──
+	if (FLogger::Get().Initialize() != 42)
+	{
+		std::puts("[FAIL] TTool::Get() did not return the singleton");
+		return 1;
+	}
+	// mixed list: a Tool + a Layer — Select<ISingleton> keeps only the tool.
+	using FMixed = TTypeList<FLogger, Inst::LA>;
+	using FOnlyTools = typename decltype(::Maho::Query<FMixed>().Select<Maho::ISingleton>())::Type;
+	static_assert(FOnlyTools::Count == 1);
+	static_assert(std::is_same_v<FOnlyTools, TTypeList<FLogger>>,
+		"Select<ISingleton> filters out the Layer");
+	std::puts("[ok] TTool: Get() singleton + Select<ISingleton> filters it out of a mixed list");
 
 	std::puts("CORE TEST PASSED");
 	return 0;

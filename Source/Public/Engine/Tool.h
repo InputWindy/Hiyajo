@@ -1,31 +1,32 @@
 #pragma once
 
-#include <Core/Extension.h>
 #include <Core/Singleton.h>
-#include <Core/TypeList.h>
 
 namespace Maho
 {
 
 // ───────────────────────────────────────────────────────────────────────
-// Tool — the plug-in-and-play service. A singleton, self-managed: read AND
-// write are public, no scheduler ownership. Callers call T::Get().xxx()
-// directly whenever they need it.
+// Tool — the plug-in-and-play service. A CRTP singleton (T::Get()), self-
+// managed: read AND write are public, no scheduler ownership. Callers call
+// T::Get().xxx() directly whenever they need it.
 //
-// Dependencies are declared like any extension: inherit IExtension (directly or
-// through a base) and define using FDependsPack — Topology reads it for order.
+// Dependencies are declared with the macros (MAHO_EXTEND_DEPS → FDependsPack),
+// exactly like every other extension; Topology reads them for order.
 //
-// C++14-compatible: pulls only TSingleton (+ IExtension), so a plugin that needs
-// an older standard (e.g. Math + GLM) can derive from it without the C++20
-// concept headers (Layer.h).
+//   class FLog : public Maho::TTool<FLog>
+//   {
+//   public:
+//       MAHO_EXTEND_DEPS((IA, /* parent-or-omit */, /* extras */));
+//       void Initialize();
+//   };
+//   FLog::Get().Initialize();
+//
+// A Tool is a singleton (TSingleton → ISingleton), so Query<...>.Select<ISingleton>()
+// picks every tool out of a mixed list. C++14-compatible (no concept headers).
 // ───────────────────────────────────────────────────────────────────────
-
 template <typename TDerived>
-class TTool
-	: public TSingleton<TDerived>
+class TTool : public TSingleton<TDerived>
 {
-public:
-	using FTags = TTypeList<>;
 };
 
 } // namespace Maho
