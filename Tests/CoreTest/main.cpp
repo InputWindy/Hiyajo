@@ -22,8 +22,10 @@ struct IB { virtual void InterfaceB() = 0; };
 struct IC { virtual void InterfaceC() = 0; };
 
 // code-gen closure macros (simulated — normally written to .gen.h)
-#define MAHO_CLOSURE_0_SD_IA ::Maho::TTypeList<SA, SB, SC>
+#define MAHO_CLOSURE_0_SD_IA ::Maho::TTypeList<SA, SB, SC>   // SE/SF derive from SD-ish chains
 #define MAHO_CLOSURE_0_SD_IB ::Maho::TTypeList<SA>
+#define MAHO_CLOSURE_0_SE_IA ::Maho::TTypeList<SA, SB>       // SE deps {SA,SB}
+#define MAHO_CLOSURE_0_SF_IA ::Maho::TTypeList<SB>           // SF deps {SB}
 
 // ── extensions; interfaces installed messily.
 // Leaf/non-inherited extensions use the assembled base TExtension<TDeps> —
@@ -57,6 +59,12 @@ static_assert(std::is_same_v<MAHO_CLOSURE(SD, IB), TTypeList<SA>>, "SD IB closur
 using FLevelsSD = MAHO_SORT_LEVEL(SD, IA);   // closure → bands, user-friendly
 static_assert(std::is_same_v<FLevelsSD,
 	TTypeList<TTypeList<SA, SB>, TTypeList<SC>>>);
+
+// ── MAHO_SORT_LEVELS: bands over an aggregate LIST (union of each closure) ──
+// SD_IA{SA,SB,SC} ∪ SE_IA{SA,SB} ∪ SF_IA{SB} = {SA,SB,SC} → SA/SB root, SC leaf.
+using FLevelsAll = MAHO_SORT_LEVELS(IA, SD, SE, SF);
+static_assert(std::is_same_v<FLevelsAll,
+	TTypeList<TTypeList<SA, SB>, TTypeList<SC>>>, "aggregate closure levels");
 
 // SE : SD → inherits SD's edges + its own (SA); nothing extra.
 struct SE : SD

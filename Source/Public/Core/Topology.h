@@ -632,3 +632,30 @@ struct FReverseTopology
 #define MAHO_SORT_LEVEL(Class, Key) \
 	::Maho::Topo::TLevels_t<MAHO_CLOSURE(Class, Key), Key>
 
+// ───────────────────────────────────────────────────────────────────────
+// MAHO_SORT_LEVELS — dependency-level bands for an aggregate LIST of classes
+// at a Key. Each class's code-gen closure is read (as a literal TTypeList — no
+// template metaprogramming), they are unioned, and the union is leveled.
+//
+//   using FLevels = MAHO_SORT_LEVELS(IA, SD, SE, SF);
+//   // == TLevels_t< union(MAHO_CLOSURE(SD,IA), ...), IA>
+// ───────────────────────────────────────────────────────────────────────
+#define MAHO_SORT_LEVELS_1(Key, A) \
+	::Maho::Topo::TLevels_t<MAHO_CLOSURE(A, Key), Key>
+#define MAHO_SORT_LEVELS_2(Key, A, B) \
+	::Maho::Topo::TLevels_t< \
+		::Maho::TUnionList_t<MAHO_CLOSURE(A, Key), MAHO_CLOSURE(B, Key)>, Key>
+#define MAHO_SORT_LEVELS_3(Key, A, B, C) \
+	::Maho::Topo::TLevels_t< \
+		::Maho::TUnionList_t<MAHO_CLOSURE(A, Key), \
+			::Maho::TUnionList_t<MAHO_CLOSURE(B, Key), MAHO_CLOSURE(C, Key)>>, Key>
+#define MAHO_SORT_LEVELS_4(Key, A, B, C, D) \
+	::Maho::Topo::TLevels_t< \
+		::Maho::TUnionList_t<MAHO_CLOSURE(A, Key), \
+			::Maho::TUnionList_t<MAHO_CLOSURE(B, Key), \
+				::Maho::TUnionList_t<MAHO_CLOSURE(C, Key), MAHO_CLOSURE(D, Key)>>>, Key>
+#define MAHO_SORT_LEVELS_SELECT(_1, _2, _3, _4, NAME, ...) NAME
+#define MAHO_SORT_LEVELS(Key, ...) \
+	MAHO_SORT_LEVELS_SELECT(__VA_ARGS__, \
+		MAHO_SORT_LEVELS_4, MAHO_SORT_LEVELS_3, MAHO_SORT_LEVELS_2, MAHO_SORT_LEVELS_1)(Key, __VA_ARGS__)
+
