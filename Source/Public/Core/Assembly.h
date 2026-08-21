@@ -61,6 +61,9 @@ class MAHO_API IAssembly : public virtual IRunable
 {
 public:
 	virtual ~IAssembly() = default;
+
+	virtual void Initialize(int Argc, char** Argv) = 0;
+	virtual void Shutdown() = 0;
 };
 
 // The assembly-export contract: T must provide `static IAssembly* CreateExtension()`.

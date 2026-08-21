@@ -165,4 +165,32 @@ struct TCatch<TTypeList<T1...>, TTypeList<T2...>, TRest...>
 	using Type = typename TCatch<TTypeList<T1..., T2...>, TRest...>::Type;
 };
 
+/**
+ * Left-fold a TTypeList: append each element to the accumulator unless already
+ * present (order-preserving dedup). Base = the accumulated list. The recursion
+ * inherits a conditional_t, so ::Type is inherited at each step (no alias side
+ * type that MSVC struggles to instantiate lazily).
+ */
+template <typename TAcc, typename TList>
+struct TUnionFold;
+
+template <typename TAcc>
+struct TUnionFold<TAcc, TTypeList<>>
+{
+	using Type = TAcc;
+};
+
+template <typename TAcc, typename THead, typename... TRest>
+struct TUnionFold<TAcc, TTypeList<THead, TRest...>>
+	: std::conditional_t<
+		TContains_v<TAcc, THead>,
+		TUnionFold<TAcc, TTypeList<TRest...>>,
+		TUnionFold<typename TAppend<TAcc, THead>::Type, TTypeList<TRest...>>>
+{
+};
+
+/** Union of two TTypeLists (order-preserving, deduplicated). */
+template <typename TListA, typename TListB>
+using TUnionList_t = typename TUnionFold<TListA, TListB>::Type;
+
 } // namespace Maho

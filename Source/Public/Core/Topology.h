@@ -40,7 +40,7 @@ namespace Maho
 //   //     TTypeList<FMySystem>>           (level 1)
 // ───────────────────────────────────────────────────────────────────────
 
-template <auto SlotKey, typename TList>
+template <typename TSlotKey, typename TList>
 struct TDependsOn;
 
 template <typename... TSlots>
@@ -49,7 +49,7 @@ struct TDependsPack;
 template <typename T, typename = void>
 struct TResolveDependsPack;
 
-template <typename T, auto Key>
+template <typename T, typename Key>
 struct TDependsList;
 
 // ───────────────────────────────────────────────────────────────────────
@@ -57,20 +57,20 @@ struct TDependsList;
 // ───────────────────────────────────────────────────────────────────────
 
 /**
- * Default dependency slot — the level-sort key used when the drive is by
- * lambda (no stage). Plugins that only need ordering (not per-stage
- * partitioning) declare TDependsOn<FDefaultSlot, ...>.
+ * Default dependency slot — the type key used when the drive is by lambda (no
+ * stage). Plugins that only need ordering (not per-stage partitioning) declare
+ * TDependsOn<FDefaultSlot, ...>.
  */
-inline constexpr int FDefaultSlot = 0;
+struct FDefaultSlot {};
 
 /**
- * One dependency slot: at Key, Self depends on every type in TList
+ * One dependency slot: at Key (a type tag), Self depends on every type in TList
  * (peers complete before Self).
  */
-template <auto SlotKey, typename TList>
+template <typename TSlotKey, typename TList>
 struct TDependsOn
 {
-	static constexpr auto Key = SlotKey;
+	using TKey = TSlotKey;
 	using FDeps = TList;
 };
 
@@ -80,14 +80,15 @@ struct TDependsPack
 {
 	using FDependsPack = TDependsPack<TSlots...>;
 	static constexpr std::size_t NumSlots = sizeof...(TSlots);
+	static constexpr bool HasSlots = (sizeof...(TSlots) > 0);
 
-	/** Visit every slot: Visitor(Key, static_cast<TList*>(nullptr)). */
+	/** Visit every slot: Visitor(static_cast<TList*>(nullptr)). */
 	template <typename TVisitor>
 	static constexpr void ForEachSlot(TVisitor&& Visitor)
 	{
 		if constexpr (sizeof...(TSlots) > 0)
 		{
-			(Visitor(TSlots::Key, static_cast<typename TSlots::FDeps*>(nullptr)), ...);
+			(Visitor(static_cast<typename TSlots::FDeps*>(nullptr)), ...);
 		}
 		else
 		{
@@ -115,63 +116,126 @@ struct TResolveDependsPack<T, std::void_t<typename T::FDependsPack>>
 namespace Topo
 {
 
-/** Compile-time key equality (different types compare false, never ill-formed). */
-template <auto A, auto B>
-constexpr bool TKeyEqual()
-{
-	if constexpr (std::is_same_v<decltype(A), decltype(B)>)
-	{
-		return A == B;
-	}
-	return false;
-}
-
-/** Find the peer TTypeList for a Key inside a pack. */
-template <typename TPack, auto Key>
+/** Find the peer TTypeList for a Key (type) inside a pack. */
+template <typename TPack, typename Key>
 struct TFindSlot
 {
 	using Type = TTypeList<>;
 };
 
-template <auto Key>
+template <typename Key>
 struct TFindSlot<TDependsPack<>, Key>
 {
 	using Type = TTypeList<>;
 };
 
-template <auto Key, auto SlotKey, typename TList, typename... TRest>
-struct TFindSlot<TDependsPack<TDependsOn<SlotKey, TList>, TRest...>, Key>
+template <typename Key, typename TSlotKey, typename TList, typename... TRest>
+struct TFindSlot<TDependsPack<TDependsOn<TSlotKey, TList>, TRest...>, Key>
 {
 	using Type = std::conditional_t<
-		TKeyEqual<Key, SlotKey>(),
+		std::is_same_v<Key, TSlotKey>,
 		TList,
 		typename TFindSlot<TDependsPack<TRest...>, Key>::Type>;
 };
 
-/** Raw peer list of T at Key (no node filtering). */
-template <typename T, auto Key>
+/** Raw peer list of T at Key (type) (no node filtering). */
+template <typename T, typename Key>
 struct TNodeDeps
 {
 	using Type = typename TFindSlot<typename TResolveDependsPack<T>::Type, Key>::Type;
 };
 
-template <typename T, auto Key>
+template <typename T, typename Key>
 using TNodeDeps_t = typename TNodeDeps<T, Key>::Type;
+
+// ───────────────────────────────────────────────────────────────────────
+// Dependency-pack merging (the 3D DAG: inheritance is the z-axis).
+//
+// TConcatPacks<A, B> merges two TDependsPack into one TDependsPack, splicing
+// the deps of same-KEY slots (so an inherited parent's edges ∪ its own edges).
+//   using FDependsPack = TCatch<...>  (TTypeList)  does NOT apply here —
+//   use TCatchPacks / TConcatPacks for dependency packs, not TCatch.
+// ───────────────────────────────────────────────────────────────────────
+
+/** Append a slot to the END of a dependency pack. */
+template <typename TPack, typename TSlot>
+struct TDependAppendSlot;
+
+template <typename... TSlots, typename TSlotKey, typename TList>
+struct TDependAppendSlot<TDependsPack<TSlots...>, TDependsOn<TSlotKey, TList>>
+{
+	using Type = TDependsPack<TSlots..., TDependsOn<TSlotKey, TList>>;
+};
+
+/** Insert one slot into a pack: same-KEY slot → splice deps; else append. */
+template <typename TPack, typename TSlot>
+struct TInsertDependSlot;
+
+template <typename TSlotKey, typename TList>
+struct TInsertDependSlot<TDependsPack<>, TDependsOn<TSlotKey, TList>>
+{
+	using Type = TDependsPack<TDependsOn<TSlotKey, TList>>;
+};
+
+template <typename TSlotKey, typename THeadList, typename... TRest, typename TList>
+struct TInsertDependSlot<TDependsPack<TDependsOn<TSlotKey, THeadList>, TRest...>,
+	TDependsOn<TSlotKey, TList>>
+{
+	using Type = TDependsPack<
+		TDependsOn<TSlotKey, typename TCatch<THeadList, TList>::Type>, TRest...>;
+};
+
+template <typename KHead, typename THeadList, typename... TRest,
+	typename TSlotKey, typename TList>
+struct TInsertDependSlot<TDependsPack<TDependsOn<KHead, THeadList>, TRest...>,
+	TDependsOn<TSlotKey, TList>>
+{
+private:
+	using FInserted = typename TInsertDependSlot<TDependsPack<TRest...>,
+		TDependsOn<TSlotKey, TList>>::Type;
+
+public:
+	using Type = typename TDependAppendSlot<FInserted,
+		TDependsOn<KHead, THeadList>>::Type;
+};
+
+/** Merge two dependency packs (same KEY slots spliced). */
+template <typename TPackA, typename TPackB>
+struct TConcatPacks;
+
+template <typename TPackA>
+struct TConcatPacks<TPackA, TDependsPack<>>
+{
+	using Type = TPackA;
+};
+
+template <typename TPackA, typename THead, typename... TRest>
+struct TConcatPacks<TPackA, TDependsPack<THead, TRest...>>
+{
+private:
+	using FStep = typename TInsertDependSlot<TPackA, THead>::Type;
+
+public:
+	using Type = typename TConcatPacks<FStep, TDependsPack<TRest...>>::Type;
+};
+
+template <typename TPackA, typename TPackB>
+using TConcatPacks_t = typename TConcatPacks<TPackA, TPackB>::Type;
 
 // ── ① Cycle detection (DFS path coloring; short-circuits on back edge). ─
 
-template <typename TNodes, auto Key, typename TNode, typename TPath>
+template <typename TNodes, typename Key, typename TNode, typename TPath>
 struct TDfsCycle;
 
-template <typename TNodes, auto Key, typename TPath, typename TDeps>
+template <typename TNodes, typename Key, typename TPath, typename TDeps>
 struct TDfsCycleList;
 
-template <typename TNodes, auto Key, typename TPath>
+template <typename TNodes, typename Key, typename TPath>
 struct TDfsCycleList<TNodes, Key, TPath, TTypeList<>> : std::false_type
 {
 };
 
-template <typename TNodes, auto Key, typename TPath, typename THead, typename... TRest>
+template <typename TNodes, typename Key, typename TPath, typename THead, typename... TRest>
 struct TDfsCycleList<TNodes, Key, TPath, TTypeList<THead, TRest...>>
 	: std::bool_constant<
 		TDfsCycle<TNodes, Key, THead, TPath>::value
@@ -179,15 +243,15 @@ struct TDfsCycleList<TNodes, Key, TPath, TTypeList<THead, TRest...>>
 {
 };
 
-template <bool bInPath, typename TNodes, auto Key, typename TNode, typename TPath>
+template <bool bInPath, typename TNodes, typename Key, typename TNode, typename TPath>
 struct TDfsCycleImpl;
 
-template <typename TNodes, auto Key, typename TNode, typename TPath>
+template <typename TNodes, typename Key, typename TNode, typename TPath>
 struct TDfsCycleImpl<true, TNodes, Key, TNode, TPath> : std::true_type
 {
 };
 
-template <typename TNodes, auto Key, typename TNode, typename TPath>
+template <typename TNodes, typename Key, typename TNode, typename TPath>
 struct TDfsCycleImpl<false, TNodes, Key, TNode, TPath>
 	: std::bool_constant<
 		TDfsCycleList<
@@ -198,22 +262,22 @@ struct TDfsCycleImpl<false, TNodes, Key, TNode, TPath>
 {
 };
 
-template <typename TNodes, auto Key, typename TNode, typename TPath>
+template <typename TNodes, typename Key, typename TNode, typename TPath>
 struct TDfsCycle
 {
 	static constexpr bool bInPath = TContains_v<TPath, TNode>;
 	static constexpr bool value = TDfsCycleImpl<bInPath, TNodes, Key, TNode, TPath>::value;
 };
 
-template <typename TNodes, auto Key>
+template <typename TNodes, typename Key>
 struct THasCycleFromAny;
 
-template <auto Key>
+template <typename Key>
 struct THasCycleFromAny<TTypeList<>, Key> : std::false_type
 {
 };
 
-template <auto Key, typename THead, typename... TRest>
+template <typename Key, typename THead, typename... TRest>
 struct THasCycleFromAny<TTypeList<THead, TRest...>, Key>
 	: std::bool_constant<
 		TDfsCycle<TTypeList<THead, TRest...>, Key, THead, TTypeList<>>::value
@@ -221,14 +285,14 @@ struct THasCycleFromAny<TTypeList<THead, TRest...>, Key>
 {
 };
 
-template <typename TNodes, auto Key>
+template <typename TNodes, typename Key>
 inline constexpr bool THasCycle_v = THasCycleFromAny<TNodes, Key>::value;
 
-template <typename TNodes, auto Key>
+template <typename TNodes, typename Key>
 inline constexpr bool TIsAcyclic_v = !THasCycle_v<TNodes, Key>;
 
 /** static_assert that TNodes' graph at Key has no cycle. */
-template <typename TNodes, auto Key>
+template <typename TNodes, typename Key>
 constexpr void TAssertAcyclic()
 {
 	static_assert(
@@ -245,25 +309,25 @@ struct TTopoState
 	using Result = TResult;
 };
 
-template <typename TNodes, auto Key, typename TList, typename TState>
+template <typename TNodes, typename Key, typename TList, typename TState>
 struct TTopoVisitList;
 
-template <typename TNodes, auto Key, typename TState>
+template <typename TNodes, typename Key, typename TState>
 struct TTopoVisitList<TNodes, Key, TTypeList<>, TState>
 {
 	using State = TState;
 };
 
-template <bool bVisited, typename TNodes, auto Key, typename TNode, typename TState>
+template <bool bVisited, typename TNodes, typename Key, typename TNode, typename TState>
 struct TTopoVisitImpl;
 
-template <typename TNodes, auto Key, typename TNode, typename TState>
+template <typename TNodes, typename Key, typename TNode, typename TState>
 struct TTopoVisitImpl<true, TNodes, Key, TNode, TState>
 {
 	using State = TState;
 };
 
-template <typename TNodes, auto Key, typename TNode, typename TState>
+template <typename TNodes, typename Key, typename TNode, typename TState>
 struct TTopoVisitImpl<false, TNodes, Key, TNode, TState>
 {
 private:
@@ -280,14 +344,14 @@ public:
 		TAppend_t<typename FAfterDeps::Result, TNode>>;
 };
 
-template <typename TNodes, auto Key, typename TNode, typename TState>
+template <typename TNodes, typename Key, typename TNode, typename TState>
 struct TTopoVisit
 {
 	static constexpr bool bVisited = TContains_v<typename TState::Visited, TNode>;
 	using State = typename TTopoVisitImpl<bVisited, TNodes, Key, TNode, TState>::State;
 };
 
-template <typename TNodes, auto Key, typename THead, typename... TRest, typename TState>
+template <typename TNodes, typename Key, typename THead, typename... TRest, typename TState>
 struct TTopoVisitList<TNodes, Key, TTypeList<THead, TRest...>, TState>
 {
 private:
@@ -301,14 +365,14 @@ public:
  * Topological order of TNodes at Key: a peer appears before its dependent.
  * Meaningful only for acyclic graphs (see TAssertAcyclic).
  */
-template <typename TNodes, auto Key>
+template <typename TNodes, typename Key>
 struct TTopoSort
 {
 	using Type = typename TTopoVisitList<
 		TNodes, Key, TNodes, TTopoState<TTypeList<>, TTypeList<>>>::State::Result;
 };
 
-template <typename TNodes, auto Key>
+template <typename TNodes, typename Key>
 using TTopoSort_t = typename TTopoSort<TNodes, Key>::Type;
 
 // ── ③ Levels (parallel groups by dependency level). ─────────────────────
@@ -317,7 +381,7 @@ using TTopoSort_t = typename TTopoSort<TNodes, Key>::Type;
  * Level of a node: 1 + max(level of deps); roots are 0.
  * Self-recursive: folds over the dep list, recursing into each dep's level.
  */
-template <typename TNodes, auto Key, typename TNode>
+template <typename TNodes, typename Key, typename TNode>
 struct TNodeLevel
 {
 private:
@@ -341,13 +405,13 @@ public:
 };
 
 /** Max level over a list of nodes (empty → -1). */
-template <typename TNodes, auto Key, typename TList>
+template <typename TNodes, typename Key, typename TList>
 struct TMaxLevel
 {
 	static constexpr int Value = -1;
 };
 
-template <typename TNodes, auto Key, typename THead, typename... TRest>
+template <typename TNodes, typename Key, typename THead, typename... TRest>
 struct TMaxLevel<TNodes, Key, TTypeList<THead, TRest...>>
 {
 private:
@@ -359,16 +423,16 @@ public:
 };
 
 /** Filter a list to nodes whose level equals K. */
-template <typename TNodes, auto Key, int K, typename TList>
+template <typename TNodes, typename Key, int K, typename TList>
 struct TFilterByLevel;
 
-template <typename TNodes, auto Key, int K>
+template <typename TNodes, typename Key, int K>
 struct TFilterByLevel<TNodes, Key, K, TTypeList<>>
 {
 	using Type = TTypeList<>;
 };
 
-template <typename TNodes, auto Key, int K, typename THead, typename... TRest>
+template <typename TNodes, typename Key, int K, typename THead, typename... TRest>
 struct TFilterByLevel<TNodes, Key, K, TTypeList<THead, TRest...>>
 {
 private:
@@ -383,23 +447,23 @@ public:
 };
 
 /** One level: every node at level K (unordered — may run in parallel). */
-template <typename TNodes, auto Key, int K>
+template <typename TNodes, typename Key, int K>
 struct TLevel
 {
 	using Type = typename TFilterByLevel<TNodes, Key, K, TNodes>::Type;
 };
 
 /** Levels 0..K as TTypeList<TTypeList<...>, ...>. */
-template <typename TNodes, auto Key, int K>
+template <typename TNodes, typename Key, int K>
 struct TLevelsUpTo;
 
-template <typename TNodes, auto Key>
+template <typename TNodes, typename Key>
 struct TLevelsUpTo<TNodes, Key, 0>
 {
 	using Type = TTypeList<typename TLevel<TNodes, Key, 0>::Type>;
 };
 
-template <typename TNodes, auto Key, int K>
+template <typename TNodes, typename Key, int K>
 struct TLevelsUpTo
 {
 private:
@@ -415,22 +479,22 @@ public:
  * first), inner list = types within one level (mutually independent, may run
  * in parallel). Assumes acyclic (see TAssertAcyclic).
  */
-template <typename TNodes, auto Key, int Max, bool bEmpty>
+template <typename TNodes, typename Key, int Max, bool bEmpty>
 struct TLevelsImpl;
 
-template <typename TNodes, auto Key, int Max>
+template <typename TNodes, typename Key, int Max>
 struct TLevelsImpl<TNodes, Key, Max, true>
 {
 	using Type = TTypeList<>;
 };
 
-template <typename TNodes, auto Key, int Max>
+template <typename TNodes, typename Key, int Max>
 struct TLevelsImpl<TNodes, Key, Max, false>
 {
 	using Type = typename TLevelsUpTo<TNodes, Key, Max>::Type;
 };
 
-template <typename TNodes, auto Key>
+template <typename TNodes, typename Key>
 struct TLevels
 {
 private:
@@ -440,7 +504,7 @@ public:
 	using Type = typename TLevelsImpl<TNodes, Key, Max, (Max < 0)>::Type;
 };
 
-template <typename TNodes, auto Key>
+template <typename TNodes, typename Key>
 using TLevels_t = typename TLevels<TNodes, Key>::Type;
 
 // ── ④ Reverse dependency: who depends on TTarget at Key. ───────────────
@@ -453,16 +517,16 @@ using TLevels_t = typename TLevels<TNodes, Key>::Type;
  *   using FWho = TFindDependents_t<FNodes, EPhase::Main, FC>;
  *   // FWho = TTypeList of every node that depends on FC at Main.
  */
-template <typename TNodes, auto Key, typename TTarget>
+template <typename TNodes, typename Key, typename TTarget>
 struct TFindDependents;
 
-template <auto Key, typename TTarget>
+template <typename Key, typename TTarget>
 struct TFindDependents<TTypeList<>, Key, TTarget>
 {
 	using Type = TTypeList<>;
 };
 
-template <auto Key, typename THead, typename... TRest, typename TTarget>
+template <typename Key, typename THead, typename... TRest, typename TTarget>
 struct TFindDependents<TTypeList<THead, TRest...>, Key, TTarget>
 {
 private:
@@ -476,7 +540,7 @@ public:
 		FTail>;
 };
 
-template <typename TNodes, auto Key, typename TTarget>
+template <typename TNodes, typename Key, typename TTarget>
 using TFindDependents_t = typename TFindDependents<TNodes, Key, TTarget>::Type;
 
 // ── ⑤ Reverse a TTypeList (used for auto-mirrored shutdown order). ─────
@@ -506,13 +570,13 @@ using TReverse_t = typename TReverse<TList>::Type;
 // TDependsList: the deps of T at Key (empty if no pack / no matching slot).
 // ───────────────────────────────────────────────────────────────────────
 
-template <typename T, auto Key>
+template <typename T, typename Key>
 struct TDependsList
 {
 	using Type = typename Topo::TFindSlot<typename TResolveDependsPack<T>::Type, Key>::Type;
 };
 
-template <typename T, auto Key>
+template <typename T, typename Key>
 using TDependsList_t = typename TDependsList<T, Key>::Type;
 
 // ───────────────────────────────────────────────────────────────────────
