@@ -58,51 +58,99 @@ namespace Q
 }
 
 // ───────────────────────────────────────────────────────────────────────
-// ② Topology: cycle detection, topological order, dependency levels.
+// ② Topology: static dependency ordering (topo sort + parallel levels).
 // ───────────────────────────────────────────────────────────────────────
 namespace Tp
 {
-	// Fake "phase" key shared by the graph.
-	enum class EPhase { Main };
+	// A graph keyed by two independent phases.
+	enum class EPhase { Init, Tick };
 
-	// Three nodes with a dependency chain, plus a parallel root.
-	struct FBase   { using FDependsPack = TDependsPack<TDependsOn<EPhase::Main, TTypeList<>>>; };
-	struct FInput  { using FDependsPack = TDependsPack<TDependsOn<EPhase::Main, TTypeList<FBase>>>; };
-	struct FSystem { using FDependsPack = TDependsPack<TDependsOn<EPhase::Main, TTypeList<FBase, FInput>>>; };
+	// ── Init graph: FBase → FInput → FSystem; FOther is data-only. ──
+	struct FBase
+	{
+		using FDependsPack = TDependsPack<
+			TDependsOn<EPhase::Init, TTypeList<>>,
+			TDependsOn<EPhase::Tick, TTypeList<>>>;
+	};
+	struct FInput
+	{
+		using FDependsPack = TDependsPack<TDependsOn<EPhase::Init, TTypeList<FBase>>>;
+	};
+	struct FSystem
+	{
+		using FDependsPack = TDependsPack<
+			TDependsOn<EPhase::Init, TTypeList<FBase, FInput>>,
+			TDependsOn<EPhase::Tick, TTypeList<FBase>>>;
+	};
+	struct FOther {};   // declares no pack → zero deps, resolves to empty.
 
-	using FNodes = TTypeList<FSystem, FInput, FBase>;
+	using FNodes = TTypeList<FSystem, FInput, FBase, FOther>;
+	static_assert(FNodes::Count == 4);
 
-	static_assert(Topo::TIsAcyclic_v<FNodes, EPhase::Main>);
+	//── per-key deps resolution ──
+	static_assert(std::is_same_v<Topo::TNodeDeps_t<FSystem, EPhase::Init>, TTypeList<FBase, FInput>>);
+	static_assert(std::is_same_v<Topo::TNodeDeps_t<FSystem, EPhase::Tick>, TTypeList<FBase>>);
+	static_assert(std::is_same_v<Topo::TNodeDeps_t<FBase,  EPhase::Init>, TTypeList<>>);
+	static_assert(std::is_same_v<Topo::TNodeDeps_t<FOther, EPhase::Init>, TTypeList<>>, "no pack → empty deps");
 
-	// Topological order: deps first.
-	using FOrder = Topo::TTopoSort_t<FNodes, EPhase::Main>;
-	static_assert(std::is_same_v<TTypeList<FBase, FInput, FSystem>, FOrder>);
+	//── cycle checks ──
+	static_assert(Topo::TIsAcyclic_v<FNodes, EPhase::Init>);
+	static_assert(Topo::TIsAcyclic_v<FNodes, EPhase::Tick>);
 
-	// Levels: 3 bands (FBase → FInput → FSystem).
-	using FLevels = Topo::TLevels_t<FNodes, EPhase::Main>;
-	static_assert(FLevels::Count == 3);
+	//── topological order at Init: deps before dependents, others at the end
+	//   (post-order over the node list preserves declaration order among peers) ──
+	using FOrderInit = Topo::TTopoSort_t<FNodes, EPhase::Init>;
+	static_assert(std::is_same_v<TTypeList<FBase, FInput, FSystem, FOther>, FOrderInit>,
+		"Init order = Base, Input, System, Other");
 
-	// A cycle is detected (forward-declare to let FY/FZ mutually reference).
-	struct FZ;
-	struct FY { using FDependsPack = TDependsPack<TDependsOn<EPhase::Main, TTypeList<FZ>>>; };
-	struct FZ { using FDependsPack = TDependsPack<TDependsOn<EPhase::Main, TTypeList<FY>>>; };
-	using FCycle  = TTypeList<FY, FZ>;
-	static_assert(std::is_same_v<Topo::TNodeDeps_t<FY, EPhase::Main>, TTypeList<FZ>>, "FY deps = FZ");
-	static_assert(std::is_same_v<Topo::TNodeDeps_t<FZ, EPhase::Main>, TTypeList<FY>>, "FZ deps = FY");
-	static_assert(Topo::THasCycle_v<FCycle, EPhase::Main>, "mutual FY/FZ is a cycle");
-	static_assert(!Topo::TIsAcyclic_v<FCycle, EPhase::Main>);
+	using FOrderTick = Topo::TTopoSort_t<FNodes, EPhase::Tick>;
+	// Tick graph: FSystem→FBase; FInput/FOther independent. Post-order visit of
+	// (FSystem,FInput,FBase,FOther) yields FBase,FSystem,FInput,FOther.
+	static_assert(std::is_same_v<TTypeList<FBase, FSystem, FInput, FOther>, FOrderTick>);
 
-	// a self-loop is also a cycle.
-	struct FSelf { using FDependsPack = TDependsPack<TDependsOn<EPhase::Main, TTypeList<FSelf>>>; };
-	static_assert(!Topo::TIsAcyclic_v<TTypeList<FSelf>, EPhase::Main>, "self loop is a cycle");
+	//── parallel levels at Init:
+	//   level0 = {FBase, FOther} (independent), level1={FInput}, level2={FSystem} ──
+	using FLevelsInit = Topo::TLevels_t<FNodes, EPhase::Init>;
+	static_assert(std::is_same_v<
+		TTypeList<
+			TTypeList<FBase, FOther>,
+			TTypeList<FInput>,
+			TTypeList<FSystem>>,
+		FLevelsInit>);
 
-	// Reverse dependency lookup: who depends on FBase? (in FNodes declaration order)
-	using FDependentsOfBase = Topo::TFindDependents_t<FNodes, EPhase::Main, FBase>;
+	//── at Tick: level0={FInput, FBase, FOther} (node declaration order),
+	//   level1={FSystem} ──
+	using FLevelsTick = Topo::TLevels_t<FNodes, EPhase::Tick>;
+	static_assert(std::is_same_v<
+		TTypeList<
+			TTypeList<FInput, FBase, FOther>,
+			TTypeList<FSystem>>,
+		FLevelsTick>);
+
+	//── reverse dependency: who depends on FBase at Init? ──
+	using FDependentsOfBase = Topo::TFindDependents_t<FNodes, EPhase::Init, FBase>;
 	static_assert(std::is_same_v<TTypeList<FSystem, FInput>, FDependentsOfBase>);
+
+	//── cycles ──
+	struct FZ;
+	struct FY { using FDependsPack = TDependsPack<TDependsOn<EPhase::Init, TTypeList<FZ>>>; };
+	struct FZ { using FDependsPack = TDependsPack<TDependsOn<EPhase::Init, TTypeList<FY>>>; };
+	using FCycle = TTypeList<FY, FZ>;
+	static_assert(Topo::THasCycle_v<FCycle, EPhase::Init>, "mutual FY/FZ is a cycle");
+
+	struct FSelf { using FDependsPack = TDependsPack<TDependsOn<EPhase::Init, TTypeList<FSelf>>>; };
+	static_assert(Topo::THasCycle_v<TTypeList<FSelf>, EPhase::Init>, "self-loop is a cycle");
+
+	//── default slot (no stage): plugin wants plain ordering ──
+	struct FD1 { using FDependsPack = TDependsPack<TDependsOn<FDefaultSlot, TTypeList<>>>; };
+	struct FD2 { using FDependsPack = TDependsPack<TDependsOn<FDefaultSlot, TTypeList<FD1>>>; };
+	using FDefNodes = TTypeList<FD2, FD1>;
+	using FDefOrder = Topo::TTopoSort_t<FDefNodes, FDefaultSlot>;
+	static_assert(std::is_same_v<TTypeList<FD1, FD2>, FDefOrder>);
 
 	void Run()
 	{
-		std::puts("[ok] Topology: acyclic order + levels + reverse deps");
+		std::puts("[ok] Topology: static dependency ordering (topo sort + levels + cycles)");
 	}
 }
 
