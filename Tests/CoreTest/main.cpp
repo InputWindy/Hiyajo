@@ -36,27 +36,27 @@ struct SC : TExtension<TDependsPack<TDependsOn<IA, TTypeList<SA>>>>, IC
 {
 };
 
-// SD : SC → inherits SC's deps (its edges, NOT SC itself — parent & child are
-// the SAME node in the 3D graph) + its own; we add IA+IB.
+// SD : SC → inherits SC's edges (parent & child are the SAME node on the 3D
+// graph — SD runs after SC at IA; SC itself is never a dep) + own {SB}.
 struct SD : SC, IA, IB
 {
-	MAHO_EXTEND_DEPS(SC, IA, SB)
+	MAHO_EXTEND_DEPS(IA, SC, SB)
 };
 
 // SE : SD → inherits SD's edges + its own (SA); nothing extra.
 struct SE : SD
 {
-	MAHO_EXTEND_DEPS(SD, IA, SA)
+	MAHO_EXTEND_DEPS(IA, SD, SA)
 };
 
 struct SF : TExtension<TDependsPack<TDependsOn<IA, TTypeList<SB>>>>, IA, IC
 {
 };
 
-// SG : SF → inherits SF's deps + its own; we add IB.
+// SG : SF → inherits SF's edges + its own {SD}; we add IB.
 struct SG : SF, IB
 {
-	MAHO_EXTEND_DEPS(SF, IA, SD)
+	MAHO_EXTEND_DEPS(IA, SF, SD)
 };
 
 // All extension types (the Query FROM list).

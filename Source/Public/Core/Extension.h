@@ -52,13 +52,14 @@ public:
 
 /**
  * Extend a parent extension's deps: inherit the parent's deps at Key, union in
- * the extra types, dedup — then declare FDependsPack. Avoids writing the raw
- * TUnionList_t / TNodeDeps_t chain by hand.
+ * the extra types, dedup — then declare FDependsPack.
  *
- *   struct SD : SC { MAHO_EXTEND_DEPS(SC, IA, SB, SC); };
- *     // FDependsPack = { parent SC's IA deps } ∪ {SB, SC}, deduplicated
+ *   MAHO_EXTEND_DEPS(IA, SC, SB)   // Key=IA, parent=SC, extras={SB}
+ *   // SD (derived from SC) runs after SC at IA — its edges are inherited —
+ *   // and additionally after SB. The parent itself is NOT a dep (parent and
+ *   // child are the same node on the 3D graph); its EDGES are.
  */
-#define MAHO_EXTEND_DEPS(Parent, Key, ...) \
+#define MAHO_EXTEND_DEPS(Key, Parent, ...) \
 	using FDependsPack = ::Maho::TDependsPack<::Maho::TDependsOn<Key, \
 		::Maho::TUnionList_t<::Maho::Topo::TNodeDeps_t<Parent, Key>, \
 			::Maho::TTypeList<__VA_ARGS__>>>>;
