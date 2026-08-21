@@ -148,6 +148,24 @@ namespace Tp
 	using FDefOrder = Topo::TTopoSort_t<FDefNodes, FDefaultSlot>;
 	static_assert(std::is_same_v<TTypeList<FD1, FD2>, FDefOrder>);
 
+	//── MyExtension: inherits the dependency table AND the per-stage slots; the
+	//   inherited FDependsPack must carry the slots (regression for the alias bug).
+	struct FX { using FDependsPack = TDependsPack<TDependsOn<EPhase::Init, TTypeList<>>>; };
+	struct FY2 { using FDependsPack = TDependsPack<TDependsOn<EPhase::Init, TTypeList<FX>>>; };
+	struct FMyExtension
+		: TExtension<FX, FY2>
+		, TDependsPack<TDependsOn<EPhase::Init, TTypeList<FX, FY2>>>
+	{
+	};
+	using FMyNodes = TTypeList<FMyExtension, FY2, FX>;
+	using FMyDeps = Topo::TNodeDeps_t<FMyExtension, EPhase::Init>;
+	static_assert(std::is_same_v<FMyDeps, TTypeList<FX, FY2>>,
+		"inherited TDependsPack slot must carry TTypeList<FX,FY2>");
+	static_assert(Topo::TIsAcyclic_v<FMyNodes, EPhase::Init>);
+	using FMyOrder = Topo::TTopoSort_t<FMyNodes, EPhase::Init>;
+	static_assert(FMyOrder::Count == 3);
+	static_assert(Topo::TIsAcyclic_v<FMyOrder, EPhase::Init>);
+
 	void Run()
 	{
 		std::puts("[ok] Topology: static dependency ordering (topo sort + levels + cycles)");

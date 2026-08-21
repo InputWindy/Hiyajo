@@ -78,7 +78,7 @@ struct TDependsOn
 template <typename... TSlots>
 struct TDependsPack
 {
-	using FDependsPack = TDependsPack;
+	using FDependsPack = TDependsPack<TSlots...>;
 	static constexpr std::size_t NumSlots = sizeof...(TSlots);
 
 	/** Visit every slot: Visitor(Key, static_cast<TList*>(nullptr)). */
