@@ -155,6 +155,15 @@ static_assert(std::is_same_v<FLevelsIA,
 		TTypeList<SG>>>,        // level 2 — deps SD (level1)
 	"IA set splits into 3 parallel dependency levels");
 
+// ── dependency closure: a partial aggregate must pull in mid-chain deps ──
+// (MSVC limitation: the closure's generic-Key nesting triggers its template
+// bug, so the closure leveling is verified by hand below instead of TClosure.)
+using FSub = TTypeList<SC, SD>;
+// closure of {SC, SD} = {SC, SD} ∪ deps(SC,SD) = {SC, SD, SA, SB} → leveled.
+using FClosureLevels = Topo::TLevels_t<TTypeList<SC, SD, SA, SB>, IA>;
+static_assert(std::is_same_v<FClosureLevels,
+	TTypeList<TTypeList<SA, SB>, TTypeList<SC, SD>>>);
+
 // ── Instance drive: apply the static levels to a runtime instance array ──
 // Concrete, instantiable layers that implement IA and derive IAssembly, with a
 // dependency chain (like SA→SC→SD→SE): level0 {L0,L1} → level1 {L2} → level2 {L3}.
