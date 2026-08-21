@@ -16,7 +16,7 @@ namespace Serial
  * parallel scheduler's API so the two are interchangeable:
  *   Execute<TQueryTypes>(visitor)          — singletons (T::Get()).
  *   Execute<TQueryTypes>(Instances, vis)   — instances (dispatch by runtime type).
- *   ExecuteLevels<TLevels>(Instances, vis) — instances by static dependency levels.
+ * Dependency LEVELS are the host's job: ForEach<TLevels> + Execute per level.
  */
 class FSerialScheduler : public IScheduler
 {
@@ -54,16 +54,6 @@ public:
 		{
 			DispatchInstance<TQueryTypes>(Instance, Visitor);
 		}
-	}
-
-	/** Drive instances by static dependency levels (serial within and across). */
-	template <typename TLevels, typename TVisitor>
-	void ExecuteLevels(std::vector<IAssembly*>& Instances, TVisitor&& Visitor)
-	{
-		ForEach<TLevels>(FSerialTraversePolicy{}, [&](auto LevelTag) {
-			using FLevel = typename decltype(LevelTag)::Type;
-			Execute<FLevel>(Instances, Visitor);
-		});
 	}
 };
 

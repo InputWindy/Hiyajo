@@ -8,6 +8,7 @@
 #include <Engine/ParallelScheduler.h>
 
 #include <algorithm>
+#include <atomic>
 #include <cstdio>
 #include <mutex>
 #include <type_traits>
@@ -167,32 +168,64 @@ namespace Inst
 		void Shutdown() override {}
 		int Main(int, char**) override { return 0; }
 	};
-	// A concrete implementation of the interface + IAssembly.
-	struct LA : FLayerBase, AIBase
+	// A concrete implementation of the interface + IAssembly + extension identity.
+	struct LA : FLayerBase,
+		TExtension<TDependsPack<TDependsOn<AIBase, TTypeList<>>>>, AIBase
 	{
 		int Tag() const override { return 1; }
-		using FDependsPack = TDependsPack<TDependsOn<AIBase, TTypeList<>>>;
 	};
-	struct LB : FLayerBase, AIBase
+	struct LB : FLayerBase,
+		TExtension<TDependsPack<TDependsOn<AIBase, TTypeList<>>>>, AIBase
 	{
 		int Tag() const override { return 2; }
-		using FDependsPack = TDependsPack<TDependsOn<AIBase, TTypeList<>>>;
 	};
-	struct LC : FLayerBase, AIBase
+	struct LC : FLayerBase,
+		TExtension<TDependsPack<TDependsOn<AIBase, TTypeList<LA, LB>>>>, AIBase
 	{
 		int Tag() const override { return 3; }
-		using FDependsPack = TDependsPack<TDependsOn<AIBase, TTypeList<LA, LB>>>;
 	};
-	struct LD : FLayerBase, AIBase
+	struct LD : FLayerBase,
+		TExtension<TDependsPack<TDependsOn<AIBase, TTypeList<LC>>>>, AIBase
 	{
 		int Tag() const override { return 4; }
-		using FDependsPack = TDependsPack<TDependsOn<AIBase, TTypeList<LC>>>;
 	};
 	using FTypes = TTypeList<LA, LB, LC, LD>;
 	using FLevels = Topo::TLevels_t<FTypes, AIBase>;
 	static_assert(std::is_same_v<FLevels,
 		TTypeList<TTypeList<LA, LB>, TTypeList<LC>, TTypeList<LD>>>);
 }
+
+// A host that owns the parallel scheduler. It filters the IExtension extensions
+// (Query), orders them into parallel levels, drives the LIVE instances, counts.
+struct FParallelHost : Maho::Parallel::FParallelScheduler
+{
+	// Compile-time: which instance types are extensions (derive IExtension)?
+	using FExtended = typename decltype(::Maho::Query<Inst::FTypes>().Select<Maho::IExtension>())::Type;
+	static_assert(FExtended::Count == 4, "all four layers are extensions");
+
+	// Count visitors triggered by each concrete layer instance.
+	struct FCountVisitor
+	{
+		mutable std::atomic<int> N{0};
+		void operator()(Inst::LA&) const { N.fetch_add(1, std::memory_order_relaxed); }
+		void operator()(Inst::LB&) const { N.fetch_add(1, std::memory_order_relaxed); }
+		void operator()(Inst::LC&) const { N.fetch_add(1, std::memory_order_relaxed); }
+		void operator()(Inst::LD&) const { N.fetch_add(1, std::memory_order_relaxed); }
+	};
+
+	// Drive every extension-bearing instance by its static dependency levels.
+	// Levels are the host's concern: ForEach<TLevels> serially, Execute per level
+	// (barrier between, parallel within).
+	int RunAndCount(std::vector<Maho::IAssembly*>& Insts)
+	{
+		FCountVisitor V;
+		ForEach<Inst::FLevels>(FSerialTraversePolicy{}, [&](auto LevelsTag) {
+			using FLevel = typename decltype(LevelsTag)::Type;
+			this->Execute<FLevel>(Insts, V);
+		});
+		return V.N.load();
+	}
+};
 
 int main()
 {
@@ -214,7 +247,10 @@ int main()
 
 	std::vector<int> Saw;
 	Maho::Serial::FSerialScheduler Serial;
-	Serial.ExecuteLevels<Inst::FLevels>(Insts, FCollect{ Saw });
+	ForEach<Inst::FLevels>(FSerialTraversePolicy{}, [&](auto LevelsTag) {
+		using FLevel = typename decltype(LevelsTag)::Type;
+		Serial.Execute<FLevel>(Insts, FCollect{ Saw });
+	});
 
 	std::puts("[ok] Query: LINQ-style Select<interface> / Where<Predicate> / Cast");
 	std::puts("[ok] ForEach traversal over the filtered interface sets");
@@ -237,7 +273,7 @@ int main()
 		std::puts("[FAIL] ExecuteLevels violated dependency level order");
 		return 1;
 	}
-	std::puts("[ok] ExecuteLevels drives instances by static dependency levels");
+	std::puts("[ok] Serial ForEach-over-levels drives instances in order");
 
 	// ── parallel instance drive by levels ──
 	// Level inner runs in parallel (thread pool); levels are separated by a
@@ -255,7 +291,10 @@ int main()
 
 	std::vector<int> PSaw;
 	Maho::Parallel::FParallelScheduler Parallel;
-	Parallel.ExecuteLevels<Inst::FLevels>(Insts, FParallelCollect{ PSaw });
+	ForEach<Inst::FLevels>(FSerialTraversePolicy{}, [&](auto LevelsTag) {
+		using FLevel = typename decltype(LevelsTag)::Type;
+		Parallel.Execute<FLevel>(Insts, FParallelCollect{ PSaw });
+	});
 
 	if (PSaw.size() != 4)
 	{
@@ -275,7 +314,17 @@ int main()
 		std::puts("[FAIL] parallel ExecuteLevels violated level barrier");
 		return 1;
 	}
-	std::puts("[ok] Parallel ExecuteLevels keeps level barriers under thread pool");
+	std::puts("[ok] Parallel Execute keeps level barriers under thread pool");
+
+	// ── host owns the parallel scheduler: filter IExtension, order levels, count ──
+	FParallelHost Host;
+	const int HostCount = Host.RunAndCount(Insts);
+	if (HostCount != 4)
+	{
+		std::puts("[FAIL] host drove the wrong number of extension instances");
+		return 1;
+	}
+	std::puts("[ok] FParallelHost: Query<IExtension> + level-wise Execute counted 4 layers");
 
 	std::puts("CORE TEST PASSED");
 	return 0;

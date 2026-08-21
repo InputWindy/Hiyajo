@@ -16,9 +16,7 @@ namespace Parallel
 /**
  * Parallel scheduler — the parallel traverse base.
  *
- * Execute is a parallel base ONLY — no stage semantics. The host expresses
- * lifecycle by calling Execute once per phase, passing a visitor that decides
- * what each target does. Two flavors, matching the two extension kinds:
+ * Two Execute overloads, matching the two extension kinds:
  *
  *   Execute<TQueryTypes>(visitor)          — singletons: each type's T::Get() is
  *     handed to the visitor as T&. (Tools / type providers.)
@@ -26,10 +24,10 @@ namespace Parallel
  *     the array, its RUNTIME type is checked against TQueryTypes (the Query's
  *     filtered type list); the first matching type hands the typed instance
  *     (T&) to the visitor, others are skipped. (Layers.)
- *   ExecuteLevels<TLevels>(Instances, vis) — drive the instances by the static
- *     dependency levels: each level (a TTypeList of peer types) runs its
- *     matching instances in parallel; levels are serialized (dependency
- *     barriers come from Topo::TLevels_t).
+ *
+ * Dependency LEVELS are not a scheduler concern: iterate Topo::TLevels_t with
+ * a serial ForEach and call Execute per level (barrier between, parallel
+ * within) — the host owns phasing.
  */
 class FParallelScheduler : public IScheduler
 {
@@ -71,21 +69,6 @@ public:
 			Tasks.emplace_back([&, Instance] { DispatchInstance<TQueryTypes>(Instance, Visitor); });
 		}
 		Pool->RunTasks(std::move(Tasks));
-	}
-
-	/**
-	 * Drive instances by static dependency levels. TLevels is the output of
-	 * Topo::TLevels_t<TQueryTypes, Key>: TTypeList<TTypeList<L0...>, TTypeList<L1...>...>.
-	 * Levels run serially (dependency barrier); within a level, matching
-	 * instances run in parallel.
-	 */
-	template <typename TLevels, typename TVisitor>
-	void ExecuteLevels(std::vector<IAssembly*>& Instances, TVisitor&& Visitor)
-	{
-		ForEach<TLevels>(FSerialTraversePolicy{}, [&](auto LevelTag) {
-			using FLevel = typename decltype(LevelTag)::Type;
-			Execute<FLevel>(Instances, Visitor);
-		});
 	}
 
 private:
