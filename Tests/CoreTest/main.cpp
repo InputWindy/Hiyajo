@@ -74,8 +74,7 @@ static_assert(Topo::TIsAcyclic_v<FNodes, IA>);
 
 // ── Query: FOR THE INTERFACE TYPE SETS ──
 // which extensions carry IA? (all except pure-IC SC)
-// NOTE: Select's Type is the source of truth; As<B> is a cast/assert helper
-// (its auto-returned decltype is unreliable on MSVC for these tags).
+// Select's Type is the source of truth; Cast<T> is the LINQ finalizer (assert).
 using FIA = typename decltype(::Maho::Query<FAll>().Select<IA>())::Type;
 static_assert(FIA::Count == 6);
 static_assert(TContains_v<FIA, SA>);
@@ -127,7 +126,7 @@ int main()
 		std::puts("[FAIL] interface traversal count mismatch");
 		return 1;
 	}
-	std::puts("[ok] Query: Select<interface> + Where<TAnd<TDerivesFrom<IB>>>");
+	std::puts("[ok] Query: LINQ-style Select<interface> / Where<Predicate> / Cast");
 	std::puts("[ok] ForEach traversal over the filtered interface sets");
 	std::puts("CORE TEST PASSED");
 	return 0;

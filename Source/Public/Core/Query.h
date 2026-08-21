@@ -8,21 +8,21 @@ namespace Maho
 {
 
 // ───────────────────────────────────────────────────────────────────────
-// Query — a compile-time type filter over a TTypeList (SQL-ish).
+// Query — a compile-time type filter over a TTypeList (LINQ-style).
 //
-//   constexpr auto Q = Maho::Query<TTypeList<Exts...>>()      // FROM types
-//       .Select<IRenderFeature>()                             // WHERE derives IRenderFeature
-//       .Where<Not<TIsSingleton>>()                           //   AND NOT (predicate)
-//       .As<IRenderFeature>();                                // result: the TTypeList
+//   constexpr auto Q = Maho::Query<TTypeList<Exts...>>()   // FROM types
+//       .Select<IRenderFeature>()                          // WHERE derives IRenderFeature
+//       .Where<Not<TIsSingleton>>()                        //   AND NOT (predicate)
+//       .Cast<IRenderFeature>();                            // assert + finalize
 //
-//   using FMatched = decltype(Q);                             // TTypeList<...>
+//   using FMatched = decltype(Q);                          // TTypeList<...>
 //   static_assert(FMatched::Count > 0);
 //
 // - Select<TBases...>: keep types deriving every TBases (accumulates).
 // - Where<TFilters...>: keep types where every filter's Apply<T>::value is true.
 //   Filters are type predicates carrying `template<typename T> struct Apply`;
 //   Not<TPredicate> negates a predicate template.
-// - As<TBase>: asserts every survivor derives TBase, returns the filtered
+// - Cast<TBase>: asserts every survivor derives TBase, returns the filtered
 //   TTypeList (a value, usable in ForEach<TList>).
 //
 // Query only selects types — it never drives instances.
@@ -173,12 +173,12 @@ struct TQuery
 			typename TCatch<FFilters, TTypeList<TFilters...>>::Type>{};
 	}
 
-	/** Finalize: verify every survivor derives TBase, return the filtered TTypeList. */
+	/** Finalize (LINQ Cast): verify every survivor derives TBase, return the filtered TTypeList. */
 	template <typename TBase>
-	[[nodiscard]] constexpr auto As() const
+	[[nodiscard]] constexpr auto Cast() const
 	{
 		static_assert(QueryDetail::TAllDerive<Type, TBase>::value,
-			"Query::As<TBase> requires every selected type to derive TBase");
+			"Query::Cast<TBase> requires every selected type to derive TBase");
 		return Type{};
 	}
 };
