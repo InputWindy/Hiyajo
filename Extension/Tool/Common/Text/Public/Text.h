@@ -57,9 +57,6 @@ private:
 class MAHO_TEXT_API FTextTool : public Maho::TTool<FTextTool>
 {
 public:
-	/** Identity tag — this is a Tool. */
-	using FTags = TTypeList<FToolTag>;
-
 	// ── 读（public）──
 
 	[[nodiscard]] std::string_view GetCulture() const;

@@ -31,9 +31,6 @@ namespace Config
 class MAHO_CONFIG_API FConfigTool : public Maho::TTool<FConfigTool>
 {
 public:
-	/** Identity tag — this is a Tool. */
-	using FTags = TTypeList<FToolTag>;
-
 	/** Raw string lookup by section + key; nullopt when absent. */
 	[[nodiscard]] std::optional<std::string> GetString(std::string_view Section, std::string_view Key) const;
 

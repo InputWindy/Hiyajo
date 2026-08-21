@@ -19,9 +19,6 @@ using FJsonValue = nlohmann::json;
 class MAHO_JSON_API FJsonTool : public Maho::TTool<FJsonTool>
 {
 public:
-	/** Identity tag — this is a Tool. */
-	using FTags = TTypeList<FToolTag>;
-
 	// header-only — no lifecycle, no stage.
 };
 

@@ -20,9 +20,6 @@ namespace Paths
 class MAHO_PATHS_API FPathsTool : public TTool<FPathsTool>
 {
 public:
-	/** Identity tag — this is a Tool. */
-	using FTags = TTypeList<FToolTag>;
-
 	/** Resolve a virtual path "Alias/Sub/Path" (or "Alias:Sub/Path") to a physical path. */
 	[[nodiscard]] std::filesystem::path Resolve(std::string_view VirtualPath) const;
 

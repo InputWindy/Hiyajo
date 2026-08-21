@@ -20,10 +20,10 @@ Engine 层放**具体调度策略**和**两类插件模板**。核心 `Core/Sche
 
 新建插件时，按角色选择继承哪个模板：
 
-| 模板 | 标记 | 身份 | 单例 | 调度器 | 说明 |
-|------|------|------|------|--------|------|
-| `TTool<TDerived>` | `FToolTag` | 工具 | ✅ | ❌ | 即插即用，全 public，谁用谁 `Get().xxx()` |
-| `TLayer<Ts...>` | `FLayerTag` | 应用根/嵌套宿主 | ❌ | ✅ 并行 | Assembly（导出 CreateExtension），可动态安装，并行调度自己 FExtensions |
+| 模板 | 身份 | 单例 | 调度器 | 说明 |
+|------|------|------|--------|------|
+| `TTool<TDerived>` | 工具 | ✅ | ❌ | 即插即用，全 public，谁用谁 `Get().xxx()` |
+| `TLayer<Ts...>` | 应用根/嵌套宿主 | ❌ | ✅ 并行 | Assembly（导出 CreateExtension），可动态安装，并行调度自己 FExtensions |
 
 Engine 与 Layer 已统一为 `TLayer`：应用根就是一个 Layer（导出 CreateExtension → 可多实例），它内部再驱动自己的工具/子层。不再有单独的 Engine 分类。
 
@@ -43,8 +43,8 @@ class FMyGame : public Maho::TLayer<FLog, FRDG, FRenderer> { ... };
 `TLayer` 内置两个分半别名，Manager 在 `Main` 里分别驱动：
 
 ```cpp
-using FTools = typename TFilter<FExtensions, FToolTag>::Type;   // 工具
-using FLayers = typename TFilter<FExtensions, FLayerTag>::Type;  // 层
+using FTools = typename TFilterWhere<FExtensions, TIsSingleton>::Type;   // 工具（单例）
+using FLayers = typename TFilter<FExtensions, IAssembly>::Type;           // 层（Assembly）
 
 enum class EStage { Init, Tick, Shutdown };
 

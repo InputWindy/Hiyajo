@@ -2,9 +2,9 @@
 
 #include <Core/Assembly.h>
 #include <Core/Extension.h>
+#include <Core/Singleton.h>
 #include <Core/Topology.h>
 #include <Engine/ParallelScheduler.h>
-#include <Engine/Tool.h>
 
 namespace Maho
 {
@@ -27,22 +27,17 @@ namespace Maho
 // Requires C++20 (scheduler concepts).
 // ───────────────────────────────────────────────────────────────────────
 
-struct FLayerTag {};
-
 template <typename... TExtensions>
 class TLayer
-	: public FLayerTag
-	, public TExtension<TExtensions...>
+	: public TExtension<TExtensions...>
 	, public IAssembly
 	, public Parallel::FParallelScheduler
 {
 public:
 	using FExtensions = typename TExtension<TExtensions...>::FExtensions;
-	using FTools = typename TFilter<FExtensions, FToolTag>::Type;
-	using FLayers = typename TFilter<FExtensions, FLayerTag>::Type;
-
-	/** Identity tag — concatenate extra tag lists as needed. */
-	using FTags = TCatch<TTypeList<FLayerTag>>::Type;
+	/** Tools = singleton extensions (derive TSingleton); Layers = assemblies. */
+	using FTools = typename TFilterWhere<FExtensions, TIsSingleton>::Type;
+	using FLayers = typename TFilter<FExtensions, IAssembly>::Type;
 };
 
 } // namespace Maho

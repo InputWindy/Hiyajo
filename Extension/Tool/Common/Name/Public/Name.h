@@ -55,9 +55,6 @@ private:
 class MAHO_NAME_API FNameTool : public TTool<FNameTool>
 {
 public:
-	/** Identity tag — this is a Tool. */
-	using FTags = TTypeList<FToolTag>;
-
 	/** Intern a string — returns the canonical FName (thread-safe). */
 	[[nodiscard]] FName Intern(std::string_view Str);
 

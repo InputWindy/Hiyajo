@@ -1,5 +1,7 @@
 #pragma once
 
+#include <type_traits>
+
 namespace Maho
 {
 
@@ -30,5 +32,24 @@ public:
 		return Instance;
 	}
 };
+
+/**
+ * True when T is a CRTP singleton (derives from TSingleton<T> itself).
+ *
+ *   static_assert(TIsSingleton<FLog>::value);
+ */
+template <typename T, typename = void>
+struct TIsSingleton : std::false_type
+{
+};
+
+template <typename T>
+struct TIsSingleton<T, std::enable_if_t<std::is_base_of_v<TSingleton<T>, T>>>
+	: std::true_type
+{
+};
+
+template <typename T>
+inline constexpr bool TIsSingleton_v = TIsSingleton<T>::value;
 
 } // namespace Maho

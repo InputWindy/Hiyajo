@@ -147,7 +147,7 @@ int Main(int Argc, char** Argv) override
 ### 编译期组装
 
 - `TExtension<TExtensions...>`：依赖表，编译期组合工具列表
-- `TFilter<TList, TBase>`：按基类过滤品种（`FToolTag` / `FLayerTag`），分半调度
+- `TFilter<TList, TBase>`：按基类过滤品种（如 `IAssembly`）；`TFilterWhere<TList, TPredicate>` 按谓词（如 `TIsSingleton`）过滤，分半调度
 - `ForEach<TList>`：把插件列表摊平成若干次回调，由调度器决定串行或并行——没有运行时容器，没有反射
 - 单例直调：`T::Get()` 首次访问才构造
 
