@@ -5,8 +5,11 @@
 // deliberately messy way, then filter by interface in main().
 #include <Maho.h>
 #include <Engine/SerialScheduler.h>
+#include <Engine/ParallelScheduler.h>
 
+#include <algorithm>
 #include <cstdio>
+#include <mutex>
 #include <type_traits>
 #include <vector>
 
@@ -216,6 +219,45 @@ int main()
 		return 1;
 	}
 	std::puts("[ok] ExecuteLevels drives instances by static dependency levels");
+
+	// ── parallel instance drive by levels ──
+	// Level inner runs in parallel (thread pool); levels are separated by a
+	// barrier (RunTasks blocks until the level's tasks finish), so the level
+	// ordering MUST hold even though entries within a level are unordered.
+	struct FParallelCollect
+	{
+		std::vector<int>& Out;
+		mutable std::mutex Mu;
+		void operator()(Inst::LA&) const { std::lock_guard lk(Mu); Out.push_back(1); }
+		void operator()(Inst::LB&) const { std::lock_guard lk(Mu); Out.push_back(2); }
+		void operator()(Inst::LC&) const { std::lock_guard lk(Mu); Out.push_back(3); }
+		void operator()(Inst::LD&) const { std::lock_guard lk(Mu); Out.push_back(4); }
+	};
+
+	std::vector<int> PSaw;
+	Maho::Parallel::FParallelScheduler Parallel;
+	Parallel.ExecuteLevels<Inst::FLevels>(Insts, FParallelCollect{ PSaw });
+
+	if (PSaw.size() != 4)
+	{
+		std::puts("[FAIL] Parallel ExecuteLevels visited the wrong number");
+		return 1;
+	}
+	// level0 (LA,LB=1,2) before level1 (LC=3) before level2 (LD=4), guaranteed by
+	// the per-level barrier even though 1 and 2 may appear in either order.
+	int p1 = std::find(PSaw.begin(), PSaw.end(), 1) - PSaw.begin();
+	int p2 = std::find(PSaw.begin(), PSaw.end(), 2) - PSaw.begin();
+	int pc = std::find(PSaw.begin(), PSaw.end(), 3) - PSaw.begin();
+	int pd = std::find(PSaw.begin(), PSaw.end(), 4) - PSaw.begin();
+	bool pOk = (long)p1 != -1 && (long)p2 != -1 && (long)pc != -1 && (long)pd != -1
+		&& (size_t)pc > (size_t)std::max(p1, p2) && (size_t)pd > (size_t)pc;
+	if (!pOk)
+	{
+		std::puts("[FAIL] parallel ExecuteLevels violated level barrier");
+		return 1;
+	}
+	std::puts("[ok] Parallel ExecuteLevels keeps level barriers under thread pool");
+
 	std::puts("CORE TEST PASSED");
 	return 0;
 }
