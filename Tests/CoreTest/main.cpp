@@ -21,12 +21,13 @@ struct IRender { virtual void Render() = 0; };
 struct IPhysics { virtual void Step() = 0; };
 struct IAudio { virtual void Play() = 0; };
 
-// ── concrete Layer base: satisfies every pure virtual of ILayer ──
+// ── concrete Layer base: satisfies every pure virtual of ILayer's capabilities ──
 struct FLayerBase : ILayer
 {
 	void Initialize(int, char**) override {}
+	void Tick() override {}
 	void Shutdown() override {}
-	int Main(int, char**) override { return 0; }
+	int MainLoop(int, char**) override { return 0; }
 };
 
 // ── Layers, each a singleton-free Assembly + a set of interfaces. Deps via the
@@ -80,13 +81,14 @@ struct FAppLayer
 	, Parallel::FParallelScheduler<FLayerTypes>
 {
 	void Initialize(int, char**) override {}
+	void Tick() override {}
 	void Shutdown() override {}
-	int Main(int, char**) override
+	int MainLoop(int, char**) override
 	{
 		// every layer in the scan table (each ILayer* here) is a candidate;
 		// Execute dispatches each instance to its concrete type.
 		FCountVisitor V{ Calls };
-		this->Execute<FLayerTypes>(Insts, V);
+		this->Execute<FLayerTypes, ILayer>(Insts, V);
 		return 0;
 	}
 
@@ -103,7 +105,7 @@ int main()
 	FWindow W; FScene S; FPhysics P; FAudio A; FPlayer Pl;
 	App.Insts = { &Pl, &A, &W, &P, &S };
 
-	App.Main(0, nullptr);   // drives every layer in the scan table (5)
+	App.MainLoop(0, nullptr);   // drives every layer in the scan table (5)
 
 	if (App.Calls.load() != 5)
 	{
