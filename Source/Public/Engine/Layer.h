@@ -38,22 +38,7 @@ class TLayer
 {
 public:
 	using FExtensions = typename TExtension<TExtensions...>::Type;
-	/** Tools = singleton extensions (derive TSingleton); Layers = assemblies. */
-	using FTools = typename TFilterWhere<FExtensions, TIsSingleton>::Type;
-	using FLayerTypes = typename TFilter<FExtensions, IAssembly>::Type;
 	using FTags = TTypeList<>;
-
-	/** Runtime child-layer instances, owned by this host. */
-	std::vector<IAssembly*> Layers;
-
-	/** Instantiate every child Layer type in FLayerTypes via CreateExtension(). */
-	void CreateLayers()
-	{
-		ForEach<FLayerTypes>(FSerialTraversePolicy{}, [this](auto Tag) {
-			using T = typename decltype(Tag)::Type;
-			Layers.push_back(T::CreateExtension());
-		});
-	}
 };
 
 } // namespace Maho

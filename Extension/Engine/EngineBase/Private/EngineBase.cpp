@@ -22,43 +22,19 @@ int FEngineBase::Main(int Argc, char** Argv)
 	(void)Argc;
 	(void)Argv;
 
-	// Execute is a parallel traverse base — no stage semantics. Lifecycle is the
-	// host's job: call it once per phase (init once, tick per frame, shutdown
-	// once). Tools are compile-time singletons (TTag<T> → T::Get()); child layers
-	// are runtime instances (each IAssembly* in this->Layers).
-	CreateLayers();
-
-	Execute<FTools>([](auto& Tool)
-	{
-		// Init phase — per-tool capability.
-		(void)Tool;
-	});
-
-	Execute(Layers, [](Maho::IAssembly* Layer)
-	{
-		// The host dispatches each instance's per-phase work here.
-		(void)Layer;
-	});
+	// Execute is a parallel traverse base (from FParallelScheduler). Lifeycle is
+	// the host's job: call it once per phase (init / per frame / shutdown), each
+	// with a visitor deciding what each target does. Tools are singletons
+	// (T::Get()); child layers are runtime instance collections.
+	//
+	//   Execute<FTools>([](auto& Tool) { Tool.Initialize(); });
+	//   Execute(Layers, [](IAssembly* L) { L->...; });
+	//
+	// (EngineBase has no tools/layers — nothing to drive.)
 
 	while (ShouldContinue())
 	{
-		Execute(Layers, [](Maho::IAssembly* Layer)
-		{
-			// Per-frame tick work per instance.
-			(void)Layer;
-		});
 	}
-
-	Execute(Layers, [](Maho::IAssembly* Layer)
-	{
-		// Shutdown per instance.
-		(void)Layer;
-	});
-	Execute<FTools>([](auto& Tool)
-	{
-		// Shutdown phase — per-tool capability.
-		(void)Tool;
-	});
 
 	return 0;
 }
