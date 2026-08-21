@@ -24,20 +24,25 @@ Maho 核心是**零 app 假设、零三方依赖、零 stage 预设**的纯积�
 
 **`IExtension`** —— 所有扩展的根身份（只有一个虚析构）。
 
-**`TExtension<TExtensions...>`** —— **依赖表 + 管理者**。它继承 `IExtension`（于是隐式地把自己变成扩展）和 `TTypeList<TExtensions...>`（工具列表）。
+**依赖声明** —— 一个扩展就是"身份 + 依赖表"：继承 `IExtension`，定义 `using FDependsPack`。`TDependsPack` 持有若干 `TDependsOn<Key, TTypeList<...>>` slot，声明"在哪个阶段依赖谁"。
 
 ```cpp
-template <typename... TExtensions>
-class TExtension
-    : public virtual IExtension
-    , public TTypeList<TExtensions...>
+class FInput : public Maho::IExtension
 {
 public:
-    using FExtensions = TTypeList<TExtensions...>;
+    using FDependsPack = Maho::TDependsPack<Maho::TDependsOn<EStage::Init, TTypeList<>>>;
+};
+
+class FSystem : public Maho::IExtension
+{
+public:
+    using FDependsPack = Maho::TDependsPack<
+        Maho::TDependsOn<EStage::Init, TTypeList<FInput>>,      // Init 依赖 FInput
+        Maho::TDependsOn<EStage::Tick, TTypeList<FInput>>>;     // Tick 也依赖
 };
 ```
 
-关键语义：**`TExtensions` 列表里的插件跟 `TExtension` 不是平级、也不是继承——它是"管理者"声明的"我要用到这些工具"**。真正的"拓展"（继承一个插件扩展它的能力）是直接继承 `class FMyPlugin : public FBasePlugin`，跟这个列表无关。
+`TResolveDependsPack<T>::Type` 解析出 T 的 pack（无 `FDependsPack` 时为空 = 无依赖）；`Topo::TNodeDeps_t<T, Key>` 按 Key 取该阶段的依赖列表；`Topo::TIsAcyclic_v` / `TTopoSort_t` / `TLevels_t` 做排序、分层与环检测。
 
 ### ② 能力（可选，各自独立）
 
@@ -75,10 +80,8 @@ Execute<FTools>([](T& Tool) {
 graph TD
     subgraph 身份与依赖
         IExtension["IExtension<br/>扩展身份"]
-        TExtension["TExtension&lt;Ts...&gt;<br/>依赖表 = 管理者 + 工具列表"]
-        TTypeList["TTypeList&lt;Ts...&gt;<br/>工具列表"]
-        TExtension --> IExtension
-        TExtension --> TTypeList
+        DependsPack["TDependsPack&lt;TDependsOn&lt;Key,TList&gt;...&gt;<br/>分阶段依赖表"]
+        IExtension --> DependsPack
     end
 
     subgraph 可选能力
@@ -94,9 +97,8 @@ graph TD
         IScheduler --> ForEach
     end
 
-    TExtension -.装配.-> TSingleton
-    TExtension -.装配.-> IRunable
-    TExtension -.装配.-> IAssembly
+    DependsPack -.参与.-> Topology
+    Topology["Topology<br/>排序/分层/还检测"]
 ```
 
 ## 相关文档

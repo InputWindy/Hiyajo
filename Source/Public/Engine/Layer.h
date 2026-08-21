@@ -12,32 +12,23 @@ namespace Maho
 {
 
 // ───────────────────────────────────────────────────────────────────────
-// Layer — the application root AND a nested host, unified into one template.
+// Layer — the installable application root (and a nested host). A dynamically
+// installable Assembly (exports CreateExtension → may be instantiated many
+// times) with a parallel drive. NOT a singleton — the host owns instances.
 //
-// A Layer is a dynamically-installable Assembly (exports CreateExtension → may
-// be instantiated many times) with a parallel drive over its own extension
-// table. NOT a singleton — the host owns its instances.
-//
-//   Tools    — plug-in-and-play singletons (Get().xxx()) you call directly.
-//   Layers   — runtime instances (CreateExtension), driven through this host's
-//              scheduler by stage + visitor lambda.
-//
-// A Layer's FExtensions may be anything (tools + child layers); the host
-// drives tools by compile-time type and child layers by runtime instance.
-// Deep inheritance is explicit: a parent Layer specialises per-project needs,
-// then has its own child Layer(s).
+// Dependencies are declared like any extension: define using FDependsPack;
+// Topology orders the types and the scheduler drives the instances.
 //
 // Requires C++20 (scheduler concepts).
 // ───────────────────────────────────────────────────────────────────────
 
 template <typename... TExtensions>
 class TLayer
-	: public TExtension<TExtensions...>
-	, public IAssembly
+	: public IAssembly
 	, public Parallel::FParallelScheduler
 {
 public:
-	using FExtensions = typename TExtension<TExtensions...>::Type;
+	using FExtensions = TTypeList<TExtensions...>;
 	using FTags = TTypeList<>;
 };
 

@@ -1,40 +1,37 @@
 #pragma once
 
-#include <Core/TypeList.h>
-
 namespace Maho
 {
 
 // ───────────────────────────────────────────────────────────────────────
-// ① Extension contract — the identity every extension shares.
+// Extension — the identity every service/plugin shares.
 //
-// An extension is a dependency table: which extensions it assembles. How it is
-// driven it is NOT part of the extension — the scheduler traverses the lists
-// (compile-time) or the instances (runtime) and passes a visitor lambda.
+// An extension IS its dependency table: a host plugin declares what it depends
+// on (and at which stage) via FDependsPack. The scheduler reads FDependsPack
+// (through Topology / TNodeDeps_t) to order service groups and drive them; it
+// never reaches inside the extension because the type knows its own deps.
+//
+//   class FInput : public IExtension
+//   {
+//   public:
+//       using FDependsPack = TDependsPack<>;                       // no deps
+//   };
+//
+//   class FSystem : public IExtension
+//   {
+//   public:
+//       using FDependsPack = TDependsPack<
+//           TDependsOn<EStage::Init, TTypeList<FInput>>>;          // deps: FInput
+//   };
+//
+// Driving the matched types (by instance or singleton) is the host/scheduler's
+// job — an extension is pure declaration (identity + dependency table).
 // ───────────────────────────────────────────────────────────────────────
 
 class IExtension
 {
 public:
 	virtual ~IExtension() = default;
-};
-
-// ───────────────────────────────────────────────────────────────────────
-// ② Assembly: the dependency table.
-//
-// TExtension<TExtensions...> is an IExtension (identity) and a TTypeList
-// (the assembled group) at once. NOT a singleton — single-instance access is
-// a plugin's own choice (derive TSingleton<Self> alongside). Being a
-// TExtension, it nests recursively.
-// ───────────────────────────────────────────────────────────────────────
-
-template <typename... TExtensions>
-class TExtension
-	: public virtual IExtension
-	, public TTypeList<TExtensions...>
-{
-public:
-	using Type = TTypeList<TExtensions...>;
 };
 
 } // namespace Maho

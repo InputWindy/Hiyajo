@@ -148,12 +148,12 @@ namespace Tp
 	using FDefOrder = Topo::TTopoSort_t<FDefNodes, FDefaultSlot>;
 	static_assert(std::is_same_v<TTypeList<FD1, FD2>, FDefOrder>);
 
-	//── MyExtension: inherits the dependency table AND the per-stage slots; the
+	//── MyExtension: a plugin declares itself via IExtension + FDependsPack — the
 	//   inherited FDependsPack must carry the slots (regression for the alias bug).
 	struct FX { using FDependsPack = TDependsPack<TDependsOn<EPhase::Init, TTypeList<>>>; };
 	struct FY2 { using FDependsPack = TDependsPack<TDependsOn<EPhase::Init, TTypeList<FX>>>; };
 	struct FMyExtension
-		: TExtension<FX, FY2>
+		: IExtension
 		, TDependsPack<TDependsOn<EPhase::Init, TTypeList<FX, FY2>>>
 	{
 	};
