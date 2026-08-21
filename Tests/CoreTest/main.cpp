@@ -40,11 +40,13 @@ struct SD : SC, IA, IB
 		TDependsPack<TDependsOn<IA, TTypeList<SB, SC>>>>;
 };
 
-// SE : SD → inherits + its own; nothing extra.
+// SE : SD → inherits + its own; nothing extra. Manual union (dedup) at the
+// class site — TUnionList_t is standalone-clean (MSVC-safe here, unlike inside
+// TConcatPacks).
 struct SE : SD
 {
-	using FDependsPack = Topo::TConcatPacks_t<SD::FDependsPack,
-		TDependsPack<TDependsOn<IA, TTypeList<SD, SA>>>>;
+	using FDependsPack = TDependsPack<
+		TDependsOn<IA, Maho::TUnionList_t<Topo::TNodeDeps_t<SD, IA>, TTypeList<SD, SA>>>>;
 };
 
 struct SF : TExtension<TDependsPack<TDependsOn<IA, TTypeList<SB>>>>, IA, IC
@@ -69,7 +71,7 @@ static_assert(std::is_same_v<UProbe, TTypeList<SA, SB, SC, SD>>, "TUnionList_t d
 static_assert(std::is_same_v<Topo::TNodeDeps_t<SB, IA>, TTypeList<>>);
 static_assert(std::is_same_v<Topo::TNodeDeps_t<SC, IA>, TTypeList<SA>>);
 static_assert(std::is_same_v<Topo::TNodeDeps_t<SD, IA>, TTypeList<SA, SB, SC>>);
-static_assert(std::is_same_v<Topo::TNodeDeps_t<SE, IA>, TTypeList<SA, SB, SC, SD, SA>>);
+static_assert(std::is_same_v<Topo::TNodeDeps_t<SE, IA>, TTypeList<SA, SB, SC, SD>>);
 static_assert(std::is_same_v<Topo::TNodeDeps_t<SF, IA>, TTypeList<SB>>);
 static_assert(std::is_same_v<Topo::TNodeDeps_t<SG, IA>, TTypeList<SB, SD>>);
 using FNodes = TTypeList<SE, SD, SC, SB, SA, SG, SF>;
