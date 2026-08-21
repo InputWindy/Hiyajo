@@ -25,6 +25,9 @@ enum class ELogLevel : std::uint8_t
 class MAHO_LOG_API FLogTool : public Maho::TTool<FLogTool>
 {
 public:
+	/** Aggregate identity tags: base + this Tool's own (empty for now). */
+	using FTags = TCatch<typename Maho::TTool<FLogTool>::FTags, TTypeList<>>::Type;
+
 	// Services are namespace-level free functions (SetLogLevel/Debug/Info/Warn/Error).
 
 	/** Set the default spdlog level. */

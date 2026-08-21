@@ -57,6 +57,9 @@ private:
 class MAHO_TEXT_API FTextTool : public Maho::TTool<FTextTool>
 {
 public:
+	/** Aggregate identity tags: base + this Tool's own (empty for now). */
+	using FTags = TCatch<typename Maho::TTool<FTextTool>::FTags, TTypeList<>>::Type;
+
 	// ── 读（public）──
 
 	[[nodiscard]] std::string_view GetCulture() const;

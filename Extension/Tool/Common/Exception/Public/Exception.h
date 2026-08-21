@@ -30,6 +30,9 @@ namespace Exception
 class MAHO_EXCEPTION_API FExceptionTool : public Maho::TTool<FExceptionTool>
 {
 public:
+	/** Aggregate identity tags: base + this Tool's own (empty for now). */
+	using FTags = TCatch<typename Maho::TTool<FExceptionTool>::FTags, TTypeList<>>::Type;
+
 	/** Subscribers receive every reported exception message. */
 	Maho::TMulticastDelegate<void(const std::string&)> OnException;
 

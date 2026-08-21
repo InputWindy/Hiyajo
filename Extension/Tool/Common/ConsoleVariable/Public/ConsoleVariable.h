@@ -70,6 +70,9 @@ public:
 class MAHO_CONSOLEVARIABLE_API FConsoleVariableTool : public Maho::TTool<FConsoleVariableTool>
 {
 public:
+	/** Aggregate identity tags: base + this Tool's own (empty for now). */
+	using FTags = TCatch<typename Maho::TTool<FConsoleVariableTool>::FTags, TTypeList<>>::Type;
+
 	/** Find a registered variable; nullptr when absent. (read) */
 	[[nodiscard]] IConsoleVariable* Find(std::string_view Name);
 

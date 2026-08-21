@@ -89,6 +89,9 @@ class MAHO_RESOURCE_API FResourceTool
 	, public FThreadedServer
 {
 public:
+	/** Aggregate identity tags: base + this Tool's own (empty for now). */
+	using FTags = TCatch<typename Maho::TTool<FResourceTool>::FTags, TTypeList<>>::Type;
+
 	~FResourceTool() override;
 
 	/** Async import; OnDone receives the registered resource or nullptr. */

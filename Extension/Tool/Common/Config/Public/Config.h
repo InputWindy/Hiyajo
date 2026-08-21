@@ -31,6 +31,9 @@ namespace Config
 class MAHO_CONFIG_API FConfigTool : public Maho::TTool<FConfigTool>
 {
 public:
+	/** Aggregate identity tags: base + this Tool's own (empty for now). */
+	using FTags = TCatch<typename Maho::TTool<FConfigTool>::FTags, TTypeList<>>::Type;
+
 	/** Raw string lookup by section + key; nullopt when absent. */
 	[[nodiscard]] std::optional<std::string> GetString(std::string_view Section, std::string_view Key) const;
 

@@ -19,6 +19,9 @@ using FJsonValue = nlohmann::json;
 class MAHO_JSON_API FJsonTool : public Maho::TTool<FJsonTool>
 {
 public:
+	/** Aggregate identity tags: base + this Tool's own (empty for now). */
+	using FTags = TCatch<typename Maho::TTool<FJsonTool>::FTags, TTypeList<>>::Type;
+
 	// header-only — no lifecycle, no stage.
 };
 

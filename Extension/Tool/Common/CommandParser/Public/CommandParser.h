@@ -19,6 +19,9 @@ namespace CommandParser
 class MAHO_COMMANDPARSER_API FCommandParserTool : public Maho::TTool<FCommandParserTool>
 {
 public:
+	/** Aggregate identity tags: base + this Tool's own (empty for now). */
+	using FTags = TCatch<typename Maho::TTool<FCommandParserTool>::FTags, TTypeList<>>::Type;
+
 	/**
 	 * Get a value from the parsed command line by name. Supports both `-name=value`
 	 * and `-name value` forms. Returns nullptr when the key is absent.

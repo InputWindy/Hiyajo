@@ -28,6 +28,9 @@ template <typename T> [[nodiscard]] constexpr T Clamp(const T& Value, const T& M
 /** Math library extension (GLM + helpers). A plain singleton type provider, header-only. */
 class MAHO_MATH_API FMathTool : public Maho::TTool<FMathTool>
 {
+public:
+	/** Aggregate identity tags: base + this Tool's own (empty for now). */
+	using FTags = TCatch<typename Maho::TTool<FMathTool>::FTags, TTypeList<>>::Type;
 };
 
 } // namespace Math

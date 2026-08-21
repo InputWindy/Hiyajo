@@ -21,6 +21,8 @@ class TTool
 	: public TExtension<TExtensions...>
 	, public TSingleton<TDerived>
 {
+public:
+	using FTags = TTypeList<>;
 };
 
 } // namespace Maho

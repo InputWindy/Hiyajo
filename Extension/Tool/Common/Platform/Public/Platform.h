@@ -50,6 +50,9 @@ public:
 class MAHO_PLATFORM_API FPlatformTool : public Maho::TTool<FPlatformTool>
 {
 public:
+	/** Aggregate identity tags: base + this Tool's own (empty for now). */
+	using FTags = TCatch<typename Maho::TTool<FPlatformTool>::FTags, TTypeList<>>::Type;
+
 	// ── 读接口（public）──
 
 	/** Native surface for the RHI; nullptr when headless or creation failed. */

@@ -33,6 +33,9 @@ namespace Timer
 class MAHO_TIMER_API FTimerTool : public Maho::TTool<FTimerTool>
 {
 public:
+	/** Aggregate identity tags: base + this Tool's own (empty for now). */
+	using FTags = TCatch<typename Maho::TTool<FTimerTool>::FTags, TTypeList<>>::Type;
+
 	/** Format the timing tree as text (milliseconds). */
 	[[nodiscard]] std::string DumpToString() const;
 

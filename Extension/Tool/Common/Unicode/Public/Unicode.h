@@ -58,6 +58,9 @@ MAHO_UNICODE_API void EnsureConsoleUtf8();
 class MAHO_UNICODE_API FUnicodeTool : public Maho::TTool<FUnicodeTool>
 {
 public:
+	/** Aggregate identity tags: base + this Tool's own (empty for now). */
+	using FTags = TCatch<typename Maho::TTool<FUnicodeTool>::FTags, TTypeList<>>::Type;
+
 	// Pure function library — no lifecycle, no stage.
 };
 

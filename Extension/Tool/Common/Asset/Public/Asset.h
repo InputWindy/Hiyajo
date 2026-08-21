@@ -64,6 +64,9 @@ struct FAssetData
 class MAHO_ASSET_API FAssetTool : public Maho::TTool<FAssetTool>
 {
 public:
+	/** Aggregate identity tags: base + this Tool's own (empty for now). */
+	using FTags = TCatch<typename Maho::TTool<FAssetTool>::FTags, TTypeList<>>::Type;
+
 	/** Look up an asset by logical path; nullptr when absent. */
 	[[nodiscard]] const FAssetData* Find(const FAssetPath& Path) const;
 

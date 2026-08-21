@@ -34,7 +34,7 @@ class TExtension
 	, public TTypeList<TExtensions...>
 {
 public:
-	using FExtensions = TTypeList<TExtensions...>;
+	using Type = TTypeList<TExtensions...>;
 };
 
 // ───────────────────────────────────────────────────────────────────────

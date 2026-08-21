@@ -20,6 +20,9 @@ namespace Paths
 class MAHO_PATHS_API FPathsTool : public TTool<FPathsTool>
 {
 public:
+	/** Aggregate identity tags: base + this Tool's own (empty for now). */
+	using FTags = TCatch<typename Maho::TTool<FPathsTool>::FTags, TTypeList<>>::Type;
+
 	/** Resolve a virtual path "Alias/Sub/Path" (or "Alias:Sub/Path") to a physical path. */
 	[[nodiscard]] std::filesystem::path Resolve(std::string_view VirtualPath) const;
 

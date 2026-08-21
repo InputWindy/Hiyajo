@@ -55,6 +55,9 @@ private:
 class MAHO_NAME_API FNameTool : public TTool<FNameTool>
 {
 public:
+	/** Aggregate identity tags: base + this Tool's own (empty for now). */
+	using FTags = TCatch<typename Maho::TTool<FNameTool>::FTags, TTypeList<>>::Type;
+
 	/** Intern a string — returns the canonical FName (thread-safe). */
 	[[nodiscard]] FName Intern(std::string_view Str);
 

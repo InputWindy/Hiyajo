@@ -131,6 +131,8 @@ private:
 class MAHO_ARCHIVE_API FArchiveTool : public Maho::TTool<FArchiveTool>
 {
 public:
+	/** Aggregate identity tags: base + this Tool's own (empty for now). */
+	using FTags = TCatch<typename Maho::TTool<FArchiveTool>::FTags, TTypeList<>>::Type;
 };
 
 } // namespace Archive

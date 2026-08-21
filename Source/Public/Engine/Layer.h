@@ -34,10 +34,11 @@ class TLayer
 	, public Parallel::FParallelScheduler
 {
 public:
-	using FExtensions = typename TExtension<TExtensions...>::FExtensions;
+	using FExtensions = typename TExtension<TExtensions...>::Type;
 	/** Tools = singleton extensions (derive TSingleton); Layers = assemblies. */
 	using FTools = typename TFilterWhere<FExtensions, TIsSingleton>::Type;
 	using FLayers = typename TFilter<FExtensions, IAssembly>::Type;
+	using FTags = TTypeList<>;
 };
 
 } // namespace Maho
