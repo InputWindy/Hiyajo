@@ -41,6 +41,29 @@ public:
 	virtual void Shutdown() = 0;
 };
 
+/**
+ * Tool contract — a plug-and-play service instance. No Main; lifecycle is
+ * OPTIONAL (default no-op, a Tool overrides only when it owns resources).
+ * Tools are also instantiable (owned in a host's std::vector<ITool*>) and
+ * driven like Layers — but their public capability methods stay callable
+ * directly (the plug-in-and-play property is about the API, not the storage).
+ *
+ *   class FLog : public Maho::ITool
+ *   {
+ *   public:
+ *       void Log(const char*) const;
+ *       void Initialize() override;   // only if it owns something
+ *   };
+ */
+class ITool
+{
+public:
+	virtual ~ITool() = default;
+
+	virtual void Initialize() {}
+	virtual void Shutdown() {}
+};
+
 /** Extension identity — a declared service/plugin (carries a FDependsPack). */
 class IExtension
 {

@@ -68,17 +68,17 @@ public:
 	}
 
 	/**
-	 * Instance traverse: every ILayer* in Instances whose runtime type
-	 * matches one of TQueryTypes is handed to the visitor as that type (T&);
-	 * non-matching instances are skipped. Each instance dispatches at most once
-	 * (first matching type wins — order TQueryTypes from most to least derived).
+	 * Instance traverse: every TObject* (ILayer or ITool) in Instances whose
+	 * runtime type matches one of TQueryTypes is handed to the visitor as that
+	 * type (T&); non-matching instances are skipped. Each instance dispatches at
+	 * most once (first matching type wins — order TQueryTypes most derived first).
 	 */
-	template <typename TQueryTypes, typename TVisitor>
-	void Execute(std::vector<ILayer*>& Instances, TVisitor&& Visitor)
+	template <typename TQueryTypes, typename TObject, typename TVisitor>
+	void Execute(std::vector<TObject*>& Instances, TVisitor&& Visitor)
 	{
 		std::vector<std::function<void()>> Tasks;
 		Tasks.reserve(Instances.size());
-		for (ILayer* Instance : Instances)
+		for (TObject* Instance : Instances)
 		{
 			Tasks.emplace_back([&, Instance] { DispatchInstance<TQueryTypes>(Instance, Visitor); });
 		}
@@ -130,10 +130,10 @@ public:
 	}
 
 	/** Instance traverse: first matching type in TQueryTypes sees Visitor(T&). */
-	template <typename TQueryTypes, typename TVisitor>
-	void Execute(std::vector<ILayer*>& Instances, TVisitor&& Visitor)
+	template <typename TQueryTypes, typename TObject, typename TVisitor>
+	void Execute(std::vector<TObject*>& Instances, TVisitor&& Visitor)
 	{
-		for (ILayer* Instance : Instances)
+		for (TObject* Instance : Instances)
 		{
 			DispatchInstance<TQueryTypes>(Instance, Visitor);
 		}
