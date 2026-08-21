@@ -2,7 +2,6 @@
 
 #include <Core/Assembly.h>
 #include <Core/Extension.h>
-#include <Core/Tags.h>
 #include <Core/Topology.h>
 #include <Engine/ParallelScheduler.h>
 #include <Engine/Tool.h>
@@ -44,10 +43,6 @@ public:
 
 	/** Identity tag FLayerTag is always present. */
 	using FTags = TTypeList<FLayerTag>;
-
-	/** Append extra tags while keeping the identity tag. */
-	template <typename... TExtra>
-	using WithTags = FWithTags<FTags, TExtra...>;
 };
 
 } // namespace Maho
