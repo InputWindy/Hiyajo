@@ -122,6 +122,18 @@ static_assert(TContains_v<FOrderScrambled, SA>);
 // SD before SE (SE deps SD); SB before SG (SG deps SB).
 static_assert(FOrderScrambled::Count == 6);
 
+// ── Query result → Topology levels: parallel bands by IA dependency depth ──
+// IA-graph: level0 {SA, SB} (no deps) → level1 {SD, SF} → level2 {SE, SG}.
+// Each band's members are mutually independent (runnable in parallel); bands
+// are separated by dependency barriers.
+using FLevelsIA = Topo::TLevels_t<FIA, IA>;
+static_assert(std::is_same_v<FLevelsIA,
+	TTypeList<
+		TTypeList<SA, SB>,    // level 0 — no deps
+		TTypeList<SD, SF>,    // level 1 — deps SA/SB
+		TTypeList<SE, SG>>>,  // level 2 — deps SD/SF
+	"IA set splits into 3 parallel dependency levels");
+
 int main()
 {
 	// Traverse each filtered interface set with ForEach(serial policy).
@@ -146,6 +158,7 @@ int main()
 	std::puts("[ok] Query: LINQ-style Select<interface> / Where<Predicate> / Cast");
 	std::puts("[ok] ForEach traversal over the filtered interface sets");
 	std::puts("[ok] Query result fed into Topo::TTopoSort_t (interface-keyed)");
+	std::puts("[ok] Query result split into parallel dependency levels (TLevels_t)");
 	std::puts("CORE TEST PASSED");
 	return 0;
 }
