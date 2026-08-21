@@ -21,6 +21,10 @@ struct IA { virtual void InterfaceA() = 0; };
 struct IB { virtual void InterfaceB() = 0; };
 struct IC { virtual void InterfaceC() = 0; };
 
+// code-gen closure macros (simulated — normally written to .gen.h)
+#define MAHO_CLOSURE_0_SD_IA ::Maho::TTypeList<SA, SB, SC>
+#define MAHO_CLOSURE_0_SD_IB ::Maho::TTypeList<SA>
+
 // ── extensions; interfaces installed messily.
 // Leaf/non-inherited extensions use the assembled base TExtension<TDeps> —
 // identity + dependency pack in one. Inherited ones merge the parent's deps.
@@ -37,9 +41,10 @@ struct SC : TExtension<TDependsPack<TDependsOn<IA, TTypeList<SA>>>>, IC
 {
 };
 
-// SD : SC → inherits SC's edges (parent & child are the SAME node on the 3D
-// graph — SD runs after SC at IA; SC itself is never a dep) + own {SB}.
-// Multi-slot: also declares its IB scheduling (SC has no IB edges → {SA} own).
+// SD : SC → inherits SC's edges + own {SB}; multi-Key.
+// Users declare deps ONLY via MAHO_EXTEND_DEPS; closures come from code-gen
+// (simulated macros above) and are read via MAHO_CLOSURE / MAHO_SORT_LEVEL —
+// the user never writes a closure.
 struct SD : SC, IA, IB
 {
 	MAHO_EXTEND_DEPS(
@@ -47,6 +52,11 @@ struct SD : SC, IA, IB
 		(IB, SC, SA)
 	)
 };
+static_assert(std::is_same_v<MAHO_CLOSURE(SD, IA), TTypeList<SA, SB, SC>>, "SD IA closure");
+static_assert(std::is_same_v<MAHO_CLOSURE(SD, IB), TTypeList<SA>>, "SD IB closure");
+using FLevelsSD = MAHO_SORT_LEVEL(SD, IA);   // closure → bands, user-friendly
+static_assert(std::is_same_v<FLevelsSD,
+	TTypeList<TTypeList<SA, SB>, TTypeList<SC>>>);
 
 // SE : SD → inherits SD's edges + its own (SA); nothing extra.
 struct SE : SD
@@ -131,10 +141,6 @@ using FOrderIA = Topo::TTopoSort_t<FIA, IA>;
 static_assert(Topo::TIsAcyclic_v<FIA, IA>);
 static_assert(std::is_same_v<FOrderIA, TTypeList<SA, SB, SD, SE, SF, SG>>,
 	"IA set topo order keeps deps first");
-// MAHO_SORT_LEVEL: bare-type macro → dependency-level bands at IA.
-using FMacroLevels = MAHO_SORT_LEVEL(IA, SA, SC, SD, SE);
-static_assert(std::is_same_v<FMacroLevels,
-	Topo::TLevels_t<TTypeList<SA, SC, SD, SE>, IA>>, "macro == TLevels_t");
 // A scrambled input still yields a valid order (deps before dependents).
 using FScrambled = TTypeList<SE, SG, SD, SF, SA, SB>;
 using FOrderScrambled = Topo::TTopoSort_t<FScrambled, IA>;
@@ -163,19 +169,6 @@ using FSub = TTypeList<SC, SD>;
 using FClosureLevels = Topo::TLevels_t<TTypeList<SC, SD, SA, SB>, IA>;
 static_assert(std::is_same_v<FClosureLevels,
 	TTypeList<TTypeList<SA, SB>, TTypeList<SC, SD>>>);
-
-// ── MAHO_CLOSURE: code-gen writes per-(Class,Key) closure macros into .gen.h ──
-// (simulated here). MAHO_CLOSURE(Class, Key) pastes to MAHO_CLOSURE_0_<C>_<K>.
-#define MAHO_CLOSURE_0_SD_IA ::Maho::TTypeList<SA, SB, SC>      // closure of SD@IA
-#define MAHO_CLOSURE_0_SD_IB ::Maho::TTypeList<SA>              // closure of SD@IB
-using FClosSD = MAHO_CLOSURE(SD, IA);
-using FClosSDB = MAHO_CLOSURE(SD, IB);
-static_assert(std::is_same_v<FClosSD, TTypeList<SA, SB, SC>>, "closure of SD@IA");
-static_assert(std::is_same_v<FClosSDB, TTypeList<SA>>, "closure of SD@IB");
-// level the code-gen closure — correct, complete (mid-chain SC present).
-using FClosLevels = Topo::TLevels_t<FClosSD, IA>;
-static_assert(std::is_same_v<FClosLevels,
-	TTypeList<TTypeList<SA, SB>, TTypeList<SC>>>, "closure levels correct");
 
 // ── Instance drive: apply the static levels to a runtime instance array ──
 // Concrete, instantiable layers that implement IA and derive IAssembly, with a

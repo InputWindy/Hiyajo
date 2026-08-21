@@ -599,16 +599,6 @@ struct FReverseTopology
 
 } // namespace Maho
 
-/**
- * Dependency-level bands (Topo::TLevels_t) for a bare list of types at a Key,
- * without spelling out TTypeList<Ts...>.
- *
- *   using FLevels = MAHO_SORT_LEVEL(IA, SA, SC, SD, SE);
- *   // == Topo::TLevels_t<TTypeList<SA, SC, SD, SE>, IA>  (the parallel bands)
- */
-#define MAHO_SORT_LEVEL(Key, ...) \
-	::Maho::Topo::TLevels_t<::Maho::TTypeList<__VA_ARGS__>, Key>
-
 // ───────────────────────────────────────────────────────────────────────
 // MAHO_CLOSURE — read a code-gen closure (a pre-computed, deduplicated,
 // acyclic dependency closure recorded per (Class, Key)).
@@ -629,4 +619,16 @@ struct FReverseTopology
 #define MAHO_CLOSURE_CAT(A, B) MAHO_CLOSURE_CAT_I(A, B)
 #define MAHO_CLOSURE_CAT_I(A, B) A##B
 #define MAHO_CLOSURE(Class, Key) MAHO_CLOSURE_CAT(MAHO_CLOSURE_CAT(MAHO_CLOSURE_0_, Class), MAHO_CLOSURE_CAT(_, Key))
+
+/**
+ * Dependency-level bands for a Class at a Key, over its (code-gen) closure.
+ * The closure already includes every mid-chain dependency, so leveling is
+ * correct even for a partial aggregate. Users never see "closure" — just "the
+ * level bands of SD when scheduled at IA".
+ *
+ *   using FLevels = MAHO_SORT_LEVEL(SD, IA);
+ *   // == Topo::TLevels_t<MAHO_CLOSURE(SD, IA), IA>
+ */
+#define MAHO_SORT_LEVEL(Class, Key) \
+	::Maho::Topo::TLevels_t<MAHO_CLOSURE(Class, Key), Key>
 
