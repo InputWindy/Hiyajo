@@ -51,20 +51,20 @@ public:
 
 ### ③ 调度协议
 
-**`IScheduler`** —— 调度器契约：`Run`（驱动一组可调用）+ 双 `Execute`（按 stage 驱动扩展，外层 level 串行、内层并行/串行）。
+**`IScheduler`** —— 调度器契约：`Run`（驱动一组可调用）+ 双 `Execute`（并行遍历基座，编译期类型表 / 运行时实例数组）。
 
-**`Execute<Stage, FTools>(visitor)`** —— 编译期版本：对每个扩展类型 T，visitor 拿 `TTag<T>` 恢复类型并调用其能力。工具是单例，`T::Get().xxx()`：
+**`Execute<FTools>(visitor)`** —— 编译期版本：对每个扩展类型 T，visitor 拿 `TTag<T>` 恢复类型并调用其能力。工具是单例，`T::Get().xxx()`：
 
 ```cpp
-Execute<EStage::Init, FTools>([](auto Tag, EStage) {
+Execute<FTools>([](auto Tag) {
 	using T = typename decltype(Tag)::Type;
 	T::Get().Initialize();
 });
 ```
 
-**`Execute<Stage>(Layers, visitor)`** —— 运行时实例版本：对 `std::vector<IAssembly*>` 内的每个层实例并行调用 visitor，宿主在 lambda 里把 `(实例, Stage)` 分发到该层能力方法。
+**`Execute(Layers, visitor)`** —— 运行时实例版本：对 `std::vector<IAssembly*>` 内的每个层实例并行调用 visitor，宿主在 lambda 里把实例分派到该层能力方法。
 
-stage 枚举与每个扩展在每个 stage 干什么完全由宿主决定；扩展只提供能力方法，不感知 stage。
+`Execute` 无 stage 语义——生命周期是宿主的职责：init/tick/shutdown 各调一次 Execute，各传一个 lambda 决定该阶段每个目标干什么。扩展只提供能力方法，不感知阶段。
 
 ### ④ 列表代数
 

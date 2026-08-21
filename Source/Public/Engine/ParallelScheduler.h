@@ -14,16 +14,16 @@ namespace Parallel
 {
 
 /**
- * Parallel scheduler — the parallel drive policy.
+ * Parallel scheduler — the parallel traverse base.
  *
- * Two Execute overloads — both parallel (per level), ordered by dependency
- * level:
- *   Execute<Stage, TList>(Visitor)          — compile-time: drives extension
- *     types, handing each a TTag<T> so the visitor calls T::Get().xxx().
- *   Execute<Stage>(vector<IAssembly*>&, Vis)— runtime: drives layer instances,
- *     handing each IAssembly* to the visitor. The visitor dispatches per build.
+ * Execute is a parallel base ONLY — no stage semantics. The host expresses
+ * lifecycle by calling Execute once per phase (init / per-frame tick / ...),
+ * passing a visitor that decides what each target does:
  *
- * Run = thread pool; between levels serial, within a level parallel.
+ *   Execute<FTools>(visitor)              — compile-time: parallel over the type
+ *     list, each type T handed to the visitor as TTag<T> → T::Get().xxx().
+ *   Execute(Layers, visitor)              — runtime: parallel over the instance
+ *     vector, each IAssembly* handed to the visitor.
  */
 class FParallelScheduler : public IScheduler
 {
@@ -39,28 +39,22 @@ public:
 		Pool->Run(std::forward<FCallables>(Callables)...);
 	}
 
-	/** Compile-time drive: every T in TExtensions at Stage sees Visitor(TTag<T>, Stage). */
-	template <auto Stage, typename TExtensions, typename TVisitor, typename TTopology = FForwardTopology>
+	/** Compile-time traverse: every T in TList sees Visitor(TTag<T>). */
+	template <typename TList, typename TVisitor>
 	void Execute(TVisitor&& Visitor)
 	{
-		using FLevels = typename TTopology::template Apply<Topo::TLevels_t<TExtensions, Stage>>;
-		ForEach<FLevels>(FSerialTraversePolicy{}, [&](auto LevelTag) {
-			using FLevel = typename decltype(LevelTag)::Type;
-			ForEach<FLevel>(*this, [&](auto Tag) {
-				Visitor(Tag, Stage);
-			});
-		});
+		ForEach<TList>(*this, std::forward<TVisitor>(Visitor));
 	}
 
-	/** Runtime drive: every IAssembly* in Layers sees Visitor(instance, Stage). */
-	template <auto Stage, typename TVisitor>
+	/** Runtime traverse: every IAssembly* in Layers sees Visitor(instance). */
+	template <typename TVisitor>
 	void Execute(std::vector<IAssembly*>& Layers, TVisitor&& Visitor)
 	{
 		std::vector<std::function<void()>> Tasks;
 		Tasks.reserve(Layers.size());
 		for (IAssembly* Instance : Layers)
 		{
-			Tasks.emplace_back([&, Instance] { Visitor(Instance, Stage); });
+			Tasks.emplace_back([&, Instance] { Visitor(Instance); });
 		}
 		Pool->RunTasks(std::move(Tasks));
 	}

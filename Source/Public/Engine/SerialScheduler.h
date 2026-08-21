@@ -9,11 +9,8 @@ namespace Serial
 {
 
 /**
- * Serial scheduler — the serial drive policy.
- *
- * Compile-time Execute<Stage, TList>(Visitor): drives extension types,
- * handing each a TTag<T> + Stage so the visitor calls capabilities. Main and
- * the stage mapping belong to the host, not the policy.
+ * Serial scheduler — the serial traverse base. Execute has no stage semantics;
+ * it is a plain traverse (compile-time type list / runtime instance vector).
  */
 class FSerialScheduler : public IScheduler
 {
@@ -24,16 +21,11 @@ public:
 		(Callables(), ...);
 	}
 
-	template <auto Stage, typename TExtensions, typename TVisitor, typename TTopology = FForwardTopology>
+	/** Compile-time traverse: every T in TList sees Visitor(TTag<T>). */
+	template <typename TList, typename TVisitor>
 	void Execute(TVisitor&& Visitor)
 	{
-		using FLevels = typename TTopology::template Apply<Topo::TLevels_t<TExtensions, Stage>>;
-		ForEach<FLevels>(FSerialTraversePolicy{}, [&](auto LevelTag) {
-			using FLevel = typename decltype(LevelTag)::Type;
-			ForEach<FLevel>(FSerialTraversePolicy{}, [&](auto Tag) {
-				Visitor(Tag, Stage);
-			});
-		});
+		ForEach<TList>(*this, std::forward<TVisitor>(Visitor));
 	}
 };
 

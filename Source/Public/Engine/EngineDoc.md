@@ -40,24 +40,22 @@ class FMyGame : public Maho::TLayer<FLog, FRDG, FRenderer> { ... };
 
 ### 分类与驱动
 
-`TLayer` 内置两个分半：`FTools`（编译期单例类型）与 `FLayerTypes`（装配类型，运行时实例化进 `this->Layers`），宿主在 `Main` 里用 visitor lambda 分别驱动：
+`TLayer` 内置两个分半：`FTools`（编译期单例类型）与 `FLayerTypes`（装配类型，运行时实例化进 `this->Layers`）。`Execute` 是并行遍历基座，宿主按生命周期分阶段调用：
 
 ```cpp
 using FTools = typename TFilterWhere<FExtensions, TIsSingleton>::Type;   // 工具（单例）
 using FLayerTypes = typename TFilter<FExtensions, IAssembly>::Type;       // 层（Assembly）
 
-enum class EStage { Init, Tick, Shutdown };
-
 int Main(int Argc, char** Argv) override
 {
     CreateLayers();   // 实例化每个子 Layer（CreateExtension）进 this->Layers
 
-    Execute<EStage::Init, FTools>([](auto Tag, EStage) {   // 工具：编译期单例
+    Execute<FTools>([](auto Tag) {   // 工具：编译期单例
         using T = typename decltype(Tag)::Type;
         T::Get().Initialize();
     });
-    Execute<EStage::Tick>(Layers, [](Maho::IAssembly* L, EStage) { ... });   // 层：运行时实例
-    Execute<EStage::Shutdown, FTools>([](auto Tag, EStage) { T::Get().Shutdown(); });
+    Execute(Layers, [](Maho::IAssembly* L) { ... });   // 层：运行时实例
+    Execute<FTools>([](auto Tag) { T::Get().Shutdown(); });
     return 0;
 }
 ```

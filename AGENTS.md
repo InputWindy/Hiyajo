@@ -7,7 +7,7 @@
 - 本插件是**引擎核心**——纯通用基础设施：零 app 假设、零三方依赖、零 stage 预设。
 - 只提供积木：`TypeList`（`TTypeList` + `ForEach`）/ `Topology`（`TDependsOn`/`TDependsPack` + 排序/分层/环检测）/ `Delegate` / `Singleton` / `Scheduler`（`IScheduler` 空基 + 双 `Execute`）/ `Extension`（`TExtension` 单例 + `TExtensionList` 组装）/ `Assembly`（`IAssembly` + `FAssembly`）/ `Fatal`。
 - **插件 = 依赖表 + 身份**：`TExtension<TExtensions...>` 是纯依赖表（编译期 TTypeList），不预设单例/可安装。`TTool` 加 `TSingleton`（即插即用、全 public），`TLayer` 加 `IAssembly`（可动态安装、并行调度自己 FExtensions）。不再区分 Engine——应用根就是一个 Layer。
-- **驱动机制**：编译期 `ForEach`（`TTag<T>` + Scheduler 串/并行）+ Tool `T::Get()` 单例直调；`IScheduler` 双 `Execute`——编译期版（`Execute<Stage, FTools>(visitor)`，visitor 开 TTag<T>）+ 实例版（`Execute<Stage>(vector<IAssembly*>&, visitor)`，并行驱动 Layers）。stage 与映射全在宿主 lambda。
+- **驱动机制**：编译期 `ForEach`（`TTag<T>` + Scheduler 串/并行）+ Tool `T::Get()` 单例直调；`IScheduler` 双 `Execute`——编译期版（`Execute<FTools>(visitor)`，visitor 开 TTag<T>）+ 实例版（`Execute(Layers, visitor)`，并行驱动 `std::vector<IAssembly*>&`）。生命周期与阶段语义全在宿主 lambda。
 - **依赖声明两层**：编译期 `TDependsOn`/`TDependsPack`（插件内，level 排序）；项目装配 `.cplugin` `Dependencies`（CMake + codegen）。核心与核心之间走 `TDependsOn`，插件与宿主走 `.cplugin`。
 - stage 枚举、app 形态、线程池策略**全部下放插件层**，不写回 core（`Engine/` 只放可选的 `FSerialScheduler`/`FParallelScheduler` 示例）。
 - 遵循根 [AGENTS.md](../AGENTS.md)。
@@ -35,26 +35,33 @@ public:
 - 宿主不进入 Layer 内部收 "friend"：stage 驱动走 **visitor lambda**（见下），由宿主在 lambda 里调用 Layer 的 public 读接口 / 触发能力。
 
 **驱动机制（无 friend、无 ExecuteExtension 协议）**：
-- **Tools** = 编译期单例。`Execute<Stage, FTools>(visitor)` 并行遍历每个 T，visitor 拿 `TTag<T>` 恢复类型后调 `T::Get().xxx()`。
-- **Layers** = 运行时实例。`Execute<Stage>(Layers, visitor)` 并行遍历 `std::vector<IAssembly*>`，visitor 拿 `IAssembly*` 分发 stage 到实例能力。
+- **Tools** = 编译期单例。`Execute<FTools>(visitor)` 并行遍历每个 T，visitor 拿 `TTag<T>` 恢复类型后调 `T::Get().xxx()`。
+- **Layers** = 运行时实例。`Execute(Layers, visitor)` 并行遍历 `std::vector<IAssembly*>`，visitor 拿 `IAssembly*` 分发阶段工作到实例能力。
+
+`Execute` 只是**并行遍历基座，无 stage 语义**。生命周期由宿主调度：init 调一次、每帧循环调一次、shutdown 调一次，各传一个 lambda 决定该阶段每个目标干什么。
 
 ```cpp
 int FMyLayer::Main(int, char**)
 {
-	// Tools：编译期，visitor 拿 TTag<T>
-	Execute<EStage::Init, FTools>([](auto Tag, EStage) {
+	CreateLayers();   // 实例化子 Layer 进 this->Layers
+
+	Execute<FTools>([](auto Tag) {        // 编译期，visitor 拿 TTag<T>
 		using T = typename decltype(Tag)::Type;
-		T::Get().Initialize();   // 每个工具单例
+		T::Get().Initialize();            // 每个工具单例
 	});
 
-	// Layers：运行时实例（this->Layers 由 CreateLayers() 建立）
-	Execute<EStage::Tick>(Layers, [](Maho::IAssembly* Layer, EStage) {
-		// host 在此把 (instance, Stage) 映射到该 layer 的能力方法
-	});
+	while (ShouldContinue())
+	{
+		Execute(Layers, [](Maho::IAssembly* Layer) {   // 运行时实例
+			// host 在此把实例的每帧工作分发到能力方法
+		});
+	}
+
+	Execute<FTools>([](auto Tag) { /* Shutdown */ });
 }
 ```
 
-**插件不感知 stage**：Tool/Layer 不定义 stage 枚举，只提供能力方法。Stage 全在宿主定义（如 `EEngineStage`），宿主在每个 visitor lambda 里把 stage 分发到能力方法。
+**插件不感知 stage**：Tool/Layer 不定义 stage 枚举，只提供能力方法。阶段语义、阶段枚举（若有）全在宿主 lambda 里。
 
 > 编译前代码合规审查工具（`Tools/check_interface_layers.py`）强制这条规则：Layer 的 public 非 const 方法直接报错卡住构建。Tool 天生 Standalone，审查器跳过。
 

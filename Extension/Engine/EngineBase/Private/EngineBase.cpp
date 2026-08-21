@@ -22,42 +22,42 @@ int FEngineBase::Main(int Argc, char** Argv)
 	(void)Argc;
 	(void)Argv;
 
-	// IAssembly::Main — the one coarse entry — is subdivided into the host's
-	// EEngineStage. Its child layers (runtime instances) are built here, then
-	// driven by stage: tools by compile-time type (T::Get()), layers by
-	// instance (each IAssembly* in this->Layers).
+	// Execute is a parallel traverse base — no stage semantics. Lifecycle is the
+	// host's job: call it once per phase (init once, tick per frame, shutdown
+	// once). Tools are compile-time singletons (TTag<T> → T::Get()); child layers
+	// are runtime instances (each IAssembly* in this->Layers).
 	CreateLayers();
 
-	Execute<EEngineStage::Init, FTools>([](auto Tag, EEngineStage)
+	Execute<FTools>([](auto Tag)
 	{
 		using T = typename decltype(Tag)::Type;
-		// TODO: per-tool Init capability (e.g. T::Get().Initialize()).
+		// Init phase — per-tool capability (e.g. T::Get().Initialize()).
 	});
-	Execute<EEngineStage::Init>(Layers, [](Maho::IAssembly* Layer, EEngineStage Stage)
+
+	Execute(Layers, [](Maho::IAssembly* Layer)
 	{
-		// The host maps (instance, Stage) → that layer's capability methods.
+		// The host dispatches each instance's per-phase work here.
 		(void)Layer;
-		(void)Stage;
 	});
 
 	while (ShouldContinue())
 	{
-		Execute<EEngineStage::Tick>(Layers, [](Maho::IAssembly* Layer, EEngineStage Stage)
+		Execute(Layers, [](Maho::IAssembly* Layer)
 		{
+			// Per-frame tick work per instance.
 			(void)Layer;
-			(void)Stage;
 		});
 	}
 
-	Execute<EEngineStage::Shutdown>(Layers, [](Maho::IAssembly* Layer, EEngineStage Stage)
+	Execute(Layers, [](Maho::IAssembly* Layer)
 	{
+		// Shutdown per instance.
 		(void)Layer;
-		(void)Stage;
 	});
-	Execute<EEngineStage::Shutdown, FTools>([](auto Tag, EEngineStage)
+	Execute<FTools>([](auto Tag)
 	{
 		using T = typename decltype(Tag)::Type;
-		// TODO: per-tool Shutdown capability.
+		// Shutdown phase — per-tool capability.
 	});
 
 	return 0;

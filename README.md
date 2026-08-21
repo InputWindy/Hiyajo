@@ -15,7 +15,7 @@ Maho 是一个纯 C++20 的游戏引擎，核心设计围绕**并行调度**与*
 ## 特性
 
 - **两类插件**：工具（`TTool`）、层（`TLayer`）——Tool 即插即用（全 public 单例），Layer 是应用根/嵌套宿主（Assembly + 并行调度）。不再区分 Engine。
-- **stage 驱动**：调度器唯一执行路径是 `Execute<Stage>(visitor)`，宿主在 visitor lambda 里把每个 stage 分发到扩展能力方法（工具编译期单例 / 层运行时实例）。
+- **并行遍历基座**：`Execute` 只做并行遍历（编译期类型列表 / 运行时实例数组），无 stage 语义；宿主在 visitor lambda 里决定每个目标干什么（工具单例直调 / 层实例驱动）。
 - **编译期组装**：插件组合、品种过滤（`TFilter`）、遍历展开全部在编译期由模板完成，运行时零反射、零排序开销。
 - **能力可选**：单例（`TSingleton`）、可运行（`IRunable`）、可安装（`IAssembly`）——插件自己决定要哪些，编译器强制互斥约束。
 - **零三方依赖的核心**：引擎核心不含任何第三方库，每个插件在自己的 `.cmake` 里用 FetchContent 拉取依赖，镜像与代理可配置。
@@ -113,21 +113,18 @@ Extension/Engine/ ← （旧目录，现在也是 TLayer；创建工程的默认
 
 ### stage 驱动
 
-调度器唯一的执行路径是 stage 驱动 —— 宿主定义 stage 枚举，把 `Main` 细分并发到扩展，每个 stage 用 visitor lambda 驱动：
+调度器只提供**并行遍历基座** `Execute`（无 stage 语义）。生命周期由宿主调度：init/tick/shutdown 各调一次 Execute，传个 lambda 决定该阶段每个目标干什么：
 
 ```cpp
-enum class EStage { Init, Tick, Shutdown };
-
 int Main(int Argc, char** Argv) override
 {
     CreateLayers();   // 实例化子 Layer（CreateExtension）进 this->Layers
 
-    Execute<EStage::Init, FTools>([](auto Tag, EStage) {   // 工具：编译期单例
+    Execute<FTools>([](auto Tag) {   // 工具：编译期单例，visitor 拿 TTag<T>
         using T = typename decltype(Tag)::Type;
-        Maho::Log::FLog::Get().Initialize();               // 按类型调能力
+        Maho::Log::FLog::Get().Initialize();
     });
-    Execute<EStage::Tick>(Layers, [](Maho::IAssembly* L, EStage) { ... });   // 层：运行时实例
-    Execute<EStage::Shutdown, FTools>([](auto Tag, EStage) { ... });
+    Execute(Layers, [](Maho::IAssembly* L) { ... });   // 层：运行时实例
     return 0;
 }
 ```
