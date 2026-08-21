@@ -60,9 +60,9 @@ struct FPlayer : FLayerBase, TPlug<IRender, IPhysics>
 		(IRender, FNoParent, FScene));                            // deps FScene
 };
 
-// ── the app: a scheduler owning the extension scan table + the instances ──
+// ── the app: a Layer host — an Assembly + a scheduler whose scan table IS the
+//    full layer list. It owns the instances and drives them by runtime type. ──
 using FLayerTypes = TTypeList<FWindow, FScene, FPhysics, FAudio, FPlayer>;
-using FSched = Parallel::FParallelScheduler<FLayerTypes>;
 
 // visitor counting each concrete layer type hit during dispatch
 struct FCountVisitor
@@ -75,37 +75,53 @@ struct FCountVisitor
 	void operator()(FPlayer&) const { Out.fetch_add(1, std::memory_order_relaxed); }
 };
 
-// the closure-level bands come from each Layer's deps (via code-gen in the real
-// engine; here we build them explicitly from the declared FDependsPack).
+struct FAppLayer
+	: IAssembly
+	, Parallel::FParallelScheduler<FLayerTypes>
+{
+	void Initialize(int, char**) override {}
+	void Shutdown() override {}
+	int Main(int, char**) override
+	{
+		// every layer in the scan table (each IAssembly* here) is a candidate;
+		// Execute dispatches each instance to its concrete type.
+		FCountVisitor V{ Calls };
+		this->Execute<FLayerTypes>(Insts, V);
+		return 0;
+	}
+
+	std::vector<IAssembly*> Insts;
+	std::atomic<int> Calls{ 0 };
+};
+
+// ── layered dispatch through the host app layer ──
 int main()
 {
-	FSched Sched;
+	FAppLayer App;
 
 	// runtime instances, scrambled on purpose
 	FWindow W; FScene S; FPhysics P; FAudio A; FPlayer Pl;
-	std::vector<IAssembly*> Insts = { &Pl, &A, &W, &P, &S };
+	App.Insts = { &Pl, &A, &W, &P, &S };
 
-	// ① dispatch every IRender layer exactly once (runtime-type dispatch)
+	App.Main(0, nullptr);   // drives every layer in the scan table (5)
+
+	if (App.Calls.load() != 5)
+	{
+		std::puts("[FAIL] app layer drove the wrong number of layers");
+		return 1;
+	}
+
+	// separate: dispatch only the IRender subset at runtime
 	std::atomic<int> RenderCalls{ 0 };
 	auto OnRender = [&](IRender&) { RenderCalls.fetch_add(1, std::memory_order_relaxed); };
-	Sched.Execute<TTypeList<FWindow, FScene, FPlayer>>(Insts, OnRender);
-
-	// ② live dispatch to EVERY instance in the scan list (dispatch by concrete
-	//    type among FLayerTypes); each runs its overload.
-	std::atomic<int> TotalCalls{ 0 };
-	FCountVisitor V{ TotalCalls };
-	Sched.Execute<FLayerTypes>(Insts, V);
+	App.Execute<TTypeList<FWindow, FScene, FPlayer>>(App.Insts, OnRender);
 
 	if (RenderCalls.load() != 3)
 	{
 		std::puts("[FAIL] IRender dispatch count");
 		return 1;
 	}
-	if (TotalCalls.load() != 5)
-	{
-		std::puts("[FAIL] all-layer dispatch count");
-		return 1;
-	}
-	std::printf("ok: IRender x%d, all-layers x%d\n", RenderCalls.load(), TotalCalls.load());
+	std::printf("ok: app drove %d layers, IRender subset x%d\n",
+		App.Calls.load(), RenderCalls.load());
 	return 0;
 }
