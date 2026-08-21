@@ -35,7 +35,7 @@ public:
 - 宿主不进入 Layer 内部收 "friend"：stage 驱动走 **visitor lambda**（见下），由宿主在 lambda 里调用 Layer 的 public 读接口 / 触发能力。
 
 **驱动机制（无 friend、无 ExecuteExtension 协议）**：
-- **Tools** = 编译期单例。`Execute<FTools>(visitor)` 并行遍历每个 T，visitor 拿 `TTag<T>` 恢复类型后调 `T::Get().xxx()`。
+- **Tools** = 编译期单例。`Execute<FTools>(visitor)` 并行遍历每个 T，遍历器把 `T::Get()` 单例实例作为 `T&` 传给 visitor。
 - **Layers** = 运行时实例。`Execute(Layers, visitor)` 并行遍历 `std::vector<IAssembly*>`，visitor 拿 `IAssembly*` 分发阶段工作到实例能力。
 
 `Execute` 只是**并行遍历基座，无 stage 语义**。生命周期由宿主调度：init 调一次、每帧循环调一次、shutdown 调一次，各传一个 lambda 决定该阶段每个目标干什么。
@@ -45,9 +45,8 @@ int FMyLayer::Main(int, char**)
 {
 	CreateLayers();   // 实例化子 Layer 进 this->Layers
 
-	Execute<FTools>([](auto Tag) {        // 编译期，visitor 拿 TTag<T>
-		using T = typename decltype(Tag)::Type;
-		T::Get().Initialize();            // 每个工具单例
+	Execute<FTools>([](T& Tool) {          // 编译期，遍历器把单例实例传进来
+		Tool.Initialize();                 // 每个工具，T& 直调
 	});
 
 	while (ShouldContinue())
@@ -57,7 +56,7 @@ int FMyLayer::Main(int, char**)
 		});
 	}
 
-	Execute<FTools>([](auto Tag) { /* Shutdown */ });
+	Execute<FTools>([](T& Tool) { /* Shutdown */ });
 }
 ```
 

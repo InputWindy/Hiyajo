@@ -53,12 +53,11 @@ public:
 
 **`IScheduler`** —— 调度器契约：`Run`（驱动一组可调用）+ 双 `Execute`（并行遍历基座，编译期类型表 / 运行时实例数组）。
 
-**`Execute<FTools>(visitor)`** —— 编译期版本：对每个扩展类型 T，visitor 拿 `TTag<T>` 恢复类型并调用其能力。工具是单例，`T::Get().xxx()`：
+**`Execute<FTools>(visitor)`** —— 编译期版本：对每个工具类型 T，遍历器取 `T::Get()` 单例实例作为 `T&` 传给 visitor：
 
 ```cpp
-Execute<FTools>([](auto Tag) {
-	using T = typename decltype(Tag)::Type;
-	T::Get().Initialize();
+Execute<FTools>([](T& Tool) {
+	Tool.Initialize();
 });
 ```
 

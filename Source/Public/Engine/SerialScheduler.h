@@ -21,11 +21,14 @@ public:
 		(Callables(), ...);
 	}
 
-	/** Compile-time traverse: every T in TList sees Visitor(TTag<T>). */
+	/** Compile-time traverse: every tool singleton in TList sees Visitor(T&). */
 	template <typename TList, typename TVisitor>
 	void Execute(TVisitor&& Visitor)
 	{
-		ForEach<TList>(*this, std::forward<TVisitor>(Visitor));
+		ForEach<TList>(*this, [&](auto Tag) {
+			using T = typename decltype(Tag)::Type;
+			Visitor(T::Get());
+		});
 	}
 };
 

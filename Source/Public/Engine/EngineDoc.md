@@ -50,12 +50,11 @@ int Main(int Argc, char** Argv) override
 {
     CreateLayers();   // 实例化每个子 Layer（CreateExtension）进 this->Layers
 
-    Execute<FTools>([](auto Tag) {   // 工具：编译期单例
-        using T = typename decltype(Tag)::Type;
-        T::Get().Initialize();
+    Execute<FTools>([](T& Tool) {   // 工具：编译期单例，遍历器传实例
+        Tool.Initialize();
     });
     Execute(Layers, [](Maho::IAssembly* L) { ... });   // 层：运行时实例
-    Execute<FTools>([](auto Tag) { T::Get().Shutdown(); });
+    Execute<FTools>([](T& Tool) { Tool.Shutdown(); });
     return 0;
 }
 ```

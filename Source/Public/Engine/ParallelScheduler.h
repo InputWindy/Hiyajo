@@ -20,10 +20,10 @@ namespace Parallel
  * lifecycle by calling Execute once per phase (init / per-frame tick / ...),
  * passing a visitor that decides what each target does:
  *
- *   Execute<FTools>(visitor)              — compile-time: parallel over the type
- *     list, each type T handed to the visitor as TTag<T> → T::Get().xxx().
- *   Execute(Layers, visitor)              — runtime: parallel over the instance
- *     vector, each IAssembly* handed to the visitor.
+ *   Execute<FTools>(visitor)   — compile-time: every tool's singleton is fetched
+ *     (T::Get()) and handed to the visitor as T&. Tools are singletons.
+ *   Execute(Layers, visitor)   — runtime: every IAssembly* instance handed to
+ *     the visitor.
  */
 class FParallelScheduler : public IScheduler
 {
@@ -39,11 +39,14 @@ public:
 		Pool->Run(std::forward<FCallables>(Callables)...);
 	}
 
-	/** Compile-time traverse: every T in TList sees Visitor(TTag<T>). */
+	/** Compile-time traverse: every tool singleton in TList sees Visitor(T&). */
 	template <typename TList, typename TVisitor>
 	void Execute(TVisitor&& Visitor)
 	{
-		ForEach<TList>(*this, std::forward<TVisitor>(Visitor));
+		ForEach<TList>(*this, [&](auto Tag) {
+			using T = typename decltype(Tag)::Type;
+			Visitor(T::Get());
+		});
 	}
 
 	/** Runtime traverse: every IAssembly* in Layers sees Visitor(instance). */

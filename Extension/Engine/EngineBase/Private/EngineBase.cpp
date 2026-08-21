@@ -28,10 +28,10 @@ int FEngineBase::Main(int Argc, char** Argv)
 	// are runtime instances (each IAssembly* in this->Layers).
 	CreateLayers();
 
-	Execute<FTools>([](auto Tag)
+	Execute<FTools>([](auto& Tool)
 	{
-		using T = typename decltype(Tag)::Type;
-		// Init phase — per-tool capability (e.g. T::Get().Initialize()).
+		// Init phase — per-tool capability.
+		(void)Tool;
 	});
 
 	Execute(Layers, [](Maho::IAssembly* Layer)
@@ -54,10 +54,10 @@ int FEngineBase::Main(int Argc, char** Argv)
 		// Shutdown per instance.
 		(void)Layer;
 	});
-	Execute<FTools>([](auto Tag)
+	Execute<FTools>([](auto& Tool)
 	{
-		using T = typename decltype(Tag)::Type;
 		// Shutdown phase — per-tool capability.
+		(void)Tool;
 	});
 
 	return 0;

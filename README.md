@@ -120,9 +120,8 @@ int Main(int Argc, char** Argv) override
 {
     CreateLayers();   // 实例化子 Layer（CreateExtension）进 this->Layers
 
-    Execute<FTools>([](auto Tag) {   // 工具：编译期单例，visitor 拿 TTag<T>
-        using T = typename decltype(Tag)::Type;
-        Maho::Log::FLog::Get().Initialize();
+    Execute<FTools>([](T& Tool) {   // 工具：编译期单例，遍历器把实例传进来
+        Maho::Log::FLog::Get().Initialize();   // Tool 即 T& 单例
     });
     Execute(Layers, [](Maho::IAssembly* L) { ... });   // 层：运行时实例
     return 0;
