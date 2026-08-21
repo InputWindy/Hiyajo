@@ -17,43 +17,41 @@ struct IA { virtual void InterfaceA() = 0; };
 struct IB { virtual void InterfaceB() = 0; };
 struct IC { virtual void InterfaceC() = 0; };
 
-// ── extensions; interfaces installed messily ──
-struct SA : IExtension, IA
+// ── extensions; interfaces installed messily.
+// Leaf/non-inherited extensions use the assembled base TExtension<TDeps> —
+// identity + dependency pack in one. Inherited ones merge the parent's deps.
+struct SA : TExtension<TDependsPack<TDependsOn<IA, TTypeList<>>>>, IA
 {
-	using FDependsPack = TDependsPack<TDependsOn<IA, TTypeList<>>>;
 };
 
-// SB : SA → carries SA's IA, we also add IB.
+// SB : SA → inherits SA's deps; we add interface IB.
 struct SB : SA, IB
 {
-	using FDependsPack = SA::FDependsPack;
 };
 
-struct SC : IExtension, IC
+struct SC : TExtension<TDependsPack<TDependsOn<IA, TTypeList<SA>>>>, IC
 {
-	using FDependsPack = TDependsPack<TDependsOn<IA, TTypeList<SA>>>;
 };
 
-// SD : SC → carries SC's IC; we add IA + IB.
+// SD : SC → inherits SC's deps (via SC::FDependsPack) + its own; we add IA+IB.
 struct SD : SC, IA, IB
 {
 	using FDependsPack = Topo::TConcatPacks_t<SC::FDependsPack,
 		TDependsPack<TDependsOn<IA, TTypeList<SB, SC>>>>;
 };
 
-// SE : SD → carries IA,IB,IC; nothing extra.
+// SE : SD → inherits + its own; nothing extra.
 struct SE : SD
 {
 	using FDependsPack = Topo::TConcatPacks_t<SD::FDependsPack,
 		TDependsPack<TDependsOn<IA, TTypeList<SD, SA>>>>;
 };
 
-struct SF : IExtension, IA, IC
+struct SF : TExtension<TDependsPack<TDependsOn<IA, TTypeList<SB>>>>, IA, IC
 {
-	using FDependsPack = TDependsPack<TDependsOn<IA, TTypeList<SB>>>;
 };
 
-// SG : SF → carries IA,IC; we add IB.
+// SG : SF → inherits SF's deps + its own; we add IB.
 struct SG : SF, IB
 {
 	using FDependsPack = Topo::TConcatPacks_t<SF::FDependsPack,

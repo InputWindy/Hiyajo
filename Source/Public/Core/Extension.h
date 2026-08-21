@@ -1,27 +1,32 @@
 #pragma once
 
+#include <Core/Topology.h>
+
 namespace Maho
 {
 
 // ───────────────────────────────────────────────────────────────────────
 // Extension — the identity every service/plugin shares.
 //
-// An extension IS its dependency table: a host plugin declares what it depends
-// on (and at which stage) via FDependsPack. The scheduler reads FDependsPack
-// (through Topology / TNodeDeps_t) to order service groups and drive them; it
-// never reaches inside the extension because the type knows its own deps.
+// An extension IS its dependency table: it declares what it depends on (and in
+// which slot / phase) via FDependsPack. The scheduler reads FDependsPack
+// (through Topology / TNodeDeps_t) to order service groups and drive them.
 //
-//   class FInput : public IExtension
+// TExtension<TDeps> assembles the identity + the deps in one little base, so an
+// extension is a one-line declaration; interfaces go on the class itself.
+//
+//   struct FLog : TExtension<TDependsPack<>>
 //   {
-//   public:
-//       using FDependsPack = TDependsPack<>;                       // no deps
+//       // identity + empty deps
 //   };
 //
-//   class FSystem : public IExtension
+//   struct FSystem : TExtension<TDependsPack<TDependsOn<EStage::Init, TTypeList<FLog>>>>
 //   {
-//   public:
-//       using FDependsPack = TDependsPack<
-//           TDependsOn<EStage::Init, TTypeList<FInput>>>;          // deps: FInput
+//   };
+//
+//   struct FRender : TExtension<TDependsPack<TDependsOn<EStage::Init, TTypeList<FSystem>>>>
+//       , IRenderFeature                              // interfaces attach here
+//   {
 //   };
 //
 // Driving the matched types (by instance or singleton) is the host/scheduler's
@@ -32,6 +37,17 @@ class IExtension
 {
 public:
 	virtual ~IExtension() = default;
+};
+
+/**
+ * Assembled extension base: carries the IExtension identity and declares the
+ * type's dependency pack (FDependsPack). Derive and add interfaces as needed.
+ */
+template <typename TDeps>
+class TExtension : public IExtension
+{
+public:
+	using FDependsPack = TDeps;
 };
 
 } // namespace Maho
