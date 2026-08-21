@@ -89,7 +89,7 @@ public:
  * Filter a list by base class: keep the elements deriving from TBase,
  * preserving order (std::is_base_of inlined — no predicate alias needed).
  *
- *   using FLayers = typename TFilter<TTypeList<A, B, C>, Maho::IAssembly>::Type;
+ *   using FLayers = typename TFilter<TTypeList<A, B, C>, Maho::ILayer>::Type;
  */
 template <typename TList, typename TBase>
 struct TFilter;

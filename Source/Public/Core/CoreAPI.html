@@ -175,7 +175,7 @@
 
 <section class="class-panel">
 	<h3 class="class-name">TExtension&lt;TDerived&gt;<span class="class-kind">class</span></h3>
-	<p class="class-desc">单例扩展。只继承 <code>TSingleton</code>——<b>不继承 IAssembly</b>；插件不需要动态加载，只有应用（宿主）显式继承 IAssembly。</p>
+	<p class="class-desc">单例扩展。只继承 <code>TSingleton</code>——<b>不继承 ILayer</b>；插件不需要动态加载，只有应用（宿主）显式继承 ILayer。</p>
 </section>
 
 <section class="class-panel">
@@ -205,7 +205,7 @@
 </section>
 
 <section class="class-panel">
-	<h3 class="class-name">IAssembly<span class="class-kind">interface</span></h3>
+	<h3 class="class-name">ILayer<span class="class-kind">interface</span></h3>
 	<p class="class-desc">已加载装配件的契约——有 Main 入口。DLL 导出 <code>CreateExtension</code> 返回它。</p>
 	<h3 class="group">接口</h3>
 	<table class="api-table">

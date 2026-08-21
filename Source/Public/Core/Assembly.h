@@ -53,26 +53,26 @@ private:
 
 /**
  * Installable assembly contract — a runnable that is ALSO dynamically
- * installable: its DLL exports `CreateExtension` returning an IAssembly*.
+ * installable: its DLL exports `CreateExtension` returning an ILayer*.
  * Mutually exclusive with TSingleton (an installable app may be instantiated
  * many times; a singleton may not).
  */
-class MAHO_API IAssembly : public virtual IRunable
+class MAHO_API ILayer : public virtual IRunable
 {
 public:
-	virtual ~IAssembly() = default;
+	virtual ~ILayer() = default;
 
 	virtual void Initialize(int Argc, char** Argv) = 0;
 	virtual void Shutdown() = 0;
 };
 
-// The assembly-export contract: T must provide `static IAssembly* CreateExtension()`.
+// The assembly-export contract: T must provide `static ILayer* CreateExtension()`.
 // codegen emits a static_assert against this so a missing CreateExtension is a
 // compile-time error, not a link/load-time surprise.
 template <typename T>
 concept FAssemblyExport = requires
 {
-	{ T::CreateExtension() } -> std::convertible_to<IAssembly*>;
+	{ T::CreateExtension() } -> std::convertible_to<ILayer*>;
 };
 
 } // namespace Maho

@@ -48,9 +48,9 @@ public:
 
 	/** Instance traverse: first matching type in TQueryTypes sees Visitor(T&). */
 	template <typename TQueryTypes, typename TVisitor>
-	void Execute(std::vector<IAssembly*>& Instances, TVisitor&& Visitor)
+	void Execute(std::vector<ILayer*>& Instances, TVisitor&& Visitor)
 	{
-		for (IAssembly* Instance : Instances)
+		for (ILayer* Instance : Instances)
 		{
 			DispatchInstance<TQueryTypes>(Instance, Visitor);
 		}

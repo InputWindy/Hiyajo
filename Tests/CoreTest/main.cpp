@@ -21,8 +21,8 @@ struct IRender { virtual void Render() = 0; };
 struct IPhysics { virtual void Step() = 0; };
 struct IAudio { virtual void Play() = 0; };
 
-// ── concrete Layer base: satisfies every pure virtual of IAssembly ──
-struct FLayerBase : IAssembly
+// ── concrete Layer base: satisfies every pure virtual of ILayer ──
+struct FLayerBase : ILayer
 {
 	void Initialize(int, char**) override {}
 	void Shutdown() override {}
@@ -76,21 +76,21 @@ struct FCountVisitor
 };
 
 struct FAppLayer
-	: IAssembly
+	: ILayer
 	, Parallel::FParallelScheduler<FLayerTypes>
 {
 	void Initialize(int, char**) override {}
 	void Shutdown() override {}
 	int Main(int, char**) override
 	{
-		// every layer in the scan table (each IAssembly* here) is a candidate;
+		// every layer in the scan table (each ILayer* here) is a candidate;
 		// Execute dispatches each instance to its concrete type.
 		FCountVisitor V{ Calls };
 		this->Execute<FLayerTypes>(Insts, V);
 		return 0;
 	}
 
-	std::vector<IAssembly*> Insts;
+	std::vector<ILayer*> Insts;
 	std::atomic<int> Calls{ 0 };
 };
 

@@ -50,9 +50,9 @@ public:
 |------|------|--------|
 | `TSingleton<T>` | 进程内唯一实例（Meyers 单例） | — |
 | `IRunable` | 可运行（有 `Main`） | ✅ 兼容 |
-| `IAssembly` | 可动态安装（`IRunable` + 导出 `CreateExtension`） | ❌ 互斥 |
+| `ILayer` | 可动态安装（`IRunable` + 导出 `CreateExtension`） | ❌ 互斥 |
 
-`TSingleton` 和 `IRunable`/`IAssembly` 是**独立的可选能力**，插件自己决定要哪个：工具要单例、Layer 要 "Assembly（导出，实例驱动）"、应用根就是一个 Layer。
+`TSingleton` 和 `IRunable`/`ILayer` 是**独立的可选能力**，插件自己决定要哪个：工具要单例、Layer 要 "Assembly（导出，实例驱动）"、应用根就是一个 Layer。
 
 ### ③ 调度协议
 
@@ -66,7 +66,7 @@ Execute<FTools>([](T& Tool) {
 });
 ```
 
-**`Execute(Layers, visitor)`** —— 运行时实例版本：对 `std::vector<IAssembly*>` 内的每个层实例并行调用 visitor，宿主在 lambda 里把实例分派到该层能力方法。
+**`Execute(Layers, visitor)`** —— 运行时实例版本：对 `std::vector<ILayer*>` 内的每个层实例并行调用 visitor，宿主在 lambda 里把实例分派到该层能力方法。
 
 `Execute` 无 stage 语义——生命周期是宿主的职责：init/tick/shutdown 各调一次 Execute，各传一个 lambda 决定该阶段每个目标干什么。扩展只提供能力方法，不感知阶段。
 
@@ -87,8 +87,8 @@ graph TD
     subgraph 可选能力
         TSingleton["TSingleton&lt;T&gt;<br/>单例"]
         IRunable["IRunable<br/>可运行(Main)"]
-        IAssembly["IAssembly<br/>可动态安装"]
-        IAssembly --> IRunable
+        ILayer["ILayer<br/>可动态安装"]
+        ILayer --> IRunable
     end
 
     subgraph 调度协议

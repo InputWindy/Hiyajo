@@ -9,14 +9,14 @@ namespace Maho
  * Unified app driver — install an extension assembly and execute it.
  *
  * No engine/tool preset: the extension is a self-contained DLL
- * exporting `CreateExtension()` → an owning IAssembly*. The entry point
- * installs it via FAssembly, then forwards to IAssembly::Main.
+ * exporting `CreateExtension()` → an owning ILayer*. The entry point
+ * installs it via FAssembly, then forwards to ILayer::Main.
  *
  *   main()/WinMain() → Maho::Main(Argc, Argv)
  *     InstallFatalHandlers()
  *     FAssembly Load(argv[1])       // install
- *     CreateExtension() → IAssembly* // create the assembly instance
- *     IRunable->Main(Argc, Argv)     // execute (IAssembly is-a IRunable)
+ *     CreateExtension() → ILayer* // create the assembly instance
+ *     IRunable->Main(Argc, Argv)     // execute (ILayer is-a IRunable)
  */
 inline int Main(int Argc, char** Argv)
 {
@@ -36,13 +36,13 @@ inline int Main(int Argc, char** Argv)
 	}
 
 	// Create the assembly instance.
-	auto Create = Extension.GetProc<IAssembly*()>("CreateExtension");
+	auto Create = Extension.GetProc<ILayer*()>("CreateExtension");
 	if (!Create)
 	{
 		ReportFatal("Extension assembly exports no CreateExtension");
 	}
 
-	IAssembly* App = Create();
+	ILayer* App = Create();
 	if (!App)
 	{
 		ReportFatal("CreateExtension returned null");

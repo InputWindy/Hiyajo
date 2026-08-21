@@ -91,7 +91,7 @@ public:
 // ───────────────────────────────────────────────────────────────────────
 // Runtime instance dispatch (shared by the serial & parallel schedulers).
 //
-// A std::vector<IAssembly*> holds polymorphic instances whose RUNTIME type is
+// A std::vector<ILayer*> holds polymorphic instances whose RUNTIME type is
 // known only at runtime. DispatchInstance<TList>(instance, visitor) dynamic_cast
 // to the first type in TList the instance binds to (order matters — list most
 // derived first) and calls visitor(T&). Each instance is driven at most once;
@@ -100,7 +100,7 @@ public:
 namespace InstanceDispatchDetail
 {
 	template <typename THead, typename... TRest, typename TVisitor>
-	bool TCall(IAssembly* Instance, TVisitor& Visitor)
+	bool TCall(ILayer* Instance, TVisitor& Visitor)
 	{
 		if (auto* Typed = dynamic_cast<THead*>(Instance))
 		{
@@ -117,10 +117,10 @@ namespace InstanceDispatchDetail
 
 /** Drive Instance once: first matching type in TList sees Visitor(T&). */
 template <typename TList, typename TVisitor>
-void DispatchInstance(IAssembly* Instance, TVisitor& Visitor);
+void DispatchInstance(ILayer* Instance, TVisitor& Visitor);
 
 template <typename... Ts, typename TVisitor>
-void DispatchInstance(TTypeList<Ts...>, IAssembly* Instance, TVisitor& Visitor)
+void DispatchInstance(TTypeList<Ts...>, ILayer* Instance, TVisitor& Visitor)
 {
 	if (Instance == nullptr)
 	{
@@ -131,7 +131,7 @@ void DispatchInstance(TTypeList<Ts...>, IAssembly* Instance, TVisitor& Visitor)
 
 /** Drive Instance once: first matching type in TList sees Visitor(T&). */
 template <typename TList, typename TVisitor>
-void DispatchInstance(IAssembly* Instance, TVisitor& Visitor)
+void DispatchInstance(ILayer* Instance, TVisitor& Visitor)
 {
 	DispatchInstance(TList{}, Instance, Visitor);
 }

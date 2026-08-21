@@ -19,13 +19,13 @@ namespace Parallel
  * The scheduler is parameterized over its extension scan table (FExtensions),
  * a TTypeList a Layer passes in so Query can filter the candidates it drives:
  *   Query<FExtensions>().Select<ISingleton>()  — the Tools it schedules
- *   Query<FExtensions>().Select<IAssembly>()   — the child Layers it drives
+ *   Query<FExtensions>().Select<ILayer>()   — the child Layers it drives
  *
  * Two Execute overloads, matching the two extension kinds:
  *
  *   Execute<TQueryTypes>(visitor)          — singletons: each type's T::Get() is
  *     handed to the visitor as T&. (Tools / type providers.)
- *   Execute<TQueryTypes>(Instances, vis)   — instances: for every IAssembly* in
+ *   Execute<TQueryTypes>(Instances, vis)   — instances: for every ILayer* in
  *     the array, its RUNTIME type is checked against TQueryTypes (the Query's
  *     filtered type list); the first matching type hands the typed instance
  *     (T&) to the visitor, others are skipped. (Layers.)
@@ -62,17 +62,17 @@ public:
 	}
 
 	/**
-	 * Instance traverse: every IAssembly* in Instances whose runtime type
+	 * Instance traverse: every ILayer* in Instances whose runtime type
 	 * matches one of TQueryTypes is handed to the visitor as that type (T&);
 	 * non-matching instances are skipped. Each instance dispatches at most once
 	 * (first matching type wins — order TQueryTypes from most to least derived).
 	 */
 	template <typename TQueryTypes, typename TVisitor>
-	void Execute(std::vector<IAssembly*>& Instances, TVisitor&& Visitor)
+	void Execute(std::vector<ILayer*>& Instances, TVisitor&& Visitor)
 	{
 		std::vector<std::function<void()>> Tasks;
 		Tasks.reserve(Instances.size());
-		for (IAssembly* Instance : Instances)
+		for (ILayer* Instance : Instances)
 		{
 			Tasks.emplace_back([&, Instance] { DispatchInstance<TQueryTypes>(Instance, Visitor); });
 		}

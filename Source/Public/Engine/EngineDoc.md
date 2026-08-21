@@ -44,7 +44,7 @@ class FMyGame : public Maho::TLayer<FLog, FRDG, FRenderer> { ... };
 
 ```cpp
 using FTools = typename TFilterWhere<FExtensions, TIsSingleton>::Type;   // 工具（单例）
-using FLayerTypes = typename TFilter<FExtensions, IAssembly>::Type;       // 层（Assembly）
+using FLayerTypes = typename TFilter<FExtensions, ILayer>::Type;       // 层（Assembly）
 
 int Main(int Argc, char** Argv) override
 {
@@ -53,7 +53,7 @@ int Main(int Argc, char** Argv) override
     Execute<FTools>([](T& Tool) {   // 工具：编译期单例，遍历器传实例
         Tool.Initialize();
     });
-    Execute(Layers, [](Maho::IAssembly* L) { ... });   // 层：运行时实例
+    Execute(Layers, [](Maho::ILayer* L) { ... });   // 层：运行时实例
     Execute<FTools>([](T& Tool) { Tool.Shutdown(); });
     return 0;
 }
