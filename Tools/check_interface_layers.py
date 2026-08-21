@@ -1,12 +1,16 @@
 # Run before a build — enforces the Maho interface-layering rule:
 #
-#   * const read  methods → public
-#   * non-const write methods → protected (NOT public)
-#   * the scheduler's ONLY write entry = friend ExecuteExtension<T, TStage>
+#   Tool  — plug-in-and-play, self-managed. Read AND write are public; no
+#           scheduler ownership. The linter leaves Tools alone.
 #
-# A Tool/Layer must never expose a non-const method publicly: another plugin
-# could Get() the singleton and write it behind the scheduler's back, breaking
-# the thread-safe write model.
+#   Layer — the heavy engine logic, owned by the scheduler:
+#           * const read  methods → public
+#           * non-const write methods → protected (NOT public)
+#           * the scheduler's ONLY write entry = friend ExecuteExtension<T, TStage>
+#
+# A Layer must never expose a non-const method publicly: another plugin could
+# Get() the singleton and write it behind the scheduler's back, breaking the
+# thread-safe write model.
 #
 # Usage:
 #   python check_interface_layers.py path\\Game.cproject
@@ -38,18 +42,13 @@ _FRIEND_RE = re.compile(
     r"friend\s+bool\s+Maho::ExecuteExtension\s*\(TStage\s+Stage\)"
 )
 
-# Any other friend (class / function / FreeService bridge) inside a Tool/Layer is
-# a backdoor around the scheduler — must be rejected.
+# Any other friend (class / function / FreeService bridge) inside a Layer is a
+# backdoor around the scheduler — must be rejected.
 _ANY_FRIEND_RE = re.compile(r"\bfriend\b")
 
-# FStandaloneTag opt-out — a class whose FTags carries it is self-managed and the
-# linter skips it. Scan the class body for the marker broadly (the FTags alias may
-# nest template args, e.g. FWithTags<typename TTool<X>::FTags, FStandaloneTag>).
-_STANDALONE_TAG = "FStandaloneTag"
 
-
-def _is_tool_or_layer(base: str) -> bool:
-    return base.startswith(("TTool<", "TLayer<", "Maho::TTool<", "Maho::TLayer<"))
+def _is_layer(base: str) -> bool:
+    return base.startswith(("TLayer<", "Maho::TLayer<"))
 
 
 def _find_class_open(lines: list[str], start: int) -> int | None:
@@ -97,12 +96,10 @@ def check_header(path: Path) -> list[str]:
 
     i = 0
     while i < len(lines):
-        # Find a class deriving from TTool<T> / TLayer<T>.
-        m = re.search(r"class\s+\w*\s*MACRO\w*\s*\w+\s*:\s*public\s+([\w:<>,]+)", "")
-        # Simpler: scan for "class NAME ... : ... TTool<NAME" shapes.
+        # Find a class deriving from TLayer<T> (Tools are self-managed — skip).
         head = re.match(
             r"^\s*class\s+[A-Za-z_][\w]*\b.*:\s*(public\s+)?.*"
-            r"(TTool|TLayer|Maho::TTool|Maho::TLayer)\s*<",
+            r"(TLayer|Maho::TLayer)\s*<",
             lines[i],
         )
         if head is None:
@@ -121,7 +118,6 @@ def check_header(path: Path) -> list[str]:
         # Walk the class body, tracking access section + nested depth.
         section = "private"
         scheduler_friends = 0
-        standalone = False
 
         for j in range(open_idx + 1, end_idx):
             if _brace_depth(lines, open_idx, j) != 0:
@@ -132,21 +128,13 @@ def check_header(path: Path) -> list[str]:
                 section = sec.group(1)
                 continue
 
-            # FStandaloneTag opt-out — self-managed class, linter skips it.
-            if _STANDALONE_TAG in lines[j]:
-                standalone = True
-
-            if standalone:
-                # Once marked standalone, stop enforcing the Tool/Layer contract.
-                continue
-
             if _FRIEND_RE.search(lines[j]):
                 scheduler_friends += 1
                 continue
 
             if _ANY_FRIEND_RE.search(lines[j].split("//")[0]):
                 problems.append(
-                    f"{path}:{j + 1}: extra friend (backdoor) — a Tool/Layer may "
+                    f"{path}:{j + 1}: extra friend (backdoor) — a Layer may "
                     f"declare ONLY 'template <typename TExtension, typename TStage> "
                     f"friend bool Maho::ExecuteExtension(TStage Stage);'; remove it "
                     f"(external callers go through the scheduler)"
@@ -162,19 +150,15 @@ def check_header(path: Path) -> list[str]:
                         f"(only the scheduler may write via ExecuteExtension)"
                     )
 
-        if standalone:
-            i = end_idx + 1
-            continue
-
         if scheduler_friends == 0:
             problems.append(
-                f"{path}:{i + 1}: Tool/Layer class missing friend "
+                f"{path}:{i + 1}: Layer class missing friend "
                 f"'template <typename TExtension, typename TStage> "
                 f"friend bool Maho::ExecuteExtension(TStage Stage);'"
             )
         elif scheduler_friends > 1:
             problems.append(
-                f"{path}:{i + 1}: Tool/Layer class declares "
+                f"{path}:{i + 1}: Layer class declares "
                 f"{scheduler_friends} friend ExecuteExtension — exactly one required"
             )
 
@@ -217,7 +201,7 @@ def main(argv: list[str]) -> int:
                 print(f"  {p}", file=sys.stderr)
             return 1
 
-        print("[Maho] Interface layering OK (write methods protected, friend present)")
+        print("[Maho] Interface layering OK (Tools self-managed; Layer writes protected, friend present)")
         return 0
     except Exception as ex:  # noqa: BLE001
         print(f"[ERROR] {ex}", file=sys.stderr)

@@ -19,9 +19,6 @@ namespace CommandParser
 class MAHO_COMMANDPARSER_API FCommandParserTool : public Maho::TTool<FCommandParserTool>
 {
 public:
-	/** Identity tag — this is a Tool. */
-	using FTags = TTypeList<FToolTag>;
-
 	/**
 	 * Get a value from the parsed command line by name. Supports both `-name=value`
 	 * and `-name value` forms. Returns nullptr when the key is absent.
@@ -34,20 +31,16 @@ public:
 	/** Number of parsed entries. */
 	[[nodiscard]] int Count() const;
 
-protected:
 	/** Reset the store (kept idempotent — Parse overwrites entries). */
 	void Reset();
 
 	/** Parse argc/argv into the shared store (idempotent; later calls overwrite). */
 	void Parse(int Argc, char** Argv);
 
-	/** Lifecycle write (Init/Shutdown): drop all parsed entries. */
+	/** Drop all parsed entries. */
 	void Clear();
 
 private:
-	template <typename TExtension, typename TStage>
-	friend bool Maho::ExecuteExtension(TStage Stage);
-
 	std::unordered_map<std::string, std::string> Storage;
 };
 

@@ -64,16 +64,10 @@ public:
 	/** Look up a pooled string by index. */
 	[[nodiscard]] std::string_view ToString(std::uint32_t Id) const;
 
-protected:
-	// ── 写（protected，仅调度器）──
-
-	/** Clear the intern pool and reserve index 0 = None. Lifecycle write. */
+	/** Clear the intern pool and reserve index 0 = None. */
 	void Clear();
 
 private:
-	template <typename TExtension, typename TStage>
-	friend bool Maho::ExecuteExtension(TStage Stage);
-
 	mutable std::mutex Mutex;
 	std::vector<std::string> Pool;                            // index → string (0 = None)
 	std::unordered_map<std::string, std::uint32_t> Lookup;    // string → index

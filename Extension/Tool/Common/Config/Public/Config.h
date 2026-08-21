@@ -45,18 +45,14 @@ public:
 	[[nodiscard]] bool HasSection(std::string_view Section) const;
 	[[nodiscard]] bool HasKey(std::string_view Section, std::string_view Key) const;
 
-protected:
-	/** Parse an INI file; returns false on failure. Lifecycle write. */
+	/** Parse an INI file; returns false on failure. */
 	bool Load(std::string_view Path);
 
-	/** Set a value (runtime override). Only the scheduler/free fn may write. */
+	/** Set a value (runtime override). */
 	void SetString(std::string_view Section, std::string_view Key, std::string Value);
 
-	/** Lifecycle write (Init/Shutdown): drop all loaded sections. */
+	/** Drop all loaded sections. */
 	void Clear();
-
-	template <typename TExtension, typename TStage>
-	friend bool Maho::ExecuteExtension(TStage Stage);
 
 private:
 	using FSection = std::map<std::string, std::string>;   // key → value

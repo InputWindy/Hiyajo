@@ -30,17 +30,11 @@ public:
 
 	// Services are namespace-level free functions (SetLogLevel/Debug/Info/Warn/Error).
 
-protected:
-	// ── 写（protected，仅调度器 / friend 自由函数）──
-
-	/** Set the default spdlog level. Called by the host at Init. */
+	/** Set the default spdlog level. */
 	void Initialize();
 
-	/** Flush and tear down spdlog. Called by the host at Shutdown. */
+	/** Flush and tear down spdlog. */
 	void Shutdown();
-
-	template <typename TExtension, typename TStage>
-	friend bool Maho::ExecuteExtension(TStage Stage);
 };
 
 MAHO_LOG_API void SetLogLevel(ELogLevel Level);

@@ -28,14 +28,6 @@ template <typename T> [[nodiscard]] constexpr T Clamp(const T& Value, const T& M
 /** Math library extension (GLM + helpers). A plain singleton type provider, header-only. */
 class MAHO_MATH_API FMathTool : public Maho::TTool<FMathTool>
 {
-public:
-	/** Identity tag — this is a Tool. */
-	using FTags = TTypeList<FToolTag>;
-
-protected:
-	// The ONLY external write interaction — the scheduler's ExecuteExtension.
-	template <typename TExtension, typename TStage>
-	friend bool Maho::ExecuteExtension(TStage Stage);
 };
 
 } // namespace Math

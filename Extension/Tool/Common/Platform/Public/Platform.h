@@ -37,26 +37,20 @@ public:
 };
 
 /**
- * Platform system — surface + events. A driven tool; the host (Engine/Layer)
- * specialises ExecuteExtension<FPlatformTool, HostStage> to pump events and
- * tear the window down at the right stages.
+ * Platform system — surface + events. A Tool: plug-in-and-play, self-managed.
+ * Read and write are all public; the host decides when to create the window,
+ * pump events, and tear it down. No scheduler-ownership friend.
  *
- *   // read (const, public — any side may query)
+ *   FPlatformTool::Get().CreateWindow(1280, 720, "MyGame");
+ *   FPlatformTool::Get().PollEvents();
  *   FPlatformTool::Get().GetNativeWindow();
- *   FPlatformTool::Get().ShouldClose();
- *
- *   // write (non-const, protected — scheduler only, via ExecuteExtension)
- *   //   CreateWindow / PollEvents / DestroyWindow
  *
  * Headless when no backend is created.
  */
 class MAHO_PLATFORM_API FPlatformTool : public Maho::TTool<FPlatformTool>
 {
 public:
-	/** Identity tag — this is a Tool. */
-	using FTags = TTypeList<FToolTag>;
-
-	// ── 读接口（const，public，无竞争）──
+	// ── 读接口（public）──
 
 	/** Native surface for the RHI; nullptr when headless or creation failed. */
 	[[nodiscard]] FNativeSurface GetNativeWindow() const;
@@ -67,8 +61,7 @@ public:
 	/** Window close request (false when headless or no events). */
 	[[nodiscard]] bool ShouldClose() const;
 
-protected:
-	// ── 写接口（非 const，protected，仅调度器通过 ExecuteExtension 调用）──
+	// ── 写接口（public——Tool 自带管理）──
 
 	/** Create a window (picks the backend for the current platform). */
 	bool CreateWindow(int Width, int Height, std::string_view Title);
@@ -81,10 +74,6 @@ protected:
 
 	/** Pump the event queue once (host Tick). */
 	void PollEvents();
-
-	// The ONLY external write entry — the scheduler's ExecuteExtension<T, Stage>.
-	template <typename TExtension, typename TStage>
-	friend bool Maho::ExecuteExtension(TStage Stage);
 
 private:
 	std::unique_ptr<IPlatform> Surface;

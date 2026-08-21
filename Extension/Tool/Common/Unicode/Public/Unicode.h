@@ -62,9 +62,6 @@ public:
 	using FTags = TTypeList<FToolTag>;
 
 	// Pure function library — no lifecycle, no stage.
-
-	template <typename TExtension, typename TStage>
-	friend bool Maho::ExecuteExtension(TStage Stage);
 };
 
 } // namespace Unicode

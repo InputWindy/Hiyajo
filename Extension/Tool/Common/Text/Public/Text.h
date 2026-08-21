@@ -60,15 +60,12 @@ public:
 	/** Identity tag — this is a Tool. */
 	using FTags = TTypeList<FToolTag>;
 
-	// ── 读（const，public——任意方可读）──
+	// ── 读（public）──
 
 	[[nodiscard]] std::string_view GetCulture() const;
 
 	/** Look up a translation; returns nullptr when absent. Thread-safe. */
 	[[nodiscard]] const std::string* FindTranslation(std::string_view InNamespace, std::string_view InKey, std::string_view InCulture) const;
-
-protected:
-	// ── 写（protected，仅调度器 / friend 自由函数）──
 
 	void SetCulture(std::string InCulture);
 
@@ -78,11 +75,8 @@ protected:
 	/** Load translations from a JSON array of objects. */
 	void LoadTranslationsFromJson(std::string_view JsonText);
 
-	/** Clear the translation catalog and reset culture to "en-US". Lifecycle write. */
+	/** Clear the translation catalog and reset culture to "en-US". */
 	void Clear();
-
-	template <typename TExtension, typename TStage>
-	friend bool Maho::ExecuteExtension(TStage Stage);
 
 private:
 	mutable std::mutex Mutex;

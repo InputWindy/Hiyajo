@@ -63,15 +63,12 @@ public:
 };
 
 /**
- * Console variable registry (UE IConsoleManager). A Tool marked Standalone: static
- * TAutoConsoleVariable globals register at static-init, before the scheduler runs.
- * FTags = FStandaloneTag → the linter leaves it alone; it guards itself (mutex).
+ * Console variable registry (UE IConsoleManager). A Tool: plug-in-and-play,
+ * self-managed. Static TAutoConsoleVariable globals register at static-init.
+ * All read+write methods are public.
  */
 class MAHO_CONSOLEVARIABLE_API FConsoleVariableTool : public Maho::TTool<FConsoleVariableTool>
 {
-public:
-	/** FToolTag (identity) + FStandaloneTag (self-managed — linter leaves it alone). */
-	using FTags = FWithTags<Maho::TTool<FConsoleVariableTool>::FTags, Maho::FStandaloneTag>;
 public:
 	/** Find a registered variable; nullptr when absent. (read) */
 	[[nodiscard]] IConsoleVariable* Find(std::string_view Name);

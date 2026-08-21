@@ -14,9 +14,21 @@
 
 ## 接口分层（强约束，违反 = 违背引擎架构）
 
-Tool / Layer 全是单例，`Get()` 是 public——任意插件都能拿到对方单例。
+Tool 与 Layer 性质不同，访问规则相反：
 
-**核心规则**：
+**Tool = 即插即用，自行管理（Standalone）**——读接口和写接口**全 public**，不设 friend。Tool 是轻量服务积木，谁用谁直调 `Get().xxx()`，生命周期由调用方决定，不依赖调度器。引擎没有逻辑写管制 Tool，也不给 Tool 收写。
+
+```cpp
+class FPlatformTool : public Maho::TTool<FPlatformTool>
+{
+public:
+	[[nodiscard]] FNativeSurface GetNativeWindow() const;  // 读 → public
+	bool CreateWindow(int, int, std::string_view);         // 写 → public（Tool 自带管理）
+	void PollEvents();                                     // 写 → public
+};
+```
+
+**Layer = 重代码，调度器统一负责写**——Tool / Layer 全是单例，`Get()` 是 public，任意插件都能拿到对方单例。核心规则：
 
 - `const` 读接口 → **public**。读不改状态，无多线程竞争，任意方可读。
 - 非 `const` 写接口 → **protected**。写改变自身状态，多线程下危险，**只有调度器能写**。
@@ -27,32 +39,30 @@ template <typename TExtension, typename TStage>
 friend bool Maho::ExecuteExtension(TStage Stage);
 ```
 
-**为什么**：若 Tool/Layer 直接 `Get()` 对方单例 + 调 public 写接口，等于绕过调度器去写别的插件，破坏调度器的线程安全写入模型。所以写接口必须收进 protected，只有调度器（经 friend `ExecuteExtension`）能触达。
+**为什么 Layer 要收紧**：若 Layer 直接 `Get()` 对方单例 + 调 public 写接口，等于绕过调度器去写别的插件，破坏调度器的线程安全写入模型。所以 Layer 的非 const 写接口必须收进 protected，只有调度器（经 friend `ExecuteExtension`）能触达。
+
+> 编译前代码合规审查工具（`Tools/check_interface_layers.py`）强制这条规则：Layer 的 public 非 const 方法、多余 friend、缺失 friend `ExecuteExtension` 全部直接报错卡住构建。Tool 天生 Standalone，审查器跳过。
 
 **插件不感知 stage**：Tool/Layer 不定义 stage 枚举、不特化 `ExecuteExtension`，只提供能力方法。stage 由宿主（Engine/Layer）定义，宿主特化 `ExecuteExtension<Plugin, HostStage>(HostStage)` 把 stage 映射到插件的能力方法。
 
 ```cpp
-// 插件（Tool）：只提供能力，读 public / 写 protected
-class FPlatformSystem : public Maho::TTool<FPlatformSystem>
+// 插件（Tool）：全 public，自带管理
+class FPlatformTool : public Maho::TTool<FPlatformTool>
 {
 public:
-	[[nodiscard]] FNativeSurface GetNativeWindow() const;  // 读 → public
-protected:
-	bool CreateWindow(int, int, std::string_view);         // 写 → protected
-	void PollEvents();                                     // 写 → protected
-
-	template <typename TExtension, typename TStage>
-	friend bool Maho::ExecuteExtension(TStage Stage);
+	[[nodiscard]] FNativeSurface GetNativeWindow() const;
+	bool CreateWindow(int, int, std::string_view);
+	void PollEvents();
 };
 
-// 宿主（Engine）：定义 stage，特化映射
+// 宿主（Engine/Layer）：定义 stage，特化映射（Layer 才走这条写路径）
 template <>
-bool ExecuteExtension<Platform::FPlatformSystem, EEngineStage>(EEngineStage Stage)
+bool ExecuteExtension<Platform::FPlatformTool, EEngineStage>(EEngineStage Stage)
 {
 	switch (Stage)
 	{
-	case EEngineStage::Tick:     Platform::FPlatformSystem::Get().PollEvents(); break;
-	case EEngineStage::Shutdown: Platform::FPlatformSystem::Get().DestroyWindow(); break;
+	case EEngineStage::Tick:     Platform::FPlatformTool::Get().PollEvents(); break;
+	case EEngineStage::Shutdown: Platform::FPlatformTool::Get().DestroyWindow(); break;
 	}
 	return true;
 }

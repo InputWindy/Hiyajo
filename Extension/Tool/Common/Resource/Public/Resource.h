@@ -76,10 +76,10 @@ struct TResourceExporter;   // undefined — specialize per resource type
 /**
  * Resource system — async transfer server + typed import/export.
  *
- * A Tool marked Standalone (self-managed): Import/Export/TryLoad are runtime
- * services called by game code at any point, not by the scheduler. Its own
- * worker thread (FThreadedServer) does bulk IO; the registry mutex protects the
- * catalog.
+ * A Tool: plug-in-and-play, self-managed. Import/Export/TryLoad are runtime
+ * services called by game code at any point — read and write are public. Its
+ * own worker thread (FThreadedServer) does bulk IO; the registry mutex protects
+ * the catalog.
  *
  *   FResourceTool::Get().Import<FMeshResource>({ "Raw/mesh.fbx" });
  *   const FResource* R = FResourceTool::Get().TryLoad("Raw/mesh");
@@ -89,9 +89,6 @@ class MAHO_RESOURCE_API FResourceTool
 	, public FThreadedServer
 {
 public:
-	/** FToolTag (identity) + FStandaloneTag (self-managed API — linter skips). */
-	using FTags = FWithTags<Maho::TTool<FResourceTool>::FTags, FStandaloneTag>;
-
 	~FResourceTool() override;
 
 	/** Async import; OnDone receives the registered resource or nullptr. */

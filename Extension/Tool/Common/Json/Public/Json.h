@@ -23,9 +23,6 @@ public:
 	using FTags = TTypeList<FToolTag>;
 
 	// header-only — no lifecycle, no stage.
-
-	template <typename TExtension, typename TStage>
-	friend bool Maho::ExecuteExtension(TStage Stage);
 };
 
 } // namespace Json

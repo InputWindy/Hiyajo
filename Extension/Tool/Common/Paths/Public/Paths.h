@@ -29,17 +29,13 @@ public:
 	/** True when the alias is registered. */
 	[[nodiscard]] bool HasRoot(std::string_view Alias) const;
 
-protected:
-	/** Register a root alias (e.g. "Engine" -> <engine dir>). Lifecycle write. */
+	/** Register a root alias (e.g. "Engine" -> <engine dir>). */
 	void SetRoot(std::string_view Alias, std::filesystem::path Path);
 
-	/** Clear all registered root aliases. Lifecycle write. */
+	/** Clear all registered root aliases. */
 	void Clear();
 
 private:
-	template <typename TExtension, typename TStage>
-	friend bool Maho::ExecuteExtension(TStage Stage);
-
 	std::map<std::string, std::filesystem::path> Roots;
 };
 

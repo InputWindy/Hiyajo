@@ -19,8 +19,7 @@ namespace Timer
 /**
  * Stack-based scope profiler — hierarchical timing instrumentation.
  *
- * A Tool marked Standalone: diagnostic, append-only, self-managed — it lives
- * outside the scheduler's write model (FTags = FStandaloneTag) and guards its
+ * A Tool: plug-in-and-play, self-managed — diagnostic, append-only, guards its
  * own concurrency. FScopedTimer (RAII) drives it via public methods.
  *
  *   void Render()
@@ -33,9 +32,6 @@ namespace Timer
  */
 class MAHO_TIMER_API FTimerTool : public Maho::TTool<FTimerTool>
 {
-public:
-	/** FToolTag (identity) + FStandaloneTag (self-managed — linter leaves it alone). */
-	using FTags = FWithTags<Maho::TTool<FTimerTool>::FTags, Maho::FStandaloneTag>;
 public:
 	/** Format the timing tree as text (milliseconds). */
 	[[nodiscard]] std::string DumpToString() const;

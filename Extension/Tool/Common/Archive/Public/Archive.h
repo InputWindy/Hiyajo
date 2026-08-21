@@ -131,13 +131,6 @@ private:
 class MAHO_ARCHIVE_API FArchiveTool : public Maho::TTool<FArchiveTool>
 {
 public:
-	/** Identity tag — this is a Tool. */
-	using FTags = TTypeList<FToolTag>;
-
-protected:
-	// The ONLY external write interaction — the scheduler's ExecuteExtension.
-	template <typename TExtension, typename TStage>
-	friend bool Maho::ExecuteExtension(TStage Stage);
 };
 
 } // namespace Archive

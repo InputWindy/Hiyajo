@@ -36,18 +36,14 @@ public:
 	/** Subscribers receive every reported exception message. */
 	Maho::TMulticastDelegate<void(const std::string&)> OnException;
 
-protected:
 	/** Report a non-fatal exception (broadcasts to OnException). */
 	void ReportException(std::string_view Message);
 
 	/** Report from a std::exception (forwards what()). */
 	void ReportException(const std::exception& Error);
 
-	/** Lifecycle write (Init/Shutdown): drop all exception subscribers. */
+	/** Drop all exception subscribers. */
 	void Clear();
-
-	template <typename TExtension, typename TStage>
-	friend bool Maho::ExecuteExtension(TStage Stage);
 };
 
 } // namespace Exception

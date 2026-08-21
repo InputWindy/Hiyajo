@@ -25,8 +25,7 @@ class TTool
 	, public TSingleton<TDerived>
 {
 public:
-	/** UCLASS-style markers — the identity tag FToolTag is always present. A
-	 *  plugin appends more via WithTags (e.g. FStandaloneTag for self-managed). */
+	/** UCLASS-style markers — the identity tag FToolTag is always present. */
 	using FTags = TTypeList<FToolTag>;
 
 	/** Append extra tags while keeping the identity tag. */
