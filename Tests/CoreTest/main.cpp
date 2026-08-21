@@ -26,24 +26,30 @@ namespace Q
 	using FList = TTypeList<ACapture, AForward, AHeadless, AGameplay, AStreamer>;
 	static_assert(FList::Count == 5);
 
-	// With accumulates; keeps types deriving ALL With-bases.
-	using FRender = TQuery<FList>::With<IRenderFeature>;
-	static_assert(FRender::Type::Count == 3);
-	static_assert(TContains_v<FRender::Type, ACapture>);
-	static_assert(!TContains_v<FRender::Type, AGameplay>);
+	// Chained value-cascade: each .With/.Not returns a new query value.
+	// render features: Capture + Forward + Headless.
+	constexpr auto QRender = TQuery<FList>{}.With<IRenderFeature>();
+	using FRender = decltype(QRender)::Type;
+	static_assert(FRender::Count == 3);
+	static_assert(TContains_v<FRender, ACapture>);
+	static_assert(!TContains_v<FRender, AGameplay>);
 
-	using FRenderTickable = TQuery<FList>::With<IRenderFeature>::With<FTickableTag>;
-	static_assert(FRenderTickable::Type::Count == 2);
+	// render AND tickable: Capture + Forward.
+	constexpr auto QRenderTick = QRender.With<FTickableTag>();
+	using FRenderTick = decltype(QRenderTick)::Type;
+	static_assert(FRenderTick::Count == 2);
+	static_assert(TContains_v<FRenderTick, ACapture>);
 
-	// Not excludes types deriving ANY Not-base.
-	using FTickableNotRender = TQuery<FList>::With<FTickableTag>::Not<IRenderFeature>;
-	static_assert(FTickableNotRender::Type::Count == 1);
-	static_assert(TContains_v<FTickableNotRender::Type, AGameplay>);
-	static_assert(!TContains_v<FTickableNotRender::Type, ACapture>);
+	// tickable but NOT render: only Gameplay.
+	constexpr auto QTickNotRender = TQuery<FList>{}.With<FTickableTag>().Not<IRenderFeature>();
+	using FTickNotRender = decltype(QTickNotRender)::Type;
+	static_assert(FTickNotRender::Count == 1);
+	static_assert(TContains_v<FTickNotRender, AGameplay>);
 
 	// With then Not of the same base → empty.
-	using FSelfCancel = TQuery<FList>::With<IRenderFeature>::Not<IRenderFeature>;
-	static_assert(FSelfCancel::Type::Count == 0);
+	constexpr auto QCancel = TQuery<FList>{}.With<IRenderFeature>().Not<IRenderFeature>();
+	using FCancel = decltype(QCancel)::Type;
+	static_assert(FCancel::Count == 0);
 
 	void Run()
 	{

@@ -10,16 +10,17 @@ namespace Maho
 // ───────────────────────────────────────────────────────────────────────
 // Query — compile-time type filtering over a TTypeList.
 //
-// Query only selects types; it does not drive instances. Each result carries a
+// Query only selects types; it does not drive instances. A query carries a
 // filtered TTypeList (::Type) of every type deriving from all the With<...>
-// bases and from none of the Not<...> bases. .With / .Not accumulate.
+// bases and from none of the Not<...> bases. .With / .Not return a NEW query
+// value, so filters chain indefinitely:
 //
-//   using FQuery = Maho::TQuery<FExtensions>
-//       ::With<IRenderFeature>       // keep types deriving IRenderFeature
-//       ::With<FTickableTag>         // AND deriving FTickableTag (accumulates)
-//       ::Not<FHeadlessTag>;         // ... that don't derive FHeadlessTag;
+//   constexpr auto Q = Maho::TQuery<FExtensions>{}
+//       .With<IRenderFeature>()       // keep types deriving IRenderFeature
+//       .With<FTickableTag>()         // AND deriving FTickableTag (accumulates)
+//       .Not<FHeadlessTag>()          // ... that don't derive FHeadlessTag;
 //
-//   using FMatched = FQuery::Type;   // a TTypeList<...> of matching types
+//   using FMatched = decltype(Q)::Type;   // a TTypeList<...> of matching types
 //   static_assert(FMatched::Count > 0);
 //
 // Driving the matched types (by instance or singleton) is the host/scheduler's
@@ -84,21 +85,29 @@ namespace QueryDetail
 }
 
 // The query state — a candidate list + required/excluded base lists.
+// .With / .Not return a NEW query value so filters can chain indefinitely.
 template <typename FCandidates, typename FRequired = TTypeList<>, typename FExcluded = TTypeList<>>
 struct TQuery
 {
 	/** Every type matching the accumulated filters. */
 	using Type = typename QueryDetail::TFilter<FCandidates, FRequired, FExcluded>::Type;
+	using FTypes = Type;
 
 	/** Require T to also derive every TBases... (accumulates with prior With). */
 	template <typename... TBases>
-	using With = TQuery<FCandidates,
-		typename TCatch<FRequired, TTypeList<TBases...>>::Type, FExcluded>;
+	[[nodiscard]] constexpr auto With() const
+	{
+		return TQuery<FCandidates,
+			typename TCatch<FRequired, TTypeList<TBases...>>::Type, FExcluded>{};
+	}
 
 	/** Exclude T deriving any TBases... (accumulates with prior Not). */
 	template <typename... TBases>
-	using Not = TQuery<FCandidates, FRequired,
-		typename TCatch<FExcluded, TTypeList<TBases...>>::Type>;
+	[[nodiscard]] constexpr auto Not() const
+	{
+		return TQuery<FCandidates, FRequired,
+			typename TCatch<FExcluded, TTypeList<TBases...>>::Type>{};
+	}
 };
 
 } // namespace Maho
