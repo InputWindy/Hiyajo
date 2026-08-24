@@ -1065,26 +1065,13 @@ def create_plugin(
 		f"#include <Engine/Layer.h>\n\n"
 		f"namespace Maho\n{{\n\n"
 		f"// {plugin_name} — a Layer node: FLayer<children...> + the interfaces it\n"
-		f"// implements. Hand-write the children (Layers) and interfaces (IPlugin<...>)\n"
-		f"// you want; the root (FLayerBase), scheduler, install/uninstall lifecycle\n"
-		f"// and the LINQ query all come from FLayer.\n"
+		f"// implements. Interfaces are hand-spelled as IPlugin<> template args;\n"
+		f"// the DLL factory + module path + OnInstall come from MAHO_DECLARE_LAYER.\n"
 		f"class F{plugin_name}\n"
 		f"\t: public FLayer<>\n"
-		f"\t, public IPlugin<\n"
-		f"#ifdef MAHO_{export}_INTERFACES\n"
-		f"\t\tMAHO_{export}_INTERFACES\n"
-		f"#endif\n"
-		f"\t>\n"
+		f"\t, public IPlugin<> // hand-write your interfaces here (e.g. IPlugin<IMain>)\n"
 		f"{{\n"
-		f"public:\n"
-		f"\t// The module-instance factory — the only way an FLayerBase root is born.\n"
-		f"\tstatic FLayerBase* CreateExtension();\n"
-		f"\n"
-		f"\t// The module path this layer's DLL is loaded from.\n"
-		f"\tstatic std::string_view GetModulePath() {{ return \"{plugin_name}.dll\"; }}\n"
-		f"\n"
-		f"\t// Install what this layer manages (recursive). Your loop lives in Main().\n"
-		f"\tvoid OnInstall() override {{}}\n"
+		f"MAHO_DECLARE_LAYER(F{plugin_name}, \"{plugin_name}.dll\");\n"
 		f"}};\n\n"
 		f"}} // namespace Maho\n",
 		encoding="utf-8", newline="\n",
@@ -1092,10 +1079,8 @@ def create_plugin(
 	(private / f"{plugin_name}.cpp").write_text(
 		f'#include "{plugin_name}.h"\n\n'
 		f"namespace Maho\n{{\n\n"
-		f"FLayerBase* F{plugin_name}::CreateExtension()\n"
-		f"{{\n"
-		f"\treturn new F{plugin_name}();\n"
-		f"}}\n\n"
+		f"// {plugin_name} — implementation. CreateExtension is inline via\n"
+		f"// MAHO_DECLARE_LAYER; add the plugin's per-instance logic here.\n\n"
 		f"}} // namespace Maho\n",
 		encoding="utf-8", newline="\n",
 	)

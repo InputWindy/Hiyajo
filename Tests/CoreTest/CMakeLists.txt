@@ -30,9 +30,14 @@ target_include_directories(QueueStress PRIVATE "${ENGINE_DIR}/Source/Public")
 add_executable(LayerBaseStress LayerBaseStress.cpp ${MAHO_HEADERS})
 target_include_directories(LayerBaseStress PRIVATE "${ENGINE_DIR}/Source/Public")
 
+# MAHO_DECLARE_LAYER scaffold macro compile/run check.
+add_executable(DeclareLayerStress DeclareLayerStress.cpp ${MAHO_HEADERS})
+target_include_directories(DeclareLayerStress PRIVATE "${ENGINE_DIR}/Source/Public")
+
 # Assembly.cpp uses LoadLibrary/FreeLibrary/getenv on the host platform; Threads for FThreadPool.
 find_package(Threads REQUIRED)
 target_link_libraries(CoreTest PRIVATE Threads::Threads)
 target_link_libraries(PoolStress PRIVATE Threads::Threads)
 target_link_libraries(QueueStress PRIVATE Threads::Threads)
 target_link_libraries(LayerBaseStress PRIVATE Threads::Threads)
+target_link_libraries(DeclareLayerStress PRIVATE Threads::Threads)

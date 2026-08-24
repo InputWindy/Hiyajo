@@ -526,3 +526,28 @@ private:
 };
 
 } // namespace Maho
+
+// A blank FLayer-derived scaffold — match Base + interfaces + inline DLL factory.
+//
+//   class FMyPlugin
+//       : public Maho::FLayer<>
+//       , public Maho::IPlugin<IMyInterface>   // hand-written interfaces
+//   {
+//       MAHO_DECLARE_LAYER(FMyPlugin, "MyPlugin.dll");
+//   };
+//
+// Expands inside a class body to an inline CreateExtension (the DLL factory),
+// the module path GetModulePath(), and an empty OnInstall hook. Interfaces stay
+// a hand-written template arg — no code-gen.
+#define MAHO_DECLARE_LAYER(CustomBase, AppDLL)          \
+public:                                                 \
+	static Maho::FLayerBase* CreateExtension()          \
+	{                                                   \
+		return new CustomBase();                        \
+	}                                                   \
+	static std::string_view GetModulePath()             \
+	{                                                   \
+		return AppDLL;                                  \
+	}                                                   \
+	void OnInstall() override {}                        \
+
