@@ -446,6 +446,7 @@ target_include_directories({name} PUBLIC
 # Export the extern "C" CreateExtension() bridge — the host's single entry.
 set_target_properties({name} PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 target_compile_definitions({name} PRIVATE MAHO_{NAME_UPPER}_MODULE_EXPORTS)
+target_link_libraries({name} PUBLIC Maho)
 add_dependencies({name} {plugin_link_names})
 target_link_libraries({name} PUBLIC {plugin_link_names})
 
@@ -482,13 +483,18 @@ else()
 endif()
 
 # The entry — code-gen boilerplate (never edited), loads {name}.dll.
-add_executable(EntryPoint WIN32
-	Intermediate/Main.cpp
+# The engine source lives in the Maho library (sln folder Maho/); the exe just
+# links it and runs Maho::Main.
+add_library(Maho STATIC
 	${{MAHO_PRIVATE}}
 	${{MAHO_HEADERS}}
 )
+target_include_directories(Maho PUBLIC "${{ENGINE_DIR}}/Source/Public")
+set_target_properties(Maho PROPERTIES FOLDER "Maho")
+
+add_executable(EntryPoint WIN32 Intermediate/Main.cpp)
 target_compile_definitions(EntryPoint PRIVATE MAHO_EXTENSION_NAME="{name}.dll")
-target_include_directories(EntryPoint PRIVATE "${{ENGINE_DIR}}/Source/Public")
+target_link_libraries(EntryPoint PRIVATE Maho)
 add_dependencies(EntryPoint {name} {plugin_link_names} MahoCheckCycle)
 
 # Solution folders: EntryPoint at the ROOT; Maho (engine), Project (project
@@ -743,6 +749,7 @@ def _plugin_targets(
 			f")\n"
 			f"set_target_properties({name} PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)\n"
 			f"target_compile_definitions({name} PRIVATE MAHO_{name.upper()}_MODULE_EXPORTS)\n"
+			f"target_link_libraries({name} PUBLIC Maho)\n"
 			f"{cmake_include}"
 		)
 		# Plugin → its in-chain deps (host + disabled plugins excluded). Link,
