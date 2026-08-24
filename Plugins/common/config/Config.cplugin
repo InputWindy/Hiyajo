@@ -1,0 +1,6 @@
+{
+	"FileVersion": 1,
+	"Name": "Config",
+	"Description": "INI-style configuration singleton",
+	"Dependencies": []
+}

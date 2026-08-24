@@ -1,0 +1,7 @@
+{
+	"FileVersion": 1,
+	"Name": "Math",
+	"Header": "MathTool",
+	"Description": "GLM math types + helpers (header-only)",
+	"Dependencies": []
+}

@@ -1,0 +1,6 @@
+{
+	"FileVersion": 1,
+	"Name": "Unicode",
+	"Description": "UTF-8/16/32 conversion + platform-native string",
+	"Dependencies": []
+}
