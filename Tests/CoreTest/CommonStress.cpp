@@ -13,15 +13,39 @@
 #include <Engine/Common/Asset.h>
 #include <Engine/Common/CommandParser.h>
 #include <Engine/Common/Compress.h>
+#include <Engine/Common/Resource.h>
 #include <glm/glm.hpp>
 #include <nlohmann/json.hpp>
 
 #include <cstdio>
+#include <chrono>
 #include <filesystem>
 #include <fstream>
 #include <system_error>
+#include <thread>
 
 using namespace Maho;
+
+// A tiny resource type + its typed importer for the Resource test.
+struct TestBytesRes : public Maho::Resource::FResource
+{
+	using Maho::Resource::FResource::FResource;
+	std::vector<std::uint8_t> Data;
+};
+struct TestBytesImportConfig
+{
+	std::string SourcePath;
+};
+template <>
+struct Maho::Resource::TResourceImporter<TestBytesRes>
+{
+	using FConfig = TestBytesImportConfig;
+	static bool Import(const FConfig&, std::span<const std::uint8_t> Bytes, TestBytesRes& Out)
+	{
+		Out.Data.assign(Bytes.begin(), Bytes.end());
+		return true;
+	}
+};
 
 int main()
 {
@@ -217,6 +241,68 @@ int main()
 		}
 	}
 
-	std::puts("ok: engine Common full set + glm/nlohmann/CLI11/zstd");
+	// Resource (async typed system on a dedicated IO thread)
+	{
+		const std::filesystem::path RFile = std::filesystem::temp_directory_path() / "maho_res.bin";
+		{
+			std::ofstream Ofs(RFile, std::ios::binary);
+			for (int I = 0; I < 100; ++I)
+			{
+				Ofs.put(static_cast<char>(I));
+			}
+		}
+		if (!std::filesystem::exists(RFile))
+		{
+			std::puts("[FAIL] Resource temp file not written"); return 1;
+		}
+
+		// map "Raw" → temp dir so the virtual path resolves
+		Paths::FPaths::Get().Initiate(0, nullptr);
+		Paths::FPaths::Get().SetRoot("Raw", std::filesystem::temp_directory_path());
+		const auto Phys = Paths::FPaths::Get().Resolve("Raw/maho_res.bin");
+		if (!std::filesystem::exists(Phys))
+		{
+			std::printf("[FAIL] Paths resolve missing: %s\n", Phys.string().c_str()); return 1;
+		}
+
+		Maho::Resource::FResourceSystem& RS = Maho::Resource::FResourceSystem::Get();
+		RS.Initiate(0, nullptr);
+		bool bIoRan = false;
+		RS.Submit([&] { bIoRan = true; });
+		RS.Flush();
+		if (!bIoRan)
+		{
+			std::puts("[FAIL] Resource IO thread not executing tasks"); return 1;
+		}
+		bool bDone = false;
+		bool bQueued = RS.Import<TestBytesRes>({ "Raw/maho_res.bin" }, [&](const Maho::Resource::FResource* R) {
+			const TestBytesRes* Typed = static_cast<const TestBytesRes*>(R);
+			bDone = (Typed && Typed->Data.size() == 100 && Typed->Data.front() == 0 && Typed->Data.back() == 99);
+		});
+		if (!bQueued)
+		{
+			std::puts("[FAIL] Resource Import rejected"); return 1;
+		}
+		// Give the IO thread a beat, then drain on the game thread.
+		std::this_thread::sleep_for(std::chrono::milliseconds(50));
+		for (int I = 0; I < 1000 && !bDone; ++I)
+		{
+			RS.Tick();   // applies at most 1 per tick
+		}
+		if (!bDone)
+		{
+			std::printf("[FAIL] Resource async import (running=%d)\n", RS.IsRunning() ? 1 : 0); return 1;
+		}
+		const Maho::Resource::FResource* Loaded = RS.TryLoad("Raw/maho_res");
+		if (Loaded == nullptr)
+		{
+			std::puts("[FAIL] Resource find"); return 1;
+		}
+		RS.Shutdown();
+		std::filesystem::remove(RFile, EC);
+		Paths::FPaths::Get().Shutdown();
+	}
+
+	std::puts("ok: engine Common full set + glm/nlohmann/CLI11/zstd/Resource");
 	return 0;
 }
