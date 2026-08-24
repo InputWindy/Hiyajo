@@ -1,6 +1,0 @@
-{
-	"FileVersion": 1,
-	"Name": "Paths",
-	"Description": "Virtual path aliases → physical paths",
-	"Dependencies": []
-}

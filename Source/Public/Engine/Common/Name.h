@@ -1,6 +1,5 @@
 #pragma once
 
-#include "NameApi.h"
 #include <Core/Singleton.h>
 
 #include <cstdint>
@@ -24,21 +23,20 @@ namespace Name
  *   const FName Bone = "head";
  *   const FName Also = "head";       // same pool entry
  *   Bone == Also;                    // true, O(1)
- *   Bone.ToString();                 // "head"
  */
 class FName
 {
 public:
 	FName() = default;
-	FName(std::string_view Str);
+	explicit FName(std::string_view Str);
 
 	[[nodiscard]] std::string_view ToString() const;
 	[[nodiscard]] bool IsNone() const { return Id == 0; }
 	[[nodiscard]] std::uint32_t GetId() const { return Id; }
 
-	[[nodiscard]] bool operator==(const FName& Other) const { return Id == Other.Id; }
-	[[nodiscard]] bool operator!=(const FName& Other) const { return Id != Other.Id; }
-	[[nodiscard]] bool operator<(const FName& Other) const { return Id < Other.Id; }
+	[[nodiscard]] bool operator==(const FName& O) const { return Id == O.Id; }
+	[[nodiscard]] bool operator!=(const FName& O) const { return Id != O.Id; }
+	[[nodiscard]] bool operator<(const FName& O) const { return Id < O.Id; }
 
 private:
 	friend class FNamePool;
@@ -47,20 +45,11 @@ private:
 	std::uint32_t Id = 0;
 };
 
-/**
- * Global interned string pool — a singleton service. Initiate clears the pool
- * (index 0 = None), Intern is thread-safe; Shutdown frees it. Reached via
- * FNamePool::Get() (or Select<ISingleton>().ForEach for the lifecycle).
- */
-class MAHO_NAME_API FNamePool : public TSingleton<FNamePool>
+/** Global interned string pool — a singleton service. */
+class FNamePool : public TSingleton<FNamePool>
 {
 public:
-	/** Clear the pool, reserve index 0 = None (ISingleton::Initiate). */
-	void Initiate(int, char**) override
-	{
-		free();
-		Pool.emplace_back(); // index 0 = None (empty)
-	}
+	void Initiate(int, char**) override { free(); }
 	void Shutdown() override { free(); }
 
 	/** Intern a string — returns the canonical FName (thread-safe). */
@@ -73,8 +62,8 @@ private:
 	void free();
 
 	std::mutex Mutex;
-	std::vector<std::string> Pool;                          // index → string (0 = None)
-	std::unordered_map<std::string, std::uint32_t> Lookup;  // string → index
+	std::vector<std::string> Pool;
+	std::unordered_map<std::string, std::uint32_t> Lookup;
 };
 
 } // namespace Name

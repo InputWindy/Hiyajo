@@ -1,4 +1,4 @@
-#include "Name.h"
+#include <Engine/Common/Name.h>
 
 namespace Maho::Name
 {
@@ -28,20 +28,20 @@ FName FNamePool::Intern(std::string_view Str)
 {
 	if (Str.empty())
 	{
-		return FName(0);
+		return FName{};
 	}
 
 	std::lock_guard<std::mutex> Lock(Mutex);
 	const auto It = Lookup.find(std::string(Str));
 	if (It != Lookup.end())
 	{
-		return FName(It->second);
+		return FName{ It->second };
 	}
 
-	const std::uint32_t Id = static_cast<std::uint32_t>(Pool.size());
+	const std::uint32_t NextId = static_cast<std::uint32_t>(Pool.size());
 	Pool.emplace_back(Str);
-	Lookup.emplace(Pool.back(), Id);
-	return FName(Id);
+	Lookup.emplace(Pool.back(), NextId);
+	return FName{ NextId };
 }
 
 } // namespace Maho::Name

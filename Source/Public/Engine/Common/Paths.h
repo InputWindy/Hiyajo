@@ -1,6 +1,5 @@
 #pragma once
 
-#include "PathsApi.h"
 #include <Core/Singleton.h>
 
 #include <filesystem>
@@ -14,10 +13,9 @@ namespace Paths
 {
 
 /** Path resolution singleton — engine/project root aliases → physical paths. */
-class MAHO_PATHS_API FPaths : public TSingleton<FPaths>
+class FPaths : public TSingleton<FPaths>
 {
 public:
-	/** Clear registered roots (ISingleton::Initiate/Shutdown). */
 	void Initiate(int, char**) override { Roots.clear(); }
 	void Shutdown() override { Roots.clear(); }
 

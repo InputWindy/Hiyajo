@@ -1,4 +1,4 @@
-#include "Config.h"
+#include <Engine/Common/Config.h>
 
 #include <fstream>
 #include <string>
@@ -36,7 +36,7 @@ bool FConfig::Load(std::string_view Path)
 		const std::string Trimmed = Trim(Line);
 		if (Trimmed.empty() || Trimmed.front() == ';' || Trimmed.front() == '#')
 		{
-			continue;   // empty / comment
+			continue;
 		}
 
 		if (Trimmed.front() == '[' && Trimmed.back() == ']')
@@ -48,9 +48,8 @@ bool FConfig::Load(std::string_view Path)
 		const std::size_t Eq = Trimmed.find('=');
 		if (Eq == std::string::npos)
 		{
-			continue;   // not a key=value line
+			continue;
 		}
-
 		Sections[CurrentSection][Trim(Trimmed.substr(0, Eq))] = Trim(Trimmed.substr(Eq + 1));
 	}
 	return true;
@@ -78,14 +77,7 @@ std::int64_t FConfig::GetInt(std::string_view Section, std::string_view Key, std
 	{
 		return Default;
 	}
-	try
-	{
-		return std::stoll(*Value);
-	}
-	catch (...)
-	{
-		return Default;
-	}
+	try { return std::stoll(*Value); } catch (...) { return Default; }
 }
 
 double FConfig::GetFloat(std::string_view Section, std::string_view Key, double Default) const
@@ -95,14 +87,7 @@ double FConfig::GetFloat(std::string_view Section, std::string_view Key, double 
 	{
 		return Default;
 	}
-	try
-	{
-		return std::stod(*Value);
-	}
-	catch (...)
-	{
-		return Default;
-	}
+	try { return std::stod(*Value); } catch (...) { return Default; }
 }
 
 bool FConfig::GetBool(std::string_view Section, std::string_view Key, bool Default) const

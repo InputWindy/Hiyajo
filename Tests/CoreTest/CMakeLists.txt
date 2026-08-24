@@ -38,6 +38,17 @@ target_include_directories(DeclareLayerStress PRIVATE "${ENGINE_DIR}/Source/Publ
 add_executable(SingletonStress SingletonStress.cpp ${MAHO_HEADERS})
 target_include_directories(SingletonStress PRIVATE "${ENGINE_DIR}/Source/Public")
 
+# Engine Common singletons/libraries (Unicode/Name/Paths/Config).
+add_executable(CommonStress CommonStress.cpp
+	${MAHO_PRIVATE}
+	${ENGINE_DIR}/Source/Private/Engine/Common/Unicode.cpp
+	${ENGINE_DIR}/Source/Private/Engine/Common/Name.cpp
+	${ENGINE_DIR}/Source/Private/Engine/Common/Paths.cpp
+	${ENGINE_DIR}/Source/Private/Engine/Common/Config.cpp
+	${MAHO_HEADERS})
+target_include_directories(CommonStress PRIVATE "${ENGINE_DIR}/Source/Public")
+target_link_libraries(CommonStress PRIVATE Threads::Threads)
+
 # EntryPoint.h drivers.compile + link check (needs Fatal.cpp).
 add_executable(EntryPointStress EntryPointStress.cpp ${MAHO_PRIVATE} ${MAHO_HEADERS})
 target_include_directories(EntryPointStress PRIVATE "${ENGINE_DIR}/Source/Public")
