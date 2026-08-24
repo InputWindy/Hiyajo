@@ -712,7 +712,7 @@ def _plugin_targets(
 		)
 		# A project-side plugin depends on the project's entry plugin → also
 		# include the entry plugin's Public/ (the parent interfaces it implements).
-		entry_public = f"\"${{CMAKE_CURRENT_SOURCE_DIR}}/Source/{project_name}/Public\""
+		entry_public = f"\"${{CMAKE_CURRENT_SOURCE_DIR}}/Plugins/{project_name}/Public\""
 		# Dependency plugins' Public/ include dirs (engine + project plugins).
 		dep_public_dirs = "".join(
 			f'\t"{infos[d]["public_dir"]}"\n'
