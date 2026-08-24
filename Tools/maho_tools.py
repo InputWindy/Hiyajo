@@ -489,6 +489,8 @@ add_library(Maho STATIC
 	${{MAHO_PRIVATE}}
 	${{MAHO_HEADERS}}
 )
+# show engine source as its on-disk tree (Source/Public, Source/Private, ...)
+source_group(TREE "${{ENGINE_DIR}}/Source" FILES ${{MAHO_HEADERS}} ${{MAHO_PRIVATE}})
 target_include_directories(Maho PUBLIC "${{ENGINE_DIR}}/Source/Public")
 set_target_properties(Maho PROPERTIES FOLDER "Maho")
 
@@ -499,10 +501,15 @@ target_link_libraries(EntryPoint PRIVATE Maho)
 set_property(DIRECTORY "${{CMAKE_CURRENT_SOURCE_DIR}}" PROPERTY VS_STARTUP_PROJECT EntryPoint)
 add_dependencies(EntryPoint {name} {plugin_link_names} MahoCheckCycle)
 
-# Solution folders: EntryPoint at the ROOT; Maho (engine), Project (project
-# plugins + root), ThirdParty are the three top-level folders. Dependency
-# checks live under Maho; the project root + project plugins under Project.
+# Solution folders: EntryPoint at the ROOT; Maho (engine), Project, ThirdParty.
+# The project root sits at Project/ itself; project plugin DLLs under
+# Project/Plugins/. Engine plugins under Maho/Plugins/ — each grouped by the
+# filesystem tree (shown via source_group as Public/Private on disk).
 set_target_properties({name} PROPERTIES FOLDER "Project")
+source_group(TREE "${{CMAKE_CURRENT_SOURCE_DIR}}/Plugins/{name}" FILES
+	Plugins/{name}/Public/{name}.h
+	Plugins/{name}/Private/{name}.cpp
+)
 # EntryPoint stays at the root (no FOLDER property).
 {plugin_folders}
 """
@@ -766,13 +773,23 @@ def _plugin_targets(
 			)
 		group = info["group"]
 		# sln folder tree: EntryPoint at root, then Maho / Project / ThirdParty.
-		# Engine plugins → Maho/..., project plugins → Project/... (grouped by the
-		# filesystem hierarchy under each Plugins root).
+		# Engine plugins → Maho/Plugins/..., project plugins → Project/Plugins/...
+		# (grouped by the filesystem hierarchy under each Plugins root).
 		is_engine = info["public_dir"].startswith("${ENGINE_DIR}")
-		base = "Maho" if is_engine else "Project"
+		base = "Maho/Plugins" if is_engine else "Project/Plugins"
 		folder = f"{base}/{group}" if group else base
 		folders.append(
 			f"set_target_properties({name} PROPERTIES FOLDER \"{folder}\")\n"
+		)
+		# show the plugin's files as the on-disk tree (Public/Private, ...)
+		plugin_root = info["public_dir"].rsplit("/", 1)[0]
+		plugin_h = f'{info["public_dir"]}/{info.get("header", name)}.h'
+		plugin_cpp = f'{info["private_dir"]}/{info["mod_file"]}.cpp'
+		targets.append(
+			f'source_group(TREE "{plugin_root}" FILES\n'
+			f'\t"{plugin_h}"\n'
+			f'\t"{plugin_cpp}"\n'
+			f")\n"
 		)
 	return "\n".join(targets), dep_names, "\n".join(folders)
 
