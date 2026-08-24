@@ -1096,7 +1096,14 @@ def create_plugin(
 		f"namespace Maho\n{{\n\n"
 		f"// {plugin_name} — implementation. CreateExtension is inline via\n"
 		f"// MAHO_DECLARE_LAYER; add the plugin's per-instance logic here.\n\n"
-		f"}} // namespace Maho\n",
+		f"}} // namespace Maho\n\n"
+		f"// The C export the host (EntryPoint) looks up BY SYMBOL NAME. The inline\n"
+		f"// static factory's C++ mangled name is not addressable via GetProcAddress,\n"
+		f"// so a plain C bridge is exported (the DLL's single stable entry).\n"
+		f'extern "C" MAHO_{export}_API Maho::FLayerBase* CreateExtension()\n'
+		f"{{\n"
+		f"\treturn Maho::F{plugin_name}::CreateExtension();\n"
+		f"}}\n",
 		encoding="utf-8", newline="\n",
 	)
 
