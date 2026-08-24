@@ -495,6 +495,8 @@ set_target_properties(Maho PROPERTIES FOLDER "Maho")
 add_executable(EntryPoint WIN32 Intermediate/Main.cpp)
 target_compile_definitions(EntryPoint PRIVATE MAHO_EXTENSION_NAME="{name}.dll")
 target_link_libraries(EntryPoint PRIVATE Maho)
+# The sln startup project is EntryPoint (the app host), not ZERO_CHECK.
+set_property(DIRECTORY "${{CMAKE_CURRENT_SOURCE_DIR}}" PROPERTY VS_STARTUP_PROJECT EntryPoint)
 add_dependencies(EntryPoint {name} {plugin_link_names} MahoCheckCycle)
 
 # Solution folders: EntryPoint at the ROOT; Maho (engine), Project (project
