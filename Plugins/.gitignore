@@ -1,0 +1,5 @@
+# Engine plugins, created by Tools/create_plugin_ui.py — not committed.
+# `*` ignores every file and directory (and thus every nested plugin) below;
+# `!.gitignore` keeps THIS file tracked.
+*
+!.gitignore
