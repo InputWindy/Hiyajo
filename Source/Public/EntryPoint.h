@@ -1,5 +1,6 @@
 #pragma once
 
+#include <Core/Fatal.h>
 #include <Engine/Layer.h>
 
 namespace Maho
@@ -10,14 +11,18 @@ namespace Maho
  *
  * No engine/tool preset: the extension is a self-contained DLL exporting
  * `CreateExtension()` → a FLayerBase*. The entry point loads it via FAssembly,
- * looks up the root, then forwards to its main capability if it has one.
+ * brings the anonymous root up (OnInstall → subtree), forwards to its main
+ * capability, then takes it down symmetrically (OnUninstall + dtor teardown).
  *
  *   main()/WinMain() → Maho::Main(Argc, Argv)
  *     InstallFatalHandlers()
- *     FAssembly Load(argv[1])           // install
- *     CreateExtension() → FLayerBase* // create the root instance
- *     dynamic_cast<IMain*>              // does it own a run entry?
- *       → Main()                         // execute
+ *     FAssembly Load(argv[1])          // install
+ *     CreateExtension() → FLayerBase* // create the root instance (anonymous)
+ *     App->OnInstall()                // bring the subtree up
+ *     dynamic_cast<IMain*>            // does it own a run entry?
+ *       → Main()                       // execute
+ *     App->OnUninstall()              // symmetric teardown
+ *     delete App
  */
 inline int Main(int Argc, char** Argv)
 {
@@ -50,7 +55,11 @@ inline int Main(int Argc, char** Argv)
 		ReportFatal("CreateExtension returned null");
 	}
 
-	// Execute through the main capability, if the root owns one.
+	// Bring the (anonymous) root layer up: install its subtree, run its main
+	// loop, then uninstall symmetrically. The root is never known by concrete
+	// type — only by the FLayerBase anchor + the IMain capability.
+	App->OnInstall(); // 拉起：根安装子树（项目根 override）
+
 	auto* MainCaps = dynamic_cast<IMain*>(App);
 	if (!MainCaps)
 	{
@@ -58,6 +67,8 @@ inline int Main(int Argc, char** Argv)
 	}
 
 	const int Result = MainCaps->Main();
+
+	App->OnUninstall(); // 收起：对称卸载（子树清理走 ~FLayer 析构递归）
 	delete App; // FLayerBase virtual dtor — removes the whole object through the DLL.
 	return Result;
 }
