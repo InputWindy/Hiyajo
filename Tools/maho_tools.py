@@ -467,7 +467,7 @@ else()
 		BYPRODUCTS "${{CMAKE_CURRENT_SOURCE_DIR}}/Intermediate/_cycle_check.stamp"
 		VERBATIM
 	)
-		set_target_properties(MahoCheckCycle PROPERTIES FOLDER "Maho")
+		set_target_properties(MahoCheckCycle PROPERTIES FOLDER "ThirdParty")
 		add_dependencies({name} MahoCheckCycle)
 
 	# Interface layering — write methods must be protected, scheduler is the
@@ -477,7 +477,7 @@ else()
 		BYPRODUCTS "${{CMAKE_CURRENT_SOURCE_DIR}}/Intermediate/_layers_check.stamp"
 		VERBATIM
 	)
-		set_target_properties(MahoCheckLayers PROPERTIES FOLDER "Maho")
+		set_target_properties(MahoCheckLayers PROPERTIES FOLDER "ThirdParty")
 		add_dependencies({name} MahoCheckLayers)
 endif()
 
