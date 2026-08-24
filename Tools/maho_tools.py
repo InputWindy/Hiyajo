@@ -1115,7 +1115,8 @@ def create_plugin(
 	)
 
 	# Auto-register into the project's .cproject (when the plugin lives under
-	# the project's Source/).
+	# the project's Plugins/), then regenerate CMakeLists so the new plugin
+	# reaches the sln / build without a manual generate step.
 	for cproject in list(plugins_dir.glob("*.cproject")) + list(plugins_dir.parent.glob("*.cproject")):
 		data = read_cproject(cproject)
 		entries = data.get("Plugins", [])
@@ -1124,6 +1125,12 @@ def create_plugin(
 			data["Plugins"] = entries
 			write_cproject(cproject, data)
 			print(f"[Maho] Registered {plugin_name} → {cproject.name}")
+		# regenerate the project's CMakeLists (contains the new plugin target)
+		project_name = str(data.get("ProjectName", ""))
+		if project_name:
+			engine_root = resolve_engine_directory(cproject, data)
+			_write_cmake_lists(cproject.parent, project_name, engine_root, data)
+			print(f"[Maho] Regenerated CMakeLists for {project_name}")
 		break
 
 	return dst
