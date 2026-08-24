@@ -54,6 +54,8 @@ add_executable(CommonStress CommonStress.cpp
 	${ENGINE_DIR}/Source/Private/Engine/Common/ConsoleVariable.cpp
 	${ENGINE_DIR}/Source/Private/Engine/Common/Exception.cpp
 	${ENGINE_DIR}/Source/Private/Engine/Common/Timer.cpp
+	${ENGINE_DIR}/Source/Private/Engine/Common/Text.cpp
+	${ENGINE_DIR}/Source/Private/Engine/Common/Asset.cpp
 	${MAHO_HEADERS})
 target_include_directories(CommonStress PRIVATE "${ENGINE_DIR}/Source/Public")
 target_link_libraries(CommonStress PRIVATE Threads::Threads glm::glm nlohmann_json::nlohmann_json)

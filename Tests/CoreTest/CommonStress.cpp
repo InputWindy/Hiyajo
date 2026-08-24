@@ -9,10 +9,15 @@
 #include <Engine/Common/ConsoleVariable.h>
 #include <Engine/Common/Exception.h>
 #include <Engine/Common/Timer.h>
+#include <Engine/Common/Text.h>
+#include <Engine/Common/Asset.h>
 #include <glm/glm.hpp>
 #include <nlohmann/json.hpp>
 
 #include <cstdio>
+#include <filesystem>
+#include <fstream>
+#include <system_error>
 
 using namespace Maho;
 
@@ -131,6 +136,45 @@ int main()
 	}
 	Timer::FGameClock::Get().Shutdown();
 
-	std::puts("ok: engine Common Unicode/Name/Paths/Config + Archive/CVar/Exception/Timer + glm/nlohmann");
+	// Text (localized catalog)
+	Text::FTextManager::Get().Initiate(0, nullptr);
+	Text::FTextManager::Get().AddTranslation("MainMenu", "Title", Text::Culture::Chinese, "\xE4\xB8\xBB\xE8\x8F\x9C\xE5\x8D\x95"); // "主菜单"
+	Text::FTextManager::Get().SetCulture(std::string(Text::Culture::Chinese));
+	const Text::FText Title = Text::FText("MainMenu", "Title", "Main Menu");
+	if (Title.Resolve() != "\xE4\xB8\xBB\xE8\x8F\x9C\xE5\x8D\x95")
+	{
+		std::puts("[FAIL] Text resolve zh"); return 1;
+	}
+	Text::FTextManager::Get().Shutdown();
+
+	// Asset (registry over a temp content dir)
+	Asset::FAssetRegistry::Get().Initiate(0, nullptr);
+	const std::filesystem::path Tmp = std::filesystem::temp_directory_path() / "maho_asset_stress";
+	std::error_code EC;
+	std::filesystem::create_directories(Tmp / "Materials", EC);
+	(EC.clear());
+	{
+		std::ofstream Ofs(Tmp / "Materials" / "M_Metal.material");
+		Ofs << "metal";
+	}
+	Asset::FAssetRegistry::Get().Scan(Tmp, "Game");
+	if (Asset::FAssetRegistry::Get().GetAssetCount() != 1)
+	{
+		std::puts("[FAIL] Asset scan count"); return 1;
+	}
+	const Asset::FAssetData* Data = Asset::FAssetRegistry::Get().Find(Asset::FAssetPath("/Game/Materials/M_Metal"));
+	if (!Data || Data->Type != Asset::EAssetType::Material)
+	{
+		std::puts("[FAIL] Asset find"); return 1;
+	}
+	auto AssetBytes = Asset::FAssetRegistry::Get().Load(Asset::FAssetPath("/Game/Materials/M_Metal"));
+	if (!AssetBytes || AssetBytes->size() != 5)
+	{
+		std::puts("[FAIL] Asset load"); return 1;
+	}
+	Asset::FAssetRegistry::Get().Shutdown();
+	std::filesystem::remove_all(Tmp, EC);
+
+	std::puts("ok: engine Common Unicode/Name/Paths/Config + Archive/CVar/Exception/Timer/Text/Asset + glm/nlohmann");
 	return 0;
 }
