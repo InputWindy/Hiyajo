@@ -146,3 +146,13 @@ if(NOT TARGET nlohmann_json::nlohmann_json)
 		INTERFACE_INCLUDE_DIRECTORIES "${nlohmann_json_SOURCE_DIR}/single_include")
 	unset(_M_NLJSON_URL)
 endif()
+
+# CLI11 (header-only command-line parser).
+if(NOT TARGET CLI11::CLI11)
+	maho_git_repository_url(_M_CLI11_URL https://github.com/CLIUtils/CLI11.git)
+	maho_fetchcontent_populate_or_reuse(CLI11 ${_M_CLI11_URL} v2.4.2 include/CLI/CLI.hpp)
+	add_library(CLI11::CLI11 INTERFACE IMPORTED)
+	set_target_properties(CLI11::CLI11 PROPERTIES
+		INTERFACE_INCLUDE_DIRECTORIES "${CLI11_SOURCE_DIR}/include")
+	unset(_M_CLI11_URL)
+endif()

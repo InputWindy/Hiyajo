@@ -11,6 +11,7 @@
 #include <Engine/Common/Timer.h>
 #include <Engine/Common/Text.h>
 #include <Engine/Common/Asset.h>
+#include <Engine/Common/CommandParser.h>
 #include <glm/glm.hpp>
 #include <nlohmann/json.hpp>
 
@@ -175,6 +176,27 @@ int main()
 	Asset::FAssetRegistry::Get().Shutdown();
 	std::filesystem::remove_all(Tmp, EC);
 
-	std::puts("ok: engine Common Unicode/Name/Paths/Config + Archive/CVar/Exception/Timer/Text/Asset + glm/nlohmann");
+	// CommandParser (CLI11-backed KV store)
+	{
+		char Arg0[] = "app";
+		char Arg1[] = "-width=800";
+		char Arg2[] = "-height";
+		char Arg3[] = "600";
+		char Arg4[] = "-fullscreen";
+		char* TestArgs[] = { Arg0, Arg1, Arg2, Arg3, Arg4 };
+		CommandParser::FCommandParser& Parser = CommandParser::FCommandParser::Get();
+		Parser.Clear();
+		Parser.Initiate(5, TestArgs);
+		if (Parser.GetInt("width") != 800 || Parser.Get("height") != "600" || !Parser.GetBool("fullscreen"))
+		{
+			std::printf("[FAIL] CommandParser KV: width=%s height=%s fullscreen=%s\n",
+				Parser.Get("width").c_str(), Parser.Get("height").c_str(),
+				Parser.GetBool("fullscreen") ? "true" : "false");
+			return 1;
+		}
+		Parser.Shutdown();
+	}
+
+	std::puts("ok: engine Common full set + glm/nlohmann/CLI11");
 	return 0;
 }
