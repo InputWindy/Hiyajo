@@ -1,5 +1,5 @@
 # Run via Tools/maho_python.bat (or Tools/*.bat) — engine Tools/python only.
-"""Maho new-project UI (CreateProject.bat) — pick ONE parent Layer, build the project."""
+"""Maho new-project UI (CreateProject.bat) — pick ONE plugin to mount, build the project."""
 
 from __future__ import annotations
 
@@ -43,7 +43,7 @@ class CreateProjectApp(tk.Tk):
 
 		self._parents: list[dict] = []
 		self._checked: dict[str, bool] = {}
-		self._selected: str | None = None  # the single chosen parent Layer
+		self._selected: str | None = None  # the single chosen plugin to mount
 
 		self._build()
 		self.protocol("WM_DELETE_WINDOW", self.destroy)
@@ -77,8 +77,8 @@ class CreateProjectApp(tk.Tk):
 		self.txt_desc.grid(row=5, column=1, columnspan=2, sticky="nsew", **pad)
 		self.txt_desc.insert("1.0", "哈哈，我是土豆泥大王！")
 
-		# The parent Layer — the project root INHERITS exactly one of these.
-		ttk.Label(frm, text="Parent Layer（项目继承的基类）").grid(row=6, column=0, sticky="nw", **pad)
+		# The plugin the project mounts — a single dependency this project ships with.
+		ttk.Label(frm, text="Plugins（勾选要装配的插件，单选）").grid(row=6, column=0, sticky="nw", **pad)
 		tree_frame = ttk.Frame(frm)
 		tree_frame.grid(row=6, column=1, columnspan=2, sticky="nsew", **pad)
 		tree_frame.columnconfigure(0, weight=1)
@@ -159,7 +159,7 @@ class CreateProjectApp(tk.Tk):
 			self._select(iid)
 
 	def _select(self, name: str) -> None:
-		"""Single selection: pick one parent Layer, clear the rest."""
+		"""Single selection: pick one plugin to mount, clear the rest."""
 		if self._selected == name:
 			return
 		if self._selected:
@@ -209,7 +209,7 @@ class CreateProjectApp(tk.Tk):
 			messagebox.showerror("Maho", "Invalid project name.\nUse Letter + A-Z a-z 0-9 _ -")
 			return
 		if not self._selected:
-			messagebox.showerror("Maho", "Pick ONE parent Layer the project inherits from.")
+			messagebox.showerror("Maho", "Pick ONE plugin the project mounts.")
 			return
 		if not parent:
 			messagebox.showerror("Maho", "Parent folder is required.")
