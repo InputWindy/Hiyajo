@@ -3,6 +3,7 @@
 #include <Core/Assembly.h>
 #include <Core/Extension.h>
 #include <Core/Queue.h>
+#include <Core/Singleton.h>
 #include <Core/Topology.h>
 #include <Engine/Schedulers.h>
 
@@ -205,6 +206,19 @@ public:
 					"Query().ForEach requires Select<T>() first");
 				using FList = TTypeList<TSelected...>;
 
+				// ① singleton segment — compile-time types in FLayers that are
+				// CRTP singletons AND implement a selected interface: drive T::Get().
+				using FLevels = typename FLayerType::FLevels;
+				Maho::ForEach<FLevels>(Maho::FSerialTraversePolicy{}, [&](auto Tag) {
+					using FLevel = typename decltype(Tag)::Type;
+					std::vector<std::function<void()>> Tasks;
+					Maho::ForEach<FLevel>(Maho::FSerialTraversePolicy{}, [&](auto TypeTag) {
+						using T = typename decltype(TypeTag)::Type;
+						EmplaceIf<T>(Tasks, Visitor);
+					});
+					Layer->RunTasks(std::move(Tasks));
+				});
+
 				// collect the selected subset once up front (safe snapshot)
 				std::vector<FLayerBase*> StaticSubset;
 				for (FLayerBase* I : Layer->Instances)
@@ -224,7 +238,6 @@ public:
 				}
 
 				// static: topological levels (barrier between, parallel within)
-				using FLevels = typename FLayerType::FLevels;
 				Maho::ForEach<FLevels>(Maho::FSerialTraversePolicy{}, [&](auto Tag) {
 					using FLevel = typename decltype(Tag)::Type;
 					std::vector<std::function<void()>> Tasks;
@@ -261,6 +274,17 @@ public:
 			explicit FLayerQuery(FLayerType& InLayer)
 				: Layer(&InLayer)
 			{
+			}
+
+			/** Singleton-or-not tag dispatch — avoids MSVC `if constexpr` in lambda. */
+			template <typename T, typename TVisitor>
+			static void EmplaceIf(std::vector<std::function<void()>>& Tasks, TVisitor& Visitor)
+			{
+				if constexpr (std::is_base_of_v<TSingleton<T>, T>
+					&& (std::is_base_of_v<TSelected, T> || ...))
+				{
+					Tasks.emplace_back([&] { Visitor(T::Get()); });
+				}
 			}
 
 private:

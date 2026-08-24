@@ -141,22 +141,20 @@ struct FGameWorld : FLayer<>, IPlugin<IMain, IGameWorld>
 
 // ── the engine root: owns the loop (IExit stops it), drives children per frame ──
 struct FGameEngine
-	: FLayer<FRenderer, FResourceManager, FNetWork, FGameWorld>
+	// singletons (FLog/FAudioService) live in the SAME plugin table as layer
+	// instances — Select<IService>().ForEach drives T::Get() for them here.
+	: FLayer<FRenderer, FResourceManager, FNetWork, FGameWorld, FLog, FAudioService>
 	, IPlugin<IMain, IExit>
 {
-	// the engine's singleton services (a second plugin table, driven via T::Get())
-	using FServices = TTypeList<FLog, FAudioService>;
-
 	std::atomic<bool> bExit{ false };
 	void Exit() override { bExit.store(true, std::memory_order_release); }
 
 	// installing the engine installs the children it manages (recursive)
 	void Initialize(int, char**) override
 	{
-		// singletons: no instance array — T::Get() per service, topo-ordered
-		Parallel::TypeQuery<FServices>()
-			.Select<IService>()
-			.ForEach([](IService& S) { S.Initiate(); });
+		// singletons: same syntax as instances — Select then ForEach; the FLayer
+		// query drives T::Get() for CRTP-singleton members of the table.
+		Select<IService>().ForEach([](IService& S) { S.Initiate(); });
 
 		Enqueue(FLayerCommand{ FLayerCommand::EOp::Install, new FRenderer(), /*static*/ true });
 		Enqueue(FLayerCommand{ FLayerCommand::EOp::Install, new FResourceManager(), /*static*/ true });
