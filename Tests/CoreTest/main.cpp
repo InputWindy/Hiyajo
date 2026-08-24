@@ -39,6 +39,23 @@ struct IRenderer
 struct INetwork { virtual void Poll() = 0; };
 struct IGameWorld { virtual void Tick() = 0; };
 
+// ── singleton services (driven by T::Get(), no instance array) ──
+struct IService { virtual void Initiate() = 0; };
+
+struct FLog : TSingleton<FLog>, IService
+{
+	MAHO_EXTEND_DEPS((FDefaultSlot, FNoParent));          // root singleton
+	int Initiated = 0;
+	void Initiate() override { ++Initiated; }
+};
+
+struct FAudioService : TSingleton<FAudioService>, IService
+{
+	MAHO_EXTEND_DEPS((FDefaultSlot, FNoParent, FLog));    // audio after log
+	int Initiated = 0;
+	void Initiate() override { ++Initiated; }
+};
+
 // ── leaf render features ──
 struct FRenderFeature : FLayer<>, IPlugin<IRenderer>
 {
@@ -127,12 +144,20 @@ struct FGameEngine
 	: FLayer<FRenderer, FResourceManager, FNetWork, FGameWorld>
 	, IPlugin<IMain, IExit>
 {
+	// the engine's singleton services (a second plugin table, driven via T::Get())
+	using FServices = TTypeList<FLog, FAudioService>;
+
 	std::atomic<bool> bExit{ false };
 	void Exit() override { bExit.store(true, std::memory_order_release); }
 
 	// installing the engine installs the children it manages (recursive)
 	void Initialize(int, char**) override
 	{
+		// singletons: no instance array — T::Get() per service, topo-ordered
+		Parallel::TypeQuery<FServices>()
+			.Select<IService>()
+			.ForEach([](IService& S) { S.Initiate(); });
+
 		Enqueue(FLayerCommand{ FLayerCommand::EOp::Install, new FRenderer(), /*static*/ true });
 		Enqueue(FLayerCommand{ FLayerCommand::EOp::Install, new FResourceManager(), /*static*/ true });
 		Enqueue(FLayerCommand{ FLayerCommand::EOp::Install, new FNetWork(), /*static*/ true });
@@ -165,7 +190,14 @@ int main()
 	// bootstrap the root: its Initialize recursively installs the subtree
 	// (children + FRenderer::Initialize → features). All owned by the subtree.
 	FGameEngine Engine;
-	Engine.Initialize(0, nullptr); // → install FRenderer/Res/Net/World/Audit + features
+	Engine.Initialize(0, nullptr); // → singletons Initiate + install children/features
+
+	// singletons were Initiate'd exactly once via TTypeQuery (T::Get(), no array)
+	if (FLog::Get().Initiated != 1 || FAudioService::Get().Initiated != 1)
+	{
+		std::puts("[FAIL] singleton services not Initiate'd exactly once");
+		return 1;
+	}
 
 	// topology: FGameWorld depends on FNetWork → net is a level before world
 	using FEngLevels = typename FGameEngine::FLevels;
