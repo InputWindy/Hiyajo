@@ -41,10 +41,10 @@ inline int Main(int Argc, char** Argv)
 		ReportFatal("Failed to install extension assembly");
 	}
 
-	// Create the root instance.
+	// Create the root instance — the exported CreateExtension factory.
 	using CreateFunction = FLayerBase* (*)();
-	auto Create = Extension.GetProc<CreateFunction>("CreateExtension");
-	if (!Create)
+	auto Create = Extension.GetProcAs<CreateFunction>("CreateExtension");
+	if (Create == nullptr)
 	{
 		ReportFatal("Extension assembly exports no CreateExtension");
 	}

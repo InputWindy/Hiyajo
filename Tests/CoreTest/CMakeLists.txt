@@ -34,6 +34,11 @@ target_include_directories(LayerBaseStress PRIVATE "${ENGINE_DIR}/Source/Public"
 add_executable(DeclareLayerStress DeclareLayerStress.cpp ${MAHO_HEADERS})
 target_include_directories(DeclareLayerStress PRIVATE "${ENGINE_DIR}/Source/Public")
 
+# EntryPoint.h drivers.compile + link check (needs Fatal.cpp).
+add_executable(EntryPointStress EntryPointStress.cpp ${MAHO_PRIVATE} ${MAHO_HEADERS})
+target_include_directories(EntryPointStress PRIVATE "${ENGINE_DIR}/Source/Public")
+target_link_libraries(EntryPointStress PRIVATE Threads::Threads)
+
 # Assembly.cpp uses LoadLibrary/FreeLibrary/getenv on the host platform; Threads for FThreadPool.
 find_package(Threads REQUIRED)
 target_link_libraries(CoreTest PRIVATE Threads::Threads)

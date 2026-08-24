@@ -93,11 +93,11 @@ public:
 #endif
 	}
 
-	/** Typed symbol lookup. */
-	template <typename T>
-	[[nodiscard]] T* GetProc(const char* Name) const
+	/** Cast the raw symbol to a typed FUNCTION pointer. */
+	template <typename TFunction>
+	[[nodiscard]] TFunction GetProcAs(const char* Name) const
 	{
-		return reinterpret_cast<T*>(GetProcAddress(Name));
+		return reinterpret_cast<TFunction>(GetProcAddress(Name));
 	}
 
 private:

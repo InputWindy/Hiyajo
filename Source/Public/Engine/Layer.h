@@ -498,7 +498,7 @@ private:
 		if (M.Assembly.Load(DLLPath))
 		{
 			using CreateFunction = FLayerBase* (*)();
-			auto Create = reinterpret_cast<CreateFunction>(M.Assembly.GetProcAddress("CreateExtension"));
+			auto Create = M.Assembly.GetProcAs<CreateFunction>("CreateExtension");
 			if (Create)
 			{
 				return Create();
