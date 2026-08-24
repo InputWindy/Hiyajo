@@ -443,6 +443,9 @@ target_include_directories({name} PUBLIC
 	"${{CMAKE_CURRENT_SOURCE_DIR}}/Plugins/{name}/Public"
 {plugin_dirs}
 )
+# Export the extern "C" CreateExtension() bridge — the host's single entry.
+set_target_properties({name} PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
+target_compile_definitions({name} PRIVATE MAHO_{NAME_UPPER}_MODULE_EXPORTS)
 add_dependencies({name} {plugin_link_names})
 target_link_libraries({name} PUBLIC {plugin_link_names})
 
@@ -867,6 +870,7 @@ def _write_cmake_lists(
 	(project_dir / "CMakeLists.txt").write_text(
 		CMAKELISTS.format(
 			name=project_name,
+			NAME_UPPER=project_name.upper(),
 			engine_rel=engine_rel,
 			plugin_dirs=plugin_dirs,
 			plugin_targets=plugin_targets,
