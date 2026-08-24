@@ -72,3 +72,15 @@ public:
 };
 
 } // namespace Maho
+
+// ── syntax sugar: CORE-logging macros (spdlog-style) ─────────────────────
+// Format like the engine core; call after FLog::Get().Initiate(argc, argv):
+//
+//   MAHO_LOG_CORE_INFO("init {}", name);
+//   MAHO_LOG_CORE_ERROR("boom: code={}", code);
+#define MAHO_LOG_CORE_TRACE(...)    ::Maho::FLog::Get().Logger->trace(__VA_ARGS__)
+#define MAHO_LOG_CORE_DEBUG(...)    ::Maho::FLog::Get().Logger->debug(__VA_ARGS__)
+#define MAHO_LOG_CORE_INFO(...)     ::Maho::FLog::Get().Logger->info(__VA_ARGS__)
+#define MAHO_LOG_CORE_WARN(...)     ::Maho::FLog::Get().Logger->warn(__VA_ARGS__)
+#define MAHO_LOG_CORE_ERROR(...)    ::Maho::FLog::Get().Logger->error(__VA_ARGS__)
+#define MAHO_LOG_CORE_CRITICAL(...) ::Maho::FLog::Get().Logger->critical(__VA_ARGS__)
