@@ -3,19 +3,28 @@
 namespace Maho
 {
 
-/** Singleton identity — a class exposing `static T::Get()` (CRTP singleton). */
+/**
+ * Singleton identity + fixed lifecycle — a class exposing `static T::Get()`
+ * (CRTP singleton) with two lifecycle hooks: Initiate (bring it up) and
+ * Shutdown (tear it down). The engine drives these the same way for every
+ * singleton plugin via Select<ISingleton>().ForEach.
+ */
 class ISingleton
 {
 public:
 	virtual ~ISingleton() = default;
+
+	/** Bring the singleton up — the fixed init phase. */
+	virtual void Initiate() = 0;
+
+	/** Tear it down — the fixed shutdown phase. */
+	virtual void Shutdown() = 0;
 };
 
 /**
  * CRTP singleton — the single process-wide instance of T, created on first
- * access via `static T& Get()` (Meyers). A plugin layer declared as a singleton
- * is driven by FParallelScheduler::ForEachSingletons without an instance array:
- * the type list is traversed level-by-level and each T::Get() is handed to the
- * visitor.
+ * access via `static T& Get()` (Meyers). A derived singleton only needs to
+ * implement Initiate/Shutdown.
  */
 template <typename T>
 class TSingleton : public ISingleton

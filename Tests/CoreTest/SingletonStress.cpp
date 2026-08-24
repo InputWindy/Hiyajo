@@ -17,18 +17,27 @@ namespace
 	struct FA : public TSingleton<FA>
 	{
 		MAHO_EXTEND_DEPS((FDefaultSlot, FNoParent));
+		int InitCount = 0;
+		void Initiate() override { ++InitCount; }
+		void Shutdown() override {}
 		void Poll() { gPolls.fetch_add(1, std::memory_order_relaxed); }
 	};
 
 	struct FB : public TSingleton<FB>
 	{
 		MAHO_EXTEND_DEPS((FDefaultSlot, FNoParent, FA));
+		int InitCount = 0;
+		void Initiate() override { ++InitCount; }
+		void Shutdown() override {}
 		void Poll() { gPolls.fetch_add(1, std::memory_order_relaxed); }
 	};
 
 	// FC has no topo deps (leaf) — another root-level singleton
 	struct FC : public TSingleton<FC>
 	{
+		int InitCount = 0;
+		void Initiate() override { ++InitCount; }
+		void Shutdown() override {}
 		void Poll() { gPolls.fetch_add(1, std::memory_order_relaxed); }
 	};
 
@@ -55,6 +64,16 @@ int main()
 	if (gPolls.load() != 3)
 	{
 		std::printf("[FAIL] TTypeQuery polled=%d want=3\n", gPolls.load());
+		return 1;
+	}
+
+	// TTypeQuery.Select().ForEach also drives the fixed lifecycle (Initiate/Shutdown)
+	Parallel::TypeQuery<FSingletons>()
+		.Select<ISingleton>()
+		.ForEach([](auto& S) { S.Initiate(); });
+	if (FA::Get().InitCount != 1 || FB::Get().InitCount != 1 || FC::Get().InitCount != 1)
+	{
+		std::puts("[FAIL] singletons not Initiate'd exactly once");
 		return 1;
 	}
 

@@ -3,36 +3,48 @@
 #include <spdlog/spdlog.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
 
-#include "LogApi.h"
+#include <Core/Singleton.h>
 #include <Maho.h>
-#include <Engine/Layer.h>
 
 namespace Maho
 {
 
 /**
- * Logging layer — a thin wrapper over spdlog. Owns a shared, thread-safe
- * console logger; Initialize spins it up, Shutdown flushes+drops it. Any plugin
- * that depends on Log can call FLog::Instance() to log.
+ * Logging singleton — a CRTP singleton (T::Get()) wrapping spdlog. Initiate
+ * configures the thread-safe stdout-color logger; Shutdown flushes+drops it
+ * (both are ISingleton's fixed lifecycle, driven via Select<ISingleton>().ForEach).
+ * Any plugin depending on Log can log straight through FLog:
  *
- *   FLog::Info("init: {}", name);          // fmt-style format args
- *   FLog::Instance()->warn("warn {} ", x); // raw spdlog access
+ *   FLog::InitLog();                  // or driven by the engine's singleton init
+ *   FLog::Info("init: {}", name);
+ *   FLog::Error("boom: code={}", code);
  */
-class FLog
-	: public FLayer<>
-	, public IPlugin<IMain, IExit>
+class FLog : public TSingleton<FLog>
 {
 public:
-	MAHO_DECLARE_LAYER(FLog, "Log.dll");
-
-	/** The shared logger — route all engine/service logging through it. */
-	static std::shared_ptr<spdlog::logger> Instance()
+	/** Bring the logger up (ISingleton::Initiate). */
+	void Initiate() override
 	{
-		static std::shared_ptr<spdlog::logger> G = spdlog::stdout_color_mt("Maho");
-		return G;
+		Logger = spdlog::stdout_color_mt("Maho");
+		Logger->set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%^%l%$] %v");
+		Logger->set_level(spdlog::level::debug);
 	}
 
-	/** fmt-style convenience (appends a formatted message). */
+	/** Flush + drop the sinks (ISingleton::Shutdown). */
+	void Shutdown() override
+	{
+		spdlog::shutdown();
+		Logger.reset();
+	}
+
+	/** The shared logger. */
+	static std::shared_ptr<spdlog::logger>& Instance()
+	{
+		static thread_local auto Log = Get().Logger;
+		return Log;
+	}
+
+	// fmt-style passthroughs
 	template <typename... Args>
 	static void Info(spdlog::format_string_t<Args...> Fmt, Args&&... A)
 	{
@@ -49,22 +61,8 @@ public:
 		Instance()->error(Fmt, std::forward<Args>(A)...);
 	}
 
-	// The run entry — a logging layer has no per-frame work; returns immediately.
-	int Main() override { return 0; }
-	void Exit() override {}
-
-	// Install: configure spdlog (pattern + level).
-	void Initialize(int, char**) override
-	{
-		spdlog::set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%^%l%$] %v");
-		spdlog::set_level(spdlog::level::debug);
-	}
-
-	// Shutdown: flush + drop the singleton sinks.
-	void Shutdown() override
-	{
-		spdlog::shutdown();
-	}
+private:
+	std::shared_ptr<spdlog::logger> Logger;
 };
 
 } // namespace Maho

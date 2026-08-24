@@ -39,21 +39,21 @@ struct IRenderer
 struct INetwork { virtual void Poll() = 0; };
 struct IGameWorld { virtual void Tick() = 0; };
 
-// ── singleton services (driven by T::Get(), no instance array) ──
-struct IService { virtual void Initiate() = 0; };
-
-struct FLog : TSingleton<FLog>, IService
+// ── singleton services (driven by T::Get(), fixed ISingleton lifecycle) ──
+struct FLog : TSingleton<FLog>
 {
 	MAHO_EXTEND_DEPS((FDefaultSlot, FNoParent));          // root singleton
 	int Initiated = 0;
 	void Initiate() override { ++Initiated; }
+	void Shutdown() override {}
 };
 
-struct FAudioService : TSingleton<FAudioService>, IService
+struct FAudioService : TSingleton<FAudioService>
 {
 	MAHO_EXTEND_DEPS((FDefaultSlot, FNoParent, FLog));    // audio after log
 	int Initiated = 0;
 	void Initiate() override { ++Initiated; }
+	void Shutdown() override {}
 };
 
 // ── leaf render features ──
@@ -154,7 +154,7 @@ struct FGameEngine
 	{
 		// singletons: same syntax as instances — Select then ForEach; the FLayer
 		// query drives T::Get() for CRTP-singleton members of the table.
-		Select<IService>().ForEach([](IService& S) { S.Initiate(); });
+		Select<ISingleton>().ForEach([](ISingleton& S) { S.Initiate(); });
 
 		Enqueue(FLayerCommand{ FLayerCommand::EOp::Install, new FRenderer(), /*static*/ true });
 		Enqueue(FLayerCommand{ FLayerCommand::EOp::Install, new FResourceManager(), /*static*/ true });
