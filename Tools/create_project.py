@@ -77,8 +77,8 @@ class CreateProjectApp(tk.Tk):
 		self.txt_desc.grid(row=5, column=1, columnspan=2, sticky="nsew", **pad)
 		self.txt_desc.insert("1.0", "哈哈，我是土豆泥大王！")
 
-		# The plugin the project mounts — a single dependency this project ships with.
-		ttk.Label(frm, text="Plugins（勾选要装配的插件，单选）").grid(row=6, column=0, sticky="nw", **pad)
+		# Optional: a plugin to mount as the project's child (empty project allowed).
+		ttk.Label(frm, text="Plugins（可选，勾选装配为一个子层）").grid(row=6, column=0, sticky="nw", **pad)
 		tree_frame = ttk.Frame(frm)
 		tree_frame.grid(row=6, column=1, columnspan=2, sticky="nsew", **pad)
 		tree_frame.columnconfigure(0, weight=1)
@@ -208,9 +208,6 @@ class CreateProjectApp(tk.Tk):
 		if not is_valid_project_name(name):
 			messagebox.showerror("Maho", "Invalid project name.\nUse Letter + A-Z a-z 0-9 _ -")
 			return
-		if not self._selected:
-			messagebox.showerror("Maho", "Pick ONE plugin the project mounts.")
-			return
 		if not parent:
 			messagebox.showerror("Maho", "Parent folder is required.")
 			return
@@ -226,13 +223,14 @@ class CreateProjectApp(tk.Tk):
 			return
 
 		try:
+			plugins = [self._selected] if self._selected else []
 			cproject = create_project(
 				name,
 				parent,
 				engine,
 				description=desc,
 				author=author,
-				plugins=[self._selected],
+				plugins=plugins,
 			)
 		except Exception as ex:  # noqa: BLE001
 			messagebox.showerror("Maho", str(ex))
