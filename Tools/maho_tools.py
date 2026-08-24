@@ -1068,18 +1068,23 @@ def create_plugin(
 	child_includes = "".join(f'#include <{c}.h>\n' for c in (children or []))
 	child_bases = ", ".join(f"F{c}" for c in (children or []))
 	flayer_base = f"FLayer<{child_bases}>" if child_bases else "FLayer<>"
+	# a chosen parent plugin becomes the class's base (inherit its layer type)
+	parent = (inherits or [None])[0]
+	parent_include = f'#include <{parent}.h>\n' if parent else ""
+	base_line = f"\t: public Maho::F{parent}\n" if parent else f"\t: public {flayer_base}\n"
 	(public / f"{plugin_name}.h").write_text(
 		"#pragma once\n\n"
 		f'#include "{plugin_name}Api.h"\n'
 		f"#include <Maho.h>\n"
 		f"#include <Engine/Layer.h>\n"
+		f"{parent_include}"
 		f"{child_includes}\n"
 		f"namespace Maho\n{{\n\n"
-		f"// {plugin_name} — a Layer node: FLayer<children...> + the interfaces it\n"
-		f"// implements. Children are code-gen filled (the mounted plugins);\n"
-		f"// interfaces are hand-spelled as IPlugin<> template args.\n"
+		f"// {plugin_name} — a Layer node. Optionally inherits a parent plugin's layer;\n"
+		f"// children are code-gen filled (the mounted plugins); interfaces are\n"
+		f"// hand-spelled as IPlugin<> template args.\n"
 		f"class F{plugin_name}\n"
-		f"\t: public {flayer_base}\n"
+		f"{base_line}"
 		f"\t, public IPlugin<IMain, IExit>\n"
 		f"{{\n"
 		f"MAHO_DECLARE_LAYER(F{plugin_name}, \"{plugin_name}.dll\");\n"
