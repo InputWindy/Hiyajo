@@ -32,8 +32,6 @@ namespace Maho
 //   using FNodes = TTypeList<FMySystem, FMyBase, FMyInput>;
 //
 //   static_assert(Topo::TIsAcyclic_v<FNodes, EEngineStage::Init>);
-//   using FOrder = Topo::TTopoSort_t<FNodes, EEngineStage::Init>;
-//   // FOrder == TTypeList<FMyBase, FMyInput, FMySystem>   (ordered, serial)
 //   using FLevels = Topo::TLevels_t<FNodes, EEngineStage::Init>;
 //   // FLevels == TTypeList<
 //   //     TTypeList<FMyBase, FMyInput>,   (level 0, may run in parallel)
@@ -48,9 +46,6 @@ struct TDependsPack;
 
 template <typename T, typename = void>
 struct TResolveDependsPack;
-
-template <typename T, typename Key>
-struct TDependsList;
 
 // ───────────────────────────────────────────────────────────────────────
 // Declaration types.
@@ -148,80 +143,6 @@ struct TNodeDeps
 template <typename T, typename Key>
 using TNodeDeps_t = typename TNodeDeps<T, Key>::Type;
 
-// ───────────────────────────────────────────────────────────────────────
-// Dependency-pack merging (the 3D DAG: inheritance is the z-axis).
-//
-// TConcatPacks<A, B> merges two TDependsPack into one TDependsPack, splicing
-// the deps of same-KEY slots (so an inherited parent's edges ∪ its own edges).
-//   using FDependsPack = TCatch<...>  (TTypeList)  does NOT apply here —
-//   use TCatchPacks / TConcatPacks for dependency packs, not TCatch.
-// ───────────────────────────────────────────────────────────────────────
-
-/** Append a slot to the END of a dependency pack. */
-template <typename TPack, typename TSlot>
-struct TDependAppendSlot;
-
-template <typename... TSlots, typename TSlotKey, typename TList>
-struct TDependAppendSlot<TDependsPack<TSlots...>, TDependsOn<TSlotKey, TList>>
-{
-	using Type = TDependsPack<TSlots..., TDependsOn<TSlotKey, TList>>;
-};
-
-/** Insert one slot into a pack: same-KEY slot → splice deps; else append. */
-template <typename TPack, typename TSlot>
-struct TInsertDependSlot;
-
-template <typename TSlotKey, typename TList>
-struct TInsertDependSlot<TDependsPack<>, TDependsOn<TSlotKey, TList>>
-{
-	using Type = TDependsPack<TDependsOn<TSlotKey, TList>>;
-};
-
-template <typename TSlotKey, typename THeadList, typename... TRest, typename TList>
-struct TInsertDependSlot<TDependsPack<TDependsOn<TSlotKey, THeadList>, TRest...>,
-	TDependsOn<TSlotKey, TList>>
-{
-	using Type = TDependsPack<
-		TDependsOn<TSlotKey, typename TCatch<THeadList, TList>::Type>, TRest...>;
-};
-
-template <typename KHead, typename THeadList, typename... TRest,
-	typename TSlotKey, typename TList>
-struct TInsertDependSlot<TDependsPack<TDependsOn<KHead, THeadList>, TRest...>,
-	TDependsOn<TSlotKey, TList>>
-{
-private:
-	using FInserted = typename TInsertDependSlot<TDependsPack<TRest...>,
-		TDependsOn<TSlotKey, TList>>::Type;
-
-public:
-	using Type = typename TDependAppendSlot<FInserted,
-		TDependsOn<KHead, THeadList>>::Type;
-};
-
-/** Merge two dependency packs (same KEY slots spliced). */
-template <typename TPackA, typename TPackB>
-struct TConcatPacks;
-
-template <typename TPackA>
-struct TConcatPacks<TPackA, TDependsPack<>>
-{
-	using Type = TPackA;
-};
-
-template <typename TPackA, typename THead, typename... TRest>
-struct TConcatPacks<TPackA, TDependsPack<THead, TRest...>>
-{
-private:
-	using FStep = typename TInsertDependSlot<TPackA, THead>::Type;
-
-public:
-	using Type = typename TConcatPacks<FStep, TDependsPack<TRest...>>::Type;
-};
-
-template <typename TPackA, typename TPackB>
-using TConcatPacks_t = typename TConcatPacks<TPackA, TPackB>::Type;
-
 // ── ① Cycle detection (DFS path coloring; short-circuits on back edge). ─
 
 template <typename TNodes, typename Key, typename TNode, typename TPath>
@@ -291,91 +212,7 @@ inline constexpr bool THasCycle_v = THasCycleFromAny<TNodes, Key>::value;
 template <typename TNodes, typename Key>
 inline constexpr bool TIsAcyclic_v = !THasCycle_v<TNodes, Key>;
 
-/** static_assert that TNodes' graph at Key has no cycle. */
-template <typename TNodes, typename Key>
-constexpr void TAssertAcyclic()
-{
-	static_assert(
-		TIsAcyclic_v<TNodes, Key>,
-		"Topo: dependency graph has a cycle at this key");
-}
-
-// ── ② Topological sort (deps before dependents), DFS post-order. ───────
-
-template <typename TVisited, typename TResult>
-struct TTopoState
-{
-	using Visited = TVisited;
-	using Result = TResult;
-};
-
-template <typename TNodes, typename Key, typename TList, typename TState>
-struct TTopoVisitList;
-
-template <typename TNodes, typename Key, typename TState>
-struct TTopoVisitList<TNodes, Key, TTypeList<>, TState>
-{
-	using State = TState;
-};
-
-template <bool bVisited, typename TNodes, typename Key, typename TNode, typename TState>
-struct TTopoVisitImpl;
-
-template <typename TNodes, typename Key, typename TNode, typename TState>
-struct TTopoVisitImpl<true, TNodes, Key, TNode, TState>
-{
-	using State = TState;
-};
-
-template <typename TNodes, typename Key, typename TNode, typename TState>
-struct TTopoVisitImpl<false, TNodes, Key, TNode, TState>
-{
-private:
-	using FDeps = typename TFilterDepsInNodes<TNodes, TNodeDeps_t<TNode, Key>>::Type;
-	using FAfterDeps = typename TTopoVisitList<
-		TNodes,
-		Key,
-		FDeps,
-		TTopoState<typename TCons<TNode, typename TState::Visited>::Type, typename TState::Result>>::State;
-
-public:
-	using State = TTopoState<
-		typename FAfterDeps::Visited,
-		TAppend_t<typename FAfterDeps::Result, TNode>>;
-};
-
-template <typename TNodes, typename Key, typename TNode, typename TState>
-struct TTopoVisit
-{
-	static constexpr bool bVisited = TContains_v<typename TState::Visited, TNode>;
-	using State = typename TTopoVisitImpl<bVisited, TNodes, Key, TNode, TState>::State;
-};
-
-template <typename TNodes, typename Key, typename THead, typename... TRest, typename TState>
-struct TTopoVisitList<TNodes, Key, TTypeList<THead, TRest...>, TState>
-{
-private:
-	using FAfterHead = typename TTopoVisit<TNodes, Key, THead, TState>::State;
-
-public:
-	using State = typename TTopoVisitList<TNodes, Key, TTypeList<TRest...>, FAfterHead>::State;
-};
-
-/**
- * Topological order of TNodes at Key: a peer appears before its dependent.
- * Meaningful only for acyclic graphs (see TAssertAcyclic).
- */
-template <typename TNodes, typename Key>
-struct TTopoSort
-{
-	using Type = typename TTopoVisitList<
-		TNodes, Key, TNodes, TTopoState<TTypeList<>, TTypeList<>>>::State::Result;
-};
-
-template <typename TNodes, typename Key>
-using TTopoSort_t = typename TTopoSort<TNodes, Key>::Type;
-
-// ── ③ Levels (parallel groups by dependency level). ─────────────────────
+// ── ② Levels (parallel groups by dependency level). ─────────────────────
 
 /**
  * Level of a node: 1 + max(level of deps); roots are 0.
@@ -477,7 +314,7 @@ public:
 /**
  * Parallel levels of TNodes at Key: outer list = level sequence (level 0 runs
  * first), inner list = types within one level (mutually independent, may run
- * in parallel). Assumes acyclic (see TAssertAcyclic).
+ * in parallel). Assumes acyclic (verify with TIsAcyclic_v).
  */
 template <typename TNodes, typename Key, int Max, bool bEmpty>
 struct TLevelsImpl;
@@ -507,95 +344,7 @@ public:
 template <typename TNodes, typename Key>
 using TLevels_t = typename TLevels<TNodes, Key>::Type;
 
-// ── ④ Reverse dependency: who depends on TTarget at Key. ───────────────
-
-/**
- * Collect every type in TNodes whose dependency list at Key contains TTarget
- * (incoming edges of TTarget). Assumes the forward deps are already resolvable
- * via TNodeDeps (each type's TDependsPack).
- *
- *   using FWho = TFindDependents_t<FNodes, EPhase::Main, FC>;
- *   // FWho = TTypeList of every node that depends on FC at Main.
- */
-template <typename TNodes, typename Key, typename TTarget>
-struct TFindDependents;
-
-template <typename Key, typename TTarget>
-struct TFindDependents<TTypeList<>, Key, TTarget>
-{
-	using Type = TTypeList<>;
-};
-
-template <typename Key, typename THead, typename... TRest, typename TTarget>
-struct TFindDependents<TTypeList<THead, TRest...>, Key, TTarget>
-{
-private:
-	using FTail = typename TFindDependents<TTypeList<TRest...>, Key, TTarget>::Type;
-	static constexpr bool bDepends = TContains_v<TNodeDeps_t<THead, Key>, TTarget>;
-
-public:
-	using Type = std::conditional_t<
-		bDepends,
-		typename TCons<THead, FTail>::Type,
-		FTail>;
-};
-
-template <typename TNodes, typename Key, typename TTarget>
-using TFindDependents_t = typename TFindDependents<TNodes, Key, TTarget>::Type;
-
-// ── ⑤ Reverse a TTypeList (used for auto-mirrored shutdown order). ─────
-
-/** Reverse a TTypeList: TTypeList<A, B, C> → TTypeList<C, B, A>. */
-template <typename TList>
-struct TReverse;
-
-template <>
-struct TReverse<TTypeList<>>
-{
-	using Type = TTypeList<>;
-};
-
-template <typename THead, typename... TRest>
-struct TReverse<TTypeList<THead, TRest...>>
-{
-	using Type = TAppend_t<typename TReverse<TTypeList<TRest...>>::Type, THead>;
-};
-
-template <typename TList>
-using TReverse_t = typename TReverse<TList>::Type;
-
 } // namespace Topo
-
-// ───────────────────────────────────────────────────────────────────────
-// TDependsList: the deps of T at Key (empty if no pack / no matching slot).
-// ───────────────────────────────────────────────────────────────────────
-
-template <typename T, typename Key>
-struct TDependsList
-{
-	using Type = typename Topo::TFindSlot<typename TResolveDependsPack<T>::Type, Key>::Type;
-};
-
-template <typename T, typename Key>
-using TDependsList_t = typename TDependsList<T, Key>::Type;
-
-// ───────────────────────────────────────────────────────────────────────
-// Ordering policies: how the scheduler applies the computed level bands.
-// ───────────────────────────────────────────────────────────────────────
-
-/** Forward topology: the level bands as-is (deps before dependents). */
-struct FForwardTopology
-{
-	template <typename TLevels>
-	using Apply = TLevels;
-};
-
-/** Reverse topology: reversed band sequence (dependents before deps). */
-struct FReverseTopology
-{
-	template <typename TLevels>
-	using Apply = Topo::TReverse_t<TLevels>;
-};
 
 } // namespace Maho
 
@@ -631,31 +380,3 @@ struct FReverseTopology
  */
 #define MAHO_SORT_LEVEL(Class, Key) \
 	::Maho::Topo::TLevels_t<MAHO_CLOSURE(Class, Key), Key>
-
-// ───────────────────────────────────────────────────────────────────────
-// MAHO_SORT_LEVELS — dependency-level bands for an aggregate LIST of classes
-// at a Key. Each class's code-gen closure is read (as a literal TTypeList — no
-// template metaprogramming), they are unioned, and the union is leveled.
-//
-//   using FLevels = MAHO_SORT_LEVELS(IA, SD, SE, SF);
-//   // == TLevels_t< union(MAHO_CLOSURE(SD,IA), ...), IA>
-// ───────────────────────────────────────────────────────────────────────
-#define MAHO_SORT_LEVELS_1(Key, A) \
-	::Maho::Topo::TLevels_t<MAHO_CLOSURE(A, Key), Key>
-#define MAHO_SORT_LEVELS_2(Key, A, B) \
-	::Maho::Topo::TLevels_t< \
-		::Maho::TUnionList_t<MAHO_CLOSURE(A, Key), MAHO_CLOSURE(B, Key)>, Key>
-#define MAHO_SORT_LEVELS_3(Key, A, B, C) \
-	::Maho::Topo::TLevels_t< \
-		::Maho::TUnionList_t<MAHO_CLOSURE(A, Key), \
-			::Maho::TUnionList_t<MAHO_CLOSURE(B, Key), MAHO_CLOSURE(C, Key)>>, Key>
-#define MAHO_SORT_LEVELS_4(Key, A, B, C, D) \
-	::Maho::Topo::TLevels_t< \
-		::Maho::TUnionList_t<MAHO_CLOSURE(A, Key), \
-			::Maho::TUnionList_t<MAHO_CLOSURE(B, Key), \
-				::Maho::TUnionList_t<MAHO_CLOSURE(C, Key), MAHO_CLOSURE(D, Key)>>>, Key>
-#define MAHO_SORT_LEVELS_SELECT(_1, _2, _3, _4, NAME, ...) NAME
-#define MAHO_SORT_LEVELS(Key, ...) \
-	MAHO_SORT_LEVELS_SELECT(__VA_ARGS__, \
-		MAHO_SORT_LEVELS_4, MAHO_SORT_LEVELS_3, MAHO_SORT_LEVELS_2, MAHO_SORT_LEVELS_1)(Key, __VA_ARGS__)
-

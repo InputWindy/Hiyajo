@@ -3,62 +3,57 @@
 
 ## 代码文件
 
+- [ModuleManager.h](ModuleManager.h) — 模块加载/引用计数（DLL 生命周期）
 - [Schedulers.h](Schedulers.h) — 串行 / 并行调度器
 - [ThreadPool.h](ThreadPool.h)
 <!-- mahogen end -->
 
-## 概念——插件模板与调度策略
+## 概念——模块系统与调度策略
 
-Engine 层放**具体调度策略**和**两类插件模板**。核心 `Core/Scheduler.h` 只给 `IScheduler` 契约，串/并行在这里。
+Engine 层放**具体调度策略**和**模块加载管理器**。核心 `Core/` 只给契约（`FInstance` 根、`FModuleInstance` 约定、`IScheduler`），串/并行与模块生命周期的实现都在这里。
 
-两个模板各占一个头文件：`Tool.h`（`TTool`，C++14）、`Layer.h`（`TLayer`，C++20）。工具模板不拉任何 concept 头，标准要求最低，方便像 Math（GLM）这类要降标的插件单独使用。
+### 模块系统
 
-### 两类插件模板
+模块 = "DLL + 工厂"的可装载代码单元。三块拼：
 
-新建插件时，按角色选择继承哪个模板：
+| 概念 | 层 | 职责 |
+|------|------|------|
+| `FInstance` | Core | DLL 实例根（虚析构，`delete` 走 DLL） |
+| `FModuleInstance` | Core | 类型约定：`static GetModulePath()` 指向 DLL |
+| `FModuleManager<TExtensions>` | Engine | `TSingleton`：加载 DLL、构造实例、引用计数卸载 |
 
-| 模板 | 身份 | 单例 | 调度器 | 说明 |
-|------|------|------|--------|------|
-| `TTool<TDerived>` | 工具 | ✅ | ❌ | 即插即用，全 public，谁用谁 `Get().xxx()` |
-| `TLayer<Ts...>` | 应用根/嵌套宿主 | ❌ | ✅ 并行 | Assembly（导出 CreateExtension），可动态安装，并行调度自己 FExtensions |
-
-Engine 与 Layer 已统一为 `TLayer`：应用根就是一个 Layer（导出 CreateExtension → 可多实例），它内部再驱动自己的工具/子层。不再有单独的 Engine 分类。
-
-```cpp
-// 工具：单例，全 public，不调度别人
-class FLog : public Maho::TTool<FLog> { ... };
-
-// 嵌套层：宿主，调度自己的工具/子层
-class FRenderer : public Maho::TLayer<FLog, FRDG> { ... };
-
-// 应用根：也是一个 Layer（Assembly，导出）
-class FMyGame : public Maho::TLayer<FLog, FRDG, FRenderer> { ... };
-```
-
-### 分类与驱动
-
-`TLayer` 内置两个分半：`FTools`（编译期单例类型）与 `FLayerTypes`（装配类型，运行时实例化进 `this->Layers`）。`Execute` 是并行遍历基座，宿主按生命周期分阶段调用：
+应用用 `FModuleManager<FXxx>` 按类型加载，再驱动返回的实例：
 
 ```cpp
-using FTools = typename TFilterWhere<FExtensions, TIsSingleton>::Type;   // 工具（单例）
-using FLayerTypes = typename TFilter<FExtensions, ILayer>::Type;       // 层（Assembly）
-
-int Main(int Argc, char** Argv) override
+// FExtensions = 项目全部模块类型（编译期扫描表 + code-gen）
+struct FGameEngine : Parallel::FParallelScheduler<FExtensions>
 {
-    CreateLayers();   // 实例化每个子 Layer（CreateExtension）进 this->Layers
+	std::vector<FInstance*> Instances;
 
-    Execute<FTools>([](T& Tool) {   // 工具：编译期单例，遍历器传实例
-        Tool.Initialize();
-    });
-    Execute(Layers, [](Maho::ILayer* L) { ... });   // 层：运行时实例
-    Execute<FTools>([](T& Tool) { Tool.Shutdown(); });
-    return 0;
-}
+	int Main(int, char**)
+	{
+		// 1. 加载全部实例
+		ForEach<FExtensions>(*this, [&](auto Tag) {
+			using T = typename decltype(Tag)::Type;
+			if (FInstance* S = FModuleManager<FExtensions>::Get().template Load<T>())
+				Instances.push_back(S);
+		});
+
+		// 2. Query 过滤接口 → 并行驱动
+		using FTicks = decltype(Query<FExtensions>().Select<ITick>().Cast<ITick>());
+		this->template Execute<FTicks>(Instances, [](ITick& T) { T.Tick(); });
+
+		// 3. 收尾：实例先死（虚析构在 DLL）→ 模块后卸
+		for (FInstance* I : Instances) delete I;
+		FModuleManager<FExtensions>::Get().UnloadIdle();
+		return 0;
+	}
+};
 ```
+
+**生命周期顺序是硬约束**：实例的虚表/析构都在 DLL 代码段，先 Unload DLL 再用实例 = 用后释放。所以实例销毁必须先于模块卸载——这交给宿主（`delete` 全死在 DLL 卸载之前）。
 
 ### 调度策略
-
-**`FSerialScheduler`** —— 串行：`Run` = fold 顺序执行；`Execute` = 外层 level 串行 + 内层串行。
 
 **`FParallelScheduler`** —— 并行：持有 `FThreadPool`。`Run` 投线程池；`Execute` = 外层 level 串行 + 内层线程池并行（barrier 跨层同步）。
 

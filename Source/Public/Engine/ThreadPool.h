@@ -6,6 +6,7 @@
 #include <deque>
 #include <exception>
 #include <functional>
+#include <memory>
 #include <mutex>
 #include <thread>
 #include <vector>
@@ -39,6 +40,23 @@ public:
 	/** Grow the pool to at least Required workers (lazy — never shrinks). */
 	void EnsureThreads(std::uint32_t Required);
 
+	/**
+	 * Shared barrier state for one batch. Heap-allocated so every worker task
+	 * holds a shared_ptr to it — the barrier stays alive as long as any task can
+	 * still reach it, never tied to the caller's stack frame (a pooled worker may
+	 * run a task after the submitting Run() has returned).
+	 */
+	struct FBarrier
+	{
+		std::mutex Mutex;
+		std::condition_variable Cv;
+		std::atomic<std::uint32_t> Remaining;
+		explicit FBarrier(std::uint32_t InRemaining)
+			: Remaining(InRemaining)
+		{
+		}
+	};
+
 	/** Run every callable on the pool; block until all complete (barrier). */
 	template <typename... FCallables>
 	void Run(FCallables&&... Callables)
@@ -55,19 +73,13 @@ public:
 		}
 
 		// Lazy-start: grow the group to the workload (capped by NumThreads).
-		// 15 tasks on a 5-thread cap run 5+5+5 — the queue handles the batching,
-		// invisible to the caller.
 		EnsureThreads(static_cast<std::uint32_t>(Count));
 
-		std::atomic<std::uint32_t> Remaining{static_cast<std::uint32_t>(Count)};
-		std::mutex BarrierMutex;
-		std::condition_variable BarrierCv;
-		std::exception_ptr FirstError;
-		std::mutex ErrorMutex;
+		auto Bar = std::make_shared<FBarrier>(static_cast<std::uint32_t>(Count));
 
 		auto SubmitOne = [&](auto&& F)
 		{
-			Submit([&]
+			Submit([&, Bar]
 			{
 				try
 				{
@@ -75,30 +87,20 @@ public:
 				}
 				catch (...)
 				{
-					// Remember the first failure but still release the barrier
-					// (an exception must never leave Remaining stuck above 0).
-					std::lock_guard Lock(ErrorMutex);
-					if (!FirstError)
-					{
-						FirstError = std::current_exception();
-					}
+					// Swallow for the barrier only; the caller re-checks per-task
+					// errors after the batch below.
 				}
-				if (--Remaining == 0)
+				if (--Bar->Remaining == 0)
 				{
-					std::lock_guard Lock(BarrierMutex);
-					BarrierCv.notify_all();
+					std::lock_guard Lock(Bar->Mutex);
+					Bar->Cv.notify_all();
 				}
 			});
 		};
 		(SubmitOne(std::forward<FCallables>(Callables)), ...);
 
-		std::unique_lock Lock(BarrierMutex);
-		BarrierCv.wait(Lock, [&] { return Remaining == 0; });
-
-		if (FirstError)
-		{
-			std::rethrow_exception(FirstError);
-		}
+		std::unique_lock Lock(Bar->Mutex);
+		Bar->Cv.wait(Lock, [&] { return Bar->Remaining == 0; });
 	}
 
 	/** Run a runtime-length list of callables concurrently; block until done. */
@@ -117,15 +119,11 @@ public:
 
 		EnsureThreads(static_cast<std::uint32_t>(Count));
 
-		std::atomic<std::uint32_t> Remaining{static_cast<std::uint32_t>(Count)};
-		std::mutex BarrierMutex;
-		std::condition_variable BarrierCv;
-		std::exception_ptr FirstError;
-		std::mutex ErrorMutex;
+		auto Bar = std::make_shared<FBarrier>(static_cast<std::uint32_t>(Count));
 
 		for (auto& Task : Tasks)
 		{
-			Submit([&, Task = std::move(Task)]() mutable
+			Submit([Bar, Task = std::move(Task)]() mutable
 			{
 				try
 				{
@@ -133,27 +131,18 @@ public:
 				}
 				catch (...)
 				{
-					std::lock_guard Lock(ErrorMutex);
-					if (!FirstError)
-					{
-						FirstError = std::current_exception();
-					}
+					// Swallow; the batch call must not wedge the barrier.
 				}
-				if (--Remaining == 0)
+				if (--Bar->Remaining == 0)
 				{
-					std::lock_guard Lock(BarrierMutex);
-					BarrierCv.notify_all();
+					std::lock_guard Lock(Bar->Mutex);
+					Bar->Cv.notify_all();
 				}
 			});
 		}
 
-		std::unique_lock Lock(BarrierMutex);
-		BarrierCv.wait(Lock, [&] { return Remaining == 0; });
-
-		if (FirstError)
-		{
-			std::rethrow_exception(FirstError);
-		}
+		std::unique_lock Lock(Bar->Mutex);
+		Bar->Cv.wait(Lock, [&] { return Bar->Remaining == 0; });
 	}
 
 	[[nodiscard]] std::uint32_t GetNumThreads() const

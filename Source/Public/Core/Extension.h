@@ -1,75 +1,39 @@
 #pragma once
 
-#include <Core/Interface.h>
 #include <Core/Topology.h>
 
 namespace Maho
 {
 
 // ───────────────────────────────────────────────────────────────────────
-// Extension — the identity every service/plugin shares.
+// Extension — the dependency-declaration macros.
 //
-// An extension IS its dependency table: it declares what it depends on (and in
-// which slot / phase) via FDependsPack. The scheduler reads FDependsPack
-// (through Topology / TNodeDeps_t) to order service groups and drive them.
+// Identity/abilities are declared by inheritance (IPlugin<...>, FLayer, etc.);
+// an extension additionally declares WHO it depends on (and in which slot /
+// phase) via FDependsPack. The topology layer (Topology / TNodeDeps_t) reads
+// FDependsPack to order groups and drive them.
 //
-// TExtension<TDeps> assembles the identity + the deps in one little base, so an
-// extension is a one-line declaration; interfaces go on the class itself.
-//
-//   struct FLog : TExtension<TDependsPack<>>
+//   struct SD : SC, IA, IB
 //   {
-//       // identity + empty deps
+//       MAHO_EXTEND_DEPS(
+//           (IA, SC, SB),   // IA 调度：排在 SC（边）、SB 之后
+//           (IB, SD, X));   // IB 调度：排在 SD（边）、X 之后
 //   };
 //
-//   struct FSystem : TExtension<TDependsPack<TDependsOn<EStage::Init, TTypeList<FLog>>>>
-//   {
-//   };
-//
-//   struct FRender : TExtension<TDependsPack<TDependsOn<EStage::Init, TTypeList<FSystem>>>>
-//       , IRenderFeature                              // interfaces attach here
-//   {
-//   };
-//
-// Driving the matched types (by instance or singleton) is the host/scheduler's
-// job — an extension is pure declaration (identity + dependency table).
+// Driving the matched types is the host/scheduler's job — an extension just
+// declares its dependency table.
 // ───────────────────────────────────────────────────────────────────────
-
-/**
- * Assembled extension base: carries the IExtension identity and declares the
- * type's dependency pack (FDependsPack). Derive and add interfaces as needed.
- */
-template <typename TDeps>
-class TExtension : public IExtension
-{
-public:
-	using FDependsPack = TDeps;
-};
-
-/**
- * Interface plug — a variadic base that installs any number of interfaces as
- * its bases, so a class can carry them without spelling each out in its own
- * inheritance list:
- *
- *   class FLog : public Maho::TSingleton<FLog>,
- *                public Maho::TPlug<IA, IB>     // IA + IB
- *   {
- *   };
- */
-template <typename... TInterfaces>
-class TPlug : public TInterfaces...
-{
-};
 
 /**
  * Empty dependency anchor for MAHO_EXTEND_DEPS — declares no FDependsPack, so
  * TNodeDeps_t<FNoParent, Key> is empty at every Key. Use it as the Parent of a
  * root layer (no parent edges) or when a dep is spelled purely in extras:
  *
- *   struct FWindow : FLayerBase, TPlug<IRender>
+ *   struct FWindow : FLayer<>, IRender
  *   {
  *       MAHO_EXTEND_DEPS((IRender, FNoParent));      // root — no deps
  *   };
- *   struct FScene : FLayerBase, TPlug<IRender>
+ *   struct FScene : FLayer<>, IRender
  *   {
  *       MAHO_EXTEND_DEPS((IRender, FNoParent, FWindow));  // deps: FWindow
  *   };

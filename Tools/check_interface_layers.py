@@ -40,7 +40,7 @@ _SECTION_RE = re.compile(r"^\s*(public|protected|private)\s*:")
 
 
 def _is_layer(base: str) -> bool:
-    return base.startswith(("TLayer<", "Maho::TLayer<"))
+    return base.startswith(("FLayer<", "Maho::FLayer<"))
 
 
 def _find_class_open(lines: list[str], start: int) -> int | None:

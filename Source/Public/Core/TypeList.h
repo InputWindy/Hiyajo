@@ -85,65 +85,8 @@ public:
 		FTail>;
 };
 
-/**
- * Filter a list by base class: keep the elements deriving from TBase,
- * preserving order (std::is_base_of inlined — no predicate alias needed).
- *
- *   using FLayers = typename TFilter<TTypeList<A, B, C>, Maho::ILayer>::Type;
- */
-template <typename TList, typename TBase>
-struct TFilter;
-
-template <typename TBase>
-struct TFilter<TTypeList<>, TBase>
-{
-	using Type = TTypeList<>;
-};
-
-template <typename THead, typename... TRest, typename TBase>
-struct TFilter<TTypeList<THead, TRest...>, TBase>
-{
-private:
-	using FTail = typename TFilter<TTypeList<TRest...>, TBase>::Type;
-
-public:
-	using Type = std::conditional_t<
-		std::is_base_of_v<TBase, THead>,
-		typename TCons<THead, FTail>::Type,
-		FTail>;
-};
-
-/**
- * Filter a list by a predicate template: keep the elements where
- * TPredicate<T>::value is true, preserving order.
- *
- *   template <typename T> struct TIsSingleton;   // trait with ::value
- *   using FTools = typename TFilterWhere<TTypeList<A, B>, TIsSingleton>::Type;
- */
-template <typename TList, template <typename> class TPredicate>
-struct TFilterWhere;
-
-template <template <typename> class TPredicate>
-struct TFilterWhere<TTypeList<>, TPredicate>
-{
-	using Type = TTypeList<>;
-};
-
-template <typename THead, typename... TRest, template <typename> class TPredicate>
-struct TFilterWhere<TTypeList<THead, TRest...>, TPredicate>
-{
-private:
-	using FTail = typename TFilterWhere<TTypeList<TRest...>, TPredicate>::Type;
-
-public:
-	using Type = std::conditional_t<
-		TPredicate<THead>::value,
-		typename TCons<THead, FTail>::Type,
-		FTail>;
-};
-
 // (Traversal — TTag / ForEach / the scheduler contract — lives in
-//  Scheduler.h, where the drive protocol is defined.)
+//  Engine/Schedulers.h, where the drive protocol is defined.)
 
 /**
  * Concatenate multiple TTypeLists into one, in order.

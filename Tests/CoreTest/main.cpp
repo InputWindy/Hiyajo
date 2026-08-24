@@ -1,129 +1,203 @@
-// Maho core demo — a scheduler, a few Layers wired with dependencies, leveled
-// parallel dispatch. Runs a real layered system with a thread pool.
+// Maho engine demo — a root layer over parallel subsystems, driven by the
+// standard lifecycle only.
 //
-//   Layers declare deps via MAHO_EXTEND_DEPS. A scheduler (FParallelScheduler,
-//   parameterized over its extension scan table) holds the Layer instances.
-//   MAHO_SORT_LEVELS computes the closure-level bands; each band runs in
-//   parallel (barrier between bands).
+//   FGameEngine : FLayer<FRenderer, FResourceManager, FNetWork, FGameWorld>, IPlugin<IExit>
+//     └─ each subsystem layer implements its own interface (IRenderer/INetwork/
+//        IGameWorld) and refines its driven Main into finer stages
 //
+// The root owns the loop and stops via IExit; per frame it drives every child
+// through Query<IMain> (each child's Main = one frame of its own work). Stage
+// refinement lives inside each subsystem — the root never knows IRenderer.
 #include <Maho.h>
-#include <Engine/Schedulers.h>
+#include <Engine/Layer.h>
+#include "Gen/Closure.gen.h"   // code-gen: MAHO_CLOSURE_0_<Class>_<Key>, then MAHO_SORT_LEVEL
 
 #include <algorithm>
 #include <atomic>
 #include <cstdio>
+#include <string_view>
+#include <type_traits>
 #include <vector>
 
 using namespace Maho;
 
-// ── interfaces (Query Select bases + dependency Keys) ──
-struct IRender { virtual void Render() = 0; };
-struct IPhysics { virtual void Step() = 0; };
-struct IAudio { virtual void Play() = 0; };
+// ── code-gen closure sample: FA ← FB ← FC diamond (matches Gen/Closure.gen.h) ──
+struct FA : FLayer<> { MAHO_EXTEND_DEPS((FDefaultSlot, FNoParent)); };
+struct FB : FLayer<> { MAHO_EXTEND_DEPS((FDefaultSlot, FNoParent, FA)); };
+struct FC : FLayer<> { MAHO_EXTEND_DEPS((FDefaultSlot, FNoParent, FA, FB)); };
+// read the generated closure (Gen/Closure.gen.h) through MAHO_SORT_LEVEL
+using FFCLevels = decltype(MAHO_SORT_LEVEL(FC, FDefaultSlot));
+static_assert(FFCLevels::Count == 2, "FC closure levels: {FA} then {FB}");
 
-// ── concrete Layer base: satisfies every pure virtual of ILayer's capabilities ──
-struct FLayerBase : ILayer
+// ── subsystem interfaces ──
+struct IRenderer
 {
-	void Initialize(int, char**) override {}
-	void Tick() override {}
-	void Shutdown() override {}
-	int MainLoop(int, char**) override { return 0; }
+	virtual void PreRender() = 0;
+	virtual void Render() = 0;
+	virtual void PostRender() = 0;
 };
+struct INetwork { virtual void Poll() = 0; };
+struct IGameWorld { virtual void Tick() = 0; };
 
-// ── Layers, each a singleton-free Assembly + a set of interfaces. Deps via the
-//    MAHO_EXTEND_DEPS macro (Key, Parent, extras...) — FNoParent = root edge. ──
-struct FWindow : FLayerBase, TPlug<IRender>
+// ── leaf render features ──
+struct FRenderFeature : FLayer<>, IPlugin<IRenderer>
 {
-	void Render() override {}
-	MAHO_EXTEND_DEPS((IRender, FNoParent));                       // root
+	std::atomic<int> Pre{ 0 }, Mid{ 0 }, Post{ 0 };
+	void PreRender() override { Pre.fetch_add(1, std::memory_order_relaxed); }
+	void Render() override { Mid.fetch_add(1, std::memory_order_relaxed); }
+	void PostRender() override { Post.fetch_add(1, std::memory_order_relaxed); }
 };
-struct FScene : FLayerBase, TPlug<IRender>
+struct FSSAO : FRenderFeature
 {
-	void Render() override {}
-	MAHO_EXTEND_DEPS((IRender, FNoParent, FWindow));              // deps FWindow
+	static std::string_view GetModulePath() { return "unused/SSAO.dll"; }
 };
-struct FPhysics : FLayerBase, TPlug<IPhysics>
+struct FTonemap : FRenderFeature
 {
-	void Step() override {}
-	MAHO_EXTEND_DEPS((IPhysics, FNoParent, FWindow));             // deps FWindow
-};
-struct FAudio : FLayerBase, TPlug<IAudio>
-{
-	void Play() override {}
-	MAHO_EXTEND_DEPS((IAudio, FNoParent));                        // root
-};
-struct FPlayer : FLayerBase, TPlug<IRender, IPhysics>
-{
-	void Render() override {}
-	void Step() override {}
-	MAHO_EXTEND_DEPS(
-		(IPhysics, FNoParent, FPhysics),                          // deps FPhysics
-		(IRender, FNoParent, FScene));                            // deps FScene
+	static std::string_view GetModulePath() { return "unused/Tonemap.dll"; }
 };
 
-// ── the app: a Layer host — an Assembly + a scheduler whose scan table IS the
-//    full layer list. It owns the instances and drives them by runtime type. ──
-using FLayerTypes = TTypeList<FWindow, FScene, FPhysics, FAudio, FPlayer>;
-
-// visitor counting each concrete layer type hit during dispatch
-struct FCountVisitor
+// ── subsystems: each refines its driven Main into its own stages ──
+struct FRenderer : FLayer<FSSAO, FTonemap>, IPlugin<IMain, IRenderer>
 {
-	std::atomic<int>& Out;
-	void operator()(FWindow&) const { Out.fetch_add(1, std::memory_order_relaxed); }
-	void operator()(FScene&) const { Out.fetch_add(1, std::memory_order_relaxed); }
-	void operator()(FPhysics&) const { Out.fetch_add(1, std::memory_order_relaxed); }
-	void operator()(FAudio&) const { Out.fetch_add(1, std::memory_order_relaxed); }
-	void operator()(FPlayer&) const { Out.fetch_add(1, std::memory_order_relaxed); }
-};
-
-struct FAppLayer
-	: ILayer
-	, Parallel::FParallelScheduler<FLayerTypes>
-{
-	void Initialize(int, char**) override {}
-	void Tick() override {}
-	void Shutdown() override {}
-	int MainLoop(int, char**) override
+	// installing the renderer installs its render features
+	void OnInstall() override
 	{
-		// every layer in the scan table (each ILayer* here) is a candidate;
-		// Execute dispatches each instance to its concrete type.
-		FCountVisitor V{ Calls };
-		this->Execute<FLayerTypes, ILayer>(Insts, V);
+		Enqueue(FLayerCommand{ FLayerCommand::EOp::Install, new FSSAO(), /*static*/ true });
+		Enqueue(FLayerCommand{ FLayerCommand::EOp::Install, new FTonemap(), /*static*/ true });
+		Flush();
+	}
+
+	int Main() override
+	{
+		PreRender();
+		Render();
+		PostRender();
+		return 0;
+	}
+	void PreRender() override
+	{
+		Select<IRenderer>().ForEach([](IRenderer& F) { F.PreRender(); });
+	}
+	void Render() override
+	{
+		Select<IRenderer>().ForEach([](IRenderer& F) { F.Render(); });
+	}
+	void PostRender() override
+	{
+		Select<IRenderer>().ForEach([](IRenderer& F) { F.PostRender(); });
+	}
+	static std::string_view GetModulePath() { return "unused/Renderer.dll"; }
+};
+
+struct FResourceManager : FLayer<>
+{
+	// no per-frame work — default Main returns immediately
+	static std::string_view GetModulePath() { return "unused/Resource.dll"; }
+};
+
+// a dynamic layer — type NOT declared in any FLayer<...>, runtime-installed DLL.
+// Assumed independent (no topo ordering); driven in the dynamic batch.
+struct FAudit : FLayer<>, IPlugin<IMain>
+{
+	std::atomic<int> Audits{ 0 };
+	int Main() override { Audits.fetch_add(1, std::memory_order_relaxed); return 0; }
+	static std::string_view GetModulePath() { return "unused/Audit.dll"; }
+};
+
+struct FNetWork : FLayer<>, IPlugin<IMain, INetwork>
+{
+	MAHO_EXTEND_DEPS((FDefaultSlot, FNoParent));   // root
+	std::atomic<int> Polls{ 0 };
+	void Poll() override { Polls.fetch_add(1, std::memory_order_relaxed); }
+	int Main() override { Poll(); return 0; }
+	static std::string_view GetModulePath() { return "unused/Net.dll"; }
+};
+
+struct FGameWorld : FLayer<>, IPlugin<IMain, IGameWorld>
+{
+	MAHO_EXTEND_DEPS((FDefaultSlot, FNoParent, FNetWork));  // world after network
+	std::atomic<int> Ticks{ 0 };
+	void Tick() override { Ticks.fetch_add(1, std::memory_order_relaxed); }
+	int Main() override { Tick(); return 0; }
+	static std::string_view GetModulePath() { return "unused/World.dll"; }
+};
+
+// ── the engine root: owns the loop (IExit stops it), drives children per frame ──
+struct FGameEngine
+	: FLayer<FRenderer, FResourceManager, FNetWork, FGameWorld>
+	, IPlugin<IMain, IExit>
+{
+	std::atomic<bool> bExit{ false };
+	void Exit() override { bExit.store(true, std::memory_order_release); }
+
+	// installing the engine installs the children it manages (recursive)
+	void OnInstall() override
+	{
+		Enqueue(FLayerCommand{ FLayerCommand::EOp::Install, new FRenderer(), /*static*/ true });
+		Enqueue(FLayerCommand{ FLayerCommand::EOp::Install, new FResourceManager(), /*static*/ true });
+		Enqueue(FLayerCommand{ FLayerCommand::EOp::Install, new FNetWork(), /*static*/ true });
+		Enqueue(FLayerCommand{ FLayerCommand::EOp::Install, new FGameWorld(), /*static*/ true });
+		// a dynamic layer (type NOT in FChildren → independent, no topo ordering)
+		Enqueue(FLayerCommand{ FLayerCommand::EOp::Install, new FAudit(), /*dynamic*/ false });
+		Flush(); // apply → each child's OnInstall runs (recursive)
+	}
+
+	// exit after a fixed frame budget — deterministic, no cross-thread stopper
+	int FramesLeft = 200;
+	void SetFrames(int N) { FramesLeft = N; }
+
+	int Main() override
+	{
+		while (FramesLeft-- > 0 && !bExit.load(std::memory_order_acquire))
+		{
+			// drive only the IMain-capable children (FResourceManager has no Main),
+			// level-by-level, parallel within a level.
+			Select<IMain>().ForEach([](IMain& C) { C.Main(); });
+		}
 		return 0;
 	}
 
-	std::vector<ILayer*> Insts;
-	std::atomic<int> Calls{ 0 };
+	static std::string_view GetModulePath() { return "unused/Game.dll"; }
 };
 
-// ── layered dispatch through the host app layer ──
 int main()
 {
-	FAppLayer App;
+	// bootstrap the root: its OnInstall recursively installs the subtree
+	// (children + FRenderer::OnInstall → features). All owned by the subtree.
+	FGameEngine Engine;
+	Engine.OnInstall();   // → install FRenderer/Res/Net/World/Audit + features
 
-	// runtime instances, scrambled on purpose
-	FWindow W; FScene S; FPhysics P; FAudio A; FPlayer Pl;
-	App.Insts = { &Pl, &A, &W, &P, &S };
+	// topology: FGameWorld depends on FNetWork → net is a level before world
+	using FEngLevels = typename FGameEngine::FLevels;
+	static_assert(FEngLevels::Count > 0, "engine children form at least one level");
+	static_assert(std::is_base_of_v<IMain, FNetWork>, "network is a driven child");
 
-	App.MainLoop(0, nullptr);   // drives every layer in the scan table (5)
+	// exit after a fixed 200 frames — deterministic (no live stopper thread)
+	const int Frames = 200;
+	Engine.SetFrames(Frames);
+	Engine.Main();        // runs Frames frames, then exits the loop
 
-	if (App.Calls.load() != 5)
+	// every subsystem ran exactly Frames frames
+	FRenderer* Renderer = Engine.FindChild<FRenderer>();
+	FNetWork* Net = Engine.FindChild<FNetWork>();
+	FGameWorld* World = Engine.FindChild<FGameWorld>();
+	FAudit* Audit = Engine.FindChild<FAudit>();
+	const bool Ok = Renderer && Net && World && Audit
+		&& Renderer->FindChild<FSSAO>() && Renderer->FindChild<FTonemap>()
+		&& Renderer->FindChild<FSSAO>()->Pre.load() == Frames
+		&& Renderer->FindChild<FSSAO>()->Mid.load() == Frames
+		&& Renderer->FindChild<FSSAO>()->Post.load() == Frames
+		&& Renderer->FindChild<FTonemap>()->Pre.load() == Frames
+		&& Renderer->FindChild<FTonemap>()->Mid.load() == Frames
+		&& Renderer->FindChild<FTonemap>()->Post.load() == Frames
+		&& Net->Polls.load() == Frames && World->Ticks.load() == Frames
+		&& Audit->Audits.load() == Frames;   // dynamic layer driven in the batch
+	if (!Ok)
 	{
-		std::puts("[FAIL] app layer drove the wrong number of layers");
+		std::puts("[FAIL] subsystems did not all run the same frames");
 		return 1;
 	}
-
-	// separate: dispatch only the IRender subset at runtime
-	std::atomic<int> RenderCalls{ 0 };
-	auto OnRender = [&](IRender&) { RenderCalls.fetch_add(1, std::memory_order_relaxed); };
-	App.Execute<TTypeList<FWindow, FScene, FPlayer>>(App.Insts, OnRender);
-
-	if (RenderCalls.load() != 3)
-	{
-		std::puts("[FAIL] IRender dispatch count");
-		return 1;
-	}
-	std::printf("ok: app drove %d layers, IRender subset x%d\n",
-		App.Calls.load(), RenderCalls.load());
+	std::printf("ok: %d frames x 2 features x 3 stages driven in parallel levels; net poll, world tick, dynamic audit\n", Frames);
+	// Engine dtor → uninstall all owned children (frees the heap children)
 	return 0;
 }

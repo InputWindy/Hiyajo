@@ -1,22 +1,23 @@
 #pragma once
 
-#include <Maho.h>
+#include <Engine/Layer.h>
 
 namespace Maho
 {
 
 /**
- * Unified app driver — install an extension assembly and execute it.
+ * Unified app driver — install an extension DLL and execute its root instance.
  *
- * No engine/tool preset: the extension is a self-contained DLL
- * exporting `CreateExtension()` → an owning ILayer*. The entry point
- * installs it via FAssembly, then forwards to ILayer::Main.
+ * No engine/tool preset: the extension is a self-contained DLL exporting
+ * `CreateExtension()` → a FLayerBase*. The entry point loads it via FAssembly,
+ * looks up the root, then forwards to its main capability if it has one.
  *
  *   main()/WinMain() → Maho::Main(Argc, Argv)
  *     InstallFatalHandlers()
- *     FAssembly Load(argv[1])       // install
- *     CreateExtension() → ILayer* // create the assembly instance
- *     IRunable->Main(Argc, Argv)     // execute (ILayer is-a IRunable)
+ *     FAssembly Load(argv[1])           // install
+ *     CreateExtension() → FLayerBase* // create the root instance
+ *     dynamic_cast<IMain*>              // does it own a run entry?
+ *       → Main()                         // execute
  */
 inline int Main(int Argc, char** Argv)
 {
@@ -35,22 +36,29 @@ inline int Main(int Argc, char** Argv)
 		ReportFatal("Failed to install extension assembly");
 	}
 
-	// Create the assembly instance.
-	auto Create = Extension.GetProc<ILayer*()>("CreateExtension");
+	// Create the root instance.
+	using CreateFunction = FLayerBase* (*)();
+	auto Create = Extension.GetProc<CreateFunction>("CreateExtension");
 	if (!Create)
 	{
 		ReportFatal("Extension assembly exports no CreateExtension");
 	}
 
-	ILayer* App = Create();
+	FLayerBase* App = Create();
 	if (!App)
 	{
 		ReportFatal("CreateExtension returned null");
 	}
 
-	// Execute.
-	const int Result = App->Main(Argc, Argv);
-	delete App;
+	// Execute through the main capability, if the root owns one.
+	auto* MainCaps = dynamic_cast<IMain*>(App);
+	if (!MainCaps)
+	{
+		ReportFatal("Extension root exposes no IMain");
+	}
+
+	const int Result = MainCaps->Main();
+	delete App; // FLayerBase virtual dtor — removes the whole object through the DLL.
 	return Result;
 }
 

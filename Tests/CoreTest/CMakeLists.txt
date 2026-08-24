@@ -18,6 +18,21 @@ file(GLOB MAHO_HEADERS  CONFIGURE_DEPENDS "${ENGINE_DIR}/Source/Public/**/*.h")
 add_executable(CoreTest main.cpp ${MAHO_PRIVATE} ${MAHO_HEADERS})
 target_include_directories(CoreTest PRIVATE "${ENGINE_DIR}/Source/Public")
 
+# Isolated FThreadPool stress test — header-only, no engine private sources.
+add_executable(PoolStress PoolStress.cpp ${MAHO_HEADERS})
+target_include_directories(PoolStress PRIVATE "${ENGINE_DIR}/Source/Public")
+
+# Isolated FQueue MPMC stress test — header-only.
+add_executable(QueueStress QueueStress.cpp ${MAHO_HEADERS})
+target_include_directories(QueueStress PRIVATE "${ENGINE_DIR}/Source/Public")
+
+# Self-referential FLayerBase : FQueue<FLayerBase> compile/run check.
+add_executable(LayerBaseStress LayerBaseStress.cpp ${MAHO_HEADERS})
+target_include_directories(LayerBaseStress PRIVATE "${ENGINE_DIR}/Source/Public")
+
 # Assembly.cpp uses LoadLibrary/FreeLibrary/getenv on the host platform; Threads for FThreadPool.
 find_package(Threads REQUIRED)
 target_link_libraries(CoreTest PRIVATE Threads::Threads)
+target_link_libraries(PoolStress PRIVATE Threads::Threads)
+target_link_libraries(QueueStress PRIVATE Threads::Threads)
+target_link_libraries(LayerBaseStress PRIVATE Threads::Threads)

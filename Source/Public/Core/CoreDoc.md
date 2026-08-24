@@ -9,7 +9,7 @@
 - [Export.h](Export.h)
 - [Extension.h](Extension.h)
 - [Fatal.h](Fatal.h)
-- [Runable.h](Runable.h)
+- [Interface.h](Interface.h)
 - [Scheduler.h](Scheduler.h)
 - [Singleton.h](Singleton.h)
 - [Topology.h](Topology.h)
@@ -20,39 +20,23 @@
 
 Maho 核心是**零 app 假设、零三方依赖、零 stage 预设**的纯积木。下面从"身份 → 能力 → 协议 → 列表"四层讲清每个概念。
 
-### ① 扩展身份与依赖表
+### ① 根抽象与加载
 
-**`IExtension`** —— 所有扩展的根身份（只有一个虚析构）。
+**`FInstance`** —— 所有 DLL 内实例化的对象的根（只有一个虚析构）。刻意轻：唯一承诺是 `delete` 能走 DLL 自己的代码销毁整个对象。加载/符号查找是 `FAssembly` 的活，"它承诺什么"由派生接口声明。
 
-**依赖声明** —— 一个扩展就是"身份 + 依赖表"：继承 `IExtension`，定义 `using FDependsPack`。`TDependsPack` 持有若干 `TDependsOn<Key, TTypeList<...>>` slot，声明"在哪个阶段依赖谁"。
+**`FModuleInstance`** —— 模块实例约定：具体类型须提供 `static GetModulePath()`，指向载出它的 DLL。这样 `FModuleManager`（`Engine/ModuleManager.h`）能按类型加载该 DLL 并构造实例。
 
-```cpp
-class FInput : public Maho::IExtension
-{
-public:
-    using FDependsPack = Maho::TDependsPack<Maho::TDependsOn<EStage::Init, TTypeList<>>>;
-};
-
-class FSystem : public Maho::IExtension
-{
-public:
-    using FDependsPack = Maho::TDependsPack<
-        Maho::TDependsOn<EStage::Init, TTypeList<FInput>>,      // Init 依赖 FInput
-        Maho::TDependsOn<EStage::Tick, TTypeList<FInput>>>;     // Tick 也依赖
-};
-```
-
-`TResolveDependsPack<T>::Type` 解析出 T 的 pack（无 `FDependsPack` 时为空 = 无依赖）；`Topo::TNodeDeps_t<T, Key>` 按 Key 取该阶段的依赖列表；`Topo::TIsAcyclic_v` / `TTopoSort_t` / `TLevels_t` 做排序、分层与环检测。
+**`FAssembly`** —— DLL 加载单元（句柄的 RAII 独占封装，内部 `unique_ptr<void, deleter>`）。宿主必须让它的生命周期长于任何由它构造的实例——虚表/析构在 DLL 代码段里，先卸载就是用后释放。
 
 ### ② 能力（可选，各自独立）
 
 | 概念 | 语义 | 与单例 |
 |------|------|--------|
-| `TSingleton<T>` | 进程内唯一实例（Meyers 单例） | — |
-| `IRunable` | 可运行（有 `Main`） | ✅ 兼容 |
-| `ILayer` | 可动态安装（`IRunable` + 导出 `CreateExtension`） | ❌ 互斥 |
+| `TSingleton<T>` | 进程内唯一实例（Meyers 单例，CRTP `Get()`） | — |
+| 能力接口 | `FInstance` 派生的单个服务/阶段（`IRender`/`ITick`/`IPlugin<Caps...>`） | ✅ 兼容 |
+| 模块 | 类型 +`GetModulePath()`+ DLL 导出 `CreateExtension()→FInstance*` | ❌ 互斥 |
 
-`TSingleton` 和 `IRunable`/`ILayer` 是**独立的可选能力**，插件自己决定要哪个：工具要单例、Layer 要 "Assembly（导出，实例驱动）"、应用根就是一个 Layer。
+身份是**独立可选能力**：工具要单例，模块要 "DLL + 工厂 + 实例驱动"，应用根就是一个模块。没有强加的生命周期——纯函数 DLL 无状态也不需要。要生命周期（init/shutdown/tick），类型明确继承对应能力接口，宿主才知道驱动它。
 
 ### ③ 调度协议
 
@@ -66,7 +50,7 @@ Execute<FTools>([](T& Tool) {
 });
 ```
 
-**`Execute(Layers, visitor)`** —— 运行时实例版本：对 `std::vector<ILayer*>` 内的每个层实例并行调用 visitor，宿主在 lambda 里把实例分派到该层能力方法。
+**`Execute(Instances, visitor)`** —— 运行时实例版本：对 `std::vector<FInstance*>` 内的每个实例并行调用 visitor（按运行期类型分派），宿主在 lambda 里把实例分派到该能力方法。
 
 `Execute` 无 stage 语义——生命周期是宿主的职责：init/tick/shutdown 各调一次 Execute，各传一个 lambda 决定该阶段每个目标干什么。扩展只提供能力方法，不感知阶段。
 
@@ -78,33 +62,31 @@ Execute<FTools>([](T& Tool) {
 
 ```mermaid
 graph TD
-    subgraph 身份与依赖
-        IExtension["IExtension<br/>扩展身份"]
-        DependsPack["TDependsPack&lt;TDependsOn&lt;Key,TList&gt;...&gt;<br/>分阶段依赖表"]
-        IExtension --> DependsPack
+    subgraph 身份与加载
+        FInstance["FInstance<br/>DLL 实例根"]
+        FModuleInstance["FModuleInstance<br/>GetModulePath() 约定"]
+        FInstance --> FModuleInstance
     end
 
     subgraph 可选能力
         TSingleton["TSingleton&lt;T&gt;<br/>单例"]
-        IRunable["IRunable<br/>可运行(Main)"]
-        ILayer["ILayer<br/>可动态安装"]
-        ILayer --> IRunable
+        Capability["能力接口<br/>IRender/ITick/IPlugin"]
     end
 
     subgraph 调度协议
         IScheduler["IScheduler<br/>Run + Execute"]
         ForEach["ForEach&lt;TList&gt;<br/>遍历 + visitor lambda"]
-        IScheduler --> ForEach
+        DispatchInstance["DispatchInstance<br/>运行期类型分派"]
+        IScheduler --> ForEach --> DispatchInstance
     end
 
-    DependsPack -.参与.-> Topology
-    Topology["Topology<br/>排序/分层/还检测"]
+    FInstance -.参与.-> DispatchInstance
 ```
 
 ## 相关文档
 
 - [Core.h](Core.h) — 聚合头
 - [CoreAPI.html](CoreAPI.html) — API 文档
-- [../Engine/EngineDoc.md](../Engine/EngineDoc.md) — 插件模板（Tool/Layer/Engine）
+- [../Engine/EngineDoc.md](../Engine/EngineDoc.md) — 调度策略（Serial/Parallel/ThreadPool）与模块管理器
 - [../../Private/Core/CoreDoc.md](../../Private/Core/CoreDoc.md) — 实现算法字典
 - [../../SourceDoc.md](../../SourceDoc.md) — 源码根

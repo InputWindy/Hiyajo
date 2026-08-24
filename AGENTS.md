@@ -9,7 +9,7 @@
 - **插件 = 依赖表 + 身份**：`TExtension<TExtensions...>` 是纯依赖表（编译期 TTypeList），不预设单例/可安装。`TTool` 加 `TSingleton`（即插即用、全 public），`TLayer` 加 `IAssembly`（可动态安装、并行调度自己 FExtensions）。不再区分 Engine——应用根就是一个 Layer。
 - **驱动机制**：编译期 `ForEach`（`TTag<T>` + Scheduler 串/并行）+ Tool `T::Get()` 单例直调；`IScheduler` 双 `Execute`——编译期版（`Execute<FTools>(visitor)`，visitor 开 TTag<T>）+ 实例版（`Execute(Layers, visitor)`，并行驱动 `std::vector<IAssembly*>&`）。生命周期与阶段语义全在宿主 lambda。
 - **依赖声明两层**：编译期 `TDependsOn`/`TDependsPack`（插件内，level 排序）；项目装配 `.cplugin` `Dependencies`（CMake + codegen）。核心与核心之间走 `TDependsOn`，插件与宿主走 `.cplugin`。
-- stage 枚举、app 形态、线程池策略**全部下放插件层**，不写回 core（`Engine/` 只放可选的 `FSerialScheduler`/`FParallelScheduler` 示例）。
+- stage 枚举、app 形态、线程池策略**全部下放插件层**，不写回 core（`Engine/` 只放可选的 `FParallelScheduler` 示例）。
 - 遵循根 [AGENTS.md](../AGENTS.md)。
 
 ## 接口分层（强约束，违反 = 违背引擎架构）

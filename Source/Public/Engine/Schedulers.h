@@ -1,14 +1,146 @@
 #pragma once
 
-#include <Core/Scheduler.h>
+#include <Core/TypeList.h>
 #include <Engine/ThreadPool.h>
 
+#include <concepts>
 #include <functional>
 #include <memory>
+#include <utility>
 #include <vector>
 
 namespace Maho
 {
+
+// FLayerBase lives in Engine/Layer.h — forward-declared here so the runtime
+// dispatch can hold pointers to it (only the name is needed at this layer).
+class FLayerBase;
+
+// ───────────────────────────────────────────────────────────────────────
+// The drive protocol: the traversal machinery + the scheduler contract.
+//
+//   forall FForEachScheduler   — "S has Run(Callables...)"
+//   ForEach / TTag             — unpacks a TTypeList to per-type visits
+//   IScheduler                 — Run (stage drive)
+//
+// There is NO extension-interaction protocol beside the visitor lambda: the
+// scheduler only traverses lists (compile-time) or layer instances (runtime)
+// and hands each target to a visitor the host passes in. Layers expose only
+// capability methods; the host decides what each stage does in the lambda.
+//
+// Lives in Engine: it dispatches over FLayerBase (Engine/Layer.h), the
+// polymorphic layer node — Core stays limited to pure type/concurrency
+// primitives.
+// ───────────────────────────────────────────────────────────────────────
+
+/** Type tag: lets a generic callable recover T via decltype(Tag)::Type. */
+template <typename T>
+struct TTag
+{
+	using Type = T;
+};
+
+/** ForEach scheduler contract: a callable with Run(Callables...). */
+template <typename TScheduler>
+concept FForEachScheduler = requires(TScheduler& S)
+{
+	S.Run([]{});
+};
+
+/** Serial traversal — run every callable in order (no thread, stateless). */
+struct FSerialTraversePolicy
+{
+	template <typename... FCallables>
+	void Run(FCallables&&... Callables) const
+	{
+		(Callables(), ...);
+	}
+};
+
+/**
+ * Scheduler contract — a state-free identity a concrete policy (e.g. the
+ * engine's FParallelScheduler) derives from. It declares the traverse API; a
+ * derived policy provides Run/RunTasks.
+ */
+class IScheduler
+{
+public:
+	virtual ~IScheduler() = default;
+
+	/** Drive every callable (serial / parallel — derived policy). */
+	template <typename... FCallables>
+	void Run(FCallables&&...) const = delete;
+};
+
+/**
+ * Unpack a TTypeList, schedule per-type visits, and feed each type to Visitor
+ * as a TTag<T>.
+ *
+ *   ForEach<FList>(FSerialTraversePolicy{}, [](auto Tag) {
+ *       using T = typename decltype(Tag)::Type;
+ *       // per-type work
+ *   });
+ */
+template <typename TScheduler, typename TVisitor, typename... TArgs, typename... Ts>
+void ForEachImpl(TTypeList<Ts...>, TScheduler&& Scheduler, TVisitor&& Visitor, TArgs&&... Args)
+{
+	Scheduler.Run([&] { Visitor(TTag<Ts>{}, Args...); }...);
+}
+
+template <typename TList, typename TScheduler, typename TVisitor, typename... TArgs>
+	requires FForEachScheduler<TScheduler>
+void ForEach(TScheduler&& Scheduler, TVisitor&& Visitor, TArgs&&... Args)
+{
+	ForEachImpl(TList{}, std::forward<TScheduler>(Scheduler), std::forward<TVisitor>(Visitor), std::forward<TArgs>(Args)...);
+}
+
+// ───────────────────────────────────────────────────────────────────────
+// Runtime instance dispatch.
+//
+// A container of FLayerBase* holds polymorphic instances whose RUNTIME type is
+// known only at runtime. DispatchInstance<TList>(instance, visitor) dynamic_cast
+// to the first type in TList the instance binds to (order matters — list most
+// derived first) and calls visitor(T&). Each instance is driven at most once;
+// instances matching no candidate are skipped.
+// ───────────────────────────────────────────────────────────────────────
+namespace InstanceDispatchDetail
+{
+	template <typename THead, typename... TRest, typename TVisitor>
+	bool TCall(FLayerBase* Instance, TVisitor& Visitor)
+	{
+		if (auto* Typed = dynamic_cast<THead*>(Instance))
+		{
+			Visitor(*Typed);
+			return true;
+		}
+		if constexpr (sizeof...(TRest) > 0)
+		{
+			return TCall<TRest...>(Instance, Visitor);
+		}
+		return false;
+	}
+}
+
+/** Drive Instance once: first matching type in TList sees Visitor(T&). */
+template <typename TList, typename TVisitor>
+void DispatchInstance(FLayerBase* Instance, TVisitor& Visitor);
+
+template <typename... Ts, typename TVisitor>
+void DispatchInstance(TTypeList<Ts...>, FLayerBase* Instance, TVisitor& Visitor)
+{
+	if (Instance == nullptr)
+	{
+		return;
+	}
+	InstanceDispatchDetail::TCall<Ts...>(Instance, Visitor);
+}
+
+/** Drive Instance once: first matching type in TList sees Visitor(T&). */
+template <typename TList, typename TVisitor>
+void DispatchInstance(FLayerBase* Instance, TVisitor& Visitor)
+{
+	DispatchInstance(TList{}, Instance, Visitor);
+}
 
 namespace Parallel
 {
@@ -16,23 +148,11 @@ namespace Parallel
 /**
  * Parallel scheduler — the parallel traverse base (thread pool).
  *
- * The scheduler is parameterized over its extension scan table (FExtensions),
- * a TTypeList a Layer passes in so Query can filter the candidates it drives:
- *   Query<FExtensions>().Select<ISingleton>()  — the Tools it schedules
- *   Query<FExtensions>().Select<ILayer>()      — the child Layers it drives
+ * A FLayer drives its children through FLayer::Query().ForEach — that path is
+ * built on this pool (RunTasks, barrier-per-level, parallel within a level).
  *
- * Two Execute overloads, matching the two extension kinds:
- *
- *   Execute<TQueryTypes>(visitor)          — singletons: each type's T::Get() is
- *     handed to the visitor as T&. (Tools / type providers.)
- *   Execute<TQueryTypes>(Instances, vis)   — instances: for every ILayer* in
- *     the array, its RUNTIME type is checked against TQueryTypes (the Query's
- *     filtered type list); the first matching type hands the typed instance
- *     (T&) to the visitor, others are skipped. (Layers.)
- *
- * Dependency LEVELS are not a scheduler concern: iterate Topo::TLevels_t with
- * a serial ForEach and call Execute per level (barrier between, parallel
- * within) — the host owns phasing.
+ * Dependency LEVELS and instance dispatch are the LAYER's concern (FLayer holds
+ * FLevels + DispatchInstance inside Query().ForEach), not the scheduler's.
  */
 template <typename FExtensions = TTypeList<>>
 class FParallelScheduler : public IScheduler
@@ -57,89 +177,10 @@ public:
 		Pool->RunTasks(std::move(Tasks));
 	}
 
-	/** Singleton traverse: every T in TQueryTypes sees Visitor(T::Get()&). */
-	template <typename TQueryTypes, typename TVisitor>
-	void Execute(TVisitor&& Visitor)
-	{
-		ForEach<TQueryTypes>(*this, [&](auto Tag) {
-			using T = typename decltype(Tag)::Type;
-			Visitor(T::Get());
-		});
-	}
-
-	/**
-	 * Instance traverse: every TObject* (ILayer or ITool) in Instances whose
-	 * runtime type matches one of TQueryTypes is handed to the visitor as that
-	 * type (T&); non-matching instances are skipped. Each instance dispatches at
-	 * most once (first matching type wins — order TQueryTypes most derived first).
-	 */
-	template <typename TQueryTypes, typename TObject, typename TVisitor>
-	void Execute(std::vector<TObject*>& Instances, TVisitor&& Visitor)
-	{
-		std::vector<std::function<void()>> Tasks;
-		Tasks.reserve(Instances.size());
-		for (TObject* Instance : Instances)
-		{
-			Tasks.emplace_back([&, Instance] { DispatchInstance<TQueryTypes>(Instance, Visitor); });
-		}
-		Pool->RunTasks(std::move(Tasks));
-	}
-
 private:
 	std::unique_ptr<FThreadPool> Pool;
 };
 
 } // namespace Parallel
-
-namespace Serial
-{
-
-/**
- * Serial scheduler — the serial traverse base (no threads). Mirrors the
- * parallel scheduler's API so the two are interchangeable:
- *   Execute<TQueryTypes>(visitor)          — singletons (T::Get()).
- *   Execute<TQueryTypes>(Instances, vis)   — instances (dispatch by runtime type).
- * Dependency LEVELS are the host's job: ForEach<TLevels> + Execute per level.
- */
-class FSerialScheduler : public IScheduler
-{
-public:
-	template <typename... FCallables>
-	void Run(FCallables&&... Callables) const
-	{
-		(Callables(), ...);
-	}
-
-	/** Runtime task array — run in order (serial). */
-	void RunTasks(std::vector<std::function<void()>> Tasks) const
-	{
-		for (auto& Task : Tasks)
-		{
-			Task();
-		}
-	}
-
-	/** Singleton traverse: every T in TQueryTypes sees Visitor(T::Get()&). */
-	template <typename TQueryTypes, typename TVisitor>
-	void Execute(TVisitor&& Visitor)
-	{
-		ForEach<TQueryTypes>(*this, [&](auto Tag) {
-			using T = typename decltype(Tag)::Type;
-			Visitor(T::Get());
-		});
-	}
-
-	/** Instance traverse: first matching type in TQueryTypes sees Visitor(T&). */
-	template <typename TQueryTypes, typename TObject, typename TVisitor>
-	void Execute(std::vector<TObject*>& Instances, TVisitor&& Visitor)
-	{
-		for (TObject* Instance : Instances)
-		{
-			DispatchInstance<TQueryTypes>(Instance, Visitor);
-		}
-	}
-};
-
-} // namespace Serial
 
 } // namespace Maho
