@@ -1,5 +1,5 @@
-# Run via the project's CreatePlugin.bat — creates a plugin in the project's Extension/.
-"""Maho new-plugin UI (project-side) — with parent-plugin dependency tree."""
+# Run via the project's CreatePlugin.bat — creates a plugin.
+"""Maho new-plugin UI — pick engine-plugin or project-plugin target + template."""
 
 from __future__ import annotations
 
@@ -14,32 +14,39 @@ sys.path.insert(0, str(TOOLS_DIR))
 from maho_tools import (  # noqa: E402
 	ENGINE_ROOT,
 	create_plugin,
+	discover_cplugin_files,
 	is_valid_project_name,
-	list_engine_plugins,
+	read_cplugin,
 )
 
 _CHECKED = "☑"
 _UNCHECKED = "☐"
+
+_ENGINE_KIND = "引擎插件 (Engine/Plugins)"
+_PROJECT_KIND = "项目插件 (项目根/Plugins)"
 
 
 class CreatePluginApp(tk.Tk):
 	def __init__(self, default_plugins_dir: Path | None = None) -> None:
 		super().__init__()
 		self.title("Maho — New Plugin")
-		self.geometry("600x560")
+		self.geometry("620x560")
 		self.minsize(520, 460)
 		self.resizable(True, True)
 
-		plugins_default = default_plugins_dir or (Path.cwd() / "Source")
+		self.var_kind = tk.StringVar(value=_PROJECT_KIND)
 		self.var_name = tk.StringVar(value="MyPlugin")
-		self.var_plugins_dir = tk.StringVar(value=str(plugins_default))
+		self.var_plugins_dir = tk.StringVar(value=str(default_plugins_dir or Path.cwd() / "Plugins"))
+		self.var_project_root = tk.StringVar(value=str(Path.cwd()))
 
 		self._parents: list[dict] = []
 		self._checked: dict[str, bool] = {}
 
 		self._build()
 		self.protocol("WM_DELETE_WINDOW", self.destroy)
+		self.var_kind.trace_add("write", lambda *_: self._sync_target())
 		self.var_plugins_dir.trace_add("write", lambda *_: self._reload_parents())
+		self._sync_target()
 		self._reload_parents()
 
 	def _build(self) -> None:
@@ -51,17 +58,27 @@ class CreatePluginApp(tk.Tk):
 			row=0, column=0, columnspan=3, sticky="w", **pad
 		)
 
-		ttk.Label(frm, text="Plugin Name").grid(row=1, column=0, sticky="w", **pad)
-		ttk.Entry(frm, textvariable=self.var_name).grid(row=1, column=1, columnspan=2, sticky="ew", **pad)
+		# 插件归属：引擎插件 → 引擎根/Plugins；项目插件 → 项目根/Plugins
+		ttk.Label(frm, text="Plugin Location").grid(row=1, column=0, sticky="w", **pad)
+		self.cmb_kind = ttk.Combobox(
+			frm, textvariable=self.var_kind, state="readonly",
+			values=[_ENGINE_KIND, _PROJECT_KIND],
+		)
+		self.cmb_kind.grid(row=1, column=1, columnspan=2, sticky="ew", **pad)
 
-		ttk.Label(frm, text="Plugins Path").grid(row=2, column=0, sticky="w", **pad)
-		ttk.Entry(frm, textvariable=self.var_plugins_dir).grid(row=2, column=1, sticky="ew", **pad)
-		ttk.Button(frm, text="Browse…", command=self._browse).grid(row=2, column=2, sticky="e", **pad)
+		ttk.Label(frm, text="Plugin Name").grid(row=2, column=0, sticky="w", **pad)
+		ttk.Entry(frm, textvariable=self.var_name).grid(row=2, column=1, columnspan=2, sticky="ew", **pad)
+
+		ttk.Label(frm, text="Plugins Path").grid(row=3, column=0, sticky="w", **pad)
+		self.ent_plugins = ttk.Entry(frm, textvariable=self.var_plugins_dir)
+		self.ent_plugins.grid(row=3, column=1, sticky="ew", **pad)
+		self.btn_browse = ttk.Button(frm, text="Browse…", command=self._browse)
+		self.btn_browse.grid(row=3, column=2, sticky="e", **pad)
 
 		# Parent plugin types — the plugins this new plugin depends on.
-		ttk.Label(frm, text="父插件类型 (Dependencies)").grid(row=3, column=0, sticky="nw", **pad)
+		ttk.Label(frm, text="父插件类型 (Dependencies)").grid(row=4, column=0, sticky="nw", **pad)
 		parent_frame = ttk.Frame(frm)
-		parent_frame.grid(row=3, column=1, columnspan=2, sticky="nsew", **pad)
+		parent_frame.grid(row=4, column=1, columnspan=2, sticky="nsew", **pad)
 		parent_frame.columnconfigure(0, weight=1)
 		parent_frame.rowconfigure(0, weight=1)
 		self.parent_tree = ttk.Treeview(parent_frame, show="tree", selectmode="none")
@@ -71,22 +88,39 @@ class CreatePluginApp(tk.Tk):
 		scroll.grid(row=0, column=1, sticky="ns")
 		self.parent_tree.bind("<Button-1>", self._on_tree_click)
 
-		ttk.Label(frm, text="Description").grid(row=4, column=0, sticky="nw", **pad)
+		ttk.Label(frm, text="Description").grid(row=5, column=0, sticky="nw", **pad)
 		self.txt_desc = tk.Text(frm, height=3, wrap=tk.WORD)
-		self.txt_desc.grid(row=4, column=1, columnspan=2, sticky="nsew", **pad)
+		self.txt_desc.grid(row=5, column=1, columnspan=2, sticky="nsew", **pad)
 
 		ttk.Button(frm, text="Create Plugin", command=self._create).grid(
-			row=5, column=1, columnspan=2, sticky="e", **pad
+			row=6, column=1, columnspan=2, sticky="e", **pad
 		)
 
 		frm.columnconfigure(1, weight=1)
-		frm.rowconfigure(3, weight=3)
-		frm.rowconfigure(4, weight=1)
+		frm.rowconfigure(4, weight=3)
+		frm.rowconfigure(5, weight=1)
+
+	def _sync_target(self) -> None:
+		"""引擎插件 → 固定到 引擎根/Plugins；项目插件 → 项目根/Plugins（可 Browse）。"""
+		if self.var_kind.get() == _ENGINE_KIND:
+			self.var_plugins_dir.set(str((ENGINE_ROOT / "Plugins").resolve()))
+			self.ent_plugins.config(state="readonly")
+			self.btn_browse.config(state="disabled")
+		else:
+			root = Path(self.var_project_root.get())
+			self.var_plugins_dir.set(str((root / "Plugins").resolve()))
+			self.ent_plugins.config(state="normal")
+			self.btn_browse.config(state="normal")
 
 	def _browse(self) -> None:
-		path = filedialog.askdirectory(initialdir=self.var_plugins_dir.get() or str(ENGINE_ROOT))
+		if self.var_kind.get() == _ENGINE_KIND:
+			return
+		# project kind: pick the project ROOT (containing the .cproject)
+		initial = self.var_project_root.get() or str(Path.cwd())
+		path = filedialog.askdirectory(initialdir=initial, title="Select Project Root (contains .cproject)")
 		if path:
-			self.var_plugins_dir.set(path)
+			self.var_project_root.set(path)
+			self.var_plugins_dir.set(str((Path(path) / "Plugins").resolve()))
 
 	def _reload_parents(self) -> None:
 		for item in self.parent_tree.get_children():
@@ -94,21 +128,20 @@ class CreatePluginApp(tk.Tk):
 		self._parents = []
 		self._checked = {}
 
-		engine_plugins = list_engine_plugins(ENGINE_ROOT)
-		project_dir = Path(self.var_plugins_dir.get().strip())
-		project_plugins: list[dict] = []
-		if project_dir.is_dir():
-			project_plugins = list_engine_plugins(project_dir.parent if project_dir.name == "Extension" else project_dir)
-
-		# Engine catalog first, then the project's own plugins — de-dupe by
-		# Name (engine-side runs scan the same Extension/ twice otherwise).
+		# scan the engine Plugins/ + the target Plugins/ for candidate parents
+		roots = [ENGINE_ROOT / "Plugins", Path(self.var_plugins_dir.get().strip())]
 		seen: set[str] = set()
 		merged: list[dict] = []
-		for p in engine_plugins + project_plugins:
-			if p["Name"] in seen:
+		for root in roots:
+			if not root.is_dir():
 				continue
-			seen.add(p["Name"])
-			merged.append(p)
+			for cplugin_path in discover_cplugin_files([root]):
+				data = read_cplugin(cplugin_path)
+				name = data.get("Name") or cplugin_path.parent.name
+				if name in seen:
+					continue
+				seen.add(name)
+				merged.append({"Name": name, "Group": data.get("Group") or []})
 		self._parents = merged
 		for p in self._parents:
 			self._insert_parent(p)
@@ -165,14 +198,14 @@ class CreatePluginApp(tk.Tk):
 
 
 def main() -> int:
-	# Optional positional arg: default plugins dir (e.g. a project's Extension/).
-	default_plugins_dir: Path | None = None
+	# Optional positional arg: default project root (or plugins dir).
+	default_dir: Path | None = None
 	for arg in sys.argv[1:]:
 		p = Path(arg).expanduser()
 		if p.is_dir() or not p.exists():
-			default_plugins_dir = p.resolve()
+			default_dir = p.resolve()
 			break
-	app = CreatePluginApp(default_plugins_dir=default_plugins_dir)
+	app = CreatePluginApp(default_plugins_dir=default_dir)
 	app.mainloop()
 	return 0
 
