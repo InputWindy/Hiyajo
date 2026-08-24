@@ -492,8 +492,9 @@ add_library(Maho STATIC
 # show engine source as its on-disk tree (Source/Public, Source/Private, ...)
 source_group(TREE "${{ENGINE_DIR}}/Source" FILES ${{MAHO_HEADERS}} ${{MAHO_PRIVATE}})
 target_include_directories(Maho PUBLIC "${{ENGINE_DIR}}/Source/Public")
-# Engine/Common (MathTool header-only + Json) leans on the engine third-parties;
-# PUBLIC so every Consumer (entry plugin + EntryPoint + sub-plugins) gets them.
+# The engine third-parties are the shared infra (glm, nlohmann/json, …); PUBLIC
+# so every Consumer (entry plugin + EntryPoint + sub-plugins) can just
+# #include <glm/glm.hpp> / <nlohmann/json.hpp>.
 target_link_libraries(Maho PUBLIC glm::glm nlohmann_json::nlohmann_json)
 set_target_properties(Maho PROPERTIES FOLDER "Maho")
 

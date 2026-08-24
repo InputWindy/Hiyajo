@@ -4,8 +4,8 @@
 #include <Engine/Common/Name.h>
 #include <Engine/Common/Paths.h>
 #include <Engine/Common/Config.h>
-#include <Engine/Common/MathTool.h>
-#include <Engine/Common/Json.h>
+#include <glm/glm.hpp>
+#include <nlohmann/json.hpp>
 
 #include <cstdio>
 
@@ -13,16 +13,16 @@ using namespace Maho;
 
 int main()
 {
-	// Math (glm alias) + Json (nlohmann alias) — engine third-party headers
-	const Math::FVector3 HL = Math::Lerp(Math::FVector3(0.f), Math::FVector3(2.f), 0.5f);
-	if (HL != Math::FVector3(1.f))
+	// Engine third-party headers usable directly (Maho lib PUBLIC links the targets)
+	const glm::vec3 HL = glm::mix(glm::vec3(0.f), glm::vec3(2.f), 0.5f);
+	if (HL != glm::vec3(1.f))
 	{
-		std::puts("[FAIL] Math::Lerp FVector3"); return 1;
+		std::puts("[FAIL] glm::mix vec3"); return 1;
 	}
-	Json::FJsonValue J = Json::FJsonValue::parse("{\"a\":[1,2,3]}");
+	nlohmann::json J = nlohmann::json::parse("{\"a\":[1,2,3]}");
 	if (J["a"][2] != 3)
 	{
-		std::puts("[FAIL] Json parse"); return 1;
+		std::puts("[FAIL] nlohmann::json parse"); return 1;
 	}
 
 	// Unicode (zero third-party) — "中文" as explicit UTF-8 bytes
@@ -68,6 +68,6 @@ int main()
 	}
 	Config::FConfig::Get().Shutdown();
 
-	std::puts("ok: engine Common Unicode/Name/Paths/Config + Math/Json");
+	std::puts("ok: engine Common Unicode/Name/Paths/Config + direct glm/nlohmann");
 	return 0;
 }
