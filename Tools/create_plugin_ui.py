@@ -75,8 +75,9 @@ class CreatePluginApp(tk.Tk):
 		self.btn_browse = ttk.Button(frm, text="Browse…", command=self._browse)
 		self.btn_browse.grid(row=3, column=2, sticky="e", **pad)
 
-		# Parent plugin — the ONE base class this plugin inherits (optional).
-		ttk.Label(frm, text="父插件（可选，单选继承基类）").grid(row=4, column=0, sticky="nw", **pad)
+		# Enabled/dependency plugins — a multi-select group (optional; cascaded
+		# into this plugin's .cplugin Dependencies so a project pulls them too).
+		ttk.Label(frm, text="启用/依赖插件（可多选，级联）").grid(row=4, column=0, sticky="nw", **pad)
 		parent_frame = ttk.Frame(frm)
 		parent_frame.grid(row=4, column=1, columnspan=2, sticky="nsew", **pad)
 		parent_frame.columnconfigure(0, weight=1)
@@ -175,17 +176,9 @@ class CreatePluginApp(tk.Tk):
 		iid = self.parent_tree.identify_row(event.y)
 		if not iid or iid.startswith("group:"):
 			return
-		# single selection — pick ONE parent plugin (or click again to clear)
-		if self._checked.get(iid):
-			self._checked[iid] = False
-		else:
-			for n in list(self._checked):
-				self._checked[n] = False
-			self._checked[iid] = True
+		# multi-select — a group of enabled/dependency plugins (optional)
+		self._checked[iid] = not self._checked.get(iid, False)
 		self.parent_tree.item(iid, text=self._label(iid))
-		for n in list(self._checked):
-			if n != iid and self.parent_tree.exists(n):
-				self.parent_tree.item(n, text=self._label(n))
 
 	def _create(self) -> None:
 		name = self.var_name.get().strip()
@@ -200,10 +193,10 @@ class CreatePluginApp(tk.Tk):
 				messagebox.showerror("Maho", f"Cannot create plugins path:\n{plugins_dir}\n\n{ex}")
 				return
 		desc = self.txt_desc.get("1.0", tk.END).strip()
-		parent = next((n for n in self._checked if self._checked[n]), None)
+		deps = sorted(n for n in self._checked if self._checked[n])
 		try:
 			path = create_plugin(
-				name, ENGINE_ROOT, description=desc, inherits=[parent] if parent else [], plugins_dir=plugins_dir
+				name, ENGINE_ROOT, description=desc, inherits=deps, plugins_dir=plugins_dir
 			)
 		except Exception as ex:  # noqa: BLE001
 			messagebox.showerror("Maho", f"Create plugin failed:\n{ex}")

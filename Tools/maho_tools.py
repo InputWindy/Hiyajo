@@ -467,8 +467,8 @@ else()
 		BYPRODUCTS "${{CMAKE_CURRENT_SOURCE_DIR}}/Intermediate/_cycle_check.stamp"
 		VERBATIM
 	)
-	set_target_properties(MahoCheckCycle PROPERTIES FOLDER "ThirdParty")
-	add_dependencies({name} MahoCheckCycle)
+		set_target_properties(MahoCheckCycle PROPERTIES FOLDER "Maho")
+		add_dependencies({name} MahoCheckCycle)
 
 	# Interface layering — write methods must be protected, scheduler is the
 	# only writer (runs before every build).
@@ -477,8 +477,8 @@ else()
 		BYPRODUCTS "${{CMAKE_CURRENT_SOURCE_DIR}}/Intermediate/_layers_check.stamp"
 		VERBATIM
 	)
-	set_target_properties(MahoCheckLayers PROPERTIES FOLDER "ThirdParty")
-	add_dependencies({name} MahoCheckLayers)
+		set_target_properties(MahoCheckLayers PROPERTIES FOLDER "Maho")
+		add_dependencies({name} MahoCheckLayers)
 endif()
 
 # The entry — code-gen boilerplate (never edited), loads {name}.dll.
@@ -491,10 +491,11 @@ target_compile_definitions(EntryPoint PRIVATE MAHO_EXTENSION_NAME="{name}.dll")
 target_include_directories(EntryPoint PRIVATE "${{ENGINE_DIR}}/Source/Public")
 add_dependencies(EntryPoint {name} {plugin_link_names} MahoCheckCycle)
 
-# Solution folders: all project plugins (host + deps) under one folder named
-# after the project; EntryPoint stays at the root; third-party targets go to
-# ThirdParty.
-set_target_properties({name} PROPERTIES FOLDER "{name}")
+# Solution folders: the project root, every plugin (engine + project), the
+# dependency checks, and EntryPoint all live under Maho/ (grouped by filesystem
+# hierarchy for plugins). Third-party stays in ThirdParty.
+set_target_properties({name} PROPERTIES FOLDER "Maho")
+set_target_properties(EntryPoint PROPERTIES FOLDER "Maho")
 {plugin_folders}
 """
 
@@ -755,7 +756,9 @@ def _plugin_targets(
 				f"target_link_libraries({name} PUBLIC {' '.join(deps_in_chain)})\n"
 			)
 		group = info["group"]
-		folder = f"{project_name}/{group}" if group else project_name
+		# all plugins (engine + project) live under the Maho folder, grouped by
+		# their filesystem hierarchy (Maho/Rendering/SSAO, Maho/MyPlugin, ...).
+		folder = f"Maho/{group}" if group else "Maho"
 		folders.append(
 			f"set_target_properties({name} PROPERTIES FOLDER \"{folder}\")\n"
 		)
@@ -1068,23 +1071,17 @@ def create_plugin(
 	child_includes = "".join(f'#include <{c}.h>\n' for c in (children or []))
 	child_bases = ", ".join(f"F{c}" for c in (children or []))
 	flayer_base = f"FLayer<{child_bases}>" if child_bases else "FLayer<>"
-	# a chosen parent plugin becomes the class's base (inherit its layer type)
-	parent = (inherits or [None])[0]
-	parent_include = f'#include <{parent}.h>\n' if parent else ""
-	base_line = f"\t: public Maho::F{parent}\n" if parent else f"\t: public {flayer_base}\n"
 	(public / f"{plugin_name}.h").write_text(
 		"#pragma once\n\n"
 		f'#include "{plugin_name}Api.h"\n'
 		f"#include <Maho.h>\n"
 		f"#include <Engine/Layer.h>\n"
-		f"{parent_include}"
 		f"{child_includes}\n"
 		f"namespace Maho\n{{\n\n"
-		f"// {plugin_name} — a Layer node. Optionally inherits a parent plugin's layer;\n"
-		f"// children are code-gen filled (the mounted plugins); interfaces are\n"
-		f"// hand-spelled as IPlugin<> template args.\n"
+		f"// {plugin_name} — a Layer node. Children are code-gen filled (dependencies);\n"
+		f"// interfaces are hand-spelled as IPlugin<> template args.\n"
 		f"class F{plugin_name}\n"
-		f"{base_line}"
+		f"\t: public {flayer_base}\n"
 		f"\t, public IPlugin<IMain, IExit>\n"
 		f"{{\n"
 		f"MAHO_DECLARE_LAYER(F{plugin_name}, \"{plugin_name}.dll\");\n"
