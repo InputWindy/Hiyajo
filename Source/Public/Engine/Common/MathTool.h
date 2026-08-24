@@ -1,15 +1,15 @@
 #pragma once
 
-// Math plugin — GLM math types + helpers. Header-only; consumers just include
-// this header and get FVector2/3/4, FMatrix4, FQuaternion (= glm aliases).
+// Math — GLM math types + helpers (header-only, engine Common). Consumers just
+// include this header and get FVector2/3/4, FMatrix4, FQuaternion (= glm
+// aliases). glm is an ENGINE third-party (Build/CMake/MahoDependencies).
+// The header is named MathTool (not Math) to avoid the MSVC case-insensitive
+// clash with <math.h>.
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
 
-#include "MathApi.h"
-
 namespace Maho
 {
-
 namespace Math
 {
 
@@ -25,5 +25,4 @@ template <typename T> [[nodiscard]] constexpr T Clamp(const T& Value, const T& M
 [[nodiscard]] inline constexpr float RadiansToDegrees(float Rad) { return Rad * 57.29577951308232f; }
 
 } // namespace Math
-
 } // namespace Maho

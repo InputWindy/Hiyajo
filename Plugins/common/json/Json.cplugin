@@ -1,6 +1,0 @@
-{
-	"FileVersion": 1,
-	"Name": "Json",
-	"Description": "nlohmann/json wrapper (header-only)",
-	"Dependencies": []
-}

@@ -4,6 +4,8 @@
 #include <Engine/Common/Name.h>
 #include <Engine/Common/Paths.h>
 #include <Engine/Common/Config.h>
+#include <Engine/Common/MathTool.h>
+#include <Engine/Common/Json.h>
 
 #include <cstdio>
 
@@ -11,6 +13,18 @@ using namespace Maho;
 
 int main()
 {
+	// Math (glm alias) + Json (nlohmann alias) — engine third-party headers
+	const Math::FVector3 HL = Math::Lerp(Math::FVector3(0.f), Math::FVector3(2.f), 0.5f);
+	if (HL != Math::FVector3(1.f))
+	{
+		std::puts("[FAIL] Math::Lerp FVector3"); return 1;
+	}
+	Json::FJsonValue J = Json::FJsonValue::parse("{\"a\":[1,2,3]}");
+	if (J["a"][2] != 3)
+	{
+		std::puts("[FAIL] Json parse"); return 1;
+	}
+
 	// Unicode (zero third-party) — "中文" as explicit UTF-8 bytes
 	std::string Utf8("\xE4\xB8\xAD\xE6\x96\x87");
 	if (!Unicode::IsValidUtf8(Utf8))
@@ -54,6 +68,6 @@ int main()
 	}
 	Config::FConfig::Get().Shutdown();
 
-	std::puts("ok: engine Common Unicode/Name/Paths/Config");
+	std::puts("ok: engine Common Unicode/Name/Paths/Config + Math/Json");
 	return 0;
 }

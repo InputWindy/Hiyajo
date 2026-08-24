@@ -120,3 +120,29 @@ macro(maho_add_thirdparty_subdirectory)
 	unset(_maho_tp_name)
 	unset(_maho_tp_type)
 endmacro()
+
+# ── Engine-level third-party (fetched ONCE, usable by every target) ──────
+# These are the generic infrastructure libs the engine provides to all code
+# (like std). Domain-specific libs still go through per-plugin .cmake files.
+
+# GLM (header-only math).
+if(NOT TARGET glm::glm)
+	maho_git_repository_url(_M_GLM_URL https://github.com/g-truc/glm.git)
+	maho_fetchcontent_populate_or_reuse(glm ${_M_GLM_URL} 0.9.9.8 glm/glm.hpp)
+	add_library(glm::glm INTERFACE IMPORTED)
+	set_target_properties(glm::glm PROPERTIES
+		INTERFACE_INCLUDE_DIRECTORIES "${glm_SOURCE_DIR}"
+		INTERFACE_COMPILE_DEFINITIONS "GLM_ENABLE_EXPERIMENTAL"
+	)
+	unset(_M_GLM_URL)
+endif()
+
+# nlohmann/json (header-only).
+if(NOT TARGET nlohmann_json::nlohmann_json)
+	maho_git_repository_url(_M_NLJSON_URL https://github.com/nlohmann/json.git)
+	maho_fetchcontent_populate_or_reuse(nlohmann_json ${_M_NLJSON_URL} v3.11.3 single_include/nlohmann/json.hpp)
+	add_library(nlohmann_json::nlohmann_json INTERFACE IMPORTED)
+	set_target_properties(nlohmann_json::nlohmann_json PROPERTIES
+		INTERFACE_INCLUDE_DIRECTORIES "${nlohmann_json_SOURCE_DIR}/single_include")
+	unset(_M_NLJSON_URL)
+endif()

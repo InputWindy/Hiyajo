@@ -39,6 +39,11 @@ add_executable(SingletonStress SingletonStress.cpp ${MAHO_HEADERS})
 target_include_directories(SingletonStress PRIVATE "${ENGINE_DIR}/Source/Public")
 
 # Engine Common singletons/libraries (Unicode/Name/Paths/Config).
+# Math/Json are engine third-party headers (glm + nlohmann) — fetched via the
+# SAME engine helper as real projects (Build/CMake/MahoDependencies.cmake), so
+# the mirror/proxy support applies here too.
+include("${ENGINE_DIR}/Build/CMake/MahoDependencies.cmake")
+
 add_executable(CommonStress CommonStress.cpp
 	${MAHO_PRIVATE}
 	${ENGINE_DIR}/Source/Private/Engine/Common/Unicode.cpp
@@ -47,7 +52,7 @@ add_executable(CommonStress CommonStress.cpp
 	${ENGINE_DIR}/Source/Private/Engine/Common/Config.cpp
 	${MAHO_HEADERS})
 target_include_directories(CommonStress PRIVATE "${ENGINE_DIR}/Source/Public")
-target_link_libraries(CommonStress PRIVATE Threads::Threads)
+target_link_libraries(CommonStress PRIVATE Threads::Threads glm::glm nlohmann_json::nlohmann_json)
 
 # EntryPoint.h drivers.compile + link check (needs Fatal.cpp).
 add_executable(EntryPointStress EntryPointStress.cpp ${MAHO_PRIVATE} ${MAHO_HEADERS})
