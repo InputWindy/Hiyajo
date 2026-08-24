@@ -44,7 +44,7 @@ struct FLog : TSingleton<FLog>
 {
 	MAHO_EXTEND_DEPS((FDefaultSlot, FNoParent));          // root singleton
 	int Initiated = 0;
-	void Initiate() override { ++Initiated; }
+	void Initiate(int, char**) override { ++Initiated; }
 	void Shutdown() override {}
 };
 
@@ -52,7 +52,7 @@ struct FAudioService : TSingleton<FAudioService>
 {
 	MAHO_EXTEND_DEPS((FDefaultSlot, FNoParent, FLog));    // audio after log
 	int Initiated = 0;
-	void Initiate() override { ++Initiated; }
+	void Initiate(int, char**) override { ++Initiated; }
 	void Shutdown() override {}
 };
 
@@ -154,7 +154,7 @@ struct FGameEngine
 	{
 		// singletons: same syntax as instances — Select then ForEach; the FLayer
 		// query drives T::Get() for CRTP-singleton members of the table.
-		Select<ISingleton>().ForEach([](ISingleton& S) { S.Initiate(); });
+		Select<ISingleton>().ForEach([](ISingleton& S) { S.Initiate(0, nullptr); });
 
 		Enqueue(FLayerCommand{ FLayerCommand::EOp::Install, new FRenderer(), /*static*/ true });
 		Enqueue(FLayerCommand{ FLayerCommand::EOp::Install, new FResourceManager(), /*static*/ true });

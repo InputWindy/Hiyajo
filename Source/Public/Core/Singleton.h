@@ -14,8 +14,8 @@ class ISingleton
 public:
 	virtual ~ISingleton() = default;
 
-	/** Bring the singleton up — the fixed init phase. */
-	virtual void Initiate() = 0;
+	/** Bring the singleton up — the fixed init phase (receives launch args). */
+	virtual void Initiate(int Argc, char** Argv) = 0;
 
 	/** Tear it down — the fixed shutdown phase. */
 	virtual void Shutdown() = 0;
