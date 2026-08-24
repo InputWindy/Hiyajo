@@ -134,13 +134,16 @@ class CreatePluginApp(tk.Tk):
 		seen: set[str] = set()
 		merged: list[dict] = []
 		for root in roots:
+			root = root.resolve()
 			if not root.is_dir():
 				continue
 			for cplugin_path in discover_cplugin_files([root]):
 				data = read_cplugin(cplugin_path)
 				name = data.get("Name") or cplugin_path.parent.name
-				# relative folder path under the Plugins root → tree groups
-				group = list(cplugin_path.parent.relative_to(root).parts)
+				# folder hierarchy under the Plugins root, EXCLUDING the plugin's
+				# own directory (create_plugin nests each plugin in its own folder,
+				# so the last segment is the plugin itself, not a group).
+				group = list(cplugin_path.parent.relative_to(root).parts[:-1])
 				key = "/".join(group + [name])
 				if key in seen:
 					continue
