@@ -1,6 +1,8 @@
 #pragma once
 
 #include <Core/TypeList.h>
+#include <Core/Topology.h>
+#include <Core/Singleton.h>
 #include <Engine/ThreadPool.h>
 
 #include <concepts>
@@ -175,6 +177,30 @@ public:
 	void RunTasks(std::vector<std::function<void()>> Tasks) const
 	{
 		Pool->RunTasks(std::move(Tasks));
+	}
+
+	/**
+	 * Drive the SINGLETON extensions level-by-level (their compile-time topo on
+	 * FDefaultSlot) — no instance array needed: each T's {@literal T::Get()}
+	 * singleton is handed to the visitor as {@literal T&}. Levels are serialized
+	 * (barrier after each), singletons within a level run in parallel.
+	 *
+	 *   ForEachSingletons([](TSingletonPlugin& S) { S.Poll(); });
+	 */
+	template <typename TVisitor>
+	void ForEachSingletons(TVisitor&& Visitor) const
+	{
+		using FLevels = Topo::TLevels_t<FExtensions, FDefaultSlot>;
+		Maho::ForEach<FLevels>(Maho::FSerialTraversePolicy{}, [&](auto Tag) {
+			using FLevel = typename decltype(Tag)::Type;
+			std::vector<std::function<void()>> Tasks;
+			Tasks.reserve(FLevel::Count);
+			Maho::ForEach<FLevel>(Maho::FSerialTraversePolicy{}, [&](auto TypeTag) {
+				using T = typename decltype(TypeTag)::Type;
+				Tasks.emplace_back([&] { Visitor(T::Get()); });
+			});
+			Pool->RunTasks(std::move(Tasks));
+		});
 	}
 
 private:
