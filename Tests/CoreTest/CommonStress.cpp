@@ -12,6 +12,7 @@
 #include <Engine/Common/Text.h>
 #include <Engine/Common/Asset.h>
 #include <Engine/Common/CommandParser.h>
+#include <Engine/Common/Compress.h>
 #include <glm/glm.hpp>
 #include <nlohmann/json.hpp>
 
@@ -197,6 +198,25 @@ int main()
 		Parser.Shutdown();
 	}
 
-	std::puts("ok: engine Common full set + glm/nlohmann/CLI11");
+	// Compress (zstd pure library)
+	{
+		std::vector<std::uint8_t> Raw;
+		for (int I = 0; I < 2000; ++I)
+		{
+			Raw.push_back(static_cast<std::uint8_t>(I % 8));   // compressible
+		}
+		auto Packed = Compress::Compress(Raw, 5);
+		if (!Packed || Packed->size() >= Raw.size())
+		{
+			std::puts("[FAIL] Compress compressed"); return 1;
+		}
+		auto RoundTrip = Compress::Decompress(*Packed);
+		if (!RoundTrip || *RoundTrip != Raw)
+		{
+			std::puts("[FAIL] Compress roundtrip"); return 1;
+		}
+	}
+
+	std::puts("ok: engine Common full set + glm/nlohmann/CLI11/zstd");
 	return 0;
 }

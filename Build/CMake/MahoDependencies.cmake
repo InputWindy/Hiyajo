@@ -156,3 +156,16 @@ if(NOT TARGET CLI11::CLI11)
 		INTERFACE_INCLUDE_DIRECTORIES "${CLI11_SOURCE_DIR}/include")
 	unset(_M_CLI11_URL)
 endif()
+
+# zstd — compiled C lib (not header-only). Fetched ONCE; the static lib target
+# is what every Consumer links (publicly through Maho). Only the static lib is
+# built (skip shared lib + CLI + tests).
+if(NOT TARGET libzstd_static)
+	maho_git_repository_url(_M_ZSTD_URL https://github.com/facebook/zstd.git)
+	maho_fetchcontent_populate_or_reuse(zstd ${_M_ZSTD_URL} v1.5.6 lib/zstd.h)
+	set(ZSTD_BUILD_SHARED OFF CACHE BOOL "" FORCE)
+	set(ZSTD_BUILD_PROGRAMS OFF CACHE BOOL "" FORCE)
+	set(ZSTD_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+	maho_add_thirdparty_subdirectory("${zstd_SOURCE_DIR}/build/cmake" "${zstd_BINARY_DIR}")
+	unset(_M_ZSTD_URL)
+endif()

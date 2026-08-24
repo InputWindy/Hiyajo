@@ -492,10 +492,10 @@ add_library(Maho STATIC
 # show engine source as its on-disk tree (Source/Public, Source/Private, ...)
 source_group(TREE "${{ENGINE_DIR}}/Source" FILES ${{MAHO_HEADERS}} ${{MAHO_PRIVATE}})
 target_include_directories(Maho PUBLIC "${{ENGINE_DIR}}/Source/Public")
-# The engine third-parties are the shared infra (glm, nlohmann/json, CLI11 …);
-# PUBLIC so every Consumer (entry plugin + EntryPoint + sub-plugins) can just
-# #include them directly.
-target_link_libraries(Maho PUBLIC glm::glm nlohmann_json::nlohmann_json CLI11::CLI11)
+# The engine third-parties are the shared infra (glm, nlohmann/json, CLI11,
+# zstd …); PUBLIC so every Consumer (entry plugin + EntryPoint + sub-plugins)
+# can just #include them directly.
+target_link_libraries(Maho PUBLIC glm::glm nlohmann_json::nlohmann_json CLI11::CLI11 libzstd_static)
 set_target_properties(Maho PROPERTIES FOLDER "Maho")
 
 add_executable(EntryPoint WIN32 Intermediate/Main.cpp)

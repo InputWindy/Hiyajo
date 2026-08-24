@@ -57,9 +57,10 @@ add_executable(CommonStress CommonStress.cpp
 	${ENGINE_DIR}/Source/Private/Engine/Common/Text.cpp
 	${ENGINE_DIR}/Source/Private/Engine/Common/Asset.cpp
 	${ENGINE_DIR}/Source/Private/Engine/Common/CommandParser.cpp
+	${ENGINE_DIR}/Source/Private/Engine/Common/Compress.cpp
 	${MAHO_HEADERS})
 target_include_directories(CommonStress PRIVATE "${ENGINE_DIR}/Source/Public")
-target_link_libraries(CommonStress PRIVATE Threads::Threads glm::glm nlohmann_json::nlohmann_json CLI11::CLI11)
+target_link_libraries(CommonStress PRIVATE Threads::Threads glm::glm nlohmann_json::nlohmann_json CLI11::CLI11 libzstd_static)
 
 # EntryPoint.h drivers.compile + link check (needs Fatal.cpp).
 add_executable(EntryPointStress EntryPointStress.cpp ${MAHO_PRIVATE} ${MAHO_HEADERS})
