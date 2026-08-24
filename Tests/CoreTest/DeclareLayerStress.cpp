@@ -1,15 +1,18 @@
-// Compile check for MAHO_DECLARE_LAYER — the plugin scaffold macro.
+// Compile check for MAHO_DECLARE_LAYER + the plugin scaffold — the layer stays
+// CONCRETE because every FLayer-uncovered abstract capability is overridden.
 #include <Engine/Layer.h>
 
 using namespace Maho;
 
-// a plugin layer declared via the macro (hand-written IPlugin<> interfaces)
+// a plugin layer exactly as create_plugin scaffolds it
 class FMyPlugin
 	: public FLayer<>
-	, public IPlugin<IMain>
+	, public IPlugin<IMain, IExit>
 {
 	MAHO_DECLARE_LAYER(FMyPlugin, "MyPlugin.dll");
-	int Main() override { return 0; }
+
+	int Main() override { return 0; } // the run entry (a layer that owns a loop)
+	void Exit() override {}
 };
 
 int main()
@@ -19,11 +22,17 @@ int main()
 	{
 		return 1;
 	}
-	if (FMyPlugin::CreateExtension() == nullptr)
+	// the factory returns the anonymous FLayerBase* ceiling — downcast to drive
+	auto* Made = FMyPlugin::CreateExtension();
+	if (Made == nullptr)
 	{
 		return 2;
 	}
-	delete FMyPlugin::CreateExtension();
-	P.OnInstall();
+	FMyPlugin* Typed = static_cast<FMyPlugin*>(Made);
+	Typed->Initialize(0, nullptr);
+	Typed->Shutdown();
+	Typed->Main();
+	Typed->Exit();
+	delete Made;
 	return 0;
 }

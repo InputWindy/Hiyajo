@@ -128,7 +128,8 @@ class CreatePluginApp(tk.Tk):
 		self._parents = []
 		self._checked = {}
 
-		# scan the engine Plugins/ + the target Plugins/ for candidate parents
+		# scan the engine Plugins/ + the target Plugins/ for candidate parents,
+		# building the tree from the FILESYSTEM hierarchy under each Plugins/ root.
 		roots = [ENGINE_ROOT / "Plugins", Path(self.var_plugins_dir.get().strip())]
 		seen: set[str] = set()
 		merged: list[dict] = []
@@ -138,10 +139,13 @@ class CreatePluginApp(tk.Tk):
 			for cplugin_path in discover_cplugin_files([root]):
 				data = read_cplugin(cplugin_path)
 				name = data.get("Name") or cplugin_path.parent.name
-				if name in seen:
+				# relative folder path under the Plugins root → tree groups
+				group = list(cplugin_path.parent.relative_to(root).parts)
+				key = "/".join(group + [name])
+				if key in seen:
 					continue
-				seen.add(name)
-				merged.append({"Name": name, "Group": data.get("Group") or []})
+				seen.add(key)
+				merged.append({"Name": name, "Group": group})
 		self._parents = merged
 		for p in self._parents:
 			self._insert_parent(p)

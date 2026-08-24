@@ -74,7 +74,7 @@ class FLayerBase;
  * A value command: an (Op, Target) pair — "install layer X" or "uninstall layer
  * X". The consumer (a layer holding an FQueue<FLayerCommand>) Enqueues these at
  * any time; Flush() at a safe point runs each one, which calls the target's
- * OnInstall / OnUninstall. Dedupe key is (Op, Target), so a repeated request for
+ * Initialize / Shutdown. Dedupe key is (Op, Target), so a repeated request for
  * the same operation on the same layer queues once.
  *
  * bStatic distinguishes the two schedules: a STATIC target's type is declared in
@@ -114,7 +114,7 @@ struct FLayerCommand : public ICommand
  *
  * Inherits FQueue<FLayerCommand>, so a layer owns the deferred install/uninstall
  * intents of its children: Enqueue a command from any thread, Flush at a safe
- * point (each command runs the target's OnInstall / OnUninstall). No explicit
+ * point (each command runs the target's Initialize / Shutdown). No explicit
  * init/shutdown stages exist — install IS the init, uninstall IS the shutdown,
  * both command-driven.
  *
@@ -135,11 +135,14 @@ public:
 		return dynamic_cast<const T*>(this) != nullptr;
 	}
 
-	/** Called when this layer is installed (install IS the init). */
-	virtual void OnInstall() {}
+	/**
+	 * Called when this layer is initialized (install IS the init). Receives the
+	 * launch arguments so a layer can start up with command-line config.
+	 */
+	virtual void Initialize(int Argc, char** Argv) {}
 
-	/** Called when this layer is uninstalled (uninstall IS the shutdown). */
-	virtual void OnUninstall() {}
+	/** Called when this layer is shut down (uninstall IS the shutdown). */
+	virtual void Shutdown() {}
 };
 
 inline void FLayerCommand::Execute()
@@ -150,11 +153,11 @@ inline void FLayerCommand::Execute()
 	}
 	if (Op == EOp::Install)
 	{
-		Target->OnInstall();
+		Target->Initialize(0, nullptr); // args come at bootstrap; a mid-run install has none
 	}
 	else
 	{
-		Target->OnUninstall();
+		Target->Shutdown();
 	}
 }
 
@@ -388,7 +391,7 @@ public:
 
 	/**
 	 * Apply pending install/uninstall commands — call between frames (a safe
-	 * point). Installs OnInstall() + run, uninstalls OnUninstall() + detach.
+	 * point). Installs Initialize() + run, uninstalls Shutdown() + detach.
 	 */
 	void Flush()
 	{
@@ -459,14 +462,14 @@ private:
 				if (Cmd.Target)
 				{
 					(Cmd.bStatic ? Instances : DynamicLayers).push_back(Cmd.Target);
-					Cmd.Target->OnInstall();
+					Cmd.Target->Initialize(0, nullptr); // mid-run install: no launch args
 				}
 			}
 			else
 			{
 				if (Cmd.Target)
 				{
-					Cmd.Target->OnUninstall();
+					Cmd.Target->Shutdown();
 					Erase(Instances, Cmd.Target);
 					Erase(DynamicLayers, Cmd.Target);
 					delete Cmd.Target; // owned child — free it
@@ -536,9 +539,10 @@ private:
 //       MAHO_DECLARE_LAYER(FMyPlugin, "MyPlugin.dll");
 //   };
 //
-// Expands inside a class body to an inline CreateExtension (the DLL factory),
-// the module path GetModulePath(), and an empty OnInstall hook. Interfaces stay
-// a hand-written template arg — no code-gen.
+// Expands inside a class body to an inline CreateExtension (the DLL factory)
+// + GetModulePath — pure boilerplate the user never edits. Lifecycle hooks
+// (Initialize/Shutdown) stay VISIBLE in the class, since the user usually
+// writes logic there. Interfaces stay a hand-written template arg — no code-gen.
 #define MAHO_DECLARE_LAYER(CustomBase, AppDLL)          \
 public:                                                 \
 	static Maho::FLayerBase* CreateExtension()          \
@@ -549,5 +553,4 @@ public:                                                 \
 	{                                                   \
 		return AppDLL;                                  \
 	}                                                   \
-	void OnInstall() override {}                        \
 

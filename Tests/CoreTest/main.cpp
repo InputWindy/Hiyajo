@@ -60,7 +60,7 @@ struct FTonemap : FRenderFeature
 struct FRenderer : FLayer<FSSAO, FTonemap>, IPlugin<IMain, IRenderer>
 {
 	// installing the renderer installs its render features
-	void OnInstall() override
+	void Initialize(int, char**) override
 	{
 		Enqueue(FLayerCommand{ FLayerCommand::EOp::Install, new FSSAO(), /*static*/ true });
 		Enqueue(FLayerCommand{ FLayerCommand::EOp::Install, new FTonemap(), /*static*/ true });
@@ -131,7 +131,7 @@ struct FGameEngine
 	void Exit() override { bExit.store(true, std::memory_order_release); }
 
 	// installing the engine installs the children it manages (recursive)
-	void OnInstall() override
+	void Initialize(int, char**) override
 	{
 		Enqueue(FLayerCommand{ FLayerCommand::EOp::Install, new FRenderer(), /*static*/ true });
 		Enqueue(FLayerCommand{ FLayerCommand::EOp::Install, new FResourceManager(), /*static*/ true });
@@ -139,7 +139,7 @@ struct FGameEngine
 		Enqueue(FLayerCommand{ FLayerCommand::EOp::Install, new FGameWorld(), /*static*/ true });
 		// a dynamic layer (type NOT in FChildren → independent, no topo ordering)
 		Enqueue(FLayerCommand{ FLayerCommand::EOp::Install, new FAudit(), /*dynamic*/ false });
-		Flush(); // apply → each child's OnInstall runs (recursive)
+		Flush(); // apply → each child's Initialize runs (recursive)
 	}
 
 	// exit after a fixed frame budget — deterministic, no cross-thread stopper
@@ -162,10 +162,10 @@ struct FGameEngine
 
 int main()
 {
-	// bootstrap the root: its OnInstall recursively installs the subtree
-	// (children + FRenderer::OnInstall → features). All owned by the subtree.
+	// bootstrap the root: its Initialize recursively installs the subtree
+	// (children + FRenderer::Initialize → features). All owned by the subtree.
 	FGameEngine Engine;
-	Engine.OnInstall();   // → install FRenderer/Res/Net/World/Audit + features
+	Engine.Initialize(0, nullptr); // → install FRenderer/Res/Net/World/Audit + features
 
 	// topology: FGameWorld depends on FNetWork → net is a level before world
 	using FEngLevels = typename FGameEngine::FLevels;
