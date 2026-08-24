@@ -491,11 +491,11 @@ target_compile_definitions(EntryPoint PRIVATE MAHO_EXTENSION_NAME="{name}.dll")
 target_include_directories(EntryPoint PRIVATE "${{ENGINE_DIR}}/Source/Public")
 add_dependencies(EntryPoint {name} {plugin_link_names} MahoCheckCycle)
 
-# Solution folders: the project root, every plugin (engine + project), the
-# dependency checks, and EntryPoint all live under Maho/ (grouped by filesystem
-# hierarchy for plugins). Third-party stays in ThirdParty.
-set_target_properties({name} PROPERTIES FOLDER "Maho")
-set_target_properties(EntryPoint PROPERTIES FOLDER "Maho")
+# Solution folders: EntryPoint at the ROOT; Maho (engine), Project (project
+# plugins + root), ThirdParty are the three top-level folders. Dependency
+# checks live under Maho; the project root + project plugins under Project.
+set_target_properties({name} PROPERTIES FOLDER "Project")
+# EntryPoint stays at the root (no FOLDER property).
 {plugin_folders}
 """
 
@@ -756,9 +756,12 @@ def _plugin_targets(
 				f"target_link_libraries({name} PUBLIC {' '.join(deps_in_chain)})\n"
 			)
 		group = info["group"]
-		# all plugins (engine + project) live under the Maho folder, grouped by
-		# their filesystem hierarchy (Maho/Rendering/SSAO, Maho/MyPlugin, ...).
-		folder = f"Maho/{group}" if group else "Maho"
+		# sln folder tree: EntryPoint at root, then Maho / Project / ThirdParty.
+		# Engine plugins → Maho/..., project plugins → Project/... (grouped by the
+		# filesystem hierarchy under each Plugins root).
+		is_engine = info["public_dir"].startswith("${ENGINE_DIR}")
+		base = "Maho" if is_engine else "Project"
+		folder = f"{base}/{group}" if group else base
 		folders.append(
 			f"set_target_properties({name} PROPERTIES FOLDER \"{folder}\")\n"
 		)
