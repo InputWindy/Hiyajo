@@ -1,9 +1,14 @@
 // Compile+run for the engine Common singletons/libraries (migrated from
-// plugins): Unicode (zero-third-party), Name/Paths/Config singletons.
+// plugins): Unicode (zero-third-party), Name/Paths/Config, Archive,
+// ConsoleVariable, Exception, Timer.
 #include <Engine/Common/Unicode.h>
 #include <Engine/Common/Name.h>
 #include <Engine/Common/Paths.h>
 #include <Engine/Common/Config.h>
+#include <Engine/Common/Archive.h>
+#include <Engine/Common/ConsoleVariable.h>
+#include <Engine/Common/Exception.h>
+#include <Engine/Common/Timer.h>
 #include <glm/glm.hpp>
 #include <nlohmann/json.hpp>
 
@@ -68,6 +73,64 @@ int main()
 	}
 	Config::FConfig::Get().Shutdown();
 
-	std::puts("ok: engine Common Unicode/Name/Paths/Config + direct glm/nlohmann");
+	// Archive (serialization streams)
+	Archive::FMemoryWriter Ar;
+	int WInt = 42; double WReal = 3.5; std::string WStr = "hi"; bool WYes = true;
+	Ar << WInt << WReal << WStr << WYes;
+	std::vector<std::uint8_t> Bytes = Ar.TakeBytes();
+	Archive::FMemoryReader Rd(Bytes);
+	int RInt = 0; double RReal = 0.0; std::string RStr; bool RYes = false;
+	Rd << RInt << RReal << RStr << RYes;
+	if (RInt != WInt || RReal != WReal || RStr != WStr || RYes != WYes)
+	{
+		std::puts("[FAIL] Archive roundtrip"); return 1;
+	}
+
+	// ConsoleVariable (CVar registry + static TAutoConsoleVariable)
+	ConsoleVariable::FConsoleVariable::Get().Initiate(0, nullptr);
+	static ConsoleVariable::TAutoConsoleVariable<int> CVarMaxFPS("r.MaxFPS", 60, "Max FPS");
+	ConsoleVariable::TAutoConsoleVariable<std::string> CVarLabel("r.Label", "default", "Label");
+	if (CVarMaxFPS.GetValue() != 60 || CVarLabel.GetValue() != "default")
+	{
+		std::puts("[FAIL] CVar default"); return 1;
+	}
+	CVarMaxFPS.Set(120);
+	if (CVarMaxFPS.GetValue() != 120)
+	{
+		std::puts("[FAIL] CVar set"); return 1;
+	}
+	ConsoleVariable::FConsoleVariable::Get().Shutdown();
+
+	// Exception (non-fatal broadcast)
+	Exception::FException::Get().Initiate(0, nullptr);
+	std::string Caught;
+	Exception::FException::Get().OnException.Bind([&](const std::string& M) { Caught = M; });
+	Exception::FException::Get().ReportException("boom");
+	if (Caught != "boom")
+	{
+		std::puts("[FAIL] Exception broadcast"); return 1;
+	}
+	Exception::FException::Get().Shutdown();
+
+	// Timer (scope profiler + game clock)
+	Timer::FTimer::Get().Initiate(0, nullptr);
+	{
+		Timer::FScopedTimer Scope("frame");
+	}
+	std::string Dump = Timer::FTimer::Get().DumpToString();
+	if (Dump.find("frame") == std::string::npos)
+	{
+		std::puts("[FAIL] Timer dump"); return 1;
+	}
+	Timer::FTimer::Get().Shutdown();
+	Timer::FGameClock::Get().Initiate(0, nullptr);
+	Timer::FGameClock::Get().SetTimeScale(0.5);
+	if (Timer::FGameClock::Get().GetTimeScale() != 0.5)
+	{
+		std::puts("[FAIL] GameClock scale"); return 1;
+	}
+	Timer::FGameClock::Get().Shutdown();
+
+	std::puts("ok: engine Common Unicode/Name/Paths/Config + Archive/CVar/Exception/Timer + glm/nlohmann");
 	return 0;
 }

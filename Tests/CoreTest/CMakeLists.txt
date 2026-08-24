@@ -46,10 +46,14 @@ include("${ENGINE_DIR}/Build/CMake/MahoDependencies.cmake")
 
 add_executable(CommonStress CommonStress.cpp
 	${MAHO_PRIVATE}
+	${ENGINE_DIR}/Source/Private/Engine/Common/Archive.cpp
 	${ENGINE_DIR}/Source/Private/Engine/Common/Unicode.cpp
 	${ENGINE_DIR}/Source/Private/Engine/Common/Name.cpp
 	${ENGINE_DIR}/Source/Private/Engine/Common/Paths.cpp
 	${ENGINE_DIR}/Source/Private/Engine/Common/Config.cpp
+	${ENGINE_DIR}/Source/Private/Engine/Common/ConsoleVariable.cpp
+	${ENGINE_DIR}/Source/Private/Engine/Common/Exception.cpp
+	${ENGINE_DIR}/Source/Private/Engine/Common/Timer.cpp
 	${MAHO_HEADERS})
 target_include_directories(CommonStress PRIVATE "${ENGINE_DIR}/Source/Public")
 target_link_libraries(CommonStress PRIVATE Threads::Threads glm::glm nlohmann_json::nlohmann_json)
