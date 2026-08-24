@@ -207,6 +207,83 @@ private:
 	std::unique_ptr<FThreadPool> Pool;
 };
 
+namespace TTypeQueryDetail
+{
+	template <typename T, typename TSelectedList>
+	struct TDerivesAny;
+
+	template <typename T, typename THead, typename... TRest>
+	struct TDerivesAny<T, TTypeList<THead, TRest...>>
+		: std::disjunction<std::is_base_of<THead, T>, TDerivesAny<T, TTypeList<TRest...>>>
+	{
+	};
+
+	template <typename T>
+	struct TDerivesAny<T, TTypeList<>> : std::false_type
+	{
+	};
+
+	/** keep the types in TList deriving at least one of TSelectedList */
+	template <typename TList, typename TSelectedList>
+	struct TFilter;
+
+	template <typename TSelectedList, typename THead, typename... TRest>
+	struct TFilter<TTypeList<THead, TRest...>, TSelectedList>
+	{
+		using FTAil = typename TFilter<TTypeList<TRest...>, TSelectedList>::Type;
+		using Type = std::conditional_t<
+			TDerivesAny<THead, TSelectedList>::value,
+			typename TCatch<TTypeList<THead>, FTAil>::Type,
+			FTAil>;
+	};
+
+	template <typename TSelectedList>
+	struct TFilter<TTypeList<>, TSelectedList>
+	{
+		using Type = TTypeList<>;
+	};
+}
+
+/**
+ * Compile-time query over a TYPE table (e.g. a layer's FLayers). Select<T>()
+ * keeps the types deriving T; ForEach drives each surviving type's singleton
+ * (T::Get()) level-by-level in parallel — the sugar that lets singletons live
+ * in the same plugin table as layer instances.
+ *
+ *   using FTable = TTypeList<FLog, FNet>;
+ *   TypeQuery<FTable>().Select<ITick>().ForEach([](auto& S) { S.Tick(); });
+ */
+template <typename FList, typename... TSelected>
+class TTypeQuery
+{
+public:
+	template <typename... TInterfaces>
+	[[nodiscard]] constexpr auto Select() const
+	{
+		return TTypeQuery<FList, TSelected..., TInterfaces...>{};
+	}
+
+	/** Drive each surviving type's singleton (T::Get()) level-by-level, parallel. */
+	template <typename TVisitor>
+	void ForEach(TVisitor&& Visitor) const
+	{
+		using FMatched = typename TTypeQueryDetail::TFilter<FList, TTypeList<TSelected...>>::Type;
+		static_assert(FMatched::Count > 0,
+			"TTypeQuery::ForEach: no types derive the selected interfaces");
+
+		// singleton driver: no instance array — T::Get() for each surviving type
+		Parallel::FParallelScheduler<FMatched> Sched;
+		Sched.ForEachSingletons(std::forward<TVisitor>(Visitor));
+	}
+};
+
+/** Build a compile-time query over a type table. */
+template <typename FList>
+[[nodiscard]] constexpr auto TypeQuery()
+{
+	return TTypeQuery<FList>{};
+}
+
 } // namespace Parallel
 
 } // namespace Maho

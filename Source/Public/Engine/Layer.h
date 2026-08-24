@@ -303,7 +303,8 @@ class FLayer
 {
 public:
 	/** The child type table — the compile-time scan list this layer drives. */
-	using FChildren = TTypeList<FChildrenTypes...>;
+	using FLayers = TTypeList<FChildrenTypes...>;
+	using FChildren = FLayers;
 	using FScheduler = Parallel::FParallelScheduler<FChildren>;
 
 	/**
