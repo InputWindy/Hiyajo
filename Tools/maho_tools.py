@@ -470,17 +470,7 @@ else()
 	)
 		set_target_properties(MahoCheckCycle PROPERTIES FOLDER "ThirdParty")
 		add_dependencies({name} MahoCheckCycle)
-
-	# Interface layering — write methods must be protected, scheduler is the
-	# only writer (runs before every build).
-	add_custom_target(MahoCheckLayers
-		COMMAND "${{MAHO_PYTHON_EXECUTABLE}}" "${{ENGINE_DIR}}/Tools/check_interface_layers.py" "${{CMAKE_CURRENT_SOURCE_DIR}}/{name}.cproject"
-		BYPRODUCTS "${{CMAKE_CURRENT_SOURCE_DIR}}/Intermediate/_layers_check.stamp"
-		VERBATIM
-	)
-		set_target_properties(MahoCheckLayers PROPERTIES FOLDER "ThirdParty")
-		add_dependencies({name} MahoCheckLayers)
-endif()
+	endif()
 
 # The entry — code-gen boilerplate (never edited), loads {name}.dll.
 # The engine source lives in the Maho library (sln folder Maho/); the exe just

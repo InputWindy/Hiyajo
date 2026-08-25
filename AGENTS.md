@@ -28,11 +28,11 @@ public:
 };
 ```
 
-**Layer = 重代码，宿主统一负责写**——Layer 是 IAssembly，**非单例**，实例由宿主创建并持有。核心规则：
+**Layer = 重代码，宿主统一负责生命周期**——Layer 是 IAssembly，**非单例**，实例由宿主创建并持有。接口规则：
 
 - `const` 读接口 → **public**。读不改状态，无多线程竞争，任意方可读。
-- 非 `const` 写接口 → **protected**。写改变自身状态，多线程下危险，**只有宿主通过 stage 驱动能写**。
-- 宿主不进入 Layer 内部收 "friend"：stage 驱动走 **visitor lambda**（见下），由宿主在 lambda 里调用 Layer 的 public 读接口 / 触发能力。
+- 能力/写接口 → **public**。服务型 Layer（如资源系统）本身就是供给方，任何模块都能触发能力；不做"仅宿主可写"的写保护。多线程安全由 Layer 内部自己保证（锁/队列）。
+- 宿主持有 Layer 实例，通过 stage lambda 驱动其生命周期（init/每帧/shutdown）。
 
 **驱动机制（无 friend、无 ExecuteExtension 协议）**：
 - **Tools** = 编译期单例。`Execute<FTools>(visitor)` 并行遍历每个 T，遍历器把 `T::Get()` 单例实例作为 `T&` 传给 visitor。
@@ -61,8 +61,6 @@ int FMyLayer::Main(int, char**)
 ```
 
 **插件不感知 stage**：Tool/Layer 不定义 stage 枚举，只提供能力方法。阶段语义、阶段枚举（若有）全在宿主 lambda 里。
-
-> 编译前代码合规审查工具（`Tools/check_interface_layers.py`）强制这条规则：Layer 的 public 非 const 方法直接报错卡住构建。Tool 天生 Standalone，审查器跳过。
 
 ## 项目侧开发约束（强约束）
 
