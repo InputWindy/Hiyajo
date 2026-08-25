@@ -31,9 +31,6 @@ import sys
 from pathlib import Path
 
 _DEPS_CALL = re.compile(r"\bMAHO_EXTEND_DEPS\s*\(")
-# a bare identifier that's a plausible class/type name
-_CLASS_HEAD = re.compile(r"\b(?:class|struct)\s+([A-Za-z_]\w*)\s*(?=[<:{ ])")
-_IDENT = re.compile(r"[A-Za-z_]\w*")
 
 
 def _strip_comments_strings(text: str) -> str:
@@ -147,32 +144,66 @@ def _parse_group(group: str) -> tuple[str, str, list[str]] | None:
 
 def _scan_file(path: Path) -> dict[str, dict]:
 	raw = path.read_text(encoding="utf-8", errors="replace")
-	clean = _strip_comments_strings(raw)
 	out: dict[str, dict] = {}
 
-	# New form: MAHO_EXTEND_DEPS(Class, Key, (Parent, Extras...)) — the class name
-	# is the FIRST macro argument, so no class-range tracking is needed.
+	# Tree-sitter drives parsing — the AST separates comments/strings from real
+	# code, so a `MAHO_EXTEND_DEPS(...)` inside a comment or string literal is
+	# never picked up. We look for the macro used in a declaration / call /
+	# expression_statement node and read its argument list as text.
+	try:
+		import tree_sitter_cpp as _ts_cpp
+		from tree_sitter import Language, Parser
+		parser = Parser(Language(_ts_cpp.language()))
+	except (ImportError, Exception):
+		# no tree-sitter: fall back to comment-stripped regex scan
+		clean = _strip_comments_strings(raw)
+		_scan_file_regex_fallback(clean, path, out)
+		return out
+
+	tree = parser.parse(raw.encode("utf-8"))
+
+	def walk(node):
+		if node.type in ("field_declaration", "declaration", "expression_statement",
+						  "call_expression", "init_declarator"):
+			txt = (node.text or b"").decode("utf-8", "replace")
+			start = txt.find("MAHO_EXTEND_DEPS")
+			if start >= 0:
+				_parse_one_call(txt, path, out)
+		for child in node.children:
+			walk(child)
+
+	walk(tree.root_node)
+	return out
+
+
+def _parse_one_call(txt: str, path: Path, out: dict[str, dict]) -> None:
+	"""Extract (Class, Key, (Parent, Extras...)) from a MAHO_EXTEND_DEPS(...) text."""
+	paren = txt.find("(")
+	end = _find_balanced(txt, paren, "(", ")")
+	if end == -1:
+		return
+	inner = txt[paren + 1 : end]
+	parts = [p.strip() for p in _split_groups(inner)]
+	if len(parts) < 3:
+		return
+	cls, key, grouptext = parts[0], parts[1], parts[2]
+	if not re.fullmatch(r"[A-Za-z_]\w*", cls) or not re.fullmatch(r"[A-Za-z_]\w*", key):
+		return
+	parsed = _parse_group(grouptext)
+	if parsed is None:
+		return
+	_parent, extras = parsed
+	entry = out.setdefault(cls, {"deps": [], "file": str(path)})
+	entry["deps"].append([key, _parent, extras])
+
+
+def _scan_file_regex_fallback(clean: str, path: Path, out: dict[str, dict]) -> None:
+	"""Legacy regex path (no tree-sitter): MAHO_EXTEND_DEPS(Class, Key, (...))."""
 	for m in _DEPS_CALL.finditer(clean):
 		paren = clean.find("(", m.start())
 		if paren == -1:
 			continue
-		end = _find_balanced(clean, paren, "(", ")")
-		if end == -1:
-			continue
-		inner = clean[paren + 1 : end]
-		parts = [p.strip() for p in _split_groups(inner)]
-		if len(parts) < 3:
-			continue
-		cls, key, grouptext = parts[0], parts[1], parts[2]
-		if not re.fullmatch(r"[A-Za-z_]\w*", cls) or not re.fullmatch(r"[A-Za-z_]\w*", key):
-			continue
-		parsed = _parse_group(grouptext)
-		if parsed is None:
-			continue
-		_parent, extras = parsed
-		entry = out.setdefault(cls, {"deps": [], "file": str(path)})
-		entry["deps"].append([key, _parent, extras])
-	return out
+		_parse_one_call(clean[paren:], path, out)
 
 
 def scan_sources(paths: list[Path]) -> dict[str, dict]:
