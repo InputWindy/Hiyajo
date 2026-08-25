@@ -5,7 +5,7 @@
 #include <Core/Queue.h>
 #include <Core/Singleton.h>
 #include <Core/Topology.h>
-#include <Engine/Schedulers.h>
+#include <Core/Schedulers.h>
 
 #include <functional>
 #include <string_view>
@@ -163,6 +163,52 @@ public:
 	/** Called when this layer is shut down (uninstall IS the shutdown). */
 	virtual void Shutdown() {}
 };
+
+// ───────────────────────────────────────────────────────────────────────
+// Runtime instance dispatch — FLayer-scoped (FLayerBase*, the polymorphic layer
+// node). At compile time a TList of candidate types is tried by dynamic_cast;
+// the first match sees Visitor(T&). Each instance is driven at most once;
+// instances matching no candidate are skipped. Distinct from the type-agnostic
+// Core/Query.h filtering (which never touches runtime instances).
+// ───────────────────────────────────────────────────────────────────────
+namespace InstanceDispatchDetail
+{
+	template <typename THead, typename... TRest, typename TVisitor>
+	bool TCall(FLayerBase* Instance, TVisitor& Visitor)
+	{
+		if (auto* Typed = dynamic_cast<THead*>(Instance))
+		{
+			Visitor(*Typed);
+			return true;
+		}
+		if constexpr (sizeof...(TRest) > 0)
+		{
+			return TCall<TRest...>(Instance, Visitor);
+		}
+		return false;
+	}
+}
+
+/** Drive Instance once: first matching type in TList sees Visitor(T&). */
+template <typename TList, typename TVisitor>
+void DispatchInstance(FLayerBase* Instance, TVisitor& Visitor);
+
+template <typename... Ts, typename TVisitor>
+void DispatchInstance(TTypeList<Ts...>, FLayerBase* Instance, TVisitor& Visitor)
+{
+	if (Instance == nullptr)
+	{
+		return;
+	}
+	InstanceDispatchDetail::TCall<Ts...>(Instance, Visitor);
+}
+
+/** Drive Instance once: first matching type in TList sees Visitor(T&). */
+template <typename TList, typename TVisitor>
+void DispatchInstance(FLayerBase* Instance, TVisitor& Visitor)
+{
+	DispatchInstance(TList{}, Instance, Visitor);
+}
 
 inline void FLayerCommand::Execute()
 {

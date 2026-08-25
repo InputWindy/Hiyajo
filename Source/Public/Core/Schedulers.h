@@ -3,7 +3,7 @@
 #include <Core/TypeList.h>
 #include <Core/Topology.h>
 #include <Core/Singleton.h>
-#include <Engine/ThreadPool.h>
+#include <Core/ThreadPool.h>
 
 #include <concepts>
 #include <functional>
@@ -13,15 +13,6 @@
 
 namespace Maho
 {
-
-// FLayerBase lives in Engine/Layer.h — forward-declared here so the runtime
-// dispatch can hold pointers to it (only the name is needed at this layer).
-class FLayerBase;
-
-// FLayerQuery (Engine/Layer.h) drives a layer's instances; it is friended so it
-// can reach the scheduler's private RunTasks during FLayer-driven traversal.
-template <typename FLayerType, typename... TSelected>
-class FLayerQuery;
 
 // ───────────────────────────────────────────────────────────────────────
 // The drive protocol: the traversal machinery + the scheduler contract.
@@ -99,54 +90,6 @@ template <typename TList, typename TScheduler, typename TVisitor, typename... TA
 void ForEach(TScheduler&& Scheduler, TVisitor&& Visitor, TArgs&&... Args)
 {
 	ForEachImpl(TList{}, std::forward<TScheduler>(Scheduler), std::forward<TVisitor>(Visitor), std::forward<TArgs>(Args)...);
-}
-
-// ───────────────────────────────────────────────────────────────────────
-// Runtime instance dispatch.
-//
-// A container of FLayerBase* holds polymorphic instances whose RUNTIME type is
-// known only at runtime. DispatchInstance<TList>(instance, visitor) dynamic_cast
-// to the first type in TList the instance binds to (order matters — list most
-// derived first) and calls visitor(T&). Each instance is driven at most once;
-// instances matching no candidate are skipped.
-// ───────────────────────────────────────────────────────────────────────
-namespace InstanceDispatchDetail
-{
-	template <typename THead, typename... TRest, typename TVisitor>
-	bool TCall(FLayerBase* Instance, TVisitor& Visitor)
-	{
-		if (auto* Typed = dynamic_cast<THead*>(Instance))
-		{
-			Visitor(*Typed);
-			return true;
-		}
-		if constexpr (sizeof...(TRest) > 0)
-		{
-			return TCall<TRest...>(Instance, Visitor);
-		}
-		return false;
-	}
-}
-
-/** Drive Instance once: first matching type in TList sees Visitor(T&). */
-template <typename TList, typename TVisitor>
-void DispatchInstance(FLayerBase* Instance, TVisitor& Visitor);
-
-template <typename... Ts, typename TVisitor>
-void DispatchInstance(TTypeList<Ts...>, FLayerBase* Instance, TVisitor& Visitor)
-{
-	if (Instance == nullptr)
-	{
-		return;
-	}
-	InstanceDispatchDetail::TCall<Ts...>(Instance, Visitor);
-}
-
-/** Drive Instance once: first matching type in TList sees Visitor(T&). */
-template <typename TList, typename TVisitor>
-void DispatchInstance(FLayerBase* Instance, TVisitor& Visitor)
-{
-	DispatchInstance(TList{}, Instance, Visitor);
 }
 
 namespace Parallel
