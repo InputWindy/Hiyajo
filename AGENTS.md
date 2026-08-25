@@ -62,6 +62,8 @@ int FMyLayer::Main(int, char**)
 
 **插件不感知 stage**：Tool/Layer 不定义 stage 枚举，只提供能力方法。阶段语义、阶段枚举（若有）全在宿主 lambda 里。
 
+**依赖声明通用**：`MAHO_EXTEND_DEPS(...)`（`FDependsPack`）是通用依赖声明机制，不限 FLayer——任何类/结构都能标记依赖（读取方 `TResolveDependsPack` SFINAE 探测，无基类约束）。声明了依赖即记录意图（文档化 + codegen 循环校验），声明 ≠ 必须有调度消费方，放着即可。FLayer 用它派生子层拓扑序；单例服务可用它声明依赖（如 Asset→Paths），但单例调度无顺序需求。
+
 ## 项目侧开发约束（强约束）
 
 拓展项目侧代码时，遵守以下三条：
