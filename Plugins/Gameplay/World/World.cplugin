@@ -1,0 +1,6 @@
+{
+  "FileVersion": 1,
+  "Name": "World",
+  "Description": "game world",
+  "Dependencies": ["AI"]
+}
