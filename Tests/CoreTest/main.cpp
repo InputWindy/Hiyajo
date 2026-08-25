@@ -188,6 +188,22 @@ struct FGameEngine
 
 int main()
 {
+	// EnqueueCommand: FQueue's generic multi-threaded callback command. Any
+	// FQueue<FLayerCommand> holder can enqueue a lambda from any thread; Flush
+	// executes it. Verify on an independent queue (not a per-frame layer).
+	{
+		FQueue<FLayerCommand> QCmd;
+		int Calls = 0;
+		QCmd.EnqueueCommand([&] { Calls += 1; });
+		QCmd.EnqueueCommand([&] { Calls += 2; });
+		QCmd.Flush();
+		if (Calls != 3)
+		{
+			std::printf("[FAIL] EnqueueCommand calls=%d want=3\n", Calls);
+			return 1;
+		}
+	}
+
 	// bootstrap the root: its Initialize recursively installs the subtree
 	// (children + FRenderer::Initialize → features). All owned by the subtree.
 	FGameEngine Engine;

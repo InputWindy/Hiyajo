@@ -88,11 +88,13 @@ struct FLayerCommand : public ICommand
 	{
 		Install,
 		Uninstall,
+		Callback,
 	};
 
 	EOp Op = EOp::Install;
 	FLayerBase* Target = nullptr;
 	bool bStatic = false;
+	std::function<void()> Action;   // Callback 命令的负载（Flush 时执行）
 
 	FLayerCommand() = default;
 	FLayerCommand(EOp InOp, FLayerBase* InTarget, bool InStatic = false)
@@ -101,9 +103,25 @@ struct FLayerCommand : public ICommand
 		, bStatic(InStatic)
 	{
 	}
+	FLayerCommand(EOp InOp, std::function<void()> InAction)
+		: Op(InOp)
+		, Action(std::move(InAction))
+	{
+	}
+
+	/** The generic multi-threaded enqueue factory — FQueue::EnqueueCommand uses this. */
+	static FLayerCommand Callback(std::function<void()> Fn)
+	{
+		return FLayerCommand(EOp::Callback, std::move(Fn));
+	}
 
 	bool operator==(const FLayerCommand& O) const
 	{
+		// Callback 命令有状态、不可比 → 不去重；Install/Uninstall 按 (Op,Target) 去重。
+		if (Op == EOp::Callback)
+		{
+			return false;
+		}
 		return Op == O.Op && Target == O.Target;
 	}
 
@@ -148,6 +166,14 @@ public:
 
 inline void FLayerCommand::Execute()
 {
+	if (Op == EOp::Callback)
+	{
+		if (Action)
+		{
+			Action();
+		}
+		return;
+	}
 	if (!Target)
 	{
 		return;
