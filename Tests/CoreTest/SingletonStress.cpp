@@ -1,10 +1,10 @@
-// Compile+run check for FParallelScheduler::ForEachSingletons — drives CRTP
-// singletons level-by-level (compile-time topo via MAHO_EXTEND_DEPS), each
-// T::Get() singleton handed to the visitor.
-#include <Core/Extension.h>
+// Compile+run check for FLayerBase::ForEachSingleton — drives CRTP singletons
+// level-by-level (compile-time topo via FDepends), each T::Get() singleton
+// handed to the visitor; the type filter is Core::Query.
+#include <Core/Query.h>
 #include <Core/Singleton.h>
 #include <Engine/Layer.h>
-#include <Engine/Schedulers.h>
+#include <Core/Schedulers.h>
 
 #include <atomic>
 #include <cstdio>
@@ -47,41 +47,39 @@ namespace
 	};
 
 	using FSingletons = TTypeList<FA, FB, FC>;
-	using FScheduler = Parallel::FParallelScheduler;
 }
 
 int main()
 {
-	FScheduler Sched;
-	Sched.ForEach<FSingletons>([](auto& S) { S.Poll(); });
+	// Drive singletons level-by-level via FLayerBase::ForEachSingleton (sunk from
+	// the removed TTypeQuery; the filter is Core::Query's type-agnostic Select).
+	FLayerBase Base;
+
+	Base.ForEachSingleton<FA, FB, FC>([](auto& S) { S.Poll(); });
 	if (gPolls.load() != 3)
 	{
 		std::printf("[FAIL] polled=%d want=3\n", gPolls.load());
 		return 1;
 	}
 
-	// the TTypeQuery sugar: Select keeps matching types, ForEach drives their
-	// singletons (T::Get()) topo-leveled — same table, filterable.
+	// filter the table first (Core::Query::Select keeps matching types), then drive
 	gPolls.store(0);
-	Parallel::TypeQuery<FSingletons>()
-		.Select<IPlugin<IInitialize, IShutdown>>()
-		.ForEach([](auto& S) { S.Poll(); });
+	using FSelected = typename Maho::Query<FSingletons>().Select<IPlugin<IInitialize, IShutdown>>().FResult;
+	Base.ForEachSingletonList<FSelected>([](auto& S) { S.Poll(); });
 	if (gPolls.load() != 3)
 	{
-		std::printf("[FAIL] TTypeQuery polled=%d want=3\n", gPolls.load());
+		std::printf("[FAIL] filtered singletons polled=%d want=3\n", gPolls.load());
 		return 1;
 	}
 
-	// TTypeQuery.Select().ForEach also drives the fixed lifecycle (Initiate/Shutdown)
-	Parallel::TypeQuery<FSingletons>()
-		.Select<IPlugin<IInitialize, IShutdown>>()
-		.ForEach([](auto& S) { S.Initiate(0, nullptr); });
+	// drive the fixed lifecycle (Initiate/Shutdown)
+	Base.ForEachSingletonList<FSelected>([](auto& S) { S.Initiate(0, nullptr); });
 	if (FA::Get().InitCount != 1 || FB::Get().InitCount != 1 || FC::Get().InitCount != 1)
 	{
 		std::puts("[FAIL] singletons not Initiate'd exactly once");
 		return 1;
 	}
 
-	std::puts("ok: ForEachSingletons + TTypeQuery.Select().ForEach drove singletons");
+	std::puts("ok: ForEachSingleton + Query.Select drove singletons");
 	return 0;
 }

@@ -70,6 +70,17 @@ class FLayer;
 class FLayerBase;
 
 /**
+ * Execute contract for a layer command value. FLayerCommand implements it so a
+ * consumer can `while (auto C = Q.DequeueOne()) C.Execute()`. The engine's
+ * FQueue is a pure FIFO value container and does NOT define or run this.
+ */
+struct ICommand
+{
+	virtual ~ICommand() = default;
+	virtual void Execute() = 0;
+};
+
+/**
  * A deferred install/uninstall intent over a target layer.
  *
  * A value command: an (Op, Target) pair — "install layer X" or "uninstall layer
@@ -162,6 +173,38 @@ public:
 
 	/** Called when this layer is shut down (uninstall IS the shutdown). */
 	virtual void Shutdown() {}
+
+	/**
+	 * Drive SINGLETON types level-by-level (their compile-time topo on
+	 * FDefaultSlot): each T's T::Get() singleton is handed to visitor as T&.
+	 * Levels serialized, singletons within a level run in parallel. The singleton
+	 * type table is given; no runtime instance array involved.
+	 *
+	 *   Layer->ForEachSingleton<FLog, FNet>([](auto& S) { S.Tick(); });
+	 */
+	template <typename... FTypes, typename TVisitor>
+	void ForEachSingleton(TVisitor&& Visitor) const
+	{
+		ForEachSingletonList<TTypeList<FTypes...>>(std::forward<TVisitor>(Visitor));
+	}
+
+	/// Variant taking a TTypeList directly (e.g. a Core::Query::FResult).
+	template <typename FList, typename TVisitor>
+	void ForEachSingletonList(TVisitor&& Visitor) const
+	{
+		using FLevels = Topo::TLevels_t<FList, FDefaultSlot>;
+		Parallel::FParallelScheduler Sched;
+		Maho::ForEach<FLevels>(Maho::FSerialTraversePolicy{}, [&](auto Tag) {
+			using FLevel = typename decltype(Tag)::Type;
+			std::vector<std::function<void()>> Tasks;
+			Tasks.reserve(FLevel::Count);
+			Maho::ForEach<FLevel>(Maho::FSerialTraversePolicy{}, [&](auto TypeTag) {
+				using T = typename decltype(TypeTag)::Type;
+				Tasks.emplace_back([&] { Visitor(T::Get()); });
+			});
+			Sched.ForEach(Tasks, [](const std::function<void()>& T) { return T; });
+		});
+	}
 };
 
 // ───────────────────────────────────────────────────────────────────────
@@ -547,33 +590,31 @@ private:
 	std::vector<FLayerBase*> DynamicLayers;
 
 	/** Drain the inherited command queue and apply each install/uninstall. */
-	void ProcessCommands()
-	{
-		// snapshot pending, clear it, then apply each command
-		std::vector<FLayerCommand> Pending(Get().begin(), Get().end());
-		ClearPending();
-		for (FLayerCommand& Cmd : Pending)
+		void ProcessCommands()
 		{
-			if (Cmd.Op == FLayerCommand::EOp::Install)
+			// drain the FIFO one at a time, then apply each command
+			while (auto Cmd = DequeueOne())
 			{
-				if (Cmd.Target)
+				if (Cmd->Op == FLayerCommand::EOp::Install)
 				{
-					(Cmd.bStatic ? Instances : DynamicLayers).push_back(Cmd.Target);
-					Cmd.Target->Initialize(0, nullptr); // mid-run install: no launch args
+					if (Cmd->Target)
+					{
+						(Cmd->bStatic ? Instances : DynamicLayers).push_back(Cmd->Target);
+						Cmd->Target->Initialize(0, nullptr); // mid-run install: no launch args
+					}
 				}
-			}
-			else
-			{
-				if (Cmd.Target)
+				else
 				{
-					Cmd.Target->Shutdown();
-					Erase(Instances, Cmd.Target);
-					Erase(DynamicLayers, Cmd.Target);
-					delete Cmd.Target; // owned child — free it
+					if (Cmd->Target)
+					{
+						Cmd->Target->Shutdown();
+						Erase(Instances, Cmd->Target);
+						Erase(DynamicLayers, Cmd->Target);
+						delete Cmd->Target; // owned child — free it
+					}
 				}
 			}
 		}
-	}
 
 	/**
 	 * Load a STATIC child of type T — the module path comes from T::GetModulePath()

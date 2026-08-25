@@ -1,120 +1,96 @@
 #pragma once
 
 #include <algorithm>
-#include <functional>
+#include <map>
 #include <mutex>
+#include <optional>
 #include <utility>
 #include <vector>
 
 namespace Maho
 {
 
-struct ICommand
-{
-    virtual ~ICommand() = default;
-    virtual void Execute() = 0;
-};
-    
 /**
- * Thread-safe pending command collection over VALUE commands.
+ * Thread-safe FIFO pending-VALUE command collection, partitioned by CATALOG.
  *
- * TCommand is a plain value type — the queue stores copies, deduplicates, and
- * Flush() executes-and-clears them. No unique_ptr, no lifetime management, no
- * polymorphic identity: a command is whatever the enqueueing site needs to run
- * once at the next safe point.
+ * TCatalog is any less-than-comparable key (enum / integer); TCommand is any
+ * plain value type. Each catalog owns its own FIFO, so Enqueue/Dequeue route by
+ * category. It holds commands ONLY — execution is the consumer's job (the queue
+ * never runs anything). No unique_ptr, no polymorphism, no execute protocol.
  *
  * TCommand must be:
- *   - copyable (stored by value)
- *   - comparable with operator== (dedupe)
- *   - executable via Execute()
+ *   - copyable / moveable (stored by value)
+ *   - comparable with operator== (dedupe, per catalog)
  *
- *   FQueue<FMyCommand> Q;
- *   Q.Enqueue(FMyCommand{...});  // dedupe: same value not queued twice
- *   Q.Dequeue(FMyCommand{...});  // dedupe: remove a pending command
- *   Q.Flush();                   // safe point: run all pending, then clear
+ *   enum class ECmd { A, B };
+ *   FQueue<ECmd, FMyCommand> Q;
+ *   Q.Enqueue(ECmd::A, FMyCommand{...});        // dedupe within catalog A
+ *   Q.Enqueue(ECmd::B, FMyCommand{...});        // separate catalog B FIFO
+ *   while (auto C = Q.Dequeue(ECmd::A))         // drain catalog A, oldest first
+ *   { /* consumer decides what "run" means */ }
  *
- * The consumer is the ENQUEUEing side (a layer, a service): it decides what a
- * command means when its Execute() runs at Flush.
+ * The consumer is the ENQUEUEing side: it reads via Dequeue and does the side
+ * effect itself.
  */
-template <typename TCommand>
+template <typename TCatalog, typename TCommand>
 class FQueue
 {
 public:
-	/** Queue a command — dedupe: identical pending values are not queued twice. */
-	void Enqueue(const TCommand& Cmd)
+	/** Queue a command into its catalog — dedupe: identical pending values in the
+	 *  same catalog are not queued twice. */
+	void Enqueue(TCatalog Catalog, const TCommand& Cmd)
 	{
 		std::lock_guard Lock(Mutex);
-		if (std::find(Pending.begin(), Pending.end(), Cmd) == Pending.end())
+		std::vector<TCommand>& Lane = List[Catalog];
+		if (std::find(Lane.begin(), Lane.end(), Cmd) == Lane.end())
 		{
-			Pending.push_back(Cmd);
+			Lane.push_back(Cmd);
 		}
 	}
 
-	/** Remove a pending command (no-op if not queued). */
-	void Dequeue(const TCommand& Cmd)
+	/** Pop-and-return the OLDEST pending command in a catalog (FIFO). nullopt when
+	 *  that catalog is empty. The consumer decides what "run" means. */
+	[[nodiscard]] std::optional<TCommand> Dequeue(TCatalog Catalog)
 	{
 		std::lock_guard Lock(Mutex);
-		Pending.erase(std::remove(Pending.begin(), Pending.end(), Cmd), Pending.end());
+		auto It = List.find(Catalog);
+		if (It == List.end() || It->second.empty())
+		{
+			return std::nullopt;
+		}
+		std::vector<TCommand>& Lane = It->second;
+		TCommand Cmd = std::move(Lane.front());
+		Lane.erase(Lane.begin());
+		if (Lane.empty())
+		{
+			List.erase(It);
+		}
+		return Cmd;
 	}
 
-	/**
-	 * Execute-and-clear: run up to MaxCommands pending commands, then drop them
-	 * from the queue. MaxCommands == 0 (default) means ALL pending commands run
-	 * and the queue empties; a smaller value lets a consumer pace consumption —
-	 * the rest stay pending for the next Flush.
-	 */
-	void Flush(std::size_t MaxCommands = 0)
-	{
-		std::vector<TCommand> Commands;
-		{
-			std::lock_guard Lock(Mutex);
-			const std::size_t Count = (MaxCommands == 0 || MaxCommands >= Pending.size())
-				? Pending.size()
-				: MaxCommands;
-			Commands.reserve(Count);
-			for (std::size_t i = 0; i < Count; ++i)
-			{
-				Commands.push_back(std::move(Pending[i]));
-			}
-			Pending.erase(Pending.begin(), Pending.begin() + Count);
-		}
-		for (TCommand& Cmd : Commands)
-		{
-			Cmd.Execute();
-		}
-	}
-
-	/** True when nothing is pending. */
+	/** True when nothing is pending in ANY catalog. */
 	bool IsEmpty() const
 	{
 		std::lock_guard Lock(Mutex);
-		return Pending.empty();
+		return List.empty();
 	}
 
-	/** Number of pending commands. */
+	/** Number of pending commands across all catalogs. */
 	std::size_t Size() const
 	{
 		std::lock_guard Lock(Mutex);
-		return Pending.size();
-	}
-
-protected:
-	/** The pending set (latest snapshot) — for derived inspection. */
-	const std::vector<TCommand>& Get() const
-	{
-		return Pending;
-	}
-
-	/** Drop all pending commands without executing them. */
-	void ClearPending()
-	{
-		std::lock_guard Lock(Mutex);
-		Pending.clear();
+		std::size_t N = 0;
+		for (const auto& [K, Lane] : List)
+		{
+			(void)K;
+			N += Lane.size();
+		}
+		return N;
 	}
 
 private:
 	mutable std::mutex Mutex;
-	std::vector<TCommand> Pending;
+	std::map<TCatalog, std::vector<TCommand>> List;
 };
 
 } // namespace Maho

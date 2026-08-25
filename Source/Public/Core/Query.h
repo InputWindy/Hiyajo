@@ -8,9 +8,12 @@
 //   using FTable = TTypeList<FLog, FNet, FAudio>;
 //   using FTickable = TQuery<FTable>::Select<ITick>::With<IShared>::Not<ITest>::FResult;
 //
-//   Select<T...>   keep types deriving ANY of T (OR)   — starts from FList
-//   With<T...>     keep types deriving ALL of T (AND)  — refines FResult
-//   Not<T...>      drop types deriving ANY of T (NOR)  — subtracts from FResult
+//   Select<T...>   keep types deriving ANY of T (OR)    — starts from FList
+//   With<T...>     keep types deriving ALL of T (AND)   — refines FList
+//   Not<T...>      drop types deriving ANY of T (NOR)   — subtracts from FList
+//
+// The chain mutates FList: every call returns a NEW TQuery whose FList is the
+// survivor set so far. FResult is just that running table.
 #include <Core/TypeList.h>
 
 #include <type_traits>
@@ -69,16 +72,19 @@ namespace QueryDetail
  * Type-agnostic compile-time query over a type table.
  *
  * Select / With / Not are chainable and pure: they never touch runtime state or
- * the FLayer/scheduler contract. The accumulated FResult is a TTypeList; driving
- * its elements (instances via a layer, singletons via their Get) is left to the
- * caller.
+ * the FLayer/scheduler contract. Each returns a new TQuery whose FList is the
+ * survivor set so far; FResult is that running table. Driving its elements
+ * (instances via a layer, singletons via their Get) is left to the caller.
+ *
+ *   TQuery<FTable> Q;
+ *   using FOut = decltype(Q.Select<IA>().With<IB>().Not<IC>())::FResult;
  */
-template <typename FList, typename... TCriteria>
+template <typename FList>
 class TQuery
 {
 public:
-	/** The survivor set: FList filtered by ALL accumulated criteria (AND). */
-	using FResult = typename QueryDetail::TKeepAll<FList, TCriteria...>::Type;
+	/** The survivor set so far — a TTypeList. */
+	using FResult = FList;
 
 	/** Keep types deriving ANY of TInterfaces... (OR) — starts from FList. */
 	template <typename... TInterfaces>
@@ -87,26 +93,19 @@ public:
 		return TQuery<typename QueryDetail::TKeep<FList, TInterfaces...>::Type>{};
 	}
 
-	/** Keep types deriving ALL of TInterfaces... (AND) — refines FResult. */
+	/** Keep types deriving ALL of TInterfaces... (AND) — refines FList. */
 	template <typename... TInterfaces>
 	[[nodiscard]] constexpr auto With() const
 	{
 		return TQuery<typename QueryDetail::TKeepAll<FList, TInterfaces...>::Type>{};
 	}
 
-	/** Drop types deriving ANY of TInterfaces... (NOR) — subtracts from FResult. */
+	/** Drop types deriving ANY of TInterfaces... (NOR) — subtracts from FList. */
 	template <typename... TInterfaces>
 	[[nodiscard]] constexpr auto Not() const
 	{
 		return TQuery<typename QueryDetail::TDrop<FList, TInterfaces...>::Type>{};
 	}
 };
-
-/** Build a compile-time query over a type table. */
-template <typename FList>
-[[nodiscard]] constexpr auto Query()
-{
-	return TQuery<FList>{};
-}
 
 } // namespace Maho
