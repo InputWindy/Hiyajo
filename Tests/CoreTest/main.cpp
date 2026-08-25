@@ -23,9 +23,9 @@
 using namespace Maho;
 
 // ── dependency table sample: FA ← FB ← FC (code-gen: MAHO_EXTEND_DEPS → .gen.h) ──
-struct FA : FLayer<> { MAHO_EXTEND_DEPS((FDefaultSlot, FNoParent)); using FDepends = TTypeList<FDefaultSlot, TTypeList<MAHO_DEPS_FA_FDefaultSlot>>; };
-struct FB : FLayer<> { MAHO_EXTEND_DEPS((FDefaultSlot, FNoParent, FA)); using FDepends = TTypeList<FDefaultSlot, TTypeList<MAHO_DEPS_FB_FDefaultSlot>>; };
-struct FC : FLayer<> { MAHO_EXTEND_DEPS((FDefaultSlot, FNoParent, FA, FB)); using FDepends = TTypeList<FDefaultSlot, TTypeList<MAHO_DEPS_FC_FDefaultSlot>>; };
+struct FA : FLayer<> { MAHO_EXTEND_DEPS(FA, FDefaultSlot, (FNoParent)); };
+struct FB : FLayer<> { MAHO_EXTEND_DEPS(FB, FDefaultSlot, (FNoParent, FA)); };
+struct FC : FLayer<> { MAHO_EXTEND_DEPS(FC, FDefaultSlot, (FNoParent, FA, FB)); };
 // levels via Topo: FC = {FA, FB(level1)} + FC(level2) → FC level 2
 static_assert(Topo::TNodeLevel<TTypeList<FA, FB, FC>, FDefaultSlot, FC>::Value == 2,
 	"FC depends on FA and FB");

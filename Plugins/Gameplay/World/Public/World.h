@@ -16,8 +16,7 @@ class FWorld
 	, public IPlugin<IMain, IExit>
 {
 public:
-	MAHO_EXTEND_DEPS((FDefaultSlot, FNoParent, FAI));
-	using FDepends = TTypeList<FDefaultSlot, TTypeList<MAHO_DEPS_FWorld_FDefaultSlot>>;
+	MAHO_EXTEND_DEPS(FWorld, FDefaultSlot, (FNoParent, FAI));
 
 MAHO_DECLARE_LAYER(FWorld, "World.dll");
 

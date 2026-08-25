@@ -15,8 +15,7 @@ class FAI
 	, public IPlugin<IMain, IExit>
 {
 public:
-	MAHO_EXTEND_DEPS((FDefaultSlot, FNoParent));
-	using FDepends = TTypeList<FDefaultSlot, TTypeList<MAHO_DEPS_FAI_FDefaultSlot>>;
+	MAHO_EXTEND_DEPS(FAI, FDefaultSlot, (FNoParent));
 
 MAHO_DECLARE_LAYER(FAI, "AI.dll");
 

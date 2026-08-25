@@ -59,22 +59,21 @@ struct FNoParent
  */
 
 /**
- * Extend a parent extension's deps across one or more interface Keys.
- *
- * Each group (Key, Parent, extras...) declares one dependency slot: at Key this
- * class runs after its parent's edges. This is COMPILE-TIME INTENT ONLY — a
- * marker scanned by Tools/scan_deps.py to generate `.gen.h` macros
- * (`MAHO_DEPS_<Class>_<Key>`) that feed the class's `FDepends`:
+ * Declare a class's dependency slot (single Key form). ONE line, expanded by the
+ * compiler into the FDepends type the topo layer reads; the dependency list
+ * itself is code-gen: Tools/scan_deps.py scans this marker and writes
+ * `#define MAHO_DEPS_<Class>_<Key> <deps...>` into the sibling .gen.h.
  *
  *   class FWorld : public ... {
  *   public:
- *       MAHO_EXTEND_DEPS((FDefaultSlot, FNoParent, FAI));       // marker
- *       using FDepends = TTypeList<FDefaultSlot, TTypeList<MAHO_DEPS_FWorld_FDefaultSlot>>;
+ *       MAHO_EXTEND_DEPS(FWorld, FDefaultSlot, (FNoParent, FAI));  // after FAI
  *   };
  *
- * The macro body is intentionally empty at compile time — the dependency table
- * lives in the code-gen `.gen.h`, read by Topo::TNodeLevel / cycle detection.
+ * expands to:
+ *   using FDepends = TTypeList<FDefaultSlot, TTypeList<MAHO_DEPS_FWorld_FDefaultSlot>>;
+ * (== TTypeList<FDefaultSlot, TTypeList<FAI>> after the .gen.h macro).
  */
-#define MAHO_EXTEND_DEPS(...)
+#define MAHO_EXTEND_DEPS(Class, Key, ...) \
+	using FDepends = TTypeList<Key, TTypeList<MAHO_DEPS_##Class##_##Key>>
 
 } // namespace Maho

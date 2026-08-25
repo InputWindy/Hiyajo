@@ -132,17 +132,17 @@ def _iter_deps_calls(clean: str):
 
 
 def _parse_group(group: str) -> tuple[str, str, list[str]] | None:
-	"""'(Key, Parent, Extras...)' → (Key, Parent, [extras])."""
+	"""'(Parent, Extras...)' → (Parent, [extras])."""
 	group = group.strip()
 	if not (group.startswith("(") and group.endswith(")")):
 		return None
 	inner = group[1:-1]
 	parts = [p.strip() for p in _split_groups(inner)]
-	if len(parts) < 2:
+	if len(parts) < 1:
 		return None
-	key, parent = parts[0], parts[1]
-	extras = [p for p in parts[2:] if p]
-	return (key, parent, extras)
+	parent = parts[0]
+	extras = [p for p in parts[1:] if p]
+	return (parent, extras)
 
 
 def _scan_file(path: Path) -> dict[str, dict]:
@@ -150,45 +150,28 @@ def _scan_file(path: Path) -> dict[str, dict]:
 	clean = _strip_comments_strings(raw)
 	out: dict[str, dict] = {}
 
-	# Interval method: for each class head with a body, locate its `{...}` range
-	# once via balanced scan (ranges are disjoint so total cost is linear), then
-	# attribute every MAHO_EXTEND_DEPS call lexically inside that range to the class.
-	calls: list[tuple[int, int, list[tuple[str, str, list[str]]]]] = []
+	# New form: MAHO_EXTEND_DEPS(Class, Key, (Parent, Extras...)) — the class name
+	# is the FIRST macro argument, so no class-range tracking is needed.
 	for m in _DEPS_CALL.finditer(clean):
 		paren = clean.find("(", m.start())
 		if paren == -1:
 			continue
-		# count from the macro's own '(' so extra()'s inner (group) parens nest
 		end = _find_balanced(clean, paren, "(", ")")
 		if end == -1:
 			continue
 		inner = clean[paren + 1 : end]
-		groups = [g for g in _split_groups(inner) if g]
-		deps: list[tuple[str, str, list[str]]] = []
-		for g in groups:
-			triple = _parse_group(g)
-			if triple:
-				deps.append(triple)
-		calls.append((m.start(), end, deps))
-
-	for m in _CLASS_HEAD.finditer(clean):
-		rest = clean[m.end() :]
-		semi = rest.find(";")
-		brace = rest.find("{")
-		if brace == -1 or (semi != -1 and semi < brace):
-			continue  # forward decl / no body
-		body_start = m.end() + brace
-		body_end = _find_balanced(clean, body_start, "{", "}")
-		if body_end == -1:
+		parts = [p.strip() for p in _split_groups(inner)]
+		if len(parts) < 3:
 			continue
-		name = m.group(1)
-		owned = [(s, e, d) for (s, e, d) in calls
-				 if s >= body_start and e <= body_end]
-		if not owned:
+		cls, key, grouptext = parts[0], parts[1], parts[2]
+		if not re.fullmatch(r"[A-Za-z_]\w*", cls) or not re.fullmatch(r"[A-Za-z_]\w*", key):
 			continue
-		entry = out.setdefault(name, {"deps": [], "file": str(path)})
-		for _s, _e, deps in owned:
-			entry["deps"].extend(deps)
+		parsed = _parse_group(grouptext)
+		if parsed is None:
+			continue
+		_parent, extras = parsed
+		entry = out.setdefault(cls, {"deps": [], "file": str(path)})
+		entry["deps"].append([key, _parent, extras])
 	return out
 
 
