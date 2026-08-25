@@ -1,96 +1,102 @@
 #pragma once
 
-#include <algorithm>
+#include <cstdint>
 #include <map>
+#include <memory>
 #include <mutex>
-#include <optional>
-#include <utility>
 #include <vector>
 
 namespace Maho
 {
 
 /**
- * Thread-safe FIFO pending-VALUE command collection, partitioned by CATALOG.
- *
- * TCatalog is any less-than-comparable key (enum / integer); TCommand is any
- * plain value type. Each catalog owns its own FIFO, so Enqueue/Dequeue route by
- * category. It holds commands ONLY — execution is the consumer's job (the queue
- * never runs anything). No unique_ptr, no polymorphism, no execute protocol.
- *
- * TCommand must be:
- *   - copyable / moveable (stored by value)
- *   - comparable with operator== (dedupe, per catalog)
- *
- *   enum class ECmd { A, B };
- *   FQueue<ECmd, FMyCommand> Q;
- *   Q.Enqueue(ECmd::A, FMyCommand{...});        // dedupe within catalog A
- *   Q.Enqueue(ECmd::B, FMyCommand{...});        // separate catalog B FIFO
- *   while (auto C = Q.Dequeue(ECmd::A))         // drain catalog A, oldest first
- *   { /* consumer decides what "run" means */ }
- *
- * The consumer is the ENQUEUEing side: it reads via Dequeue and does the side
- * effect itself.
+ * Executable command — the runtime base every queued command derives from.
+ * Type-erased: FQueue holds these via unique_ptr, so the queue is type-agnostic.
+ * GetCatalogId() is the catalog key that routes the command into its own FIFO
+ * lane; Execute() runs the command (called by the CONSUMER after Dequeue).
  */
-template <typename TCatalog, typename TCommand>
+struct ICommand
+{
+	virtual ~ICommand() = default;
+
+	/** The catalog lane this command belongs to (uint64 key). */
+	[[nodiscard]] virtual std::uint64_t GetCatalogId() const = 0;
+
+	/** Run the command — invoked by the consumer, not the queue. */
+	virtual void Execute() = 0;
+};
+
+/**
+ * Thread-safe FIFO pending-command collection, partitioned by CATALOG.
+ *
+ * Type-agnostic: commands are held as unique_ptr<ICommand>; each command carries
+ * its own catalog id (GetCatalogId), so Enqueue routes it into the right FIFO
+ * lane and Dequeue drains one lane. The queue only HOLDS commands — execution
+ * (ICommand::Execute) is the consumer's job.
+ *
+ *   FQueue Q;
+ *   Q.Enqueue(std::make_unique<FInstallCmd>(...));   // routed by GetCatalogId
+ *   while (auto Cmd = Q.Dequeue(kInstallLane))       // drain that lane, FIFO
+ *   { Cmd->Execute(); }
+ *
+ * Any thread may Enqueue; the consumer Dequeues at its own safe point.
+ */
 class FQueue
 {
 public:
-	/** Queue a command into its catalog — dedupe: identical pending values in the
-	 *  same catalog are not queued twice. */
-	void Enqueue(TCatalog Catalog, const TCommand& Cmd)
+	/** Queue a command into its catalog lane (takes ownership). */
+	void Enqueue(std::unique_ptr<ICommand> Cmd)
 	{
-		std::lock_guard Lock(Mutex);
-		std::vector<TCommand>& Lane = List[Catalog];
-		if (std::find(Lane.begin(), Lane.end(), Cmd) == Lane.end())
+		if (!Cmd)
 		{
-			Lane.push_back(Cmd);
+			return;
 		}
+		std::lock_guard Lock(Mutex);
+		List[Cmd->GetCatalogId()].push_back(std::move(Cmd));
 	}
 
-	/** Pop-and-return the OLDEST pending command in a catalog (FIFO). nullopt when
-	 *  that catalog is empty. The consumer decides what "run" means. */
-	[[nodiscard]] std::optional<TCommand> Dequeue(TCatalog Catalog)
+	/** Pop-and-return the OLDEST pending command in a catalog lane (FIFO).
+	 *  nullptr when that lane is empty. Ownership transfers to the caller. */
+	[[nodiscard]] std::unique_ptr<ICommand> Dequeue(std::uint64_t CatalogId)
 	{
 		std::lock_guard Lock(Mutex);
-		auto It = List.find(Catalog);
+		auto It = List.find(CatalogId);
 		if (It == List.end() || It->second.empty())
 		{
-			return std::nullopt;
+			return nullptr;
 		}
-		std::vector<TCommand>& Lane = It->second;
-		TCommand Cmd = std::move(Lane.front());
-		Lane.erase(Lane.begin());
-		if (Lane.empty())
+		std::unique_ptr<ICommand> Cmd = std::move(It->second.front());
+		It->second.erase(It->second.begin());
+		if (It->second.empty())
 		{
 			List.erase(It);
 		}
 		return Cmd;
 	}
 
-	/** True when nothing is pending in ANY catalog. */
+	/** True when nothing is pending in ANY catalog lane. */
 	bool IsEmpty() const
 	{
 		std::lock_guard Lock(Mutex);
 		return List.empty();
 	}
 
-	/** Number of pending commands across all catalogs. */
+	/** Number of pending commands across all catalog lanes. */
 	std::size_t Size() const
 	{
 		std::lock_guard Lock(Mutex);
 		std::size_t N = 0;
-		for (const auto& [K, Lane] : List)
+		for (const auto& [Lane, Items] : List)
 		{
-			(void)K;
-			N += Lane.size();
+			(void)Lane;
+			N += Items.size();
 		}
 		return N;
 	}
 
 private:
 	mutable std::mutex Mutex;
-	std::map<TCatalog, std::vector<TCommand>> List;
+	std::map<std::uint64_t, std::vector<std::unique_ptr<ICommand>>> List;
 };
 
 } // namespace Maho

@@ -70,21 +70,10 @@ class FLayer;
 class FLayerBase;
 
 /**
- * Execute contract for a layer command value. FLayerCommand implements it so a
- * consumer can `while (auto C = Q.DequeueOne()) C.Execute()`. The engine's
- * FQueue is a pure FIFO value container and does NOT define or run this.
- */
-struct ICommand
-{
-	virtual ~ICommand() = default;
-	virtual void Execute() = 0;
-};
-
-/**
  * A deferred install/uninstall intent over a target layer.
  *
  * A value command: an (Op, Target) pair — "install layer X" or "uninstall layer
- * X". The consumer (a layer holding an FQueue<FLayerCommand>) Enqueues these at
+ * X". The consumer (a layer holding an FQueue) Enqueues these at
  * any time; Flush() at a safe point runs each one, which calls the target's
  * Initialize / Shutdown. Dedupe key is (Op, Target), so a repeated request for
  * the same operation on the same layer queues once.
@@ -142,7 +131,7 @@ struct FLayerCommand : public ICommand
 /**
  * Layer root anchor — the base of every layer instance, and a command consumer.
  *
- * Inherits FQueue<FLayerCommand>, so a layer owns the deferred install/uninstall
+ * Inherits FQueue, so a layer owns the deferred install/uninstall
  * intents of its children: Enqueue a command from any thread, Flush at a safe
  * point (each command runs the target's Initialize / Shutdown). No explicit
  * init/shutdown stages exist — install IS the init, uninstall IS the shutdown,
@@ -153,10 +142,19 @@ struct FLayerCommand : public ICommand
  * vtable / RTTI shared across the DLL boundary) so host-side dynamic_cast keeps
  * a single ABI.
  */
-class MAHO_API FLayerBase : public FQueue<FLayerCommand>
+class MAHO_API FLayerBase
+	: public FQueue
+	, public Parallel::FParallelScheduler
 {
 public:
 	virtual ~FLayerBase() = default;
+
+	/** Type-agnostic query over a type table — FLayerBase composes Core::Query. */
+	template <typename FList>
+	[[nodiscard]] constexpr auto Query() const
+	{
+		return TQuery<FList>{};
+	}
 
 	/** True when this instance derives from T (a runtime LINQ filter helper). */
 	template <typename T>
