@@ -59,32 +59,6 @@ struct TContains<TTypeList<THead, TRest...>, T> : TContains<TTypeList<TRest...>,
 template <typename TList, typename T>
 inline constexpr bool TContains_v = TContains<TList, T>::value;
 
-/**
- * List intersection: keep the elements of TDeps that also appear in TNodes,
- * preserving TDeps' order.
- */
-template <typename TNodes, typename TDeps>
-struct TFilterDepsInNodes;
-
-template <typename TNodes>
-struct TFilterDepsInNodes<TNodes, TTypeList<>>
-{
-	using Type = TTypeList<>;
-};
-
-template <typename TNodes, typename THead, typename... TRest>
-struct TFilterDepsInNodes<TNodes, TTypeList<THead, TRest...>>
-{
-private:
-	using FTail = typename TFilterDepsInNodes<TNodes, TTypeList<TRest...>>::Type;
-
-public:
-	using Type = std::conditional_t<
-		TContains_v<TNodes, THead>,
-		typename TCons<THead, FTail>::Type,
-		FTail>;
-};
-
 // (Traversal — TTag / ForEach / the scheduler contract — lives in
 //  Engine/Schedulers.h, where the drive protocol is defined.)
 

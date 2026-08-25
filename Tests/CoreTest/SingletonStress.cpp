@@ -16,7 +16,8 @@ namespace
 	// two singleton plugin layers; B depends on A → A is level 0, B level 1
 	struct FA : public TSingleton<FA>
 	{
-		MAHO_EXTEND_DEPS((FDefaultSlot, FNoParent));
+		static FA& Get() { static FA I; return I; }   // test-local: no DLL boundary
+		using FDepends = TTypeList<FDefaultSlot, TTypeList<>>;
 		int InitCount = 0;
 		void Initiate(int, char**) override { ++InitCount; }
 		void Shutdown() override {}
@@ -25,7 +26,8 @@ namespace
 
 	struct FB : public TSingleton<FB>
 	{
-		MAHO_EXTEND_DEPS((FDefaultSlot, FNoParent, FA));
+		static FB& Get() { static FB I; return I; }
+		using FDepends = TTypeList<FDefaultSlot, TTypeList<FA>>;
 		int InitCount = 0;
 		void Initiate(int, char**) override { ++InitCount; }
 		void Shutdown() override {}
@@ -35,6 +37,7 @@ namespace
 	// FC has no topo deps (leaf) — another root-level singleton
 	struct FC : public TSingleton<FC>
 	{
+		static FC& Get() { static FC I; return I; }
 		int InitCount = 0;
 		void Initiate(int, char**) override { ++InitCount; }
 		void Shutdown() override {}

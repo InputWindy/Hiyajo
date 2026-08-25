@@ -57,26 +57,24 @@ struct FNoParent
  *           (IB, SD, X));   // IB 调度：排在 SD（边）、X 之后
  *   };
  */
-#define MAHO_DEPEND_ONE_IMPL(Key, Parent, ...) \
-	::Maho::TDependsOn<Key, \
-		::Maho::TUnionList_t<::Maho::Topo::TNodeDeps_t<Parent, Key>, \
-			::Maho::TTypeList<__VA_ARGS__>>>
-#define MAHO_DEPEND_ONE(Group) MAHO_DEPEND_ONE_IMPL Group
 
-// MSVC-friendly 1..4 FOR_EACH: emit `Name(arg), Name(arg), ...`.
-#define MAHO_DEPS_EXPAND(...) __VA_ARGS__
-#define MAHO_DEPS_FE1(F, A)                    F(A)
-#define MAHO_DEPS_FE2(F, A, ...)               F(A), MAHO_DEPS_EXPAND(MAHO_DEPS_FE1(F, __VA_ARGS__))
-#define MAHO_DEPS_FE3(F, A, ...)               F(A), MAHO_DEPS_EXPAND(MAHO_DEPS_FE2(F, __VA_ARGS__))
-#define MAHO_DEPS_FE4(F, A, ...)               F(A), MAHO_DEPS_EXPAND(MAHO_DEPS_FE3(F, __VA_ARGS__))
-#define MAHO_DEPS_SELECT(_1, _2, _3, _4, NAME, ...) NAME
-#define MAHO_DEPS_FOR_EACH(F, ...) \
-	MAHO_DEPS_EXPAND( \
-		MAHO_DEPS_SELECT(__VA_ARGS__, \
-			MAHO_DEPS_FE4, MAHO_DEPS_FE3, MAHO_DEPS_FE2, MAHO_DEPS_FE1)(F, __VA_ARGS__))
-
-#define MAHO_EXTEND_DEPS(...) \
-	using FDependsPack = ::Maho::TDependsPack< \
-		MAHO_DEPS_EXPAND(MAHO_DEPS_FOR_EACH(MAHO_DEPEND_ONE, __VA_ARGS__))>;
+/**
+ * Extend a parent extension's deps across one or more interface Keys.
+ *
+ * Each group (Key, Parent, extras...) declares one dependency slot: at Key this
+ * class runs after its parent's edges. This is COMPILE-TIME INTENT ONLY — a
+ * marker scanned by Tools/scan_deps.py to generate `.gen.h` macros
+ * (`MAHO_DEPS_<Class>_<Key>`) that feed the class's `FDepends`:
+ *
+ *   class FWorld : public ... {
+ *   public:
+ *       MAHO_EXTEND_DEPS((FDefaultSlot, FNoParent, FAI));       // marker
+ *       using FDepends = TTypeList<FDefaultSlot, TTypeList<MAHO_DEPS_FWorld_FDefaultSlot>>;
+ *   };
+ *
+ * The macro body is intentionally empty at compile time — the dependency table
+ * lives in the code-gen `.gen.h`, read by Topo::TNodeLevel / cycle detection.
+ */
+#define MAHO_EXTEND_DEPS(...)
 
 } // namespace Maho

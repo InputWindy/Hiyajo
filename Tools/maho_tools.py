@@ -472,6 +472,21 @@ else()
 	)
 		set_target_properties(MahoCheckCycle PROPERTIES FOLDER "ThirdParty")
 		add_dependencies({name} MahoCheckCycle)
+
+	# Scan MAHO_EXTEND_DEPS globally and (re)generate each class's dependency
+	# macros into its declaring file's sibling .gen.h BEFORE any source that
+	# includes them compiles.
+	add_custom_target(MahoScanDeps
+		COMMAND "${{MAHO_PYTHON_EXECUTABLE}}" "${{ENGINE_DIR}}/Tools/scan_deps.py"
+			--src "${{ENGINE_DIR}}/Source"
+			--src "${{ENGINE_DIR}}/Plugins"
+			--src "${{CMAKE_CURRENT_SOURCE_DIR}}/Plugins"
+			--out "${{CMAKE_CURRENT_SOURCE_DIR}}/Intermediate/Generated/_deps.json"
+		BYPRODUCTS "${{CMAKE_CURRENT_SOURCE_DIR}}/Intermediate/Generated/_deps.json"
+		VERBATIM
+	)
+		set_target_properties(MahoScanDeps PROPERTIES FOLDER "ThirdParty")
+		add_dependencies({name} MahoScanDeps)
 	endif()
 
 # The entry — code-gen boilerplate (never edited), loads {name}.dll.

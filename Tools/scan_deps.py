@@ -294,6 +294,9 @@ def main(argv: list[str]) -> int:
 	print(f"[Maho] Wrote {args.out} ({len(table)} classes)")
 	if args.emit_h is not None:
 		_emit_gen_h(table, args.emit_h)
+	else:
+		# default: write each class's .gen.h next to its declaring header
+		_emit_gen_h(table, None)
 	return 0
 
 
