@@ -449,6 +449,8 @@ target_compile_definitions({name} PRIVATE MAHO_{NAME_UPPER}_MODULE_EXPORTS)
 target_link_libraries({name} PUBLIC Maho)
 add_dependencies({name} {plugin_link_names})
 target_link_libraries({name} PUBLIC {plugin_link_names})
+# Plugin DLLs co-locate with Maho.dll + EntryPoint so relative DLL deps resolve.
+set_property(TARGET {name} PROPERTY RUNTIME_OUTPUT_DIRECTORY "${{CMAKE_BINARY_DIR}}/Binaries/$<CONFIG>")
 
 # Cycle check — runs before every in-IDE build (host + entry depend on it).
 # Prefer the engine-local venv (Setup.bat); fall back to any system python.
@@ -473,12 +475,18 @@ else()
 	endif()
 
 # The entry — code-gen boilerplate (never edited), loads {name}.dll.
-# The engine source lives in the Maho library (sln folder Maho/); the exe just
-# links it and runs Maho::Main.
-add_library(Maho STATIC
+# The engine source lives in the Maho library (sln folder Maho/); the exe
+# imports the Maho.dll the library builds. Maho.dll is the process-unique copy
+# of engine code + the shared third-party set.
+add_library(Maho SHARED
 	${{MAHO_PRIVATE}}
 	${{MAHO_HEADERS}}
 )
+# activate MAHO_API → dllexport here; consumers (plugins/EntryPoint) get dllimport.
+target_compile_definitions(Maho PRIVATE MAHO_BUILD_SHARED MAHO_EXPORTS)
+# export every engine symbol pragmatically (fast path for stage 1; MAHO_API
+# classes refine the surface later).
+set_target_properties(Maho PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 # show engine source as its on-disk tree (Source/Public, Source/Private, ...)
 source_group(TREE "${{ENGINE_DIR}}/Source" FILES ${{MAHO_HEADERS}} ${{MAHO_PRIVATE}})
 target_include_directories(Maho PUBLIC "${{ENGINE_DIR}}/Source/Public")
@@ -491,6 +499,17 @@ set_target_properties(Maho PROPERTIES FOLDER "Maho")
 add_executable(EntryPoint WIN32 Intermediate/Main.cpp)
 target_compile_definitions(EntryPoint PRIVATE MAHO_EXTENSION_NAME="{name}.dll")
 target_link_libraries(EntryPoint PRIVATE Maho)
+
+# One Binaries/<Config> dir for the exe + Maho.dll + every plugin DLL, so at
+# runtime they all resolve each other (both Maho.dll and the plugin DLLs must
+# sit next to the EntryPoint exe). Multi-config (MSVC): per-config suffix.
+set(_MAHO_BIN "${{CMAKE_BINARY_DIR}}/Binaries/")
+foreach(_Cfg Debug Release RelWithDebInfo MinSizeRel)
+	string(TOUPPER "${{_Cfg}}" _CfgUp)
+	set_target_properties(Maho PROPERTIES "RUNTIME_OUTPUT_DIRECTORY_${{_CfgUp}}" "${{_MAHO_BIN}}/${{_Cfg}}")
+	set_target_properties(EntryPoint PROPERTIES "RUNTIME_OUTPUT_DIRECTORY_${{_CfgUp}}" "${{_MAHO_BIN}}/${{_Cfg}}")
+endforeach()
+set_property(DIRECTORY "${{CMAKE_CURRENT_SOURCE_DIR}}" PROPERTY VS_DEBUGGER_WORKING_DIRECTORY "${{_MAHO_BIN}}/$<CONFIG>")
 # The sln startup project is EntryPoint (the app host), not ZERO_CHECK.
 set_property(DIRECTORY "${{CMAKE_CURRENT_SOURCE_DIR}}" PROPERTY VS_STARTUP_PROJECT EntryPoint)
 add_dependencies(EntryPoint {name} {plugin_link_names} MahoCheckCycle)
@@ -753,6 +772,7 @@ def _plugin_targets(
 			f"set_target_properties({name} PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)\n"
 			f"target_compile_definitions({name} PRIVATE MAHO_{name.upper()}_MODULE_EXPORTS)\n"
 			f"target_link_libraries({name} PUBLIC Maho)\n"
+			f"set_property(TARGET {name} PROPERTY RUNTIME_OUTPUT_DIRECTORY \"${{CMAKE_BINARY_DIR}}/Binaries/$<CONFIG>\")\n"
 			f"{cmake_include}"
 		)
 		# Plugin → its in-chain deps (host + disabled plugins excluded). Link,
