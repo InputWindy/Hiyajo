@@ -3,6 +3,12 @@
 namespace Maho::Name
 {
 
+FNamePool& FNamePool::Get()
+{
+	static FNamePool Instance;
+	return Instance;
+}
+
 FName::FName(std::string_view Str)
 	: Id(FNamePool::Get().Intern(Str).Id)
 {

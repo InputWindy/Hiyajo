@@ -8,6 +8,18 @@
 namespace Maho::Timer
 {
 
+FTimer& FTimer::Get()
+{
+	static FTimer Instance;
+	return Instance;
+}
+
+FGameClock& FGameClock::Get()
+{
+	static FGameClock Instance;
+	return Instance;
+}
+
 void FTimer::Initiate(int Argc, char** Argv)
 {
 	(void)Argc; (void)Argv;

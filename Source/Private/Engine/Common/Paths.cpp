@@ -5,6 +5,12 @@
 namespace Maho::Paths
 {
 
+FPaths& FPaths::Get()
+{
+	static FPaths Instance;
+	return Instance;
+}
+
 void FPaths::SetRoot(std::string_view Alias, std::filesystem::path Path)
 {
 	Roots[std::string(Alias)] = std::move(Path);

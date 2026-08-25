@@ -7,6 +7,12 @@
 namespace Maho::Config
 {
 
+FConfig& FConfig::Get()
+{
+	static FConfig Instance;
+	return Instance;
+}
+
 namespace
 {
 	[[nodiscard]] std::string Trim(std::string_view S)

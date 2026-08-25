@@ -9,6 +9,12 @@
 namespace Maho::Asset
 {
 
+FAssetRegistry& FAssetRegistry::Get()
+{
+	static FAssetRegistry Instance;
+	return Instance;
+}
+
 namespace
 {
 	[[nodiscard]] EAssetType TypeFromExtension(std::string_view Extension)

@@ -20,9 +20,8 @@ namespace CommandParser
 class FCommandParser : public TSingleton<FCommandParser>
 {
 public:
-	// Re-expose the static factory — the member Get(string_view) below would
-	// otherwise hide TSingleton<FCommandParser>::Get().
-	using TSingleton<FCommandParser>::Get;
+	/** Process-unique accessor (overloads the Get(string_view) member below). */
+	static FCommandParser& Get();
 
 	void Initiate(int Argc, char** Argv) override;
 	void Shutdown() override;

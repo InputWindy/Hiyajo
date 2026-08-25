@@ -5,4 +5,11 @@
 
 namespace Maho
 {
+
+FLog& FLog::Get()
+{
+	static FLog Instance;
+	return Instance;
 }
+
+} // namespace Maho

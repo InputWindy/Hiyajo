@@ -3,6 +3,12 @@
 namespace Maho::Exception
 {
 
+FException& FException::Get()
+{
+	static FException Instance;
+	return Instance;
+}
+
 void FException::Initiate(int Argc, char** Argv)
 {
 	(void)Argc; (void)Argv;

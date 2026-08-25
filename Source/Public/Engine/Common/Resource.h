@@ -91,6 +91,9 @@ class FResourceSystem
 	, public FThreadedServer
 {
 public:
+	/** Process-unique accessor — defined in Resource.cpp (in Maho.dll). */
+	static FResourceSystem& Get();
+
 	~FResourceSystem() override;
 
 	// The fixed single-Layer lifecycle (host-driven).

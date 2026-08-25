@@ -30,6 +30,9 @@ namespace Timer
 class FTimer : public TSingleton<FTimer>
 {
 public:
+	/** Process-unique accessor — defined in Timer.cpp (in Maho.dll). */
+	static FTimer& Get();
+
 	void Initiate(int Argc, char** Argv) override;
 	void Shutdown() override;
 
@@ -83,6 +86,9 @@ public:
 class FGameClock : public TSingleton<FGameClock>
 {
 public:
+	/** Process-unique accessor — defined in Timer.cpp (in Maho.dll). */
+	static FGameClock& Get();
+
 	void Initiate(int Argc, char** Argv) override;
 	void Shutdown() override;
 

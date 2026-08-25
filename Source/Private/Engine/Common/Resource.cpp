@@ -13,6 +13,12 @@
 namespace Maho::Resource
 {
 
+FResourceSystem& FResourceSystem::Get()
+{
+	static FResourceSystem Instance;
+	return Instance;
+}
+
 namespace
 {
 	constexpr std::size_t kMaxAppliesPerTick = 1;

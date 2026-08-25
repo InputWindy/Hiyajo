@@ -49,6 +49,9 @@ private:
 class FNamePool : public TSingleton<FNamePool>
 {
 public:
+	/** Process-unique accessor — declared here, defined in Name.cpp (in Maho.dll). */
+	static FNamePool& Get();
+
 	void Initiate(int, char**) override { free(); }
 	void Shutdown() override { free(); }
 

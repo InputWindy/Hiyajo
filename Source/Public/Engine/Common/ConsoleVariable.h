@@ -70,6 +70,9 @@ public:
 class FConsoleVariable : public TSingleton<FConsoleVariable>
 {
 public:
+	/** Process-unique accessor — declared here, defined in ConsoleVariable.cpp (in Maho.dll). */
+	static FConsoleVariable& Get();
+
 	void Initiate(int Argc, char** Argv) override;
 	void Shutdown() override;
 

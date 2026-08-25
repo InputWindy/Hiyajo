@@ -5,6 +5,12 @@
 namespace Maho::Text
 {
 
+FTextManager& FTextManager::Get()
+{
+	static FTextManager Instance;
+	return Instance;
+}
+
 namespace
 {
 	// Catalog key = Namespace + US + Key + US + Culture (US = unit separator 0x1f,

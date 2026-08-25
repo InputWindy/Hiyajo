@@ -68,6 +68,9 @@ private:
 class FTextManager : public TSingleton<FTextManager>
 {
 public:
+	/** Process-unique accessor — declared here, defined in Text.cpp (in Maho.dll). */
+	static FTextManager& Get();
+
 	void Initiate(int Argc, char** Argv) override;
 	void Shutdown() override;
 

@@ -22,20 +22,17 @@ public:
 };
 
 /**
- * CRTP singleton — the single process-wide instance of T, created on first
- * access via `static T& Get()` (Meyers). A derived singleton only needs to
- * implement Initiate/Shutdown.
+ * CRTP singleton — the process-wide single instance of T. **Identity/flag base
+ * only**: no inline Meyers here. Each derived singleton declares `static T&
+ * Get();` itself and defines it in its own .cpp (compiled into its DLL), so the
+ * instance lives in exactly one translation unit of one DLL → process-unique
+ * across DLL boundaries (an inline static local here would be duplicated per
+ * include-site DLL). `is_base_of_v<TSingleton<T>, T>` still identifies a
+ * singleton (query traversal unchanged).
  */
 template <typename T>
 class TSingleton : public ISingleton
 {
-public:
-	static T& Get()
-	{
-		static T Instance;
-		return Instance;
-	}
-
 protected:
 	TSingleton() = default;
 	~TSingleton() override = default;

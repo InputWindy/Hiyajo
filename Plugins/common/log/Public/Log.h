@@ -24,6 +24,9 @@ namespace Maho
 class FLog : public TSingleton<FLog>
 {
 public:
+	/** Process-unique accessor — defined in Log.cpp (in Log.dll). */
+	static FLog& Get();
+
 	/** The shared logger — all engine/service logging routes through it. */
 	std::shared_ptr<spdlog::logger> Logger;
 

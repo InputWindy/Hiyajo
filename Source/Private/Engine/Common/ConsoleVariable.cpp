@@ -7,6 +7,12 @@
 namespace Maho::ConsoleVariable
 {
 
+FConsoleVariable& FConsoleVariable::Get()
+{
+	static FConsoleVariable Instance;
+	return Instance;
+}
+
 namespace
 {
 	std::mutex GMutex;

@@ -11,6 +11,12 @@
 namespace Maho::CommandParser
 {
 
+FCommandParser& FCommandParser::Get()
+{
+	static FCommandParser Instance;
+	return Instance;
+}
+
 void FCommandParser::Initiate(int Argc, char** Argv)
 {
 	Parse(Argc, Argv);

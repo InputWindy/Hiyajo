@@ -66,6 +66,9 @@ private:
 class FException : public TSingleton<FException>
 {
 public:
+	/** Process-unique accessor — declared here, defined in Exception.cpp (in Maho.dll). */
+	static FException& Get();
+
 	void Initiate(int Argc, char** Argv) override;
 	void Shutdown() override;
 
