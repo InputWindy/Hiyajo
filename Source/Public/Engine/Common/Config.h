@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Core/Singleton.h>
+#include <Engine/Layer.h>
 
 #include <cstdint>
 #include <map>
@@ -18,7 +19,9 @@ namespace Config
  * an INI file; GetString/GetInt/... read; SetString overrides at runtime.
  *   FConfig::Get().GetString("/Script/Engine.Engine", "GameName");
  */
-class FConfig : public TSingleton<FConfig>
+class FConfig
+	: public TSingleton<FConfig>
+	, public IPlugin<IInitialize, IShutdown>
 {
 public:
 	/** Process-unique accessor — declared here, defined in Config.cpp (in Maho.dll). */

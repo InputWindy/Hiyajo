@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Core/Singleton.h>
+#include <Engine/Layer.h>
 
 #include <filesystem>
 #include <map>
@@ -13,7 +14,9 @@ namespace Paths
 {
 
 /** Path resolution singleton — engine/project root aliases → physical paths. */
-class FPaths : public TSingleton<FPaths>
+class FPaths
+	: public TSingleton<FPaths>
+	, public IPlugin<IInitialize, IShutdown>
 {
 public:
 	/** Process-unique accessor — declared here, defined in Paths.cpp (in Paths.dll). */

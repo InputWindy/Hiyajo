@@ -41,7 +41,7 @@ struct INetwork { virtual void Poll() = 0; };
 struct IGameWorld { virtual void Tick() = 0; };
 
 // ── singleton services (driven by T::Get(), fixed ISingleton lifecycle) ──
-struct FLog : TSingleton<FLog>
+struct FLog : TSingleton<FLog>, IPlugin<IInitialize, IShutdown>
 {
 	static FLog& Get() { static FLog I; return I; }   // test-local: no DLL boundary
 	using FDepends = TTypeList<FDefaultSlot, TTypeList<>>;   // root singleton
@@ -50,7 +50,7 @@ struct FLog : TSingleton<FLog>
 	void Shutdown() override {}
 };
 
-struct FAudioService : TSingleton<FAudioService>
+struct FAudioService : TSingleton<FAudioService>, IPlugin<IInitialize, IShutdown>
 {
 	static FAudioService& Get() { static FAudioService I; return I; }
 	using FDepends = TTypeList<FDefaultSlot, TTypeList<FLog>>;    // audio after log
@@ -157,7 +157,7 @@ struct FGameEngine
 	{
 		// singletons: same syntax as instances — Select then ForEach; the FLayer
 		// query drives T::Get() for CRTP-singleton members of the table.
-		Select<ISingleton>().ForEach([](ISingleton& S) { S.Initiate(0, nullptr); });
+		Select<IPlugin<IInitialize, IShutdown>>().ForEach([](IPlugin<IInitialize, IShutdown>& S) { S.Initiate(0, nullptr); });
 
 		Enqueue(FLayerCommand{ FLayerCommand::EOp::Install, new FRenderer(), /*static*/ true });
 		Enqueue(FLayerCommand{ FLayerCommand::EOp::Install, new FResourceManager(), /*static*/ true });

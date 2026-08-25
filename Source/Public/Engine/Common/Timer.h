@@ -4,6 +4,7 @@
 // RAII scope timing; FGameClock is a lazily-advanced real/game clock with
 // time-scale and pause.
 #include <Core/Singleton.h>
+#include <Engine/Layer.h>
 
 #include <chrono>
 #include <cstdint>
@@ -27,7 +28,9 @@ namespace Timer
  *
  *   Timer::FTimer::Get().DumpToString();   // "Render: 1.23 ms (n calls, avg, max)"
  */
-class FTimer : public TSingleton<FTimer>
+class FTimer
+	: public TSingleton<FTimer>
+	, public IPlugin<IInitialize, IShutdown>
 {
 public:
 	/** Process-unique accessor — defined in Timer.cpp (in Maho.dll). */
@@ -83,7 +86,9 @@ public:
  * GetGameSeconds() accumulates wall-clock delta × TimeScale since the last
  * advance, so no per-frame Tick is required.
  */
-class FGameClock : public TSingleton<FGameClock>
+class FGameClock
+	: public TSingleton<FGameClock>
+	, public IPlugin<IInitialize, IShutdown>
 {
 public:
 	/** Process-unique accessor — defined in Timer.cpp (in Maho.dll). */

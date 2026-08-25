@@ -5,6 +5,7 @@
 // resolves a logical path, Resolve() maps it to a physical file via FPaths
 // (engine Common root alias), Load() reads raw bytes.
 #include <Core/Singleton.h>
+#include <Engine/Layer.h>
 
 #include <cstdint>
 #include <filesystem>
@@ -62,7 +63,9 @@ struct FAssetData
  * Asset registry: logical path → metadata. Scan() walks a content directory
  * and indexes every asset file; Find() resolves a logical path.
  */
-class FAssetRegistry : public TSingleton<FAssetRegistry>
+class FAssetRegistry
+	: public TSingleton<FAssetRegistry>
+	, public IPlugin<IInitialize, IShutdown>
 {
 public:
 	/** Process-unique accessor — defined in Asset.cpp (in Asset.dll). */

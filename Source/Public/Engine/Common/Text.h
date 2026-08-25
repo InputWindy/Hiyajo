@@ -5,6 +5,7 @@
 // culture's translation and falls back to the source. Depends on engine-fixed
 // Json (nlohmann) for LoadTranslationsFromJson.
 #include <Core/Singleton.h>
+#include <Engine/Layer.h>
 
 #include <mutex>
 #include <string>
@@ -65,7 +66,9 @@ private:
 };
 
 /** Localization manager: current culture + translation catalog (TSingleton). */
-class FTextManager : public TSingleton<FTextManager>
+class FTextManager
+	: public TSingleton<FTextManager>
+	, public IPlugin<IInitialize, IShutdown>
 {
 public:
 	/** Process-unique accessor — declared here, defined in Text.cpp (in Maho.dll). */

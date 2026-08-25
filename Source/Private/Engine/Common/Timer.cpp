@@ -49,7 +49,7 @@ void FTimer::EndScope()
 	const auto Now = std::chrono::steady_clock::now();
 	const double Elapsed = std::chrono::duration<double>(Now - Current->Start).count();
 	Current->TotalSeconds += Elapsed;
-	Current->MaxSeconds = std::max(Current->MaxSeconds, Elapsed);
+	Current->MaxSeconds = (std::max)(Current->MaxSeconds, Elapsed);
 	++Current->Count;
 	Current = Current->Parent;
 }

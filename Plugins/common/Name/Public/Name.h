@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Core/Singleton.h>
+#include <Engine/Layer.h>
 
 #include <cstdint>
 #include <functional>
@@ -46,7 +47,9 @@ private:
 };
 
 /** Global interned string pool — a singleton service. */
-class FNamePool : public TSingleton<FNamePool>
+class FNamePool
+	: public TSingleton<FNamePool>
+	, public IPlugin<IInitialize, IShutdown>
 {
 public:
 	/** Process-unique accessor — declared here, defined in Name.cpp (in Name.dll). */

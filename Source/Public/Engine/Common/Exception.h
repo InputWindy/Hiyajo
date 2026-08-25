@@ -8,6 +8,7 @@
 // standalone delegate building block yet, and OnException only needs a
 // void(const std::string&) broadcast.
 #include <Core/Singleton.h>
+#include <Engine/Layer.h>
 
 #include <exception>
 #include <functional>
@@ -63,7 +64,9 @@ private:
  *   });
  *   Exception::FException::Get().ReportException("failed to load texture");
  */
-class FException : public TSingleton<FException>
+class FException
+	: public TSingleton<FException>
+	, public IPlugin<IInitialize, IShutdown>
 {
 public:
 	/** Process-unique accessor — declared here, defined in Exception.cpp (in Maho.dll). */

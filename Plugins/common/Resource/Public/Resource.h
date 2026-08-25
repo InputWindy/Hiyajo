@@ -19,6 +19,7 @@
 // is called every frame to apply ready transfers on the game thread, Shutdown()
 // stops the thread and clears the catalog.
 #include <Core/Singleton.h>
+#include <Engine/Layer.h>
 #include <Engine/ThreadedServer.h>
 
 #include <cstdint>
@@ -89,6 +90,7 @@ struct TResourceExporter;   // undefined — specialize per resource type
 class FResourceSystem
 	: public TSingleton<FResourceSystem>
 	, public FThreadedServer
+	, public IPlugin<IInitialize, IShutdown>
 {
 public:
 	/** Process-unique accessor — defined in Resource.cpp (in Resource.dll). */

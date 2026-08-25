@@ -5,6 +5,7 @@
 
 #include <Core/Singleton.h>
 #include <Maho.h>
+#include <Engine/Layer.h>
 
 #include <string_view>
 
@@ -21,7 +22,9 @@ namespace Maho
  *   FLog::Info("init: {}", name);
  *   FLog::Error("boom: code={}", code);
  */
-class FLog : public TSingleton<FLog>
+class FLog
+	: public TSingleton<FLog>
+	, public IPlugin<IInitialize, IShutdown>
 {
 public:
 	/** Process-unique accessor — defined in Log.cpp (in Log.dll). */

@@ -6,6 +6,7 @@
 // under positional keys. FCommandParser::Get().Initiate(argc, argv) fills the
 // store (idempotent).
 #include <Core/Singleton.h>
+#include <Engine/Layer.h>
 
 #include <map>
 #include <string>
@@ -17,7 +18,9 @@ namespace CommandParser
 {
 
 /** Command-line argument parser (key-value store). */
-class FCommandParser : public TSingleton<FCommandParser>
+class FCommandParser
+	: public TSingleton<FCommandParser>
+	, public IPlugin<IInitialize, IShutdown>
 {
 public:
 	/** Process-unique accessor (overloads the Get(string_view) member below). */

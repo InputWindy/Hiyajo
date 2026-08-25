@@ -4,6 +4,7 @@
 // TAutoConsoleVariable globals self-register at static-init; Find looks them
 // up. Values stored as strings, parsed on typed access.
 #include <Core/Singleton.h>
+#include <Engine/Layer.h>
 
 #include <cstdint>
 #include <map>
@@ -67,7 +68,9 @@ public:
  * globals register here at static-init; Find looks them up. TSingleton with the
  * fixed Initiate/Shutdown lifecycle (Shutdown clears the registry).
  */
-class FConsoleVariable : public TSingleton<FConsoleVariable>
+class FConsoleVariable
+	: public TSingleton<FConsoleVariable>
+	, public IPlugin<IInitialize, IShutdown>
 {
 public:
 	/** Process-unique accessor — declared here, defined in ConsoleVariable.cpp (in Maho.dll). */
