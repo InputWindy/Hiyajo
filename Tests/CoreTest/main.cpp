@@ -188,14 +188,14 @@ struct FGameEngine
 
 int main()
 {
-	// EnqueueCommand: FQueue's generic multi-threaded callback command. Any
-	// FQueue<FLayerCommand> holder can enqueue a lambda from any thread; Flush
+	// EnqueueCommand via FQueue's minimal command set + FLayerCommand::Callback:
+	// any FQueue<FLayerCommand> holder can enqueue a lambda from any thread; Flush
 	// executes it. Verify on an independent queue (not a per-frame layer).
 	{
 		FQueue<FLayerCommand> QCmd;
 		int Calls = 0;
-		QCmd.EnqueueCommand([&] { Calls += 1; });
-		QCmd.EnqueueCommand([&] { Calls += 2; });
+		QCmd.Enqueue(FLayerCommand::Callback([&] { Calls += 1; }));
+		QCmd.Enqueue(FLayerCommand::Callback([&] { Calls += 2; }));
 		QCmd.Flush();
 		if (Calls != 3)
 		{

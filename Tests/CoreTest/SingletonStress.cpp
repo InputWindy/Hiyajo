@@ -47,13 +47,13 @@ namespace
 	};
 
 	using FSingletons = TTypeList<FA, FB, FC>;
-	using FScheduler = Parallel::FParallelScheduler<FSingletons>;
+	using FScheduler = Parallel::FParallelScheduler;
 }
 
 int main()
 {
 	FScheduler Sched;
-	Sched.ForEachSingletons([](auto& S) { S.Poll(); });
+	Sched.ForEach<FSingletons>([](auto& S) { S.Poll(); });
 	if (gPolls.load() != 3)
 	{
 		std::printf("[FAIL] polled=%d want=3\n", gPolls.load());

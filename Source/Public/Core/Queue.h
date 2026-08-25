@@ -50,18 +50,6 @@ public:
 		}
 	}
 
-	/**
-	 * Queue a deferred CALLBACK command — the generic multi-threaded enqueue
-	 * primitive. Any thread may call it; the lambda runs later at Flush()
-	 * (a safe point) via TCommand::Callback(fn). TCommand must provide a static
-	 * `Callback(std::function<void()>)` factory (e.g. FLayerCommand).
-	 */
-	template <typename FCallback>
-	void EnqueueCommand(FCallback&& Callable)
-	{
-		Enqueue(TCommand::Callback(std::forward<FCallback>(Callable)));
-	}
-
 	/** Remove a pending command (no-op if not queued). */
 	void Dequeue(const TCommand& Cmd)
 	{

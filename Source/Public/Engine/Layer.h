@@ -242,7 +242,7 @@ public:
 						using T = typename decltype(TypeTag)::Type;
 						EmplaceIf<T>(Tasks, Visitor);
 					});
-					Layer->RunTasks(std::move(Tasks));
+					Layer->Parallel::FParallelScheduler::ForEach(Tasks, [](const std::function<void()>& T) { return T; });
 				});
 
 				// collect the selected subset once up front (safe snapshot)
@@ -280,7 +280,7 @@ public:
 							}
 						});
 					}
-					Layer->RunTasks(std::move(Tasks));
+					Layer->Parallel::FParallelScheduler::ForEach(Tasks, [](const std::function<void()>& T) { return T; });
 				});
 
 				// dynamic: mutually independent — one parallel batch, no ordering
@@ -292,7 +292,7 @@ public:
 					{
 						Tasks.emplace_back([&, I] { DispatchInstance<FList>(I, Visitor); });
 					}
-					Layer->RunTasks(std::move(Tasks));
+					Layer->Parallel::FParallelScheduler::ForEach(Tasks, [](const std::function<void()>& T) { return T; });
 				}
 			}
 
@@ -349,13 +349,13 @@ template <typename... FChildrenTypes>
 class FLayer
 	: public FLayerBase
 	, public FLayerQuery<FLayer<FChildrenTypes...>>
-	, public Parallel::FParallelScheduler<TTypeList<FChildrenTypes...>>
+	, public Parallel::FParallelScheduler
 {
 public:
 	/** The child type table — the compile-time scan list this layer drives. */
 	using FLayers = TTypeList<FChildrenTypes...>;
 	using FChildren = FLayers;
-	using FScheduler = Parallel::FParallelScheduler<FChildren>;
+	using FScheduler = Parallel::FParallelScheduler;
 
 	/**
 	 * Topology: children leveled by their MAHO_EXTEND_DEPS declarations on the

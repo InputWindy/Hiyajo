@@ -18,6 +18,11 @@ namespace Maho
 // dispatch can hold pointers to it (only the name is needed at this layer).
 class FLayerBase;
 
+// FLayerQuery (Engine/Layer.h) drives a layer's instances; it is friended so it
+// can reach the scheduler's private RunTasks during FLayer-driven traversal.
+template <typename FLayerType, typename... TSelected>
+class FLayerQuery;
+
 // ───────────────────────────────────────────────────────────────────────
 // The drive protocol: the traversal machinery + the scheduler contract.
 //
@@ -156,54 +161,58 @@ namespace Parallel
  * Dependency LEVELS and instance dispatch are the LAYER's concern (FLayer holds
  * FLevels + DispatchInstance inside Query().ForEach), not the scheduler's.
  */
-template <typename FExtensions = TTypeList<>>
 class FParallelScheduler : public IScheduler
 {
 public:
-	using FExtensionList = FExtensions;
-
 	FParallelScheduler()
 		: Pool(std::make_unique<FThreadPool>())
 	{
 	}
 
+	/**
+	 * Generic PARALLEL ForEach over a compile-time callable pack: every callable
+	 * runs on the thread pool concurrently, returns when ALL complete (barrier).
+	 * No type/layer/level semantics — the caller decides what each callable does.
+	 *
+	 *   Sched.ForEach([]{ A(); }, []{ B(); }, []{ C(); });   // A/B/C run in parallel
+	 */
 	template <typename... FCallables>
-	void Run(FCallables&&... Callables) const
+		requires (std::is_invocable_v<FCallables> && ...)
+	void ForEach(FCallables&&... Callables) const
 	{
 		Pool->Run(std::forward<FCallables>(Callables)...);
 	}
 
+	/**
+	 * Generic PARALLEL ForEach over a runtime container: each element is projected
+	 * to a task via MakeTask and runs concurrently; returns when all complete.
+	 * No type/layer/level semantics — any iterable range, MakeTask maps each
+	 * element to its std::function<void()> work item. Constrained to containers so
+	 * it disambiguates from the variadic callable overload.
+	 *
+	 *   std::vector<FWidget*> Widgets = ...;
+	 *   Sched.ForEach(Widgets, [](FWidget* W) { return [W] { W->Draw(); }; });
+	 */
+	template <typename TContainer, typename TTaskFn>
+		requires requires(const TContainer& c) { c.begin(); c.end(); c.size(); }
+	void ForEach(const TContainer& Items, TTaskFn&& MakeTask) const
+	{
+		std::vector<std::function<void()>> Tasks;
+		Tasks.reserve(Items.size());
+		for (const auto& Item : Items)
+		{
+			Tasks.emplace_back(MakeTask(Item));
+		}
+		RunTasks(std::move(Tasks));
+	}
+
+private:
 	/** Runtime task array — run on the thread pool (parallel, barrier at end). */
 	void RunTasks(std::vector<std::function<void()>> Tasks) const
 	{
 		Pool->RunTasks(std::move(Tasks));
 	}
 
-	/**
-	 * Drive the SINGLETON extensions level-by-level (their compile-time topo on
-	 * FDefaultSlot) — no instance array needed: each T's {@literal T::Get()}
-	 * singleton is handed to the visitor as {@literal T&}. Levels are serialized
-	 * (barrier after each), singletons within a level run in parallel.
-	 *
-	 *   ForEachSingletons([](TSingletonPlugin& S) { S.Poll(); });
-	 */
-	template <typename TVisitor>
-	void ForEachSingletons(TVisitor&& Visitor) const
-	{
-		using FLevels = Topo::TLevels_t<FExtensions, FDefaultSlot>;
-		Maho::ForEach<FLevels>(Maho::FSerialTraversePolicy{}, [&](auto Tag) {
-			using FLevel = typename decltype(Tag)::Type;
-			std::vector<std::function<void()>> Tasks;
-			Tasks.reserve(FLevel::Count);
-			Maho::ForEach<FLevel>(Maho::FSerialTraversePolicy{}, [&](auto TypeTag) {
-				using T = typename decltype(TypeTag)::Type;
-				Tasks.emplace_back([&] { Visitor(T::Get()); });
-			});
-			Pool->RunTasks(std::move(Tasks));
-		});
-	}
-
-private:
 	std::unique_ptr<FThreadPool> Pool;
 };
 
@@ -271,9 +280,21 @@ public:
 		static_assert(FMatched::Count > 0,
 			"TTypeQuery::ForEach: no types derive the selected interfaces");
 
-		// singleton driver: no instance array — T::Get() for each surviving type
-		Parallel::FParallelScheduler<FMatched> Sched;
-		Sched.ForEachSingletons(std::forward<TVisitor>(Visitor));
+		using FLevels = Topo::TLevels_t<FMatched, FDefaultSlot>;
+		// layer semantics live HERE (a compile-time query over a type table) — the
+		// scheduler only runs the already-assembled parallel task batches.
+		Parallel::FParallelScheduler Sched;
+		Maho::ForEach<FLevels>(Maho::FSerialTraversePolicy{}, [&](auto Tag) {
+			using FLevel = typename decltype(Tag)::Type;
+			std::vector<std::function<void()>> Tasks;
+			Tasks.reserve(FLevel::Count);
+			Maho::ForEach<FLevel>(Maho::FSerialTraversePolicy{}, [&](auto TypeTag) {
+				using T = typename decltype(TypeTag)::Type;
+				Tasks.emplace_back([&] { Visitor(T::Get()); });
+			});
+			// each task in this level -> a parallel work item, barrier after level.
+			Sched.ForEach(Tasks, [](const std::function<void()>& T) { return T; });
+		});
 	}
 };
 
