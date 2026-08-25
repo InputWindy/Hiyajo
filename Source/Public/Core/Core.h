@@ -6,6 +6,7 @@
 #include <Core/TypeList.h>
 #include <Core/Queue.h>
 #include <Core/Topology.h>
+#include <Core/Query.h>
 #include <Core/Singleton.h>
 #include <Core/Extension.h>
 #include <Core/Assembly.h>

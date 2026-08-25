@@ -9,6 +9,7 @@
 // through Query<IMain> (each child's Main = one frame of its own work). Stage
 // refinement lives inside each subsystem — the root never knows IRenderer.
 #include <Maho.h>
+#include <Core/Query.h>
 #include <Engine/Layer.h>
 #include "Gen/Closure.gen.h"   // code-gen: MAHO_CLOSURE_0_<Class>_<Key>, then MAHO_SORT_LEVEL
 #include "Gen/main.gen.h"      // code-gen: MAHO_DEPS_<Class>_<Key> dependency macros
@@ -188,6 +189,22 @@ struct FGameEngine
 
 int main()
 {
+	// ── Core/Query.h: type-agnostic compile-time LINQ (Select/With/Not) ──
+	{
+		// FA/FB/FC are FLayer<>; use them as both "source table" and filters.
+		// FC : FLayer<FA,FB> ... use a dedicated predicate set instead:
+		struct IA {}; struct IB {}; struct IC {};
+		struct A : IA {}; struct B : IA, IB {}; struct C : IB, IC {};
+
+		using FTable = TTypeList<A, B, C>;
+		using S1 = typename decltype(Query<FTable>().Select<IA>())::FResult;   // A,B derive IA
+		static_assert(std::is_same_v<S1, TTypeList<A, B>>, "Select OR fails");
+		using S2 = typename decltype(Query<FTable>().Select<IB>().With<IA>())::FResult;  // B (IB+IA)
+		static_assert(std::is_same_v<S2, TTypeList<B>>, "With AND fails");
+		using S3 = typename decltype(Query<FTable>().Select<IA>().Not<IB>())::FResult;   // A (IA, not IB)
+		static_assert(std::is_same_v<S3, TTypeList<A>>, "Not NOR fails");
+	}
+
 	// EnqueueCommand via FQueue's minimal command set + FLayerCommand::Callback:
 	// any FQueue<FLayerCommand> holder can enqueue a lambda from any thread; Flush
 	// executes it. Verify on an independent queue (not a per-frame layer).
