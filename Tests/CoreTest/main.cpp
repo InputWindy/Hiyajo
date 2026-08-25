@@ -21,13 +21,13 @@
 
 using namespace Maho;
 
-// ── code-gen closure sample: FA ← FB ← FC diamond (matches Gen/Closure.gen.h) ──
-struct FA : FLayer<> { MAHO_EXTEND_DEPS((FDefaultSlot, FNoParent)); };
-struct FB : FLayer<> { MAHO_EXTEND_DEPS((FDefaultSlot, FNoParent, FA)); };
-struct FC : FLayer<> { MAHO_EXTEND_DEPS((FDefaultSlot, FNoParent, FA, FB)); };
-// read the generated closure (Gen/Closure.gen.h) through MAHO_SORT_LEVEL
-using FFCLevels = decltype(MAHO_SORT_LEVEL(FC, FDefaultSlot));
-static_assert(FFCLevels::Count == 2, "FC closure levels: {FA} then {FB}");
+// ── dependency table sample: FA ← FB ← FC (Maho::EXTEND_DEPS via FDepends) ──
+struct FA : FLayer<> { using FDepends = TTypeList<FDefaultSlot, TTypeList<>>; };
+struct FB : FLayer<> { using FDepends = TTypeList<FDefaultSlot, TTypeList<FA>>; };
+struct FC : FLayer<> { using FDepends = TTypeList<FDefaultSlot, TTypeList<FA, FB>>; };
+// levels via Topo: FC = {FA, FB(level1)} + FC(level2) → 2 levels
+static_assert(Topo::TNodeLevel<TTypeList<FA, FB, FC>, FDefaultSlot, FC>::Value == 2,
+	"FC depends on FA and FB");
 
 // ── subsystem interfaces ──
 struct IRenderer
@@ -42,7 +42,8 @@ struct IGameWorld { virtual void Tick() = 0; };
 // ── singleton services (driven by T::Get(), fixed ISingleton lifecycle) ──
 struct FLog : TSingleton<FLog>
 {
-	MAHO_EXTEND_DEPS((FDefaultSlot, FNoParent));          // root singleton
+	static FLog& Get() { static FLog I; return I; }   // test-local: no DLL boundary
+	using FDepends = TTypeList<FDefaultSlot, TTypeList<>>;   // root singleton
 	int Initiated = 0;
 	void Initiate(int, char**) override { ++Initiated; }
 	void Shutdown() override {}
@@ -50,7 +51,8 @@ struct FLog : TSingleton<FLog>
 
 struct FAudioService : TSingleton<FAudioService>
 {
-	MAHO_EXTEND_DEPS((FDefaultSlot, FNoParent, FLog));    // audio after log
+	static FAudioService& Get() { static FAudioService I; return I; }
+	using FDepends = TTypeList<FDefaultSlot, TTypeList<FLog>>;    // audio after log
 	int Initiated = 0;
 	void Initiate(int, char**) override { ++Initiated; }
 	void Shutdown() override {}
@@ -123,7 +125,7 @@ struct FAudit : FLayer<>, IPlugin<IMain>
 
 struct FNetWork : FLayer<>, IPlugin<IMain, INetwork>
 {
-	MAHO_EXTEND_DEPS((FDefaultSlot, FNoParent));   // root
+	using FDepends = TTypeList<FDefaultSlot, TTypeList<>>;   // root
 	std::atomic<int> Polls{ 0 };
 	void Poll() override { Polls.fetch_add(1, std::memory_order_relaxed); }
 	int Main() override { Poll(); return 0; }
@@ -132,7 +134,7 @@ struct FNetWork : FLayer<>, IPlugin<IMain, INetwork>
 
 struct FGameWorld : FLayer<>, IPlugin<IMain, IGameWorld>
 {
-	MAHO_EXTEND_DEPS((FDefaultSlot, FNoParent, FNetWork));  // world after network
+	using FDepends = TTypeList<FDefaultSlot, TTypeList<FNetWork>>;  // world after network
 	std::atomic<int> Ticks{ 0 };
 	void Tick() override { Ticks.fetch_add(1, std::memory_order_relaxed); }
 	int Main() override { Tick(); return 0; }

@@ -215,8 +215,47 @@ inline constexpr bool TIsAcyclic_v = !THasCycle_v<TNodes, Key>;
 // ── ② Levels (parallel groups by dependency level). ─────────────────────
 
 /**
+ * A node's dependency list at a Key, read from its optional FDepends:
+ *   using FDepends = TTypeList<Key, TTypeList<A, B>>;   // deps A, B at Key
+ * Absent FDepends (or no slot for Key) → empty list. The FULL declaration is
+ * used — NOT clipped to the scheduling set (deps may name out-of-set classes).
+ */
+template <typename TNode, typename Key, typename = void>
+struct TNodeDepList
+{
+	using Type = TTypeList<>;
+};
+
+template <typename TNode, typename Key>
+struct TNodeDepList<TNode, Key, std::void_t<typename TNode::FDepends>>
+{
+private:
+	using FDepends = typename TNode::FDepends;
+
+	// FDepends = TTypeList<DepKey, TTypeList<Deps...>>
+	template <typename TKey, typename, typename>
+	struct TDepsFor;
+	template <typename TKey, typename DepKey>
+	struct TDepsFor<TKey, TTypeList<DepKey, TTypeList<>>, std::void_t<>>
+	{
+		using Type = std::conditional_t<std::is_same_v<TKey, DepKey>,
+			TTypeList<>, TTypeList<>>;
+	};
+	template <typename TKey, typename DepKey, typename... Deps>
+	struct TDepsFor<TKey, TTypeList<DepKey, TTypeList<Deps...>>, std::void_t<>>
+	{
+		using Type = std::conditional_t<std::is_same_v<TKey, DepKey>,
+			TTypeList<Deps...>, TTypeList<>>;
+	};
+
+public:
+	using Type = typename TDepsFor<Key, FDepends, void>::Type;
+};
+
+/**
  * Level of a node: 1 + max(level of deps); roots are 0.
  * Self-recursive: folds over the dep list, recursing into each dep's level.
+ * Deps are read from FDepends (full declaration), not clipped to TNodes.
  */
 template <typename TNodes, typename Key, typename TNode>
 struct TNodeLevel
@@ -238,7 +277,7 @@ private:
 
 public:
 	static constexpr int Value =
-		1 + FMaxLevel<typename TFilterDepsInNodes<TNodes, TNodeDeps_t<TNode, Key>>::Type, -1>::Value;
+		1 + FMaxLevel<typename TNodeDepList<TNode, Key>::Type, -1>::Value;
 };
 
 /** Max level over a list of nodes (empty → -1). */
