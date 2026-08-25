@@ -1,19 +1,16 @@
-// Compile+run for the engine Common singletons/libraries (migrated from
-// plugins): Unicode (zero-third-party), Name/Paths/Config, Archive,
-// ConsoleVariable, Exception, Timer.
+// Compile+run for the engine Common singleton libraries still in the engine
+// core: Unicode (zero-third-party), Config, Archive, ConsoleVariable,
+// Exception, Timer, Text, CommandParser, Compress.
+// (Name/Paths/Asset/Resource migrated to plugins.)
 #include <Engine/Common/Unicode.h>
-#include <Engine/Common/Name.h>
-#include <Engine/Common/Paths.h>
 #include <Engine/Common/Config.h>
 #include <Engine/Common/Archive.h>
 #include <Engine/Common/ConsoleVariable.h>
 #include <Engine/Common/Exception.h>
 #include <Engine/Common/Timer.h>
 #include <Engine/Common/Text.h>
-#include <Engine/Common/Asset.h>
 #include <Engine/Common/CommandParser.h>
 #include <Engine/Common/Compress.h>
-#include <Engine/Common/Resource.h>
 #include <glm/glm.hpp>
 #include <nlohmann/json.hpp>
 
@@ -25,27 +22,6 @@
 #include <thread>
 
 using namespace Maho;
-
-// A tiny resource type + its typed importer for the Resource test.
-struct TestBytesRes : public Maho::Resource::FResource
-{
-	using Maho::Resource::FResource::FResource;
-	std::vector<std::uint8_t> Data;
-};
-struct TestBytesImportConfig
-{
-	std::string SourcePath;
-};
-template <>
-struct Maho::Resource::TResourceImporter<TestBytesRes>
-{
-	using FConfig = TestBytesImportConfig;
-	static bool Import(const FConfig&, std::span<const std::uint8_t> Bytes, TestBytesRes& Out)
-	{
-		Out.Data.assign(Bytes.begin(), Bytes.end());
-		return true;
-	}
-};
 
 int main()
 {
@@ -74,26 +50,6 @@ int main()
 		std::puts("[FAIL] UTF-8↔UTF-16 roundtrip"); return 1;
 	}
 	Unicode::EnsureConsoleUtf8();
-
-	// Name (intern pool singleton)
-	Name::FNamePool::Get().Initiate(0, nullptr);
-	const Name::FName A = Name::FName("head");
-	const Name::FName B = Name::FName("head");
-	if (!(A == B) || A.ToString() != "head")
-	{
-		std::puts("[FAIL] FName intern"); return 1;
-	}
-	Name::FNamePool::Get().Shutdown();
-
-	// Paths (root alias singleton)
-	Paths::FPaths::Get().Initiate(0, nullptr);
-	Paths::FPaths::Get().SetRoot("Engine", "./EngineRoot");
-	auto Resolved = Paths::FPaths::Get().Resolve("Engine/Sub/File.txt");
-	if (Resolved.generic_string() != "./EngineRoot/Sub/File.txt")
-	{
-		std::printf("[FAIL] Paths::Resolve got %s\n", Resolved.generic_string().c_str()); return 1;
-	}
-	Paths::FPaths::Get().Shutdown();
 
 	// Config (INI singleton)
 	Config::FConfig::Get().Initiate(0, nullptr);
@@ -173,34 +129,6 @@ int main()
 	}
 	Text::FTextManager::Get().Shutdown();
 
-	// Asset (registry over a temp content dir)
-	Asset::FAssetRegistry::Get().Initiate(0, nullptr);
-	const std::filesystem::path Tmp = std::filesystem::temp_directory_path() / "maho_asset_stress";
-	std::error_code EC;
-	std::filesystem::create_directories(Tmp / "Materials", EC);
-	(EC.clear());
-	{
-		std::ofstream Ofs(Tmp / "Materials" / "M_Metal.material");
-		Ofs << "metal";
-	}
-	Asset::FAssetRegistry::Get().Scan(Tmp, "Game");
-	if (Asset::FAssetRegistry::Get().GetAssetCount() != 1)
-	{
-		std::puts("[FAIL] Asset scan count"); return 1;
-	}
-	const Asset::FAssetData* Data = Asset::FAssetRegistry::Get().Find(Asset::FAssetPath("/Game/Materials/M_Metal"));
-	if (!Data || Data->Type != Asset::EAssetType::Material)
-	{
-		std::puts("[FAIL] Asset find"); return 1;
-	}
-	auto AssetBytes = Asset::FAssetRegistry::Get().Load(Asset::FAssetPath("/Game/Materials/M_Metal"));
-	if (!AssetBytes || AssetBytes->size() != 5)
-	{
-		std::puts("[FAIL] Asset load"); return 1;
-	}
-	Asset::FAssetRegistry::Get().Shutdown();
-	std::filesystem::remove_all(Tmp, EC);
-
 	// CommandParser (CLI11-backed KV store)
 	{
 		char Arg0[] = "app";
@@ -241,68 +169,6 @@ int main()
 		}
 	}
 
-	// Resource (async typed system on a dedicated IO thread)
-	{
-		const std::filesystem::path RFile = std::filesystem::temp_directory_path() / "maho_res.bin";
-		{
-			std::ofstream Ofs(RFile, std::ios::binary);
-			for (int I = 0; I < 100; ++I)
-			{
-				Ofs.put(static_cast<char>(I));
-			}
-		}
-		if (!std::filesystem::exists(RFile))
-		{
-			std::puts("[FAIL] Resource temp file not written"); return 1;
-		}
-
-		// map "Raw" → temp dir so the virtual path resolves
-		Paths::FPaths::Get().Initiate(0, nullptr);
-		Paths::FPaths::Get().SetRoot("Raw", std::filesystem::temp_directory_path());
-		const auto Phys = Paths::FPaths::Get().Resolve("Raw/maho_res.bin");
-		if (!std::filesystem::exists(Phys))
-		{
-			std::printf("[FAIL] Paths resolve missing: %s\n", Phys.string().c_str()); return 1;
-		}
-
-		Maho::Resource::FResourceSystem& RS = Maho::Resource::FResourceSystem::Get();
-		RS.Initiate(0, nullptr);
-		bool bIoRan = false;
-		RS.Submit([&] { bIoRan = true; });
-		RS.Flush();
-		if (!bIoRan)
-		{
-			std::puts("[FAIL] Resource IO thread not executing tasks"); return 1;
-		}
-		bool bDone = false;
-		bool bQueued = RS.Import<TestBytesRes>({ "Raw/maho_res.bin" }, [&](const Maho::Resource::FResource* R) {
-			const TestBytesRes* Typed = static_cast<const TestBytesRes*>(R);
-			bDone = (Typed && Typed->Data.size() == 100 && Typed->Data.front() == 0 && Typed->Data.back() == 99);
-		});
-		if (!bQueued)
-		{
-			std::puts("[FAIL] Resource Import rejected"); return 1;
-		}
-		// Give the IO thread a beat, then drain on the game thread.
-		std::this_thread::sleep_for(std::chrono::milliseconds(50));
-		for (int I = 0; I < 1000 && !bDone; ++I)
-		{
-			RS.Tick();   // applies at most 1 per tick
-		}
-		if (!bDone)
-		{
-			std::printf("[FAIL] Resource async import (running=%d)\n", RS.IsRunning() ? 1 : 0); return 1;
-		}
-		const Maho::Resource::FResource* Loaded = RS.TryLoad("Raw/maho_res");
-		if (Loaded == nullptr)
-		{
-			std::puts("[FAIL] Resource find"); return 1;
-		}
-		RS.Shutdown();
-		std::filesystem::remove(RFile, EC);
-		Paths::FPaths::Get().Shutdown();
-	}
-
-	std::puts("ok: engine Common full set + glm/nlohmann/CLI11/zstd/Resource");
+	std::puts("ok: engine Common libs (Unicode/Config/Archive/CVar/Exception/Timer/Text/CommandParser/Compress)");
 	return 0;
 }

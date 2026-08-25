@@ -65,7 +65,7 @@ struct FAssetData
 class FAssetRegistry : public TSingleton<FAssetRegistry>
 {
 public:
-	/** Process-unique accessor — defined in Asset.cpp (in Maho.dll). */
+	/** Process-unique accessor — defined in Asset.cpp (in Asset.dll). */
 	static FAssetRegistry& Get();
 
 	void Initiate(int Argc, char** Argv) override;

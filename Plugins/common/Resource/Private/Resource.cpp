@@ -1,7 +1,7 @@
-#include <Engine/Common/Resource.h>
+#include "Resource.h"
 
-#include <Engine/Common/Name.h>
-#include <Engine/Common/Paths.h>
+#include <Name.h>
+#include <Paths.h>
 
 #include <atomic>
 #include <fstream>

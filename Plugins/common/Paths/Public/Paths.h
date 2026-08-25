@@ -16,7 +16,7 @@ namespace Paths
 class FPaths : public TSingleton<FPaths>
 {
 public:
-	/** Process-unique accessor — declared here, defined in Paths.cpp (in Maho.dll). */
+	/** Process-unique accessor — declared here, defined in Paths.cpp (in Paths.dll). */
 	static FPaths& Get();
 
 	void Initiate(int, char**) override { Roots.clear(); }

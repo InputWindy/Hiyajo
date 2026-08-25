@@ -1,0 +1,6 @@
+{
+  "FileVersion": 1,
+  "Name": "Asset",
+  "Description": "asset registry (logical /Game/... path -> metadata, resolves via Paths)",
+  "Dependencies": ["Paths"]
+}

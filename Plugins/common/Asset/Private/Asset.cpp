@@ -1,6 +1,6 @@
-#include <Engine/Common/Asset.h>
+#include "Asset.h"
 
-#include <Engine/Common/Paths.h>
+#include <Paths.h>
 
 #include <filesystem>
 #include <fstream>

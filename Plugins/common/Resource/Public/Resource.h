@@ -45,7 +45,7 @@ class FTransferHandle;
 struct FImportConfig
 {
 	std::string SourcePath;   // virtual source path, e.g. "Raw/mesh.fbx" — the asset
-	                          // path (catalog key) is derived by stripping the extension
+		                          // path (catalog key) is derived by stripping the extension
 };
 
 struct FExportConfig
@@ -91,7 +91,7 @@ class FResourceSystem
 	, public FThreadedServer
 {
 public:
-	/** Process-unique accessor — defined in Resource.cpp (in Maho.dll). */
+	/** Process-unique accessor — defined in Resource.cpp (in Resource.dll). */
 	static FResourceSystem& Get();
 
 	~FResourceSystem() override;
