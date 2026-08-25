@@ -10,10 +10,11 @@ namespace Maho
 {
 
 /**
- * Executable command — the runtime base every queued command derives from.
- * Type-erased: FQueue holds these via unique_ptr, so the queue is type-agnostic.
- * GetCatalogId() is the catalog key that routes the command into its own FIFO
- * lane; Execute() runs the command (called by the CONSUMER after Dequeue).
+ * The runtime base every queued command derives from. Type-erased: FQueue holds
+ * these via unique_ptr, so the queue is type-agnostic. GetCatalogId() is the
+ * catalog key that routes the command into its own FIFO lane. A command is a
+ * DATA carrier — execution is entirely the consumer's job (the queue never runs
+ * anything).
  */
 struct ICommand
 {
@@ -21,9 +22,6 @@ struct ICommand
 
 	/** The catalog lane this command belongs to (uint64 key). */
 	[[nodiscard]] virtual std::uint64_t GetCatalogId() const = 0;
-
-	/** Run the command — invoked by the consumer, not the queue. */
-	virtual void Execute() = 0;
 };
 
 /**
@@ -31,13 +29,13 @@ struct ICommand
  *
  * Type-agnostic: commands are held as unique_ptr<ICommand>; each command carries
  * its own catalog id (GetCatalogId), so Enqueue routes it into the right FIFO
- * lane and Dequeue drains one lane. The queue only HOLDS commands — execution
- * (ICommand::Execute) is the consumer's job.
+ * lane and Dequeue drains one lane. The queue only HOLDS commands — the consumer
+ * Dequeues and applies them itself (e.g. switch on GetCatalogId).
  *
  *   FQueue Q;
  *   Q.Enqueue(std::make_unique<FInstallCmd>(...));   // routed by GetCatalogId
  *   while (auto Cmd = Q.Dequeue(kInstallLane))       // drain that lane, FIFO
- *   { Cmd->Execute(); }
+ *   { /* consumer applies the command */ }
  *
  * Any thread may Enqueue; the consumer Dequeues at its own safe point.
  */
