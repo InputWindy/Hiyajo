@@ -42,7 +42,7 @@ std::string FText::Resolve() const
 	return Translated ? *Translated : Source;
 }
 
-void FTextManager::Initiate(int Argc, char** Argv)
+void FTextManager::Initialize(int Argc, char** Argv)
 {
 	(void)Argc; (void)Argv;
 	std::lock_guard<std::mutex> Lock(Mutex);

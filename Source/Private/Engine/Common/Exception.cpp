@@ -9,7 +9,7 @@ FException& FException::Get()
 	return Instance;
 }
 
-void FException::Initiate(int Argc, char** Argv)
+void FException::Initialize(int Argc, char** Argv)
 {
 	(void)Argc; (void)Argv;
 	OnException.RemoveAll();

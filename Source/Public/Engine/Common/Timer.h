@@ -30,13 +30,13 @@ namespace Timer
  */
 class FTimer
 	: public TSingleton<FTimer>
-	, public IPlugin<IInitialize, IShutdown>
+	, public IPlugin<IInit, IShutdown>
 {
 public:
 	/** Process-unique accessor — defined in Timer.cpp (in Maho.dll). */
 	static FTimer& Get();
 
-	void Initiate(int Argc, char** Argv) override;
+	void Initialize(int Argc, char** Argv) override;
 	void Shutdown() override;
 
 	/** Push a scope (must be balanced with EndScope / FScopedTimer). */
@@ -88,13 +88,13 @@ public:
  */
 class FGameClock
 	: public TSingleton<FGameClock>
-	, public IPlugin<IInitialize, IShutdown>
+	, public IPlugin<IInit, IShutdown>
 {
 public:
 	/** Process-unique accessor — defined in Timer.cpp (in Maho.dll). */
 	static FGameClock& Get();
 
-	void Initiate(int Argc, char** Argv) override;
+	void Initialize(int Argc, char** Argv) override;
 	void Shutdown() override;
 
 	/** Seconds since construction (wall clock). */

@@ -161,7 +161,9 @@ public:
 			using T = typename decltype(TypeTag)::Type;
 			if (auto* Child = Load(T::GetModulePath()))
 			{
-				Enqueue(std::make_unique<FInstallCommand>(FInstallCommand{ Child }));
+				auto Cmd = std::make_unique<FInstallCommand>();
+				Cmd->Child = Child;
+				Enqueue(std::move(Cmd));
 			}
 		});
 		FlushCommands();
@@ -181,13 +183,17 @@ public:
 	{
 		if (auto* Child = Load(T::GetModulePath()))
 		{
-			Enqueue(std::make_unique<FInstallCommand>(FInstallCommand{ Child }));
+			auto Cmd = std::make_unique<FInstallCommand>();
+			Cmd->Child = Child;
+			Enqueue(std::move(Cmd));
 		}
 	}
 
 	void Uninstall(FLayerBase* Child)
 	{
-		Enqueue(std::make_unique<FUninstallCommand>(FUninstallCommand{ Child }));
+		auto Cmd = std::make_unique<FUninstallCommand>();
+		Cmd->Child = Child;
+		Enqueue(std::move(Cmd));
 	}
 
 	/**
@@ -282,10 +288,10 @@ private:
 	FLayerBase* Load(std::string_view DLLPath)
 	{
 		auto& M = LoadedModules.emplace_back();
-		if (M.Assembly.Load(DLLPath))
+		if (M.Load(DLLPath))
 		{
 			using CreateFunction = FLayerBase* (*)();
-			auto Create = M.Assembly.GetProcAs<CreateFunction>("CreateLayer");
+			auto Create = M.GetProcAs<CreateFunction>("CreateLayer");
 			if (Create)
 			{
 				return Create();

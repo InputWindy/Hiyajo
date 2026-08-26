@@ -31,7 +31,7 @@ namespace
 	}
 }
 
-void FAssetRegistry::Initiate(int Argc, char** Argv)
+void FAssetRegistry::Initialize(int Argc, char** Argv)
 {
 	(void)Argc; (void)Argv;
 	std::lock_guard<std::mutex> Lock(Mutex);

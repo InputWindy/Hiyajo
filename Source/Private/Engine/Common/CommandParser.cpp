@@ -17,7 +17,7 @@ FCommandParser& FCommandParser::Get()
 	return Instance;
 }
 
-void FCommandParser::Initiate(int Argc, char** Argv)
+void FCommandParser::Initialize(int Argc, char** Argv)
 {
 	Parse(Argc, Argv);
 }

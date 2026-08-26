@@ -13,7 +13,7 @@ namespace Maho
 // World depends on FAI → level after AI.
 class FWorld
 	: public FLayer<>
-	, public IPlugin<IMain, IExit>
+	, public IPlugin<IInit, IShutdown, IMain, IExit>
 {
 public:
 	MAHO_EXTEND_DEPS(FWorld, FDefaultSlot, (FNoParent, FAI));

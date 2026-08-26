@@ -10,18 +10,18 @@ namespace Maho
  * Unified app driver — install an extension DLL and execute its root instance.
  *
  * No engine/tool preset: the extension is a self-contained DLL exporting
- * `CreateExtension()` → a FLayerBase*. The entry point loads it via FAssembly,
+ * `CreateLayer()` → a FLayerBase*. The entry point loads it via FAssembly,
  * brings the anonymous root up (Initialize → subtree), forwards to its main
  * capability, then takes it down symmetrically (Shutdown + dtor teardown).
  *
  *   main()/WinMain() → Maho::Main(Argc, Argv)
  *     InstallFatalHandlers()
  *     FAssembly Load(argv[1])          // install
- *     CreateExtension() → FLayerBase* // create the root instance (anonymous)
- *     App->Initialize(Argc, Argv)      // bring the subtree up
+ *     CreateLayer() → FLayerBase*      // create the root instance (anonymous)
+ *     dynamic_cast<IInit*> → Initialize(Argc, Argv)   // bring the subtree up
  *     dynamic_cast<IMain*>            // does it own a run entry?
  *       → Main()                       // execute
- *     App->Shutdown()                 // symmetric teardown
+ *     dynamic_cast<IShutdown*> → Shutdown()   // symmetric teardown
  *     delete App
  */
 inline int Main(int Argc, char** Argv)
@@ -41,24 +41,29 @@ inline int Main(int Argc, char** Argv)
 		ReportFatal("Failed to install extension assembly");
 	}
 
-	// Create the root instance — the exported CreateExtension factory.
+	// Create the root instance — the exported CreateLayer factory.
 	using CreateFunction = FLayerBase* (*)();
-	auto Create = Extension.GetProcAs<CreateFunction>("CreateExtension");
+	auto Create = Extension.GetProcAs<CreateFunction>("CreateLayer");
 	if (Create == nullptr)
 	{
-		ReportFatal("Extension assembly exports no CreateExtension");
+		ReportFatal("Extension assembly exports no CreateLayer");
 	}
 
 	FLayerBase* App = Create();
 	if (!App)
 	{
-		ReportFatal("CreateExtension returned null");
+		ReportFatal("CreateLayer returned null");
 	}
 
 	// Bring the (anonymous) root layer up: initialize its subtree, run its main
 	// loop, then shut it down symmetrically. The root is never known by concrete
-	// type — only by the FLayerBase anchor + the IMain capability.
-	App->Initialize(Argc, Argv); // 拉起：根初始化子树（项目根 override）
+	// type — only by the FLayerBase anchor + capability interfaces.
+	auto* InitCaps = dynamic_cast<IInit*>(App);
+	if (!InitCaps)
+	{
+		ReportFatal("Extension root exposes no IInit");
+	}
+	InitCaps->Initialize(Argc, Argv); // 拉起：根初始化子树（项目根 override）
 
 	auto* MainCaps = dynamic_cast<IMain*>(App);
 	if (!MainCaps)
@@ -68,7 +73,10 @@ inline int Main(int Argc, char** Argv)
 
 	const int Result = MainCaps->Main();
 
-	App->Shutdown(); // 收起：对称关闭（子树清理走 ~FLayer 析构递归）
+	if (auto* ShutdownCaps = dynamic_cast<IShutdown*>(App))
+	{
+		ShutdownCaps->Shutdown(); // 收起：对称关闭（子树清理走 ~FLayer 析构递归）
+	}
 	delete App; // FLayerBase virtual dtor — removes the whole object through the DLL.
 	return Result;
 }

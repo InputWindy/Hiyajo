@@ -34,7 +34,7 @@ target_include_directories(LayerBaseStress PRIVATE "${ENGINE_DIR}/Source/Public"
 add_executable(DeclareLayerStress DeclareLayerStress.cpp ${MAHO_HEADERS})
 target_include_directories(DeclareLayerStress PRIVATE "${ENGINE_DIR}/Source/Public")
 
-# FParallelScheduler::ForEachSingletons — CRTP singletons, topo-leveled.
+# FLayer::ForEach<FLevels> singleton branch — CRTP singletons, topo-leveled.
 add_executable(SingletonStress SingletonStress.cpp ${MAHO_HEADERS})
 target_include_directories(SingletonStress PRIVATE "${ENGINE_DIR}/Source/Public")
 

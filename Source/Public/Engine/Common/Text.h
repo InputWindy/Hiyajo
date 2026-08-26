@@ -68,13 +68,13 @@ private:
 /** Localization manager: current culture + translation catalog (TSingleton). */
 class FTextManager
 	: public TSingleton<FTextManager>
-	, public IPlugin<IInitialize, IShutdown>
+	, public IPlugin<IInit, IShutdown>
 {
 public:
 	/** Process-unique accessor — declared here, defined in Text.cpp (in Maho.dll). */
 	static FTextManager& Get();
 
-	void Initiate(int Argc, char** Argv) override;
+	void Initialize(int Argc, char** Argv) override;
 	void Shutdown() override;
 
 	[[nodiscard]] std::string_view GetCulture() const;

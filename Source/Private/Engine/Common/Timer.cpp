@@ -20,7 +20,7 @@ FGameClock& FGameClock::Get()
 	return Instance;
 }
 
-void FTimer::Initiate(int Argc, char** Argv)
+void FTimer::Initialize(int Argc, char** Argv)
 {
 	(void)Argc; (void)Argv;
 	Reset();
@@ -96,7 +96,7 @@ FScopedTimer::~FScopedTimer()
 
 // ── FGameClock ──
 
-void FGameClock::Initiate(int Argc, char** Argv)
+void FGameClock::Initialize(int Argc, char** Argv)
 {
 	(void)Argc; (void)Argv;
 }

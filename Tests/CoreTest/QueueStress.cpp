@@ -1,10 +1,13 @@
-// Isolated test for FQueue<TCommand> — a thread-safe PENDING VALUE-command
-// collection. Enqueue/Dequeue are deduped requests; Flush executes-and-clears.
-// Verifies: multi-producer Enqueue, dedupe, Flush runs each command once.
+// Isolated test for FQueue — a thread-safe, type-erased PENDING-command
+// collection partitioned by CATALOG lane. Enqueue routes by GetCatalogId;
+// Dequeue pops FIFO per lane; the queue only HOLDS commands (the consumer
+// applies them). Verifies: multi-producer Enqueue, per-lane FIFO, Size/IsEmpty.
 #include <Core/Queue.h>
 
 #include <atomic>
 #include <cstdio>
+#include <cstdint>
+#include <memory>
 #include <thread>
 #include <vector>
 
@@ -12,22 +15,31 @@ using namespace Maho;
 
 namespace
 {
-	std::atomic<int> gExec{ 0 };
+	// one test catalog lane
+	inline constexpr std::uint64_t kIncLane = 0x1000;
 
-	// a value command: copyable + comparable + executable
-	struct FIncCmd
+	// a value command: derives ICommand, carries an increment, one FIFO lane
+	struct FIncCmd : public ICommand
 	{
+		explicit FIncCmd(int InAmount)
+			: Amount(InAmount)
+		{
+		}
+
+		[[nodiscard]] std::uint64_t GetCatalogId() const override
+		{
+			return kIncLane;
+		}
+
 		int Amount;
-		bool operator==(const FIncCmd& O) const { return Amount == O.Amount; }
-		void Execute() { gExec.fetch_add(Amount, std::memory_order_relaxed); }
 	};
 }
 
 int main()
 {
-	FQueue<FIncCmd> Q;
+	FQueue Q;
 
-	// multi-producer Enqueue, heavily duplicated values (dedupe kicks in)
+	// multi-producer Enqueue — every command lands in the kIncLane FIFO
 	constexpr int Producers = 4;
 	constexpr int Rounds = 20000;
 	std::vector<std::thread> Ts;
@@ -36,7 +48,7 @@ int main()
 		Ts.emplace_back([&] {
 			for (int i = 0; i < Rounds; ++i)
 			{
-				Q.Enqueue(FIncCmd{ 1 }); // same value → deduped to one
+				Q.Enqueue(std::make_unique<FIncCmd>(1));
 			}
 		});
 	}
@@ -45,71 +57,63 @@ int main()
 		T.join();
 	}
 
-	// all producers pushed the identical value — queue holds exactly one
-	if (Q.Size() != 1)
+	if (Q.Size() != Producers * Rounds)
 	{
-		std::printf("[FAIL] size=%zu want=1 (dedupe)\n", Q.Size());
+		std::printf("[FAIL] size=%zu want=%d (no dedupe in catalog queue)\n",
+			Q.Size(), Producers * Rounds);
 		return 1;
 	}
 
-	Q.Flush(); // execute one command once
-	if (gExec.load() != 1)
+	// consumer drains the lane FIFO and applies each command itself
+	int Applied = 0;
+	while (auto Cmd = Q.Dequeue(kIncLane))
 	{
-		std::printf("[FAIL] executed=%d want=1\n", gExec.load());
+		auto* Inc = static_cast<FIncCmd*>(Cmd.get());
+		Applied += Inc->Amount;
+	}
+	if (Applied != Producers * Rounds)
+	{
+		std::printf("[FAIL] applied=%d want=%d\n", Applied, Producers * Rounds);
 		return 1;
 	}
 	if (!Q.IsEmpty())
 	{
-		std::printf("[FAIL] Flush should clear (%zu pending)\n", Q.Size());
+		std::printf("[FAIL] drain should clear (%zu pending)\n", Q.Size());
 		return 1;
 	}
 
-	// distinct values are not deduped
-	Q.Enqueue(FIncCmd{ 1 });
-	Q.Enqueue(FIncCmd{ 2 });
-	if (Q.Size() != 2)
+	// paced consumption: take a bounded number per safe point, rest stays pending
+	Q.Enqueue(std::make_unique<FIncCmd>(1));
+	Q.Enqueue(std::make_unique<FIncCmd>(2));
+	Q.Enqueue(std::make_unique<FIncCmd>(3));
+	if (Q.Size() != 3)
 	{
-		std::printf("[FAIL] size=%zu want=2 (distinct)\n", Q.Size());
+		std::printf("[FAIL] size=%zu want=3\n", Q.Size());
 		return 1;
 	}
-	Q.Dequeue(FIncCmd{ 1 }); // remove one pending
-	if (Q.Size() != 1)
+	int Sum = 0;
+	for (int N = 0; N < 2; ++N)   // consume 2, one stays pending
 	{
-		std::printf("[FAIL] size=%zu want=1 after dequeue\n", Q.Size());
+		if (auto Cmd = Q.Dequeue(kIncLane))
+		{
+			Sum += static_cast<FIncCmd*>(Cmd.get())->Amount;
+		}
+	}
+	if (Sum != 3 || Q.Size() != 1)
+	{
+		std::printf("[FAIL] paced consume: sum=%d size=%zu want 3/1\n", Sum, Q.Size());
 		return 1;
 	}
-	Q.Flush();
-	if (gExec.load() != 3) // 1 (earlier) + 2 (the {2} that survived)
+	if (auto Cmd = Q.Dequeue(kIncLane))
 	{
-		std::printf("[FAIL] executed=%d want=3\n", gExec.load());
-		return 1;
+		Sum += static_cast<FIncCmd*>(Cmd.get())->Amount;   // drain the last (value 3)
 	}
-
-	// paced flush: consumer takes at most N per safe point, rest stays pending
-	gExec.store(0);
-	Q.Enqueue(FIncCmd{ 1 });
-	Q.Enqueue(FIncCmd{ 2 });
-	Q.Enqueue(FIncCmd{ 3 });
-	Q.Enqueue(FIncCmd{ 4 });
-	Q.Enqueue(FIncCmd{ 5 });
-	if (Q.Size() != 5)
+	if (Sum != 6 || !Q.IsEmpty())
 	{
-		std::printf("[FAIL] size=%zu want=5\n", Q.Size());
-		return 1;
-	}
-	Q.Flush(2); // consume 2 (values 1,2), 3 remain pending
-	if (gExec.load() != 3 || Q.Size() != 3)
-	{
-		std::printf("[FAIL] paced flush: exec=%d size=%zu want 3/3\n", gExec.load(), Q.Size());
-		return 1;
-	}
-	Q.Flush(); // drain the rest (values 3,4,5 → +3+4+5=12, total 15)
-	if (gExec.load() != 15 || !Q.IsEmpty())
-	{
-		std::printf("[FAIL] drain: exec=%d size=%zu want 15/empty\n", gExec.load(), Q.Size());
+		std::printf("[FAIL] final drain: sum=%d empty=%d want 6/true\n", Sum, Q.IsEmpty());
 		return 1;
 	}
 
-	std::puts("ok: FQueue value commands — dedupe, dequeue, flush-and-clear, paced flush");
+	std::puts("ok: FQueue catalog lanes — multi-producer, per-lane FIFO, paced drain");
 	return 0;
 }

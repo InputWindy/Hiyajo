@@ -84,7 +84,7 @@ namespace
 	};
 }
 
-void FConsoleVariable::Initiate(int Argc, char** Argv)
+void FConsoleVariable::Initialize(int Argc, char** Argv)
 {
 	// Static TAutoConsoleVariable globals registered at static-init already;
 	// nothing to bring up. Explicitly no clear — those globals must survive.

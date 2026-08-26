@@ -21,13 +21,13 @@ namespace Config
  */
 class FConfig
 	: public TSingleton<FConfig>
-	, public IPlugin<IInitialize, IShutdown>
+	, public IPlugin<IInit, IShutdown>
 {
 public:
 	/** Process-unique accessor — declared here, defined in Config.cpp (in Maho.dll). */
 	static FConfig& Get();
 
-	void Initiate(int, char**) override { Sections.clear(); }
+	void Initialize(int, char**) override { Sections.clear(); }
 	void Shutdown() override { Sections.clear(); }
 
 	bool Load(std::string_view Path);

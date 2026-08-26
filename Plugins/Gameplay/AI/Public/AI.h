@@ -12,7 +12,7 @@ namespace Maho
 // → AI.gen.h MAHO_DEPS_FAI_FDefaultSlot). Root: AI has no deps → level 0.
 class FAI
 	: public FLayer<>
-	, public IPlugin<IMain, IExit>
+	, public IPlugin<IInit, IShutdown, IMain, IExit>
 {
 public:
 	MAHO_EXTEND_DEPS(FAI, FDefaultSlot, (FNoParent));

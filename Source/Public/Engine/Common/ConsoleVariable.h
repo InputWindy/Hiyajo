@@ -66,17 +66,17 @@ public:
 /**
  * Console variable registry (UE IConsoleManager). Static TAutoConsoleVariable
  * globals register here at static-init; Find looks them up. TSingleton with the
- * fixed Initiate/Shutdown lifecycle (Shutdown clears the registry).
+ * fixed Initialize/Shutdown lifecycle (Shutdown clears the registry).
  */
 class FConsoleVariable
 	: public TSingleton<FConsoleVariable>
-	, public IPlugin<IInitialize, IShutdown>
+	, public IPlugin<IInit, IShutdown>
 {
 public:
 	/** Process-unique accessor — declared here, defined in ConsoleVariable.cpp (in Maho.dll). */
 	static FConsoleVariable& Get();
 
-	void Initiate(int Argc, char** Argv) override;
+	void Initialize(int Argc, char** Argv) override;
 	void Shutdown() override;
 
 	/** Find a registered variable; nullptr when absent. */

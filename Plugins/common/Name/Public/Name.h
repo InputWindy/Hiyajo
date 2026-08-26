@@ -49,13 +49,13 @@ private:
 /** Global interned string pool — a singleton service. */
 class FNamePool
 	: public TSingleton<FNamePool>
-	, public IPlugin<IInitialize, IShutdown>
+	, public IPlugin<IInit, IShutdown>
 {
 public:
 	/** Process-unique accessor — declared here, defined in Name.cpp (in Name.dll). */
 	static FNamePool& Get();
 
-	void Initiate(int, char**) override { free(); }
+	void Initialize(int, char**) override { free(); }
 	void Shutdown() override { free(); }
 
 	/** Intern a string — returns the canonical FName (thread-safe). */

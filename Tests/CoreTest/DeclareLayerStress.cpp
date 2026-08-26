@@ -7,12 +7,14 @@ using namespace Maho;
 // a plugin layer exactly as create_plugin scaffolds it
 class FMyPlugin
 	: public FLayer<>
-	, public IPlugin<IMain, IExit>
+	, public IPlugin<IInit, IShutdown, IMain, IExit>
 {
 	MAHO_DECLARE_LAYER(FMyPlugin, "MyPlugin.dll");
 
 	int Main() override { return 0; } // the run entry (a layer that owns a loop)
 	void Exit() override {}
+	void Initialize(int, char**) override {} // optional lifecycle hook
+	void Shutdown() override {}
 };
 
 int main()
@@ -23,7 +25,7 @@ int main()
 		return 1;
 	}
 	// the factory returns the anonymous FLayerBase* ceiling — downcast to drive
-	auto* Made = FMyPlugin::CreateExtension();
+	auto* Made = FMyPlugin::CreateLayer();
 	if (Made == nullptr)
 	{
 		return 2;

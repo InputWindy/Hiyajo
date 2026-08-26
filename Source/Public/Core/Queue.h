@@ -35,7 +35,7 @@ struct ICommand
  *   FQueue Q;
  *   Q.Enqueue(std::make_unique<FInstallCmd>(...));   // routed by GetCatalogId
  *   while (auto Cmd = Q.Dequeue(kInstallLane))       // drain that lane, FIFO
- *   { /* consumer applies the command */ }
+ *   { ... }                                          // apply each command yourself
  *
  * Any thread may Enqueue; the consumer Dequeues at its own safe point.
  */

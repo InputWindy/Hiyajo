@@ -16,13 +16,13 @@ namespace Paths
 /** Path resolution singleton — engine/project root aliases → physical paths. */
 class FPaths
 	: public TSingleton<FPaths>
-	, public IPlugin<IInitialize, IShutdown>
+	, public IPlugin<IInit, IShutdown>
 {
 public:
 	/** Process-unique accessor — declared here, defined in Paths.cpp (in Paths.dll). */
 	static FPaths& Get();
 
-	void Initiate(int, char**) override { Roots.clear(); }
+	void Initialize(int, char**) override { Roots.clear(); }
 	void Shutdown() override { Roots.clear(); }
 
 	/** Register a root alias (e.g. "Engine" → <engine dir>). */

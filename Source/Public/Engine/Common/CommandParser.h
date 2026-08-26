@@ -3,7 +3,7 @@
 // CommandParser — command-line parser (engine Common, TSingleton). Parses
 // argc/argv into a key-value store. Uses CLI11 (engine third-party, header-only).
 // Both --key value and --key=value forms are accepted; positional args are stored
-// under positional keys. FCommandParser::Get().Initiate(argc, argv) fills the
+// under positional keys. FCommandParser::Get().Initialize(argc, argv) fills the
 // store (idempotent).
 #include <Core/Singleton.h>
 #include <Engine/Layer.h>
@@ -20,13 +20,13 @@ namespace CommandParser
 /** Command-line argument parser (key-value store). */
 class FCommandParser
 	: public TSingleton<FCommandParser>
-	, public IPlugin<IInitialize, IShutdown>
+	, public IPlugin<IInit, IShutdown>
 {
 public:
 	/** Process-unique accessor (overloads the Get(string_view) member below). */
 	static FCommandParser& Get();
 
-	void Initiate(int Argc, char** Argv) override;
+	void Initialize(int Argc, char** Argv) override;
 	void Shutdown() override;
 
 	/** Parse argc/argv into the store (idempotent; later overwrites). */

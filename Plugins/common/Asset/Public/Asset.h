@@ -65,13 +65,13 @@ struct FAssetData
  */
 class FAssetRegistry
 	: public TSingleton<FAssetRegistry>
-	, public IPlugin<IInitialize, IShutdown>
+	, public IPlugin<IInit, IShutdown>
 {
 public:
 	/** Process-unique accessor — defined in Asset.cpp (in Asset.dll). */
 	static FAssetRegistry& Get();
 
-	void Initiate(int Argc, char** Argv) override;
+	void Initialize(int Argc, char** Argv) override;
 	void Shutdown() override;
 
 	/**

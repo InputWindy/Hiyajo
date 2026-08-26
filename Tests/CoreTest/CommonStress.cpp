@@ -52,7 +52,7 @@ int main()
 	Unicode::EnsureConsoleUtf8();
 
 	// Config (INI singleton)
-	Config::FConfig::Get().Initiate(0, nullptr);
+	Config::FConfig::Get().Initialize(0, nullptr);
 	Config::FConfig::Get().SetString("/Script/Engine", "GameName", "MyGame");
 	if (Config::FConfig::Get().GetString("/Script/Engine", "GameName") != std::optional<std::string>("MyGame"))
 	{
@@ -74,7 +74,7 @@ int main()
 	}
 
 	// ConsoleVariable (CVar registry + static TAutoConsoleVariable)
-	ConsoleVariable::FConsoleVariable::Get().Initiate(0, nullptr);
+	ConsoleVariable::FConsoleVariable::Get().Initialize(0, nullptr);
 	static ConsoleVariable::TAutoConsoleVariable<int> CVarMaxFPS("r.MaxFPS", 60, "Max FPS");
 	ConsoleVariable::TAutoConsoleVariable<std::string> CVarLabel("r.Label", "default", "Label");
 	if (CVarMaxFPS.GetValue() != 60 || CVarLabel.GetValue() != "default")
@@ -89,7 +89,7 @@ int main()
 	ConsoleVariable::FConsoleVariable::Get().Shutdown();
 
 	// Exception (non-fatal broadcast)
-	Exception::FException::Get().Initiate(0, nullptr);
+	Exception::FException::Get().Initialize(0, nullptr);
 	std::string Caught;
 	Exception::FException::Get().OnException.Bind([&](const std::string& M) { Caught = M; });
 	Exception::FException::Get().ReportException("boom");
@@ -100,7 +100,7 @@ int main()
 	Exception::FException::Get().Shutdown();
 
 	// Timer (scope profiler + game clock)
-	Timer::FTimer::Get().Initiate(0, nullptr);
+	Timer::FTimer::Get().Initialize(0, nullptr);
 	{
 		Timer::FScopedTimer Scope("frame");
 	}
@@ -110,7 +110,7 @@ int main()
 		std::puts("[FAIL] Timer dump"); return 1;
 	}
 	Timer::FTimer::Get().Shutdown();
-	Timer::FGameClock::Get().Initiate(0, nullptr);
+	Timer::FGameClock::Get().Initialize(0, nullptr);
 	Timer::FGameClock::Get().SetTimeScale(0.5);
 	if (Timer::FGameClock::Get().GetTimeScale() != 0.5)
 	{
@@ -119,7 +119,7 @@ int main()
 	Timer::FGameClock::Get().Shutdown();
 
 	// Text (localized catalog)
-	Text::FTextManager::Get().Initiate(0, nullptr);
+	Text::FTextManager::Get().Initialize(0, nullptr);
 	Text::FTextManager::Get().AddTranslation("MainMenu", "Title", Text::Culture::Chinese, "\xE4\xB8\xBB\xE8\x8F\x9C\xE5\x8D\x95"); // "主菜单"
 	Text::FTextManager::Get().SetCulture(std::string(Text::Culture::Chinese));
 	const Text::FText Title = Text::FText("MainMenu", "Title", "Main Menu");
@@ -139,7 +139,7 @@ int main()
 		char* TestArgs[] = { Arg0, Arg1, Arg2, Arg3, Arg4 };
 		CommandParser::FCommandParser& Parser = CommandParser::FCommandParser::Get();
 		Parser.Clear();
-		Parser.Initiate(5, TestArgs);
+		Parser.Initialize(5, TestArgs);
 		if (Parser.GetInt("width") != 800 || Parser.Get("height") != "600" || !Parser.GetBool("fullscreen"))
 		{
 			std::printf("[FAIL] CommandParser KV: width=%s height=%s fullscreen=%s\n",

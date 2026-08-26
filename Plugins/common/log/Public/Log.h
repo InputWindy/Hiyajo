@@ -13,18 +13,18 @@ namespace Maho
 {
 
 /**
- * Logging singleton — a CRTP singleton (T::Get()) wrapping spdlog. Initiate
+ * Logging singleton — a CRTP singleton (T::Get()) wrapping spdlog. Initialize
  * configures the thread-safe stdout-color logger (honoring a `--log-level` arg
  * if present); Shutdown flushes+drops it. Logger is public — just reach it via
  * FLog::Get().Logger (or the FLog::Info/Warn/Error passthroughs).
  *
- *   FLog::Get().Initiate(argc, argv);
+ *   FLog::Get().Initialize(argc, argv);
  *   FLog::Info("init: {}", name);
  *   FLog::Error("boom: code={}", code);
  */
 class FLog
 	: public TSingleton<FLog>
-	, public IPlugin<IInitialize, IShutdown>
+	, public IPlugin<IInit, IShutdown>
 {
 public:
 	/** Process-unique accessor — defined in Log.cpp (in Log.dll). */
@@ -33,8 +33,8 @@ public:
 	/** The shared logger — all engine/service logging routes through it. */
 	std::shared_ptr<spdlog::logger> Logger;
 
-	/** Bring the logger up (ISingleton::Initiate). */
-	void Initiate(int, char** Argv) override
+	/** Bring the logger up (ISingleton::Initialize). */
+	void Initialize(int, char** Argv) override
 	{
 		Logger = spdlog::stdout_color_mt("Maho");
 		Logger->set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%^%l%$] %v");
@@ -80,7 +80,7 @@ public:
 } // namespace Maho
 
 // ── syntax sugar: CORE-logging macros (spdlog-style) ─────────────────────
-// Format like the engine core; call after FLog::Get().Initiate(argc, argv):
+// Format like the engine core; call after FLog::Get().Initialize(argc, argv):
 //
 //   MAHO_LOG_CORE_INFO("init {}", name);
 //   MAHO_LOG_CORE_ERROR("boom: code={}", code);

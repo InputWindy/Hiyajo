@@ -386,7 +386,7 @@ MAIN_CPP = """// ═════════════════════
 //    - 项目默认插件：Extension/<ProjectName>/
 //    - 手动创建的插件：Extension/<其他插件名>/
 //
-//  入口只负责：安装（加载）默认插件 DLL → CreateExtension → Main 执行。
+//  入口只负责：安装（加载）默认插件 DLL → CreateLayer → Main 执行。
 // ═══════════════════════════════════════════════════════════════════════
 #if defined(_WIN32)
 #	include <EntryPointWindows.h>
@@ -443,7 +443,7 @@ target_include_directories({name} PUBLIC
 	"${{CMAKE_CURRENT_SOURCE_DIR}}/Plugins/{name}/Public"
 {plugin_dirs}
 )
-# Export the extern "C" CreateExtension() bridge — the host's single entry.
+# Export the extern "C" CreateLayer() bridge — the host's single entry.
 set_target_properties({name} PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 target_compile_definitions({name} PRIVATE MAHO_{NAME_UPPER}_MODULE_EXPORTS)
 target_link_libraries({name} PUBLIC Maho)
@@ -1141,7 +1141,7 @@ def create_plugin(
 		f"//   interfaces are hand-spelled as IPlugin<> template args.\n"
 		f"class F{plugin_name}\n"
 		f"\t: public FLayer<>\n"
-		f"\t, public IPlugin<IMain, IExit>\n"
+		f"\t, public IPlugin<IInit, IShutdown, IMain, IExit>\n"
 		f"{{\n"
 		f"MAHO_DECLARE_LAYER(F{plugin_name}, \"{plugin_name}.dll\");\n"
 		f"\n"
@@ -1160,15 +1160,15 @@ def create_plugin(
 	(private / f"{plugin_name}.cpp").write_text(
 		f'#include "{plugin_name}.h"\n\n'
 		f"namespace Maho\n{{\n\n"
-		f"// {plugin_name} — implementation. CreateExtension is inline via\n"
+		f"// {plugin_name} — implementation. CreateLayer is inline via\n"
 		f"// MAHO_DECLARE_LAYER; add the plugin's per-instance logic here.\n\n"
 		f"}} // namespace Maho\n\n"
 		f"// The C export the host (EntryPoint) looks up BY SYMBOL NAME. The inline\n"
 		f"// static factory's C++ mangled name is not addressable via GetProcAddress,\n"
 		f"// so a plain C bridge is exported (the DLL's single stable entry).\n"
-		f'extern "C" MAHO_{export}_API Maho::FLayerBase* CreateExtension()\n'
+		f'extern "C" MAHO_{export}_API Maho::FLayerBase* CreateLayer()\n'
 		f"{{\n"
-		f"\treturn Maho::F{plugin_name}::CreateExtension();\n"
+		f"\treturn Maho::F{plugin_name}::CreateLayer();\n"
 		f"}}\n",
 		encoding="utf-8", newline="\n",
 	)

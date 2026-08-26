@@ -63,17 +63,25 @@ public:
 	std::shared_ptr<FTransferState> State;
 };
 
-struct FPendingIO
+struct FPendingImport
 {
 	FTransferHandle Handle;
 	std::function<void(std::span<const std::uint8_t>)> OnBulkReady;
+};
+
+/** A queued async export: encoded+written on the IO thread, OnDone on the game thread. */
+struct FPendingExport
+{
+	FTransferHandle Handle;
+	std::function<void(bool)> OnDone;
 };
 
 class FResourceSystem::FImpl
 {
 public:
 	mutable std::mutex Mutex;
-	std::unordered_map<Name::FName, FPendingIO> PendingIO;
+	std::unordered_map<Name::FName, FPendingImport> PendingIO;
+	std::unordered_map<Name::FName, FPendingExport> PendingExports;
 	std::unordered_map<Name::FName, std::unique_ptr<FResource>> Catalog;
 };
 
@@ -88,10 +96,10 @@ FResourceSystem::FResourceSystem()
 {
 }
 
-void FResourceSystem::Initiate(int Argc, char** Argv)
+void FResourceSystem::Initialize(int Argc, char** Argv)
 {
 	(void)Argc; (void)Argv;
-	Initialize();   // start the async load thread
+	FThreadedServer::Initialize();   // start the async load thread
 }
 
 void FResourceSystem::Shutdown()
@@ -100,6 +108,7 @@ void FResourceSystem::Shutdown()
 	{
 		std::lock_guard Lock(Impl->Mutex);
 		Impl->PendingIO.clear();
+		Impl->PendingExports.clear();
 		Impl->Catalog.clear();
 	}
 }
@@ -147,7 +156,33 @@ bool FResourceSystem::EnqueueImport(
 	FTransferHandle Handle = RequestLoad(PhysicalPath);
 
 	std::lock_guard Lock(Impl->Mutex);
-	Impl->PendingIO[Name::FName(AssetPath)] = FPendingIO{ std::move(Handle), std::move(OnBulkReady) };
+	Impl->PendingIO[Name::FName(AssetPath)] = FPendingImport{ std::move(Handle), std::move(OnBulkReady) };
+	return true;
+}
+
+bool FResourceSystem::EnqueueExportWrite(
+	std::vector<std::uint8_t> Bytes,
+	std::string DestinationPath,
+	std::function<void(bool)> OnDone)
+{
+	auto State = std::make_shared<FTransferState>();
+	const std::string Dest = std::move(DestinationPath);
+	Submit([State, Dest, Bytes = std::move(Bytes)]()
+	{
+		const bool bWritten = WriteBytes(Dest, Bytes);
+		if (bWritten)
+		{
+			State->bSucceeded.store(true, std::memory_order_release);
+		}
+		else
+		{
+			State->bFailed.store(true, std::memory_order_release);
+		}
+	});
+
+	std::lock_guard Lock(Impl->Mutex);
+	Impl->PendingExports[Name::FName(Dest)] = FPendingExport{
+		FTransferHandle{ std::move(State) }, std::move(OnDone) };
 	return true;
 }
 
@@ -161,17 +196,23 @@ const FResource* FResourceSystem::RegisterResource(std::string AssetPath, std::u
 
 void FResourceSystem::ProcessReadyIO()
 {
+	// Hold the impl lock for the WHOLE poll: producers (EnqueueImport/Export on the
+	// IO thread) write PendingIO/PendingExports concurrently — iterating/erasing
+	// them without the lock is a data race. The decode/OnDone callbacks run under
+	// the lock (they touch the same maps via RegisterResource / Shutdown).
+	std::lock_guard Lock(Impl->Mutex);
+
 	std::size_t Applied = 0;
 	for (auto It = Impl->PendingIO.begin(); It != Impl->PendingIO.end() && Applied < kMaxAppliesPerTick;)
 	{
-		FPendingIO& Pending = It->second;
+		FPendingImport& Pending = It->second;
 		if (!Pending.Handle.HasSucceeded() && !Pending.Handle.HasFailed())
 		{
 			++It;
 			continue;
 		}
 
-		FPendingIO Ready = std::move(Pending);
+		FPendingImport Ready = std::move(Pending);
 		It = Impl->PendingIO.erase(It);
 
 		if (Ready.Handle.HasSucceeded())
@@ -185,6 +226,23 @@ void FResourceSystem::ProcessReadyIO()
 		}
 
 		++Applied;
+	}
+
+	// apply ready exports (OnDone(bool) on the game thread)
+	for (auto It = Impl->PendingExports.begin(); It != Impl->PendingExports.end();)
+	{
+		FPendingExport& Pending = It->second;
+		if (!Pending.Handle.HasSucceeded() && !Pending.Handle.HasFailed())
+		{
+			++It;
+			continue;
+		}
+		FPendingExport Ready = std::move(Pending);
+		It = Impl->PendingExports.erase(It);
+		if (Ready.OnDone)
+		{
+			Ready.OnDone(Ready.Handle.HasSucceeded());
+		}
 	}
 }
 
