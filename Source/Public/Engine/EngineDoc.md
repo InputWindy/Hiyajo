@@ -73,6 +73,27 @@ MAHO_DECLARE_LAYER(FCustomLayer, "MyLayer.dll")
 
 子层依赖经 `MAHO_EXTEND_DEPS`（声明锚点）+ codegen 生成的 `FDepends` 表达。分层用 `Topo::TLevels_t<FTypeList, FDefaultSlot>` 计算（读每类 `FDepends`），传给 `ForEach<FLevels>` 驱动。参见 `Core/Topology.h` + `Core/Query.h`。
 
+### 依赖 / 链接 / include 规则
+
+**链接方向（`.cplugin` Dependencies / CMake `target_link_libraries`）——分层单向，箭头 = 被链接方**：
+
+```
+引擎核心(Maho)  ←── 引擎插件（每个引擎插件 link Maho）
+引擎核心 + 引擎插件  ←── 项目核心（入口层，link Maho + 全部挂载引擎插件）
+引擎核心 + 引擎插件 + 项目核心  ←── 项目插件（link Maho，经 .cplugin 传递获得上层 include）
+```
+
+- **引擎插件**：`.cplugin Dependencies` 仅声明同层插件依赖；引擎核心由 codegen 自动 link。
+- **项目核心（入口层）**：link 引擎核心 + 全部挂载引擎插件 + 项目插件；是唯一宿主（继承 FLayerBase 并导出 `CreateLayer()`）。
+- **项目插件**：`.cplugin Dependencies` 声明父（项目核心）+ 引擎插件依赖；经传递获得引擎核心 include。
+
+**include 方向（编译期）**：
+
+- **引擎核心 ↔ 引擎插件**：**单向**——引擎插件 include 引擎核心（`<Maho.h>`/`<Layer.h>`），引擎核心零 app 假设、不 include 任何插件。
+- **项目核心 ↔ 项目插件**：**双向**——项目核心 include 项目插件头（`FLayer<FChild>` 引用子类型），项目插件 include 项目核心头（子→父，经 .cplugin）。include 路径由 codegen 加所有挂载插件 Public/。
+
+**无环保证**：构建依赖（`.cplugin`）分层单向（子→父）；父 include 子只是编译期类型引用，不构成构建环。
+
 ### 生命周期
 
 `FLayer` 本身不强制 `IInit/IShutdown`——需要生命周期的层经 `IPlugin<IInit, IShutdown, ...>` 组合（Core/Interface.h），由用户在驱动循环里显式调用（可经 `ForEach<FLevels>` 统一驱动子层）。析构不静默 teardown。

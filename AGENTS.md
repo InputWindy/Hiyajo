@@ -16,6 +16,27 @@
 - **依赖声明**：`MAHO_EXTEND_DEPS(Class, Key, (Parent, deps...))` 是通用声明锚点（codegen 扫描 → `.gen.h` 宏填 `FDepends`），分层用 `Topo::TLevels_t<FTypeList, Key>`。`.cplugin` `Dependencies` 是构建级（编译 target + include），不填 FLayer 模板。
 - **生命周期归宿主**：FLayer 析构只释放内存，不静默 teardown。init/shutdown 由用户经 `ForEach<FLevels>` 或显式驱动 `IInit`/`IShutdown` 能力。
 
+## 依赖 / 链接 / include 规则（强约束）
+
+**链接方向（`.cplugin` Dependencies / CMake `target_link_libraries`）——分层单向，箭头 = 被链接方**：
+
+```
+引擎核心(Maho)  ←── 引擎插件（每个引擎插件 link Maho）
+引擎核心 + 引擎插件  ←── 项目核心（入口层，link Maho + 全部挂载引擎插件）
+引擎核心 + 引擎插件 + 项目核心  ←── 项目插件（link Maho，经 .cplugin 传递获得上层 include）
+```
+
+- **引擎插件**：`.cplugin Dependencies` 仅声明同层插件依赖（如 Asset→Paths、Resource→Name+Paths、World→AI），引擎核心由 codegen 自动 link（`target_link_libraries({name} PUBLIC Maho)`）。
+- **项目核心（入口层）**：link 引擎核心 + 全部挂载引擎插件 + 项目插件。它是唯一宿主（继承 FLayerBase 并导出 `CreateLayer()`）。
+- **项目插件**：`.cplugin Dependencies` 声明父（项目核心）+ 引擎插件依赖；经传递获得引擎核心 include。
+
+**include 方向（编译期）——双向规则**：
+
+- **引擎核心 ↔ 引擎插件**：**单向**——引擎插件 include 引擎核心（`<Maho.h>`/`<Layer.h>`），**引擎核心零 app 假设，不 include 任何插件**（纯脚手架）。
+- **项目核心 ↔ 项目插件**：**双向**——项目核心 include 项目插件头（`FLayer<FTestProjectPlugin>` 模板参数引用子类型），项目插件 include 项目核心头（子→父，经 .cplugin）。include 路径由 codegen 加所有挂载插件 Public/（`dep_public_dirs`）。
+
+**无环保证**：构建依赖（`.cplugin`）保持分层单向（子→父）；父 include 子只是编译期类型引用（入口 include 路径含所有挂载插件），不构成构建环。
+
 ## 接口分层
 
 **读接口 public，能力/写接口 public**（不做"仅宿主可写"写保护）。多线程安全由各对象内部保证（锁/队列）。
