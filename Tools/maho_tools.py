@@ -2064,11 +2064,13 @@ def list_engine_plugins(engine_root: Path | None = None) -> list[dict[str, Any]]
 	"""
 	Enumerate engine plugins for the CreateProject UI.
 
-	Returns [{Name, Dependencies, FriendlyName, Description, EnabledByDefault,
-	Extension}] in stable name order. Extension is the first module's
-	{Class, Header, Priority} (None when the module declares no extension).
+	Engine plugins live under <engine>/Plugins/ (Common = service plugins,
+	Gameplay = layer plugins). Returns [{Name, Dependencies, FriendlyName,
+	Description, EnabledByDefault, Extension}] in stable name order. Extension is
+	the first module's {Class, Header, Priority} (None when the module declares no
+	extension).
 	"""
-	root = (engine_root or ENGINE_ROOT).resolve() / "Extension"
+	root = (engine_root or ENGINE_ROOT).resolve() / "Plugins"
 	if not root.is_dir():
 		return []
 	out: list[dict[str, Any]] = []
