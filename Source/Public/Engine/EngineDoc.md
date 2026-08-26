@@ -3,7 +3,7 @@
 
 ## 代码文件
 
-- [Layer.h](Layer.h) — 层体系（FLayerBase / FLayer / 命令 / DispatchInstance / 插件宏）
+- [Layer.h](Layer.h)
 <!-- mahogen end -->
 
 ## 层架构（FLayerBase / FLayer）

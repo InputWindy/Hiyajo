@@ -3,20 +3,20 @@
 
 ## 代码文件
 
-- [Assembly.h](Assembly.h) — DLL 加载单元（LoadLibrary/FreeLibrary RAII）
-- [Core.h](Core.h) — Core 聚合头
-- [Export.h](Export.h) — DLL 导出/导入宏（MAHO_API）
-- [Extension.h](Extension.h) — MAHO_EXTEND_DEPS（依赖声明锚点）
-- [Fatal.h](Fatal.h) — 致命错误报告
-- [Interface.h](Interface.h) — 能力接口（IInit/IShutdown/IMain/IExit/IPlugin）
-- [Query.h](Query.h) — 类型无关编译期 LINQ（TQuery）
-- [Queue.h](Queue.h) — 类型无关 FIFO 命令队列（FQueue）
-- [Schedulers.h](Schedulers.h) — 遍历协议 + 并行调度器（FParallelScheduler）
-- [Singleton.h](Singleton.h) — CRTP 单例标识基类（TSingleton）
-- [ThreadPool.h](ThreadPool.h) — 线程池（FThreadPool）
-- [ThreadedServer.h](ThreadedServer.h) — 常驻单线程（FThreadedServer）
-- [Topology.h](Topology.h) — 编译期依赖拓扑（TLevels_t / TNodeLevel）
-- [TypeList.h](TypeList.h) — 编译期类型表（TTypeList 及操作）
+- [Assembly.h](Assembly.h)
+- [Core.h](Core.h)
+- [Export.h](Export.h)
+- [Extension.h](Extension.h)
+- [Fatal.h](Fatal.h)
+- [Interface.h](Interface.h)
+- [Query.h](Query.h)
+- [Queue.h](Queue.h)
+- [Schedulers.h](Schedulers.h)
+- [Singleton.h](Singleton.h)
+- [ThreadedServer.h](ThreadedServer.h)
+- [ThreadPool.h](ThreadPool.h)
+- [Topology.h](Topology.h)
+- [TypeList.h](TypeList.h)
 <!-- mahogen end -->
 
 ## 概念——类型无关的基建积木
