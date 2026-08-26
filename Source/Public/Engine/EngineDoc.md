@@ -3,67 +3,76 @@
 
 ## 代码文件
 
-- [ModuleManager.h](ModuleManager.h) — 模块加载/引用计数（DLL 生命周期）
-- [Schedulers.h](Schedulers.h) — 串行 / 并行调度器
-- [ThreadPool.h](ThreadPool.h)
+- [Layer.h](Layer.h) — 层体系（FLayerBase / FLayer / 命令 / DispatchInstance / 插件宏）
 <!-- mahogen end -->
 
-## 概念——模块系统与调度策略
+## 层架构（FLayerBase / FLayer）
 
-Engine 层放**具体调度策略**和**模块加载管理器**。核心 `Core/` 只给契约（`FInstance` 根、`FModuleInstance` 约定、`IScheduler`），串/并行与模块生命周期的实现都在这里。
+Engine 层只有 `Layer.h` —— 层体系：一个"层"是**可安装/可被驱动的运行时节点**（`FLayerBase`），加上带编译期子层表的装配节点（`FLayer<TChildren...>`）。Core 的 `Schedulers.h` / `ThreadPool.h` / `ThreadedServer.h` 已迁入 Core（类型无关基建）。
 
-### 模块系统
+### FLayerBase — 三个基建能力的组装基座
 
-模块 = "DLL + 工厂"的可装载代码单元。三块拼：
-
-| 概念 | 层 | 职责 |
-|------|------|------|
-| `FInstance` | Core | DLL 实例根（虚析构，`delete` 走 DLL） |
-| `FModuleInstance` | Core | 类型约定：`static GetModulePath()` 指向 DLL |
-| `FModuleManager<TExtensions>` | Engine | `TSingleton`：加载 DLL、构造实例、引用计数卸载 |
-
-应用用 `FModuleManager<FXxx>` 按类型加载，再驱动返回的实例：
+`FLayerBase` 继承三个类型无关的 Core 基建，是所有层实例的多态锚点（跨 DLL 单 vtable/RTTI，`MAHO_API`）：
 
 ```cpp
-// FExtensions = 项目全部模块类型（编译期扫描表 + code-gen）
-struct FGameEngine : Parallel::FParallelScheduler<FExtensions>
+class MAHO_API FLayerBase
+    : public FQueue                          // ① 命令队列（catalog 分 lane 的 FIFO，多线程 Enqueue）
+    , public Parallel::FParallelScheduler    // ② 并行执行（两个泛型 ForEach）
 {
-	std::vector<FInstance*> Instances;
-
-	int Main(int, char**)
-	{
-		// 1. 加载全部实例
-		ForEach<FExtensions>(*this, [&](auto Tag) {
-			using T = typename decltype(Tag)::Type;
-			if (FInstance* S = FModuleManager<FExtensions>::Get().template Load<T>())
-				Instances.push_back(S);
-		});
-
-		// 2. Query 过滤接口 → 并行驱动
-		using FTicks = decltype(Query<FExtensions>().Select<ITick>().Cast<ITick>());
-		this->template Execute<FTicks>(Instances, [](ITick& T) { T.Tick(); });
-
-		// 3. 收尾：实例先死（虚析构在 DLL）→ 模块后卸
-		for (FInstance* I : Instances) delete I;
-		FModuleManager<FExtensions>::Get().UnloadIdle();
-		return 0;
-	}
+    template <typename TList> constexpr auto Query() const;  // ③ 类型无关编译期查询（Core::TQuery）
+    template <typename T> bool Is() const;                   // 运行时 dynamic_cast 类型判断
 };
 ```
 
-**生命周期顺序是硬约束**：实例的虚表/析构都在 DLL 代码段，先 Unload DLL 再用实例 = 用后释放。所以实例销毁必须先于模块卸载——这交给宿主（`delete` 全死在 DLL 卸载之前）。
+- **FQueue**：`Enqueue(unique_ptr<ICommand>)`（任意线程，按 `GetCatalogId()` 路由到 lane）+ `Dequeue(catalogId)`（FIFO 取出）。命令是纯数据载体（`ICommand` 仅 `GetCatalogId()`），**执行是消费方的职责**。
+- **FParallelScheduler**：`ForEach(FCallables...)`（编译期变参并行）+ `ForEach(Container, MakeTask)`（运行时容器并行），barrier 收尾。
+- **Query\<TList\>()**：返回 `TQuery<TList>`（Core 的 Select/With/Not 编译期筛选），不依赖层状态。
 
-### 调度策略
+### DispatchInstance — 运行时分发
 
-**`FParallelScheduler`** —— 并行：持有 `FThreadPool`。`Run` 投线程池；`Execute` = 外层 level 串行 + 内层线程池并行（barrier 跨层同步）。
+`DispatchInstance(TTypeList<Ts...>, FLayerBase* Instance, Visitor)` 对单个实例按候选类型列表 `dynamic_cast`，**第一个匹配**的类型交给 Visitor。用于"层内类型筛选"（实例属于哪层就驱动哪层）。
 
-**`FThreadPool`** —— 线程池：
+### FLayer — 装配节点
 
-- 构造 0 线程；首次 `Run` 懒启动到 `min(任务数, hardware_concurrency)`
-- 15 任务 5 核 → 5+5+5 分批，对外透明
-- `Run` 带 barrier（atomic + cv）；任务异常 `try/catch` 记录 `exception_ptr`、保证 barrier 释放、跑完 `rethrow`
+`FLayer<TChildren...>` 继承 `FLayerBase`，持有已安装子实例（`Layers`）+ 已加载模块（`LoadedModules`）：
+
+- **ctor**：遍历 `FLayers`（TChildren 类型表），对每个 `FModuleInstance<T>`（`T::GetModulePath()`）Load 其 DLL → Enqueue `FInstallCommand` → 末尾 `FlushCommands()` 立即装。
+- **Install\<T\>()**：Load 子类型 → Enqueue Install 命令（延迟，待 FlushCommands）。
+- **Uninstall(Child)**：Enqueue Uninstall 命令（延迟）。
+- **FlushCommands()**（virtual，FLayer 层级的顶层虚）：从命令队列按 lane 取出 Install/Uninstall 命令；Install → `Layers.push_back(Child)`；Uninstall → erase + delete。**生命周期钩子（IInit/IShutdown）归用户显式驱动**，析构只释放内存。
+- **ForEach\<FLevels\>(Visitor)**：编译期分层序遍历。`if constexpr (LayerDetail::TAllSingleton<FLevels>::value)` 分流：
+  - **单例分支**（FLevels 全 `TSingleton` 类型表）：每层类型 `Visitor(T::Get())`，编译期遍历 + 并行。
+  - **实例分支**（FLevels 是实例类型表）：每层遍历 `Layers` 数组，`DispatchInstance` 匹配层类型，并行执行层内实例。
+  - 层间串行（barrier），层内并行（继承的 FParallelScheduler）。
+
+### 命令类型
+
+```cpp
+enum class ELayerCommand : std::uint64_t { Install = 1, Uninstall = 2 };
+struct FInstallCommand : ICommand { FLayerBase* Child; GetCatalogId() → Install; };
+struct FUninstallCommand : ICommand { FLayerBase* Child; GetCatalogId() → Uninstall; };
+```
+
+### 插件宏
+
+```cpp
+MAHO_DECLARE_LAYER(FCustomLayer, "MyLayer.dll")
+// 展开：static FLayerBase* CreateLayer() { return new FCustomLayer(); }
+//      + static std::string_view GetModulePath() { return "MyLayer.dll"; }
+```
+
+`Load` 经 `FAssembly::GetProcAs<CreateFunction>("CreateLayer")` 从 DLL 拿工厂（DLL 的 extern "C" bridge 返回 `FCustomLayer::CreateLayer()`）。
+
+### 生命周期
+
+`FLayer` 本身不强制 IInit/IShutdown —— 需要生命周期的层经 `IPlugin<IInit, IShutdown, ...>` 组合（Core/Interface.h），由用户在驱动循环里显式调用（可经 `ForEach<FLevels>` 统一驱动子层）。
+
+### 分层序（依赖）
+
+子层之间的依赖经 `MAHO_EXTEND_DEPS`（声明锚点）+ codegen 生成的 `FDepends`（`TTypeList<Key, TTypeList<deps...>>`）表达。分层用 `Topo::TLevels_t<FTypeList, FDefaultSlot>` 计算（读每类的 `FDepends`），传给 `ForEach<FLevels>` 驱动。参见 `Core/Topology.h` + `Core/Query.h`。
 
 ## 相关文档
 
 - [../Core/CoreDoc.md](../Core/CoreDoc.md) — 核心基础设施
 - [EngineAPI.html](EngineAPI.html) — API 文档
+- [../PublicDoc.md](../PublicDoc.md) — Public 根
