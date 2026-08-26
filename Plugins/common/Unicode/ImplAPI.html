@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Unicode（实现）— 函数字典</title>
+<style>
+	:root {
+		--bg: #14181f; --panel: #1b2130; --code-bg: #0d1117;
+		--text: #d8e1f0; --muted: #8b96a8; --accent: #5b8dd9;
+		--accent2: #3f8f63; --border: #2c3444; --border-strong: #3d4a61;
+	}
+	* { box-sizing: border-box; }
+	body { margin:0; padding:32px 40px; background:var(--bg); color:var(--text);
+		font-family:"Segoe UI","Microsoft YaHei",sans-serif; line-height:1.7; max-width:1040px; }
+	h1 { font-size:26px; border-bottom:2px solid var(--border-strong); padding-bottom:12px; }
+	h2 { font-size:22px; margin-top:44px; color:var(--accent); border-bottom:1px solid var(--border); padding-bottom:8px; }
+	a { color:var(--accent); text-decoration:none; }
+	a:hover { text-decoration:underline; }
+	.fn-panel { background:var(--panel); border:1px solid var(--border);
+		border-left:4px solid var(--accent2); border-radius:8px; padding:20px 24px; margin:24px 0; }
+	.fn-name { font-family:Consolas,"Cascadia Code",monospace; font-size:18px; color:var(--accent2); margin:0 0 4px 0; }
+	.back-link { font-size:13px; color:var(--muted); }
+	.pseudo { font-family:Consolas,"Cascadia Code",monospace; background:var(--code-bg);
+		border:1px solid var(--border); border-radius:6px; padding:14px 18px;
+		margin:12px 0; font-size:13px; white-space:pre; overflow-x:auto; line-height:1.6; }
+	code { font-family:Consolas,"Cascadia Code",monospace; background:var(--code-bg);
+		padding:2px 6px; border-radius:4px; }
+	.muted { color:var(--muted); }
+</style>
+</head>
+<body>
+
+<h1>Unicode（Private）— 实现算法字典</h1>
+<p class="muted">cpp 侧每个函数的算法伪代码解释。公开 API 文档经 <a href="API.html">API.html</a> 跳转落到这里。纯库（无单例）——Windows 走 WinAPI 宽字符转换，非 Windows 退化为字节直通（下方仅述 Win 分支）。</p>
+
+<h2>校验</h2>
+
+<section class="fn-panel" id="fn-uni-valid">
+	<h3 class="fn-name">bool IsValidUtf8(std::string_view In)</h3>
+	<p class="back-link">← <a href="API.html">公开 API</a> · <code>bool</code></p>
+	<p>手写 UTF-8 校验：逐字节扫描——ASCII 直过；按首字节前导位判定 2/3/4 字节序列，逐个检查续字节（10xxxxxx）并累积码点；拒绝截断、过短编码（overlong）、超范围 &gt;0x10FFFF、以及代理区 0xD800-0xDFFF。</p>
+	<div class="pseudo">IsValidUtf8(In):
+	1. I = 0
+	2. while I &lt; N:
+	3.   C = In[I]
+	4.   if C &lt; 0x80: ++I; continue
+	5.   按 C 判定 Extra / 码点下限 / Mask:
+	6.     0xC0→1字节 / 0xE0→2 / 0xF0→3，否则 return false
+	7.   if I+Extra ≥ N: return false    // 截断
+	8.   CP = C &amp; Mask
+	9.   for K in 1..Extra:
+	10.    if 续字节非 10xxxxxx: return false
+	11.    CP = (CP&lt;&lt;6) | (续 &amp; 0x3F)
+	12.   if CP &lt; 下限 or CP &gt; 0x10FFFF or 代理区: return false
+	13.   I += Extra + 1
+	14. return true</div>
+</section>
+
+<h2>转换（WinAPI）</h2>
+
+<section class="fn-panel" id="fn-uni-u16">
+	<h3 class="fn-name">std::u16string Utf8ToUtf16(std::string_view In)</h3>
+	<p class="back-link">← <a href="API.html">公开 API</a> · <code>std::u16string</code></p>
+	<p>UTF-8 → UTF-16：先 MultiByteToWideChar 两次调用——第一遍取所需大小并校验非法字符（MB_ERR_INVALID_CHARS），第二遍实际转换。空输入直接返回空。</p>
+	<div class="pseudo">Utf8ToUtf16(In):
+	1. if In.empty(): return {}
+	2. Size = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, In, 0)
+	3. if Size ≤ 0: return {}
+	4. Out(Size); MultiByteToWideChar(CP_UTF8, 0, In, Out, Size)
+	5. return Out</div>
+</section>
+
+<section class="fn-panel" id="fn-uni-u8">
+	<h3 class="fn-name">std::string Utf16ToUtf8(std::u16string_view In)</h3>
+	<p class="back-link">← <a href="API.html">公开 API</a> · <code>std::string</code></p>
+	<p>UTF-16 → UTF-8：WideCharToMultiByte 两遍——第一遍取大小，第二遍转换。</p>
+	<div class="pseudo">Utf16ToUtf8(In):
+	1. if In.empty(): return {}
+	2. Size = WideCharToMultiByte(CP_UTF8, 0, In, 0, null, null)
+	3. if Size ≤ 0: return {}
+	4. Out(Size); WideCharToMultiByte(CP_UTF8, 0, In, Out, Size)
+	5. return Out</div>
+</section>
+
+<section class="fn-panel" id="fn-uni-u32">
+	<h3 class="fn-name">std::u32string Utf8ToUtf32(std::string_view In)</h3>
+	<p class="back-link">← <a href="API.html">公开 API</a> · <code>std::u32string</code></p>
+	<p>UTF-8 → UTF-32：先转 UTF-16，再逐 16 位单元手工解代理对——高代理+低代理合并成码点；孤立代理直接返回空（非法）。</p>
+	<div class="pseudo">Utf8ToUtf32(In):
+	1. U16 = Utf8ToUtf16(In)
+	2. for I in U16:
+	3.   Unit = U16[I]
+	4.   if 高代理且后随低代理:
+	5.     CP = 0x10000 + (高-0xD800)&lt;&lt;10 + (低-0xDC00)
+	6.     入 Out; ++I
+	7.   elif 孤立代理: return {}   // 非法
+	8.   else: 直接入 Out
+	9. return Out</div>
+</section>
+
+<section class="fn-panel" id="fn-uni-u32out">
+	<h3 class="fn-name">std::string Utf32ToUtf8(std::u32string_view In)</h3>
+	<p class="back-link">← <a href="API.html">公开 API</a> · <code>std::string</code></p>
+	<p>UTF-32 → UTF-8：先按码点编码代理对（&lt;0x10000 直接入，否则拆高/低代理），再转 UTF-8。</p>
+	<div class="pseudo">Utf32ToUtf8(In):
+	1. for CP in In:
+	2.   if CP &lt; 0x10000: U16 += CP
+	3.   else: CP -= 0x10000
+	4.         U16 += 0xD800 + (CP&gt;&gt;10)
+	5.         U16 += 0xDC00 + (CP&amp;0x3FF)
+	6. return Utf16ToUtf8(U16)</div>
+</section>
+
+<h2>平台对接</h2>
+
+<section class="fn-panel" id="fn-uni-native">
+	<h3 class="fn-name">FNativeString ToNative(std::string_view Utf8) / std::string FromNative(FNativeStringView Native)</h3>
+	<p class="back-link">← <a href="API.html">公开 API</a> · 平台宽字符串</p>
+	<p>Win：UTF-8 ↔ 原生宽字符串（wstring），经 UTF-16 中转；非 Win：原样拷贝。</p>
+	<div class="pseudo">ToNative(Utf8):    U16 = Utf8ToUtf16(Utf8); return wstring(U16)
+	FromNative(Native): U16 = (Native); return Utf16ToUtf8(U16)</div>
+</section>
+
+<section class="fn-panel" id="fn-uni-console">
+	<h3 class="fn-name">void EnsureConsoleUtf8()</h3>
+	<p class="back-link">← <a href="API.html">公开 API</a> · <code>void</code></p>
+	<p>把控制台输出代码页设为 UTF-8（仅 Win 有效，非 Win 空操作）。</p>
+	<div class="pseudo">EnsureConsoleUtf8():
+	1. #if _WIN32: SetConsoleOutputCP(CP_UTF8)</div>
+</section>
+
+<p class="muted"><a href="Unicode.md">Unicode.md</a> — 概念 · <a href="API.html">API.html</a> — 公开签名</p>
+
+</body>
+</html>

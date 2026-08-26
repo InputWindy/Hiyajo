@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Log（实现）— 函数字典</title>
+<style>
+	:root {
+		--bg: #14181f; --panel: #1b2130; --code-bg: #0d1117;
+		--text: #d8e1f0; --muted: #8b96a8; --accent: #5b8dd9;
+		--accent2: #3f8f63; --border: #2c3444; --border-strong: #3d4a61;
+	}
+	* { box-sizing: border-box; }
+	body { margin:0; padding:32px 40px; background:var(--bg); color:var(--text);
+		font-family:"Segoe UI","Microsoft YaHei",sans-serif; line-height:1.7; max-width:1040px; }
+	h1 { font-size:26px; border-bottom:2px solid var(--border-strong); padding-bottom:12px; }
+	h2 { font-size:22px; margin-top:44px; color:var(--accent); border-bottom:1px solid var(--border); padding-bottom:8px; }
+	a { color:var(--accent); text-decoration:none; }
+	a:hover { text-decoration:underline; }
+	.fn-panel { background:var(--panel); border:1px solid var(--border);
+		border-left:4px solid var(--accent2); border-radius:8px; padding:20px 24px; margin:24px 0; }
+	.fn-name { font-family:Consolas,"Cascadia Code",monospace; font-size:18px; color:var(--accent2); margin:0 0 4px 0; }
+	.back-link { font-size:13px; color:var(--muted); }
+	.pseudo { font-family:Consolas,"Cascadia Code",monospace; background:var(--code-bg);
+		border:1px solid var(--border); border-radius:6px; padding:14px 18px;
+		margin:12px 0; font-size:13px; white-space:pre; overflow-x:auto; line-height:1.6; }
+	code { font-family:Consolas,"Cascadia Code",monospace; background:var(--code-bg);
+		padding:2px 6px; border-radius:4px; }
+	.muted { color:var(--muted); }
+</style>
+</head>
+<body>
+
+<h1>Log（Private）— 实现算法字典</h1>
+<p class="muted">cpp 侧每个函数的算法伪代码解释。公开 API 文档经 <a href="API.html">API.html</a> 跳转落到这里。Log.cpp 只有 Get()——Initialize/Shutdown 内联在 Log.h（见下）。</p>
+
+<h2>生命周期</h2>
+
+<section class="fn-panel" id="fn-log-get">
+	<h3 class="fn-name">FLog&amp; FLog::Get()</h3>
+	<p class="back-link">← <a href="API.html">公开 API</a> · <code>FLog&amp;</code></p>
+	<p>进程唯一访问器——Meyers 单例，定义在 Log.cpp（编进 Log.dll），跨 DLL dllimport 解析到同一实例。CRTP TSingleton&lt;FLog&gt;，无 CreateLayer 工厂。</p>
+	<div class="pseudo">Get():
+	1. static Instance
+	2. return Instance</div>
+</section>
+
+<section class="fn-panel" id="fn-log-init">
+	<h3 class="fn-name">void FLog::Initialize(int, char** Argv) <span class="muted">（header 内联）</span></h3>
+	<p class="back-link">← <a href="API.html">公开 API</a> · <code>void</code></p>
+	<p>内联在 Log.h：创建线程安全 stdout 彩色 logger（"Maho"），设格式；扫命令行 --log-level=trace|debug|info|warn|error 设级别，缺省 debug。</p>
+	<div class="pseudo">Initialize(Argc, Argv):
+	1. Logger = spdlog::stdout_color_mt("Maho")
+	2. Logger-&gt;set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%^%l%$] %v")
+	3. Lv = debug
+	4. for i in Argv:
+	5.   if Argv[i] 为 "-log-level" 且下个参数存在:
+	6.     Lv = spdlog::level::from_str(Argv[i+1])
+	7. Logger-&gt;set_level(Lv)</div>
+</section>
+
+<section class="fn-panel" id="fn-log-shutdown">
+	<h3 class="fn-name">void FLog::Shutdown() <span class="muted">（header 内联）</span></h3>
+	<p class="back-link">← <a href="API.html">公开 API</a> · <code>void</code></p>
+	<p>内联在 Log.h：flush + 停掉全部 spdlog registry，释放 Logger。</p>
+	<div class="pseudo">Shutdown():
+	1. spdlog::shutdown()
+	2. Logger.reset()</div>
+</section>
+
+<h2>便捷直通（header 模板）</h2>
+
+<section class="fn-panel" id="fn-log-passthrough">
+	<h3 class="fn-name">FLog::Info / Warn / Error (fmt-style 静态直通)</h3>
+	<p class="back-link">内部 · 模板</p>
+	<p>fmt 格式化直通——转发到 Get().Logger 的 info/warn/error。宏 MAHO_LOG_CORE_* 则直接走 Logger-&gt;trace/debug/...。</p>
+	<div class="pseudo">Info(Fmt, Args...):
+	1. Get().Logger-&gt;info(Fmt, Args...)</div>
+</section>
+
+<p class="muted"><a href="Log.md">Log.md</a> — 概念 · <a href="API.html">API.html</a> — 公开签名</p>
+
+</body>
+</html>

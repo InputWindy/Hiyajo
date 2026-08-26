@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Name（实现）— 函数字典</title>
+<style>
+	:root {
+		--bg: #14181f; --panel: #1b2130; --code-bg: #0d1117;
+		--text: #d8e1f0; --muted: #8b96a8; --accent: #5b8dd9;
+		--accent2: #3f8f63; --border: #2c3444; --border-strong: #3d4a61;
+	}
+	* { box-sizing: border-box; }
+	body { margin:0; padding:32px 40px; background:var(--bg); color:var(--text);
+		font-family:"Segoe UI","Microsoft YaHei",sans-serif; line-height:1.7; max-width:1040px; }
+	h1 { font-size:26px; border-bottom:2px solid var(--border-strong); padding-bottom:12px; }
+	h2 { font-size:22px; margin-top:44px; color:var(--accent); border-bottom:1px solid var(--border); padding-bottom:8px; }
+	a { color:var(--accent); text-decoration:none; }
+	a:hover { text-decoration:underline; }
+	.fn-panel { background:var(--panel); border:1px solid var(--border);
+		border-left:4px solid var(--accent2); border-radius:8px; padding:20px 24px; margin:24px 0; }
+	.fn-name { font-family:Consolas,"Cascadia Code",monospace; font-size:18px; color:var(--accent2); margin:0 0 4px 0; }
+	.back-link { font-size:13px; color:var(--muted); }
+	.pseudo { font-family:Consolas,"Cascadia Code",monospace; background:var(--code-bg);
+		border:1px solid var(--border); border-radius:6px; padding:14px 18px;
+		margin:12px 0; font-size:13px; white-space:pre; overflow-x:auto; line-height:1.6; }
+	code { font-family:Consolas,"Cascadia Code",monospace; background:var(--code-bg);
+		padding:2px 6px; border-radius:4px; }
+	.muted { color:var(--muted); }
+</style>
+</head>
+<body>
+
+<h1>Name（Private）— 实现算法字典</h1>
+<p class="muted">cpp 侧每个函数的算法伪代码解释。公开 API 文档经 <a href="API.html">API.html</a> 跳转落到这里。FName = 池化字符串句柄（uint32 索引），Intern 加锁写。</p>
+
+<h2>池与句柄</h2>
+
+<section class="fn-panel" id="fn-nm-get">
+	<h3 class="fn-name">FNamePool&amp; FNamePool::Get()</h3>
+	<p class="back-link">← <a href="API.html">公开 API</a> · <code>FNamePool&amp;</code></p>
+	<p>进程唯一访问器——Meyers 单例，static 局部在 Name.dll 内。</p>
+	<div class="pseudo">Get():
+	1. static Instance
+	2. return Instance</div>
+</section>
+
+<section class="fn-panel" id="fn-nm-ctor">
+	<h3 class="fn-name">FName::FName(std::string_view Str)</h3>
+	<p class="back-link">← <a href="API.html">公开 API</a> · 构造</p>
+	<p>构造 = Intern：把字符串登记进池，FName 只存返回的 Id。</p>
+	<div class="pseudo">FName(Str):
+	1. Id = FNamePool::Get().Intern(Str).Id</div>
+</section>
+
+<section class="fn-panel" id="fn-nm-tostring">
+	<h3 class="fn-name">std::string_view FName::ToString() const</h3>
+	<p class="back-link">← <a href="API.html">公开 API</a> · <code>std::string_view</code></p>
+	<p>Id 反查字符串——委托给池的 StringForId（池生命周期内 view 有效）。</p>
+	<div class="pseudo">ToString():
+	1. return FNamePool::Get().StringForId(Id)</div>
+</section>
+
+<section class="fn-panel" id="fn-nm-stringforid">
+	<h3 class="fn-name">std::string_view FNamePool::StringForId(std::uint32_t Id) const</h3>
+	<p class="back-link">← <a href="API.html">公开 API</a> · <code>std::string_view</code></p>
+	<p>Id → 字符串：越界返回空 view。</p>
+	<div class="pseudo">StringForId(Id):
+	1. return Id &lt; Pool.size() ? Pool[Id] : ""</div>
+</section>
+
+<section class="fn-panel" id="fn-nm-free">
+	<h3 class="fn-name">void FNamePool::free()</h3>
+	<p class="back-link">← <a href="API.html">公开 API</a> · <code>void</code></p>
+	<p>清空字符串池 + 反查表（句柄全部失效，须在无引用时调用）。</p>
+	<div class="pseudo">free():
+	1. Pool.clear()
+	2. Lookup.clear()</div>
+</section>
+
+<section class="fn-panel" id="fn-nm-intern">
+	<h3 class="fn-name">FName FNamePool::Intern(std::string_view Str)</h3>
+	<p class="back-link">← <a href="API.html">公开 API</a> · <code>FName</code></p>
+	<p>登记字符串：空串返回默认 FName；持锁查 Lookup——命中直接复用旧 Id，未命中则追加到 Pool 并建反查。返回 Id 包装的 FName。</p>
+	<div class="pseudo">Intern(Str):
+	1. if Str.empty(): return FName{}
+	2. lock(Mutex):
+	3.   It = Lookup.find(Str)
+	4.   if 命中: return FName{It-&gt;second}
+	5.   NextId = Pool.size()
+	6.   Pool.emplace_back(Str)
+	7.   Lookup[Pool.back()] = NextId
+	8.   return FName{NextId}</div>
+</section>
+
+<p class="muted"><a href="Name.md">Name.md</a> — 概念 · <a href="API.html">API.html</a> — 公开签名</p>
+
+</body>
+</html>

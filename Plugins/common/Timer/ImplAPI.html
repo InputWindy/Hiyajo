@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Timer（实现）— 函数字典</title>
+<style>
+	:root {
+		--bg: #14181f; --panel: #1b2130; --code-bg: #0d1117;
+		--text: #d8e1f0; --muted: #8b96a8; --accent: #5b8dd9;
+		--accent2: #3f8f63; --border: #2c3444; --border-strong: #3d4a61;
+	}
+	* { box-sizing: border-box; }
+	body { margin:0; padding:32px 40px; background:var(--bg); color:var(--text);
+		font-family:"Segoe UI","Microsoft YaHei",sans-serif; line-height:1.7; max-width:1040px; }
+	h1 { font-size:26px; border-bottom:2px solid var(--border-strong); padding-bottom:12px; }
+	h2 { font-size:22px; margin-top:44px; color:var(--accent); border-bottom:1px solid var(--border); padding-bottom:8px; }
+	a { color:var(--accent); text-decoration:none; }
+	a:hover { text-decoration:underline; }
+	.fn-panel { background:var(--panel); border:1px solid var(--border);
+		border-left:4px solid var(--accent2); border-radius:8px; padding:20px 24px; margin:24px 0; }
+	.fn-name { font-family:Consolas,"Cascadia Code",monospace; font-size:18px; color:var(--accent2); margin:0 0 4px 0; }
+	.back-link { font-size:13px; color:var(--muted); }
+	.pseudo { font-family:Consolas,"Cascadia Code",monospace; background:var(--code-bg);
+		border:1px solid var(--border); border-radius:6px; padding:14px 18px;
+		margin:12px 0; font-size:13px; white-space:pre; overflow-x:auto; line-height:1.6; }
+	code { font-family:Consolas,"Cascadia Code",monospace; background:var(--code-bg);
+		padding:2px 6px; border-radius:4px; }
+	.muted { color:var(--muted); }
+</style>
+</head>
+<body>
+
+<h1>Timer（Private）— 实现算法字典</h1>
+<p class="muted">cpp 侧每个函数的算法伪代码解释。公开 API 文档经 <a href="API.html">API.html</a> 跳转落到这里。两个单例：FTimer（作用域计时树）+ FGameClock（游戏时钟，时间缩放/暂停）。</p>
+
+<h2>单例访问器</h2>
+
+<section class="fn-panel" id="fn-tm-gettimer">
+	<h3 class="fn-name">FTimer&amp; FTimer::Get()</h3>
+	<p class="back-link">← <a href="API.html">公开 API</a> · <code>FTimer&amp;</code></p>
+	<p>进程唯一访问器——Meyers 单例，static 局部在 Timer.dll 内。</p>
+	<div class="pseudo">Get():
+	1. static Instance
+	2. return Instance</div>
+</section>
+
+<section class="fn-panel" id="fn-tm-getclock">
+	<h3 class="fn-name">FGameClock&amp; FGameClock::Get()</h3>
+	<p class="back-link">← <a href="API.html">公开 API</a> · <code>FGameClock&amp;</code></p>
+	<p>第二个进程唯一单例——游戏时钟。</p>
+	<div class="pseudo">Get():
+	1. static Instance
+	2. return Instance</div>
+</section>
+
+<h2>FTimer（作用域计时）</h2>
+
+<section class="fn-panel" id="fn-tm-init">
+	<h3 class="fn-name">void FTimer::Initialize(int Argc, char** Argv)</h3>
+	<p class="back-link">← <a href="API.html">公开 API</a> · <code>void</code></p>
+	<p>重置计时树。</p>
+	<div class="pseudo">Initialize(Argc, Argv):
+	1. Reset()</div>
+</section>
+
+<section class="fn-panel" id="fn-tm-shutdown">
+	<h3 class="fn-name">void FTimer::Shutdown()</h3>
+	<p class="back-link">← <a href="API.html">公开 API</a> · <code>void</code></p>
+	<p>同 Initialize——重置计时树。</p>
+	<div class="pseudo">Shutdown():
+	1. Reset()</div>
+</section>
+
+<section class="fn-panel" id="fn-tm-beginscope">
+	<h3 class="fn-name">void FTimer::BeginScope(std::string_view Name)</h3>
+	<p class="back-link">← <a href="API.html">公开 API</a> · <code>void</code></p>
+	<p>进入作用域：取当前节点下同名子节点（map 自动创建），记 start 时间，下潜。同名重复进入会累积到同一节点。</p>
+	<div class="pseudo">BeginScope(Name):
+	1. Child = Current-&gt;Children[Name]
+	2. Child.Name = Name
+	3. Child.Start = steady_clock::now()
+	4. Current = &amp;Child</div>
+</section>
+
+<section class="fn-panel" id="fn-tm-endscope">
+	<h3 class="fn-name">void FTimer::EndScope()</h3>
+	<p class="back-link">← <a href="API.html">公开 API</a> · <code>void</code></p>
+	<p>退出作用域：已在 Root 则忽略（不平衡调用）；否则累计 elapsed 到 TotalSeconds、更新 MaxSeconds、Count++，回退到父节点。</p>
+	<div class="pseudo">EndScope():
+	1. if Current == Root: return   // 不平衡，忽略
+	2. Elapsed = now() - Current-&gt;Start
+	3. Current-&gt;TotalSeconds += Elapsed
+	4. Current-&gt;MaxSeconds = max(Max, Elapsed)
+	5. ++Current-&gt;Count
+	6. Current = Current-&gt;Parent</div>
+</section>
+
+<section class="fn-panel" id="fn-tm-reset">
+	<h3 class="fn-name">void FTimer::Reset()</h3>
+	<p class="back-link">← <a href="API.html">公开 API</a> · <code>void</code></p>
+	<p>重建 Root 节点，游标回到根。</p>
+	<div class="pseudo">Reset():
+	1. Root = FNode{"Root"}
+	2. Current = &amp;Root</div>
+</section>
+
+<section class="fn-panel" id="fn-tm-dump">
+	<h3 class="fn-name">std::string FTimer::DumpToString() const</h3>
+	<p class="back-link">← <a href="API.html">公开 API</a> · <code>std::string</code></p>
+	<p>递归格式化计时树为文本——每层缩进 2 空格，节点输出 总 ms / 调用次数 / 平均 ms / 最大 ms，再递归子节点。</p>
+	<div class="pseudo">DumpToString():
+	1. 定义 Format(Node, Depth):
+	2.   缩进 + Node.Name + ": "
+	3.   if Count &gt; 0: 总ms (N 次调用, 平均 ms, 最大 ms)
+	4.   换行; for 子节点: Format(Child, Depth+1)
+	5. Format(Root, 0); return 结果字符串</div>
+</section>
+
+<section class="fn-panel" id="fn-tm-scoped">
+	<h3 class="fn-name">FScopedTimer::FScopedTimer(std::string_view Name) / ~FScopedTimer()</h3>
+	<p class="back-link">← <a href="API.html">公开 API</a> · RAII</p>
+	<p>RAII 包装——构造 BeginScope，析构 EndScope，作用域自动成对。</p>
+	<div class="pseudo">FScopedTimer(Name):   FTimer::Get().BeginScope(Name)
+	~FScopedTimer():     FTimer::Get().EndScope()</div>
+</section>
+
+<h2>FGameClock（游戏时钟）</h2>
+
+<section class="fn-panel" id="fn-tm-cinit">
+	<h3 class="fn-name">void FGameClock::Initialize(int Argc, char** Argv) / Shutdown()</h3>
+	<p class="back-link">← <a href="API.html">公开 API</a> · <code>void</code></p>
+	<p>空实现——时钟无状态资源，成员自带默认值。</p>
+	<div class="pseudo">Initialize(Argc, Argv):
+	1. 无操作
+	Shutdown():
+	1. 无操作</div>
+</section>
+
+<section class="fn-panel" id="fn-tm-realsec">
+	<h3 class="fn-name">double FGameClock::GetRealSeconds() const</h3>
+	<p class="back-link">← <a href="API.html">公开 API</a> · <code>double</code></p>
+	<p>进程启动至今的真实秒数（steady_clock 相对 InitTime）。</p>
+	<div class="pseudo">GetRealSeconds():
+	1. return (now() - InitTime) 秒</div>
+</section>
+
+<section class="fn-panel" id="fn-tm-gamesec">
+	<h3 class="fn-name">double FGameClock::GetGameSeconds()</h3>
+	<p class="back-link">← <a href="API.html">公开 API</a> · <code>double</code></p>
+	<p>惰性推进的游戏秒数：未暂停时按 (now - LastReal) × TimeScale 累加并记 DeltaSeconds；暂停期间只更新 LastReal 不推进。返回累计 GameSeconds。</p>
+	<div class="pseudo">GetGameSeconds():
+	1. Now = steady_clock::now()
+	2. if !bPaused:
+	3.   Delta = (Now - LastReal) * TimeScale
+	4.   GameSeconds += Delta;  DeltaSeconds = Delta
+	5. LastReal = Now
+	6. return GameSeconds</div>
+</section>
+
+<section class="fn-panel" id="fn-tm-delta">
+	<h3 class="fn-name">double FGameClock::GetDeltaSeconds()</h3>
+	<p class="back-link">← <a href="API.html">公开 API</a> · <code>double</code></p>
+	<p>取上一帧游戏帧间隔——先触发一次 GetGameSeconds 推进再返回缓存值。</p>
+	<div class="pseudo">GetDeltaSeconds():
+	1. GetGameSeconds()   // 推进
+	2. return DeltaSeconds</div>
+</section>
+
+<section class="fn-panel" id="fn-tm-timescale">
+	<h3 class="fn-name">void FGameClock::SetTimeScale(double InScale)</h3>
+	<p class="back-link">← <a href="API.html">公开 API</a> · <code>void</code></p>
+	<p>设置时间缩放（&gt;1 加速，&lt;1 慢放）。</p>
+	<div class="pseudo">SetTimeScale(InScale):
+	1. TimeScale = InScale</div>
+</section>
+
+<section class="fn-panel" id="fn-tm-pause">
+	<h3 class="fn-name">void FGameClock::SetPaused(bool bInPaused)</h3>
+	<p class="back-link">← <a href="API.html">公开 API</a> · <code>void</code></p>
+	<p>暂停/恢复：进入暂停瞬间先推进一次游戏时间（冻结前结算），再置标志。</p>
+	<div class="pseudo">SetPaused(bInPaused):
+	1. if bInPaused and !bPaused:
+	2.   GetGameSeconds()   // 冻结前推进
+	3. bPaused = bInPaused</div>
+</section>
+
+<section class="fn-panel" id="fn-tm-acc">
+	<h3 class="fn-name">double FGameClock::GetTimeScale() const / bool FGameClock::IsPaused() const</h3>
+	<p class="back-link">← <a href="API.html">公开 API</a> · 只读</p>
+	<p>两个琐碎只读访问器。</p>
+	<div class="pseudo">GetTimeScale(): return TimeScale
+	IsPaused():     return bPaused</div>
+</section>
+
+<p class="muted"><a href="Timer.md">Timer.md</a> — 概念 · <a href="API.html">API.html</a> — 公开签名</p>
+
+</body>
+</html>

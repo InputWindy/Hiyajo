@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Text（实现）— 函数字典</title>
+<style>
+	:root {
+		--bg: #14181f; --panel: #1b2130; --code-bg: #0d1117;
+		--text: #d8e1f0; --muted: #8b96a8; --accent: #5b8dd9;
+		--accent2: #3f8f63; --border: #2c3444; --border-strong: #3d4a61;
+	}
+	* { box-sizing: border-box; }
+	body { margin:0; padding:32px 40px; background:var(--bg); color:var(--text);
+		font-family:"Segoe UI","Microsoft YaHei",sans-serif; line-height:1.7; max-width:1040px; }
+	h1 { font-size:26px; border-bottom:2px solid var(--border-strong); padding-bottom:12px; }
+	h2 { font-size:22px; margin-top:44px; color:var(--accent); border-bottom:1px solid var(--border); padding-bottom:8px; }
+	a { color:var(--accent); text-decoration:none; }
+	a:hover { text-decoration:underline; }
+	.fn-panel { background:var(--panel); border:1px solid var(--border);
+		border-left:4px solid var(--accent2); border-radius:8px; padding:20px 24px; margin:24px 0; }
+	.fn-name { font-family:Consolas,"Cascadia Code",monospace; font-size:18px; color:var(--accent2); margin:0 0 4px 0; }
+	.back-link { font-size:13px; color:var(--muted); }
+	.pseudo { font-family:Consolas,"Cascadia Code",monospace; background:var(--code-bg);
+		border:1px solid var(--border); border-radius:6px; padding:14px 18px;
+		margin:12px 0; font-size:13px; white-space:pre; overflow-x:auto; line-height:1.6; }
+	code { font-family:Consolas,"Cascadia Code",monospace; background:var(--code-bg);
+		padding:2px 6px; border-radius:4px; }
+	.muted { color:var(--muted); }
+</style>
+</head>
+<body>
+
+<h1>Text（Private）— 实现算法字典</h1>
+<p class="muted">cpp 侧每个函数的算法伪代码解释。公开 API 文档经 <a href="API.html">API.html</a> 跳转落到这里。目录 key = Namespace \x1f Key \x1f Culture，防拼接歧义；全部读写持 Mutex。</p>
+
+<h2>生命周期</h2>
+
+<section class="fn-panel" id="fn-txt-get">
+	<h3 class="fn-name">FTextManager&amp; FTextManager::Get()</h3>
+	<p class="back-link">← <a href="API.html">公开 API</a> · <code>FTextManager&amp;</code></p>
+	<p>进程唯一访问器——Meyers 单例，static 局部在 Text.dll 内。</p>
+	<div class="pseudo">Get():
+	1. static Instance
+	2. return Instance</div>
+</section>
+
+<section class="fn-panel" id="fn-txt-init">
+	<h3 class="fn-name">void FTextManager::Initialize(int Argc, char** Argv)</h3>
+	<p class="back-link">← <a href="API.html">公开 API</a> · <code>void</code></p>
+	<p>清空目录并重置当前语言为 "en-US"。持锁。</p>
+	<div class="pseudo">Initialize(Argc, Argv):
+	1. lock(Mutex):
+	2.   Catalog.clear()
+	3.   CurrentCulture = "en-US"</div>
+</section>
+
+<section class="fn-panel" id="fn-txt-shutdown">
+	<h3 class="fn-name">void FTextManager::Shutdown()</h3>
+	<p class="back-link">← <a href="API.html">公开 API</a> · <code>void</code></p>
+	<p>清空翻译目录。持锁。</p>
+	<div class="pseudo">Shutdown():
+	1. lock(Mutex): Catalog.clear()</div>
+</section>
+
+<h2>语言与文化</h2>
+
+<section class="fn-panel" id="fn-txt-getculture">
+	<h3 class="fn-name">std::string_view FTextManager::GetCulture() const</h3>
+	<p class="back-link">← <a href="API.html">公开 API</a> · <code>std::string_view</code></p>
+	<p>取当前语言（返回成员引用）。持锁读。</p>
+	<div class="pseudo">GetCulture():
+	1. lock(Mutex): return CurrentCulture</div>
+</section>
+
+<section class="fn-panel" id="fn-txt-setculture">
+	<h3 class="fn-name">void FTextManager::SetCulture(std::string InCulture)</h3>
+	<p class="back-link">← <a href="API.html">公开 API</a> · <code>void</code></p>
+	<p>切换当前语言。持锁写。</p>
+	<div class="pseudo">SetCulture(InCulture):
+	1. lock(Mutex): CurrentCulture = move(InCulture)</div>
+</section>
+
+<h2>目录</h2>
+
+<section class="fn-panel" id="fn-txt-makekey">
+	<h3 class="fn-name">std::string MakeKey(std::string_view InNamespace, std::string_view InKey, std::string_view InCulture)</h3>
+	<p class="back-link">内部 · <code>std::string</code></p>
+	<p>三段拼接目录 key——中间以单元分隔符 \x1f 隔开，杜绝 "a"+"bc" == "ab"+"c" 式碰撞。</p>
+	<div class="pseudo">MakeKey(Ns, Key, Culture):
+	1. 预留 Ns + Key + Culture 长度 + 2
+	2. 追加 Ns; 追加 '\x1f'; 追加 Key; 追加 '\x1f'; 追加 Culture
+	3. return</div>
+</section>
+
+<section class="fn-panel" id="fn-txt-add">
+	<h3 class="fn-name">void FTextManager::AddTranslation(std::string_view InNamespace, std::string_view InKey, std::string_view InCulture, std::string Text)</h3>
+	<p class="back-link">← <a href="API.html">公开 API</a> · <code>void</code></p>
+	<p>登记一条翻译（同 key 覆盖）。持锁写。</p>
+	<div class="pseudo">AddTranslation(Ns, Key, Culture, Text):
+	1. lock(Mutex):
+	2.   Catalog[MakeKey(Ns, Key, Culture)] = move(Text)</div>
+</section>
+
+<section class="fn-panel" id="fn-txt-loadjson">
+	<h3 class="fn-name">void FTextManager::LoadTranslationsFromJson(std::string_view JsonText)</h3>
+	<p class="back-link">← <a href="API.html">公开 API</a> · <code>void</code></p>
+	<p>nlohmann 解析 JSON 数组，逐条取 Namespace/Key/Culture/Text 四字段转 AddTranslation。单次持锁（逐条锁亦可，此处复用 AddTranslation 内锁）。</p>
+	<div class="pseudo">LoadTranslationsFromJson(JsonText):
+	1. Root = json::parse(JsonText)
+	2. for Entry in Root:
+	3.   AddTranslation(Entry["Namespace"], Entry["Key"],
+	4.                  Entry["Culture"], Entry["Text"])</div>
+</section>
+
+<section class="fn-panel" id="fn-txt-find">
+	<h3 class="fn-name">const std::string* FTextManager::FindTranslation(std::string_view InNamespace, std::string_view InKey, std::string_view InCulture) const</h3>
+	<p class="back-link">← <a href="API.html">公开 API</a> · <code>const std::string*</code></p>
+	<p>按三段 key 查目录——未命中返回 nullptr。持锁读。</p>
+	<div class="pseudo">FindTranslation(Ns, Key, Culture):
+	1. lock(Mutex):
+	2.   It = Catalog.find(MakeKey(Ns, Key, Culture))
+	3. return It != end ? &amp;It-&gt;second : nullptr</div>
+</section>
+
+<h2>FText 句柄</h2>
+
+<section class="fn-panel" id="fn-txt-ctor">
+	<h3 class="fn-name">FText::FText(std::string InNamespace, std::string InKey, std::string InSource)</h3>
+	<p class="back-link">← <a href="API.html">公开 API</a> · 构造</p>
+	<p>保存三段（源语言文本兜底用）。</p>
+	<div class="pseudo">FText(Ns, Key, Source):
+	1. 保存 Namespace, Key, Source</div>
+</section>
+
+<section class="fn-panel" id="fn-txt-resolve">
+	<h3 class="fn-name">std::string FText::Resolve() const</h3>
+	<p class="back-link">← <a href="API.html">公开 API</a> · <code>std::string</code></p>
+	<p>按当前语言查翻译——命中返回译文，未命中回退 Source。</p>
+	<div class="pseudo">Resolve():
+	1. Manager = FTextManager::Get()
+	2. T = Manager.FindTranslation(Namespace, Key, Manager.GetCulture())
+	3. return T ? *T : Source</div>
+</section>
+
+<p class="muted"><a href="Text.md">Text.md</a> — 概念 · <a href="API.html">API.html</a> — 公开签名</p>
+
+</body>
+</html>

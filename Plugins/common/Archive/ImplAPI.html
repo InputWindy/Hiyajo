@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Archive（实现）— 函数字典</title>
+<style>
+	:root {
+		--bg: #14181f; --panel: #1b2130; --code-bg: #0d1117;
+		--text: #d8e1f0; --muted: #8b96a8; --accent: #5b8dd9;
+		--accent2: #3f8f63; --border: #2c3444; --border-strong: #3d4a61;
+	}
+	* { box-sizing: border-box; }
+	body { margin:0; padding:32px 40px; background:var(--bg); color:var(--text);
+		font-family:"Segoe UI","Microsoft YaHei",sans-serif; line-height:1.7; max-width:1040px; }
+	h1 { font-size:26px; border-bottom:2px solid var(--border-strong); padding-bottom:12px; }
+	h2 { font-size:22px; margin-top:44px; color:var(--accent); border-bottom:1px solid var(--border); padding-bottom:8px; }
+	a { color:var(--accent); text-decoration:none; }
+	a:hover { text-decoration:underline; }
+	.fn-panel { background:var(--panel); border:1px solid var(--border);
+		border-left:4px solid var(--accent2); border-radius:8px; padding:20px 24px; margin:24px 0; }
+	.fn-name { font-family:Consolas,"Cascadia Code",monospace; font-size:18px; color:var(--accent2); margin:0 0 4px 0; }
+	.back-link { font-size:13px; color:var(--muted); }
+	.pseudo { font-family:Consolas,"Cascadia Code",monospace; background:var(--code-bg);
+		border:1px solid var(--border); border-radius:6px; padding:14px 18px;
+		margin:12px 0; font-size:13px; white-space:pre; overflow-x:auto; line-height:1.6; }
+	code { font-family:Consolas,"Cascadia Code",monospace; background:var(--code-bg);
+		padding:2px 6px; border-radius:4px; }
+	.muted { color:var(--muted); }
+</style>
+</head>
+<body>
+
+<h1>Archive（Private）— 实现算法字典</h1>
+<p class="muted">cpp 侧每个函数的算法伪代码解释。公开 API 文档经 <a href="API.html">API.html</a> 跳转落到这里。</p>
+
+<h2>类型化序列化（内建类型）</h2>
+
+<section class="fn-panel" id="fn-arc-i32">
+	<h3 class="fn-name">FArchive&amp; FArchive::operator&lt;&lt;(std::int32_t&amp; V)</h3>
+	<p class="back-link">← <a href="API.html">公开 API</a> · <code>FArchive&amp;</code></p>
+	<p>32 位有符号整数序列化——原样按 sizeof 字节写/读，返回 *this 支持链式调用。</p>
+	<div class="pseudo">operator&lt;&lt;(int32_t V):
+	1. Serialize(&amp;V, sizeof(V))
+	2. return *this</div>
+</section>
+
+<section class="fn-panel" id="fn-arc-u32">
+	<h3 class="fn-name">FArchive&amp; FArchive::operator&lt;&lt;(std::uint32_t&amp; V)</h3>
+	<p class="back-link">← <a href="API.html">公开 API</a> · <code>FArchive&amp;</code></p>
+	<p>32 位无符号整数序列化——同上，按 sizeof 字节读写。</p>
+	<div class="pseudo">operator&lt;&lt;(uint32_t V):
+	1. Serialize(&amp;V, sizeof(V))
+	2. return *this</div>
+</section>
+
+<section class="fn-panel" id="fn-arc-i64">
+	<h3 class="fn-name">FArchive&amp; FArchive::operator&lt;&lt;(std::int64_t&amp; V)</h3>
+	<p class="back-link">← <a href="API.html">公开 API</a> · <code>FArchive&amp;</code></p>
+	<p>64 位有符号整数序列化。</p>
+	<div class="pseudo">operator&lt;&lt;(int64_t V):
+	1. Serialize(&amp;V, sizeof(V))
+	2. return *this</div>
+</section>
+
+<section class="fn-panel" id="fn-arc-u64">
+	<h3 class="fn-name">FArchive&amp; FArchive::operator&lt;&lt;(std::uint64_t&amp; V)</h3>
+	<p class="back-link">← <a href="API.html">公开 API</a> · <code>FArchive&amp;</code></p>
+	<p>64 位无符号整数序列化。</p>
+	<div class="pseudo">operator&lt;&lt;(uint64_t V):
+	1. Serialize(&amp;V, sizeof(V))
+	2. return *this</div>
+</section>
+
+<section class="fn-panel" id="fn-arc-float">
+	<h3 class="fn-name">FArchive&amp; FArchive::operator&lt;&lt;(float&amp; V)</h3>
+	<p class="back-link">← <a href="API.html">公开 API</a> · <code>FArchive&amp;</code></p>
+	<p>单精度浮点序列化——按 IEEE754 原字节读写。</p>
+	<div class="pseudo">operator&lt;&lt;(float V):
+	1. Serialize(&amp;V, sizeof(V))
+	2. return *this</div>
+</section>
+
+<section class="fn-panel" id="fn-arc-double">
+	<h3 class="fn-name">FArchive&amp; FArchive::operator&lt;&lt;(double&amp; V)</h3>
+	<p class="back-link">← <a href="API.html">公开 API</a> · <code>FArchive&amp;</code></p>
+	<p>双精度浮点序列化。</p>
+	<div class="pseudo">operator&lt;&lt;(double V):
+	1. Serialize(&amp;V, sizeof(V))
+	2. return *this</div>
+</section>
+
+<section class="fn-panel" id="fn-arc-bool">
+	<h3 class="fn-name">FArchive&amp; FArchive::operator&lt;&lt;(bool&amp; V)</h3>
+	<p class="back-link">← <a href="API.html">公开 API</a> · <code>FArchive&amp;</code></p>
+	<p>布尔序列化——按 1 字节存储（sizeof(bool) 即 1）。</p>
+	<div class="pseudo">operator&lt;&lt;(bool V):
+	1. Serialize(&amp;V, sizeof(V))
+	2. return *this</div>
+</section>
+
+<section class="fn-panel" id="fn-arc-string">
+	<h3 class="fn-name">FArchive&amp; FArchive::operator&lt;&lt;(std::string&amp; V)</h3>
+	<p class="back-link">← <a href="API.html">公开 API</a> · <code>FArchive&amp;</code></p>
+	<p>字符串序列化——先写 uint32 长度（长度前缀），读模式据此 resize 缓冲，再写/读全部字节。长度前缀保证跨端可恢复。</p>
+	<div class="pseudo">operator&lt;&lt;(string V):
+	1. Len = V.size(); 写 Len (uint32)
+	2. if 读模式: V.resize(Len)
+	3. if Len &gt; 0: Serialize(V.data(), Len)
+	4. return *this</div>
+</section>
+
+<h2>FMemoryReader（读端）</h2>
+
+<section class="fn-panel" id="fn-arc-rdctor">
+	<h3 class="fn-name">FMemoryReader::FMemoryReader(const std::vector&lt;std::uint8_t&gt;&amp; InData)</h3>
+	<p class="back-link">← <a href="API.html">公开 API</a> · 构造</p>
+	<p>读模式构造——拷贝输入字节为内部缓冲，游标 Pos 从 0 起。</p>
+	<div class="pseudo">FMemoryReader(InData):
+	1. FArchive(Read 模式)
+	2. Data = InData  (Pos = 0)</div>
+</section>
+
+<section class="fn-panel" id="fn-arc-rdser">
+	<h3 class="fn-name">void FMemoryReader::Serialize(void* Out, std::size_t Size)</h3>
+	<p class="back-link">← <a href="API.html">公开 API</a> · <code>void</code></p>
+	<p>顺序读 Size 字节到 Out——越界直接返回（TODO 报错），否则 memcpy 并推进游标。</p>
+	<div class="pseudo">Serialize(Out, Size):
+	1. if Pos + Size &gt; Data.size(): return   // 越界保护
+	2. memcpy(Out, Data + Pos, Size)
+	3. Pos += Size</div>
+</section>
+
+<section class="fn-panel" id="fn-arc-rdseek">
+	<h3 class="fn-name">void FMemoryReader::Seek(std::size_t InPos)</h3>
+	<p class="back-link">← <a href="API.html">公开 API</a> · <code>void</code></p>
+	<p>绝对定位游标（不做边界校验，靠 Serialize 兜底）。</p>
+	<div class="pseudo">Seek(InPos):
+	1. Pos = InPos</div>
+</section>
+
+<section class="fn-panel" id="fn-arc-rdtell">
+	<h3 class="fn-name">std::size_t FMemoryReader::Tell() const</h3>
+	<p class="back-link">← <a href="API.html">公开 API</a> · <code>std::size_t</code></p>
+	<p>返回当前读游标位置。</p>
+	<div class="pseudo">Tell():
+	1. return Pos</div>
+</section>
+
+<h2>FMemoryWriter（写端）</h2>
+
+<section class="fn-panel" id="fn-arc-wrctor">
+	<h3 class="fn-name">FMemoryWriter::FMemoryWriter()</h3>
+	<p class="back-link">← <a href="API.html">公开 API</a> · 构造</p>
+	<p>写模式构造——内部缓冲从空开始。</p>
+	<div class="pseudo">FMemoryWriter():
+	1. FArchive(Write 模式)
+	2. Buffer 为空</div>
+</section>
+
+<section class="fn-panel" id="fn-arc-wrser">
+	<h3 class="fn-name">void FMemoryWriter::Serialize(void* In, std::size_t Size)</h3>
+	<p class="back-link">← <a href="API.html">公开 API</a> · <code>void</code></p>
+	<p>顺序追加写——Buffer 尾部扩容后 memcpy 拷贝入。</p>
+	<div class="pseudo">Serialize(In, Size):
+	1. Old = Buffer.size()
+	2. Buffer.resize(Old + Size)
+	3. memcpy(Buffer + Old, In, Size)</div>
+</section>
+
+<section class="fn-panel" id="fn-arc-wrseek">
+	<h3 class="fn-name">void FMemoryWriter::Seek(std::size_t InPos)</h3>
+	<p class="back-link">← <a href="API.html">公开 API</a> · <code>void</code></p>
+	<p>截断式定位——目标位置小于当前缓冲则 resize 回退（回写覆盖旧数据用）。</p>
+	<div class="pseudo">Seek(InPos):
+	1. if InPos &lt; Buffer.size(): Buffer.resize(InPos)</div>
+</section>
+
+<section class="fn-panel" id="fn-arc-wrtell">
+	<h3 class="fn-name">std::size_t FMemoryWriter::Tell() const</h3>
+	<p class="back-link">← <a href="API.html">公开 API</a> · <code>std::size_t</code></p>
+	<p>返回已写字节数（即缓冲长度）。</p>
+	<div class="pseudo">Tell():
+	1. return Buffer.size()</div>
+</section>
+
+<section class="fn-panel" id="fn-arc-getbytes">
+	<h3 class="fn-name">const std::vector&lt;std::uint8_t&gt;&amp; FMemoryWriter::GetBytes() const</h3>
+	<p class="back-link">← <a href="API.html">公开 API</a> · <code>const std::vector&lt;std::uint8_t&gt;&amp;</code></p>
+	<p>只读视图——不拷贝，直接引用内部缓冲。</p>
+	<div class="pseudo">GetBytes():
+	1. return Buffer</div>
+</section>
+
+<section class="fn-panel" id="fn-arc-takebytes">
+	<h3 class="fn-name">std::vector&lt;std::uint8_t&gt; FMemoryWriter::TakeBytes()</h3>
+	<p class="back-link">← <a href="API.html">公开 API</a> · <code>std::vector&lt;std::uint8_t&gt;</code></p>
+	<p>转移所有权——move 出缓冲，Writer 变空，零拷贝交付结果。</p>
+	<div class="pseudo">TakeBytes():
+	1. return std::move(Buffer)</div>
+</section>
+
+<p class="muted"><a href="Archive.md">Archive.md</a> — 概念 · <a href="API.html">API.html</a> — 公开签名</p>
+
+</body>
+</html>

@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Asset（实现）— 函数字典</title>
+<style>
+	:root {
+		--bg: #14181f; --panel: #1b2130; --code-bg: #0d1117;
+		--text: #d8e1f0; --muted: #8b96a8; --accent: #5b8dd9;
+		--accent2: #3f8f63; --border: #2c3444; --border-strong: #3d4a61;
+	}
+	* { box-sizing: border-box; }
+	body { margin:0; padding:32px 40px; background:var(--bg); color:var(--text);
+		font-family:"Segoe UI","Microsoft YaHei",sans-serif; line-height:1.7; max-width:1040px; }
+	h1 { font-size:26px; border-bottom:2px solid var(--border-strong); padding-bottom:12px; }
+	h2 { font-size:22px; margin-top:44px; color:var(--accent); border-bottom:1px solid var(--border); padding-bottom:8px; }
+	a { color:var(--accent); text-decoration:none; }
+	a:hover { text-decoration:underline; }
+	.fn-panel { background:var(--panel); border:1px solid var(--border);
+		border-left:4px solid var(--accent2); border-radius:8px; padding:20px 24px; margin:24px 0; }
+	.fn-name { font-family:Consolas,"Cascadia Code",monospace; font-size:18px; color:var(--accent2); margin:0 0 4px 0; }
+	.back-link { font-size:13px; color:var(--muted); }
+	.pseudo { font-family:Consolas,"Cascadia Code",monospace; background:var(--code-bg);
+		border:1px solid var(--border); border-radius:6px; padding:14px 18px;
+		margin:12px 0; font-size:13px; white-space:pre; overflow-x:auto; line-height:1.6; }
+	code { font-family:Consolas,"Cascadia Code",monospace; background:var(--code-bg);
+		padding:2px 6px; border-radius:4px; }
+	.muted { color:var(--muted); }
+</style>
+</head>
+<body>
+
+<h1>Asset（Private）— 实现算法字典</h1>
+<p class="muted">cpp 侧每个函数的算法伪代码解释。公开 API 文档经 <a href="API.html">API.html</a> 跳转落到这里。</p>
+
+<h2>生命周期</h2>
+
+<section class="fn-panel" id="fn-ast-get">
+	<h3 class="fn-name">FAssetRegistry&amp; FAssetRegistry::Get()</h3>
+	<p class="back-link">← <a href="API.html">公开 API</a> · <code>FAssetRegistry&amp;</code></p>
+	<p>进程唯一访问器——Meyers 单例，static 局部在 Asset.dll 内，跨 DLL dllimport 解析到同一实例。</p>
+	<div class="pseudo">Get():
+	1. static Instance
+	2. return Instance</div>
+</section>
+
+<section class="fn-panel" id="fn-ast-init">
+	<h3 class="fn-name">void FAssetRegistry::Initialize(int Argc, char** Argv)</h3>
+	<p class="back-link">← <a href="API.html">公开 API</a> · <code>void</code></p>
+	<p>启动清空登记表（从零状态）。持锁清 Assets。</p>
+	<div class="pseudo">Initialize(Argc, Argv):
+	1. lock(Mutex): Assets.clear()</div>
+</section>
+
+<section class="fn-panel" id="fn-ast-shutdown">
+	<h3 class="fn-name">void FAssetRegistry::Shutdown()</h3>
+	<p class="back-link">← <a href="API.html">公开 API</a> · <code>void</code></p>
+	<p>与 Initialize 相同——清空登记表。</p>
+	<div class="pseudo">Shutdown():
+	1. lock(Mutex): Assets.clear()</div>
+</section>
+
+<h2>扫描与查询</h2>
+
+<section class="fn-panel" id="fn-ast-scan">
+	<h3 class="fn-name">void FAssetRegistry::Scan(const std::filesystem::path&amp; ContentDir, std::string_view MountAlias)</h3>
+	<p class="back-link">← <a href="API.html">公开 API</a> · <code>void</code></p>
+	<p>递归扫描内容目录：目录不存在直接返回；先把 MountAlias 映射为 FPaths root（虚拟路径走平台根抽象），再逐文件建 FAssetData（虚拟路径 = /Alias/相对路径去扩展名），按扩展名判定类型。</p>
+	<div class="pseudo">Scan(ContentDir, MountAlias):
+	1. if !is_directory(ContentDir): return
+	2. FPaths::Get().SetRoot(MountAlias, ContentDir)
+	3. lock(Mutex):
+	4.   递归遍历目录:
+	5.     跳过错误/非普通文件
+	6.     Relative = 相对 ContentDir 的路径
+	7.     if 无扩展名: continue
+	8.     Data.Path = "/" + MountAlias + "/" + Relative(去扩展名)
+	9.     Data.Type = TypeFromExtension(扩展名)
+	10.    Assets[Path] = move(Data)</div>
+</section>
+
+<section class="fn-panel" id="fn-ast-type">
+	<h3 class="fn-name">EAssetType TypeFromExtension(std::string_view Extension)</h3>
+	<p class="back-link">内部 · <code>EAssetType</code></p>
+	<p>扩展名 → 资产类型映射：".material"→Material、".texture"→Texture，其余 Unknown。</p>
+	<div class="pseudo">TypeFromExtension(Ext):
+	1. if Ext == ".material": return Material
+	2. if Ext == ".texture": return Texture
+	3. return Unknown</div>
+</section>
+
+<section class="fn-panel" id="fn-ast-find">
+	<h3 class="fn-name">const FAssetData* FAssetRegistry::Find(const FAssetPath&amp; Path) const</h3>
+	<p class="back-link">← <a href="API.html">公开 API</a> · <code>const FAssetData*</code></p>
+	<p>按虚拟路径查登记表（key 为路径字符串）；未命中返回 nullptr。持锁读。</p>
+	<div class="pseudo">Find(Path):
+	1. lock(Mutex):
+	2.   It = Assets.find(Path.GetPath())
+	3. return It != end ? &amp;It-&gt;second : nullptr</div>
+</section>
+
+<section class="fn-panel" id="fn-ast-resolve">
+	<h3 class="fn-name">std::filesystem::path FAssetRegistry::Resolve(const FAssetPath&amp; Path) const</h3>
+	<p class="back-link">← <a href="API.html">公开 API</a> · <code>std::filesystem::path</code></p>
+	<p>虚拟路径落盘：去掉前导 '/' 后交给 FPaths::Resolve（按 root 别名拆接物理路径）。</p>
+	<div class="pseudo">Resolve(Path):
+	1. P = Path.GetPath(); 去前导 '/'
+	2. return FPaths::Get().Resolve(P)</div>
+</section>
+
+<section class="fn-panel" id="fn-ast-load">
+	<h3 class="fn-name">std::optional&lt;std::vector&lt;std::uint8_t&gt;&gt; FAssetRegistry::Load(const FAssetPath&amp; Path) const</h3>
+	<p class="back-link">← <a href="API.html">公开 API</a> · <code>std::optional&lt;std::vector&lt;std::uint8_t&gt;&gt;</code></p>
+	<p>先 Find 拿元数据；未登记或打不开文件返回 nullopt，否则 binary 流读全部字节。</p>
+	<div class="pseudo">Load(Path):
+	1. Data = Find(Path); if !Data: return nullopt
+	2. Stream = ifstream(Data.File, binary)
+	3. if !Stream: return nullopt
+	4. Bytes = 读全部字节 (istreambuf_iterator)
+	5. return Bytes</div>
+</section>
+
+<section class="fn-panel" id="fn-ast-count">
+	<h3 class="fn-name">std::size_t FAssetRegistry::GetAssetCount() const</h3>
+	<p class="back-link">← <a href="API.html">公开 API</a> · <code>std::size_t</code></p>
+	<p>登记表条目数。持锁读。</p>
+	<div class="pseudo">GetAssetCount():
+	1. lock(Mutex): return Assets.size()</div>
+</section>
+
+<p class="muted"><a href="Asset.md">Asset.md</a> — 概念 · <a href="API.html">API.html</a> — 公开签名</p>
+
+</body>
+</html>
