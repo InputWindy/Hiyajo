@@ -2,11 +2,74 @@
 <html lang="zh">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Log — API</title>
-<style>body{background:#14181f;color:#d8e1f0;font-family:Segoe UI,sans-serif;padding:32px}</style>
+<style>
+	:root {
+		--bg: #14181f; --panel: #1b2130; --code-bg: #0d1117;
+		--text: #d8e1f0; --muted: #8b96a8; --accent: #5b8dd9;
+		--accent2: #3f8f63; --border: #2c3444; --border-strong: #3d4a61;
+		--kw: #ff7b72; --type: #79c0ff; --field: #e6c07b;
+	}
+	* { box-sizing: border-box; }
+	body { margin:0; padding:32px 40px; background:var(--bg); color:var(--text);
+		font-family:"Segoe UI","Microsoft YaHei",sans-serif; line-height:1.7; max-width:1040px; }
+	h1 { font-size:26px; border-bottom:2px solid var(--border-strong); padding-bottom:12px; }
+	h2 { font-size:22px; margin-top:44px; color:var(--accent); border-bottom:1px solid var(--border); padding-bottom:8px; }
+	a { color:var(--accent); text-decoration:none; }
+	a:hover { text-decoration:underline; }
+	code { font-family:Consolas,"Cascadia Code",monospace; background:var(--code-bg);
+		padding:2px 6px; border-radius:4px; font-size:13px; }
+	.kw { color:var(--kw); } .type { color:var(--type); }
+	.muted { color:var(--muted); }
+	.class-panel { background:var(--panel); border:1px solid var(--border);
+		border-left:4px solid var(--accent); border-radius:8px; padding:20px 24px; margin:20px 0; }
+	.class-name { font-family:Consolas,"Cascadia Code",monospace; font-size:18px; color:var(--accent); margin:0 0 4px 0; }
+	.class-kind { font-size:12px; color:var(--muted); border:1px solid var(--border);
+		border-radius:4px; padding:1px 8px; margin-left:8px; vertical-align:middle; }
+	.class-desc { color:var(--muted); margin:4px 0 16px 0; }
+	.api-table { width:100%; border-collapse:collapse; margin:8px 0; }
+	.api-table th { text-align:left; background:var(--code-bg); color:var(--muted);
+		font-weight:normal; padding:6px 10px; border:1px solid var(--border); }
+	.api-table td { padding:6px 10px; border:1px solid var(--border); vertical-align:top; }
+	.sig { font-family:Consolas,"Cascadia Code",monospace; font-size:13px; }
+	.group { text-transform:uppercase; letter-spacing:1px; font-size:13px; color:var(--muted);
+		margin:20px 0 8px 0; border-bottom:1px dashed var(--border); padding-bottom:4px; }
+</style>
 </head>
 <body>
+
 <h1>Log — API</h1>
-<p>占位。</p>
+<p class="muted">日志单例服务——封装 <span class="type">spdlog</span> 的线程安全 stdout-color logger，全引擎共享。fmt 风格格式化（<code>{}</code> 占位）。<code>Get()</code> 定义在 <code>Log.cpp</code>（编进 Log.dll），实例进程唯一。</p>
+
+<h2>FLog — 日志单例</h2>
+
+<section class="class-panel">
+	<h3 class="class-name">FLog<span class="class-kind">class : TSingleton&lt;FLog&gt;, IPlugin&lt;IInit, IShutdown&gt;</span></h3>
+	<p class="class-desc">CRTP 单例，包装 <code>spdlog::logger</code>。跨 DLL 经 <code>FLog::Get()</code>（非 header inline，避免每 DLL 一份）。</p>
+	<table class="api-table">
+		<tr><th style="width:46%">签名</th><th>说明</th></tr>
+		<tr><td class="sig"><code><span class="kw">static</span> FLog&amp; Get()</code></td><td>进程唯一访问器——声明在头、定义在 Log.cpp（Log.dll）</td></tr>
+		<tr><td class="sig"><code><span class="field">std::shared_ptr&lt;spdlog::logger&gt;</span> Logger</code></td><td>共享 logger——所有引擎/服务日志路由到这里</td></tr>
+		<tr><td class="sig"><code><span class="kw">void</span> Initialize(<span class="kw">int</span>, <span class="type">char</span>** Argv)</code> <span class="kw">override</span></td><td>创建 stdout-color logger（<code>"Maho"</code>），设 pattern 与级别；识别 <code>--log-level=trace|debug|info|warn|error</code></td></tr>
+		<tr><td class="sig"><code><span class="kw">void</span> Shutdown()</code> <span class="kw">override</span></td><td><code>spdlog::shutdown()</code>（flush + drop）+ 释放 Logger</td></tr>
+		<tr><td class="sig"><code><span class="kw">template&lt;Args...&gt;</span> <span class="kw">static void</span> Info/Warn/Error(format_string_t&lt;Args...&gt;, Args...)</code></td><td>fmt 风格静态透传（路由 <code>Get().Logger</code>，编译期格式检查）</td></tr>
+	</table>
+</section>
+
+<h2>宏</h2>
+
+<section class="class-panel">
+	<h3 class="class-name">MAHO_LOG_CORE_TRACE / DEBUG / INFO / WARN / ERROR / CRITICAL<span class="class-kind">宏</span></h3>
+	<p class="class-desc">CORE 日志宏糖——直接透传到 <code>::Maho::FLog::Get().Logger</code> 的对应级别方法。须在 <code>FLog::Get().Initialize(argc, argv)</code> 之后使用。</p>
+	<div class="muted" style="font-family:Consolas,monospace;font-size:13px;background:var(--code-bg);padding:10px 14px;border-radius:6px;">
+		#define MAHO_LOG_CORE_INFO(...) ::Maho::FLog::Get().Logger-&gt;info(__VA_ARGS__)<br>
+		#define MAHO_LOG_CORE_ERROR(...) ::Maho::FLog::Get().Logger-&gt;error(__VA_ARGS__)<br>
+		// TRACE / DEBUG / WARN / CRITICAL 同理
+	</div>
+</section>
+
+<p class="muted"><a href="Log.md">Log.md</a> — 概念</p>
+
 </body>
 </html>
