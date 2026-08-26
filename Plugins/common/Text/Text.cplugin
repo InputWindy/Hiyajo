@@ -1,0 +1,6 @@
+{
+  "FileVersion": 1,
+  "Name": "Text",
+  "Description": "localized text singleton (FText handles + FTextManager catalog; SetCulture/Resolve; nlohmann JSON load)",
+  "Dependencies": []
+}

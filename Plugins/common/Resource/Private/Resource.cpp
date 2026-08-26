@@ -160,7 +160,7 @@ bool FResourceSystem::EnqueueImport(
 	return true;
 }
 
-bool FResourceSystem::EnqueueExportWrite(
+bool FResourceSystem::EnqueueExport(
 	std::vector<std::uint8_t> Bytes,
 	std::string DestinationPath,
 	std::function<void(bool)> OnDone)

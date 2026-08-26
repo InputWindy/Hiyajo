@@ -136,7 +136,7 @@ protected:
 		std::function<void(std::span<const std::uint8_t>)> OnBulkReady);
 	/** Encode on the CALLER thread (safe: reads catalog resources synchronously),
 	 *  then hand the bytes to the IO thread for WriteBytes; OnDone on game thread. */
-	bool EnqueueExportWrite(
+	bool EnqueueExport(
 		std::vector<std::uint8_t> Bytes,
 		std::string DestinationPath,
 		std::function<void(bool)> OnDone);
@@ -220,7 +220,7 @@ bool FResourceSystem::Export(typename TResourceExporter<TResource>::FConfig Conf
 		return false;
 	}
 
-	return EnqueueExportWrite(std::move(Bytes), Config.DestinationPath, std::move(OnDone));
+	return EnqueueExport(std::move(Bytes), Config.DestinationPath, std::move(OnDone));
 }
 
 } // namespace Resource

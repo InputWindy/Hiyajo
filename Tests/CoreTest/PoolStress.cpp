@@ -1,7 +1,7 @@
 // Isolated stress test for FThreadPool — no FLayer, no stack objects, no
 // scheduler. Answers: is the pool alone race-free under high-frequency
 // RunTasks/Run with lazy growth + teardown?
-#include <Engine/ThreadPool.h>
+#include <Core/ThreadPool.h>
 
 #include <atomic>
 #include <cstdio>

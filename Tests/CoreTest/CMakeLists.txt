@@ -44,21 +44,6 @@ target_include_directories(SingletonStress PRIVATE "${ENGINE_DIR}/Source/Public"
 # the mirror/proxy support applies here too.
 include("${ENGINE_DIR}/Build/CMake/MahoDependencies.cmake")
 
-add_executable(CommonStress CommonStress.cpp
-	${MAHO_PRIVATE}
-	${ENGINE_DIR}/Source/Private/Engine/Common/Archive.cpp
-	${ENGINE_DIR}/Source/Private/Engine/Common/Unicode.cpp
-	${ENGINE_DIR}/Source/Private/Engine/Common/Config.cpp
-	${ENGINE_DIR}/Source/Private/Engine/Common/ConsoleVariable.cpp
-	${ENGINE_DIR}/Source/Private/Engine/Common/Exception.cpp
-	${ENGINE_DIR}/Source/Private/Engine/Common/Timer.cpp
-	${ENGINE_DIR}/Source/Private/Engine/Common/Text.cpp
-	${ENGINE_DIR}/Source/Private/Engine/Common/CommandParser.cpp
-	${ENGINE_DIR}/Source/Private/Engine/Common/Compress.cpp
-	${MAHO_HEADERS})
-target_include_directories(CommonStress PRIVATE "${ENGINE_DIR}/Source/Public")
-target_link_libraries(CommonStress PRIVATE Threads::Threads glm::glm nlohmann_json::nlohmann_json CLI11::CLI11 libzstd_static)
-
 # EntryPoint.h drivers.compile + link check (needs Fatal.cpp).
 add_executable(EntryPointStress EntryPointStress.cpp ${MAHO_PRIVATE} ${MAHO_HEADERS})
 target_include_directories(EntryPointStress PRIVATE "${ENGINE_DIR}/Source/Public")

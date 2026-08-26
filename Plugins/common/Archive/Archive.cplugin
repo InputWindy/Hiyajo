@@ -1,0 +1,6 @@
+{
+  "FileVersion": 1,
+  "Name": "Archive",
+  "Description": "binary serialization (FArchive reader/writer + FMemoryReader/FMemoryWriter byte streams + ISerialize). Pure std.",
+  "Dependencies": []
+}

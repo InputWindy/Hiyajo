@@ -1,0 +1,6 @@
+{
+  "FileVersion": 1,
+  "Name": "CommandParser",
+  "Description": "command-line parser singleton (argc/argv -> key-value store; uses CLI11)",
+  "Dependencies": []
+}

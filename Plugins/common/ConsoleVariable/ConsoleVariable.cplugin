@@ -1,0 +1,6 @@
+{
+  "FileVersion": 1,
+  "Name": "ConsoleVariable",
+  "Description": "CVar registry singleton (TAutoConsoleVariable statics self-register at static-init; Find/Register)",
+  "Dependencies": []
+}
