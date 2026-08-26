@@ -13,86 +13,6 @@ namespace Maho::Script
 
 namespace
 {
-	void RegisterCoreBindings(sol::state& Lua)
-	{
-		sol::table MahoTable = Lua.create_named_table("maho");
-
-		MahoTable["log"] = [](const std::string& Message)
-		{
-			MAHO_LOG_CORE_INFO("[Lua] {}", Message);
-		};
-		MahoTable["log_warn"] = [](const std::string& Message)
-		{
-			MAHO_LOG_CORE_WARN("[Lua] {}", Message);
-		};
-		MahoTable["log_error"] = [](const std::string& Message)
-		{
-			MAHO_LOG_CORE_ERROR("[Lua] {}", Message);
-		};
-
-		MahoTable["get_cvar_int"] = [](const std::string& Name, sol::optional<int> DefaultValue) -> int
-		{
-			ConsoleVariable::IConsoleVariable* CVar = ConsoleVariable::FConsoleVariable::Get().Find(Name);
-			return CVar ? CVar->GetInt() : DefaultValue.value_or(0);
-		};
-		MahoTable["get_cvar_float"] = [](const std::string& Name, sol::optional<float> DefaultValue) -> float
-		{
-			ConsoleVariable::IConsoleVariable* CVar = ConsoleVariable::FConsoleVariable::Get().Find(Name);
-			return CVar ? CVar->GetFloat() : DefaultValue.value_or(0.0f);
-		};
-		MahoTable["get_cvar_bool"] = [](const std::string& Name, sol::optional<bool> DefaultValue) -> bool
-		{
-			ConsoleVariable::IConsoleVariable* CVar = ConsoleVariable::FConsoleVariable::Get().Find(Name);
-			return CVar ? CVar->GetBool() : DefaultValue.value_or(false);
-		};
-		MahoTable["get_cvar_string"] = [](const std::string& Name, sol::optional<std::string> DefaultValue) -> std::string
-		{
-			ConsoleVariable::IConsoleVariable* CVar = ConsoleVariable::FConsoleVariable::Get().Find(Name);
-			return CVar ? CVar->GetString() : DefaultValue.value_or("");
-		};
-
-		MahoTable["set_cvar_int"] = [](const std::string& Name, int Value) -> bool
-		{
-			ConsoleVariable::IConsoleVariable* CVar = ConsoleVariable::FConsoleVariable::Get().Find(Name);
-			if (CVar)
-			{
-				CVar->Set(std::to_string(Value));
-				return true;
-			}
-			return false;
-		};
-		MahoTable["set_cvar_float"] = [](const std::string& Name, float Value) -> bool
-		{
-			ConsoleVariable::IConsoleVariable* CVar = ConsoleVariable::FConsoleVariable::Get().Find(Name);
-			if (CVar)
-			{
-				CVar->Set(std::to_string(Value));
-				return true;
-			}
-			return false;
-		};
-		MahoTable["set_cvar_bool"] = [](const std::string& Name, bool Value) -> bool
-		{
-			ConsoleVariable::IConsoleVariable* CVar = ConsoleVariable::FConsoleVariable::Get().Find(Name);
-			if (CVar)
-			{
-				CVar->Set(Value ? "true" : "false");
-				return true;
-			}
-			return false;
-		};
-		MahoTable["set_cvar_string"] = [](const std::string& Name, const std::string& Value) -> bool
-		{
-			ConsoleVariable::IConsoleVariable* CVar = ConsoleVariable::FConsoleVariable::Get().Find(Name);
-			if (CVar)
-			{
-				CVar->Set(Value);
-				return true;
-			}
-			return false;
-		};
-	}
-
 	[[nodiscard]] std::string ResolveScriptPath(const std::string& ScriptsDirectory, const std::string& FilePath)
 	{
 		namespace fs = std::filesystem;
@@ -129,11 +49,6 @@ void FScriptSystem::Shutdown()
 	ShutdownLua();
 }
 
-void FScriptSystem::Tick(float DeltaSeconds)
-{
-	(void)Call("OnUpdate", DeltaSeconds);
-}
-
 bool FScriptSystem::InitializeLua(const std::string& InScriptsDirectory)
 {
 	if (bLuaInitialized)
@@ -162,19 +77,14 @@ bool FScriptSystem::InitializeLua(const std::string& InScriptsDirectory)
 	const std::string PackagePath = Pattern + ";" + PatternInit;
 	Impl->Lua["package"]["path"] = PackagePath;
 
-	RegisterCoreBindings(Impl->Lua);
-
 	bLuaInitialized = true;
 	MAHO_LOG_CORE_INFO("FScriptSystem Lua initialized (Scripts='{}')", ScriptsDirectory);
 
-	for (ILuaBindable* Bindable : PendingBindables)
+	for (FTypeBinder Binder : PendingTypeBinders)
 	{
-		if (Bindable)
-		{
-			Bindable->BindLua(*this);
-		}
+		Binder(&Impl->Lua);
 	}
-	PendingBindables.clear();
+	PendingTypeBinders.clear();
 
 	OnLuaReady.Broadcast(*this);
 	return true;
@@ -189,20 +99,24 @@ void* FScriptSystem::TryGetLuaState()
 	return &Impl->Lua;
 }
 
-void FScriptSystem::Bind(ILuaBindable& Bindable)
+void FScriptSystem::RegisterTypeBinder(FTypeBinder Binder)
 {
-	if (!bLuaInitialized || !Impl)
+	if (!Binder)
 	{
-		PendingBindables.push_back(&Bindable);
 		return;
 	}
-	Bindable.BindLua(*this);
+	if (!bLuaInitialized || !Impl)
+	{
+		PendingTypeBinders.push_back(Binder);
+		return;
+	}
+	Binder(&Impl->Lua);
 }
 
 void FScriptSystem::ShutdownLua()
 {
 	OnLuaReady.RemoveAll();
-	PendingBindables.clear();
+	PendingTypeBinders.clear();
 
 	Impl.reset();
 	bLuaInitialized = false;
@@ -234,6 +148,40 @@ bool FScriptSystem::DoFile(const std::string& FilePath)
 
 	MAHO_LOG_CORE_INFO("FScriptSystem loaded '{}'", Resolved);
 	return true;
+}
+
+void* FScriptSystem::LoadScriptRaw(const char* FilePath)
+{
+	if (!bLuaInitialized || !Impl || !FilePath || FilePath[0] == '\0')
+	{
+		return nullptr;
+	}
+
+	const std::string Resolved = ResolveScriptPath(ScriptsDirectory, FilePath);
+	namespace fs = std::filesystem;
+	if (!fs::is_regular_file(Resolved))
+	{
+		MAHO_LOG_CORE_WARN("FScriptSystem::LoadScript: file not found '{}'", Resolved);
+		return nullptr;
+	}
+
+	sol::protected_function_result Result = Impl->Lua.safe_script_file(Resolved);
+	if (!Result.valid())
+	{
+		const sol::error Error = Result;
+		MAHO_LOG_CORE_ERROR("FScriptSystem::LoadScript('{}'): {}", Resolved, Error.what());
+		return nullptr;
+	}
+
+	sol::object Top = Result.get<sol::object>();
+	if (Top.valid())
+	{
+		MAHO_LOG_CORE_INFO("FScriptSystem::LoadScript loaded '{}'", Resolved);
+		return new sol::object(Top);
+	}
+
+	MAHO_LOG_CORE_WARN("FScriptSystem::LoadScript('{}'): script returned no value", Resolved);
+	return nullptr;
 }
 
 bool FScriptSystem::HasFunction(const char* FunctionName)
@@ -278,6 +226,56 @@ bool FScriptSystem::Call(const char* FunctionName, float Arg0)
 	{
 		const sol::error Error = Result;
 		MAHO_LOG_CORE_ERROR("FScriptSystem::Call('{}', float): {}", FunctionName, Error.what());
+		return false;
+	}
+	return true;
+}
+
+bool FScriptSystem::CallRaw(void* TableHandle, const char* FunctionName)
+{
+	if (!bLuaInitialized || !Impl || !TableHandle || !FunctionName || FunctionName[0] == '\0')
+	{
+		return false;
+	}
+
+	sol::table& Table = *static_cast<sol::table*>(TableHandle);
+	sol::object Object = Table[FunctionName];
+	if (!Object.is<sol::function>())
+	{
+		return false;
+	}
+
+	sol::protected_function Function = Object.as<sol::function>();
+	sol::protected_function_result Result = Function();
+	if (!Result.valid())
+	{
+		const sol::error Error = Result;
+		MAHO_LOG_CORE_ERROR("FScriptSystem::Call(table, '{}'): {}", FunctionName, Error.what());
+		return false;
+	}
+	return true;
+}
+
+bool FScriptSystem::CallRaw(void* TableHandle, const char* FunctionName, float Arg0)
+{
+	if (!bLuaInitialized || !Impl || !TableHandle || !FunctionName || FunctionName[0] == '\0')
+	{
+		return false;
+	}
+
+	sol::table& Table = *static_cast<sol::table*>(TableHandle);
+	sol::object Object = Table[FunctionName];
+	if (!Object.is<sol::function>())
+	{
+		return false;
+	}
+
+	sol::protected_function Function = Object.as<sol::function>();
+	sol::protected_function_result Result = Function(Arg0);
+	if (!Result.valid())
+	{
+		const sol::error Error = Result;
+		MAHO_LOG_CORE_ERROR("FScriptSystem::Call(table, '{}', float): {}", FunctionName, Error.what());
 		return false;
 	}
 	return true;

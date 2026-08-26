@@ -288,7 +288,8 @@ private:
 	FLayerBase* Load(std::string_view DLLPath)
 	{
 		auto& M = LoadedModules.emplace_back();
-		if (M.Load(DLLPath))
+		bool bLoaded = M.Load(DLLPath);
+		if (bLoaded)
 		{
 			using CreateFunction = FLayerBase* (*)();
 			auto Create = M.GetProcAs<CreateFunction>("CreateLayer");

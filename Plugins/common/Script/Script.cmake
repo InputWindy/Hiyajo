@@ -61,6 +61,7 @@ maho_fetchcontent_populate_or_reuse(sol2 ${_SCRIPT_SOL2_URL} v3.3.1 include/sol/
 set(_SCRIPT_SOL2_INCLUDE_DIR "${sol2_SOURCE_DIR}/include")
 set(MAHO_SOL2_INCLUDE_DIR "${_SCRIPT_SOL2_INCLUDE_DIR}" CACHE INTERNAL "sol2 include directory" FORCE)
 
-# Script DLL links lua; sol2 include is public (consumers reflect Lua types).
-target_link_libraries(Script PRIVATE lua)
+# Script DLL links lua; lua include is PUBLIC (sol2 consumers need lua.h too);
+# sol2 include is PUBLIC (consumers reflect Lua types).
+target_link_libraries(Script PUBLIC lua)
 target_include_directories(Script PUBLIC "${_SCRIPT_SOL2_INCLUDE_DIR}")
