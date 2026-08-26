@@ -13,7 +13,7 @@ namespace Maho::Script
 
 namespace
 {
-	[[nodiscard]] std::string ResolveScriptPath(const std::string& ScriptsDirectory, const std::string& FilePath)
+	[[nodiscard]] std::string ResolveScriptPath(const std::string& ScriptsDirectory, const char* FilePath)
 	{
 		namespace fs = std::filesystem;
 		const fs::path Path = FilePath;
@@ -25,10 +25,251 @@ namespace
 	}
 }
 
-struct FScriptSystem::FImpl
+// ── Lua backend ────────────────────────────────────────────────────────────
+
+class FLuaLanguage : public IScriptLanguage
 {
-	sol::state Lua;
+public:
+	const char* GetName() const override { return "Lua"; }
+
+	bool Initialize(int Argc, char** Argv, const char* InScriptsDirectory) override
+	{
+		(void)Argc; (void)Argv;
+		if (bInitialized)
+		{
+			return true;
+		}
+
+		ScriptsDirectory = (InScriptsDirectory && InScriptsDirectory[0]) ? InScriptsDirectory : "Scripts";
+		Impl = std::make_unique<FImpl>();
+
+		Impl->Lua.open_libraries(
+			sol::lib::base,
+			sol::lib::package,
+			sol::lib::coroutine,
+			sol::lib::string,
+			sol::lib::table,
+			sol::lib::math,
+			sol::lib::utf8);
+
+		namespace fs = std::filesystem;
+		std::error_code ErrorCode;
+		fs::create_directories(ScriptsDirectory, ErrorCode);
+
+		const std::string Pattern = (fs::path(ScriptsDirectory) / "?.lua").string();
+		const std::string PatternInit = (fs::path(ScriptsDirectory) / "?" / "init.lua").string();
+		Impl->Lua["package"]["path"] = Pattern + ";" + PatternInit;
+
+		bInitialized = true;
+		MAHO_LOG_CORE_INFO("Script Lua backend initialized (Scripts='{}')", ScriptsDirectory);
+
+		for (FTypeBinder Binder : PendingTypeBinders)
+		{
+			Binder(&Impl->Lua);
+		}
+		PendingTypeBinders.clear();
+		return true;
+	}
+
+	void Shutdown() override
+	{
+		PendingTypeBinders.clear();
+		Impl.reset();
+		bInitialized = false;
+		MAHO_LOG_CORE_INFO("Script Lua backend shut down");
+	}
+
+	bool IsInitialized() const override { return bInitialized; }
+
+	bool DoFile(const char* FilePath) override
+	{
+		if (!bInitialized || !Impl || !FilePath || FilePath[0] == '\0')
+		{
+			return false;
+		}
+
+		const std::string Resolved = ResolveScriptPath(ScriptsDirectory, FilePath);
+		namespace fs = std::filesystem;
+		if (!fs::is_regular_file(Resolved))
+		{
+			MAHO_LOG_CORE_WARN("Script Lua DoFile: file not found '{}'", Resolved);
+			return false;
+		}
+
+		sol::protected_function_result Result = Impl->Lua.safe_script_file(Resolved);
+		if (!Result.valid())
+		{
+			const sol::error Error = Result;
+			MAHO_LOG_CORE_ERROR("Script Lua DoFile('{}'): {}", Resolved, Error.what());
+			return false;
+		}
+
+		MAHO_LOG_CORE_INFO("Script Lua loaded '{}'", Resolved);
+		return true;
+	}
+
+	void* LoadScriptRaw(const char* FilePath) override
+	{
+		if (!bInitialized || !Impl || !FilePath || FilePath[0] == '\0')
+		{
+			return nullptr;
+		}
+
+		const std::string Resolved = ResolveScriptPath(ScriptsDirectory, FilePath);
+		namespace fs = std::filesystem;
+		if (!fs::is_regular_file(Resolved))
+		{
+			MAHO_LOG_CORE_WARN("Script Lua LoadScript: file not found '{}'", Resolved);
+			return nullptr;
+		}
+
+		sol::protected_function_result Result = Impl->Lua.safe_script_file(Resolved);
+		if (!Result.valid())
+		{
+			const sol::error Error = Result;
+			MAHO_LOG_CORE_ERROR("Script Lua LoadScript('{}'): {}", Resolved, Error.what());
+			return nullptr;
+		}
+
+		sol::object Top = Result.get<sol::object>();
+		if (Top.valid())
+		{
+			MAHO_LOG_CORE_INFO("Script Lua LoadScript loaded '{}'", Resolved);
+			return new sol::object(Top);
+		}
+
+		MAHO_LOG_CORE_WARN("Script Lua LoadScript('{}'): script returned no value", Resolved);
+		return nullptr;
+	}
+
+	bool CallGlobal(const char* FunctionName) override
+	{
+		if (!bInitialized || !Impl || !HasFunction(FunctionName))
+		{
+			return false;
+		}
+
+		sol::protected_function Function = Impl->Lua[FunctionName];
+		sol::protected_function_result Result = Function();
+		if (!Result.valid())
+		{
+			const sol::error Error = Result;
+			MAHO_LOG_CORE_ERROR("Script Lua Call('{}'): {}", FunctionName, Error.what());
+			return false;
+		}
+		return true;
+	}
+
+	bool CallGlobal(const char* FunctionName, float Arg0) override
+	{
+		if (!bInitialized || !Impl || !HasFunction(FunctionName))
+		{
+			return false;
+		}
+
+		sol::protected_function Function = Impl->Lua[FunctionName];
+		sol::protected_function_result Result = Function(Arg0);
+		if (!Result.valid())
+		{
+			const sol::error Error = Result;
+			MAHO_LOG_CORE_ERROR("Script Lua Call('{}', float): {}", FunctionName, Error.what());
+			return false;
+		}
+		return true;
+	}
+
+	bool CallHandle(void* Handle, const char* FunctionName) override
+	{
+		if (!bInitialized || !Impl || !Handle || !FunctionName || FunctionName[0] == '\0')
+		{
+			return false;
+		}
+
+		sol::table& Table = *static_cast<sol::table*>(Handle);
+		sol::object Object = Table[FunctionName];
+		if (!Object.is<sol::function>())
+		{
+			return false;
+		}
+
+		sol::protected_function Function = Object.as<sol::function>();
+		sol::protected_function_result Result = Function();
+		if (!Result.valid())
+		{
+			const sol::error Error = Result;
+			MAHO_LOG_CORE_ERROR("Script Lua Call(table, '{}'): {}", FunctionName, Error.what());
+			return false;
+		}
+		return true;
+	}
+
+	bool CallHandle(void* Handle, const char* FunctionName, float Arg0) override
+	{
+		if (!bInitialized || !Impl || !Handle || !FunctionName || FunctionName[0] == '\0')
+		{
+			return false;
+		}
+
+		sol::table& Table = *static_cast<sol::table*>(Handle);
+		sol::object Object = Table[FunctionName];
+		if (!Object.is<sol::function>())
+		{
+			return false;
+		}
+
+		sol::protected_function Function = Object.as<sol::function>();
+		sol::protected_function_result Result = Function(Arg0);
+		if (!Result.valid())
+		{
+			const sol::error Error = Result;
+			MAHO_LOG_CORE_ERROR("Script Lua Call(table, '{}', float): {}", FunctionName, Error.what());
+			return false;
+		}
+		return true;
+	}
+
+	void* GetState() override
+	{
+		return (bInitialized && Impl) ? static_cast<void*>(&Impl->Lua) : nullptr;
+	}
+
+	void RegisterTypeBinder(FTypeBinder Binder) override
+	{
+		if (!Binder)
+		{
+			return;
+		}
+		if (!bInitialized || !Impl)
+		{
+			PendingTypeBinders.push_back(Binder);
+			return;
+		}
+		Binder(&Impl->Lua);
+	}
+
+private:
+	bool HasFunction(const char* FunctionName) const
+	{
+		if (!bInitialized || !Impl || !FunctionName || FunctionName[0] == '\0')
+		{
+			return false;
+		}
+		sol::object Object = Impl->Lua[FunctionName];
+		return Object.is<sol::function>();
+	}
+
+	struct FImpl
+	{
+		sol::state Lua;
+	};
+
+	std::unique_ptr<FImpl> Impl;
+	bool bInitialized = false;
+	std::string ScriptsDirectory;
+	std::vector<FTypeBinder> PendingTypeBinders;
 };
+
+// ── Host (FScriptSystem) ───────────────────────────────────────────────────
 
 FScriptSystem& FScriptSystem::Get()
 {
@@ -38,247 +279,102 @@ FScriptSystem& FScriptSystem::Get()
 
 void FScriptSystem::Initialize(int Argc, char** Argv)
 {
-	(void)Argc; (void)Argv;
-		// Scripts directory: fixed convention "Scripts" (project cwd). A launch
-		// override could read --scripts-dir here in the future.
-		(void)InitializeLua("Scripts");
+	// Default backend: Lua. Other languages register themselves (e.g. a
+	// ScriptPython / ScriptCSharp plugin) during their own Initialize.
+	RegisterLanguage(new FLuaLanguage());
+
+	for (auto& Language : Languages)
+	{
+		if (Language->Initialize(Argc, Argv, "Scripts"))
+		{
+			OnLanguageReady.Broadcast(*Language);
+		}
 	}
+}
 
 void FScriptSystem::Shutdown()
 {
-	ShutdownLua();
+	for (auto& Language : Languages)
+	{
+		Language->Shutdown();
+	}
+	Languages.clear();
+	Active = nullptr;
+	OnLanguageReady.RemoveAll();
 }
 
-bool FScriptSystem::InitializeLua(const std::string& InScriptsDirectory)
+void FScriptSystem::RegisterLanguage(IScriptLanguage* Language)
 {
-	if (bLuaInitialized)
-	{
-		return true;
-	}
-
-	ScriptsDirectory = InScriptsDirectory.empty() ? "Scripts" : InScriptsDirectory;
-	Impl = std::make_unique<FImpl>();
-
-	Impl->Lua.open_libraries(
-		sol::lib::base,
-		sol::lib::package,
-		sol::lib::coroutine,
-		sol::lib::string,
-		sol::lib::table,
-		sol::lib::math,
-		sol::lib::utf8);
-
-	namespace fs = std::filesystem;
-	std::error_code ErrorCode;
-	fs::create_directories(ScriptsDirectory, ErrorCode);
-
-	const std::string Pattern = (fs::path(ScriptsDirectory) / "?.lua").string();
-	const std::string PatternInit = (fs::path(ScriptsDirectory) / "?" / "init.lua").string();
-	const std::string PackagePath = Pattern + ";" + PatternInit;
-	Impl->Lua["package"]["path"] = PackagePath;
-
-	bLuaInitialized = true;
-	MAHO_LOG_CORE_INFO("FScriptSystem Lua initialized (Scripts='{}')", ScriptsDirectory);
-
-	for (FTypeBinder Binder : PendingTypeBinders)
-	{
-		Binder(&Impl->Lua);
-	}
-	PendingTypeBinders.clear();
-
-	OnLuaReady.Broadcast(*this);
-	return true;
-}
-
-void* FScriptSystem::TryGetLuaState()
-{
-	if (!bLuaInitialized || !Impl)
-	{
-		return nullptr;
-	}
-	return &Impl->Lua;
-}
-
-void FScriptSystem::RegisterTypeBinder(FTypeBinder Binder)
-{
-	if (!Binder)
+	if (!Language)
 	{
 		return;
 	}
-	if (!bLuaInitialized || !Impl)
+	for (const auto& Existing : Languages)
 	{
-		PendingTypeBinders.push_back(Binder);
-		return;
+		if (Existing->GetName() == Language->GetName())
+		{
+			delete Language;
+			return;
+		}
 	}
-	Binder(&Impl->Lua);
+	if (Active == nullptr)
+	{
+		Active = Language;
+	}
+	Languages.emplace_back(Language);
 }
 
-void FScriptSystem::ShutdownLua()
+IScriptLanguage* FScriptSystem::GetLanguage(const char* Name) const
 {
-	OnLuaReady.RemoveAll();
-	PendingTypeBinders.clear();
-
-	Impl.reset();
-	bLuaInitialized = false;
-	MAHO_LOG_CORE_INFO("FScriptSystem Lua shut down");
-}
-
-bool FScriptSystem::DoFile(const std::string& FilePath)
-{
-	if (!bLuaInitialized || !Impl)
-	{
-		return false;
-	}
-
-	const std::string Resolved = ResolveScriptPath(ScriptsDirectory, FilePath);
-	namespace fs = std::filesystem;
-	if (!fs::is_regular_file(Resolved))
-	{
-		MAHO_LOG_CORE_WARN("FScriptSystem::DoFile: file not found '{}'", Resolved);
-		return false;
-	}
-
-	sol::protected_function_result Result = Impl->Lua.safe_script_file(Resolved);
-	if (!Result.valid())
-	{
-		const sol::error Error = Result;
-		MAHO_LOG_CORE_ERROR("FScriptSystem::DoFile('{}'): {}", Resolved, Error.what());
-		return false;
-	}
-
-	MAHO_LOG_CORE_INFO("FScriptSystem loaded '{}'", Resolved);
-	return true;
-}
-
-void* FScriptSystem::LoadScriptRaw(const char* FilePath)
-{
-	if (!bLuaInitialized || !Impl || !FilePath || FilePath[0] == '\0')
+	if (!Name)
 	{
 		return nullptr;
 	}
-
-	const std::string Resolved = ResolveScriptPath(ScriptsDirectory, FilePath);
-	namespace fs = std::filesystem;
-	if (!fs::is_regular_file(Resolved))
+	for (const auto& Language : Languages)
 	{
-		MAHO_LOG_CORE_WARN("FScriptSystem::LoadScript: file not found '{}'", Resolved);
-		return nullptr;
+		if (Language->GetName() == Name)
+		{
+			return Language.get();
+		}
 	}
-
-	sol::protected_function_result Result = Impl->Lua.safe_script_file(Resolved);
-	if (!Result.valid())
-	{
-		const sol::error Error = Result;
-		MAHO_LOG_CORE_ERROR("FScriptSystem::LoadScript('{}'): {}", Resolved, Error.what());
-		return nullptr;
-	}
-
-	sol::object Top = Result.get<sol::object>();
-	if (Top.valid())
-	{
-		MAHO_LOG_CORE_INFO("FScriptSystem::LoadScript loaded '{}'", Resolved);
-		return new sol::object(Top);
-	}
-
-	MAHO_LOG_CORE_WARN("FScriptSystem::LoadScript('{}'): script returned no value", Resolved);
 	return nullptr;
 }
 
-bool FScriptSystem::HasFunction(const char* FunctionName)
+IScriptLanguage* FScriptSystem::GetActive() const
 {
-	if (!bLuaInitialized || !Impl || !FunctionName || FunctionName[0] == '\0')
-	{
-		return false;
-	}
+	return Active;
+}
 
-	sol::object Object = Impl->Lua[FunctionName];
-	return Object.is<sol::function>();
+void FScriptSystem::RegisterTypeBinder(const char* LanguageName, IScriptLanguage::FTypeBinder Binder)
+{
+	if (IScriptLanguage* Language = GetLanguage(LanguageName))
+	{
+		Language->RegisterTypeBinder(Binder);
+	}
 }
 
 bool FScriptSystem::Call(const char* FunctionName)
 {
-	if (!HasFunction(FunctionName))
-	{
-		return false;
-	}
-
-	sol::protected_function Function = Impl->Lua[FunctionName];
-	sol::protected_function_result Result = Function();
-	if (!Result.valid())
-	{
-		const sol::error Error = Result;
-		MAHO_LOG_CORE_ERROR("FScriptSystem::Call('{}'): {}", FunctionName, Error.what());
-		return false;
-	}
-	return true;
+	IScriptLanguage* Language = GetActive();
+	return Language != nullptr && Language->CallGlobal(FunctionName);
 }
 
 bool FScriptSystem::Call(const char* FunctionName, float Arg0)
 {
-	if (!HasFunction(FunctionName))
-	{
-		return false;
-	}
-
-	sol::protected_function Function = Impl->Lua[FunctionName];
-	sol::protected_function_result Result = Function(Arg0);
-	if (!Result.valid())
-	{
-		const sol::error Error = Result;
-		MAHO_LOG_CORE_ERROR("FScriptSystem::Call('{}', float): {}", FunctionName, Error.what());
-		return false;
-	}
-	return true;
+	IScriptLanguage* Language = GetActive();
+	return Language != nullptr && Language->CallGlobal(FunctionName, Arg0);
 }
 
-bool FScriptSystem::CallRaw(void* TableHandle, const char* FunctionName)
+bool FScriptSystem::DoFile(const char* FilePath)
 {
-	if (!bLuaInitialized || !Impl || !TableHandle || !FunctionName || FunctionName[0] == '\0')
-	{
-		return false;
-	}
-
-	sol::table& Table = *static_cast<sol::table*>(TableHandle);
-	sol::object Object = Table[FunctionName];
-	if (!Object.is<sol::function>())
-	{
-		return false;
-	}
-
-	sol::protected_function Function = Object.as<sol::function>();
-	sol::protected_function_result Result = Function();
-	if (!Result.valid())
-	{
-		const sol::error Error = Result;
-		MAHO_LOG_CORE_ERROR("FScriptSystem::Call(table, '{}'): {}", FunctionName, Error.what());
-		return false;
-	}
-	return true;
+	IScriptLanguage* Language = GetActive();
+	return Language != nullptr && Language->DoFile(FilePath);
 }
 
-bool FScriptSystem::CallRaw(void* TableHandle, const char* FunctionName, float Arg0)
+void* FScriptSystem::TryGetState()
 {
-	if (!bLuaInitialized || !Impl || !TableHandle || !FunctionName || FunctionName[0] == '\0')
-	{
-		return false;
-	}
-
-	sol::table& Table = *static_cast<sol::table*>(TableHandle);
-	sol::object Object = Table[FunctionName];
-	if (!Object.is<sol::function>())
-	{
-		return false;
-	}
-
-	sol::protected_function Function = Object.as<sol::function>();
-	sol::protected_function_result Result = Function(Arg0);
-	if (!Result.valid())
-	{
-		const sol::error Error = Result;
-		MAHO_LOG_CORE_ERROR("FScriptSystem::Call(table, '{}', float): {}", FunctionName, Error.what());
-		return false;
-	}
-	return true;
+	IScriptLanguage* Language = GetActive();
+	return Language != nullptr ? Language->GetState() : nullptr;
 }
 
 } // namespace Maho::Script
