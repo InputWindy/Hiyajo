@@ -1,0 +1,5 @@
+{
+  "FileVersion": 1,
+  "Name": "RHI",
+  "Description": "backend-agnostic GPU device surface (FThreadedServer RHI thread, Vulkan backend)"
+}
