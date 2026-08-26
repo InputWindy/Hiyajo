@@ -72,6 +72,12 @@ public:
 		return ERHIResourceType::Buffer;
 	}
 	[[nodiscard]] virtual const FRHIBufferDesc& GetDesc() const = 0;
+
+	/** GPU device address (uint64) when FRHIBufferDesc::Usage has DeviceAddress; 0 otherwise. */
+	[[nodiscard]] virtual std::uint64_t GetDeviceAddress() const
+	{
+		return 0;
+	}
 };
 
 struct FRHIStructuredBufferDesc
@@ -355,6 +361,32 @@ public:
 	}
 };
 
+struct FRHIRayTracingPipelineDesc
+{
+	FRHIShaderModule* RayGen = nullptr;
+	std::vector<FRHIShaderModule*> Miss;        // miss shaders
+	std::vector<FRHIShaderModule*> ClosestHit;  // closest-hit shaders
+	std::vector<FRHIShaderModule*> AnyHit;      // any-hit shaders (optional)
+	std::vector<FRHIShaderModule*> Intersection; // intersection shaders (optional)
+	std::vector<FRHIShaderModule*> Callable;    // callable shaders (optional)
+	std::vector<const char*> EntryPoints;       // entry for each module (same order)
+	FRHIPipelineLayout* Layout = nullptr;
+	std::uint32_t MaxRecursionDepth = 1;
+};
+
+class MAHO_RHI_API FRHIRayTracingPipeline : public FRHIResource
+{
+public:
+	[[nodiscard]] const char* GetTypeName() const override
+	{
+		return "FRHIRayTracingPipeline";
+	}
+	[[nodiscard]] ERHIResourceType GetType() const override
+	{
+		return ERHIResourceType::RayTracingPipeline;
+	}
+};
+
 struct FRHIDescriptorPoolSize
 {
 	ERHIDescriptorType Type = ERHIDescriptorType::UniformBuffer;
@@ -493,6 +525,82 @@ public:
 	{
 		return ERHIResourceType::QueryPool;
 	}
+};
+
+enum class ERHIRayTracingStructureType : std::uint8_t
+{
+	TopLevel = 0,       // TLAS: instance array
+	BottomLevel = 1,    // BLAS: geometry
+};
+
+/** One geometry in a bottom-level AS (triangle data via vertex/index buffers). */
+struct FRHIRayTracingGeometry
+{
+	FRHIBuffer* VertexBuffer = nullptr;
+	std::uint64_t VertexBufferOffset = 0;
+	std::uint32_t VertexCount = 0;
+	std::uint32_t VertexStride = 12;      // bytes per vertex
+	FRHIBuffer* IndexBuffer = nullptr;
+	std::uint64_t IndexBufferOffset = 0;
+	std::uint32_t IndexCount = 0;
+	bool bIndex32 = true;
+	bool bOpaque = true;                  // no any-hit (VK_GEOMETRY_OPAQUE_BIT)
+};
+
+struct FRHIRayTracingGeometryDesc
+{
+	std::vector<FRHIRayTracingGeometry> Geometries;
+	bool bAllowUpdate = false;            // BLAS refit
+	bool bAllowCompaction = false;
+};
+
+/** One TLAS instance (placement-matrix + AS handle + instance id). */
+struct FRHIRayTracingInstance
+{
+	std::uint32_t InstanceId = 0;
+	std::uint32_t InstanceMask = 0xFF;
+	std::uint32_t SbtOffset = 0;          // shader-binding-table offset (per-instance)
+	FRHIBuffer* AccelerationStructure = nullptr;  // the TLAS to instance
+	// 12 floats row-major: column0, column1, column2, column3 (transposed world)
+	float Transform[12] = {
+		1, 0, 0, 0,
+		0, 1, 0, 0,
+		0, 0, 1, 0
+	};
+};
+
+class MAHO_RHI_API FRHIAccelerationStructure : public FRHIResource
+{
+public:
+	[[nodiscard]] const char* GetTypeName() const override
+	{
+		return "FRHIAccelerationStructure";
+	}
+	[[nodiscard]] ERHIResourceType GetType() const override
+	{
+		return ERHIResourceType::AccelerationStructure;
+	}
+
+	[[nodiscard]] const FRHIRayTracingGeometryDesc& GetGeometryDesc() const
+	{
+		return GeometryDesc;
+	}
+
+protected:
+	FRHIRayTracingGeometryDesc GeometryDesc;
+};
+
+struct FRHISbtRecord
+{
+	FRHIShaderModule* Module = nullptr;   // null → miss/empty record
+	const char* EntryPoint = "main";
+};
+
+/** Shader binding table layout (one group per stage). */
+struct FRHISbtGroup
+{
+	ERHIShaderStage Stage = ERHIShaderStage::RayGen;
+	std::vector<FRHISbtRecord> Records;   // rayGen/miss/callable: records; hit: per-hit records
 };
 
 struct FRHIDescriptorWrite

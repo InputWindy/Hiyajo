@@ -564,6 +564,56 @@ void FVulkanCommandList::DrawIndexedIndirect(
 	vkCmdDrawIndexedIndirect(Buffer, Buf->GetVkBuffer(), ArgsOffset, DrawCount, Stride);
 }
 
+void FVulkanCommandList::DrawIndirectCount(
+	FRHIBuffer* ArgsBuffer,
+	std::uint64_t ArgsOffset,
+	FRHIBuffer* CountBuffer,
+	std::uint64_t CountOffset,
+	std::uint32_t MaxDrawCount,
+	std::uint32_t Stride)
+{
+	AssertType(ERHICommandListType::Graphics);
+	auto* Buf = static_cast<FVulkanBuffer*>(ArgsBuffer);
+	auto* CountBuf = static_cast<FVulkanBuffer*>(CountBuffer);
+	if (Buf == nullptr || CountBuf == nullptr)
+	{
+		return;
+	}
+	vkCmdDrawIndirectCount(
+		Buffer,
+		Buf->GetVkBuffer(),
+		ArgsOffset,
+		CountBuf->GetVkBuffer(),
+		CountOffset,
+		MaxDrawCount,
+		Stride);
+}
+
+void FVulkanCommandList::DrawIndexedIndirectCount(
+	FRHIBuffer* ArgsBuffer,
+	std::uint64_t ArgsOffset,
+	FRHIBuffer* CountBuffer,
+	std::uint64_t CountOffset,
+	std::uint32_t MaxDrawCount,
+	std::uint32_t Stride)
+{
+	AssertType(ERHICommandListType::Graphics);
+	auto* Buf = static_cast<FVulkanBuffer*>(ArgsBuffer);
+	auto* CountBuf = static_cast<FVulkanBuffer*>(CountBuffer);
+	if (Buf == nullptr || CountBuf == nullptr)
+	{
+		return;
+	}
+	vkCmdDrawIndexedIndirectCount(
+		Buffer,
+		Buf->GetVkBuffer(),
+		ArgsOffset,
+		CountBuf->GetVkBuffer(),
+		CountOffset,
+		MaxDrawCount,
+		Stride);
+}
+
 void FVulkanCommandList::BindComputePipeline(FRHIComputePipeline* Pipeline)
 {
 	AssertType(ERHICommandListType::Compute);
@@ -706,6 +756,203 @@ void FVulkanCommandList::PushConstants(ERHIShaderStage Stages, std::uint32_t Off
 	}
 
 	vkCmdPushConstants(Buffer, Layout, VkStages, Offset, Size, Data);
+}
+
+void FVulkanCommandList::BeginQuery(FRHIQueryPool* Pool, std::uint32_t QueryIndex)
+{
+	AssertType(ERHICommandListType::Graphics);
+	auto* VkPool = static_cast<FVulkanQueryPool*>(Pool);
+	if (VkPool == nullptr)
+	{
+		return;
+	}
+	vkCmdBeginQuery(Buffer, VkPool->GetVkQueryPool(), QueryIndex, 0);
+}
+
+void FVulkanCommandList::EndQuery(FRHIQueryPool* Pool, std::uint32_t QueryIndex)
+{
+	AssertType(ERHICommandListType::Graphics);
+	auto* VkPool = static_cast<FVulkanQueryPool*>(Pool);
+	if (VkPool == nullptr)
+	{
+		return;
+	}
+	vkCmdEndQuery(Buffer, VkPool->GetVkQueryPool(), QueryIndex);
+}
+
+void FVulkanCommandList::WriteTimestamp(FRHIQueryPool* Pool, std::uint32_t QueryIndex)
+{
+	AssertNotTransfer();
+	auto* VkPool = static_cast<FVulkanQueryPool*>(Pool);
+	if (VkPool == nullptr)
+	{
+		return;
+	}
+	vkCmdWriteTimestamp(Buffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VkPool->GetVkQueryPool(), QueryIndex);
+}
+
+void FVulkanCommandList::ResetQueryPool(FRHIQueryPool* Pool, std::uint32_t FirstQuery, std::uint32_t QueryCount)
+{
+	auto* VkPool = static_cast<FVulkanQueryPool*>(Pool);
+	if (VkPool == nullptr)
+	{
+		return;
+	}
+	vkCmdResetQueryPool(Buffer, VkPool->GetVkQueryPool(), FirstQuery, QueryCount);
+}
+
+void FVulkanCommandList::BuildAccelerationStructure(
+	FRHIAccelerationStructure* Accel,
+	FRHIBuffer* ScratchBuffer,
+	std::uint64_t ScratchOffset)
+{
+	if (RT.BuildAccel == nullptr)
+	{
+		MAHO_LOG_CORE_ERROR("FVulkanCommandList::BuildAccelerationStructure: ray tracing unavailable");
+		return;
+	}
+	if (Accel == nullptr || ScratchBuffer == nullptr)
+	{
+		MAHO_LOG_CORE_ERROR("FVulkanCommandList::BuildAccelerationStructure: null accel or scratch");
+		return;
+	}
+
+	auto* VkAccel = static_cast<FVulkanAccelerationStructure*>(Accel);
+	auto* VkScratch = static_cast<FVulkanBuffer*>(ScratchBuffer);
+	const FRHIRayTracingGeometryDesc& GeometryDesc = Accel->GetGeometryDesc();
+
+	std::vector<VkAccelerationStructureGeometryKHR> Geometries;
+	std::vector<VkAccelerationStructureBuildRangeInfoKHR> Ranges;
+	Geometries.reserve(GeometryDesc.Geometries.size());
+	Ranges.reserve(GeometryDesc.Geometries.size());
+
+	for (const FRHIRayTracingGeometry& Geometry : GeometryDesc.Geometries)
+	{
+		VkAccelerationStructureGeometryKHR Geo{};
+		Geo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR;
+		Geo.geometryType = VK_GEOMETRY_TYPE_TRIANGLES_KHR;
+		Geo.flags = Geometry.bOpaque ? VK_GEOMETRY_OPAQUE_BIT_KHR : 0;
+
+		auto* VkVertex = static_cast<FVulkanBuffer*>(Geometry.VertexBuffer);
+		auto* VkIndex = static_cast<FVulkanBuffer*>(Geometry.IndexBuffer);
+
+		VkAccelerationStructureGeometryTrianglesDataKHR& Triangles = Geo.geometry.triangles;
+		Triangles.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR;
+		Triangles.vertexFormat = VK_FORMAT_R32G32B32_SFLOAT;
+		Triangles.vertexData.deviceAddress =
+			VkVertex ? VkVertex->GetDeviceAddress() + Geometry.VertexBufferOffset : 0;
+		Triangles.vertexStride = Geometry.VertexStride;
+		Triangles.maxVertex = Geometry.VertexCount > 0 ? Geometry.VertexCount - 1 : 0;
+		if (VkIndex)
+		{
+			Triangles.indexType = Geometry.bIndex32 ? VK_INDEX_TYPE_UINT32 : VK_INDEX_TYPE_UINT16;
+			Triangles.indexData.deviceAddress =
+				VkIndex->GetDeviceAddress() + Geometry.IndexBufferOffset;
+		}
+
+		VkAccelerationStructureBuildRangeInfoKHR Range{};
+		Range.primitiveCount = Geometry.IndexCount > 0 ? Geometry.IndexCount / 3 : Geometry.VertexCount / 3;
+		Range.primitiveOffset = 0;
+		Range.firstVertex = 0;
+		Range.transformOffset = 0;
+
+		Geometries.push_back(Geo);
+		Ranges.push_back(Range);
+	}
+
+	VkAccelerationStructureBuildGeometryInfoKHR BuildInfo{};
+	BuildInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR;
+	BuildInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
+	BuildInfo.flags = GeometryDesc.bAllowUpdate
+		? VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR
+		: 0u;
+	BuildInfo.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
+	BuildInfo.srcAccelerationStructure = VK_NULL_HANDLE;
+	BuildInfo.dstAccelerationStructure = VkAccel->GetVkAccelerationStructure();
+	BuildInfo.geometryCount = static_cast<std::uint32_t>(Geometries.size());
+	BuildInfo.pGeometries = Geometries.data();
+	BuildInfo.scratchData.deviceAddress = VkScratch->GetDeviceAddress() + ScratchOffset;
+
+	const VkAccelerationStructureBuildRangeInfoKHR* RangePtrs[] = { Ranges.data() };
+	RT.BuildAccel(Buffer, 1, &BuildInfo, RangePtrs);
+}
+
+void FVulkanCommandList::CopyAccelerationStructure(
+	FRHIAccelerationStructure* Dst,
+	FRHIAccelerationStructure* Src)
+{
+	if (RT.CopyAccel == nullptr)
+	{
+		MAHO_LOG_CORE_ERROR("FVulkanCommandList::CopyAccelerationStructure: ray tracing unavailable");
+		return;
+	}
+	if (Dst == nullptr || Src == nullptr)
+	{
+		return;
+	}
+
+	auto* VkDst = static_cast<FVulkanAccelerationStructure*>(Dst);
+	auto* VkSrc = static_cast<FVulkanAccelerationStructure*>(Src);
+
+	VkCopyAccelerationStructureInfoKHR CopyInfo{};
+	CopyInfo.sType = VK_STRUCTURE_TYPE_COPY_ACCELERATION_STRUCTURE_INFO_KHR;
+	CopyInfo.src = VkSrc->GetVkAccelerationStructure();
+	CopyInfo.dst = VkDst->GetVkAccelerationStructure();
+	CopyInfo.mode = VK_COPY_ACCELERATION_STRUCTURE_MODE_COMPACT_KHR;
+	RT.CopyAccel(Buffer, &CopyInfo);
+}
+
+void FVulkanCommandList::TraceRays(
+	FRHIRayTracingPipeline* Pipeline,
+	const FRHIRayTracingSbt& Sbt,
+	std::uint32_t Width,
+	std::uint32_t Height,
+	std::uint32_t Depth)
+{
+	if (RT.TraceRays == nullptr)
+	{
+		MAHO_LOG_CORE_ERROR("FVulkanCommandList::TraceRays: ray tracing unavailable");
+		return;
+	}
+	if (Pipeline == nullptr)
+	{
+		MAHO_LOG_CORE_ERROR("FVulkanCommandList::TraceRays: null pipeline");
+		return;
+	}
+
+	auto* VkPipeline = static_cast<FVulkanRayTracingPipeline*>(Pipeline);
+	auto* VkSbt = static_cast<FVulkanBuffer*>(Sbt.SbtBuffer);
+	const std::uint64_t SbtAddress = VkSbt ? VkSbt->GetDeviceAddress() : 0;
+
+	VkStridedDeviceAddressRegionKHR RayGenRegion{};
+	RayGenRegion.deviceAddress = SbtAddress + Sbt.RayGenOffset;
+	RayGenRegion.stride = Sbt.RayGenStride;
+	RayGenRegion.size = Sbt.RayGenStride;
+
+	VkStridedDeviceAddressRegionKHR MissRegion{};
+	MissRegion.deviceAddress = SbtAddress + Sbt.MissOffset;
+	MissRegion.stride = Sbt.MissStride;
+	MissRegion.size = Sbt.MissStride;
+
+	VkStridedDeviceAddressRegionKHR HitRegion{};
+	HitRegion.deviceAddress = SbtAddress + Sbt.HitOffset;
+	HitRegion.stride = Sbt.HitStride;
+	HitRegion.size = Sbt.HitStride;
+
+	VkStridedDeviceAddressRegionKHR CallableRegion{};
+	CallableRegion.deviceAddress = 0;
+	CallableRegion.stride = 0;
+	CallableRegion.size = 0;
+
+	RT.TraceRays(
+		Buffer,
+		&RayGenRegion,
+		&MissRegion,
+		&HitRegion,
+		&CallableRegion,
+		Width,
+		Height,
+		Depth);
 }
 
 } // namespace Maho

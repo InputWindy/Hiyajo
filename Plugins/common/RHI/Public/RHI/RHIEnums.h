@@ -39,6 +39,7 @@ enum class ERHIResourceType : std::uint16_t
 	PipelineLayout,
 	GraphicsPipeline,
 	ComputePipeline,
+	RayTracingPipeline,
 	DescriptorPool,
 	DescriptorSet,
 	Framebuffer,
@@ -47,6 +48,7 @@ enum class ERHIResourceType : std::uint16_t
 	Fence,
 	Semaphore,
 	QueryPool,
+	AccelerationStructure,
 };
 
 enum class ERHIFormat : std::uint16_t
@@ -80,6 +82,8 @@ enum class ERHIBufferUsage : std::uint32_t
 	TransferSrc = 1u << 4,
 	TransferDst = 1u << 5,
 	Indirect = 1u << 6,
+	DeviceAddress = 1u << 7,   // shader-addressable (VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT)
+	AccelerationStructure = 1u << 8, // BLAS/TLAS storage (VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT)
 };
 
 enum class ERHITextureUsage : std::uint32_t
@@ -118,6 +122,12 @@ enum class ERHIResourceState : std::uint16_t
 	Present,
 };
 
+enum class ERHIQueryType : std::uint8_t
+{
+	Occlusion = 0,      // binary occlusion (VK_QUERY_TYPE_OCCLUSION)
+	Timestamp = 1,      // GPU timestamp (VK_QUERY_TYPE_TIMESTAMP)
+};
+
 enum class ERHIDescriptorType : std::uint8_t
 {
 	Sampler = 0,
@@ -128,6 +138,7 @@ enum class ERHIDescriptorType : std::uint8_t
 	StorageBuffer,
 	DynamicUniform,
 	DynamicStorage,
+	AccelerationStructure,   // readonly AS binding (VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR)
 };
 
 enum class ERHIShaderStage : std::uint32_t
@@ -136,7 +147,14 @@ enum class ERHIShaderStage : std::uint32_t
 	Vertex = 1u << 0,
 	Fragment = 1u << 1,
 	Compute = 1u << 2,
+	RayGen = 1u << 3,
+	AnyHit = 1u << 4,
+	ClosestHit = 1u << 5,
+	Miss = 1u << 6,
+	Intersection = 1u << 7,
+	Callable = 1u << 8,
 	AllGraphics = Vertex | Fragment,
+	AllRayTracing = RayGen | AnyHit | ClosestHit | Miss | Intersection | Callable,
 };
 
 enum class ERHIPrimitiveTopology : std::uint8_t

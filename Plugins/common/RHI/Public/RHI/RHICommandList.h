@@ -115,6 +115,22 @@ public:
 		std::uint32_t DrawCount = 1,
 		std::uint32_t Stride = 0) = 0;
 
+	/** GPU-driven draw count: drawCount comes from a GPU-written buffer. */
+	virtual void DrawIndirectCount(
+		FRHIBuffer* ArgsBuffer,
+		std::uint64_t ArgsOffset,
+		FRHIBuffer* CountBuffer,
+		std::uint64_t CountOffset,
+		std::uint32_t MaxDrawCount,
+		std::uint32_t Stride = 0) = 0;
+	virtual void DrawIndexedIndirectCount(
+		FRHIBuffer* ArgsBuffer,
+		std::uint64_t ArgsOffset,
+		FRHIBuffer* CountBuffer,
+		std::uint64_t CountOffset,
+		std::uint32_t MaxDrawCount,
+		std::uint32_t Stride = 0) = 0;
+
 	// Compute only
 	virtual void BindComputePipeline(FRHIComputePipeline* Pipeline) = 0;
 	virtual void Dispatch(std::uint32_t GroupCountX, std::uint32_t GroupCountY, std::uint32_t GroupCountZ) = 0;
@@ -132,6 +148,46 @@ public:
 		std::uint32_t Offset,
 		std::uint32_t Size,
 		const void* Data) = 0;
+
+	// GPU queries (occlusion / timestamp)
+	virtual void BeginQuery(FRHIQueryPool* Pool, std::uint32_t QueryIndex) = 0;
+	virtual void EndQuery(FRHIQueryPool* Pool, std::uint32_t QueryIndex) = 0;
+	virtual void WriteTimestamp(FRHIQueryPool* Pool, std::uint32_t QueryIndex) = 0;
+	virtual void ResetQueryPool(FRHIQueryPool* Pool, std::uint32_t FirstQuery, std::uint32_t QueryCount) = 0;
+
+	// Ray tracing
+	/**
+	 * Build an acceleration structure (BLAS or TLAS).
+	 * ScratchBuffer must be DeviceAddress + Storage flagged and large enough
+	 * for the build's scratch requirements (query via the RHI if needed).
+	 */
+	virtual void BuildAccelerationStructure(
+		FRHIAccelerationStructure* Accel,
+		FRHIBuffer* ScratchBuffer,
+		std::uint64_t ScratchOffset) = 0;
+	/** Copy (compact / refit-result) from Src to Dst. */
+	virtual void CopyAccelerationStructure(
+		FRHIAccelerationStructure* Dst,
+		FRHIAccelerationStructure* Src) = 0;
+
+	struct FRHIRayTracingSbt
+	{
+		FRHIBuffer* SbtBuffer = nullptr;      // whole SBT buffer
+		std::uint32_t RayGenOffset = 0;
+		std::uint32_t RayGenStride = 0;
+		std::uint32_t HitOffset = 0;
+		std::uint32_t HitStride = 0;
+		std::uint32_t MissOffset = 0;
+		std::uint32_t MissStride = 0;
+	};
+
+	/** Launch rays; Sbt comes from FRHIRayTracingSbt (filled by CreateShaderBindingTable). */
+	virtual void TraceRays(
+		FRHIRayTracingPipeline* Pipeline,
+		const FRHIRayTracingSbt& Sbt,
+		std::uint32_t Width,
+		std::uint32_t Height,
+		std::uint32_t Depth = 1) = 0;
 };
 
 } // namespace Maho

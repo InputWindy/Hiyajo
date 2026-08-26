@@ -5,6 +5,7 @@
 
 #include "VulkanCommandList.h"
 #include "VulkanMemory.h"
+#include "VulkanResources.h"
 
 #include <memory>
 #include <vector>
@@ -85,6 +86,35 @@ public:
 	virtual void DestroyRenderPass(FRHIRenderPass* Pass) override;
 	[[nodiscard]] virtual FRHIFramebuffer* CreateFramebuffer(const FRHIFramebufferDesc& Desc) override;
 	virtual void DestroyFramebuffer(FRHIFramebuffer* Framebuffer) override;
+
+	[[nodiscard]] virtual FRHIQueryPool* CreateQueryPool(ERHIQueryType Type, std::uint32_t QueryCount) override;
+	virtual void DestroyQueryPool(FRHIQueryPool* Pool) override;
+	virtual bool GetQueryPoolResults(
+		FRHIQueryPool* Pool,
+		std::uint32_t FirstQuery,
+		std::uint32_t QueryCount,
+		std::uint64_t* Results,
+		std::size_t Stride,
+		bool bWait) override;
+
+	[[nodiscard]] virtual FRHIRayTracingPipeline* CreateRayTracingPipeline(const FRHIRayTracingPipelineDesc& Desc) override;
+	virtual void DestroyRayTracingPipeline(FRHIRayTracingPipeline* Pipeline) override;
+	[[nodiscard]] virtual FRHIAccelerationStructure* CreateAccelerationStructure(const FRHIRayTracingGeometryDesc& Desc) override;
+	virtual void DestroyAccelerationStructure(FRHIAccelerationStructure* Accel) override;
+	virtual bool GetAccelerationStructureBuildSizes(
+		const FRHIRayTracingGeometryDesc& Desc,
+		std::uint64_t& OutAccelSize,
+		std::uint64_t& OutScratchSize) override;
+	[[nodiscard]] virtual FRHIBuffer* CreateShaderBindingTable(
+		FRHIRayTracingPipeline* Pipeline,
+		const FRHISbtGroup* Groups,
+		std::uint32_t GroupCount,
+		std::uint32_t* OutRayGenOffset,
+		std::uint32_t* OutRayGenStride,
+		std::uint32_t* OutHitOffset,
+		std::uint32_t* OutHitStride,
+		std::uint32_t* OutMissOffset,
+		std::uint32_t* OutMissStride) override;
 
 	/** Begin command buffer + main swapchain render pass (clear). Leaves the pass open. */
 	void BeginMainPass(float R, float G, float B, float A);
@@ -213,6 +243,18 @@ private:
 	float ClearColorA = 1.0f;
 
 	bool bFramebufferResized = false;
+
+	// Ray tracing: device-level functions (KHR extensions).
+	bool bRayTracingSupported = false;
+	PFN_vkCreateAccelerationStructureKHR CreateAccelerationStructureKHR = nullptr;
+	PFN_vkDestroyAccelerationStructureKHR DestroyAccelerationStructureKHR = nullptr;
+	PFN_vkGetAccelerationStructureBuildSizesKHR GetAccelerationStructureBuildSizesKHR = nullptr;
+	PFN_vkCreateRayTracingPipelinesKHR CreateRayTracingPipelinesKHR = nullptr;
+	PFN_vkGetRayTracingShaderGroupHandlesKHR GetRayTracingShaderGroupHandlesKHR = nullptr;
+	PFN_vkCmdBuildAccelerationStructuresKHR CmdBuildAccelerationStructuresKHR = nullptr;
+	PFN_vkCmdCopyAccelerationStructureKHR CmdCopyAccelerationStructureKHR = nullptr;
+	PFN_vkCmdTraceRaysKHR CmdTraceRaysKHR = nullptr;
+	PFN_vkGetBufferDeviceAddressKHR GetBufferDeviceAddressKHR = nullptr;
 
 	std::unique_ptr<FVulkanMemoryAllocator> MemoryAllocator;
 	std::unique_ptr<FRHIResourceManager> ResourceManager;

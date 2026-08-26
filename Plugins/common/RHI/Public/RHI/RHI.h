@@ -105,6 +105,58 @@ public:
 	[[nodiscard]] virtual FRHIFramebuffer* CreateFramebuffer(const FRHIFramebufferDesc& Desc) = 0;
 	virtual void DestroyFramebuffer(FRHIFramebuffer* Framebuffer) = 0;
 
+	// GPU queries (occlusion / timestamp)
+	[[nodiscard]] virtual FRHIQueryPool* CreateQueryPool(ERHIQueryType Type, std::uint32_t QueryCount) = 0;
+	virtual void DestroyQueryPool(FRHIQueryPool* Pool) = 0;
+
+	/**
+	 * Copy query results to the destination buffer (GPU) or CPU memory.
+	 * When bWait is true this blocks until results are available (a
+	 * synchronized read — call off the RHI thread).
+	 */
+	virtual bool GetQueryPoolResults(
+		FRHIQueryPool* Pool,
+		std::uint32_t FirstQuery,
+		std::uint32_t QueryCount,
+		std::uint64_t* Results,
+		std::size_t Stride,
+		bool bWait = true) = 0;
+
+	// Ray tracing
+	[[nodiscard]] virtual FRHIRayTracingPipeline* CreateRayTracingPipeline(const FRHIRayTracingPipelineDesc& Desc) = 0;
+	virtual void DestroyRayTracingPipeline(FRHIRayTracingPipeline* Pipeline) = 0;
+
+	/**
+	 * Create an acceleration structure (BLAS or TLAS). The structure is built
+	 * later on a command list via FRHICommandList::BuildAccelerationStructure.
+	 * Returns nullptr when the device lacks ray tracing support.
+	 */
+	[[nodiscard]] virtual FRHIAccelerationStructure* CreateAccelerationStructure(const FRHIRayTracingGeometryDesc& Desc) = 0;
+	virtual void DestroyAccelerationStructure(FRHIAccelerationStructure* Accel) = 0;
+
+	/** Query the required device sizes (accel + scratch) for a geometry desc. */
+	virtual bool GetAccelerationStructureBuildSizes(
+		const FRHIRayTracingGeometryDesc& Desc,
+		std::uint64_t& OutAccelSize,
+		std::uint64_t& OutScratchSize) = 0;
+
+	/**
+	 * Create a shader binding table from the pipeline's stage groups.
+	 * Returns an opaque handle to the table's GPU-side layout (the caller
+	 * supplies it to TraceRays via FRHIRayTracingSbt). The buffer is
+	 * DeviceAddress-capable and Storage-flagged.
+	 */
+	[[nodiscard]] virtual FRHIBuffer* CreateShaderBindingTable(
+		FRHIRayTracingPipeline* Pipeline,
+		const FRHISbtGroup* Groups,
+		std::uint32_t GroupCount,
+		std::uint32_t* OutRayGenOffset = nullptr,
+		std::uint32_t* OutRayGenStride = nullptr,
+		std::uint32_t* OutHitOffset = nullptr,
+		std::uint32_t* OutHitStride = nullptr,
+		std::uint32_t* OutMissOffset = nullptr,
+		std::uint32_t* OutMissStride = nullptr) = 0;
+
 protected:
 	IRHI() = default;
 };

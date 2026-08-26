@@ -155,4 +155,35 @@ FVulkanFramebuffer::~FVulkanFramebuffer()
 	}
 }
 
+FVulkanAccelerationStructure::~FVulkanAccelerationStructure()
+{
+	// KHR functions are not guaranteed in the static Vulkan loader — resolve
+	// per-device like the rest of the dynamic Vulkan usage in this plugin.
+	if (Device != VK_NULL_HANDLE && Accel != VK_NULL_HANDLE)
+	{
+		auto DestroyFn = reinterpret_cast<PFN_vkDestroyAccelerationStructureKHR>(
+			vkGetDeviceProcAddr(Device, "vkDestroyAccelerationStructureKHR"));
+		if (DestroyFn)
+		{
+			DestroyFn(Device, Accel, nullptr);
+		}
+		Accel = VK_NULL_HANDLE;
+	}
+	if (Allocator != nullptr && StorageBuffer != VK_NULL_HANDLE)
+	{
+		Allocator->DestroyBuffer(StorageBuffer, Allocation);
+		StorageBuffer = VK_NULL_HANDLE;
+		Allocation = nullptr;
+	}
+}
+
+FVulkanRayTracingPipeline::~FVulkanRayTracingPipeline()
+{
+	if (Device != VK_NULL_HANDLE && Pipeline != VK_NULL_HANDLE)
+	{
+		vkDestroyPipeline(Device, Pipeline, nullptr);
+		Pipeline = VK_NULL_HANDLE;
+	}
+}
+
 } // namespace Maho

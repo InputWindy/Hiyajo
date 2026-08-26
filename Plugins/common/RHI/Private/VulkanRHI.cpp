@@ -49,6 +49,11 @@ constexpr const char* GDeviceExtensions[] =
 	VK_KHR_SWAPCHAIN_EXTENSION_NAME,
 	VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME,
 	VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME,
+	// Ray tracing (Vulkan 1.2-era KHR; core in 1.3 but these names stay valid).
+	VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME,
+	VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME,
+	VK_KHR_RAY_QUERY_EXTENSION_NAME,
+	VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME,
 };
 
 [[nodiscard]] bool CheckVkResult(VkResult Result, const char* Context)
@@ -492,7 +497,8 @@ bool FVulkanRHI::CreateInstance()
 	AppInfo.applicationVersion = VK_MAKE_VERSION(0, 1, 0);
 	AppInfo.pEngineName = "Maho";
 	AppInfo.engineVersion = VK_MAKE_VERSION(0, 1, 0);
-	AppInfo.apiVersion = VK_API_VERSION_1_0;
+	// 1.2+ required for drawIndirectCount / bufferDeviceAddress / descriptorIndexing.
+	AppInfo.apiVersion = VK_API_VERSION_1_2;
 
 	VkInstanceCreateInfo CreateInfo{};
 	CreateInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
@@ -801,6 +807,14 @@ bool FVulkanRHI::CreateLogicalDevice()
 	}
 
 	VkPhysicalDeviceFeatures DeviceFeatures{};
+	// GPU-driven pipeline core features (Vulkan 1.1/1.2 core).
+	DeviceFeatures.multiDrawIndirect = VK_TRUE;
+	DeviceFeatures.drawIndirectFirstInstance = VK_TRUE;
+	DeviceFeatures.fragmentStoresAndAtomics = VK_TRUE;
+	DeviceFeatures.vertexPipelineStoresAndAtomics = VK_TRUE;
+	DeviceFeatures.shaderStorageBufferArrayDynamicIndexing = VK_TRUE;
+	DeviceFeatures.shaderSampledImageArrayDynamicIndexing = VK_TRUE;
+	DeviceFeatures.fillModeNonSolid = VK_TRUE;
 
 	VkPhysicalDeviceDynamicRenderingFeatures DynamicRendering{};
 	DynamicRendering.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES;
@@ -813,6 +827,50 @@ bool FVulkanRHI::CreateLogicalDevice()
 	DescriptorIndexing.descriptorBindingVariableDescriptorCount = VK_TRUE;
 	DescriptorIndexing.runtimeDescriptorArray = VK_TRUE;
 
+	// Vulkan 1.2 core: GPU-controlled indirect draw count.
+	VkPhysicalDeviceVulkan11Features Features11{};
+	Features11.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES;
+	Features11.shaderDrawParameters = VK_TRUE;
+
+	VkPhysicalDeviceVulkan12Features Features12{};
+	Features12.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
+	Features12.drawIndirectCount = VK_TRUE;
+	Features12.bufferDeviceAddress = VK_TRUE;
+	Features12.descriptorIndexing = VK_TRUE;
+	Features12.shaderSampledImageArrayNonUniformIndexing = VK_TRUE;
+	Features12.descriptorBindingPartiallyBound = VK_TRUE;
+	Features12.descriptorBindingVariableDescriptorCount = VK_TRUE;
+	Features12.runtimeDescriptorArray = VK_TRUE;
+	Features12.descriptorBindingSampledImageUpdateAfterBind = VK_TRUE;
+	Features12.descriptorBindingStorageBufferUpdateAfterBind = VK_TRUE;
+	Features12.shaderUniformBufferArrayNonUniformIndexing = VK_TRUE;
+	Features12.shaderStorageBufferArrayNonUniformIndexing = VK_TRUE;
+
+	// Ray tracing (KHR extensions).
+	VkPhysicalDeviceAccelerationStructureFeaturesKHR AccelStructure{};
+	AccelStructure.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR;
+	AccelStructure.accelerationStructure = VK_TRUE;
+	AccelStructure.accelerationStructureCaptureReplay = VK_FALSE;
+	AccelStructure.accelerationStructureIndirectBuild = VK_TRUE;
+	AccelStructure.accelerationStructureHostCommands = VK_FALSE;
+	AccelStructure.descriptorBindingAccelerationStructureUpdateAfterBind = VK_TRUE;
+
+	VkPhysicalDeviceRayTracingPipelineFeaturesKHR RayTracingPipeline{};
+	RayTracingPipeline.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR;
+	RayTracingPipeline.rayTracingPipeline = VK_TRUE;
+	RayTracingPipeline.rayTracingPipelineShaderGroupHandleCaptureReplay = VK_FALSE;
+	RayTracingPipeline.rayTracingPipelineTraceRaysIndirect = VK_TRUE;
+
+	VkPhysicalDeviceRayQueryFeaturesKHR RayQuery{};
+	RayQuery.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR;
+	RayQuery.rayQuery = VK_TRUE;
+
+	AccelStructure.pNext = &RayTracingPipeline;
+	RayTracingPipeline.pNext = &RayQuery;
+	Features12.pNext = &AccelStructure;
+
+	Features11.pNext = &Features12;
+	DescriptorIndexing.pNext = &Features11;
 	DynamicRendering.pNext = &DescriptorIndexing;
 
 	VkDeviceCreateInfo CreateInfo{};
@@ -834,6 +892,46 @@ bool FVulkanRHI::CreateLogicalDevice()
 	vkGetDeviceQueue(Device, PresentQueueFamilyIndex, 0, &PresentQueue);
 	vkGetDeviceQueue(Device, ComputeQueueFamilyIndex, ComputeQueueIndex, &ComputeVkQueue);
 	vkGetDeviceQueue(Device, TransferQueueFamilyIndex, TransferQueueIndex, &TransferVkQueue);
+
+	// Ray tracing KHR device functions — resolve dynamically (not in the
+	// static loader on all platforms). Presence == capability (extensions were
+	// requested above; missing symbols mean the driver refuses RT).
+	CreateAccelerationStructureKHR = reinterpret_cast<PFN_vkCreateAccelerationStructureKHR>(
+		vkGetDeviceProcAddr(Device, "vkCreateAccelerationStructureKHR"));
+	DestroyAccelerationStructureKHR = reinterpret_cast<PFN_vkDestroyAccelerationStructureKHR>(
+		vkGetDeviceProcAddr(Device, "vkDestroyAccelerationStructureKHR"));
+	GetAccelerationStructureBuildSizesKHR = reinterpret_cast<PFN_vkGetAccelerationStructureBuildSizesKHR>(
+		vkGetDeviceProcAddr(Device, "vkGetAccelerationStructureBuildSizesKHR"));
+	CreateRayTracingPipelinesKHR = reinterpret_cast<PFN_vkCreateRayTracingPipelinesKHR>(
+		vkGetDeviceProcAddr(Device, "vkCreateRayTracingPipelinesKHR"));
+	GetRayTracingShaderGroupHandlesKHR = reinterpret_cast<PFN_vkGetRayTracingShaderGroupHandlesKHR>(
+		vkGetDeviceProcAddr(Device, "vkGetRayTracingShaderGroupHandlesKHR"));
+	CmdBuildAccelerationStructuresKHR = reinterpret_cast<PFN_vkCmdBuildAccelerationStructuresKHR>(
+		vkGetDeviceProcAddr(Device, "vkCmdBuildAccelerationStructuresKHR"));
+	CmdCopyAccelerationStructureKHR = reinterpret_cast<PFN_vkCmdCopyAccelerationStructureKHR>(
+		vkGetDeviceProcAddr(Device, "vkCmdCopyAccelerationStructureKHR"));
+	CmdTraceRaysKHR = reinterpret_cast<PFN_vkCmdTraceRaysKHR>(
+		vkGetDeviceProcAddr(Device, "vkCmdTraceRaysKHR"));
+	GetBufferDeviceAddressKHR = reinterpret_cast<PFN_vkGetBufferDeviceAddressKHR>(
+		vkGetDeviceProcAddr(Device, "vkGetBufferDeviceAddressKHR"));
+
+	bRayTracingSupported =
+		CreateAccelerationStructureKHR != nullptr
+		&& DestroyAccelerationStructureKHR != nullptr
+		&& GetAccelerationStructureBuildSizesKHR != nullptr
+		&& CreateRayTracingPipelinesKHR != nullptr
+		&& GetRayTracingShaderGroupHandlesKHR != nullptr
+		&& CmdBuildAccelerationStructuresKHR != nullptr
+		&& CmdCopyAccelerationStructureKHR != nullptr
+		&& CmdTraceRaysKHR != nullptr;
+	if (bRayTracingSupported)
+	{
+		MAHO_LOG_CORE_INFO("Vulkan ray tracing (KHR) available");
+	}
+	else
+	{
+		MAHO_LOG_CORE_WARN("Vulkan ray tracing (KHR) NOT available — RT APIs will fail");
+	}
 
 	MAHO_LOG_CORE_INFO(
 		"Vulkan logical device created (G fam={} idx={}, C fam={} idx={} fallback={}, T fam={} idx={} fallback={})",
@@ -1324,7 +1422,11 @@ FRHICommandList* FVulkanRHI::CreateCommandList(ERHICommandListType Type)
 		return nullptr;
 	}
 
-	return new FVulkanCommandList(Type, Device, Pool, CmdBuffer);
+	FVulkanCommandList::FRTRuntime RT;
+	RT.BuildAccel = CmdBuildAccelerationStructuresKHR;
+	RT.CopyAccel = CmdCopyAccelerationStructureKHR;
+	RT.TraceRays = CmdTraceRaysKHR;
+	return new FVulkanCommandList(Type, Device, Pool, CmdBuffer, RT);
 }
 
 void FVulkanRHI::DestroyCommandList(FRHICommandList* CmdList)
@@ -1525,6 +1627,14 @@ VkBufferUsageFlags FVulkanRHI::ToVkBufferUsage(ERHIBufferUsage Usage)
 	{
 		Flags |= VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT;
 	}
+	if (RHIEnumHas(Usage, ERHIBufferUsage::DeviceAddress))
+	{
+		Flags |= VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
+	}
+	if (RHIEnumHas(Usage, ERHIBufferUsage::AccelerationStructure))
+	{
+		Flags |= VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR;
+	}
 	return Flags;
 }
 
@@ -1655,7 +1765,17 @@ FRHIBuffer* FVulkanRHI::CreateBuffer(const FRHIBufferDesc& Desc)
 		return nullptr;
 	}
 
-	return new FVulkanBuffer(Desc, Buffer, Allocation, MemoryAllocator.get());
+	// Query the GPU device address when the buffer is shader-addressable.
+	std::uint64_t DeviceAddress = 0;
+	if (RHIEnumHas(Desc.Usage, ERHIBufferUsage::DeviceAddress))
+	{
+		VkBufferDeviceAddressInfo AddressInfo{};
+		AddressInfo.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
+		AddressInfo.buffer = Buffer;
+		DeviceAddress = vkGetBufferDeviceAddress(Device, &AddressInfo);
+	}
+
+	return new FVulkanBuffer(Desc, Buffer, Allocation, MemoryAllocator.get(), DeviceAddress);
 }
 
 void FVulkanRHI::DestroyBuffer(FRHIBuffer* Buffer)
@@ -2064,6 +2184,463 @@ void FVulkanRHI::DestroyComputePipeline(FRHIComputePipeline* Pipeline)
 	delete Pipeline;
 }
 
+namespace
+{
+	[[nodiscard]] VkShaderStageFlagBits ToVkShaderStage(ERHIShaderStage Stage)
+	{
+		switch (Stage)
+		{
+		case ERHIShaderStage::RayGen:
+			return VK_SHADER_STAGE_RAYGEN_BIT_KHR;
+		case ERHIShaderStage::AnyHit:
+			return VK_SHADER_STAGE_ANY_HIT_BIT_KHR;
+		case ERHIShaderStage::ClosestHit:
+			return VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
+		case ERHIShaderStage::Miss:
+			return VK_SHADER_STAGE_MISS_BIT_KHR;
+		case ERHIShaderStage::Intersection:
+			return VK_SHADER_STAGE_INTERSECTION_BIT_KHR;
+		case ERHIShaderStage::Callable:
+			return VK_SHADER_STAGE_CALLABLE_BIT_KHR;
+		default:
+			return VK_SHADER_STAGE_ALL;
+		}
+	}
+}
+
+FRHIRayTracingPipeline* FVulkanRHI::CreateRayTracingPipeline(const FRHIRayTracingPipelineDesc& Desc)
+{
+	if (!bRayTracingSupported || CreateRayTracingPipelinesKHR == nullptr)
+	{
+		MAHO_LOG_CORE_ERROR("FVulkanRHI::CreateRayTracingPipeline: ray tracing unavailable");
+		return nullptr;
+	}
+	if (Desc.RayGen == nullptr || Desc.Layout == nullptr)
+	{
+		MAHO_LOG_CORE_ERROR("FVulkanRHI::CreateRayTracingPipeline: missing ray-gen shader or layout");
+		return nullptr;
+	}
+
+	// ── stages: every module with its entry point ──
+	std::vector<VkPipelineShaderStageCreateInfo> Stages;
+	std::vector<VkRayTracingShaderGroupCreateInfoKHR> Groups;
+	Stages.reserve(16);
+	Groups.reserve(16);
+
+	auto AddModule = [&](FRHIShaderModule* Module, ERHIShaderStage Stage)
+	{
+		if (Module == nullptr)
+		{
+			return;
+		}
+		auto* VkModule = static_cast<FVulkanShaderModule*>(Module);
+		VkPipelineShaderStageCreateInfo StageInfo{};
+		StageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+		StageInfo.stage = ToVkShaderStage(Stage);
+		StageInfo.module = VkModule->GetVkShaderModule();
+		StageInfo.pName = "main";
+		Stages.push_back(StageInfo);
+	};
+
+	const std::uint32_t RayGenIndex = static_cast<std::uint32_t>(Stages.size());
+	AddModule(Desc.RayGen, ERHIShaderStage::RayGen);
+
+	for (FRHIShaderModule* Module : Desc.Miss)
+	{
+		AddModule(Module, ERHIShaderStage::Miss);
+	}
+	const std::uint32_t MissCount = static_cast<std::uint32_t>(Desc.Miss.size());
+	const std::uint32_t MissFirstIndex = RayGenIndex + 1;
+
+	for (FRHIShaderModule* Module : Desc.ClosestHit)
+	{
+		AddModule(Module, ERHIShaderStage::ClosestHit);
+	}
+	const std::uint32_t ClosestHitCount = static_cast<std::uint32_t>(Desc.ClosestHit.size());
+	const std::uint32_t ClosestHitFirstIndex = MissFirstIndex + MissCount;
+
+	for (FRHIShaderModule* Module : Desc.AnyHit)
+	{
+		AddModule(Module, ERHIShaderStage::AnyHit);
+	}
+	for (FRHIShaderModule* Module : Desc.Intersection)
+	{
+		AddModule(Module, ERHIShaderStage::Intersection);
+	}
+	for (FRHIShaderModule* Module : Desc.Callable)
+	{
+		AddModule(Module, ERHIShaderStage::Callable);
+	}
+
+	// ── groups: raygen / miss×N / hit (closest+any+intersection per geometry) ──
+	{
+		VkRayTracingShaderGroupCreateInfoKHR Group{};
+		Group.sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR;
+		Group.type = VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR;
+		Group.generalShader = RayGenIndex;
+		Group.closestHitShader = VK_SHADER_UNUSED_KHR;
+		Group.anyHitShader = VK_SHADER_UNUSED_KHR;
+		Group.intersectionShader = VK_SHADER_UNUSED_KHR;
+		Groups.push_back(Group);
+	}
+
+	for (std::uint32_t I = 0; I < MissCount; ++I)
+	{
+		VkRayTracingShaderGroupCreateInfoKHR Group{};
+		Group.sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR;
+		Group.type = VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR;
+		Group.generalShader = MissFirstIndex + I;
+		Group.closestHitShader = VK_SHADER_UNUSED_KHR;
+		Group.anyHitShader = VK_SHADER_UNUSED_KHR;
+		Group.intersectionShader = VK_SHADER_UNUSED_KHR;
+		Groups.push_back(Group);
+	}
+
+	const std::uint32_t HitGroupCount = ClosestHitCount > 0 ? ClosestHitCount : 1;
+	for (std::uint32_t I = 0; I < HitGroupCount; ++I)
+	{
+		VkRayTracingShaderGroupCreateInfoKHR Group{};
+		Group.sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR;
+		Group.type = VK_RAY_TRACING_SHADER_GROUP_TYPE_TRIANGLES_HIT_GROUP_KHR;
+		Group.generalShader = VK_SHADER_UNUSED_KHR;
+		Group.closestHitShader =
+			I < ClosestHitCount ? ClosestHitFirstIndex + I : VK_SHADER_UNUSED_KHR;
+		// any-hit and intersection are index-matched to the same geometry index.
+		Group.anyHitShader = I < Desc.AnyHit.size()
+			? MissFirstIndex + MissCount + ClosestHitCount + I
+			: VK_SHADER_UNUSED_KHR;
+		Group.intersectionShader = VK_SHADER_UNUSED_KHR;
+		Groups.push_back(Group);
+	}
+
+	auto* VkLayout = static_cast<FVulkanPipelineLayout*>(Desc.Layout);
+
+	VkRayTracingPipelineCreateInfoKHR PipelineInfo{};
+	PipelineInfo.sType = VK_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_CREATE_INFO_KHR;
+	PipelineInfo.stageCount = static_cast<std::uint32_t>(Stages.size());
+	PipelineInfo.pStages = Stages.data();
+	PipelineInfo.groupCount = static_cast<std::uint32_t>(Groups.size());
+	PipelineInfo.pGroups = Groups.data();
+	PipelineInfo.maxPipelineRayRecursionDepth = Desc.MaxRecursionDepth > 0 ? Desc.MaxRecursionDepth : 1;
+	PipelineInfo.layout = VkLayout->GetVkLayout();
+
+	VkPipeline Pipeline = VK_NULL_HANDLE;
+	if (!CheckVkResult(
+			CreateRayTracingPipelinesKHR(Device, VK_NULL_HANDLE, VK_NULL_HANDLE, 1, &PipelineInfo, nullptr, &Pipeline),
+			"vkCreateRayTracingPipelinesKHR"))
+	{
+		return nullptr;
+	}
+
+	MAHO_LOG_CORE_INFO("FVulkanRHI: created ray tracing pipeline ({} stages, {} groups)",
+		Stages.size(), Groups.size());
+	return new FVulkanRayTracingPipeline(Device, Pipeline, VkLayout->GetVkLayout());
+}
+
+void FVulkanRHI::DestroyRayTracingPipeline(FRHIRayTracingPipeline* Pipeline)
+{
+	delete Pipeline;
+}
+
+FRHIAccelerationStructure* FVulkanRHI::CreateAccelerationStructure(const FRHIRayTracingGeometryDesc& Desc)
+{
+	if (!bRayTracingSupported || CreateAccelerationStructureKHR == nullptr || GetAccelerationStructureBuildSizesKHR == nullptr)
+	{
+		MAHO_LOG_CORE_ERROR("FVulkanRHI::CreateAccelerationStructure: ray tracing unavailable");
+		return nullptr;
+	}
+	if (Desc.Geometries.empty())
+	{
+		MAHO_LOG_CORE_ERROR("FVulkanRHI::CreateAccelerationStructure: no geometries");
+		return nullptr;
+	}
+
+	// ── build sizes (accel + scratch) from the geometry list ──
+	std::vector<VkAccelerationStructureGeometryKHR> Geometries;
+	Geometries.reserve(Desc.Geometries.size());
+
+	for (const FRHIRayTracingGeometry& Geometry : Desc.Geometries)
+	{
+		VkAccelerationStructureGeometryKHR Geo{};
+		Geo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR;
+		Geo.geometryType = VK_GEOMETRY_TYPE_TRIANGLES_KHR;
+		Geo.flags = Geometry.bOpaque ? VK_GEOMETRY_OPAQUE_BIT_KHR : 0;
+		VkAccelerationStructureGeometryTrianglesDataKHR& Triangles = Geo.geometry.triangles;
+		Triangles.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR;
+		Triangles.vertexFormat = VK_FORMAT_R32G32B32_SFLOAT;
+		Triangles.vertexStride = Geometry.VertexStride;
+		Triangles.maxVertex = Geometry.VertexCount > 0 ? Geometry.VertexCount - 1 : 0;
+		if (Geometry.IndexBuffer)
+		{
+			Triangles.indexType = Geometry.bIndex32 ? VK_INDEX_TYPE_UINT32 : VK_INDEX_TYPE_UINT16;
+		}
+		Geometries.push_back(Geo);
+	}
+
+	VkAccelerationStructureBuildGeometryInfoKHR BuildInfo{};
+	BuildInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR;
+	BuildInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
+	BuildInfo.flags = Desc.bAllowUpdate
+		? VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR
+		: 0u;
+	BuildInfo.geometryCount = static_cast<std::uint32_t>(Geometries.size());
+	BuildInfo.pGeometries = Geometries.data();
+
+	std::vector<std::uint32_t> PrimitiveCounts;
+	PrimitiveCounts.reserve(Desc.Geometries.size());
+	for (const FRHIRayTracingGeometry& Geometry : Desc.Geometries)
+	{
+		PrimitiveCounts.push_back(
+			Geometry.IndexCount > 0 ? Geometry.IndexCount / 3 : Geometry.VertexCount / 3);
+	}
+
+	VkAccelerationStructureBuildSizesInfoKHR Sizes{};
+	Sizes.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR;
+	GetAccelerationStructureBuildSizesKHR(
+		Device,
+		VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR,
+		&BuildInfo,
+		PrimitiveCounts.data(),
+		&Sizes);
+
+	if (Sizes.accelerationStructureSize == 0)
+	{
+		MAHO_LOG_CORE_ERROR("FVulkanRHI::CreateAccelerationStructure: zero accel size");
+		return nullptr;
+	}
+
+	// ── storage buffer (GPU-only, acceleration-structure flag + device address) ──
+	VkBufferCreateInfo BufferInfo{};
+	BufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+	BufferInfo.size = Sizes.accelerationStructureSize;
+	BufferInfo.usage = VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR
+		| VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
+	BufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+	VmaAllocationCreateInfo AllocInfo = FVulkanMemoryAllocator::MakeAllocationInfo(ERHIMemoryUsage::GPUOnly);
+	VkBuffer StorageBuffer = VK_NULL_HANDLE;
+	VmaAllocation StorageAllocation = nullptr;
+	if (!MemoryAllocator->CreateBuffer(BufferInfo, AllocInfo, StorageBuffer, StorageAllocation))
+	{
+		return nullptr;
+	}
+
+	VkBufferDeviceAddressInfo AddressInfo{};
+	AddressInfo.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
+	AddressInfo.buffer = StorageBuffer;
+	const std::uint64_t BufferAddress = vkGetBufferDeviceAddress(Device, &AddressInfo);
+
+	// ── create the acceleration structure object ──
+	VkAccelerationStructureCreateInfoKHR AccelInfo{};
+	AccelInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR;
+	AccelInfo.buffer = StorageBuffer;
+	AccelInfo.offset = 0;
+	AccelInfo.size = Sizes.accelerationStructureSize;
+	AccelInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
+
+	VkAccelerationStructureKHR Accel = VK_NULL_HANDLE;
+	if (!CheckVkResult(
+			CreateAccelerationStructureKHR(Device, &AccelInfo, nullptr, &Accel),
+			"vkCreateAccelerationStructureKHR"))
+	{
+		MemoryAllocator->DestroyBuffer(StorageBuffer, StorageAllocation);
+		return nullptr;
+	}
+
+	MAHO_LOG_CORE_INFO("FVulkanRHI: created BLAS ({} geometries, {} bytes)",
+		Desc.Geometries.size(), Sizes.accelerationStructureSize);
+	return new FVulkanAccelerationStructure(
+		Device, Accel, StorageBuffer, StorageAllocation, MemoryAllocator.get(),
+		BufferAddress, Desc);
+}
+
+void FVulkanRHI::DestroyAccelerationStructure(FRHIAccelerationStructure* Accel)
+{
+	delete Accel;
+}
+
+bool FVulkanRHI::GetAccelerationStructureBuildSizes(
+	const FRHIRayTracingGeometryDesc& Desc,
+	std::uint64_t& OutAccelSize,
+	std::uint64_t& OutScratchSize)
+{
+	if (!bRayTracingSupported || GetAccelerationStructureBuildSizesKHR == nullptr || Desc.Geometries.empty())
+	{
+		return false;
+	}
+
+	std::vector<VkAccelerationStructureGeometryKHR> Geometries;
+	Geometries.reserve(Desc.Geometries.size());
+	for (const FRHIRayTracingGeometry& Geometry : Desc.Geometries)
+	{
+		VkAccelerationStructureGeometryKHR Geo{};
+		Geo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR;
+		Geo.geometryType = VK_GEOMETRY_TYPE_TRIANGLES_KHR;
+		Geo.geometry.triangles.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR;
+		Geo.geometry.triangles.vertexFormat = VK_FORMAT_R32G32B32_SFLOAT;
+		Geo.geometry.triangles.vertexStride = Geometry.VertexStride;
+		Geo.geometry.triangles.maxVertex = Geometry.VertexCount > 0 ? Geometry.VertexCount - 1 : 0;
+		Geometries.push_back(Geo);
+	}
+
+	VkAccelerationStructureBuildGeometryInfoKHR BuildInfo{};
+	BuildInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR;
+	BuildInfo.type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
+	BuildInfo.flags = Desc.bAllowUpdate
+		? VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR
+		: 0u;
+	BuildInfo.geometryCount = static_cast<std::uint32_t>(Geometries.size());
+	BuildInfo.pGeometries = Geometries.data();
+
+	std::vector<std::uint32_t> PrimitiveCounts;
+	PrimitiveCounts.reserve(Desc.Geometries.size());
+	for (const FRHIRayTracingGeometry& Geometry : Desc.Geometries)
+	{
+		PrimitiveCounts.push_back(
+			Geometry.IndexCount > 0 ? Geometry.IndexCount / 3 : Geometry.VertexCount / 3);
+	}
+
+	VkAccelerationStructureBuildSizesInfoKHR Sizes{};
+	Sizes.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR;
+	GetAccelerationStructureBuildSizesKHR(
+		Device,
+		VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR,
+		&BuildInfo,
+		PrimitiveCounts.data(),
+		&Sizes);
+
+	OutAccelSize = Sizes.accelerationStructureSize;
+	OutScratchSize = Sizes.buildScratchSize;
+	return true;
+}
+
+FRHIBuffer* FVulkanRHI::CreateShaderBindingTable(
+	FRHIRayTracingPipeline* Pipeline,
+	const FRHISbtGroup* Groups,
+	std::uint32_t GroupCount,
+	std::uint32_t* OutRayGenOffset,
+	std::uint32_t* OutRayGenStride,
+	std::uint32_t* OutHitOffset,
+	std::uint32_t* OutHitStride,
+	std::uint32_t* OutMissOffset,
+	std::uint32_t* OutMissStride)
+{
+	if (!bRayTracingSupported || GetRayTracingShaderGroupHandlesKHR == nullptr)
+	{
+		MAHO_LOG_CORE_ERROR("FVulkanRHI::CreateShaderBindingTable: ray tracing unavailable");
+		return nullptr;
+	}
+	if (Pipeline == nullptr || Groups == nullptr || GroupCount == 0)
+	{
+		MAHO_LOG_CORE_ERROR("FVulkanRHI::CreateShaderBindingTable: invalid args");
+		return nullptr;
+	}
+
+	auto* VkPipeline = static_cast<FVulkanRayTracingPipeline*>(Pipeline);
+
+	// ── per-stage group count (raygen 1, miss N, hit N) ──
+	std::uint32_t RayGenCount = 0;
+	std::uint32_t HitCount = 0;
+	std::uint32_t MissCount = 0;
+	for (std::uint32_t G = 0; G < GroupCount; ++G)
+	{
+		const ERHIShaderStage Stage = Groups[G].Stage;
+		if (Stage == ERHIShaderStage::RayGen)
+		{
+			RayGenCount = static_cast<std::uint32_t>(Groups[G].Records.size());
+		}
+		else if (Stage == ERHIShaderStage::ClosestHit || Stage == ERHIShaderStage::AnyHit)
+		{
+			HitCount += static_cast<std::uint32_t>(Groups[G].Records.size());
+		}
+		else if (Stage == ERHIShaderStage::Miss)
+		{
+			MissCount += static_cast<std::uint32_t>(Groups[G].Records.size());
+		}
+	}
+
+	// ── query the pipeline's total shader group count + handle size ──
+	// The pipeline groups order (as created): raygen(1) + miss(N) + hit(N).
+	// We query one handle per pipeline group — the SBT record count must match
+	// the pipeline's group count for vkCmdTraceRaysKHR indexing.
+	const std::uint32_t TotalGroups = 1 + MissCount + HitCount;
+	const std::uint32_t HandleSize = 32; // VK_RAY_TRACING_SHADER_GROUP_HANDLE_SIZE_KHR
+	const std::uint32_t HandleAligned = (HandleSize + 15) & ~15u;
+
+	// ── offsets: raygen 0, miss after, hit after ──
+	const std::uint32_t RayGenOffset = 0;
+	const std::uint32_t MissOffset = HandleAligned * RayGenCount;
+	const std::uint32_t HitOffset = MissOffset + HandleAligned * MissCount;
+	const std::uint32_t TotalSize = HitOffset + HandleAligned * HitCount;
+
+	if (OutRayGenOffset) *OutRayGenOffset = RayGenOffset;
+	if (OutRayGenStride) *OutRayGenStride = HandleAligned;
+	if (OutMissOffset) *OutMissOffset = MissOffset;
+	if (OutMissStride) *OutMissStride = HandleAligned;
+	if (OutHitOffset) *OutHitOffset = HitOffset;
+	if (OutHitStride) *OutHitStride = HandleAligned;
+
+	// ── SBT storage buffer: CPU→GPU, device-address capable ──
+	FRHIBufferDesc BufDesc;
+	BufDesc.Size = TotalSize;
+	BufDesc.Usage = ERHIBufferUsage::DeviceAddress | ERHIBufferUsage::TransferDst;
+	BufDesc.MemoryUsage = ERHIMemoryUsage::CPUToGPU;
+	FRHIBuffer* Sbt = CreateBuffer(BufDesc);
+	if (Sbt == nullptr)
+	{
+		MAHO_LOG_CORE_ERROR("FVulkanRHI::CreateShaderBindingTable: failed to create SBT buffer");
+		return nullptr;
+	}
+
+	auto* VkSbt = static_cast<FVulkanBuffer*>(Sbt);
+
+	FRHIMemoryAllocation MemAlloc;
+	MemAlloc.Native = VkSbt->GetAllocation();
+	MemAlloc.Mapped = nullptr;
+	void* Mapped = MemoryAllocator->Map(MemAlloc);
+	if (Mapped == nullptr)
+	{
+		DestroyBuffer(Sbt);
+		return nullptr;
+	}
+	std::memset(Mapped, 0, TotalSize);
+
+	// ── fetch each pipeline group's handle, write into the SBT ──
+	std::vector<std::uint8_t> Handles(TotalGroups * HandleSize);
+	if (!CheckVkResult(
+			GetRayTracingShaderGroupHandlesKHR(
+				Device, VkPipeline->GetVkPipeline(), 0, TotalGroups,
+				static_cast<std::uint32_t>(Handles.size()), Handles.data()),
+			"vkGetRayTracingShaderGroupHandlesKHR"))
+	{
+		MemoryAllocator->Unmap(MemAlloc);
+		DestroyBuffer(Sbt);
+		return nullptr;
+	}
+
+	auto WriteRecord = [&](std::uint32_t SbtOffset, std::uint32_t Index)
+	{
+		std::uint8_t* Dst = static_cast<std::uint8_t*>(Mapped) + SbtOffset;
+		std::memcpy(Dst, Handles.data() + static_cast<std::size_t>(Index) * HandleSize, HandleSize);
+	};
+
+	// Raygen group = index 0; miss groups follow; hit groups last.
+	std::uint32_t HandleIndex = 0;
+	WriteRecord(RayGenOffset, HandleIndex++);
+	for (std::uint32_t I = 0; I < MissCount; ++I)
+	{
+		WriteRecord(MissOffset + I * HandleAligned, HandleIndex++);
+	}
+	for (std::uint32_t I = 0; I < HitCount; ++I)
+	{
+		WriteRecord(HitOffset + I * HandleAligned, HandleIndex++);
+	}
+
+	MemoryAllocator->Unmap(MemAlloc);
+	MAHO_LOG_CORE_INFO("FVulkanRHI: created SBT ({} bytes)", TotalSize);
+	return Sbt;
+}
+
 FRHIStructuredBuffer* FVulkanRHI::CreateStructuredBuffer(const FRHIStructuredBufferDesc& Desc)
 {
 	if (Desc.Stride == 0 || Desc.Size == 0)
@@ -2462,6 +3039,67 @@ FRHIFramebuffer* FVulkanRHI::CreateFramebuffer(const FRHIFramebufferDesc& Desc)
 void FVulkanRHI::DestroyFramebuffer(FRHIFramebuffer* Framebuffer)
 {
 	delete Framebuffer;
+}
+
+FRHIQueryPool* FVulkanRHI::CreateQueryPool(ERHIQueryType Type, std::uint32_t QueryCount)
+{
+	if (Device == VK_NULL_HANDLE || QueryCount == 0)
+	{
+		return nullptr;
+	}
+
+	VkQueryPoolCreateInfo Info{};
+	Info.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;
+	Info.queryType = (Type == ERHIQueryType::Occlusion) ? VK_QUERY_TYPE_OCCLUSION : VK_QUERY_TYPE_TIMESTAMP;
+	Info.queryCount = QueryCount;
+
+	VkQueryPool Pool = VK_NULL_HANDLE;
+	if (!CheckVkResult(vkCreateQueryPool(Device, &Info, nullptr, &Pool), "vkCreateQueryPool"))
+	{
+		return nullptr;
+	}
+	return new FVulkanQueryPool(Device, Pool);
+}
+
+void FVulkanRHI::DestroyQueryPool(FRHIQueryPool* Pool)
+{
+	delete Pool;
+}
+
+bool FVulkanRHI::GetQueryPoolResults(
+	FRHIQueryPool* Pool,
+	std::uint32_t FirstQuery,
+	std::uint32_t QueryCount,
+	std::uint64_t* Results,
+	std::size_t Stride,
+	bool bWait)
+{
+	if (Pool == nullptr || Results == nullptr || QueryCount == 0)
+	{
+		return false;
+	}
+
+	auto* VkPool = static_cast<FVulkanQueryPool*>(Pool);
+	const VkQueryResultFlags Flags = VK_QUERY_RESULT_64_BIT | (bWait ? VK_QUERY_RESULT_WAIT_BIT : 0);
+	const VkResult Result = vkGetQueryPoolResults(
+		Device,
+		VkPool->GetVkQueryPool(),
+		FirstQuery,
+		QueryCount,
+		static_cast<std::size_t>(Stride) * QueryCount,
+		Results,
+		Stride,
+		Flags);
+	if (Result != VK_SUCCESS)
+	{
+		if (Result == VK_NOT_READY && !bWait)
+		{
+			return false;
+		}
+		MAHO_LOG_CORE_ERROR("FVulkanRHI::GetQueryPoolResults failed ({})", static_cast<int>(Result));
+		return false;
+	}
+	return true;
 }
 
 bool FVulkanRHI::RecreateSwapchain()

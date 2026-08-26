@@ -12,11 +12,13 @@ namespace Maho
 class FVulkanBuffer final : public FRHIBuffer
 {
 public:
-	FVulkanBuffer(FRHIBufferDesc InDesc, VkBuffer InBuffer, VmaAllocation InAllocation, FVulkanMemoryAllocator* InAllocator)
+	FVulkanBuffer(FRHIBufferDesc InDesc, VkBuffer InBuffer, VmaAllocation InAllocation,
+		FVulkanMemoryAllocator* InAllocator, std::uint64_t InDeviceAddress = 0)
 		: Desc(InDesc)
 		, Buffer(InBuffer)
 		, Allocation(InAllocation)
 		, Allocator(InAllocator)
+		, DeviceAddress(InDeviceAddress)
 	{
 	}
 
@@ -25,6 +27,10 @@ public:
 	[[nodiscard]] const FRHIBufferDesc& GetDesc() const override
 	{
 		return Desc;
+	}
+	[[nodiscard]] std::uint64_t GetDeviceAddress() const override
+	{
+		return DeviceAddress;
 	}
 	[[nodiscard]] VkBuffer GetVkBuffer() const
 	{
@@ -42,6 +48,7 @@ private:
 	VkBuffer Buffer = VK_NULL_HANDLE;
 	VmaAllocation Allocation = nullptr;
 	FVulkanMemoryAllocator* Allocator = nullptr;
+	std::uint64_t DeviceAddress = 0;
 };
 
 class FVulkanStructuredBuffer final : public FRHIStructuredBuffer
@@ -286,6 +293,78 @@ public:
 private:
 	VkDevice Device = VK_NULL_HANDLE;
 	VkQueryPool Pool = VK_NULL_HANDLE;
+};
+
+class FVulkanAccelerationStructure final : public FRHIAccelerationStructure
+{
+public:
+	FVulkanAccelerationStructure(
+		VkDevice InDevice,
+		VkAccelerationStructureKHR InAccel,
+		VkBuffer InStorageBuffer,
+		VmaAllocation InAllocation,
+		FVulkanMemoryAllocator* InAllocator,
+		std::uint64_t InDeviceAddress,
+		FRHIRayTracingGeometryDesc InGeometryDesc)
+		: Device(InDevice)
+		, Accel(InAccel)
+		, StorageBuffer(InStorageBuffer)
+		, Allocation(InAllocation)
+		, Allocator(InAllocator)
+		, DeviceAddress(InDeviceAddress)
+	{
+		GeometryDesc = std::move(InGeometryDesc);
+	}
+
+	~FVulkanAccelerationStructure() override;
+
+	[[nodiscard]] VkAccelerationStructureKHR GetVkAccelerationStructure() const
+	{
+		return Accel;
+	}
+	[[nodiscard]] VkBuffer GetVkStorageBuffer() const
+	{
+		return StorageBuffer;
+	}
+	[[nodiscard]] std::uint64_t GetDeviceAddress() const
+	{
+		return DeviceAddress;
+	}
+
+private:
+	VkDevice Device = VK_NULL_HANDLE;
+	VkAccelerationStructureKHR Accel = VK_NULL_HANDLE;
+	VkBuffer StorageBuffer = VK_NULL_HANDLE;
+	VmaAllocation Allocation = nullptr;
+	FVulkanMemoryAllocator* Allocator = nullptr;
+	std::uint64_t DeviceAddress = 0;
+};
+
+class FVulkanRayTracingPipeline final : public FRHIRayTracingPipeline
+{
+public:
+	FVulkanRayTracingPipeline(VkDevice InDevice, VkPipeline InPipeline, VkPipelineLayout InLayout)
+		: Device(InDevice)
+		, Pipeline(InPipeline)
+		, Layout(InLayout)
+	{
+	}
+
+	~FVulkanRayTracingPipeline() override;
+
+	[[nodiscard]] VkPipeline GetVkPipeline() const
+	{
+		return Pipeline;
+	}
+	[[nodiscard]] VkPipelineLayout GetVkPipelineLayout() const
+	{
+		return Layout;
+	}
+
+private:
+	VkDevice Device = VK_NULL_HANDLE;
+	VkPipeline Pipeline = VK_NULL_HANDLE;
+	VkPipelineLayout Layout = VK_NULL_HANDLE;
 };
 
 class FVulkanTextureView final : public FRHITextureView

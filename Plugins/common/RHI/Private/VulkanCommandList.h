@@ -61,11 +61,24 @@ private:
 class FVulkanCommandList final : public FRHICommandList
 {
 public:
-	FVulkanCommandList(ERHICommandListType InType, VkDevice InDevice, VkCommandPool InPool, VkCommandBuffer InBuffer)
+	struct FRTRuntime
+	{
+		PFN_vkCmdBuildAccelerationStructuresKHR BuildAccel = nullptr;
+		PFN_vkCmdCopyAccelerationStructureKHR CopyAccel = nullptr;
+		PFN_vkCmdTraceRaysKHR TraceRays = nullptr;
+	};
+
+	FVulkanCommandList(
+		ERHICommandListType InType,
+		VkDevice InDevice,
+		VkCommandPool InPool,
+		VkCommandBuffer InBuffer,
+		const FRTRuntime& InRT)
 		: Type(InType)
 		, Device(InDevice)
 		, Pool(InPool)
 		, Buffer(InBuffer)
+		, RT(InRT)
 	{
 	}
 
@@ -134,6 +147,21 @@ public:
 		std::uint32_t DrawCount,
 		std::uint32_t Stride) override;
 
+	virtual void DrawIndirectCount(
+		FRHIBuffer* ArgsBuffer,
+		std::uint64_t ArgsOffset,
+		FRHIBuffer* CountBuffer,
+		std::uint64_t CountOffset,
+		std::uint32_t MaxDrawCount,
+		std::uint32_t Stride) override;
+	virtual void DrawIndexedIndirectCount(
+		FRHIBuffer* ArgsBuffer,
+		std::uint64_t ArgsOffset,
+		FRHIBuffer* CountBuffer,
+		std::uint64_t CountOffset,
+		std::uint32_t MaxDrawCount,
+		std::uint32_t Stride) override;
+
 	virtual void BindComputePipeline(FRHIComputePipeline* Pipeline) override;
 	virtual void Dispatch(std::uint32_t GroupCountX, std::uint32_t GroupCountY, std::uint32_t GroupCountZ) override;
 	virtual void DispatchIndirect(
@@ -143,6 +171,25 @@ public:
 	virtual void BindDescriptorSets(std::uint32_t FirstSet, FRHIDescriptorSet* const* Sets, std::uint32_t Count) override;
 	virtual void PushConstants(ERHIShaderStage Stages, std::uint32_t Offset, std::uint32_t Size, const void* Data) override;
 
+	virtual void BeginQuery(FRHIQueryPool* Pool, std::uint32_t QueryIndex) override;
+	virtual void EndQuery(FRHIQueryPool* Pool, std::uint32_t QueryIndex) override;
+	virtual void WriteTimestamp(FRHIQueryPool* Pool, std::uint32_t QueryIndex) override;
+	virtual void ResetQueryPool(FRHIQueryPool* Pool, std::uint32_t FirstQuery, std::uint32_t QueryCount) override;
+
+	virtual void BuildAccelerationStructure(
+		FRHIAccelerationStructure* Accel,
+		FRHIBuffer* ScratchBuffer,
+		std::uint64_t ScratchOffset) override;
+	virtual void CopyAccelerationStructure(
+		FRHIAccelerationStructure* Dst,
+		FRHIAccelerationStructure* Src) override;
+	virtual void TraceRays(
+		FRHIRayTracingPipeline* Pipeline,
+		const FRHIRayTracingSbt& Sbt,
+		std::uint32_t Width,
+		std::uint32_t Height,
+		std::uint32_t Depth) override;
+
 private:
 	void AssertType(ERHICommandListType Allowed) const;
 	void AssertNotTransfer() const;
@@ -151,6 +198,7 @@ private:
 	VkDevice Device = VK_NULL_HANDLE;
 	VkCommandPool Pool = VK_NULL_HANDLE;
 	VkCommandBuffer Buffer = VK_NULL_HANDLE;
+	FRTRuntime RT;
 	bool bRecording = false;
 
 	// Cached bound state for pipeline-layout dependent calls.
