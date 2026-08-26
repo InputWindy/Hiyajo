@@ -101,3 +101,26 @@ private:
 
 } // namespace Script
 } // namespace Maho
+
+// ── Lua 注册语法糖 ───────────────────────────────────────────────────────
+// 供 ILuaBindable::BindLua（或用户绑定代码）在 include <sol/sol.hpp> 后使用。
+// Table 是 sol::table（如 Lua.create_named_table("maho") 的返回值）。
+//
+//   sol::state& Lua = *static_cast<sol::state*>(Script.TryGetLuaState());
+//   sol::table Maho = Lua.create_named_table("maho");
+//   MAHO_LUA_METHOD(Maho, FMesh, GetName);          // maho.get_name() 绑定成员函数
+//   MAHO_LUA_FUNCTION(Maho, "my_free_fn", MyFreeFn); // 自由函数/lambda
+//   MAHO_LUA_PROPERTY(Maho, "hp", &FUnit::GetHp, &FUnit::SetHp);  // 属性
+
+/** 注册一个 C++ 成员函数到 Lua 表（sol2 set_function，snake_case 自动）。 */
+#define MAHO_LUA_METHOD(Table, Class, Method) \
+	(Table).set_function(#Method, &Class::Method)
+
+/** 注册一个 C++ 自由函数 / lambda 到 Lua 表。 */
+#define MAHO_LUA_FUNCTION(Table, Name, Fn) \
+	(Table).set_function(Name, Fn)
+
+/** 注册一个 C++ 属性（getter + setter，省略 setter 为只读）。 */
+#define MAHO_LUA_PROPERTY(Table, Name, Getter, ...) \
+	(Table).set_property(Name, Getter, __VA_ARGS__)
+

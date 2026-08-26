@@ -50,8 +50,8 @@ if(NOT TARGET lua)
 	)
 	if(MSVC)
 		target_compile_definitions(lua PRIVATE _CRT_SECURE_NO_WARNINGS)
-		# Match the plugin DLL's dynamic CRT (/MD) — avoids LIBCMT/LNK4098 conflicts.
-		set_target_properties(lua PROPERTIES MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
+		# Match the plugin DLL's dynamic CRT: /MDd in Debug, /MD in Release.
+		target_compile_options(lua PRIVATE $<$<CONFIG:Debug>:/MDd> $<$<NOT:$<CONFIG:Debug>>:/MD>)
 	endif()
 endif()
 
