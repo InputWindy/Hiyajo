@@ -50,4 +50,5 @@ const Resource::FResource* R = Resource::FResourceSystem::Get().TryLoad("Raw/mes
 
 ## 相关文档
 
-- [API.html](API.html) — API 文档
+- [API.html](API.html) — API 文档（公开签名）
+- [ImplAPI.html](ImplAPI.html) — 实现算法字典（cpp 函数伪代码）

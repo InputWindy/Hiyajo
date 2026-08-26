@@ -1,5 +1,7 @@
 #pragma once
 
+#include <Core/Export.h>
+
 namespace Maho
 {
 
