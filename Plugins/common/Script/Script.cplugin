@@ -2,5 +2,5 @@
   "FileVersion": 1,
   "Name": "Script",
   "Description": "Lua 5.4 + sol2 scripting VM (singleton service; Bind/DoFile/Call)",
-  "Dependencies": ["Resource", "ConsoleVariable", "Log", "Exception"]
+  "Dependencies": ["Resource", "ConsoleVariable", "Log", "Exception", "Reflect"]
 }
