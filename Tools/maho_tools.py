@@ -1222,7 +1222,6 @@ def create_plugin(
 			f"// pipeline: BeginFrame → Tick → EndFrame).\n"
 			f"class F{plugin_name} : public FEngineLayer\n"
 			f"{{\n"
-			f"MAHO_DECLARE_LAYER(F{plugin_name});\n"
 			f"MAHO_DECLARE_ENGINE_LAYER(F{plugin_name}, \"{plugin_name}.dll\");\n"
 			f"\n"
 			f"public:\n"

@@ -81,7 +81,7 @@ void FRHI::Tick(FEngineBase& Engine)
 		return;   // already initialized
 	}
 
-	auto* Platform = static_cast<Platform::FPlatformSystem*>(Engine.FindLayer("FPlatformSystem"));
+	auto* Platform = static_cast<Platform::FPlatform*>(Engine.FindLayer("FPlatform"));
 	if (Platform == nullptr)
 	{
 		return;   // Platform feature not installed yet

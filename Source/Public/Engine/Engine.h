@@ -27,6 +27,7 @@ public:                                                 \
 
 #define MAHO_DECLARE_ENGINE_LAYER(FeatureType, DLL)     \
 public:                                                 \
+	MAHO_DECLARE_LAYER(FeatureType)				\
 	static Maho::FEngineLayer* CreateLayer()            \
 	{                                                   \
 		return new FeatureType();                       \

@@ -10,6 +10,7 @@ void FExampleEngine::PreMain()
 	// 由 GameInput 的 Tick 逐帧动态安装。
 	Install("Log.dll");
 	Install("GameInput.dll");
+	Install("Platform.dll");
 }
 
 void FExampleEngine::PostMain()

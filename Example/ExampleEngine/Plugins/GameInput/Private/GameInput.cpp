@@ -47,7 +47,6 @@ void FGameInput::Tick(FEngineBase& Engine)
 		break;
 
 	default:
-		Engine.RequestExit();
 		break;
 	}
 }

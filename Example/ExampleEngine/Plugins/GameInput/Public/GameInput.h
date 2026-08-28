@@ -12,7 +12,6 @@ namespace Maho
 // simulating user input in the engine loop.
 class FGameInput : public FEngineLayer
 {
-MAHO_DECLARE_LAYER(FGameInput);
 MAHO_DECLARE_ENGINE_LAYER(FGameInput, "GameInput.dll");
 
 public:

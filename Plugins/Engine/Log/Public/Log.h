@@ -46,7 +46,6 @@ enum class ELogLevel
 class FLog : public FEngineLayer
 {
 public:
-	MAHO_DECLARE_LAYER(FLog);
 	MAHO_DECLARE_ENGINE_LAYER(FLog, "Log.dll");
 
 	FLog();

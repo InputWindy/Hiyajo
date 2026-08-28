@@ -11,7 +11,6 @@ namespace Maho
 // pipeline: BeginFrame → Tick → EndFrame).
 class FDynWorld : public FEngineLayer
 {
-MAHO_DECLARE_LAYER(FDynWorld);
 MAHO_DECLARE_ENGINE_LAYER(FDynWorld, "DynWorld.dll");
 
 public:

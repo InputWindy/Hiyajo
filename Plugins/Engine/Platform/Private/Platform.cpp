@@ -1,5 +1,8 @@
 #include "Platform.h"
 
+#include <ConsoleVariable.h>
+#include <Log.h>
+
 #if !defined(MAHO_HEADLESS)
 #	include <GLFW/glfw3.h>
 #endif
@@ -20,6 +23,15 @@ namespace Maho::Platform
 
 namespace
 {
+	static ConsoleVariable::TAutoConsoleVariable<int> GCVarWindowWidth(
+		"r.Window.Width", 1280, "Platform window width");
+
+	static ConsoleVariable::TAutoConsoleVariable<int> GCVarWindowHeight(
+		"r.Window.Height", 720, "Platform window height");
+
+	static ConsoleVariable::TAutoConsoleVariable<std::string> GCVarWindowTitle(
+		"r.Window.Title", "Maho", "Platform window title");
+
 #if !defined(MAHO_HEADLESS)
 	// ── GLFW backend (desktop: Windows / Linux, windowed) ──
 
@@ -160,17 +172,23 @@ namespace
 	}
 }
 
-void FPlatformSystem::Initialize(FEngineBase&)
+void FPlatform::Initialize(FEngineBase&)
 {
-	// backend is created lazily by CreateWindow / CreateHeadlessContext.
+	// 默认创建窗口（CVar 可配）。Headless 构建跳过。
+#if !defined(MAHO_HEADLESS)
+	const int Width = GCVarWindowWidth.GetValue();
+	const int Height = GCVarWindowHeight.GetValue();
+	const bool bOk = CreateWindow(Width, Height, GCVarWindowTitle.GetValue());
+	MAHO_LOG_CORE_INFO("FPlatform::Initialize — CreateWindow({}, {}) => {}", Width, Height, bOk);
+#endif
 }
 
-void FPlatformSystem::Shutdown(FEngineBase&)
+void FPlatform::Shutdown(FEngineBase&)
 {
 	DestroyWindow();
 }
 
-bool FPlatformSystem::CreateWindow(int Width, int Height, std::string_view Title)
+bool FPlatform::CreateWindow(int Width, int Height, std::string_view Title)
 {
 	DestroyWindow();
 	FPlatformBackend Backend = CreateWindowBackend(Width, Height, Title);
@@ -180,7 +198,7 @@ bool FPlatformSystem::CreateWindow(int Width, int Height, std::string_view Title
 	return Surface != nullptr && Surface->GetNativeWindow() != nullptr;
 }
 
-bool FPlatformSystem::CreateHeadlessContext(int Width, int Height)
+bool FPlatform::CreateHeadlessContext(int Width, int Height)
 {
 	DestroyWindow();
 	FPlatformBackend Backend = CreateHeadlessBackend(Width, Height);
@@ -190,14 +208,14 @@ bool FPlatformSystem::CreateHeadlessContext(int Width, int Height)
 	return Surface != nullptr && Surface->GetNativeWindow() != nullptr;
 }
 
-void FPlatformSystem::DestroyWindow()
+void FPlatform::DestroyWindow()
 {
 	Surface.reset();
 	PollEventsFn = {};
 	QueryShouldClose = {};
 }
 
-void FPlatformSystem::PollEvents()
+void FPlatform::PollEvents()
 {
 	if (PollEventsFn)
 	{
@@ -207,14 +225,21 @@ void FPlatformSystem::PollEvents()
 
 // ── engine loop stages (FEngineLayer) ──
 
-void FPlatformSystem::BeginFrame(FEngineBase&)
+void FPlatform::BeginFrame(FEngineBase&)
 {
 }
 
-void FPlatformSystem::Tick(FEngineBase& Engine)
+void FPlatform::Tick(FEngineBase& Engine)
 {
 	PollEvents();
+}
 
+void FPlatform::EndFrame(FEngineBase&)
+{
+}
+
+void FPlatform::RequestExit(FEngineBase& Engine)
+{
 	// 窗口请求关闭 → 通知宿主引擎退出主循环。
 	if (ShouldClose())
 	{
@@ -222,23 +247,20 @@ void FPlatformSystem::Tick(FEngineBase& Engine)
 	}
 }
 
-void FPlatformSystem::EndFrame(FEngineBase&)
-{
-}
-
-void FPlatformSystem::RequestExit(FEngineBase& Engine)
-{
-	Engine.RequestExit();
-}
-
-FNativeSurface FPlatformSystem::GetNativeWindow() const
+FNativeSurface FPlatform::GetNativeWindow() const
 {
 	return Surface != nullptr ? Surface->GetNativeWindow() : nullptr;
 }
 
-bool FPlatformSystem::ShouldClose() const
+bool FPlatform::ShouldClose() const
 {
 	return QueryShouldClose && QueryShouldClose();
 }
 
 } // namespace Maho::Platform
+
+// The C export the host looks up BY SYMBOL NAME for dynamic install.
+extern "C" MAHO_API Maho::FEngineLayer* CreateLayer()
+{
+	return Maho::Platform::FPlatform::CreateLayer();
+}

@@ -326,6 +326,8 @@ target_include_directories(Platform PUBLIC
 	"${ENGINE_DIR}/Source/Public"
 	"${ENGINE_DIR}/Plugins/Engine/Platform/Public"
 	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEngine/Public"
+	"${ENGINE_DIR}/Plugins/Common/ConsoleVariable/Public"
+	"${ENGINE_DIR}/Plugins/Engine/Log/Public"
 )
 set_target_properties(Platform PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 target_compile_definitions(Platform PRIVATE MAHO_PLATFORM_MODULE_EXPORTS)
@@ -334,6 +336,8 @@ set_property(TARGET Platform PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_D
 set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Engine/Platform")
 include("${ENGINE_DIR}/Plugins/Engine/Platform/Platform.cmake")
 unset(_MOD_PLUGIN_DIR)
+
+target_link_libraries(Platform PUBLIC ConsoleVariable Log)
 
 source_group(TREE "${ENGINE_DIR}/Plugins/Engine/Platform" FILES
 	"${ENGINE_DIR}/Plugins/Engine/Platform/Public/Platform.h"

@@ -41,15 +41,15 @@ public:
  * The RHI finds this instance through the engine (Context) and reads
  * GetNativeWindow() — no singleton needed.
  *
- *   Platform::FPlatformSystem Platform;
+ *   Platform::FPlatform Platform;
  *   Platform.Initialize(0, nullptr);
  *   Platform.CreateWindow(1280, 720, "MyGame");
  *   Engine.Install(&Platform);
  */
-class FPlatformSystem : public FEngineLayer
+class FPlatform : public FEngineLayer
 {
 public:
-	MAHO_DECLARE_LAYER(FPlatformSystem);
+	MAHO_DECLARE_ENGINE_LAYER(FPlatform, "Platform.dll");
 
 	// ── engine init/shutdown stages (FEngineLayer) ──
 	void Initialize(FEngineBase& Engine) override;
