@@ -40,111 +40,111 @@
 <body>
 
 <h1>Engine — API</h1>
-<p class="muted">层体系（header-only，<code>Layer.h</code>）。Core 的类型无关基建（FQueue / FParallelScheduler / TQuery）在这里组装成"层"。所有跨 DLL 符号带 <span class="kw">MAHO_API</span>（单 vtable / RTTI 共享）。</p>
+<p class="muted">匿名层 + 有序 stage 管线 + 任务图调度（header-only，<code>Layer.h</code> / <code>Engine.h</code>）。层只声明身份与逐 stage 依赖，全局调度由 <span class="type">FLayerTaskGraph</span> 统一负责。</p>
 
-<h2>命令类型</h2>
-
-<section class="class-panel">
-	<h3 class="class-name">ELayerCommand<span class="class-kind">enum class : uint64_t</span></h3>
-	<p class="class-desc">层命令队列的 catalog 类别——FQueue 按它路由到 lane。</p>
-	<table class="api-table">
-		<tr><th style="width:40%">值</th><th>说明</th></tr>
-		<tr><td class="sig"><code>Install = 1</code></td><td>安装子层命令的 lane</td></tr>
-		<tr><td class="sig"><code>Uninstall = 2</code></td><td>卸载子层命令的 lane</td></tr>
-	</table>
-</section>
+<h2>FLayerBase — 匿名锚点</h2>
 
 <section class="class-panel">
-	<h3 class="class-name">FInstallCommand<span class="class-kind">struct : ICommand</span></h3>
-	<p class="class-desc">安装命令——携带要收养的子层实例，<code>FlushCommands()</code> 时经 <code>Layers.push_back(Child)</code> 应用。命令是纯数据载体（ICommand 仅 <code>GetCatalogId()</code>），执行是消费方（FLayer::FlushCommands）的职责。</p>
-	<table class="api-table">
-		<tr><th style="width:46%">成员</th><th>说明</th></tr>
-		<tr><td class="sig"><code><span class="field">FLayerBase*</span> Child</code></td><td>待安装的子层实例</td></tr>
-		<tr><td class="sig"><code><span class="kw">uint64_t</span> GetCatalogId()</code> <span class="kw">override</span></td><td>返回 <code>ELayerCommand::Install</code></td></tr>
-	</table>
-</section>
-
-<section class="class-panel">
-	<h3 class="class-name">FUninstallCommand<span class="class-kind">struct : ICommand</span></h3>
-	<p class="class-desc">卸载命令——携带要释放的子层实例，<code>FlushCommands()</code> 时 erase + delete 应用。</p>
-	<table class="api-table">
-		<tr><th style="width:46%">成员</th><th>说明</th></tr>
-		<tr><td class="sig"><code><span class="field">FLayerBase*</span> Child</code></td><td>待卸载的子层实例</td></tr>
-		<tr><td class="sig"><code><span class="kw">uint64_t</span> GetCatalogId()</code> <span class="kw">override</span></td><td>返回 <code>ELayerCommand::Uninstall</code></td></tr>
-	</table>
-</section>
-
-<h2>FLayerBase — 组装基座</h2>
-
-<section class="class-panel">
-	<h3 class="class-name">FLayerBase<span class="class-kind">class : FQueue, FParallelScheduler</span></h3>
-	<p class="class-desc">所有层实例的多态锚点（跨 DLL 单 vtable/RTTI，<span class="kw">MAHO_API</span>）。组装三个类型无关的 Core 基建：命令队列（FQueue）+ 并行执行（FParallelScheduler）+ 编译期查询（Query&lt;TList&gt;）。生命周期钩子（IInit/IShutdown）不在基类强制——能力经 <span class="type">IPlugin</span> 可选组合。</p>
+	<h3 class="class-name">FLayerBase<span class="class-kind">class</span></h3>
+	<p class="class-desc">所有层实例的多态锚点。层只闭合自己：稳定身份名（拓扑键）+ 逐 stage 依赖表。<b>不管理依赖的生命周期</b>——执行上下文完整性由 <span class="type">FLayerTaskGraph</span> 保证。</p>
 	<table class="api-table">
 		<tr><th style="width:46%">签名</th><th>说明</th></tr>
 		<tr><td class="sig"><code>virtual ~FLayerBase()</code></td><td>虚析构（跨 DLL 删除经 DLL 自己的代码）</td></tr>
-		<tr><td class="sig"><code><span class="kw">template&lt;T&gt;</span> bool Is() const</code></td><td>运行时 <code>dynamic_cast</code>：此实例是否派生 T</td></tr>
+		<tr><td class="sig"><code><span class="kw">virtual</span> std::string_view GetName() <span class="kw">const</span> = 0</code></td><td>稳定身份名——任务图的拓扑键</td></tr>
+		<tr><td class="sig"><code><span class="kw">const</span> FDependencyTable&amp; GetDependencies() <span class="kw">const</span></code></td><td>逐 stage 依赖表</td></tr>
+		<tr><td class="sig"><code><span class="kw">template&lt;TMyStage, TDepObj, TDepStage&gt;</span> AddDependency()</code></td><td>声明：this 在 TMyStage 依赖 TDepObj 在 TDepStage</td></tr>
 	</table>
-	<h3 class="group">继承能力（Core 基建）</h3>
+	<h3 class="group">嵌套类型</h3>
 	<table class="api-table">
-		<tr><th style="width:40%">来源</th><th>说明</th></tr>
-		<tr><td class="sig"><code>FQueue::Enqueue(unique_ptr&lt;ICommand&gt;)</code></td><td>入队命令（任意线程，按 GetCatalogId 路由）</td></tr>
-		<tr><td class="sig"><code>FQueue::Dequeue(catalogId)</code></td><td>FIFO 取出某 lane 的命令</td></tr>
-		<tr><td class="sig"><code>FParallelScheduler::ForEach(FCallables...)</code></td><td>编译期变参并行 + barrier</td></tr>
-		<tr><td class="sig"><code>FParallelScheduler::ForEach(Container, MakeTask)</code></td><td>运行时容器并行</td></tr>
-	</table>
-</section>
-
-<h2>运行时分发</h2>
-
-<section class="class-panel">
-	<h3 class="class-name">DispatchInstance<span class="class-kind">自由函数模板</span></h3>
-	<p class="class-desc">对单个 <code>FLayerBase*</code> 实例按候选类型列表 <span class="type">TTypeList</span> 逐个 <code>dynamic_cast</code>，第一个匹配的类型交给 Visitor。用于层内类型筛选。</p>
-	<table class="api-table">
-		<tr><th style="width:46%">签名</th><th>说明</th></tr>
-		<tr><td class="sig"><code><span class="kw">void</span> DispatchInstance(TTypeList&lt;Ts...&gt;, FLayerBase*, Visitor)</code></td><td>按 TList 试 match，首中者 <code>Visitor(T&amp;)</code></td></tr>
-		<tr><td class="sig"><code><span class="kw">void</span> DispatchInstance&lt;TList&gt;(FLayerBase*, Visitor)</code></td><td>便捷版（隐式 TList{}）</td></tr>
+		<tr><th style="width:46%">类型</th><th>说明</th></tr>
+		<tr><td class="sig"><code>FDependency { Name, Stage }</code></td><td>依赖元组：dep 名 + dep 的 stage 接口 type_index</td></tr>
+		<tr><td class="sig"><code>FDependencyTable</code></td><td><code>map&lt;我的 stage type_index, vector&lt;FDependency&gt;&gt;</code></td></tr>
 	</table>
 </section>
 
-<h2>FLayer — 装配节点</h2>
+<h2>FLayer — 装配语法糖</h2>
 
 <section class="class-panel">
-	<h3 class="class-name">FLayer&lt;TRegisteredTypes...&gt;<span class="class-kind">class : FLayerBase</span></h3>
-	<p class="class-desc">带编译期子层表的装配层。ctor 遍历子层类型表 Load 其 DLL 并安装；Install/Uninstall 经命令队列延迟到 <code>FlushCommands()</code>；<code>ForEach&lt;FLevels&gt;</code> 编译期分层序遍历（单例/实例双分支）。</p>
+	<h3 class="class-name">FLayer&lt;TPipeline&gt;<span class="class-kind">class : FLayerBase, TPipeline</span></h3>
+	<p class="class-desc">把 <span class="type">FLayerBase</span>（身份 + 依赖）与 <span class="type">IPipeline</span>（有序 stage）绑成一个层类型。二者无继承关系，调度时经 <code>dynamic_cast</code> 侧向转换。</p>
 	<table class="api-table">
-		<tr><th style="width:46%">签名</th><th>说明</th></tr>
-		<tr><td class="sig"><code><span class="kw">using</span> FLayers = TTypeList&lt;...&gt;</code></td><td>子层类型表</td></tr>
-		<tr><td class="sig"><code>FLayer()</code></td><td>遍历 FLayers，Load 每个 FModuleInstance 子层 → Enqueue Install → FlushCommands</td></tr>
-		<tr><td class="sig"><code>~FLayer()</code></td><td>只释放 Layers 实例内存（不静默 teardown）</td></tr>
-		<tr><td class="sig"><code><span class="kw">template&lt;T&gt;</span> Install()</code></td><td>Load 子类型 → Enqueue Install 命令</td></tr>
-		<tr><td class="sig"><code>Uninstall(FLayerBase*)</code></td><td>Enqueue Uninstall 命令</td></tr>
-		<tr><td class="sig"><code>virtual FlushCommands()</code></td><td>安全点：Drain 队列——Install→Layers.push_back；Uninstall→erase+delete</td></tr>
-		<tr><td class="sig"><code>constexpr Query()</code></td><td>返回 <code>TQuery&lt;FLayers&gt;</code>（编译期筛选本层子层表）</td></tr>
-		<tr><td class="sig"><code><span class="kw">template&lt;FLevels, TVisitor&gt;</span> ForEach(Visitor)</code></td><td>分层序遍历：单例表→T::Get()；实例表→DispatchInstance(Layers)</td></tr>
+		<tr><th style="width:46%">用法</th><th>说明</th></tr>
+		<tr><td class="sig"><code>class FWorld : public FLayer&lt;IPipeline&lt;IMain, IShutdown&gt;&gt;</code></td><td>== FLayerBase + IPipeline&lt;IMain, IShutdown&gt;</td></tr>
 	</table>
 </section>
 
-<h2>编译期特征（LayerDetail）</h2>
+<h2>FLayerTaskGraph — 全局调度</h2>
 
 <section class="class-panel">
-	<h3 class="class-name">TIsSingleton / TLevelAllSingleton / TAllSingleton<span class="class-kind">struct</span></h3>
-	<p class="class-desc">编译期检测"分层表是否为纯单例类型表"。<code>TAllSingleton&lt;FLevels&gt;::value</code> 驱动 ForEach 的 if-constexpr 分支。</p>
+	<h3 class="class-name">FLayerTaskGraph&lt;TPipeline, TContext = FEmptyContext&gt;<span class="class-kind">class : FTaskGraph</span></h3>
+	<p class="class-desc">一组匿名 <code>FLayer*</code> → 编译 → 执行。契约：每个传入层实现同一 <span class="type">TPipeline</span>。每层展开成每 stage 一个节点（自递进 + 跨对象依赖）。</p>
 	<table class="api-table">
 		<tr><th style="width:46%">签名</th><th>说明</th></tr>
-		<tr><td class="sig"><code>TIsSingleton&lt;T&gt;</code></td><td><code>is_base_of&lt;TSingleton&lt;T&gt;, T&gt;</code></td></tr>
-		<tr><td class="sig"><code>TLevelAllSingleton&lt;FLevel&gt;</code></td><td>一层（TTypeList）全单例</td></tr>
-		<tr><td class="sig"><code>TAllSingleton&lt;FLevels&gt;</code></td><td>整棵分层表全单例</td></tr>
+		<tr><td class="sig"><code>FLayerTaskGraph(FThreadPool&amp;, TContext&amp;)</code></td><td>只绑定线程池 + 执行上下文（引用，不拷贝）</td></tr>
+		<tr><td class="sig"><code><span class="kw">void</span> Init(std::vector&lt;FLayerBase*&gt;)</code></td><td>重建节点集（公开、可重复调用，每帧/重配）</td></tr>
+		<tr><td class="sig"><code><span class="kw">bool</span> Compile()</code></td><td>接线 + 环/缺依赖检测</td></tr>
+		<tr><td class="sig"><code><span class="kw">void</span> Execute()</code></td><td>异步拓扑分派（继承自 FTaskGraph）</td></tr>
+		<tr><td class="sig"><code><span class="kw">void</span> Flush()</code></td><td>阻塞到排空（继承自 FTaskGraph）</td></tr>
+	</table>
+</section>
+
+<h2>引擎主循环（Engine.h）</h2>
+
+<section class="class-panel">
+	<h3 class="class-name">IBeginFrame / ITick / IEndFrame<span class="class-kind">class</span></h3>
+	<p class="class-desc">引擎主循环三阶段能力接口（各含一个无参纯虚方法）。</p>
+	<table class="api-table">
+		<tr><th style="width:46%">接口</th><th>方法</th></tr>
+		<tr><td class="sig"><code>IBeginFrame</code></td><td><code>void BeginFrame()</code></td></tr>
+		<tr><td class="sig"><code>ITick</code></td><td><code>void Tick()</code></td></tr>
+		<tr><td class="sig"><code>IEndFrame</code></td><td><code>void EndFrame()</code></td></tr>
+	</table>
+</section>
+
+<section class="class-panel">
+	<h3 class="class-name">IEnginePipeline<span class="class-kind">class : IPipeline&lt;IBeginFrame, ITick, IEndFrame&gt;</span></h3>
+	<p class="class-desc">引擎固定管线：BeginFrame → Tick → EndFrame。实现 <code>Invoke&lt;TStage&gt;(TContext&amp;)</code> 的 if-constexpr 分派（stage → 方法调用）。</p>
+	<table class="api-table">
+		<tr><th style="width:46%">签名</th><th>说明</th></tr>
+		<tr><td class="sig"><code><span class="kw">template&lt;TStage, TContext&gt;</span> Invoke(TContext&amp;)</code></td><td>stage → BeginFrame/Tick/EndFrame 分派</td></tr>
+	</table>
+</section>
+
+<section class="class-panel">
+	<h3 class="class-name">FEngineLayer<span class="class-kind">class : FLayer&lt;IEnginePipeline&gt;</span></h3>
+	<p class="class-desc">引擎 feature 基类。业务 feature 继承它，实现三 stage 方法；跨 feature 依赖在构造函数里 <code>AddDependency&lt;ITick, FOther, IBeginFrame&gt;()</code>。</p>
+</section>
+
+<section class="class-panel">
+	<h3 class="class-name">IEngine<span class="class-kind">class : IPlugin&lt;IInit, IMain, IShutdown&gt;</span></h3>
+	<p class="class-desc">引擎锚点——生命周期能力 + 主循环。入口插件导出的唯一锚点，<span class="type">EntryPoint</span> 经 <code>FAssembly</code> 查 <code>"CreateEngine"</code> 拿到 <code>IEngine*</code>。</p>
+	<table class="api-table">
+		<tr><th style="width:46%">签名</th><th>说明</th></tr>
+		<tr><td class="sig"><code><span class="kw">void</span> Initialize(int, char**) <span class></code></td><td>启动钩子（默认空）</td></tr>
+		<tr><td class="sig"><code><span class="kw">int</span> Main() <span class="kw">final override</span></code></td><td>主循环：Flush → 应用挂起变更 → Init → Compile → Execute</td></tr>
+		<tr><td class="sig"><code><span class="kw">void</span> Shutdown() <span class="kw">override</span></code></td><td>关闭钩子（默认空）</td></tr>
+		<tr><td class="sig"><code><span class="kw">void</span> Install(FEngineLayer*)</code></td><td>安装语法糖（下帧生效）</td></tr>
+		<tr><td class="sig"><code><span class="kw">void</span> Uninstall(FEngineLayer*)</code></td><td>卸载语法糖（下帧生效）</td></tr>
 	</table>
 </section>
 
 <h2>插件宏</h2>
 
 <section class="class-panel">
-	<h3 class="class-name">MAHO_DECLARE_LAYER(CustomBase, AppDLL)<span class="class-kind">宏</span></h3>
-	<p class="class-desc">在层类体内展开 DLL 工厂 + 模块路径。Load 经 <code>FAssembly::GetProcAs&lt;CreateFunction&gt;("CreateLayer")</code> 拿到。</p>
+	<h3 class="class-name">MAHO_DECLARE_LAYER(LayerType)<span class="class-kind">宏</span></h3>
+	<p class="class-desc">在层类体内生成 <code>StaticName()</code> + <code>GetName()</code> 覆盖。名字取自类型名字符串化，依赖声明用同一类型推导，拓扑键自洽。</p>
 	<div class="muted" style="font-family:Consolas,monospace;font-size:13px;background:var(--code-bg);padding:10px 14px;border-radius:6px;">
-		static FLayerBase* CreateLayer() { return new CustomBase(); }<br>
-		static std::string_view GetModulePath() { return AppDLL; }
+		static constexpr std::string_view StaticName() { return "LayerType"; }<br>
+		std::string_view GetName() const override { return StaticName(); }
+	</div>
+</section>
+
+<section class="class-panel">
+	<h3 class="class-name">MAHO_DECLARE_ENGINE(EngineType, DLL)<span class="class-kind">宏</span></h3>
+	<p class="class-desc">在引擎类体内展开 <code>IEngine*</code> 工厂 + 模块路径。入口插件的 <code>extern "C" CreateEngine()</code> bridge 转发到 <code>CreateEngine()</code>。</p>
+	<div class="muted" style="font-family:Consolas,monospace;font-size:13px;background:var(--code-bg);padding:10px 14px;border-radius:6px;">
+		static Maho::IEngine* CreateEngine() { return new EngineType(); }<br>
+		static std::string_view GetModulePath() { return DLL; }
 	</div>
 </section>
 
