@@ -1,0 +1,99 @@
+{
+  "FileVersion": 1,
+  "ProjectName": "ExampleEngine",
+  "EngineDirectory": "../..",
+  "Plugins": [
+    {
+      "Name": "Archive",
+      "Enabled": true
+    },
+    {
+      "Name": "Asset",
+      "Enabled": true
+    },
+    {
+      "Name": "CommandParser",
+      "Enabled": true
+    },
+    {
+      "Name": "Compress",
+      "Enabled": true
+    },
+    {
+      "Name": "Config",
+      "Enabled": true
+    },
+    {
+      "Name": "ConsoleVariable",
+      "Enabled": true
+    },
+    {
+      "Name": "Exception",
+      "Enabled": true
+    },
+    {
+      "Name": "Log",
+      "Enabled": true
+    },
+    {
+      "Name": "Name",
+      "Enabled": true
+    },
+    {
+      "Name": "Paths",
+      "Enabled": true
+    },
+    {
+      "Name": "Platform",
+      "Enabled": true
+    },
+    {
+      "Name": "RHI",
+      "Enabled": true
+    },
+    {
+      "Name": "Reflect",
+      "Enabled": true
+    },
+    {
+      "Name": "Resource",
+      "Enabled": true
+    },
+    {
+      "Name": "Script",
+      "Enabled": true
+    },
+    {
+      "Name": "Text",
+      "Enabled": true
+    },
+    {
+      "Name": "Timer",
+      "Enabled": true
+    },
+    {
+      "Name": "Unicode",
+      "Enabled": true
+    },
+    {
+      "Name": "ExampleEngine",
+      "Enabled": true
+    },
+    {
+      "Name": "DynLog",
+      "Enabled": true
+    },
+    {
+      "Name": "DynWorld",
+      "Enabled": true
+    },
+    {
+      "Name": "DynRender",
+      "Enabled": true
+    },
+    {
+      "Name": "GameInput",
+      "Enabled": true
+    }
+  ]
+}
