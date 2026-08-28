@@ -35,7 +35,7 @@ class MAHO_API IExit
 {
 public:
 	virtual ~IExit() = default;
-	virtual void Exit() = 0;
+	virtual void RequestExit() = 0;
 };
 
 /**

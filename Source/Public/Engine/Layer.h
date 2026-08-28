@@ -45,7 +45,7 @@ namespace Maho
  * an IPipeline (a stage sequence), and FLayerTaskGraph<SamePipeline> drives
  * it. See FLayerTaskGraph below.
  */
-class FLayerBase
+class MAHO_API FLayerBase
 {
 public:
 	virtual ~FLayerBase() = default;
@@ -79,6 +79,14 @@ protected:
 		});
 	}
 
+	/** Runtime dependency: `this` at MyStage depends on DepName at DepStage.
+	 *  For dynamically-loaded features that cannot name the dep's type — the
+	 *  dep is addressed by its layer name (== GetName()/StaticName()). */
+	void AddDependency(std::type_index MyStage, std::string_view DepName, std::type_index DepStage)
+	{
+		Dependencies[MyStage].push_back({ std::string(DepName), DepStage });
+	}
+
 	FDependencyTable Dependencies;
 };
 
@@ -94,7 +102,7 @@ protected:
  * The stage-invoke protocol lives in IPipeline (see Interface.h).
  */
 template <typename TPipeline>
-class FLayer
+class MAHO_API FLayer
 	: public FLayerBase
 	, public TPipeline
 {

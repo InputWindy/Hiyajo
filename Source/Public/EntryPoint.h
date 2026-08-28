@@ -11,14 +11,14 @@ namespace Maho
  * Unified app driver — install an engine DLL and execute its root instance.
  *
  * No engine/tool preset: the engine is a self-contained DLL exporting
- * `CreateEngine()` → an IEngine*. The entry point loads it via FAssembly,
+ * `CreateEngine()` → an FEngineBase*. The entry point loads it via FAssembly,
  * brings the anonymous root up (Initialize), forwards to its main capability,
  * then takes it down symmetrically (Shutdown + dtor teardown).
  *
  *   main()/WinMain() → Maho::Main(Argc, Argv)
  *     InstallFatalHandlers()
  *     FAssembly Load(argv[1])          // install
- *     CreateEngine() → IEngine*        // create the root instance (anonymous)
+ *     CreateEngine() → FEngineBase*    // create the root instance (anonymous)
  *     Initialize(Argc, Argv)           // bring the engine up
  *     Main()                           // execute
  *     Shutdown()                       // symmetric teardown
@@ -42,14 +42,14 @@ inline int Main(int Argc, char** Argv)
 	}
 
 	// Create the root instance — the exported CreateEngine factory.
-	using CreateFunction = IEngine* (*)();
+	using CreateFunction = FEngineBase* (*)();
 	auto Create = Engine.GetProcAs<CreateFunction>("CreateEngine");
 	if (Create == nullptr)
 	{
 		ReportFatal("Engine assembly exports no CreateEngine");
 	}
 
-	IEngine* App = Create();
+	FEngineBase* App = Create();
 	if (!App)
 	{
 		ReportFatal("CreateEngine returned null");
@@ -57,13 +57,13 @@ inline int Main(int Argc, char** Argv)
 
 	// Bring the (anonymous) root engine up, run its main loop, then shut it
 	// down symmetrically. The root is never known by concrete type — only by
-	// the IEngine anchor.
+	// the FEngineBase anchor.
 	App->Initialize(Argc, Argv);
 
 	const int Result = App->Main();
 
 	App->Shutdown();
-	delete App; // IEngine virtual dtor — removes the whole object through the DLL.
+	delete App; // FEngineBase virtual dtor — removes the whole object through the DLL.
 	return Result;
 }
 

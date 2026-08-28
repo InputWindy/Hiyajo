@@ -228,13 +228,13 @@ class PackageApp(tk.Tk):
 				project_dir = cp.parent
 				lines.append(f"Project   : {data.get('ProjectName', cp.stem)}")
 				lines.append(f"Engine    : {engine}")
-				lines.append(f"Output    : {project_dir / 'Packaged' / platform}")
+				lines.append(f"Output    : {project_dir / 'Packaged' / platform / config}")
 			except Exception as ex:  # noqa: BLE001
 				lines.append(f"Error     : {ex}")
 		else:
 			lines.append("Mode      : Engine workspace")
 			lines.append(f"Engine    : {ENGINE_ROOT}")
-			lines.append(f"Output    : {ENGINE_ROOT / 'Packaged' / platform}")
+			lines.append(f"Output    : {ENGINE_ROOT / 'Packaged' / platform / config}")
 
 		lines.append(f"Platform  : {platform}" + ("" if enabled else "  (not implemented yet)"))
 		lines.append(f"Config    : {config}")
@@ -354,6 +354,7 @@ class PackageApp(tk.Tk):
 				raise OperationCancelled("Cancelled")
 
 			# Platform folder name must match MahoDirectories (Win64 today).
+			out_dir = project_dir / "Packaged" / platform / config
 			run_package(
 				project_dir,
 				config=config,
@@ -362,7 +363,6 @@ class PackageApp(tk.Tk):
 				cancel_event=self._cancel_event,
 				proc_holder=self._proc_holder,
 			)
-			out_dir = project_dir / "Packaged" / platform
 			self.log_line(f"[Maho] Package finished for {label}.")
 
 			def done_ok() -> None:

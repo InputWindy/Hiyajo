@@ -2,9 +2,9 @@
 
 #include <spdlog/spdlog.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
+#include <spdlog/sinks/rotating_file_sink.h>
 
 #include <Core/Singleton.h>
-#include <Maho.h>
 #include <Maho.h>
 
 #include <string_view>
@@ -13,9 +13,9 @@ namespace Maho
 {
 
 /**
- * Logging singleton â€?a CRTP singleton (T::Get()) wrapping spdlog. Initialize
+ * Logging singleton ï¿½?a CRTP singleton (T::Get()) wrapping spdlog. Initialize
  * configures the thread-safe stdout-color logger (honoring a `--log-level` arg
- * if present); Shutdown flushes+drops it. Logger is public â€?just reach it via
+ * if present); Shutdown flushes+drops it. Logger is public ï¿½?just reach it via
  * FLog::Get().Logger (or the FLog::Info/Warn/Error passthroughs).
  *
  *   FLog::Get().Initialize(argc, argv);
@@ -27,16 +27,25 @@ class FLog
 	, public IPlugin<IInit, IShutdown>
 {
 public:
-	/** Process-unique accessor â€?defined in Log.cpp (in Log.dll). */
+	/** Process-unique accessor ï¿½?defined in Log.cpp (in Log.dll). */
 	static FLog& Get();
 
-	/** The shared logger â€?all engine/service logging routes through it. */
+	/** The shared logger ï¿½?all engine/service logging routes through it. */
 	std::shared_ptr<spdlog::logger> Logger;
 
 	/** Bring the logger up (ISingleton::Initialize). */
 	void Initialize(int, char** Argv) override
 	{
-		Logger = spdlog::stdout_color_mt("Maho");
+		// stdout (color) + rotating file â€” GUI apps (WIN32 subsystem) have no
+		// console, so the file sink is the durable log destination.
+		auto ConsoleSink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
+		auto FileSink = std::make_shared<spdlog::sinks::rotating_file_sink_mt>(
+			"Logs/Maho.log", 1024 * 1024 * 5, 3);
+
+		Logger = std::make_shared<spdlog::logger>("Maho",
+			spdlog::sinks_init_list{ ConsoleSink, FileSink });
+		spdlog::register_logger(Logger);
+
 		Logger->set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%^%l%$] %v");
 		spdlog::level::level_enum Lv = spdlog::level::debug;
 		if (Argv) // allow --log-level=trace|debug|info|warn|error
