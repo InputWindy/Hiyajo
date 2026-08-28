@@ -257,31 +257,31 @@ source_group(TREE "${ENGINE_DIR}/Plugins/Common/Exception" FILES
 )
 
 add_library(Log SHARED
-	${ENGINE_DIR}/Plugins/Common/Log/Public/Log.h
-	${ENGINE_DIR}/Plugins/Common/Log/Private/Log.cpp
-	${ENGINE_DIR}/Plugins/Common/Log/Log.cplugin
-	${ENGINE_DIR}/Plugins/Common/Log/Log.cmake
-	${ENGINE_DIR}/Plugins/Common/Log/settings.json
+	${ENGINE_DIR}/Plugins/Engine/Log/Public/Log.h
+	${ENGINE_DIR}/Plugins/Engine/Log/Private/Log.cpp
+	${ENGINE_DIR}/Plugins/Engine/Log/Log.cplugin
+	${ENGINE_DIR}/Plugins/Engine/Log/Log.cmake
+	${ENGINE_DIR}/Plugins/Engine/Log/settings.json
 )
-set_source_files_properties(	${ENGINE_DIR}/Plugins/Common/Log/Log.cplugin
-	${ENGINE_DIR}/Plugins/Common/Log/Log.cmake
-	${ENGINE_DIR}/Plugins/Common/Log/settings.json PROPERTIES HEADER_FILE_ONLY ON)
+set_source_files_properties(	${ENGINE_DIR}/Plugins/Engine/Log/Log.cplugin
+	${ENGINE_DIR}/Plugins/Engine/Log/Log.cmake
+	${ENGINE_DIR}/Plugins/Engine/Log/settings.json PROPERTIES HEADER_FILE_ONLY ON)
 target_include_directories(Log PUBLIC
 	"${ENGINE_DIR}/Source/Public"
-	"${ENGINE_DIR}/Plugins/Common/Log/Public"
+	"${ENGINE_DIR}/Plugins/Engine/Log/Public"
 	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEngine/Public"
 )
 set_target_properties(Log PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 target_compile_definitions(Log PRIVATE MAHO_LOG_MODULE_EXPORTS)
 target_link_libraries(Log PUBLIC Maho)
 set_property(TARGET Log PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>")
-set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Common/Log")
-include("${ENGINE_DIR}/Plugins/Common/Log/Log.cmake")
+set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Engine/Log")
+include("${ENGINE_DIR}/Plugins/Engine/Log/Log.cmake")
 unset(_MOD_PLUGIN_DIR)
 
-source_group(TREE "${ENGINE_DIR}/Plugins/Common/Log" FILES
-	"${ENGINE_DIR}/Plugins/Common/Log/Public/Log.h"
-	"${ENGINE_DIR}/Plugins/Common/Log/Private/Log.cpp"
+source_group(TREE "${ENGINE_DIR}/Plugins/Engine/Log" FILES
+	"${ENGINE_DIR}/Plugins/Engine/Log/Public/Log.h"
+	"${ENGINE_DIR}/Plugins/Engine/Log/Private/Log.cpp"
 )
 
 add_library(Name SHARED
@@ -313,31 +313,31 @@ source_group(TREE "${ENGINE_DIR}/Plugins/Common/Name" FILES
 )
 
 add_library(Platform SHARED
-	${ENGINE_DIR}/Plugins/Common/Platform/Public/Platform.h
-	${ENGINE_DIR}/Plugins/Common/Platform/Private/Platform.cpp
-	${ENGINE_DIR}/Plugins/Common/Platform/Platform.cplugin
-	${ENGINE_DIR}/Plugins/Common/Platform/Platform.cmake
-	${ENGINE_DIR}/Plugins/Common/Platform/settings.json
+	${ENGINE_DIR}/Plugins/Engine/Platform/Public/Platform.h
+	${ENGINE_DIR}/Plugins/Engine/Platform/Private/Platform.cpp
+	${ENGINE_DIR}/Plugins/Engine/Platform/Platform.cplugin
+	${ENGINE_DIR}/Plugins/Engine/Platform/Platform.cmake
+	${ENGINE_DIR}/Plugins/Engine/Platform/settings.json
 )
-set_source_files_properties(	${ENGINE_DIR}/Plugins/Common/Platform/Platform.cplugin
-	${ENGINE_DIR}/Plugins/Common/Platform/Platform.cmake
-	${ENGINE_DIR}/Plugins/Common/Platform/settings.json PROPERTIES HEADER_FILE_ONLY ON)
+set_source_files_properties(	${ENGINE_DIR}/Plugins/Engine/Platform/Platform.cplugin
+	${ENGINE_DIR}/Plugins/Engine/Platform/Platform.cmake
+	${ENGINE_DIR}/Plugins/Engine/Platform/settings.json PROPERTIES HEADER_FILE_ONLY ON)
 target_include_directories(Platform PUBLIC
 	"${ENGINE_DIR}/Source/Public"
-	"${ENGINE_DIR}/Plugins/Common/Platform/Public"
+	"${ENGINE_DIR}/Plugins/Engine/Platform/Public"
 	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEngine/Public"
 )
 set_target_properties(Platform PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 target_compile_definitions(Platform PRIVATE MAHO_PLATFORM_MODULE_EXPORTS)
 target_link_libraries(Platform PUBLIC Maho)
 set_property(TARGET Platform PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>")
-set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Common/Platform")
-include("${ENGINE_DIR}/Plugins/Common/Platform/Platform.cmake")
+set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Engine/Platform")
+include("${ENGINE_DIR}/Plugins/Engine/Platform/Platform.cmake")
 unset(_MOD_PLUGIN_DIR)
 
-source_group(TREE "${ENGINE_DIR}/Plugins/Common/Platform" FILES
-	"${ENGINE_DIR}/Plugins/Common/Platform/Public/Platform.h"
-	"${ENGINE_DIR}/Plugins/Common/Platform/Private/Platform.cpp"
+source_group(TREE "${ENGINE_DIR}/Plugins/Engine/Platform" FILES
+	"${ENGINE_DIR}/Plugins/Engine/Platform/Public/Platform.h"
+	"${ENGINE_DIR}/Plugins/Engine/Platform/Private/Platform.cpp"
 )
 
 add_library(RHI SHARED
@@ -355,8 +355,8 @@ target_include_directories(RHI PUBLIC
 	"${ENGINE_DIR}/Plugins/Common/RHI/Public"
 	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEngine/Public"
 	"${ENGINE_DIR}/Plugins/Common/ConsoleVariable/Public"
-	"${ENGINE_DIR}/Plugins/Common/Log/Public"
-	"${ENGINE_DIR}/Plugins/Common/Platform/Public"
+	"${ENGINE_DIR}/Plugins/Engine/Log/Public"
+	"${ENGINE_DIR}/Plugins/Engine/Platform/Public"
 )
 set_target_properties(RHI PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 target_compile_definitions(RHI PRIVATE MAHO_RHI_MODULE_EXPORTS)
@@ -449,7 +449,7 @@ target_include_directories(Script PUBLIC
 	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEngine/Public"
 	"${ENGINE_DIR}/Plugins/Common/Resource/Public"
 	"${ENGINE_DIR}/Plugins/Common/ConsoleVariable/Public"
-	"${ENGINE_DIR}/Plugins/Common/Log/Public"
+	"${ENGINE_DIR}/Plugins/Engine/Log/Public"
 	"${ENGINE_DIR}/Plugins/Common/Exception/Public"
 	"${ENGINE_DIR}/Plugins/Common/Reflect/Public"
 )
@@ -552,38 +552,6 @@ source_group(TREE "${ENGINE_DIR}/Plugins/Common/Unicode" FILES
 	"${ENGINE_DIR}/Plugins/Common/Unicode/Private/Unicode.cpp"
 )
 
-add_library(DynLog SHARED
-	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/DynLog/Public/DynLog.h
-	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/DynLog/Private/DynLog.cpp
-	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/DynLog/DynLog.cplugin
-	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/DynLog/DynLog.cmake
-	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/DynLog/settings.json
-)
-set_source_files_properties(	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/DynLog/DynLog.cplugin
-	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/DynLog/DynLog.cmake
-	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/DynLog/settings.json PROPERTIES HEADER_FILE_ONLY ON)
-target_include_directories(DynLog PUBLIC
-	"${ENGINE_DIR}/Source/Public"
-	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/DynLog/Public"
-	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEngine/Public"
-	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEngine/Public"
-	"${ENGINE_DIR}/Plugins/Common/Log/Public"
-)
-set_target_properties(DynLog PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
-target_compile_definitions(DynLog PRIVATE MAHO_DYNLOG_MODULE_EXPORTS)
-target_link_libraries(DynLog PUBLIC Maho)
-set_property(TARGET DynLog PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>")
-set(_MOD_PLUGIN_DIR "${CMAKE_CURRENT_SOURCE_DIR}/Plugins/DynLog")
-include("${CMAKE_CURRENT_SOURCE_DIR}/Plugins/DynLog/DynLog.cmake")
-unset(_MOD_PLUGIN_DIR)
-
-target_link_libraries(DynLog PUBLIC Log)
-
-source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/Plugins/DynLog" FILES
-	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/DynLog/Public/DynLog.h"
-	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/DynLog/Private/DynLog.cpp"
-)
-
 add_library(DynWorld SHARED
 	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/DynWorld/Public/DynWorld.h
 	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/DynWorld/Private/DynWorld.cpp
@@ -599,7 +567,7 @@ target_include_directories(DynWorld PUBLIC
 	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/DynWorld/Public"
 	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEngine/Public"
 	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEngine/Public"
-	"${ENGINE_DIR}/Plugins/Common/Log/Public"
+	"${ENGINE_DIR}/Plugins/Engine/Log/Public"
 )
 set_target_properties(DynWorld PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 target_compile_definitions(DynWorld PRIVATE MAHO_DYNWORLD_MODULE_EXPORTS)
@@ -631,7 +599,7 @@ target_include_directories(DynRender PUBLIC
 	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/DynRender/Public"
 	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEngine/Public"
 	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEngine/Public"
-	"${ENGINE_DIR}/Plugins/Common/Log/Public"
+	"${ENGINE_DIR}/Plugins/Engine/Log/Public"
 )
 set_target_properties(DynRender PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 target_compile_definitions(DynRender PRIVATE MAHO_DYNRENDER_MODULE_EXPORTS)
@@ -663,7 +631,7 @@ target_include_directories(GameInput PUBLIC
 	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/GameInput/Public"
 	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEngine/Public"
 	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEngine/Public"
-	"${ENGINE_DIR}/Plugins/Common/Log/Public"
+	"${ENGINE_DIR}/Plugins/Engine/Log/Public"
 )
 set_target_properties(GameInput PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 target_compile_definitions(GameInput PRIVATE MAHO_GAMEINPUT_MODULE_EXPORTS)
@@ -701,9 +669,9 @@ target_include_directories(ExampleEngine PUBLIC
 	"${ENGINE_DIR}/Plugins/Common/Config/Public"
 	"${ENGINE_DIR}/Plugins/Common/ConsoleVariable/Public"
 	"${ENGINE_DIR}/Plugins/Common/Exception/Public"
-	"${ENGINE_DIR}/Plugins/Common/Log/Public"
+	"${ENGINE_DIR}/Plugins/Engine/Log/Public"
 	"${ENGINE_DIR}/Plugins/Common/Name/Public"
-	"${ENGINE_DIR}/Plugins/Common/Platform/Public"
+	"${ENGINE_DIR}/Plugins/Engine/Platform/Public"
 	"${ENGINE_DIR}/Plugins/Common/RHI/Public"
 	"${ENGINE_DIR}/Plugins/Common/Reflect/Public"
 	"${ENGINE_DIR}/Plugins/Common/Resource/Public"
@@ -796,7 +764,7 @@ endforeach()
 set_property(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" PROPERTY VS_DEBUGGER_WORKING_DIRECTORY "${_MAHO_BIN}/$<CONFIG>")
 # The sln startup project is EntryPoint (the app host), not ZERO_CHECK.
 set_property(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" PROPERTY VS_STARTUP_PROJECT EntryPoint)
-add_dependencies(EntryPoint ExampleEngine Archive Paths Asset CommandParser Compress Config ConsoleVariable Exception Log Name Platform RHI Reflect Resource Script Text Timer Unicode DynLog DynWorld DynRender GameInput MahoCheckCycle)
+add_dependencies(EntryPoint ExampleEngine Archive Paths Asset CommandParser Compress Config ConsoleVariable Exception Log Name Platform RHI Reflect Resource Script Text Timer Unicode DynWorld DynRender GameInput MahoCheckCycle)
 
 # Solution folders: EntryPoint at the ROOT; Maho (engine), Project, ThirdParty.
 # The project root sits at Project/ itself; project plugin DLLs under
@@ -824,11 +792,11 @@ set_target_properties(ConsoleVariable PROPERTIES FOLDER "Maho/Plugins/Common")
 
 set_target_properties(Exception PROPERTIES FOLDER "Maho/Plugins/Common")
 
-set_target_properties(Log PROPERTIES FOLDER "Maho/Plugins/Common")
+set_target_properties(Log PROPERTIES FOLDER "Maho/Plugins/Engine")
 
 set_target_properties(Name PROPERTIES FOLDER "Maho/Plugins/Common")
 
-set_target_properties(Platform PROPERTIES FOLDER "Maho/Plugins/Common")
+set_target_properties(Platform PROPERTIES FOLDER "Maho/Plugins/Engine")
 
 set_target_properties(RHI PROPERTIES FOLDER "Maho/Plugins/Common")
 
@@ -843,8 +811,6 @@ set_target_properties(Text PROPERTIES FOLDER "Maho/Plugins/Common")
 set_target_properties(Timer PROPERTIES FOLDER "Maho/Plugins/Common")
 
 set_target_properties(Unicode PROPERTIES FOLDER "Maho/Plugins/Common")
-
-set_target_properties(DynLog PROPERTIES FOLDER "Project/Plugins")
 
 set_target_properties(DynWorld PROPERTIES FOLDER "Project/Plugins")
 

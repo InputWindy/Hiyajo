@@ -135,4 +135,13 @@ void InstallFatalHandlers()
 	std::abort();
 }
 
+void ReportError(const char* Message)
+{
+	const char* Text = Message ? Message : "(null)";
+	std::fprintf(stderr, "Maho ERROR: %s\n", Text);
+	std::fflush(stderr);
+
+	AppendFatalLogFile(Text);
+}
+
 } // namespace Maho

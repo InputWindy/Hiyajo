@@ -80,10 +80,6 @@
       "Enabled": true
     },
     {
-      "Name": "DynLog",
-      "Enabled": true
-    },
-    {
       "Name": "DynWorld",
       "Enabled": true
     },

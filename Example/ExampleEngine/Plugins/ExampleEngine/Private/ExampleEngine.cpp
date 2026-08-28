@@ -8,7 +8,7 @@ void FExampleEngine::PreMain()
 {
 	// 引擎服务层（Log）与输入驱动层提前安装；DynLog/DynWorld/DynRender
 	// 由 GameInput 的 Tick 逐帧动态安装。
-	Install(&FLog::Get());
+	Install("Log.dll");
 	Install("GameInput.dll");
 }
 

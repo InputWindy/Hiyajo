@@ -29,3 +29,17 @@
 #if defined(_MSC_VER)
 #	pragma warning(disable : 4251)
 #endif
+
+/**
+ * Null-guard statement — evaluate a possibly-null pointer expression ONCE and
+ * run the statement only when non-null. The bound name is a local, so the
+ * expression is not re-evaluated. Use for optional services reached through a
+ * global accessor (e.g. GetLog()).
+ *
+ *   MAHO_IF_NOT_NULL(::Maho::GetLog(), L)
+ *   {
+ *       L->Info("ready");
+ *   }
+ */
+#define MAHO_IF_NOT_NULL(PtrExpr, Name)                                  \
+	for (auto* Name = (PtrExpr); Name != nullptr; Name = nullptr)
