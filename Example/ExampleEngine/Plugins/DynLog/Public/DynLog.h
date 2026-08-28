@@ -12,15 +12,12 @@ namespace Maho
 class FDynLog : public FEngineLayer
 {
 MAHO_DECLARE_LAYER(FDynLog);
-MAHO_DECLARE_FEATURE(FDynLog, "DynLog.dll");
+MAHO_DECLARE_ENGINE_LAYER(FDynLog, "DynLog.dll");
 
 public:
-	void BeginFrame() override;
-	void Tick() override;
-	void EndFrame() override;
-
-	// Cross-feature dependency (optional):
-	// FDynLog() { AddDependency<ITick, FOther, IBeginFrame>(); }
+	void BeginFrame(FEngineBase& Engine) override;
+	void Tick(FEngineBase& Engine) override;
+	void EndFrame(FEngineBase& Engine) override;
 };
 
 } // namespace Maho

@@ -15,8 +15,9 @@ class FExampleEngine : public FEngineBase
 MAHO_DECLARE_ENGINE(FExampleEngine, "ExampleEngine.dll");
 
 public:
-	void Initialize(int Argc, char** Argv) override;
-	void Shutdown() override;
+	void PreMain() override;
+
+	void PostMain() override;
 };
 
 } // namespace Maho

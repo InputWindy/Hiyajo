@@ -12,7 +12,7 @@ namespace Maho
 class FDynWorld : public FEngineLayer
 {
 MAHO_DECLARE_LAYER(FDynWorld);
-MAHO_DECLARE_FEATURE(FDynWorld, "DynWorld.dll");
+MAHO_DECLARE_ENGINE_LAYER(FDynWorld, "DynWorld.dll");
 
 public:
 	FDynWorld()
@@ -21,9 +21,9 @@ public:
 		AddDependency(std::type_index(typeid(ITick)), "FDynLog", std::type_index(typeid(IEndFrame)));
 	}
 
-	void BeginFrame() override;
-	void Tick() override;
-	void EndFrame() override;
+	void BeginFrame(FEngineBase& Engine) override;
+	void Tick(FEngineBase& Engine) override;
+	void EndFrame(FEngineBase& Engine) override;
 };
 
 } // namespace Maho

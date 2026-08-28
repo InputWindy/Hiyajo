@@ -5,9 +5,9 @@
 namespace Maho
 {
 
-void FDynRender::BeginFrame() { MAHO_LOG_CORE_INFO("[DynRender] BeginFrame"); }
-void FDynRender::Tick()       { MAHO_LOG_CORE_INFO("[DynRender] Tick"); }
-void FDynRender::EndFrame()   { MAHO_LOG_CORE_INFO("[DynRender] EndFrame (依赖 DynWorld.EndFrame)"); }
+void FDynRender::BeginFrame(FEngineBase&) { MAHO_LOG_CORE_INFO("[DynRender] BeginFrame"); }
+void FDynRender::Tick(FEngineBase&)       { MAHO_LOG_CORE_INFO("[DynRender] Tick"); }
+void FDynRender::EndFrame(FEngineBase&)   { MAHO_LOG_CORE_INFO("[DynRender] EndFrame (依赖 DynWorld.EndFrame)"); }
 
 } // namespace Maho
 

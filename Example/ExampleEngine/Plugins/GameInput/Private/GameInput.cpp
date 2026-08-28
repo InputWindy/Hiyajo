@@ -5,22 +5,22 @@
 namespace Maho
 {
 
-void FGameInput::BeginFrame() {}
+void FGameInput::BeginFrame(FEngineBase&) {}
 
-void FGameInput::Tick()
+void FGameInput::Tick(FEngineBase& Engine)
 {
 	++TickCount;
 
 	switch (TickCount)
 	{
 	case 1:
-		Owner->Install("DynLog.dll");
+		Engine.Install("DynLog.dll");
 		break;
 	case 2:
-		Owner->Install("DynWorld.dll");
+		Engine.Install("DynWorld.dll");
 		break;
 	case 3:
-		Owner->Install("DynRender.dll");
+		Engine.Install("DynRender.dll");
 		break;
 
 	// 装齐后跑 1 帧稳定。
@@ -30,7 +30,7 @@ void FGameInput::Tick()
 
 	// 场景 A：单独匿名卸载被依赖的 World —— 应放弃（卸载不掉）。
 	case 5:
-		Owner->TryUninstall("FDynWorld");
+		Engine.TryUninstall("FDynWorld");
 		break;
 
 	// 场景 A 观察帧：World 仍在（请求被放弃）。
@@ -40,8 +40,8 @@ void FGameInput::Tick()
 
 	// 场景 B：同帧匿名卸载 World + Render —— 依赖者先弹，连锁卸载两者。
 	case 7:
-		Owner->TryUninstall("FDynWorld");
-		Owner->TryUninstall("FDynRender");
+		Engine.TryUninstall("FDynWorld");
+		Engine.TryUninstall("FDynRender");
 		break;
 
 	// 场景 B 观察帧：只剩 Log。
@@ -50,12 +50,17 @@ void FGameInput::Tick()
 		break;
 
 	default:
-		Owner->RequestExit();
+		Engine.RequestExit();
 		break;
 	}
 }
 
-void FGameInput::EndFrame() {}
+void FGameInput::EndFrame(FEngineBase&) {}
+
+void FGameInput::RequestExit(FEngineBase&)
+{
+	// 退出逻辑在 Tick 的 default 分支；RequestExit stage 本身 no-op。
+}
 
 } // namespace Maho
 

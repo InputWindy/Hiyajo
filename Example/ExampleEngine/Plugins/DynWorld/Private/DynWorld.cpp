@@ -5,9 +5,9 @@
 namespace Maho
 {
 
-void FDynWorld::BeginFrame() { MAHO_LOG_CORE_INFO("[DynWorld] BeginFrame"); }
-void FDynWorld::Tick()       { MAHO_LOG_CORE_INFO("[DynWorld] Tick (依赖 DynLog.EndFrame)"); }
-void FDynWorld::EndFrame()   { MAHO_LOG_CORE_INFO("[DynWorld] EndFrame"); }
+void FDynWorld::BeginFrame(FEngineBase&) { MAHO_LOG_CORE_INFO("[DynWorld] BeginFrame"); }
+void FDynWorld::Tick(FEngineBase&)       { MAHO_LOG_CORE_INFO("[DynWorld] Tick (依赖 DynLog.EndFrame)"); }
+void FDynWorld::EndFrame(FEngineBase&)   { MAHO_LOG_CORE_INFO("[DynWorld] EndFrame"); }
 
 } // namespace Maho
 

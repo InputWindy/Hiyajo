@@ -1,21 +1,19 @@
 #include "ExampleEngine.h"
 
+#include <Log.h>
+
 namespace Maho
 {
-
-void FExampleEngine::Initialize(int Argc, char** Argv)
+void FExampleEngine::PreMain()
 {
-	FLog::Get().Initialize(Argc, Argv);
-	MAHO_LOG_CORE_INFO("FExampleEngine::Initialize — input-driven install/uninstall test");
-
-	// 只装输入驱动层；DynLog/DynWorld/DynRender 由 GameInput 的 Tick 逐帧动态安装。
+	// 引擎服务层（Log）与输入驱动层提前安装；DynLog/DynWorld/DynRender
+	// 由 GameInput 的 Tick 逐帧动态安装。
+	Install(&FLog::Get());
 	Install("GameInput.dll");
 }
 
-void FExampleEngine::Shutdown()
+void FExampleEngine::PostMain()
 {
-	// 引擎 base 已 delete 全部 feature + FreeLibrary（FEngineBase::Shutdown）。
-	FLog::Get().Shutdown();
 }
 
 } // namespace Maho

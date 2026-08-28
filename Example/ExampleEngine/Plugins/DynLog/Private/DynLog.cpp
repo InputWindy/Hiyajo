@@ -5,9 +5,9 @@
 namespace Maho
 {
 
-void FDynLog::BeginFrame() { MAHO_LOG_CORE_INFO("[DynLog] BeginFrame"); }
-void FDynLog::Tick()       { MAHO_LOG_CORE_INFO("[DynLog] Tick"); }
-void FDynLog::EndFrame()   { MAHO_LOG_CORE_INFO("[DynLog] EndFrame"); }
+void FDynLog::BeginFrame(FEngineBase&) { MAHO_LOG_CORE_INFO("[DynLog] BeginFrame"); }
+void FDynLog::Tick(FEngineBase&)       { MAHO_LOG_CORE_INFO("[DynLog] Tick"); }
+void FDynLog::EndFrame(FEngineBase&)   { MAHO_LOG_CORE_INFO("[DynLog] EndFrame"); }
 
 } // namespace Maho
 

@@ -527,7 +527,7 @@ endforeach()
 set_property(DIRECTORY "${{CMAKE_CURRENT_SOURCE_DIR}}" PROPERTY VS_DEBUGGER_WORKING_DIRECTORY "${{_MAHO_BIN}}/$<CONFIG>")
 # The sln startup project is EntryPoint (the app host), not ZERO_CHECK.
 set_property(DIRECTORY "${{CMAKE_CURRENT_SOURCE_DIR}}" PROPERTY VS_STARTUP_PROJECT EntryPoint)
-add_dependencies(EntryPoint {name} {plugin_link_names} MahoCheckCycle)
+add_dependencies(EntryPoint {name} {plugin_all_names} MahoCheckCycle)
 
 # Solution folders: EntryPoint at the ROOT; Maho (engine), Project, ThirdParty.
 # The project root sits at Project/ itself; project plugin DLLs under
@@ -717,24 +717,32 @@ def _plugin_include_dirs(
 
 def _plugin_targets(
 	engine_root: Path, names: list[str], project_name: str, project_dir: Path | None = None
-) -> tuple[str, list[str], str]:
+) -> tuple[str, list[str], list[str], str]:
 	"""CMake add_library blocks for each dependency plugin (a loadable DLL target).
 
-	Returns (targets_block, dep_names, folders_block) — dep_names for
-	target_link_libraries + add_dependencies; folders_block groups each dep
-	target under the project's solution folder.
+	Returns (targets_block, link_names, all_names, folders_block):
+	  - link_names: engine plugins ONLY — link into the host/entry DLL (their
+	    headers are compile-time-included by the host).
+	  - all_names: every plugin — build targets + EntryPoint add_dependencies
+	    (project feature plugins are loaded at RUNTIME via FAssembly, so the
+	    host does NOT link them).
+	  - folders_block groups each dep target under the project's solution folder.
 	"""
 	infos = _all_plugin_infos(engine_root, project_dir)
 	name_set = set(names)
 
 	targets: list[str] = []
-	dep_names: list[str] = []
+	link_names: list[str] = []
+	all_names: list[str] = []
 	folders: list[str] = []
 	for name in names:
 		info = infos.get(name)
 		if not info:
 			continue
-		dep_names.append(name)
+		all_names.append(name)
+		is_engine = info["public_dir"].startswith("${ENGINE_DIR}")
+		if is_engine:
+			link_names.append(name)
 		aux_files = info.get("aux_files", [])
 		aux_sources = "\n".join(f"\t{af}" for af in aux_files)
 		aux_props = (
@@ -789,7 +797,6 @@ def _plugin_targets(
 		# sln folder tree: EntryPoint at root, then Maho / Project / ThirdParty.
 		# Engine plugins → Maho/Plugins/..., project plugins → Project/Plugins/...
 		# (grouped by the filesystem hierarchy under each Plugins root).
-		is_engine = info["public_dir"].startswith("${ENGINE_DIR}")
 		base = "Maho/Plugins" if is_engine else "Project/Plugins"
 		folder = f"{base}/{group}" if group else base
 		folders.append(
@@ -805,7 +812,7 @@ def _plugin_targets(
 			f'\t"{plugin_cpp}"\n'
 			f")\n"
 		)
-	return "\n".join(targets), dep_names, "\n".join(folders)
+	return "\n".join(targets), link_names, all_names, "\n".join(folders)
 
 
 def codegen_plugin_extensions(cproject_path: Path) -> Path:
@@ -889,8 +896,14 @@ def _write_cmake_lists(
 	# The project's own plugin is the host (added separately) — never a dep target.
 	chain = [p for p in chain if p != project_name]
 	engine_rel = engine_path_for_cproject(engine_root, project_dir)
-	plugin_dirs = _plugin_include_dirs(engine_root, chain, project_dir)
-	plugin_targets, plugin_deps, plugin_folders = _plugin_targets(
+	# Host DLL include dirs: engine plugins only (compile-time headers). Project
+	# feature plugins are runtime-loaded — their Public/ is NOT in the host.
+	engine_chain = [
+		p for p in chain
+		if _all_plugin_infos(engine_root, project_dir).get(p, {}).get("public_dir", "").startswith("${ENGINE_DIR}")
+	]
+	plugin_dirs = _plugin_include_dirs(engine_root, engine_chain, project_dir)
+	plugin_targets, plugin_link_names, plugin_all_names, plugin_folders = _plugin_targets(
 		engine_root, chain, project_name, project_dir
 	)
 
@@ -920,7 +933,8 @@ def _write_cmake_lists(
 			engine_rel=engine_rel,
 			plugin_dirs=plugin_dirs,
 			plugin_targets=plugin_targets,
-			plugin_link_names=" ".join(plugin_deps),
+			plugin_link_names=" ".join(plugin_link_names),
+			plugin_all_names=" ".join(plugin_all_names),
 			plugin_folders=plugin_folders,
 			host_aux=host_aux_block,
 			host_aux_props=host_aux_props,
@@ -1209,12 +1223,13 @@ def create_plugin(
 			f"class F{plugin_name} : public FEngineLayer\n"
 			f"{{\n"
 			f"MAHO_DECLARE_LAYER(F{plugin_name});\n"
-			f"MAHO_DECLARE_FEATURE(F{plugin_name}, \"{plugin_name}.dll\");\n"
+			f"MAHO_DECLARE_ENGINE_LAYER(F{plugin_name}, \"{plugin_name}.dll\");\n"
 			f"\n"
 			f"public:\n"
-			f"\tvoid BeginFrame() override;\n"
-			f"\tvoid Tick() override;\n"
-			f"\tvoid EndFrame() override;\n"
+			f"\tvoid BeginFrame(FEngineBase& Engine) override;\n"
+			f"\tvoid Tick(FEngineBase& Engine) override;\n"
+			f"\tvoid EndFrame(FEngineBase& Engine) override;\n"
+			f"\tvoid RequestExit(FEngineBase& Engine) override;\n"
 			f"\n"
 			f"\t// Cross-feature dependency (optional):\n"
 			f"\t// F{plugin_name}() {{ AddDependency<ITick, FOther, IBeginFrame>(); }}\n"
@@ -1224,9 +1239,10 @@ def create_plugin(
 		impl_body = (
 			f'#include "{plugin_name}.h"\n\n'
 			f"namespace Maho\n{{\n\n"
-			f"void F{plugin_name}::BeginFrame() {{}}\n"
-			f"void F{plugin_name}::Tick() {{}}\n"
-			f"void F{plugin_name}::EndFrame() {{}}\n\n"
+			f"void F{plugin_name}::BeginFrame(FEngineBase&) {{}}\n"
+			f"void F{plugin_name}::Tick(FEngineBase&) {{}}\n"
+			f"void F{plugin_name}::EndFrame(FEngineBase&) {{}}\n"
+			f"void F{plugin_name}::RequestExit(FEngineBase&) {{}}\n\n"
 			f"}} // namespace Maho\n\n"
 			f"// The C export the host looks up BY SYMBOL NAME for dynamic install.\n"
 			f'extern "C" MAHO_{export}_API Maho::FEngineLayer* CreateLayer()\n'
