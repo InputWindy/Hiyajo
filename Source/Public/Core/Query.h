@@ -1,7 +1,7 @@
 #pragma once
 
 // TQuery — a type-UNRELATED compile-time LINQ over a type table. It never
-// references FLayer / scheduler / instances: input is a TTypeList, output is a
+// references instances / schedulers: input is a TTypeList, output is a
 // filtered TTypeList. Select / With / Not are type-set operations evaluated at
 // compile time; runtime driving of the surviving types is the caller's concern.
 //
@@ -71,10 +71,9 @@ namespace QueryDetail
 /**
  * Type-agnostic compile-time query over a type table.
  *
- * Select / With / Not are chainable and pure: they never touch runtime state or
- * the FLayer/scheduler contract. Each returns a new TQuery whose FList is the
- * survivor set so far; FResult is that running table. Driving its elements
- * (instances via a layer, singletons via their Get) is left to the caller.
+ * Select / With / Not are chainable and pure: they never touch runtime state.
+ * Each returns a new TQuery whose FList is the survivor set so far; FResult is
+ * that running table. Driving the surviving elements is left to the caller.
  *
  *   TQuery<FTable> Q;
  *   using FOut = decltype(Q.Select<IA>().With<IB>().Not<IC>())::FResult;

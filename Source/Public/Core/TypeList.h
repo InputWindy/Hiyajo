@@ -59,9 +59,6 @@ struct TContains<TTypeList<THead, TRest...>, T> : TContains<TTypeList<TRest...>,
 template <typename TList, typename T>
 inline constexpr bool TContains_v = TContains<TList, T>::value;
 
-// (Traversal — TTag / ForEach / the scheduler contract — lives in
-//  Engine/Schedulers.h, where the drive protocol is defined.)
-
 /**
  * Concatenate multiple TTypeLists into one, in order.
  *

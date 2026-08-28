@@ -1,323 +1,257 @@
 #pragma once
 
-#include <Core/Assembly.h>
-#include <Core/Extension.h>
 #include <Core/Interface.h>
-#include <Core/Queue.h>
-#include <Core/Query.h>
-#include <Core/Singleton.h>
-#include <Core/Topology.h>
-#include <Core/Schedulers.h>
+#include <Core/TaskGraph.h>
+#include <Core/TypeList.h>
 
-#include <algorithm>
-#include <functional>
+#include <map>
+#include <string>
 #include <string_view>
+#include <type_traits>
+#include <typeindex>
 #include <utility>
 #include <vector>
+
+/**
+ * Layer 身份声明语法糖 —— 生成 StaticName() + GetName() 覆盖。
+ * 用法：class FWorld : public FLayer<...> { MAHO_DECLARE_LAYER(FWorld); ... };
+ * 名字取自类型名字符串化（#LayerType），依赖声明用同一类型推导，自洽。
+ */
+#define MAHO_DECLARE_LAYER(LayerType)                    \
+public:                                                  \
+	static constexpr std::string_view StaticName()       \
+	{                                                    \
+		return #LayerType;                                \
+	}                                                    \
+	std::string_view GetName() const override            \
+	{                                                    \
+		return StaticName();                              \
+	}
 
 namespace Maho
 {
 
-template <typename T>
-concept FModuleInstance = requires
-{
-	{ T::GetModulePath() } -> std::convertible_to<std::string_view>;
-};
+// ── ① FLayer：匿名层锚点 ──────────────────────────────────────────────────
 
-// ── layer command catalog (queue lanes) ──────────────────────────────────
-class FLayerBase;
-
-enum class ELayerCommand : std::uint64_t
-{
-	Install = 1,
-	Uninstall = 2,
-};
-
-/** Install command — carries a child instance to be adopted at FlushCommands. */
-struct FInstallCommand : public ICommand
-{
-	FLayerBase* Child = nullptr;
-
-	[[nodiscard]] std::uint64_t GetCatalogId() const override
-	{
-		return static_cast<std::uint64_t>(ELayerCommand::Install);
-	}
-};
-
-/** Uninstall command — carries a child instance to be released at FlushCommands. */
-struct FUninstallCommand : public ICommand
-{
-	FLayerBase* Child = nullptr;
-
-	[[nodiscard]] std::uint64_t GetCatalogId() const override
-	{
-		return static_cast<std::uint64_t>(ELayerCommand::Uninstall);
-	}
-};
-
-class MAHO_API FLayerBase
-	: public FQueue
-	, public Parallel::FParallelScheduler
+/**
+ * Anonymous layer anchor — the polymorphic base a (possibly dynamically
+ * loaded) feature derives from. It carries identity + per-stage dependency
+ * declaration. Lifecycle stages are composed via IPipeline<TStages...>; a
+ * layer NEVER manages its deps' lifecycle — the loader/TaskGraph guarantees
+ * the execution context is complete before a layer runs. The layer only closes
+ * over itself.
+ *
+ * The layer and its scheduling graph are STRONGLY BOUND: the layer implements
+ * an IPipeline (a stage sequence), and FLayerTaskGraph<SamePipeline> drives
+ * it. See FLayerTaskGraph below.
+ */
+class FLayerBase
 {
 public:
 	virtual ~FLayerBase() = default;
 
-	/** True when this instance derives from T (a runtime LINQ filter helper). */
-	template <typename T>
-	bool Is() const
+	/** Stable identity name — the TaskGraph topological key. */
+	virtual std::string_view GetName() const = 0;
+
+	/** Named dep of `this` at a given stage. */
+	struct FDependency
 	{
-		return dynamic_cast<const T*>(this) != nullptr;
+		std::string     Name;    // dep object name
+		std::type_index Stage;   // dep object's stage interface (void = unset)
+	};
+
+	/** My stage (interface type) → what I depend on in that stage. */
+	using FDependencyTable = std::map<std::type_index, std::vector<FDependency>>;
+
+	virtual const FDependencyTable& GetDependencies() const
+	{
+		return Dependencies;
 	}
+
+protected:
+	/** Declare: `this` at TMyStage depends on TDepObj at TDepStage. */
+	template <typename TMyStage, typename TDepObj, typename TDepStage>
+	void AddDependency()
+	{
+		Dependencies[std::type_index(typeid(TMyStage))].push_back({
+			std::string(TDepObj::StaticName()),
+			std::type_index(typeid(TDepStage))
+		});
+	}
+
+	FDependencyTable Dependencies;
 };
 
-// ── compile-time "is a TSingleton" / "level table is all singletons" ──────
-namespace LayerDetail
+/**
+ * Layer syntax sugar — binds FLayerBase (identity + deps) with an IPipeline
+ * (ordered stages + the stage-invoke dispatch). Inherit from this instead of
+ * spelling both bases:
+ *
+ *   class FWorld : public FLayer<IPipeline<IMain, IShutdown>>
+ *   { ... };
+ *
+ * == FLayerBase + IPipeline<IMain, IShutdown>.
+ * The stage-invoke protocol lives in IPipeline (see Interface.h).
+ */
+template <typename TPipeline>
+class FLayer
+	: public FLayerBase
+	, public TPipeline
 {
-	template <typename T>
-	struct TIsSingleton : std::is_base_of<TSingleton<T>, T>
-	{
-	};
+};
 
-	template <typename FLevel>
-	struct TLevelAllSingleton;
-	template <>
-	struct TLevelAllSingleton<TTypeList<>> : std::true_type
-	{
-	};
-	template <typename THead, typename... TRest>
-	struct TLevelAllSingleton<TTypeList<THead, TRest...>>
-		: std::bool_constant<
-			TIsSingleton<THead>::value
-			&& TLevelAllSingleton<TTypeList<TRest...>>::value>
-	{
-	};
+// ── ② 无参管线的空上下文占位 ─────────────────────────────────────────────
 
-	template <typename FLevels>
-	struct TAllSingleton;
-	template <>
-	struct TAllSingleton<TTypeList<>> : std::true_type
-	{
-	};
-	template <typename FLevel, typename... FRest>
-	struct TAllSingleton<TTypeList<FLevel, FRest...>>
-		: std::bool_constant<
-			TLevelAllSingleton<FLevel>::value
-			&& TAllSingleton<TTypeList<FRest...>>::value>
-	{
-	};
-}
+struct FEmptyContext {};
 
-// ── runtime instance dispatch over FLayerBase (first matching type wins) ──
-namespace InstanceDispatchDetail
+// ── ③ 从 pipeline 提取 stage 序列（pipeline 暴露 TStages 成员）─────────
+
+template <typename P> struct TStagesOf { using Type = typename P::TStages; };
+
+// ── ④ FLayerTaskGraph：一组 FLayer → 编译 → 执行 ─────────────────────────
+
+/**
+ * Layer task graph — bridges a set of anonymous FLayer instances into a
+ * FTaskGraph. CONTRACT: TPipeline is an IPipeline<TStages...> type; every
+ * FLayer passed in MUST implement exactly that pipeline. The layer and the
+ * graph declare the SAME pipeline type, pairing them at compile time.
+ *
+ * Per layer the graph expands one node per stage:
+ *   - self-progression: stage N depends on stage N-1 of the SAME layer
+ *   - cross-object deps: the layer's own declared deps at that stage
+ * Then Compile wires everything; Execute dispatches each ready node through
+ * FLayer::Invoke (compile-time stage → method mapping).
+ *
+ *   using FPipeline = IPipeline<IMain, IShutdown>;
+ *   class FWorld : public FLayer, public FPipeline { ... };
+ *   FLayerTaskGraph<FPipeline> G(Pool, { &World, &SSAO });
+ *   if (G.Compile()) { G.Execute(); G.Flush(); }
+ */
+
+template <typename TPipeline, typename TContext = FEmptyContext>
+class FLayerTaskGraph : public FTaskGraph
 {
-	template <typename THead, typename... TRest, typename TVisitor>
-	bool TCall(FLayerBase* Instance, TVisitor& Visitor)
+	using FStages = typename TStagesOf<TPipeline>::Type;
+
+public:
+	struct FNode : FTaskGraphNode
 	{
-		if (auto* Typed = dynamic_cast<THead*>(Instance))
+		FLayerBase* Layer = nullptr;
+	};
+
+	FLayerTaskGraph(FThreadPool& InPool, TContext& InContext)
+		: FTaskGraph(InPool)
+		, Context(InContext)
+	{
+	}
+
+	/** (Re)build the graph from a layer set — callable repeatedly (每帧/重配). */
+	void Init(std::vector<FLayerBase*> Layers)
+	{
+		NodeStorage.clear();
+
+		for (FLayerBase* L : Layers)
 		{
-			Visitor(*Typed);
-			return true;
+			if (L == nullptr)
+			{
+				continue;
+			}
+			ExpandLayer(L);
+		}
+
+		BaseNodes.clear();
+		BaseNodes.reserve(NodeStorage.size());
+		for (FNode& N : NodeStorage)
+		{
+			BaseNodes.push_back(&N);
+		}
+		FTaskGraph::Init(std::move(BaseNodes));
+	}
+
+protected:
+	void ExecuteNode(FTaskGraphNode* Node) override
+	{
+		auto* L = static_cast<FNode*>(Node)->Layer;
+		Dispatch(L, Node->Stage);
+	}
+
+private:
+
+	/** Expand one anonymous layer into one node per stage + edges. */
+	void ExpandLayer(FLayerBase* Layer)
+	{
+		ExpandStagesImpl(Layer, FStages{}, NoStage);
+	}
+
+	template <typename TCurrent, typename... TRest>
+	void ExpandStagesImpl(FLayerBase* Layer, TTypeList<TCurrent, TRest...>, std::type_index PrevStage)
+	{
+		FNode Node;
+		Node.Name = std::string(Layer->GetName());
+		Node.Stage = std::type_index(typeid(TCurrent));
+		Node.Layer = Layer;
+
+		// 自递进：依赖自己前一个 stage。
+		if (PrevStage != NoStage)
+		{
+			Node.Dependencies.push_back({ Node.Name, PrevStage });
+		}
+
+		// 跨对象依赖：本 stage 声明的依赖元组。
+		if (auto It = Layer->GetDependencies().find(Node.Stage);
+			It != Layer->GetDependencies().end())
+		{
+			for (const auto& [DepName, DepStage] : It->second)
+			{
+				Node.Dependencies.push_back({ DepName, DepStage });
+			}
+		}
+
+		NodeStorage.push_back(std::move(Node));
+
+		if constexpr (sizeof...(TRest) > 0)
+		{
+			ExpandStagesImpl<TRest...>(Layer, TTypeList<TRest...>{}, std::type_index(typeid(TCurrent)));
+		}
+	}
+
+	template <typename... TRest>
+	void ExpandStagesImpl(FLayerBase*, TTypeList<>, std::type_index)
+	{
+	}
+
+	// 运行时 stage → 编译期类型匹配 + 层内嵌 Invoke 分发。
+	void Dispatch(FLayerBase* Layer, const std::type_index& Stage)
+	{
+		DispatchImpl(Layer, Stage, FStages{});
+	}
+
+	template <typename TCurrent, typename... TRest>
+	void DispatchImpl(FLayerBase* Layer, const std::type_index& Stage, TTypeList<TCurrent, TRest...>)
+	{
+		if (Stage == std::type_index(typeid(TCurrent)))
+		{
+			// TPipeline 内嵌 Invoke<TStage>（stage → 方法的 if-constexpr 映射）。
+			// FLayerBase 与 TPipeline 无继承关系（层同时继承两者），侧向转换用 dynamic_cast。
+			dynamic_cast<TPipeline&>(*Layer).template Invoke<TCurrent>(Context);
+			return;
 		}
 		if constexpr (sizeof...(TRest) > 0)
 		{
-			return TCall<TRest...>(Instance, Visitor);
-		}
-		return false;
-	}
-}
-
-template <typename TList, typename TVisitor>
-void DispatchInstance(FLayerBase* Instance, TVisitor& Visitor);
-
-template <typename... Ts, typename TVisitor>
-void DispatchInstance(TTypeList<Ts...>, FLayerBase* Instance, TVisitor& Visitor)
-{
-	if (Instance == nullptr)
-	{
-		return;
-	}
-	InstanceDispatchDetail::TCall<Ts...>(Instance, Visitor);
-}
-
-template <typename TList, typename TVisitor>
-void DispatchInstance(FLayerBase* Instance, TVisitor& Visitor)
-{
-	DispatchInstance(TList{}, Instance, Visitor);
-}
-
-template <typename... TRegisteredTypes>
-class FLayer
-	: public FLayerBase
-{
-public:
-	using FLayers = TTypeList<TRegisteredTypes...>;
-	using FScheduler = Parallel::FParallelScheduler;
-
-public:
-	FLayer()
-	{
-		Maho::ForEach<FLayers>(Maho::FSerialTraversePolicy{}, [this](auto TypeTag)
-		{
-			using T = typename decltype(TypeTag)::Type;
-			if (auto* Child = Load(T::GetModulePath()))
-			{
-				auto Cmd = std::make_unique<FInstallCommand>();
-				Cmd->Child = Child;
-				Enqueue(std::move(Cmd));
-			}
-		});
-		FlushCommands();
-	}
-
-	~FLayer() override
-	{
-		for (FLayerBase* L : Layers)
-		{
-			delete L;
-		}
-		Layers.clear();
-	}
-
-	template <typename T> requires FModuleInstance<T>
-	void Install()
-	{
-		if (auto* Child = Load(T::GetModulePath()))
-		{
-			auto Cmd = std::make_unique<FInstallCommand>();
-			Cmd->Child = Child;
-			Enqueue(std::move(Cmd));
+			DispatchImpl<TRest...>(Layer, Stage, TTypeList<TRest...>{});
 		}
 	}
 
-	void Uninstall(FLayerBase* Child)
+	template <typename... TRest>
+	void DispatchImpl(FLayerBase*, const std::type_index&, TTypeList<>)
 	{
-		auto Cmd = std::make_unique<FUninstallCommand>();
-		Cmd->Child = Child;
-		Enqueue(std::move(Cmd));
 	}
 
-	/**
-	 * Apply pending install/uninstall commands at a safe point. Commands were
-	 * Enqueued from any thread; this drains them FIFO per catalog lane:
-	 *   Install   → adopt the child into Layers
-	 *   Uninstall → release the child (delete + erase from Layers)
-	 */
-	virtual void FlushCommands()
-	{
-		while (auto Cmd = FQueue::Dequeue(static_cast<std::uint64_t>(ELayerCommand::Install)))
-		{
-			auto* Inst = dynamic_cast<FInstallCommand*>(Cmd.get());
-			if (Inst && Inst->Child)
-			{
-				Layers.push_back(Inst->Child);
-			}
-		}
-		while (auto Cmd = FQueue::Dequeue(static_cast<std::uint64_t>(ELayerCommand::Uninstall)))
-		{
-			auto* Un = dynamic_cast<FUninstallCommand*>(Cmd.get());
-			if (Un && Un->Child)
-			{
-				auto It = std::find(Layers.begin(), Layers.end(), Un->Child);
-				if (It != Layers.end())
-				{
-					Layers.erase(It);
-				}
-				delete Un->Child;
-			}
-		}
-	}
+	inline static const std::type_index NoStage = std::type_index(typeid(void));
 
-	/** Type-agnostic query over a type table — FLayerBase composes Core::Query. */
-	[[nodiscard]] constexpr auto Query() const
-	{
-		return TQuery<FLayers>{};
-	}
-
-	/**
-	 * Drive the installed instances level-by-level. FLevels is the compile-time
-	 * level table (e.g. Topo::TLevels_t<FLayers, Key>); at each level every
-	 * installed instance whose type is IN that level receives Visitor(T&) via
-	 * DispatchInstance (first match in the level wins). Levels serialize
-	 * (barrier after each); instances within a level run in parallel on the
-	 * inherited scheduler.
-	 *
-	 *   Layer.ForEach<Topo::TLevels_t<FLayers, FDefaultSlot>>([](auto& L) { L.Main(); });
-	 */
-	template <typename FLevels, typename TVisitor>
-	void ForEach(TVisitor&& Visitor)
-	{
-		// Compile-time branch: if FLevels is an all-singleton type table → drive
-		// via T::Get(); otherwise (instance type table) → dispatch against Layers.
-		if constexpr (LayerDetail::TAllSingleton<FLevels>::value)
-		{
-			// singleton branch: every level type is a TSingleton → T::Get()
-			Maho::ForEach<FLevels>(Maho::FSerialTraversePolicy{}, [&](auto LevelTag)
-			{
-				using FLevel = typename decltype(LevelTag)::Type;
-				std::vector<std::function<void()>> Tasks;
-				Tasks.reserve(FLevel::Count);
-				Maho::ForEach<FLevel>(Maho::FSerialTraversePolicy{}, [&](auto TypeTag)
-				{
-					using T = typename decltype(TypeTag)::Type;
-					Tasks.emplace_back([&] { Visitor(T::Get()); });
-				});
-				Parallel::FParallelScheduler::ForEach(Tasks, [](const std::function<void()>& T) { return T; });
-			});
-		}
-		else
-		{
-			// instance branch: match installed Layers against each level's types
-			Maho::ForEach<FLevels>(Maho::FSerialTraversePolicy{}, [this, &Visitor](auto LevelTag)
-			{
-				using FLevel = typename decltype(LevelTag)::Type;
-				std::vector<std::function<void()>> Tasks;
-				Tasks.reserve(Layers.size());
-				for (FLayerBase* L : Layers)
-				{
-					Tasks.emplace_back([L, &Visitor]
-					{
-						DispatchInstance(FLevel{}, L, Visitor);
-					});
-				}
-				Parallel::FParallelScheduler::ForEach(Tasks, [](const std::function<void()>& T) { return T; });
-			});
-		}
-	}
-
-private:
-	FLayerBase* Load(std::string_view DLLPath)
-	{
-		auto& M = LoadedModules.emplace_back();
-		bool bLoaded = M.Load(DLLPath);
-		if (bLoaded)
-		{
-			using CreateFunction = FLayerBase* (*)();
-			auto Create = M.GetProcAs<CreateFunction>("CreateLayer");
-			if (Create)
-			{
-				return Create();
-			}
-		}
-		LoadedModules.pop_back();
-		return nullptr;
-	}
-
-private:
-	std::vector<FLayerBase*> Layers;
-
-	std::vector<FAssembly> LoadedModules;
+	TContext& Context;
+	std::vector<FNode> NodeStorage;
+	std::vector<FTaskGraphNode*> BaseNodes;
 };
 
 } // namespace Maho
-
-#define MAHO_DECLARE_LAYER(CustomBase, AppDLL)          \
-public:                                                 \
-	static Maho::FLayerBase* CreateLayer()          	\
-	{                                                   \
-		return new CustomBase();                        \
-	}                                                   \
-	static std::string_view GetModulePath()             \
-	{                                                   \
-		return AppDLL;                                  \
-	}                                                   \
-
