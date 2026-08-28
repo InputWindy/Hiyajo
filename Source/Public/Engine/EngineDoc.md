@@ -3,7 +3,7 @@
 ## 代码文件
 
 - [Layer.h](Layer.h) — 匿名层 + stage 管线 + 任务图（header-only：`FLayerBase` / `FLayer` / `FLayerTaskGraph` / `MAHO_DECLARE_LAYER`）
-- [Engine.h](Engine.h) — 引擎主循环（`IBeginFrame` / `ITick` / `IEndFrame` / `IEnginePipeline` / `FEngineLayer` / `IEngine`）
+- [Engine.h](Engine.h) — 引擎主循环（`IBeginFrame` / `ITick` / `IEndFrame` / `IEnginePipeline` / `FEngineLayer` / `FEngineBase`）
 
 ## 概念——匿名层 + 有序 stage 管线
 
@@ -105,19 +105,19 @@ class FEngineLayer : public FLayer<IEnginePipeline> {};
 
 业务 feature 继承它，实现三 stage 方法；跨 feature 依赖在构造函数里 `AddDependency<ITick, FOther, IBeginFrame>()`。
 
-### IEngine —— 引擎锚点
+### FEngineBase —— 引擎基类
 
 ```cpp
-class IEngine : public IPlugin<IInit, IMain, IShutdown>
+class FEngineBase : public IPlugin<IInit, IMain, IExit, IShutdown>
 {
     int Main() final override;   // 主循环：Flush → 应用挂起变更 → Init → Compile → Execute
 protected:
-    void Install(FEngineLayer*);    // 下帧生效
-    void Uninstall(FEngineLayer*);
+    void Install(FEngineLayer*);          // 下帧生效
+    void TryUninstall(std::string_view);  // 匿名卸载（按层名）
 };
 ```
 
-`IEngine` 是入口插件导出的唯一锚点（`MAHO_DECLARE_ENGINE` + `extern "C" CreateEngine()` bridge）。`EntryPoint` 经 `FAssembly` 查 `"CreateEngine"` → `IEngine*` → `Initialize/Main/Shutdown`。
+`FEngineBase` 是入口插件导出的唯一锚点（`MAHO_DECLARE_ENGINE` + `extern "C" CreateEngine()` bridge）。`EntryPoint` 经 `FAssembly` 查 `"CreateEngine"` → `FEngineBase*` → `Initialize/Main/Shutdown`。它持有 feature 实例 + DLL 的所有权（`unique_ptr` 容器），非纯接口。
 
 ## 插件宏
 
@@ -128,7 +128,7 @@ MAHO_DECLARE_LAYER(FWorld)
 // 名字取自类型名字符串化，依赖声明用同一类型推导，拓扑键自洽。
 
 MAHO_DECLARE_ENGINE(FMyApp, "MyApp.dll")
-// 展开：static Maho::IEngine* CreateEngine() { return new FMyApp(); }
+// 展开：static Maho::FEngineBase* CreateEngine() { return new FMyApp(); }
 //      + static std::string_view GetModulePath() { return "MyApp.dll"; }
 ```
 
@@ -143,7 +143,7 @@ MAHO_DECLARE_ENGINE(FMyApp, "MyApp.dll")
 ```
 
 - **引擎插件**：`.cplugin Dependencies` 仅声明同层插件依赖；引擎核心由 codegen 自动 link。
-- **项目核心（入口插件）**：link 引擎核心 + 全部挂载引擎插件 + 项目插件；是唯一宿主（继承 `IEngine` 并导出 `CreateEngine()`）。
+- **项目核心（入口插件）**：link 引擎核心 + 全部挂载引擎插件 + 项目插件；是唯一宿主（继承 `FEngineBase` 并导出 `CreateEngine()`）。
 - **项目插件**：`.cplugin Dependencies` 声明父（项目核心）+ 引擎插件依赖；经传递获得引擎核心 include。
 
 **include 方向（编译期）**：
@@ -155,7 +155,7 @@ MAHO_DECLARE_ENGINE(FMyApp, "MyApp.dll")
 
 ## 生命周期
 
-`FLayer`/`FEngineLayer` 不强制 `IInit/IShutdown`——需要生命周期的能力经 `IPlugin<...>` 组合（Core/Interface.h），由用户在驱动循环里显式调用。`IEngine` 是唯一拥有完整生命周期（IInit/IMain/IShutdown）的锚点。析构不静默 teardown。
+`FLayer`/`FEngineLayer` 不强制 `IInit/IShutdown`——需要生命周期的能力经 `IPlugin<...>` 组合（Core/Interface.h），由用户在驱动循环里显式调用。`FEngineBase` 是唯一拥有完整生命周期（IInit/IMain/IExit/IShutdown）的基类。析构不静默 teardown。
 
 ## 相关文档
 

@@ -116,15 +116,18 @@
 </section>
 
 <section class="class-panel">
-	<h3 class="class-name">IEngine<span class="class-kind">class : IPlugin&lt;IInit, IMain, IShutdown&gt;</span></h3>
-	<p class="class-desc">引擎锚点——生命周期能力 + 主循环。入口插件导出的唯一锚点，<span class="type">EntryPoint</span> 经 <code>FAssembly</code> 查 <code>"CreateEngine"</code> 拿到 <code>IEngine*</code>。</p>
+	<h3 class="class-name">FEngineBase<span class="class-kind">class : IPlugin&lt;IInit, IMain, IExit, IShutdown&gt;</span></h3>
+	<p class="class-desc">引擎基类——生命周期能力 + 主循环 + feature 所有权（unique_ptr 容器）。入口插件导出的唯一锚点，<span class="type">EntryPoint</span> 经 <code>FAssembly</code> 查 <code>"CreateEngine"</code> 拿到 <code>FEngineBase*</code>。</p>
 	<table class="api-table">
 		<tr><th style="width:46%">签名</th><th>说明</th></tr>
 		<tr><td class="sig"><code><span class="kw">void</span> Initialize(int, char**) <span class></code></td><td>启动钩子（默认空）</td></tr>
 		<tr><td class="sig"><code><span class="kw">int</span> Main() <span class="kw">final override</span></code></td><td>主循环：Flush → 应用挂起变更 → Init → Compile → Execute</td></tr>
-		<tr><td class="sig"><code><span class="kw">void</span> Shutdown() <span class="kw">override</span></code></td><td>关闭钩子（默认空）</td></tr>
+		<tr><td class="sig"><code><span class="kw">void</span> Shutdown() <span class="kw">override</span></code></td><td>释放全部 feature + DLL</td></tr>
+		<tr><td class="sig"><code><span class="kw">void</span> RequestExit() <span class="kw">final override</span></code></td><td>请求主循环下一帧边界退出</td></tr>
 		<tr><td class="sig"><code><span class="kw">void</span> Install(FEngineLayer*)</code></td><td>安装语法糖（下帧生效）</td></tr>
-		<tr><td class="sig"><code><span class="kw">void</span> Uninstall(FEngineLayer*)</code></td><td>卸载语法糖（下帧生效）</td></tr>
+		<tr><td class="sig"><code><span class="kw">void</span> Install(string_view, symbol)</code></td><td>动态加载 DLL 并安装</td></tr>
+		<tr><td class="sig"><code><span class="kw">void</span> RequestUninstall(FEngineLayer*)</code></td><td>卸载请求（无条件入 pending）</td></tr>
+		<tr><td class="sig"><code><span class="kw">void</span> TryUninstall(string_view)</code></td><td>匿名卸载（按层名）</td></tr>
 	</table>
 </section>
 
@@ -141,9 +144,9 @@
 
 <section class="class-panel">
 	<h3 class="class-name">MAHO_DECLARE_ENGINE(EngineType, DLL)<span class="class-kind">宏</span></h3>
-	<p class="class-desc">在引擎类体内展开 <code>IEngine*</code> 工厂 + 模块路径。入口插件的 <code>extern "C" CreateEngine()</code> bridge 转发到 <code>CreateEngine()</code>。</p>
+	<p class="class-desc">在引擎类体内展开 <code>FEngineBase*</code> 工厂 + 模块路径。入口插件的 <code>extern "C" CreateEngine()</code> bridge 转发到 <code>CreateEngine()</code>。</p>
 	<div class="muted" style="font-family:Consolas,monospace;font-size:13px;background:var(--code-bg);padding:10px 14px;border-radius:6px;">
-		static Maho::IEngine* CreateEngine() { return new EngineType(); }<br>
+		static Maho::FEngineBase* CreateEngine() { return new EngineType(); }<br>
 		static std::string_view GetModulePath() { return DLL; }
 	</div>
 </section>

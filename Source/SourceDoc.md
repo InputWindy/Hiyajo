@@ -19,5 +19,5 @@
 ### 分层
 
 - **Core**（`Public/Core/`）：类型无关基建积木——TypeList/Query/Singleton/Interface/TaskGraph/Assembly/Fatal/ThreadPool。
-- **Engine**（`Public/Engine/`）：层体系——`Layer.h`（FLayerBase/FLayer/FLayerTaskGraph/插件宏）+ `Engine.h`（主循环三阶段 + IEnginePipeline/FEngineLayer/IEngine）。
+- **Engine**（`Public/Engine/`）：层体系——`Layer.h`（FLayerBase/FLayer/FLayerTaskGraph/插件宏）+ `Engine.h`（主循环三阶段 + IEnginePipeline/FEngineLayer/FEngineBase）。
 - **Plugins**（`Plugins/`）：可安装插件——`Common/`（服务插件，纯库或单例）。引擎零 app 假设，一切逻辑在插件。
