@@ -2,13 +2,13 @@
 
 #include <Core/Interface.h>
 #include <Core/Singleton.h>
-#include <Engine/Layer.h>
+#include <Maho.h>
 
 #include <functional>
 #include <memory>
 #include <string_view>
 
-// Win32 <Windows.h> #defines CreateWindow â†’ CreateWindowW; keep the clean API name.
+// Win32 <Windows.h> #defines CreateWindow â†?CreateWindowW; keep the clean API name.
 #ifdef CreateWindow
 #	undef CreateWindow
 #endif
@@ -18,11 +18,11 @@ namespace Maho
 namespace Platform
 {
 
-/** Native surface handle â€” opaque (GLFWwindow*, EGLContext, ANativeWindow*, UIView*, ...). */
+/** Native surface handle â€?opaque (GLFWwindow*, EGLContext, ANativeWindow*, UIView*, ...). */
 using FNativeSurface = void*;
 
 /**
- * Minimal platform interface â€” only the native surface for the RHI.
+ * Minimal platform interface â€?only the native surface for the RHI.
  * Not every platform has a "window" (headless, Android surface, iOS view),
  * so window semantics are hidden behind this single accessor.
  */
@@ -36,10 +36,10 @@ public:
 };
 
 /**
- * Platform system â€” native surface + events (TSingleton service). Provides a
+ * Platform system â€?native surface + events (TSingleton service). Provides a
  * GLFW window (desktop) or a headless EGL pbuffer context. The host drives the
  * fixed lifecycle: Initialize() / Shutdown(); events are pumped explicitly via
- * PollEvents() (no implicit stage loop â€” the engine has none).
+ * PollEvents() (no implicit stage loop â€?the engine has none).
  *
  *   Platform::FPlatformSystem::Get().Initialize(0, nullptr);
  *   Platform::FPlatformSystem::Get().CreateWindow(1280, 720, "MyGame");
@@ -54,7 +54,7 @@ class FPlatformSystem
 	, public IPlugin<IInit, IShutdown>
 {
 public:
-	/** Process-unique accessor â€” defined in Platform.cpp (in Platform.dll). */
+	/** Process-unique accessor â€?defined in Platform.cpp (in Platform.dll). */
 	static FPlatformSystem& Get();
 
 	void Initialize(int Argc, char** Argv) override;

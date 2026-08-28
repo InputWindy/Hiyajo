@@ -1,10 +1,10 @@
 #pragma once
 
-// Timer â€” profiling + game clock (engine Common, TSingleton). FScopedTimer is
+// Timer â€?profiling + game clock (engine Common, TSingleton). FScopedTimer is
 // RAII scope timing; FGameClock is a lazily-advanced real/game clock with
 // time-scale and pause.
 #include <Core/Singleton.h>
-#include <Engine/Layer.h>
+#include <Maho.h>
 
 #include <chrono>
 #include <cstdint>
@@ -18,7 +18,7 @@ namespace Timer
 {
 
 /**
- * Stack-based scope profiler â€” hierarchical timing instrumentation.
+ * Stack-based scope profiler â€?hierarchical timing instrumentation.
  *
  *   void Render()
  *   {
@@ -33,7 +33,7 @@ class FTimer
 	, public IPlugin<IInit, IShutdown>
 {
 public:
-	/** Process-unique accessor â€” defined in Timer.cpp (in Timer.dll). */
+	/** Process-unique accessor â€?defined in Timer.cpp (in Timer.dll). */
 	static FTimer& Get();
 
 	void Initialize(int Argc, char** Argv) override;
@@ -70,7 +70,7 @@ protected:
 	FNode* Current = &Root;
 };
 
-/** RAII scope timer â€” BeginScope on construction, EndScope on destruction. */
+/** RAII scope timer â€?BeginScope on construction, EndScope on destruction. */
 class FScopedTimer
 {
 public:
@@ -82,7 +82,7 @@ public:
 };
 
 /**
- * Game clock â€” real/game time with time scale and pause. Lazily advanced:
+ * Game clock â€?real/game time with time scale and pause. Lazily advanced:
  * GetGameSeconds() accumulates wall-clock delta Ã— TimeScale since the last
  * advance, so no per-frame Tick is required.
  */
@@ -91,7 +91,7 @@ class FGameClock
 	, public IPlugin<IInit, IShutdown>
 {
 public:
-	/** Process-unique accessor â€” defined in Timer.cpp (in Timer.dll). */
+	/** Process-unique accessor â€?defined in Timer.cpp (in Timer.dll). */
 	static FGameClock& Get();
 
 	void Initialize(int Argc, char** Argv) override;

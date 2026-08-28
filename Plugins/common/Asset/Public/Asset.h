@@ -1,11 +1,11 @@
 #pragma once
 
-// Asset â€” asset registry (engine Common, TSingleton). FAssetPath logical
-// "/Game/..." â†’ FAssetData metadata. Scan() indexes a content dir, Find()
+// Asset â€?asset registry (engine Common, TSingleton). FAssetPath logical
+// "/Game/..." â†?FAssetData metadata. Scan() indexes a content dir, Find()
 // resolves a logical path, Resolve() maps it to a physical file via FPaths
 // (engine Common root alias), Load() reads raw bytes.
 #include <Core/Singleton.h>
-#include <Engine/Layer.h>
+#include <Maho.h>
 
 #include <cstdint>
 #include <filesystem>
@@ -31,7 +31,7 @@ enum class EAssetType : std::uint8_t
 };
 
 /**
- * Logical asset path â€” no extension, no object part (no UObject system).
+ * Logical asset path â€?no extension, no object part (no UObject system).
  *   const FAssetPath P = FAssetPath("/Game/Materials/M_Metal");
  */
 class FAssetPath
@@ -60,7 +60,7 @@ struct FAssetData
 };
 
 /**
- * Asset registry: logical path â†’ metadata. Scan() walks a content directory
+ * Asset registry: logical path â†?metadata. Scan() walks a content directory
  * and indexes every asset file; Find() resolves a logical path.
  */
 class FAssetRegistry
@@ -68,7 +68,7 @@ class FAssetRegistry
 	, public IPlugin<IInit, IShutdown>
 {
 public:
-	/** Process-unique accessor â€” defined in Asset.cpp (in Asset.dll). */
+	/** Process-unique accessor â€?defined in Asset.cpp (in Asset.dll). */
 	static FAssetRegistry& Get();
 
 	void Initialize(int Argc, char** Argv) override;
@@ -76,7 +76,7 @@ public:
 
 	/**
 	 * Recursively index a content directory.
-	 * Content/Materials/M_Metal.material â†’ /Game/Materials/M_Metal (Material).
+	 * Content/Materials/M_Metal.material â†?/Game/Materials/M_Metal (Material).
 	 */
 	void Scan(const std::filesystem::path& ContentDir, std::string_view MountAlias = "Game");
 
@@ -96,7 +96,7 @@ protected:
 	FAssetRegistry() = default;
 
 	mutable std::mutex Mutex;
-	std::map<std::string, FAssetData> Assets;   // logical path string â†’ metadata
+	std::map<std::string, FAssetData> Assets;   // logical path string â†?metadata
 };
 
 } // namespace Asset

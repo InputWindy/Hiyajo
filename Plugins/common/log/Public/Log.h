@@ -5,7 +5,7 @@
 
 #include <Core/Singleton.h>
 #include <Maho.h>
-#include <Engine/Layer.h>
+#include <Maho.h>
 
 #include <string_view>
 
@@ -13,9 +13,9 @@ namespace Maho
 {
 
 /**
- * Logging singleton â€” a CRTP singleton (T::Get()) wrapping spdlog. Initialize
+ * Logging singleton â€?a CRTP singleton (T::Get()) wrapping spdlog. Initialize
  * configures the thread-safe stdout-color logger (honoring a `--log-level` arg
- * if present); Shutdown flushes+drops it. Logger is public â€” just reach it via
+ * if present); Shutdown flushes+drops it. Logger is public â€?just reach it via
  * FLog::Get().Logger (or the FLog::Info/Warn/Error passthroughs).
  *
  *   FLog::Get().Initialize(argc, argv);
@@ -27,10 +27,10 @@ class FLog
 	, public IPlugin<IInit, IShutdown>
 {
 public:
-	/** Process-unique accessor â€” defined in Log.cpp (in Log.dll). */
+	/** Process-unique accessor â€?defined in Log.cpp (in Log.dll). */
 	static FLog& Get();
 
-	/** The shared logger â€” all engine/service logging routes through it. */
+	/** The shared logger â€?all engine/service logging routes through it. */
 	std::shared_ptr<spdlog::logger> Logger;
 
 	/** Bring the logger up (ISingleton::Initialize). */

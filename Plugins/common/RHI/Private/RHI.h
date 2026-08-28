@@ -1,9 +1,8 @@
 ﻿#pragma once
 
-#include "RHIAPI.h"
+#include <RHI/RHIAPI.h>
 #include <RHI/RHICommandList.h>
 #include <RHI/RHIEnums.h>
-#include <RHI/RHIResourceManager.h>
 #include <RHI/RHIResources.h>
 
 #include <cstdint>
@@ -27,16 +26,16 @@ struct FRHIInitDesc
 /**
  * Render-hardware interface. Public surface has no Vulkan / VMA types.
  *
- * Device creates resources; prefer FRHIResourceManager for Acquire/Release.
+ * Device creates resources via internal factories.
  * Always exposes Graphics / Compute / Transfer logical queues.
  */
-class MAHO_RHI_API IRHI
+class MAHO_RHI_API IDynamicRHI
 {
 public:
-	virtual ~IRHI() = default;
+	virtual ~IDynamicRHI() = default;
 
-	IRHI(const IRHI&) = delete;
-	IRHI& operator=(const IRHI&) = delete;
+	IDynamicRHI(const IDynamicRHI&) = delete;
+	IDynamicRHI& operator=(const IDynamicRHI&) = delete;
 
 	virtual bool Initialize(const FRHIInitDesc& Desc) = 0;
 	virtual void Shutdown() = 0;
@@ -49,8 +48,7 @@ public:
 
 	[[nodiscard]] virtual bool IsInitialized() const = 0;
 
-	[[nodiscard]] virtual FRHIResourceManager& GetResourceManager() = 0;
-	[[nodiscard]] virtual IRHIMemoryAllocator* GetMemoryAllocator() = 0;
+	[[nodiscard]] virtual IDynamicRHIMemoryAllocator* GetMemoryAllocator() = 0;
 
 	[[nodiscard]] virtual FRHIQueue& GetGraphicsQueue() = 0;
 	[[nodiscard]] virtual FRHIQueue& GetComputeQueue() = 0;
@@ -64,14 +62,13 @@ public:
 	virtual void WaitForFence(FRHIFence* Fence, std::uint64_t TimeoutNs = (std::numeric_limits<std::uint64_t>::max)()) = 0;
 	/** Non-blocking fence query (vkGetFenceStatus). */
 	[[nodiscard]] virtual bool IsFenceSignaled(FRHIFence* Fence) = 0;
+	/** Reset a fence to unsignaled (before re-submitting work with it). */
+	virtual void ResetFence(FRHIFence* Fence) = 0;
 
 	[[nodiscard]] virtual FRHISemaphore* CreateGpuSemaphore() = 0;
 	virtual void DestroyGpuSemaphore(FRHISemaphore* Semaphore) = 0;
 
-	virtual void UpdateBuffer(FRHIBuffer* Buffer, std::uint64_t Offset, std::uint64_t Size, const void* Data) = 0;
-	virtual void UpdateDescriptorSets(const FRHIDescriptorWrite* Writes, std::uint32_t Count) = 0;
-
-	/** Internal factories used by FRHIResourceManager. Prefer Acquire* on the manager. */
+	/** Internal resource factories. */
 	[[nodiscard]] virtual FRHIBuffer* CreateBuffer(const FRHIBufferDesc& Desc) = 0;
 	virtual void DestroyBuffer(FRHIBuffer* Buffer) = 0;
 	[[nodiscard]] virtual FRHITexture* CreateTexture(const FRHITextureDesc& Desc) = 0;
@@ -158,16 +155,8 @@ public:
 		std::uint32_t* OutMissStride = nullptr) = 0;
 
 protected:
-	IRHI() = default;
+	IDynamicRHI() = default;
 };
-
-/** Deleter that frees the object inside Maho.dll (safe across EXE/DLL heaps). */
-struct MAHO_RHI_API FRHIDeleter
-{
-	void operator()(IRHI* RHI) const;
-};
-
-using FRHIPtr = std::unique_ptr<IRHI, FRHIDeleter>;
 
 /** Creates the RHI backend selected by FRHIInitDesc::Backend. */
 class MAHO_RHI_API FRHIFactory
@@ -175,7 +164,7 @@ class MAHO_RHI_API FRHIFactory
 public:
 	FRHIFactory() = delete;
 
-	[[nodiscard]] static FRHIPtr Create(ERHIBackend Backend);
+	[[nodiscard]] static IDynamicRHI* Create(ERHIBackend Backend);
 };
 
 } // namespace Maho

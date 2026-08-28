@@ -1,7 +1,7 @@
 #pragma once
 
 #include <Core/Singleton.h>
-#include <Engine/Layer.h>
+#include <Maho.h>
 
 #include <cstdint>
 #include <functional>
@@ -17,7 +17,7 @@ namespace Name
 {
 
 /**
- * Interned immutable string identifier â€” pooled storage, O(1) compare.
+ * Interned immutable string identifier â€?pooled storage, O(1) compare.
  * Constructing a FName interns the string into the global pool; identical
  * strings share one entry. Default-constructed FName is None (empty).
  *
@@ -46,19 +46,19 @@ private:
 	std::uint32_t Id = 0;
 };
 
-/** Global interned string pool â€” a singleton service. */
+/** Global interned string pool â€?a singleton service. */
 class FNamePool
 	: public TSingleton<FNamePool>
 	, public IPlugin<IInit, IShutdown>
 {
 public:
-	/** Process-unique accessor â€” declared here, defined in Name.cpp (in Name.dll). */
+	/** Process-unique accessor â€?declared here, defined in Name.cpp (in Name.dll). */
 	static FNamePool& Get();
 
 	void Initialize(int, char**) override { free(); }
 	void Shutdown() override { free(); }
 
-	/** Intern a string â€” returns the canonical FName (thread-safe). */
+	/** Intern a string â€?returns the canonical FName (thread-safe). */
 	FName Intern(std::string_view Str);
 
 	/** The string stored at Id (the reverse of Intern). */

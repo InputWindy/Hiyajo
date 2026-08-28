@@ -1,7 +1,6 @@
-#pragma once
+﻿#pragma once
 
-#include <RHI/RHI.h>
-#include <RHI/RHIResourceManager.h>
+#include "RHI.h"
 
 #include "VulkanCommandList.h"
 #include "VulkanMemory.h"
@@ -15,8 +14,8 @@
 namespace Maho
 {
 
-/** Minimal Vulkan implementation of IRHI. Not part of the public Maho API surface. */
-class FVulkanRHI final : public IRHI
+/** Minimal Vulkan implementation of IDynamicRHI. Not part of the public Maho API surface. */
+class FVulkanRHI final : public IDynamicRHI
 {
 public:
 	FVulkanRHI();
@@ -33,8 +32,7 @@ public:
 
 	[[nodiscard]] virtual bool IsInitialized() const override;
 
-	[[nodiscard]] virtual FRHIResourceManager& GetResourceManager() override;
-	[[nodiscard]] virtual IRHIMemoryAllocator* GetMemoryAllocator() override;
+	[[nodiscard]] virtual IDynamicRHIMemoryAllocator* GetMemoryAllocator() override;
 
 	[[nodiscard]] virtual FRHIQueue& GetGraphicsQueue() override;
 	[[nodiscard]] virtual FRHIQueue& GetComputeQueue() override;
@@ -47,12 +45,11 @@ public:
 	virtual void DestroyFence(FRHIFence* Fence) override;
 	virtual void WaitForFence(FRHIFence* Fence, std::uint64_t TimeoutNs) override;
 	[[nodiscard]] virtual bool IsFenceSignaled(FRHIFence* Fence) override;
+	virtual void ResetFence(FRHIFence* Fence) override;
 
 	[[nodiscard]] virtual FRHISemaphore* CreateGpuSemaphore() override;
 	virtual void DestroyGpuSemaphore(FRHISemaphore* Semaphore) override;
 
-	virtual void UpdateBuffer(FRHIBuffer* Buffer, std::uint64_t Offset, std::uint64_t Size, const void* Data) override;
-	virtual void UpdateDescriptorSets(const FRHIDescriptorWrite* Writes, std::uint32_t Count) override;
 
 	[[nodiscard]] virtual FRHIBuffer* CreateBuffer(const FRHIBufferDesc& Desc) override;
 	virtual void DestroyBuffer(FRHIBuffer* Buffer) override;
@@ -168,7 +165,7 @@ private:
 	bool CreateFramebuffers();
 	bool CreateCommandPoolAndBuffer();
 	bool CreateLogicalQueuesAndPools();
-	bool CreateMemoryAllocatorAndManager();
+	bool CreateMemoryAllocator();
 	bool CreateSyncObjects();
 	bool RecreateSwapchain();
 
@@ -257,7 +254,6 @@ private:
 	PFN_vkGetBufferDeviceAddressKHR GetBufferDeviceAddressKHR = nullptr;
 
 	std::unique_ptr<FVulkanMemoryAllocator> MemoryAllocator;
-	std::unique_ptr<FRHIResourceManager> ResourceManager;
 };
 
 } // namespace Maho

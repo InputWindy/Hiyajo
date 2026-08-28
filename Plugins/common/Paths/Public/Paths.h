@@ -1,7 +1,7 @@
 #pragma once
 
 #include <Core/Singleton.h>
-#include <Engine/Layer.h>
+#include <Maho.h>
 
 #include <filesystem>
 #include <map>
@@ -13,19 +13,19 @@ namespace Maho
 namespace Paths
 {
 
-/** Path resolution singleton â€” engine/project root aliases â†’ physical paths. */
+/** Path resolution singleton â€?engine/project root aliases â†?physical paths. */
 class FPaths
 	: public TSingleton<FPaths>
 	, public IPlugin<IInit, IShutdown>
 {
 public:
-	/** Process-unique accessor â€” declared here, defined in Paths.cpp (in Paths.dll). */
+	/** Process-unique accessor â€?declared here, defined in Paths.cpp (in Paths.dll). */
 	static FPaths& Get();
 
 	void Initialize(int, char**) override { Roots.clear(); }
 	void Shutdown() override { Roots.clear(); }
 
-	/** Register a root alias (e.g. "Engine" â†’ <engine dir>). */
+	/** Register a root alias (e.g. "Engine" â†?<engine dir>). */
 	void SetRoot(std::string_view Alias, std::filesystem::path Path);
 
 	/** Resolve "Alias/Sub/Path" (or "Alias:Sub/Path") to a physical path. */

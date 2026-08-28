@@ -8,6 +8,8 @@
 namespace Maho
 {
 
+class FVulkanMemoryAllocator;
+
 class FVulkanQueue final : public FRHIQueue
 {
 public:
@@ -73,11 +75,13 @@ public:
 		VkDevice InDevice,
 		VkCommandPool InPool,
 		VkCommandBuffer InBuffer,
+		FVulkanMemoryAllocator* InAllocator,
 		const FRTRuntime& InRT)
 		: Type(InType)
 		, Device(InDevice)
 		, Pool(InPool)
 		, Buffer(InBuffer)
+		, Allocator(InAllocator)
 		, RT(InRT)
 	{
 	}
@@ -101,6 +105,8 @@ public:
 	virtual void End() override;
 
 	virtual void CopyBuffer(FRHIBuffer* Src, std::uint64_t SrcOffset, FRHIBuffer* Dst, std::uint64_t DstOffset, std::uint64_t Size) override;
+	virtual void UpdateBuffer(FRHIBuffer* Buffer, std::uint64_t Offset, std::uint64_t Size, const void* Data) override;
+	virtual void UpdateDescriptorSets(const FRHIDescriptorWrite* Writes, std::uint32_t Count) override;
 	virtual void CopyBufferToTexture(FRHIBuffer* Src, FRHITexture* Dst, std::uint64_t SrcOffset) override;
 	virtual void CopyTextureToBuffer(FRHITexture* Src, FRHIBuffer* Dst, std::uint64_t DstOffset) override;
 	virtual void FillBuffer(FRHIBuffer* Buffer, std::uint64_t Offset, std::uint64_t Size, std::uint32_t Data) override;
@@ -198,6 +204,7 @@ private:
 	VkDevice Device = VK_NULL_HANDLE;
 	VkCommandPool Pool = VK_NULL_HANDLE;
 	VkCommandBuffer Buffer = VK_NULL_HANDLE;
+	FVulkanMemoryAllocator* Allocator = nullptr;
 	FRTRuntime RT;
 	bool bRecording = false;
 

@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "RHIAPI.h"
 #include <RHI/RHIEnums.h>
@@ -11,18 +11,16 @@
 namespace Maho
 {
 
-class FRHIResourceManager;
-
 struct FRHIMemoryAllocation
 {
 	void* Native = nullptr;
 	void* Mapped = nullptr;
 };
 
-class MAHO_RHI_API IRHIMemoryAllocator
+class MAHO_RHI_API IDynamicRHIMemoryAllocator
 {
 public:
-	virtual ~IRHIMemoryAllocator() = default;
+	virtual ~IDynamicRHIMemoryAllocator() = default;
 
 	virtual void Free(FRHIMemoryAllocation& Alloc) = 0;
 	virtual void* Map(FRHIMemoryAllocation& Alloc) = 0;
@@ -45,8 +43,6 @@ public:
 	}
 
 protected:
-	friend class FRHIResourceManager;
-
 	FRHIResource() = default;
 
 	std::string DebugName;
@@ -592,7 +588,7 @@ protected:
 
 struct FRHISbtRecord
 {
-	FRHIShaderModule* Module = nullptr;   // null → miss/empty record
+	FRHIShaderModule* Module = nullptr;   // null 鈫?miss/empty record
 	const char* EntryPoint = "main";
 };
 

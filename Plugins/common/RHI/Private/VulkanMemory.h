@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <RHI/RHIResources.h>
 
@@ -11,7 +11,7 @@
 namespace Maho
 {
 
-class FVulkanMemoryAllocator final : public IRHIMemoryAllocator
+class FVulkanMemoryAllocator final : public IDynamicRHIMemoryAllocator
 {
 public:
 	FVulkanMemoryAllocator() = default;

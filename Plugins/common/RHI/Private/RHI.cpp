@@ -8,11 +8,13 @@
 
 #include <RHI/RHIServer.h>
 
+#include <ConsoleVariable.h>
 #include <Log.h>
 
-#include <atomic>
+#include <map>
+#include <vector>
 
-#include "RHIResourceManager.cpp"
+#include "RHI.h"
 #include "VulkanCommandList.cpp"
 #include "VulkanMemory.cpp"
 #include "VulkanResources.cpp"
@@ -21,201 +23,544 @@
 namespace Maho
 {
 
-FRHISystem& FRHISystem::Get()
+namespace
 {
-	static FRHISystem Instance;
-	return Instance;
-}
 
-FRHISystem::FRHISystem() = default;
+static ConsoleVariable::TAutoConsoleVariable<int> GCVarRHIWidth(
+	"r.RHI.Framebuffer.Width",
+	1280,
+	"RHI framebuffer width (used until a real window is bound)");
 
-FRHISystem::~FRHISystem()
+static ConsoleVariable::TAutoConsoleVariable<int> GCVarRHIHeight(
+	"r.RHI.Framebuffer.Height",
+	720,
+	"RHI framebuffer height (used until a real window is bound)");
+
+static ConsoleVariable::TAutoConsoleVariable<std::string> GCVarRHIBackend(
+	"r.RHI.Backend",
+	"vulkan",
+	"RHI backend name (vulkan)");
+
+[[nodiscard]] ERHIBackend BackendFromName(std::string_view Name)
 {
-	if (IsRunning())
+	if (Name == "vulkan" || Name == "Vulkan")
 	{
-		Shutdown();
+		return ERHIBackend::Vulkan;
 	}
+	MAHO_LOG_CORE_WARN("FRHI: unknown backend '{}' — falling back to Vulkan", std::string(Name));
+	return ERHIBackend::Vulkan;
 }
 
-void FRHISystem::Initialize(int Argc, char** Argv)
+} // namespace
+
+// ── lifecycle ──────────────────────────────────────────────────────────────
+
+void FRHI::Initialize(int Argc, char** Argv)
 {
 	(void)Argc; (void)Argv;
-	FThreadedServer::Initialize();
+
+	// Device bring-up with CVar defaults (headless until a window is bound).
+	const int Width = GCVarRHIWidth.GetValue();
+	const int Height = GCVarRHIHeight.GetValue();
+	const ERHIBackend Backend = BackendFromName(GCVarRHIBackend.GetValue());
+	(void)InitializeRHI(nullptr, Width, Height, Backend);
 }
 
-void FRHISystem::Shutdown()
-{
-	FThreadedServer::Shutdown();
-}
-
-bool FRHISystem::OnInitialize()
-{
-	return true;
-}
-
-void FRHISystem::OnShutdown()
+void FRHI::Shutdown()
 {
 	ShutdownRHI();
-	ResetFrameFence();
-	MAHO_LOG_CORE_INFO("RHISystem: RHI worker shut down");
+	MAHO_LOG_CORE_INFO("FRHI: RHI shut down");
 }
 
-void FRHISystem::ResetFrameFence()
+// ── device bring-up / teardown ─────────────────────────────────────────────
+
+bool FRHI::InitializeRHI(void* NativeWindowHandle, int Width, int Height, ERHIBackend Backend)
 {
-	std::lock_guard<std::mutex> Lock(FenceMutex);
-	LastCompletedRenderFrame = 0;
-}
-
-void FRHISystem::WaitForRenderFrame(std::uint64_t FrameIndex)
-{
-	std::unique_lock<std::mutex> Lock(FenceMutex);
-	FenceCv.wait(Lock, [this, FrameIndex]()
-	{
-		return LastCompletedRenderFrame >= FrameIndex;
-	});
-}
-
-void FRHISystem::SignalRenderFrameComplete(std::uint64_t FrameIndex)
-{
-	{
-		std::lock_guard<std::mutex> Lock(FenceMutex);
-		if (FrameIndex > LastCompletedRenderFrame)
-		{
-			LastCompletedRenderFrame = FrameIndex;
-		}
-	}
-	FenceCv.notify_all();
-}
-
-void FRHISystem::ShutdownRHI()
-{
-	if (!RHI)
-	{
-		return;
-	}
-
-	if (!IsRunning())
-	{
-		RHI.reset();
-		return;
-	}
-
-	Submit([this]
-	{
-		if (RHI)
-		{
-			RHI->Shutdown();
-			RHI.reset();
-		}
-	});
-	Flush();
-}
-
-bool FRHISystem::InitializeRHI(void* NativeWindowHandle, int Width, int Height, ERHIBackend Backend)
-{
-	if (!IsRunning())
-	{
-		MAHO_LOG_CORE_ERROR("RHISystem::InitializeRHI: server not initialized");
-		return false;
-	}
-
 	if (!NativeWindowHandle)
 	{
-		MAHO_LOG_CORE_INFO("RHISystem::InitializeRHI: headless; skipping RHI");
+		MAHO_LOG_CORE_INFO("FRHI::InitializeRHI: headless; skipping RHI");
 		return true;
 	}
 
 	if (Width <= 0 || Height <= 0)
 	{
-		MAHO_LOG_CORE_ERROR("RHISystem::InitializeRHI: invalid framebuffer {}x{}", Width, Height);
+		MAHO_LOG_CORE_ERROR("FRHI::InitializeRHI: invalid framebuffer {}x{}", Width, Height);
 		return false;
 	}
 
-	std::atomic<bool> bOk{false};
-	Submit([this, Backend, NativeWindowHandle, Width, Height, &bOk]
+	RHI.reset(FRHIFactory::Create(Backend));
+	if (!RHI)
 	{
-		RHI = FRHIFactory::Create(Backend);
-		if (!RHI)
-		{
-			bOk.store(false);
-			return;
-		}
-
-		FRHIInitDesc Desc;
-		Desc.Backend = Backend;
-		Desc.NativeWindowHandle = NativeWindowHandle;
-		Desc.FramebufferWidth = Width;
-		Desc.FramebufferHeight = Height;
-
-		const bool bInitialized = RHI->Initialize(Desc);
-		if (!bInitialized)
-		{
-			RHI.reset();
-		}
-		bOk.store(bInitialized);
-	});
-	Flush();
-
-	if (!bOk.load())
-	{
-		MAHO_LOG_CORE_ERROR("RHISystem::InitializeRHI failed");
+		MAHO_LOG_CORE_ERROR("FRHI::InitializeRHI: FRHIFactory::Create failed");
 		return false;
 	}
 
-	MAHO_LOG_CORE_INFO("RHISystem RHI ready ({}x{})", Width, Height);
+	FRHIInitDesc Desc;
+	Desc.Backend = Backend;
+	Desc.NativeWindowHandle = NativeWindowHandle;
+	Desc.FramebufferWidth = Width;
+	Desc.FramebufferHeight = Height;
+
+	if (!RHI->Initialize(Desc))
+	{
+		MAHO_LOG_CORE_ERROR("FRHI::InitializeRHI: backend initialize failed");
+		RHI.reset();
+		return false;
+	}
+
+	MAHO_LOG_CORE_INFO("FRHI RHI ready ({}x{})", Width, Height);
 	return true;
 }
 
-void FRHISystem::SubmitBeginFrame(float R, float G, float B, float A)
+void FRHI::ShutdownRHI()
 {
 	if (!RHI)
 	{
 		return;
 	}
+	RHI->Shutdown();
+	RHI.reset();
+}
 
-	Submit([this, R, G, B, A]
+// ── frame pipeline (server-thread ordered) ─────────────────────────────────
+
+void FRHI::EnqueueTask(
+	FRHICommandList* CmdList,
+	std::function<void(FRHICommandList*)> Task)
+{
+	if (CmdList == nullptr || !Task)
 	{
-		if (!RHI)
-		{
-			return;
-		}
+		return;
+	}
+	// Parallel command recording — each task owns its command list (Vulkan
+	// forbids concurrent recording into the same buffer, so callers must never
+	// share a CmdList across tasks). Record here; the caller (RDG) submits the
+	// recorded lists serially afterwards via Submit.
+	RecordingPool.Submit([CmdList, Task = std::move(Task)]()
+	{
+		CmdList->Begin();
+		Task(CmdList);
+		CmdList->End();
+	});
+}
+
+void FRHI::Flush()
+{
+	// Drain all pending recording tasks — guarantees every EnqueueTask finished
+	// before the caller proceeds to Submit (record-all → submit-all ordering).
+	RecordingPool.Flush();
+}
+
+// ── frame primitives — direct forwarding (caller guarantees queue serial) ──
+
+void FRHI::BeginFrame()
+{
+	if (RHI)
+	{
 		RHI->BeginFrame();
+	}
+}
+
+void FRHI::Clear(float R, float G, float B, float A)
+{
+	if (RHI)
+	{
 		RHI->Clear(R, G, B, A);
-	});
+	}
 }
 
-void FRHISystem::SubmitEndFrame(std::uint64_t FrameIndex)
+void FRHI::EndFrame()
 {
-	if (!IsRunning())
+	if (RHI)
 	{
-		SignalRenderFrameComplete(FrameIndex);
+		RHI->EndFrame();
+	}
+}
+
+void FRHI::Resize(int Width, int Height)
+{
+	if (RHI && Width > 0 && Height > 0)
+	{
+		RHI->Resize(Width, Height);
+	}
+}
+
+// ── command lists ──────────────────────────────────────────────────────────
+
+FRHICommandList* FRHI::CreateCommandList(ERHICommandListType Type)
+{
+	return RHI ? RHI->CreateCommandList(Type) : nullptr;
+}
+
+void FRHI::DestroyCommandList(FRHICommandList* CmdList)
+{
+	if (RHI)
+	{
+		RHI->DestroyCommandList(CmdList);
+	}
+}
+
+void FRHI::Submit(
+	FRHICommandList* CmdList,
+	ERHICommandListType Type,
+	FRHISemaphore* const* WaitSemaphores,
+	std::uint32_t WaitCount,
+	FRHISemaphore* const* SignalSemaphores,
+	std::uint32_t SignalCount,
+	FRHIFence* SignalFence)
+{
+	if (!RHI || CmdList == nullptr)
+	{
 		return;
 	}
 
-	Submit([this, FrameIndex]
+	// Direct queue submit, routed to the queue matching the command-list type.
+	// Cross-queue ordering: when the compute/transfer queue falls back to the
+	// graphics family, submit there so it serializes with raster work. The
+	// caller (RDG) must keep queue submissions serialized.
+	switch (Type)
 	{
-		if (RHI)
+	case ERHICommandListType::Compute:
+		if (RHI->GetComputeQueue().IsNativeFallback())
 		{
-			RHI->EndFrame();
+			RHI->GetGraphicsQueue().Submit(&CmdList, 1, WaitSemaphores, WaitCount, SignalSemaphores, SignalCount, SignalFence);
 		}
-		SignalRenderFrameComplete(FrameIndex);
-	});
+		else
+		{
+			RHI->GetComputeQueue().Submit(&CmdList, 1, WaitSemaphores, WaitCount, SignalSemaphores, SignalCount, SignalFence);
+		}
+		break;
+	case ERHICommandListType::Transfer:
+		if (RHI->GetTransferQueue().IsNativeFallback())
+		{
+			RHI->GetGraphicsQueue().Submit(&CmdList, 1, WaitSemaphores, WaitCount, SignalSemaphores, SignalCount, SignalFence);
+		}
+		else
+		{
+			RHI->GetTransferQueue().Submit(&CmdList, 1, WaitSemaphores, WaitCount, SignalSemaphores, SignalCount, SignalFence);
+		}
+		break;
+	default:
+		RHI->GetGraphicsQueue().Submit(&CmdList, 1, WaitSemaphores, WaitCount, SignalSemaphores, SignalCount, SignalFence);
+		break;
+	}
 }
 
-void FRHISystem::RequestResize(int Width, int Height)
+bool FRHI::IsInitialized() const
 {
-	if (!RHI || Width <= 0 || Height <= 0)
-	{
-		return;
-	}
+	return RHI != nullptr && RHI->IsInitialized();
+}
 
-	Submit([this, Width, Height]
+FRHIFence* FRHI::CreateFence(bool bSignaled)
+{
+	return RHI ? RHI->CreateFence(bSignaled) : nullptr;
+}
+
+void FRHI::DestroyFence(FRHIFence* Fence)
+{
+	if (RHI)
 	{
-		if (RHI)
-		{
-			RHI->Resize(Width, Height);
-		}
-	});
+		RHI->DestroyFence(Fence);
+	}
+}
+
+FRHISemaphore* FRHI::CreateGpuSemaphore()
+{
+	return RHI ? RHI->CreateGpuSemaphore() : nullptr;
+}
+
+void FRHI::DestroyGpuSemaphore(FRHISemaphore* Semaphore)
+{
+	if (RHI)
+	{
+		RHI->DestroyGpuSemaphore(Semaphore);
+	}
+}
+
+void FRHI::WaitForFence(FRHIFence* Fence, std::uint64_t TimeoutNs)
+{
+	if (RHI)
+	{
+		RHI->WaitForFence(Fence, TimeoutNs);
+	}
+}
+
+bool FRHI::IsFenceSignaled(FRHIFence* Fence)
+{
+	return RHI != nullptr && RHI->IsFenceSignaled(Fence);
+}
+
+// ── resource factories — direct forwarding ─────────────────────────────────
+
+FRHIBuffer* FRHI::CreateBuffer(const FRHIBufferDesc& Desc)
+{
+	return RHI ? RHI->CreateBuffer(Desc) : nullptr;
+}
+
+void FRHI::DestroyBuffer(FRHIBuffer* Buffer)
+{
+	if (RHI)
+	{
+		RHI->DestroyBuffer(Buffer);
+	}
+}
+
+FRHITexture* FRHI::CreateTexture(const FRHITextureDesc& Desc)
+{
+	return RHI ? RHI->CreateTexture(Desc) : nullptr;
+}
+
+void FRHI::DestroyTexture(FRHITexture* Texture)
+{
+	if (RHI)
+	{
+		RHI->DestroyTexture(Texture);
+	}
+}
+
+FRHISampler* FRHI::CreateSampler(const FRHISamplerDesc& Desc)
+{
+	return RHI ? RHI->CreateSampler(Desc) : nullptr;
+}
+
+void FRHI::DestroySampler(FRHISampler* Sampler)
+{
+	if (RHI)
+	{
+		RHI->DestroySampler(Sampler);
+	}
+}
+
+FRHIShaderModule* FRHI::CreateShaderModule(const FRHIShaderModuleDesc& Desc)
+{
+	return RHI ? RHI->CreateShaderModule(Desc) : nullptr;
+}
+
+void FRHI::DestroyShaderModule(FRHIShaderModule* Module)
+{
+	if (RHI)
+	{
+		RHI->DestroyShaderModule(Module);
+	}
+}
+
+FRHIGraphicsPipeline* FRHI::CreateGraphicsPipeline(const FRHIGraphicsPipelineDesc& Desc)
+{
+	return RHI ? RHI->CreateGraphicsPipeline(Desc) : nullptr;
+}
+
+void FRHI::DestroyGraphicsPipeline(FRHIGraphicsPipeline* Pipeline)
+{
+	if (RHI)
+	{
+		RHI->DestroyGraphicsPipeline(Pipeline);
+	}
+}
+
+FRHIComputePipeline* FRHI::CreateComputePipeline(const FRHIComputePipelineDesc& Desc)
+{
+	return RHI ? RHI->CreateComputePipeline(Desc) : nullptr;
+}
+
+void FRHI::DestroyComputePipeline(FRHIComputePipeline* Pipeline)
+{
+	if (RHI)
+	{
+		RHI->DestroyComputePipeline(Pipeline);
+	}
+}
+
+FRHIStructuredBuffer* FRHI::CreateStructuredBuffer(const FRHIStructuredBufferDesc& Desc)
+{
+	return RHI ? RHI->CreateStructuredBuffer(Desc) : nullptr;
+}
+
+void FRHI::DestroyStructuredBuffer(FRHIStructuredBuffer* Buffer)
+{
+	if (RHI)
+	{
+		RHI->DestroyStructuredBuffer(Buffer);
+	}
+}
+
+FRHIBufferView* FRHI::CreateBufferView(const FRHIBufferViewDesc& Desc)
+{
+	return RHI ? RHI->CreateBufferView(Desc) : nullptr;
+}
+
+void FRHI::DestroyBufferView(FRHIBufferView* View)
+{
+	if (RHI)
+	{
+		RHI->DestroyBufferView(View);
+	}
+}
+
+FRHITextureView* FRHI::CreateTextureView(const FRHITextureViewDesc& Desc)
+{
+	return RHI ? RHI->CreateTextureView(Desc) : nullptr;
+}
+
+void FRHI::DestroyTextureView(FRHITextureView* View)
+{
+	if (RHI)
+	{
+		RHI->DestroyTextureView(View);
+	}
+}
+
+FRHIDescriptorSetLayout* FRHI::CreateDescriptorSetLayout(const FRHIDescriptorSetLayoutDesc& Desc)
+{
+	return RHI ? RHI->CreateDescriptorSetLayout(Desc) : nullptr;
+}
+
+void FRHI::DestroyDescriptorSetLayout(FRHIDescriptorSetLayout* Layout)
+{
+	if (RHI)
+	{
+		RHI->DestroyDescriptorSetLayout(Layout);
+	}
+}
+
+FRHIPipelineLayout* FRHI::CreatePipelineLayout(const FRHIPipelineLayoutDesc& Desc)
+{
+	return RHI ? RHI->CreatePipelineLayout(Desc) : nullptr;
+}
+
+void FRHI::DestroyPipelineLayout(FRHIPipelineLayout* Layout)
+{
+	if (RHI)
+	{
+		RHI->DestroyPipelineLayout(Layout);
+	}
+}
+
+FRHIDescriptorPool* FRHI::CreateDescriptorPool(const FRHIDescriptorPoolDesc& Desc)
+{
+	return RHI ? RHI->CreateDescriptorPool(Desc) : nullptr;
+}
+
+void FRHI::DestroyDescriptorPool(FRHIDescriptorPool* Pool)
+{
+	if (RHI)
+	{
+		RHI->DestroyDescriptorPool(Pool);
+	}
+}
+
+FRHIDescriptorSet* FRHI::AllocateDescriptorSet(FRHIDescriptorPool* Pool, FRHIDescriptorSetLayout* Layout)
+{
+	return RHI ? RHI->AllocateDescriptorSet(Pool, Layout) : nullptr;
+}
+
+void FRHI::FreeDescriptorSet(FRHIDescriptorPool* Pool, FRHIDescriptorSet* Set)
+{
+	if (RHI)
+	{
+		RHI->FreeDescriptorSet(Pool, Set);
+	}
+}
+
+FRHIRenderPass* FRHI::CreateRenderPass(const FRHIRenderPassDesc& Desc)
+{
+	return RHI ? RHI->CreateRenderPass(Desc) : nullptr;
+}
+
+void FRHI::DestroyRenderPass(FRHIRenderPass* Pass)
+{
+	if (RHI)
+	{
+		RHI->DestroyRenderPass(Pass);
+	}
+}
+
+FRHIFramebuffer* FRHI::CreateFramebuffer(const FRHIFramebufferDesc& Desc)
+{
+	return RHI ? RHI->CreateFramebuffer(Desc) : nullptr;
+}
+
+void FRHI::DestroyFramebuffer(FRHIFramebuffer* Framebuffer)
+{
+	if (RHI)
+	{
+		RHI->DestroyFramebuffer(Framebuffer);
+	}
+}
+
+FRHIQueryPool* FRHI::CreateQueryPool(ERHIQueryType Type, std::uint32_t QueryCount)
+{
+	return RHI ? RHI->CreateQueryPool(Type, QueryCount) : nullptr;
+}
+
+void FRHI::DestroyQueryPool(FRHIQueryPool* Pool)
+{
+	if (RHI)
+	{
+		RHI->DestroyQueryPool(Pool);
+	}
+}
+
+bool FRHI::GetQueryPoolResults(
+	FRHIQueryPool* Pool,
+	std::uint32_t FirstQuery,
+	std::uint32_t QueryCount,
+	std::uint64_t* Results,
+	std::size_t Stride,
+	bool bWait)
+{
+	return RHI != nullptr && RHI->GetQueryPoolResults(Pool, FirstQuery, QueryCount, Results, Stride, bWait);
+}
+
+FRHIRayTracingPipeline* FRHI::CreateRayTracingPipeline(const FRHIRayTracingPipelineDesc& Desc)
+{
+	return RHI ? RHI->CreateRayTracingPipeline(Desc) : nullptr;
+}
+
+void FRHI::DestroyRayTracingPipeline(FRHIRayTracingPipeline* Pipeline)
+{
+	if (RHI)
+	{
+		RHI->DestroyRayTracingPipeline(Pipeline);
+	}
+}
+
+FRHIAccelerationStructure* FRHI::CreateAccelerationStructure(const FRHIRayTracingGeometryDesc& Desc)
+{
+	return RHI ? RHI->CreateAccelerationStructure(Desc) : nullptr;
+}
+
+void FRHI::DestroyAccelerationStructure(FRHIAccelerationStructure* Accel)
+{
+	if (RHI)
+	{
+		RHI->DestroyAccelerationStructure(Accel);
+	}
+}
+
+bool FRHI::GetAccelerationStructureBuildSizes(
+	const FRHIRayTracingGeometryDesc& Desc,
+	std::uint64_t& OutAccelSize,
+	std::uint64_t& OutScratchSize)
+{
+	return RHI != nullptr && RHI->GetAccelerationStructureBuildSizes(Desc, OutAccelSize, OutScratchSize);
+}
+
+FRHIBuffer* FRHI::CreateShaderBindingTable(
+	FRHIRayTracingPipeline* Pipeline,
+	const FRHISbtGroup* Groups,
+	std::uint32_t GroupCount,
+	std::uint32_t* OutRayGenOffset,
+	std::uint32_t* OutRayGenStride,
+	std::uint32_t* OutHitOffset,
+	std::uint32_t* OutHitStride,
+	std::uint32_t* OutMissOffset,
+	std::uint32_t* OutMissStride)
+{
+	return RHI
+		? RHI->CreateShaderBindingTable(Pipeline, Groups, GroupCount,
+			OutRayGenOffset, OutRayGenStride, OutHitOffset, OutHitStride,
+			OutMissOffset, OutMissStride)
+		: nullptr;
 }
 
 } // namespace Maho

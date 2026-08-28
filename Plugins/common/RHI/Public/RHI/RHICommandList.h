@@ -70,6 +70,14 @@ public:
 	virtual void CopyBufferToTexture(FRHIBuffer* Src, FRHITexture* Dst, std::uint64_t SrcOffset) = 0;
 	virtual void CopyTextureToBuffer(FRHITexture* Src, FRHIBuffer* Dst, std::uint64_t DstOffset) = 0;
 	virtual void FillBuffer(FRHIBuffer* Buffer, std::uint64_t Offset, std::uint64_t Size, std::uint32_t Data) = 0;
+	/**
+	 * Upload CPU data into a buffer (recorded — runs inside EnqueueTask).
+	 * Host-visible buffers are written directly; device-local buffers go
+	 * through a staging copy.
+	 */
+	virtual void UpdateBuffer(FRHIBuffer* Buffer, std::uint64_t Offset, std::uint64_t Size, const void* Data) = 0;
+	/** Update descriptor sets (recorded — vkUpdateDescriptorSets, immediate CPU op). */
+	virtual void UpdateDescriptorSets(const FRHIDescriptorWrite* Writes, std::uint32_t Count) = 0;
 	virtual void TransitionBuffer(FRHIBuffer* Buffer, ERHIResourceState OldState, ERHIResourceState NewState) = 0;
 	virtual void TransitionTexture(FRHITexture* Texture, ERHIResourceState OldState, ERHIResourceState NewState) = 0;
 

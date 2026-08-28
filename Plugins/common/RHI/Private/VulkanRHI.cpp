@@ -130,7 +130,7 @@ bool FVulkanRHI::Initialize(const FRHIInitDesc& Desc)
 		return false;
 	}
 
-	if (!CreateMemoryAllocatorAndManager())
+	if (!CreateMemoryAllocator())
 	{
 		Shutdown();
 		return false;
@@ -188,12 +188,6 @@ void FVulkanRHI::Shutdown()
 	if (Device != VK_NULL_HANDLE)
 	{
 		vkDeviceWaitIdle(Device);
-	}
-
-	if (ResourceManager)
-	{
-		ResourceManager->Shutdown();
-		ResourceManager.reset();
 	}
 
 	if (MemoryAllocator)
@@ -1302,7 +1296,7 @@ bool FVulkanRHI::CreateSyncObjects()
 	return true;
 }
 
-bool FVulkanRHI::CreateMemoryAllocatorAndManager()
+bool FVulkanRHI::CreateMemoryAllocator()
 {
 	MemoryAllocator = std::make_unique<FVulkanMemoryAllocator>();
 	if (!MemoryAllocator->Initialize(Instance, PhysicalDevice, Device))
@@ -1310,7 +1304,6 @@ bool FVulkanRHI::CreateMemoryAllocatorAndManager()
 		return false;
 	}
 
-	ResourceManager = std::make_unique<FRHIResourceManager>(*this);
 	return true;
 }
 
@@ -1363,12 +1356,7 @@ bool FVulkanRHI::CreateLogicalQueuesAndPools()
 	return true;
 }
 
-FRHIResourceManager& FVulkanRHI::GetResourceManager()
-{
-	return *ResourceManager;
-}
-
-IRHIMemoryAllocator* FVulkanRHI::GetMemoryAllocator()
+IDynamicRHIMemoryAllocator* FVulkanRHI::GetMemoryAllocator()
 {
 	return MemoryAllocator.get();
 }
@@ -1426,7 +1414,7 @@ FRHICommandList* FVulkanRHI::CreateCommandList(ERHICommandListType Type)
 	RT.BuildAccel = CmdBuildAccelerationStructuresKHR;
 	RT.CopyAccel = CmdCopyAccelerationStructureKHR;
 	RT.TraceRays = CmdTraceRaysKHR;
-	return new FVulkanCommandList(Type, Device, Pool, CmdBuffer, RT);
+	return new FVulkanCommandList(Type, Device, Pool, CmdBuffer, MemoryAllocator.get(), RT);
 }
 
 void FVulkanRHI::DestroyCommandList(FRHICommandList* CmdList)
@@ -1485,6 +1473,16 @@ bool FVulkanRHI::IsFenceSignaled(FRHIFence* Fence)
 	return vkGetFenceStatus(Device, Handle) == VK_SUCCESS;
 }
 
+void FVulkanRHI::ResetFence(FRHIFence* Fence)
+{
+	if (Fence == nullptr)
+	{
+		return;
+	}
+	VkFence Handle = static_cast<FVulkanFence*>(Fence)->GetVkFence();
+	vkResetFences(Device, 1, &Handle);
+}
+
 FRHISemaphore* FVulkanRHI::CreateGpuSemaphore()
 {
 	VkSemaphoreCreateInfo Info{};
@@ -1500,100 +1498,6 @@ FRHISemaphore* FVulkanRHI::CreateGpuSemaphore()
 void FVulkanRHI::DestroyGpuSemaphore(FRHISemaphore* Semaphore)
 {
 	delete Semaphore;
-}
-
-void FVulkanRHI::UpdateBuffer(FRHIBuffer* Buffer, std::uint64_t Offset, std::uint64_t Size, const void* Data)
-{
-	auto* VulkanBuffer = static_cast<FVulkanBuffer*>(Buffer);
-	if (VulkanBuffer == nullptr || Data == nullptr || MemoryAllocator == nullptr || !MemoryAllocator->IsValid())
-	{
-		return;
-	}
-
-	FRHIMemoryAllocation Opaque{};
-	Opaque.Native = VulkanBuffer->GetAllocation();
-	void* Mapped = MemoryAllocator->Map(Opaque);
-	if (Mapped == nullptr)
-	{
-		MAHO_LOG_CORE_ERROR("FVulkanRHI::UpdateBuffer: map failed");
-		return;
-	}
-
-	std::memcpy(static_cast<std::uint8_t*>(Mapped) + Offset, Data, static_cast<std::size_t>(Size));
-	MemoryAllocator->Unmap(Opaque);
-}
-
-void FVulkanRHI::UpdateDescriptorSets(const FRHIDescriptorWrite* Writes, std::uint32_t Count)
-{
-	if (Writes == nullptr || Count == 0 || Device == VK_NULL_HANDLE)
-	{
-		return;
-	}
-
-	std::vector<VkWriteDescriptorSet> VkWrites;
-	VkWrites.reserve(Count);
-
-	// Temporary storage for descriptor info structs (must live until vkUpdateDescriptorSets call)
-	std::vector<VkDescriptorBufferInfo> BufferInfos;
-	BufferInfos.reserve(Count);
-	std::vector<VkDescriptorImageInfo> ImageInfos;
-	ImageInfos.reserve(Count);
-
-	for (std::uint32_t i = 0; i < Count; ++i)
-	{
-		const FRHIDescriptorWrite& W = Writes[i];
-		if (W.Set == nullptr)
-		{
-			continue;
-		}
-
-		auto* VkSet = static_cast<FVulkanDescriptorSet*>(W.Set);
-
-		VkWriteDescriptorSet VkWrite{};
-		VkWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-		VkWrite.dstSet = VkSet->GetVkSet();
-		VkWrite.dstBinding = W.Binding;
-		VkWrite.dstArrayElement = W.ArrayIndex;
-		VkWrite.descriptorCount = 1;
-		VkWrite.descriptorType = ToVkDescriptorType(W.Type);
-
-		bool bHasInfo = false;
-		if (W.Type == ERHIDescriptorType::UniformBuffer && W.Buffer != nullptr)
-		{
-			auto* VkBuf = static_cast<FVulkanBuffer*>(W.Buffer);
-			VkDescriptorBufferInfo& Info = BufferInfos.emplace_back();
-			Info.buffer = VkBuf->GetVkBuffer();
-			Info.offset = W.Offset;
-			Info.range = W.Range > 0 ? W.Range : VK_WHOLE_SIZE;
-
-			VkWrite.pBufferInfo = &BufferInfos.back();
-			bHasInfo = (Info.buffer != VK_NULL_HANDLE);
-		}
-		else if (W.Type == ERHIDescriptorType::CombinedImageSampler && W.TextureView != nullptr)
-		{
-			auto* VkView = static_cast<FVulkanTextureView*>(W.TextureView);
-			auto* VkSampler = (W.Sampler != nullptr) ? static_cast<FVulkanSampler*>(W.Sampler) : nullptr;
-
-			VkDescriptorImageInfo& Info = ImageInfos.emplace_back();
-			Info.imageView = VkView->GetVkImageView();
-			Info.sampler = VkSampler ? VkSampler->GetVkSampler() : VK_NULL_HANDLE;
-			Info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-
-			VkWrite.pImageInfo = &ImageInfos.back();
-			bHasInfo = (Info.imageView != VK_NULL_HANDLE);
-		}
-
-		if (bHasInfo)
-		{
-			VkWrites.push_back(VkWrite);
-		}
-	}
-
-	if (!VkWrites.empty())
-	{
-		vkUpdateDescriptorSets(Device, static_cast<std::uint32_t>(VkWrites.size()),
-		                       VkWrites.data(), 0, nullptr);
-	}
 }
 
 VkBufferUsageFlags FVulkanRHI::ToVkBufferUsage(ERHIBufferUsage Usage)
@@ -3132,19 +3036,13 @@ bool FVulkanRHI::RecreateSwapchain()
 	return true;
 }
 
-void FRHIDeleter::operator()(IRHI* RHI) const
-{
-	delete RHI;
-}
-
-FRHIPtr FRHIFactory::Create(ERHIBackend Backend)
+IDynamicRHI* FRHIFactory::Create(ERHIBackend Backend)
 {
 	switch (Backend)
 	{
 	case ERHIBackend::Vulkan:
 	{
-		auto* RHI = new FVulkanRHI();
-		return FRHIPtr{RHI};
+		return new FVulkanRHI();
 	}
 	}
 

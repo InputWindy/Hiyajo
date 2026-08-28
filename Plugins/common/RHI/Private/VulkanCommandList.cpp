@@ -1,9 +1,11 @@
 #include "VulkanCommandList.h"
 
+#include "VulkanMemory.h"
 #include "VulkanResources.h"
 
 #include <Log.h>
 
+#include <cstring>
 #include <vector>
 
 namespace Maho
@@ -243,6 +245,186 @@ void FVulkanCommandList::FillBuffer(FRHIBuffer* InBuffer, std::uint64_t Offset, 
 		return;
 	}
 	vkCmdFillBuffer(Buffer, Buf->GetVkBuffer(), Offset, Size, Data);
+}
+
+void FVulkanCommandList::UpdateBuffer(FRHIBuffer* InBuffer, std::uint64_t Offset, std::uint64_t Size, const void* Data)
+{
+	auto* Buf = static_cast<FVulkanBuffer*>(InBuffer);
+	if (Buf == nullptr || Data == nullptr || Size == 0 || Allocator == nullptr)
+	{
+		return;
+	}
+
+	// Host-visible path: map + write directly (no GPU work).
+	FRHIMemoryAllocation Opaque{};
+	Opaque.Native = Buf->GetAllocation();
+	if (void* Mapped = Allocator->Map(Opaque))
+	{
+		std::memcpy(static_cast<std::uint8_t*>(Mapped) + Offset, Data, static_cast<std::size_t>(Size));
+		Allocator->Unmap(Opaque);
+		return;
+	}
+
+	// Device-local path: staging buffer + vkCmdCopyBuffer.
+	VkBufferCreateInfo StagingInfo{};
+	StagingInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+	StagingInfo.size = Size;
+	StagingInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+	StagingInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+	VmaAllocationCreateInfo StagingAlloc = FVulkanMemoryAllocator::MakeAllocationInfo(ERHIMemoryUsage::CPUToGPU);
+	VkBuffer Staging = VK_NULL_HANDLE;
+	VmaAllocation StagingAllocation = nullptr;
+	if (!Allocator->CreateBuffer(StagingInfo, StagingAlloc, Staging, StagingAllocation))
+	{
+		MAHO_LOG_CORE_ERROR("FVulkanCommandList::UpdateBuffer: staging create failed");
+		return;
+	}
+
+	FRHIMemoryAllocation StagingOpaque{};
+	StagingOpaque.Native = StagingAllocation;
+	if (void* StagingMapped = Allocator->Map(StagingOpaque))
+	{
+		std::memcpy(StagingMapped, Data, static_cast<std::size_t>(Size));
+		Allocator->Unmap(StagingOpaque);
+	}
+
+	// Insert a barrier so the destination is writable, copy, then a barrier back.
+	VkBufferMemoryBarrier DstBarrier{};
+	DstBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+	DstBarrier.srcAccessMask = 0;
+	DstBarrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+	DstBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	DstBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	DstBarrier.buffer = Buf->GetVkBuffer();
+	DstBarrier.offset = Offset;
+	DstBarrier.size = Size;
+	vkCmdPipelineBarrier(Buffer, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+		0, 0, nullptr, 1, &DstBarrier, 0, nullptr);
+
+	VkBufferCopy Region{};
+	Region.srcOffset = 0;
+	Region.dstOffset = Offset;
+	Region.size = Size;
+	vkCmdCopyBuffer(Buffer, Staging, Buf->GetVkBuffer(), 1, &Region);
+
+	VkBufferMemoryBarrier SrcBarrier{};
+	SrcBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+	SrcBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+	SrcBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT;
+	SrcBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	SrcBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	SrcBarrier.buffer = Buf->GetVkBuffer();
+	SrcBarrier.offset = Offset;
+	SrcBarrier.size = Size;
+	vkCmdPipelineBarrier(Buffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+		0, 0, nullptr, 1, &SrcBarrier, 0, nullptr);
+
+	Allocator->DestroyBuffer(Staging, StagingAllocation);
+}
+
+namespace
+{
+
+[[nodiscard]] VkDescriptorType ToVkDescriptorType(ERHIDescriptorType Type)
+{
+	// ERHIDescriptorType is dense and skips Vulkan texel-buffer enums — never static_cast.
+	switch (Type)
+	{
+	case ERHIDescriptorType::Sampler:
+		return VK_DESCRIPTOR_TYPE_SAMPLER;
+	case ERHIDescriptorType::CombinedImageSampler:
+		return VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+	case ERHIDescriptorType::SampledImage:
+		return VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+	case ERHIDescriptorType::StorageImage:
+		return VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+	case ERHIDescriptorType::UniformBuffer:
+		return VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+	case ERHIDescriptorType::StorageBuffer:
+		return VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+	case ERHIDescriptorType::DynamicUniform:
+		return VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
+	case ERHIDescriptorType::DynamicStorage:
+		return VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC;
+	default:
+		return VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+	}
+}
+
+} // namespace
+
+void FVulkanCommandList::UpdateDescriptorSets(const FRHIDescriptorWrite* Writes, std::uint32_t Count)
+{
+	if (Writes == nullptr || Count == 0 || Device == VK_NULL_HANDLE)
+	{
+		return;
+	}
+
+	std::vector<VkWriteDescriptorSet> VkWrites;
+	VkWrites.reserve(Count);
+
+	// Temporary storage for descriptor info structs (must live until vkUpdateDescriptorSets call).
+	std::vector<VkDescriptorBufferInfo> BufferInfos;
+	BufferInfos.reserve(Count);
+	std::vector<VkDescriptorImageInfo> ImageInfos;
+	ImageInfos.reserve(Count);
+
+	for (std::uint32_t i = 0; i < Count; ++i)
+	{
+		const FRHIDescriptorWrite& W = Writes[i];
+		if (W.Set == nullptr)
+		{
+			continue;
+		}
+
+		auto* VkSet = static_cast<FVulkanDescriptorSet*>(W.Set);
+
+		VkWriteDescriptorSet VkWrite{};
+		VkWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		VkWrite.dstSet = VkSet->GetVkSet();
+		VkWrite.dstBinding = W.Binding;
+		VkWrite.dstArrayElement = W.ArrayIndex;
+		VkWrite.descriptorCount = 1;
+		VkWrite.descriptorType = ToVkDescriptorType(W.Type);
+
+		bool bHasInfo = false;
+		if (W.Type == ERHIDescriptorType::UniformBuffer && W.Buffer != nullptr)
+		{
+			auto* VkBuf = static_cast<FVulkanBuffer*>(W.Buffer);
+			VkDescriptorBufferInfo& Info = BufferInfos.emplace_back();
+			Info.buffer = VkBuf->GetVkBuffer();
+			Info.offset = W.Offset;
+			Info.range = W.Range > 0 ? W.Range : VK_WHOLE_SIZE;
+
+			VkWrite.pBufferInfo = &BufferInfos.back();
+			bHasInfo = (Info.buffer != VK_NULL_HANDLE);
+		}
+		else if (W.Type == ERHIDescriptorType::CombinedImageSampler && W.TextureView != nullptr)
+		{
+			auto* VkView = static_cast<FVulkanTextureView*>(W.TextureView);
+			auto* VkSampler = (W.Sampler != nullptr) ? static_cast<FVulkanSampler*>(W.Sampler) : nullptr;
+
+			VkDescriptorImageInfo& Info = ImageInfos.emplace_back();
+			Info.imageView = VkView->GetVkImageView();
+			Info.sampler = VkSampler ? VkSampler->GetVkSampler() : VK_NULL_HANDLE;
+			Info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+			VkWrite.pImageInfo = &ImageInfos.back();
+			bHasInfo = (Info.imageView != VK_NULL_HANDLE);
+		}
+
+		if (bHasInfo)
+		{
+			VkWrites.push_back(VkWrite);
+		}
+	}
+
+	if (!VkWrites.empty())
+	{
+		vkUpdateDescriptorSets(Device, static_cast<std::uint32_t>(VkWrites.size()),
+			VkWrites.data(), 0, nullptr);
+	}
 }
 
 void FVulkanCommandList::TransitionBuffer(FRHIBuffer* InBuffer, ERHIResourceState OldState, ERHIResourceState NewState)
