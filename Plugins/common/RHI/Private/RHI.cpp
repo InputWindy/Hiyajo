@@ -10,6 +10,7 @@
 
 #include <ConsoleVariable.h>
 #include <Log.h>
+#include <Platform.h>
 
 #include <map>
 #include <vector>
@@ -55,21 +56,61 @@ static ConsoleVariable::TAutoConsoleVariable<std::string> GCVarRHIBackend(
 
 // ── lifecycle ──────────────────────────────────────────────────────────────
 
-void FRHI::Initialize(int Argc, char** Argv)
+void FRHI::Initialize(FEngineBase& Engine)
 {
-	(void)Argc; (void)Argv;
-
-	// Device bring-up with CVar defaults (headless until a window is bound).
-	const int Width = GCVarRHIWidth.GetValue();
-	const int Height = GCVarRHIHeight.GetValue();
-	const ERHIBackend Backend = BackendFromName(GCVarRHIBackend.GetValue());
-	(void)InitializeRHI(nullptr, Width, Height, Backend);
+	// RHI bring-up is deferred to Tick: the native window comes from the
+	// Platform feature, queried through the engine — not from a singleton,
+	// not from launch args.
+	(void)Engine;
 }
 
-void FRHI::Shutdown()
+void FRHI::Shutdown(FEngineBase&)
 {
 	ShutdownRHI();
 	MAHO_LOG_CORE_INFO("FRHI: RHI shut down");
+}
+
+// ── engine loop stages (FEngineLayer) ──
+
+void FRHI::Tick(FEngineBase& Engine)
+{
+	// Lazy bring-up: once a native window is available from the Platform
+	// feature, initialize the device with it.
+	if (RHI != nullptr)
+	{
+		return;   // already initialized
+	}
+
+	auto* Platform = static_cast<Platform::FPlatformSystem*>(Engine.FindLayer("FPlatformSystem"));
+	if (Platform == nullptr)
+	{
+		return;   // Platform feature not installed yet
+	}
+
+	void* NativeWindow = Platform->GetNativeWindow();
+	if (NativeWindow == nullptr)
+	{
+		return;   // headless / window not created yet
+	}
+
+	const int Width = GCVarRHIWidth.GetValue();
+	const int Height = GCVarRHIHeight.GetValue();
+	const ERHIBackend Backend = BackendFromName(GCVarRHIBackend.GetValue());
+	InitializeRHI(NativeWindow, Width, Height, Backend);
+}
+
+void FRHI::BeginFrame(FEngineBase&)
+{
+	BeginFrame();
+}
+
+void FRHI::EndFrame(FEngineBase&)
+{
+	EndFrame();
+}
+
+void FRHI::RequestExit(FEngineBase&)
+{
 }
 
 // ── device bring-up / teardown ─────────────────────────────────────────────

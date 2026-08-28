@@ -1,6 +1,6 @@
 #pragma once
 
-// ConsoleVariable â€?CVar registry (engine Common, TSingleton). Static
+// ConsoleVariable ?CVar registry (engine Common, TSingleton). Static
 // TAutoConsoleVariable globals self-register at static-init; Find looks them
 // up. Values stored as strings, parsed on typed access.
 #include <Core/Singleton.h>
@@ -42,7 +42,7 @@ enum class ECVarType : std::uint8_t
 };
 
 /**
- * Console variable interface â€?what FindConsoleVariable returns. Values are
+ * Console variable interface ?what FindConsoleVariable returns. Values are
  * stored as a string internally and parsed on typed access.
  */
 class IConsoleVariable
@@ -73,11 +73,11 @@ class FConsoleVariable
 	, public IPlugin<IInit, IShutdown>
 {
 public:
-	/** Process-unique accessor â€?declared here, defined in ConsoleVariable.cpp (in ConsoleVariable.dll). */
+	/** Process-unique accessor ?declared here, defined in ConsoleVariable.cpp (in ConsoleVariable.dll). */
 	static FConsoleVariable& Get();
 
-	void Initialize(int Argc, char** Argv) override;
-	void Shutdown() override;
+	void Initialize(FEngineBase& Engine) override;
+	void Shutdown(FEngineBase& Engine) override;
 
 	/** Find a registered variable; nullptr when absent. */
 	[[nodiscard]] IConsoleVariable* Find(std::string_view Name);
@@ -106,7 +106,7 @@ template <> struct TCVarType<bool>        { static constexpr ECVarType Value = E
 template <> struct TCVarType<std::string> { static constexpr ECVarType Value = ECVarType::String; };
 
 /**
- * Static console variable â€?registers on construction (static init), like
+ * Static console variable ?registers on construction (static init), like
  * UE's TAutoConsoleVariable.
  *
  *   static TAutoConsoleVariable<int> CVarMaxFPS("r.MaxFPS", 60, "Max FPS");

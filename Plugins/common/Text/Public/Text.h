@@ -1,6 +1,6 @@
 #pragma once
 
-// Text �?localized text (engine Common, TSingleton). FText handles + FTextManager
+// Text ?localized text (engine Common, TSingleton). FText handles + FTextManager
 // catalog: SetCulture picks the culture, FText::Resolve() looks up the current
 // culture's translation and falls back to the source. Depends on engine-fixed
 // Json (nlohmann) for LoadTranslationsFromJson.
@@ -27,19 +27,19 @@ namespace Culture
 }
 
 /**
- * Localized text handle �?stores {Namespace, Key, Source}. Resolve() looks up
+ * Localized text handle ?stores {Namespace, Key, Source}. Resolve() looks up
  * the translation for the current culture and falls back to Source.
  *
  *   using namespace Maho::Text;
  *
  *   // Register translations once at startup (e.g. from config files).
- *   FTextManager::Get().AddTranslation("MainMenu", "Title", Culture::Chinese, "主菜�?);
- *   FTextManager::Get().AddTranslation("MainMenu", "Title", Culture::Japanese, "メインメニュ�?);
+ *   FTextManager::Get().AddTranslation("MainMenu", "Title", Culture::Chinese, "主菜?);
+ *   FTextManager::Get().AddTranslation("MainMenu", "Title", Culture::Japanese, "メインメニュ?);
  *
  *   const FText Title = FText("MainMenu", "Title", "Main Menu");
  *
  *   FTextManager::Get().SetCulture(std::string(Culture::Chinese));
- *   const std::string Shown = Title.Resolve();   // "主菜�?
+ *   const std::string Shown = Title.Resolve();   // "主菜?
  */
 class FText
 {
@@ -51,7 +51,7 @@ public:
 	[[nodiscard]] std::string_view GetKey() const { return Key; }
 	[[nodiscard]] std::string_view GetSource() const { return Source; }
 
-	/** Resolve against the current culture �?falls back to Source when absent. */
+	/** Resolve against the current culture ?falls back to Source when absent. */
 	[[nodiscard]] std::string Resolve() const;
 
 	[[nodiscard]] bool operator==(const FText& Other) const
@@ -71,11 +71,11 @@ class FTextManager
 	, public IPlugin<IInit, IShutdown>
 {
 public:
-	/** Process-unique accessor �?declared here, defined in Text.cpp (in Text.dll). */
+	/** Process-unique accessor ?declared here, defined in Text.cpp (in Text.dll). */
 	static FTextManager& Get();
 
-	void Initialize(int Argc, char** Argv) override;
-	void Shutdown() override;
+	void Initialize(FEngineBase& Engine) override;
+	void Shutdown(FEngineBase& Engine) override;
 
 	[[nodiscard]] std::string_view GetCulture() const;
 	void SetCulture(std::string InCulture);

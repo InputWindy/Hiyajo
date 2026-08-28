@@ -31,14 +31,14 @@ namespace
 	}
 }
 
-void FAssetRegistry::Initialize(int Argc, char** Argv)
+void FAssetRegistry::Initialize(FEngineBase& Engine)
 {
-	(void)Argc; (void)Argv;
+	(void)Engine;
 	std::lock_guard<std::mutex> Lock(Mutex);
 	Assets.clear();
 }
 
-void FAssetRegistry::Shutdown()
+void FAssetRegistry::Shutdown(FEngineBase&)
 {
 	std::lock_guard<std::mutex> Lock(Mutex);
 	Assets.clear();

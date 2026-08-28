@@ -42,15 +42,15 @@ std::string FText::Resolve() const
 	return Translated ? *Translated : Source;
 }
 
-void FTextManager::Initialize(int Argc, char** Argv)
+void FTextManager::Initialize(FEngineBase& Engine)
 {
-	(void)Argc; (void)Argv;
+	(void)Engine;
 	std::lock_guard<std::mutex> Lock(Mutex);
 	Catalog.clear();
 	CurrentCulture = "en-US";
 }
 
-void FTextManager::Shutdown()
+void FTextManager::Shutdown(FEngineBase&)
 {
 	std::lock_guard<std::mutex> Lock(Mutex);
 	Catalog.clear();

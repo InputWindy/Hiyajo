@@ -25,7 +25,7 @@ struct IRHI
 
 	/**
 	 * Create a command list for the given type. Command-list LIFECYCLE belongs
-	 * to the caller (e.g. the RDG, which owns frame isolation) ¡ª the RHI only
+	 * to the caller (e.g. the RDG, which owns frame isolation) ï¿½ï¿½ the RHI only
 	 * provides the raw object. Record via EnqueueTask, destroy with
 	 * DestroyCommandList.
 	 */
@@ -36,7 +36,7 @@ struct IRHI
 	 * Submit a recorded command list on the RHI worker, routing to the queue
 	 * that matches the command-list type (graphics/compute/transfer, honoring
 	 * native-queue fallback). When to submit is the caller's (RDG) scheduling
-	 * decision ¡ª this only performs the queue submit itself.
+	 * decision ï¿½ï¿½ this only performs the queue submit itself.
 	 */
 	virtual void Submit(
 		FRHICommandList* CmdList,
@@ -49,7 +49,7 @@ struct IRHI
 
 	/**
 	 * Run a recording task on a worker thread from the pool (parallel command
-	 * recording). The callback receives ITS OWN command list ¡ª never share a
+	 * recording). The callback receives ITS OWN command list ï¿½ï¿½ never share a
 	 * command list across tasks (Vulkan forbids concurrent recording into the
 	 * same buffer). After tasks complete, the caller (RDG) submits the recorded
 	 * command lists serially via Submit.
@@ -60,12 +60,12 @@ struct IRHI
 
 	/**
 	 * Barrier: wait until every EnqueueTask submitted so far has finished
-	 * recording. Call BEFORE Submit to guarantee the "record all ¡ú submit all"
+	 * recording. Call BEFORE Submit to guarantee the "record all ï¿½ï¿½ submit all"
 	 * ordering when using parallel command recording.
 	 */
 	virtual void Flush() = 0;
 
-	// ©¤©¤ frame primitives (call inside EnqueueTask to run on the server thread) ©¤©¤
+	// ï¿½ï¿½ï¿½ï¿½ frame primitives (call inside EnqueueTask to run on the server thread) ï¿½ï¿½ï¿½ï¿½
 	virtual void BeginFrame() = 0;
 	virtual void Clear(float R, float G, float B, float A) = 0;
 	virtual void EndFrame() = 0;
@@ -123,7 +123,7 @@ struct IRHI
 	/**
 	 * Copy query results to the destination buffer (GPU) or CPU memory.
 	 * When bWait is true this blocks until results are available (a
-	 * synchronized read ¡ª call off the RHI thread).
+	 * synchronized read ï¿½ï¿½ call off the RHI thread).
 	 */
 	virtual bool GetQueryPoolResults(
 		FRHIQueryPool* Pool,
@@ -173,27 +173,40 @@ struct IRHI
 class IDynamicRHI;
 
 /**
- * RHI layer ¡ª backend-agnostic GPU device surface (engine Common, a Layer node).
+ * RHI layer ï¿½ï¿½ backend-agnostic GPU device surface (engine Common, a Layer node).
  * Hosts the IDynamicRHI device and exposes the IRHI capability surface.
  * Command recording is parallel via EnqueueTask (thread pool); queue submits
- * and frame primitives are direct calls ¡ª the caller (RDG) keeps them serial.
- * Backend-agnostic ¡ª higher layers (RDG / render plugin) never touch a
+ * and frame primitives are direct calls ï¿½ï¿½ the caller (RDG) keeps them serial.
+ * Backend-agnostic ï¿½ï¿½ higher layers (RDG / render plugin) never touch a
  * concrete backend type.
  *
  * The public capability is IRHI: the parent layer (e.g. FRenderThread) picks it
  * up via Query().Select<IRHI>() and drives frames without knowing the concrete
  * layer. The device itself (IDynamicRHI) stays private to this DLL.
  */
-class FRHI final: public IPlugin<IRHI, IInit, IShutdown>
+class FRHI final
+	: public FEngineLayer
+	, public IRHI
 {
 public:
-	void Initialize(int Argc, char** Argv) override;
-	void Shutdown() override;
+	MAHO_DECLARE_LAYER(FRHI);
+
+	// â”€â”€ engine init/shutdown stages (FEngineLayer) â”€â”€
+	void Initialize(FEngineBase& Engine) override;
+	void Shutdown(FEngineBase& Engine) override;
+
+	// â”€â”€ engine tick stages (FEngineLayer) â”€â”€
+	// BeginFrame/EndFrame ä¸ IRHI å¸§åŸè¯­é‡è½½å…±å­˜ï¼ˆå¼•æ“ stage å¸¦ FEngineBase&ï¼Œ
+	// IRHI å¸§åŸè¯­æ— å‚ï¼‰ï¼›Tick åšæ‡’åˆå§‹åŒ–ï¼šç» Engine æŸ¥ Platform æ‹¿ native windowã€‚
+	void BeginFrame(FEngineBase& Engine) override;
+	void Tick(FEngineBase& Engine) override;
+	void EndFrame(FEngineBase& Engine) override;
+	void RequestExit(FEngineBase& Engine) override;
 
 	/**
 	 * Record commands into a caller-owned command list on a thread-pool worker
 	 * (parallel recording). The caller (RDG) owns the command list's lifecycle
-	 * (frame isolation) and decides WHEN to submit ¡ª call Submit explicitly.
+	 * (frame isolation) and decides WHEN to submit ï¿½ï¿½ call Submit explicitly.
 	 */
 	void EnqueueTask(
 		FRHICommandList* CmdList,
@@ -211,13 +224,13 @@ public:
 		std::uint32_t SignalCount = 0,
 		FRHIFence* SignalFence = nullptr) override;
 
-	// ©¤©¤ IRHI frame primitives (forward to the private IDynamicRHI) ©¤©¤
+	// ï¿½ï¿½ï¿½ï¿½ IRHI frame primitives (forward to the private IDynamicRHI) ï¿½ï¿½ï¿½ï¿½
 	void BeginFrame() override;
 	void Clear(float R, float G, float B, float A) override;
 	void EndFrame() override;
 	void Resize(int Width, int Height) override;
 
-	// ©¤©¤ IRHI device methods (forward to the private IDynamicRHI) ©¤©¤
+	// ï¿½ï¿½ï¿½ï¿½ IRHI device methods (forward to the private IDynamicRHI) ï¿½ï¿½ï¿½ï¿½
 	[[nodiscard]] bool IsInitialized() const override;
 
 	[[nodiscard]] FRHIFence* CreateFence(bool bSignaled) override;

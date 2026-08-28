@@ -9,13 +9,13 @@ FException& FException::Get()
 	return Instance;
 }
 
-void FException::Initialize(int Argc, char** Argv)
+void FException::Initialize(FEngineBase& Engine)
 {
-	(void)Argc; (void)Argv;
+	(void)Engine;
 	OnException.RemoveAll();
 }
 
-void FException::Shutdown()
+void FException::Shutdown(FEngineBase&)
 {
 	OnException.RemoveAll();
 }

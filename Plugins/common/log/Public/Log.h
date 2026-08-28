@@ -4,8 +4,8 @@
 #include <spdlog/sinks/stdout_color_sinks.h>
 #include <spdlog/sinks/rotating_file_sink.h>
 
-#include <Core/Singleton.h>
 #include <Maho.h>
+#include <Engine/Engine.h>
 
 #include <string_view>
 
@@ -13,60 +13,37 @@ namespace Maho
 {
 
 /**
- * Logging singleton �?a CRTP singleton (T::Get()) wrapping spdlog. Initialize
- * configures the thread-safe stdout-color logger (honoring a `--log-level` arg
- * if present); Shutdown flushes+drops it. Logger is public �?just reach it via
+ * Logging layer — an FEngineLayer (no singleton). Its IInit stage brings the
+ * logger up (stdout color + rotating file, honoring a `--log-level` arg); its
+ * IShutdown stage flushes + drops it. Logger is public — reach it via
  * FLog::Get().Logger (or the FLog::Info/Warn/Error passthroughs).
  *
- *   FLog::Get().Initialize(argc, argv);
- *   FLog::Info("init: {}", name);
- *   FLog::Error("boom: code={}", code);
+ *   Engine.Install(&FLog::Get());   // PreMain 里提前安装
  */
-class FLog
-	: public TSingleton<FLog>
-	, public IPlugin<IInit, IShutdown>
+class FLog : public FEngineLayer
 {
 public:
-	/** Process-unique accessor �?defined in Log.cpp (in Log.dll). */
+	/** Process-unique accessor — defined in Log.cpp (in Log.dll). */
 	static FLog& Get();
 
-	/** The shared logger �?all engine/service logging routes through it. */
+	MAHO_DECLARE_LAYER(FLog);
+
+	/** The shared logger — all engine/service logging routes through it. */
 	std::shared_ptr<spdlog::logger> Logger;
 
-	/** Bring the logger up (ISingleton::Initialize). */
-	void Initialize(int, char** Argv) override
-	{
-		// stdout (color) + rotating file — GUI apps (WIN32 subsystem) have no
-		// console, so the file sink is the durable log destination.
-		auto ConsoleSink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
-		auto FileSink = std::make_shared<spdlog::sinks::rotating_file_sink_mt>(
-			"Logs/Maho.log", 1024 * 1024 * 5, 3);
+	// ── engine init/shutdown stages (FEngineLayer) ──
+	void PreInitialize(FEngineBase&) override {}
+	void Initialize(FEngineBase& Engine) override;
+	void PostInitialize(FEngineBase&) override {}
+	void PreShutdown(FEngineBase&) override {}
+	void Shutdown(FEngineBase& Engine) override;
+	void PostShutdown(FEngineBase&) override {}
 
-		Logger = std::make_shared<spdlog::logger>("Maho",
-			spdlog::sinks_init_list{ ConsoleSink, FileSink });
-		spdlog::register_logger(Logger);
-
-		Logger->set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%^%l%$] %v");
-		spdlog::level::level_enum Lv = spdlog::level::debug;
-		if (Argv) // allow --log-level=trace|debug|info|warn|error
-		{
-			for (int i = 0; Argv[i]; ++i)
-			{
-				if (const char* V = Argv[i][0] == '-' ? Argv[i] + 1 : nullptr; V && std::string_view(V) == "log-level" && Argv[i + 1])
-				{
-					Lv = spdlog::level::from_str(Argv[i + 1]);
-				}
-			}
-		}
-		Logger->set_level(Lv);
-	}
-
-	/** Flush + drop the sinks (ISingleton::Shutdown). */
-	void Shutdown() override
-	{
-		spdlog::shutdown();
-		Logger.reset();
-	}
+	// ── engine tick stages (unused — Log has no per-frame work) ──
+	void BeginFrame(FEngineBase&) override {}
+	void Tick(FEngineBase&) override {}
+	void EndFrame(FEngineBase&) override {}
+	void RequestExit(FEngineBase&) override {}
 
 	// fmt-style passthroughs (route through Get().Logger)
 	template <typename... Args>
@@ -89,7 +66,7 @@ public:
 } // namespace Maho
 
 // ── syntax sugar: CORE-logging macros (spdlog-style) ─────────────────────
-// Format like the engine core; call after FLog::Get().Initialize(argc, argv):
+// Format like the engine core; call after FLog::Get() is installed + initialized:
 //
 //   MAHO_LOG_CORE_INFO("init {}", name);
 //   MAHO_LOG_CORE_ERROR("boom: code={}", code);

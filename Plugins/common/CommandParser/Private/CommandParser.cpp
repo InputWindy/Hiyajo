@@ -17,12 +17,12 @@ FCommandParser& FCommandParser::Get()
 	return Instance;
 }
 
-void FCommandParser::Initialize(int Argc, char** Argv)
+void FCommandParser::Initialize(FEngineBase& Engine)
 {
-	Parse(Argc, Argv);
+	Parse(Engine.GetLaunchArgc(), Engine.GetLaunchArgv());
 }
 
-void FCommandParser::Shutdown()
+void FCommandParser::Shutdown(FEngineBase&)
 {
 	Clear();
 }

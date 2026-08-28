@@ -277,7 +277,7 @@ FScriptSystem& FScriptSystem::Get()
 	return Instance;
 }
 
-void FScriptSystem::Initialize(int Argc, char** Argv)
+void FScriptSystem::Initialize(FEngineBase& Engine)
 {
 	// Default backend: Lua. Other languages register themselves (e.g. a
 	// ScriptPython / ScriptCSharp plugin) during their own Initialize.
@@ -285,14 +285,14 @@ void FScriptSystem::Initialize(int Argc, char** Argv)
 
 	for (auto& Language : Languages)
 	{
-		if (Language->Initialize(Argc, Argv, "Scripts"))
+		if (Language->Initialize(Engine.GetLaunchArgc(), Engine.GetLaunchArgv(), "Scripts"))
 		{
 			OnLanguageReady.Broadcast(*Language);
 		}
 	}
 }
 
-void FScriptSystem::Shutdown()
+void FScriptSystem::Shutdown(FEngineBase&)
 {
 	for (auto& Language : Languages)
 	{

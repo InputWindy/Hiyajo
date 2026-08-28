@@ -15,7 +15,7 @@ namespace Config
 {
 
 /**
- * INI-style configuration singleton â€?UE DefaultEngine.ini format. Load parses
+ * INI-style configuration singleton ï¿½?UE DefaultEngine.ini format. Load parses
  * an INI file; GetString/GetInt/... read; SetString overrides at runtime.
  *   FConfig::Get().GetString("/Script/Engine.Engine", "GameName");
  */
@@ -24,11 +24,11 @@ class FConfig
 	, public IPlugin<IInit, IShutdown>
 {
 public:
-	/** Process-unique accessor â€?declared here, defined in Config.cpp (in Config.dll). */
+	/** Process-unique accessor ï¿½?declared here, defined in Config.cpp (in Config.dll). */
 	static FConfig& Get();
 
-	void Initialize(int, char**) override { Sections.clear(); }
-	void Shutdown() override { Sections.clear(); }
+	void Initialize(FEngineBase&) override { Sections.clear(); }
+	void Shutdown(FEngineBase&) override { Sections.clear(); }
 
 	bool Load(std::string_view Path);
 	[[nodiscard]] std::optional<std::string> GetString(std::string_view Section, std::string_view Key) const;

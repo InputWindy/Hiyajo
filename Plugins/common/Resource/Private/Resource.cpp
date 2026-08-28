@@ -96,13 +96,13 @@ FResourceSystem::FResourceSystem()
 {
 }
 
-void FResourceSystem::Initialize(int Argc, char** Argv)
+void FResourceSystem::Initialize(FEngineBase& Engine)
 {
-	(void)Argc; (void)Argv;
+	(void)Engine;
 	FThreadedServer::Initialize();   // start the async load thread
 }
 
-void FResourceSystem::Shutdown()
+void FResourceSystem::Shutdown(FEngineBase&)
 {
 	FThreadedServer::Shutdown();   // stop + join the IO thread
 	{

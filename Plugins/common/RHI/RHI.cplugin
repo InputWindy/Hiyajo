@@ -3,5 +3,5 @@
   "Name": "RHI",
   "Header": "RHI/RHIServer",
   "Description": "backend-agnostic GPU device surface (FThreadedServer RHI thread, Vulkan backend)",
-  "Dependencies": ["ConsoleVariable", "Log"]
+  "Dependencies": ["ConsoleVariable", "Log", "Platform"]
 }

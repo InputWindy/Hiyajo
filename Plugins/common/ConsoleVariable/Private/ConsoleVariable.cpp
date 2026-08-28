@@ -84,14 +84,14 @@ namespace
 	};
 }
 
-void FConsoleVariable::Initialize(int Argc, char** Argv)
+void FConsoleVariable::Initialize(FEngineBase& Engine)
 {
 	// Static TAutoConsoleVariable globals registered at static-init already;
 	// nothing to bring up. Explicitly no clear — those globals must survive.
-	(void)Argc; (void)Argv;
+	(void)Engine;
 }
 
-void FConsoleVariable::Shutdown()
+void FConsoleVariable::Shutdown(FEngineBase&)
 {
 	std::lock_guard<std::mutex> Lock(GMutex);
 	Registry.clear();

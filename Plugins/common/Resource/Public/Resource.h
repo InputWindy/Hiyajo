@@ -1,6 +1,6 @@
 #pragma once
 
-// Resource â€?typed async resource system (engine Common, TSingleton). Async
+// Resource ?typed async resource system (engine Common, TSingleton). Async
 // import/export over a dedicated IO thread (FThreadedServer), catalog keyed by
 // FName, virtual paths resolved through FPaths. Importers/exporters are
 // user-specialized templates that only decode/encode raw bytes.
@@ -36,16 +36,16 @@ namespace Maho
 namespace Resource
 {
 
-// Internal implementation types â€?defined in the .cpp, only forward-declared.
+// Internal implementation types ?defined in the .cpp, only forward-declared.
 struct FTransferState;
 struct FBulkData;
 class FTransferHandle;
 
-// â”€â”€ generic config bases â€?VIRTUAL paths, resolved via FPaths â”€â”€
+// â”€â”€ generic config bases ?VIRTUAL paths, resolved via FPaths â”€â”€
 
 struct FImportConfig
 {
-	std::string SourcePath;   // virtual source path, e.g. "Raw/mesh.fbx" â€?the asset
+	std::string SourcePath;   // virtual source path, e.g. "Raw/mesh.fbx" ?the asset
 		                          // path (catalog key) is derived by stripping the extension
 };
 
@@ -54,7 +54,7 @@ struct FExportConfig
 	std::string DestinationPath;   // explicit physical path, e.g. "C:/Out/mesh.fbx"
 };
 
-// â”€â”€ resource base â€?typed resources derive from this â”€â”€
+// â”€â”€ resource base ?typed resources derive from this â”€â”€
 
 class FResource
 {
@@ -69,22 +69,22 @@ private:
 	std::string Path;
 };
 
-// â”€â”€ importer / exporter â€?specialize per resource type (receive raw bytes) â”€â”€
+// â”€â”€ importer / exporter ?specialize per resource type (receive raw bytes) â”€â”€
 
 template <typename TResource>
-struct TResourceImporter;   // undefined â€?specialize per resource type
+struct TResourceImporter;   // undefined ?specialize per resource type
 
 template <typename TResource>
-struct TResourceExporter;   // undefined â€?specialize per resource type
+struct TResourceExporter;   // undefined ?specialize per resource type
 
 /**
- * Resource system â€?async transfer server + typed import/export.
+ * Resource system ?async transfer server + typed import/export.
  *
  *   Resource::FResourceSystem::Get().Import<FMesh>({ "Raw/mesh.fbx" });
  *   const Resource::FResource* R = Resource::FResourceSystem::Get().TryLoad("Raw/mesh");
  *
  * The async transfer machinery (handle / bulk data / pending queue) is fully
- * internal â€?the header only forward-declares it. Importers see std::span /
+ * internal ?the header only forward-declares it. Importers see std::span /
  * std::vector of raw bytes.
  */
 class FResourceSystem
@@ -93,16 +93,16 @@ class FResourceSystem
 	, public IPlugin<IInit, IShutdown>
 {
 public:
-	/** Process-unique accessor â€?defined in Resource.cpp (in Resource.dll). */
+	/** Process-unique accessor ?defined in Resource.cpp (in Resource.dll). */
 	static FResourceSystem& Get();
 
 	~FResourceSystem() override;
 
 	// The fixed single-Layer lifecycle (host-driven).
-	void Initialize(int Argc, char** Argv) override;
-	void Shutdown() override;
+	void Initialize(FEngineBase& Engine) override;
+	void Shutdown(FEngineBase& Engine) override;
 
-	/** Apply ready transfers on the game thread â€?call once per frame. */
+	/** Apply ready transfers on the game thread ?call once per frame. */
 	void Tick();
 
 	/** Async import; OnDone receives the registered resource or nullptr. */
@@ -168,7 +168,7 @@ bool FResourceSystem::Import(typename TResourceImporter<TResource>::FConfig Conf
 		? Config.SourcePath
 		: Config.SourcePath.substr(0, Dot);
 
-	// Copy the source path FIRST â€?EnqueueImport's argument and the lambda's
+	// Copy the source path FIRST ?EnqueueImport's argument and the lambda's
 	// Config-capture are both evaluated for the call, and argument evaluation
 	// order isn't guaranteed; reading Config.SourcePath AFTER it was moved into
 	// the capture would see an empty string.
@@ -211,7 +211,7 @@ bool FResourceSystem::Export(typename TResourceExporter<TResource>::FConfig Conf
 		return false;
 	}
 
-	// Encode on the CALLER (game) thread â€?the exporter reads the catalog resource
+	// Encode on the CALLER (game) thread ?the exporter reads the catalog resource
 	// synchronously here (no cross-thread shared access). Only the disk write is
 	// deferred to the IO thread.
 	std::vector<std::uint8_t> Bytes;

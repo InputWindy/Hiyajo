@@ -18,12 +18,6 @@
 namespace Maho::Platform
 {
 
-FPlatformSystem& FPlatformSystem::Get()
-{
-	static FPlatformSystem Instance;
-	return Instance;
-}
-
 namespace
 {
 #if !defined(MAHO_HEADLESS)
@@ -166,13 +160,12 @@ namespace
 	}
 }
 
-void FPlatformSystem::Initialize(int Argc, char** Argv)
+void FPlatformSystem::Initialize(FEngineBase&)
 {
-	(void)Argc; (void)Argv;
 	// backend is created lazily by CreateWindow / CreateHeadlessContext.
 }
 
-void FPlatformSystem::Shutdown()
+void FPlatformSystem::Shutdown(FEngineBase&)
 {
 	DestroyWindow();
 }
@@ -210,6 +203,32 @@ void FPlatformSystem::PollEvents()
 	{
 		PollEventsFn();
 	}
+}
+
+// ── engine loop stages (FEngineLayer) ──
+
+void FPlatformSystem::BeginFrame(FEngineBase&)
+{
+}
+
+void FPlatformSystem::Tick(FEngineBase& Engine)
+{
+	PollEvents();
+
+	// 窗口请求关闭 → 通知宿主引擎退出主循环。
+	if (ShouldClose())
+	{
+		Engine.RequestExit();
+	}
+}
+
+void FPlatformSystem::EndFrame(FEngineBase&)
+{
+}
+
+void FPlatformSystem::RequestExit(FEngineBase& Engine)
+{
+	Engine.RequestExit();
 }
 
 FNativeSurface FPlatformSystem::GetNativeWindow() const

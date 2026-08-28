@@ -17,7 +17,7 @@ namespace Script
 class FScriptSystem;
 
 /**
- * Script language backend �?one implementation per language (Lua, Python, C#).
+ * Script language backend ?one implementation per language (Lua, Python, C#).
  * The host (FScriptSystem) drives languages ONLY through this interface; all
  * VM details, type binding and per-language state live inside the backend.
  *
@@ -30,7 +30,7 @@ class IScriptLanguage
 public:
 	virtual ~IScriptLanguage() = default;
 
-	/** Language name ("Lua" / "Python" / "CSharp") �?registration/select/log. */
+	/** Language name ("Lua" / "Python" / "CSharp") ?registration/select/log. */
 	[[nodiscard]] virtual const char* GetName() const = 0;
 
 	virtual bool Initialize(int Argc, char** Argv, const char* ScriptsDirectory) = 0;
@@ -46,7 +46,7 @@ public:
 	 */
 	virtual void* LoadScriptRaw(const char* FilePath) = 0;
 
-	/** Call a global function. Missing �?false (no error). */
+	/** Call a global function. Missing ?false (no error). */
 	virtual bool CallGlobal(const char* FunctionName) = 0;
 	virtual bool CallGlobal(const char* FunctionName, float Arg0) = 0;
 
@@ -57,7 +57,7 @@ public:
 	/** Opaque pointer to the language state (sol::state* / PyObject* / ...). */
 	[[nodiscard]] virtual void* GetState() = 0;
 
-	/** Type binder �?the language state is passed opaque to the binder. */
+	/** Type binder ?the language state is passed opaque to the binder. */
 	using FTypeBinder = void (*)(void* LanguageState);
 
 	/** Register a type-level binder; queued until Initialize (or run immediately). */
@@ -65,7 +65,7 @@ public:
 };
 
 /**
- * Script host �?manages multiple language backends (Lua/Python/C#...).
+ * Script host ?manages multiple language backends (Lua/Python/C#...).
  * Initialize brings up every registered language; Shutdown tears them down
  * symmetrically. Convenience templates (LoadScript/Call) forward to the ACTIVE
  * language (the first registered one).
@@ -82,11 +82,11 @@ public:
 	/** Fired after each language Initialize succeeds (binder queue already run). */
 	using FOnLanguageReady = TMulticastEvent<void(IScriptLanguage&)>;
 
-	/** Process-unique accessor �?defined in Script.cpp (in Script.dll). */
+	/** Process-unique accessor ?defined in Script.cpp (in Script.dll). */
 	static FScriptSystem& Get();
 
-	void Initialize(int Argc, char** Argv) override;
-	void Shutdown() override;
+	void Initialize(FEngineBase& Engine) override;
+	void Shutdown(FEngineBase& Engine) override;
 
 	/** Install a language backend (host takes ownership). Idempotent by name. */
 	void RegisterLanguage(IScriptLanguage* Language);
@@ -104,7 +104,7 @@ public:
 
 	/**
 	 * Load a script file and return its top-level value (typically a table).
-	 * The caller provides the sol type �?call site must include <sol/sol.hpp>.
+	 * The caller provides the sol type ?call site must include <sol/sol.hpp>.
 	 * Returns a null-type value when the file is missing or the active language
 	 * returned no value.
 	 *
@@ -131,7 +131,7 @@ public:
 	/**
 	 * Call a function on an arbitrary handle (entity script instance, a
 	 * namespace table, ...). Overload of Call that resolves against the given
-	 * handle instead of the global scope. The caller provides the handle type �?	 * call site must include <sol/sol.hpp>.
+	 * handle instead of the global scope. The caller provides the handle type ?	 * call site must include <sol/sol.hpp>.
 	 *
 	 *   FScriptSystem::Get().Call(Script, "on_update", dt);
 	 */
@@ -170,41 +170,41 @@ private:
 } // namespace Script
 } // namespace Maho
 
-// ── Lua 注册语法糖（Lua backend only �?see FLuaLanguage in Script.cpp）──────
-// 供绑定代码（MAHO_LUA_BIND_REGISTER 回调 / 手动）在 include <sol/sol.hpp> 后使用�?// Table �?sol::table（如 Lua.create_named_table("maho") 的返回值）�?//
+// ── Lua 注册语法糖（Lua backend only ?see FLuaLanguage in Script.cpp）──────
+// 供绑定代码（MAHO_LUA_BIND_REGISTER 回调 / 手动）在 include <sol/sol.hpp> 后使用?// Table ?sol::table（如 Lua.create_named_table("maho") 的返回值）?//
 //   sol::state& Lua = *static_cast<sol::state*>(Script.TryGetState());
 //   sol::table Maho = Lua.create_named_table("maho");
 //   MAHO_LUA_METHOD(Maho, FMesh, GetName);          // maho.get_name() 绑定成员函数
 //   MAHO_LUA_FUNCTION(Maho, "my_free_fn", MyFreeFn); // 自由函数/lambda
-//   MAHO_LUA_PROPERTY(Maho, "hp", &FUnit::GetHp, &FUnit::SetHp);  // 属�?
-/** 注册一�?C++ 成员函数�?Lua 表（sol2 set_function，snake_case 自动）�?*/
+//   MAHO_LUA_PROPERTY(Maho, "hp", &FUnit::GetHp, &FUnit::SetHp);  // 属?
+/** 注册一?C++ 成员函数?Lua 表（sol2 set_function，snake_case 自动）?*/
 #define MAHO_LUA_METHOD(Table, Class, Method) \
 	(Table).set_function(#Method, &Class::Method)
 
-/** 注册一�?C++ 自由函数 / lambda �?Lua 表�?*/
+/** 注册一?C++ 自由函数 / lambda ?Lua 表?*/
 #define MAHO_LUA_FUNCTION(Table, Name, Fn) \
 	(Table).set_function(Name, Fn)
 
-/** 注册一�?C++ 属性（getter + setter，省�?setter 为只读）�?*/
+/** 注册一?C++ 属性（getter + setter，省?setter 为只读）?*/
 #define MAHO_LUA_PROPERTY(Table, Name, Getter, ...) \
 	(Table).set_property(Name, Getter, __VA_ARGS__)
 
-// ── 类内内联绑定宏（Begin/End 包裹，展开�?static void LuaBind(sol::state&)）──
-// 在类体内使用，中间夹绑定宏。需 include <sol/sol.hpp> 可见�?//
+// ── 类内内联绑定宏（Begin/End 包裹，展开?static void LuaBind(sol::state&)）──
+// 在类体内使用，中间夹绑定宏。需 include <sol/sol.hpp> 可见?//
 //   class FUnit
 //   {
 //   public:
 //       int HP = 0;
 //       void Attack();
 //
-//       MAHO_LUA_BIND_BEGIN(FUnit)        // 类内，类型名写一�?//           MAHO_LUA_FIELD(HP)            //   unit.hp
+//       MAHO_LUA_BIND_BEGIN(FUnit)        // 类内，类型名写一?//           MAHO_LUA_FIELD(HP)            //   unit.hp
 //           MAHO_LUA_METHOD_FN(Attack)    //   unit:Attack()
 //       MAHO_LUA_BIND_END();
 //   };
 //
 //   展开成：static void LuaBind(sol::state& _Lua) { sol::usertype<FUnit> _Meta =
-//   _Lua.new_usertype<FUnit>("FUnit"); ... }。调用方：Type::LuaBind(LuaState)�?
-/** Begin：建 usertype + 暴露绑定上下文（_Lua / _Meta 在中间宏作用域内）�?*/
+//   _Lua.new_usertype<FUnit>("FUnit"); ... }。调用方：Type::LuaBind(LuaState)?
+/** Begin：建 usertype + 暴露绑定上下文（_Lua / _Meta 在中间宏作用域内）?*/
 #define MAHO_LUA_BIND_BEGIN(Type) \
 	static void LuaBind(sol::state& _Lua) \
 	{ \
@@ -212,26 +212,26 @@ private:
 		(void)_Meta; \
 		{
 
-/** 直接成员字段 �?点符�?unit.field（可读可写）�?*/
+/** 直接成员字段 ?点符?unit.field（可读可写）?*/
 #define MAHO_LUA_FIELD(Type, Field) \
 			_Meta[#Field] = &Type::Field;
 
-/** getter/setter 属�?�?点符�?unit.name（可读可写）�?*/
+/** getter/setter 属??点符?unit.name（可读可写）?*/
 #define MAHO_LUA_PROPERTY_MEMBER(Type, Name, Getter, Setter) \
 			_Meta[Name] = sol::property(&Type::Getter, &Type::Setter);
 
-/** 成员函数 �?点符�?unit:Method()�?*/
+/** 成员函数 ?点符?unit:Method()?*/
 #define MAHO_LUA_METHOD_FN(Type, Method) \
 			_Meta[#Method] = &Type::Method;
 
-/** End：关闭绑定块�?*/
+/** End：关闭绑定块?*/
 #define MAHO_LUA_BIND_END() \
 			} \
 		}
 
 /**
- * 把类�?BIND_BEGIN 生成�?static LuaBind(sol::state&) 注册�?Lua 后端�? * Lua Initialize 后批量执行（或已初始化则立即执行）�? *
- *   MAHO_LUA_BIND_REGISTER(FUnit);   // 任意位置调用一次（如主�?Initialize�? */
+ * 把类?BIND_BEGIN 生成?static LuaBind(sol::state&) 注册?Lua 后端? * Lua Initialize 后批量执行（或已初始化则立即执行）? *
+ *   MAHO_LUA_BIND_REGISTER(FUnit);   // 任意位置调用一次（如主?Initialize? */
 #define MAHO_LUA_BIND_REGISTER(Type) \
 	Maho::Script::FScriptSystem::Get().RegisterTypeBinder("Lua", [](void* _LuaState) \
 	{ \

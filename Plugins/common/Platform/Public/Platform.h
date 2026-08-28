@@ -1,14 +1,14 @@
 #pragma once
 
 #include <Core/Interface.h>
-#include <Core/Singleton.h>
+#include <Engine/Engine.h>
 #include <Maho.h>
 
 #include <functional>
 #include <memory>
 #include <string_view>
 
-// Win32 <Windows.h> #defines CreateWindow �?CreateWindowW; keep the clean API name.
+// Win32 <Windows.h> #defines CreateWindow �?CreateWindowW; keep the clean API name.
 #ifdef CreateWindow
 #	undef CreateWindow
 #endif
@@ -18,11 +18,11 @@ namespace Maho
 namespace Platform
 {
 
-/** Native surface handle �?opaque (GLFWwindow*, EGLContext, ANativeWindow*, UIView*, ...). */
+/** Native surface handle �?opaque (GLFWwindow*, EGLContext, ANativeWindow*, UIView*, ...). */
 using FNativeSurface = void*;
 
 /**
- * Minimal platform interface �?only the native surface for the RHI.
+ * Minimal platform interface �?only the native surface for the RHI.
  * Not every platform has a "window" (headless, Android surface, iOS view),
  * so window semantics are hidden behind this single accessor.
  */
@@ -36,29 +36,30 @@ public:
 };
 
 /**
- * Platform system �?native surface + events (TSingleton service). Provides a
- * GLFW window (desktop) or a headless EGL pbuffer context. The host drives the
- * fixed lifecycle: Initialize() / Shutdown(); events are pumped explicitly via
- * PollEvents() (no implicit stage loop �?the engine has none).
+ * Platform system �?native surface + events (an FEngineLayer feature). The
+ * engine loop drives Tick() → PollEvents + ShouldClose → Owner->RequestExit().
+ * The RHI finds this instance through the engine (Context) and reads
+ * GetNativeWindow() — no singleton needed.
  *
- *   Platform::FPlatformSystem::Get().Initialize(0, nullptr);
- *   Platform::FPlatformSystem::Get().CreateWindow(1280, 720, "MyGame");
- *   while (!Platform::FPlatformSystem::Get().ShouldClose())
- *   {
- *       Platform::FPlatformSystem::Get().PollEvents();
- *       // render frame...
- *   }
+ *   Platform::FPlatformSystem Platform;
+ *   Platform.Initialize(0, nullptr);
+ *   Platform.CreateWindow(1280, 720, "MyGame");
+ *   Engine.Install(&Platform);
  */
-class FPlatformSystem
-	: public TSingleton<FPlatformSystem>
-	, public IPlugin<IInit, IShutdown>
+class FPlatformSystem : public FEngineLayer
 {
 public:
-	/** Process-unique accessor �?defined in Platform.cpp (in Platform.dll). */
-	static FPlatformSystem& Get();
+	MAHO_DECLARE_LAYER(FPlatformSystem);
 
-	void Initialize(int Argc, char** Argv) override;
-	void Shutdown() override;
+	// ── engine init/shutdown stages (FEngineLayer) ──
+	void Initialize(FEngineBase& Engine) override;
+	void Shutdown(FEngineBase& Engine) override;
+
+	// ── engine tick stages (FEngineLayer) ──
+	void BeginFrame(FEngineBase& Engine) override;
+	void Tick(FEngineBase& Engine) override;      // PollEvents + ShouldClose → RequestExit
+	void EndFrame(FEngineBase& Engine) override;
+	void RequestExit(FEngineBase& Engine) override;
 
 	/** Create a window (picks the backend for the current platform). */
 	bool CreateWindow(int Width, int Height, std::string_view Title);
@@ -69,7 +70,7 @@ public:
 	/** Destroy the backend (switch to headless). */
 	void DestroyWindow();
 
-	/** Pump platform events (call once per frame). */
+	/** Pump platform events (called by Tick). */
 	void PollEvents();
 
 	[[nodiscard]] FNativeSurface GetNativeWindow() const;
@@ -78,10 +79,7 @@ public:
 	/** Window close request (false when headless or no events). */
 	[[nodiscard]] bool ShouldClose() const;
 
-protected:
-	friend TSingleton<FPlatformSystem>;
-	FPlatformSystem() = default;
-
+private:
 	std::unique_ptr<IPlatform> Surface;
 	std::function<void()> PollEventsFn;
 	std::function<bool()> QueryShouldClose;

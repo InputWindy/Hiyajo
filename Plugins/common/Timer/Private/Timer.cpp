@@ -20,13 +20,13 @@ FGameClock& FGameClock::Get()
 	return Instance;
 }
 
-void FTimer::Initialize(int Argc, char** Argv)
+void FTimer::Initialize(FEngineBase& Engine)
 {
-	(void)Argc; (void)Argv;
+	(void)Engine;
 	Reset();
 }
 
-void FTimer::Shutdown()
+void FTimer::Shutdown(FEngineBase&)
 {
 	Reset();
 }
@@ -96,12 +96,12 @@ FScopedTimer::~FScopedTimer()
 
 // ── FGameClock ──
 
-void FGameClock::Initialize(int Argc, char** Argv)
+void FGameClock::Initialize(FEngineBase& Engine)
 {
-	(void)Argc; (void)Argv;
+	(void)Engine;
 }
 
-void FGameClock::Shutdown()
+void FGameClock::Shutdown(FEngineBase&)
 {
 }
 
