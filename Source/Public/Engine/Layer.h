@@ -63,10 +63,7 @@ public:
 	/** My stage (interface type) → what I depend on in that stage. */
 	using FDependencyTable = std::map<std::type_index, std::vector<FDependency>>;
 
-	virtual const FDependencyTable& GetDependencies() const
-	{
-		return Dependencies;
-	}
+	virtual const FDependencyTable& GetDependencies() const;
 
 protected:
 	/** Declare: `this` at TMyStage depends on TDepObj at TDepStage. */
@@ -82,29 +79,29 @@ protected:
 	/** Runtime dependency: `this` at MyStage depends on DepName at DepStage.
 	 *  For dynamically-loaded features that cannot name the dep's type — the
 	 *  dep is addressed by its layer name (== GetName()/StaticName()). */
-	void AddDependency(std::type_index MyStage, std::string_view DepName, std::type_index DepStage)
-	{
-		Dependencies[MyStage].push_back({ std::string(DepName), DepStage });
-	}
+	void AddDependency(std::type_index MyStage, std::string_view DepName, std::type_index DepStage);
 
 	FDependencyTable Dependencies;
 };
 
 /**
- * Layer syntax sugar — binds FLayerBase (identity + deps) with an IPipeline
- * (ordered stages + the stage-invoke dispatch). Inherit from this instead of
- * spelling both bases:
+ * Layer syntax sugar — binds FLayerBase (identity + deps) with ONE OR MORE
+ * pipelines (ordered stages + the stage-invoke dispatch). Inherit from this
+ * instead of spelling the bases:
  *
  *   class FWorld : public FLayer<IPipeline<IMain, IShutdown>>
  *   { ... };
  *
- * == FLayerBase + IPipeline<IMain, IShutdown>.
- * The stage-invoke protocol lives in IPipeline (see Interface.h).
+ *   class FWorldMulti : public FLayer<IEngineTickPipeline, IEngineInitPipeline>
+ *   { ... };   // multiple pipelines (one layer, several stage sequences)
+ *
+ * == FLayerBase + TPipelines... (variadic base list).
+ * The stage-invoke protocol lives in each IPipeline (see Interface.h).
  */
-template <typename TPipeline>
+template <typename... TPipelines>
 class MAHO_API FLayer
 	: public FLayerBase
-	, public TPipeline
+	, public TPipelines...
 {
 };
 
@@ -241,7 +238,11 @@ private:
 		{
 			// TPipeline 内嵌 Invoke<TStage>（stage → 方法的 if-constexpr 映射）。
 			// FLayerBase 与 TPipeline 无继承关系（层同时继承两者），侧向转换用 dynamic_cast。
-			dynamic_cast<TPipeline&>(*Layer).template Invoke<TCurrent>(Context);
+			// 未挂此管线的层静默跳过（多管线场景下，一层可能只实现其中几条）。
+			if (auto* P = dynamic_cast<TPipeline*>(Layer))
+			{
+				P->template Invoke<TCurrent>(Context);
+			}
 			return;
 		}
 		if constexpr (sizeof...(TRest) > 0)

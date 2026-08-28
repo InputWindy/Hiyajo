@@ -8,36 +8,6 @@
 namespace Maho
 {
 
-class MAHO_API IInit
-{
-public:
-	virtual ~IInit() = default;
-	virtual void Initialize(int Argc, char** Argv) = 0;
-};
-
-class MAHO_API IShutdown
-{
-public:
-	virtual ~IShutdown() = default;
-	virtual void Shutdown() = 0;
-};
-
-/** Main capability — the engine's free-form run entry (owns its loop). */
-class MAHO_API IMain
-{
-public:
-	virtual ~IMain() = default;
-	virtual int Main() = 0;
-};
-
-/** Exit capability — request a running loop (IMain) to stop. */
-class MAHO_API IExit
-{
-public:
-	virtual ~IExit() = default;
-	virtual void RequestExit() = 0;
-};
-
 /**
  * Capability composer — an UNORDERED set of capability traits a class promises.
  * No stage ordering is implied; used for capability query (dynamic_cast) and

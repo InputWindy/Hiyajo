@@ -58,11 +58,10 @@ inline int Main(int Argc, char** Argv)
 	// Bring the (anonymous) root engine up, run its main loop, then shut it
 	// down symmetrically. The root is never known by concrete type — only by
 	// the FEngineBase anchor.
-	App->Initialize(Argc, Argv);
-
+	App->ParseCommandLine(Argc, Argv);
+	App->PreMain();
 	const int Result = App->Main();
-
-	App->Shutdown();
+	App->PostMain();
 	delete App; // FEngineBase virtual dtor — removes the whole object through the DLL.
 	return Result;
 }
