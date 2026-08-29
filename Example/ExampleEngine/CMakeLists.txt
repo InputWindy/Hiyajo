@@ -378,18 +378,18 @@ source_group(TREE "${ENGINE_DIR}/Plugins/Common/Reflect" FILES
 )
 
 add_library(Resource SHARED
-	${ENGINE_DIR}/Plugins/Common/Resource/Public/Resource.h
-	${ENGINE_DIR}/Plugins/Common/Resource/Private/Resource.cpp
-	${ENGINE_DIR}/Plugins/Common/Resource/Resource.cplugin
-	${ENGINE_DIR}/Plugins/Common/Resource/Resource.cmake
-	${ENGINE_DIR}/Plugins/Common/Resource/settings.json
+	${ENGINE_DIR}/Plugins/Engine/Resource/Public/Resource.h
+	${ENGINE_DIR}/Plugins/Engine/Resource/Private/Resource.cpp
+	${ENGINE_DIR}/Plugins/Engine/Resource/Resource.cplugin
+	${ENGINE_DIR}/Plugins/Engine/Resource/Resource.cmake
+	${ENGINE_DIR}/Plugins/Engine/Resource/settings.json
 )
-set_source_files_properties(	${ENGINE_DIR}/Plugins/Common/Resource/Resource.cplugin
-	${ENGINE_DIR}/Plugins/Common/Resource/Resource.cmake
-	${ENGINE_DIR}/Plugins/Common/Resource/settings.json PROPERTIES HEADER_FILE_ONLY ON)
+set_source_files_properties(	${ENGINE_DIR}/Plugins/Engine/Resource/Resource.cplugin
+	${ENGINE_DIR}/Plugins/Engine/Resource/Resource.cmake
+	${ENGINE_DIR}/Plugins/Engine/Resource/settings.json PROPERTIES HEADER_FILE_ONLY ON)
 target_include_directories(Resource PUBLIC
 	"${ENGINE_DIR}/Source/Public"
-	"${ENGINE_DIR}/Plugins/Common/Resource/Public"
+	"${ENGINE_DIR}/Plugins/Engine/Resource/Public"
 	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEngine/Public"
 	"${ENGINE_DIR}/Plugins/Common/Name/Public"
 	"${ENGINE_DIR}/Plugins/Common/Paths/Public"
@@ -398,15 +398,15 @@ set_target_properties(Resource PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 target_compile_definitions(Resource PRIVATE MAHO_RESOURCE_MODULE_EXPORTS)
 target_link_libraries(Resource PUBLIC Maho)
 set_property(TARGET Resource PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>")
-set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Common/Resource")
-include("${ENGINE_DIR}/Plugins/Common/Resource/Resource.cmake")
+set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Engine/Resource")
+include("${ENGINE_DIR}/Plugins/Engine/Resource/Resource.cmake")
 unset(_MOD_PLUGIN_DIR)
 
 target_link_libraries(Resource PUBLIC Name Paths)
 
-source_group(TREE "${ENGINE_DIR}/Plugins/Common/Resource" FILES
-	"${ENGINE_DIR}/Plugins/Common/Resource/Public/Resource.h"
-	"${ENGINE_DIR}/Plugins/Common/Resource/Private/Resource.cpp"
+source_group(TREE "${ENGINE_DIR}/Plugins/Engine/Resource" FILES
+	"${ENGINE_DIR}/Plugins/Engine/Resource/Public/Resource.h"
+	"${ENGINE_DIR}/Plugins/Engine/Resource/Private/Resource.cpp"
 )
 
 add_library(Script SHARED
@@ -423,7 +423,7 @@ target_include_directories(Script PUBLIC
 	"${ENGINE_DIR}/Source/Public"
 	"${ENGINE_DIR}/Plugins/Common/Script/Public"
 	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEngine/Public"
-	"${ENGINE_DIR}/Plugins/Common/Resource/Public"
+	"${ENGINE_DIR}/Plugins/Engine/Resource/Public"
 	"${ENGINE_DIR}/Plugins/Common/ConsoleVariable/Public"
 	"${ENGINE_DIR}/Plugins/Engine/Log/Public"
 	"${ENGINE_DIR}/Plugins/Common/Exception/Public"
@@ -649,7 +649,7 @@ target_include_directories(ExampleEngine PUBLIC
 	"${ENGINE_DIR}/Plugins/Engine/Platform/Public"
 	"${ENGINE_DIR}/Plugins/Common/RHI/Public"
 	"${ENGINE_DIR}/Plugins/Common/Reflect/Public"
-	"${ENGINE_DIR}/Plugins/Common/Resource/Public"
+	"${ENGINE_DIR}/Plugins/Engine/Resource/Public"
 	"${ENGINE_DIR}/Plugins/Common/Script/Public"
 	"${ENGINE_DIR}/Plugins/Common/Text/Public"
 	"${ENGINE_DIR}/Plugins/Common/Timer/Public"
@@ -775,7 +775,7 @@ set_target_properties(RHI PROPERTIES FOLDER "Maho/Plugins/Common")
 
 set_target_properties(Reflect PROPERTIES FOLDER "Maho/Plugins/Common")
 
-set_target_properties(Resource PROPERTIES FOLDER "Maho/Plugins/Common")
+set_target_properties(Resource PROPERTIES FOLDER "Maho/Plugins/Engine")
 
 set_target_properties(Script PROPERTIES FOLDER "Maho/Plugins/Common")
 

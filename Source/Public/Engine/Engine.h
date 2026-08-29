@@ -2,6 +2,7 @@
 
 #include <Core/Assembly.h>
 #include <Core/Interface.h>
+#include <Core/Query.h>
 #include <Engine/Layer.h>
 
 #include <algorithm>
@@ -230,7 +231,7 @@ protected:
 };
 
 // Engine base class
-class MAHO_API FEngineBase
+class MAHO_API FEngineBase : public FQuery<FLayerBase>
 {
 public:
 	FEngineBase();
@@ -297,6 +298,11 @@ public:
 	 * active layer with the same name exists, it is ignored.
 	 */
 	void TryUninstall(std::string_view LayerName);
+
+protected:
+	// -- FQuery data source --
+	std::vector<FLayerBase*>& GetQueryData() override { return Pipelines; }
+	const std::vector<FLayerBase*>& GetQueryData() const override { return Pipelines; }
 
 protected:
 	/** Apply pending installs/uninstalls (called at the main loop safe point). */

@@ -2,8 +2,10 @@
 
 #include <Core/Delegate.h>
 #include <Core/Interface.h>
-#include <Core/Singleton.h>
 #include <Maho.h>
+#include <Engine/Engine.h>
+
+#include "ScriptApi.h"
 
 #include <memory>
 #include <string>
@@ -15,6 +17,9 @@ namespace Script
 {
 
 class FScriptSystem;
+
+/** Global script system accessor - returns FScriptSystem* (cross-DLL via function). */
+MAHO_SCRIPT_API FScriptSystem* GetScriptSystem();
 
 /**
  * Script language backend - one implementation per language (Lua, Python, C#).
@@ -70,23 +75,17 @@ public:
  * symmetrically. Convenience templates (LoadScript/Call) forward to the ACTIVE
  * language (the first registered one).
  *
- *   Script::FScriptSystem::Get().Initialize(0, nullptr);  // starts all backends
- *   Script::FScriptSystem::Get().DoFile("main.lua");      // host loads scripts
- *   Script::FScriptSystem::Get().Call("OnUpdate", dt);    // host drives per frame
+ *   Script::GetScriptSystem()->Initialize(0, nullptr);  // starts all backends
+ *   Script::GetScriptSystem()->DoFile("main.lua");      // host loads scripts
+ *   Script::GetScriptSystem()->Call("OnUpdate", dt);    // host drives per frame
  */
-class FScriptSystem
-	: public TSingleton<FScriptSystem>
-	, public IPlugin<IInit, IShutdown>
+class FScriptSystem : public FEngineLayer
 {
 public:
+	MAHO_DECLARE_ENGINE_LAYER(FScriptSystem, "Script.dll");
+
 	/** Fired after each language Initialize succeeds (binder queue already run). */
 	using FOnLanguageReady = TMulticastEvent<void(IScriptLanguage&)>;
-
-	/** Process-unique accessor - defined in Script.cpp (in Script.dll). */
-	static FScriptSystem& Get();
-
-	void Initialize(FEngineBase& Engine) override;
-	void Shutdown(FEngineBase& Engine) override;
 
 	/** Install a language backend (host takes ownership). Idempotent by name. */
 	void RegisterLanguage(IScriptLanguage* Language);
@@ -163,6 +162,10 @@ public:
 	[[nodiscard]] void* TryGetState();
 
 private:
+	// -- engine pipeline stages (scheduler-only) --
+	void Initialize(FEngineBase& Engine) override;
+	void Shutdown(FEngineBase& Engine) override;
+
 	std::vector<std::unique_ptr<IScriptLanguage>> Languages;
 	IScriptLanguage* Active = nullptr;
 	FOnLanguageReady OnLanguageReady;
@@ -240,7 +243,7 @@ private:
  *   MAHO_LUA_BIND_REGISTER(FUnit);   // call once anywhere (e.g. main Initialize)
  */
 #define MAHO_LUA_BIND_REGISTER(Type) \
-	Maho::Script::FScriptSystem::Get().RegisterTypeBinder("Lua", [](void* _LuaState) \
+	Maho::Script::GetScriptSystem()->RegisterTypeBinder("Lua", [](void* _LuaState) \
 	{ \
 		Type::LuaBind(*static_cast<sol::state*>(_LuaState)); \
 	})

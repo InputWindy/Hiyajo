@@ -12,6 +12,8 @@ void FExampleEngine::PreMain()
 	Install("Log.dll");
 	Install("GameInput.dll");
 	Install("Platform.dll");
+	Install("Resource.dll");
+	Install("Script.dll");
 }
 
 void FExampleEngine::PostMain()

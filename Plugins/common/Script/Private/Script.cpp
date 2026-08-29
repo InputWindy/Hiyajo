@@ -271,14 +271,17 @@ private:
 
 // -- Host (FScriptSystem) ---------------------------------------------------
 
-FScriptSystem& FScriptSystem::Get()
+FScriptSystem* GScriptSystem = nullptr;
+
+MAHO_SCRIPT_API FScriptSystem* GetScriptSystem()
 {
-	static FScriptSystem Instance;
-	return Instance;
+	return GScriptSystem;
 }
 
 void FScriptSystem::Initialize(FEngineBase& Engine)
 {
+	(void)Engine;
+
 	// Default backend: Lua. Other languages register themselves (e.g. a
 	// ScriptPython / ScriptCSharp plugin) during their own Initialize.
 	RegisterLanguage(new FLuaLanguage());
@@ -293,10 +296,14 @@ void FScriptSystem::Initialize(FEngineBase& Engine)
 			OnLanguageReady.Broadcast(*Language);
 		}
 	}
+
+	GScriptSystem = this;
 }
 
 void FScriptSystem::Shutdown(FEngineBase&)
 {
+	GScriptSystem = nullptr;
+
 	for (auto& Language : Languages)
 	{
 		Language->Shutdown();
@@ -381,3 +388,9 @@ void* FScriptSystem::TryGetState()
 }
 
 } // namespace Maho::Script
+
+// The C export the host looks up BY SYMBOL NAME for dynamic install.
+extern "C" MAHO_SCRIPT_API Maho::FEngineLayer* CreateLayer()
+{
+	return Maho::Script::FScriptSystem::CreateLayer();
+}

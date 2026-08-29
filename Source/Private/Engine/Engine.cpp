@@ -121,13 +121,13 @@ int FEngineBase::Main()
 
 	// Init pipeline: drive once with a temporary graph; layers mounting IEngineInitPipeline Initialize in dependency order.
 	FLayerTaskGraph<IEngineInitPipeline, FEngineBase> InitGraph(Pool, *this);
-	InitGraph.Init(Pipelines);
-	if (!InitGraph.Compile())
-	{
-		ReportFatal("FEngineBase::Main: init pipeline Compile failed (missing dependency or cycle)");
-	}
-	InitGraph.Execute();
-	InitGraph.Flush();
+		InitGraph.Init(Select<IEngineInitPipeline>());
+		if (!InitGraph.Compile())
+		{
+			ReportFatal("FEngineBase::Main: init pipeline Compile failed (missing dependency or cycle)");
+		}
+		InitGraph.Execute();
+		InitGraph.Flush();
 
 	// Tick pipeline: the main loop.
 	FLayerTaskGraph<IEngineTickPipeline, FEngineBase> EngineGraph(Pool, *this);
@@ -136,7 +136,7 @@ int FEngineBase::Main()
 		EngineGraph.Flush();
 		FlushPendingUpdatePipelines();
 
-		EngineGraph.Init(Pipelines);
+		EngineGraph.Init(Select<IEngineTickPipeline>());
 		if (!EngineGraph.Compile())
 		{
 			ReportFatal("FEngineBase::Main: tick pipeline Compile failed (missing dependency or cycle)");
@@ -154,7 +154,7 @@ int FEngineBase::Main()
 
 	// Shutdown pipeline: drive once with a temporary graph; layers mounting IEngineShutdownPipeline Shutdown in dependency order.
 	FLayerTaskGraph<IEngineShutdownPipeline, FEngineBase> ShutdownGraph(Pool, *this);
-	ShutdownGraph.Init(Pipelines);
+	ShutdownGraph.Init(Select<IEngineShutdownPipeline>());
 	if (!ShutdownGraph.Compile())
 	{
 		ReportFatal("FEngineBase::Main: shutdown pipeline Compile failed (missing dependency or cycle)");
