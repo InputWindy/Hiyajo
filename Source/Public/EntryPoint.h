@@ -4,6 +4,8 @@
 #include <Core/Fatal.h>
 #include <Engine/Engine.h>
 
+#include <exception>
+
 namespace Maho
 {
 
@@ -28,42 +30,56 @@ inline int Main(int Argc, char** Argv)
 {
 	InstallFatalHandlers();
 
+	try
+	{
+
 #ifndef MAHO_ENGINE_NAME
 #	define MAHO_ENGINE_NAME "Engine.dll"
 #endif
-	// The engine path -- first command-line argument, else the project's DLL.
-	const char* EnginePath = (Argc > 1 && Argv[1] != nullptr) ? Argv[1] : MAHO_ENGINE_NAME;
+		// The engine path -- first command-line argument, else the project's DLL.
+		const char* EnginePath = (Argc > 1 && Argv[1] != nullptr) ? Argv[1] : MAHO_ENGINE_NAME;
 
-	// Install (load) the engine.
-	FAssembly Engine(EnginePath);
-	if (!Engine.IsLoaded())
-	{
-		ReportFatal("Failed to install engine assembly");
+		// Install (load) the engine.
+		FAssembly Engine(EnginePath);
+		if (!Engine.IsLoaded())
+		{
+			ReportFatal("Failed to install engine assembly");
+		}
+
+		// Create the root instance -- the exported CreateEngine factory.
+		using CreateFunction = FEngineBase* (*)();
+		auto Create = Engine.GetProcAs<CreateFunction>("CreateEngine");
+		if (Create == nullptr)
+		{
+			ReportFatal("Engine assembly exports no CreateEngine");
+		}
+
+		FEngineBase* App = Create();
+		if (!App)
+		{
+			ReportFatal("CreateEngine returned null");
+		}
+
+		// Bring the (anonymous) root engine up, run its main loop, then shut it
+		// down symmetrically. The root is never known by concrete type - only by
+		// the FEngineBase anchor.
+		App->ParseCommandLine(Argc, Argv);
+		App->PreMain();
+		const int Result = App->Main();
+		App->PostMain();
+		delete App; // FEngineBase virtual dtor - removes the whole object through the DLL.
+		return Result;
 	}
-
-	// Create the root instance -- the exported CreateEngine factory.
-	using CreateFunction = FEngineBase* (*)();
-	auto Create = Engine.GetProcAs<CreateFunction>("CreateEngine");
-	if (Create == nullptr)
+	catch (const std::exception& E)
 	{
-		ReportFatal("Engine assembly exports no CreateEngine");
+		// Top-level fallback: any exception escaping the engine lifecycle on the
+		// main thread lands here. Log + abort (no recovery - state is untrusted).
+		ReportFatal(E.what());
 	}
-
-	FEngineBase* App = Create();
-	if (!App)
+	catch (...)
 	{
-		ReportFatal("CreateEngine returned null");
+		ReportFatal("Unknown exception in engine main");
 	}
-
-	// Bring the (anonymous) root engine up, run its main loop, then shut it
-	// down symmetrically. The root is never known by concrete type - only by
-	// the FEngineBase anchor.
-	App->ParseCommandLine(Argc, Argv);
-	App->PreMain();
-	const int Result = App->Main();
-	App->PostMain();
-	delete App; // FEngineBase virtual dtor - removes the whole object through the DLL.
-	return Result;
 }
 
 } // namespace Maho

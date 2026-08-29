@@ -1,5 +1,7 @@
 #pragma once
 
+#include <Core/Fatal.h>
+
 #include <atomic>
 #include <condition_variable>
 #include <cstdint>
@@ -141,7 +143,20 @@ inline void FThreadPool::WorkerLoop()
 			Task = std::move(Queue.front());
 			Queue.pop_front();
 		}
-		Task();
+		try
+		{
+			Task();
+		}
+		catch (const std::exception& E)
+		{
+			// An exception escaping a worker thread bypasses the main-thread
+			// try-catch and would std::terminate; report it here.
+			ReportFatal(E.what());
+		}
+		catch (...)
+		{
+			ReportFatal("Unknown exception in thread-pool worker");
+		}
 		{
 			std::lock_guard Lock(Mutex);
 			PendingCount -= 1;

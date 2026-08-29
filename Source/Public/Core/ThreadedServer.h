@@ -12,6 +12,8 @@
 //   FResourceSystem::Get().Submit([...]{ /* runs on the worker */ });
 //   FResourceSystem::Get().Flush();        // barrier: drain everything before
 //   FResourceSystem::Get().Shutdown();     // stop + join
+#include <Core/Fatal.h>
+
 #include <atomic>
 #include <condition_variable>
 #include <deque>
@@ -160,7 +162,20 @@ inline void FThreadedServer::RunLoop()
 			Task = std::move(Queue.front());
 			Queue.pop_front();
 		}
-		Task();
+		try
+		{
+			Task();
+		}
+		catch (const std::exception& E)
+		{
+			// An exception escaping the dedicated worker bypasses the main-thread
+			// try-catch; report it here.
+			ReportFatal(E.what());
+		}
+		catch (...)
+		{
+			ReportFatal("Unknown exception in threaded server");
+		}
 	}
 }
 
