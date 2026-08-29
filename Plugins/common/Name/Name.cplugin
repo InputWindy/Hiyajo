@@ -1,6 +1,0 @@
-{
-  "FileVersion": 1,
-  "Name": "Name",
-  "Description": "interned string identifier pool singleton",
-  "Dependencies": []
-}

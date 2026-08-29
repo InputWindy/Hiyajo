@@ -58,62 +58,62 @@ source_group(TREE "${ENGINE_DIR}/Plugins/Common/Archive" FILES
 )
 
 add_library(Paths SHARED
-	${ENGINE_DIR}/Plugins/Common/Paths/Public/Paths.h
-	${ENGINE_DIR}/Plugins/Common/Paths/Private/Paths.cpp
-	${ENGINE_DIR}/Plugins/Common/Paths/Paths.cplugin
-	${ENGINE_DIR}/Plugins/Common/Paths/Paths.cmake
-	${ENGINE_DIR}/Plugins/Common/Paths/settings.json
+	${ENGINE_DIR}/Plugins/Engine/Paths/Public/Paths.h
+	${ENGINE_DIR}/Plugins/Engine/Paths/Private/Paths.cpp
+	${ENGINE_DIR}/Plugins/Engine/Paths/Paths.cplugin
+	${ENGINE_DIR}/Plugins/Engine/Paths/Paths.cmake
+	${ENGINE_DIR}/Plugins/Engine/Paths/settings.json
 )
-set_source_files_properties(	${ENGINE_DIR}/Plugins/Common/Paths/Paths.cplugin
-	${ENGINE_DIR}/Plugins/Common/Paths/Paths.cmake
-	${ENGINE_DIR}/Plugins/Common/Paths/settings.json PROPERTIES HEADER_FILE_ONLY ON)
+set_source_files_properties(	${ENGINE_DIR}/Plugins/Engine/Paths/Paths.cplugin
+	${ENGINE_DIR}/Plugins/Engine/Paths/Paths.cmake
+	${ENGINE_DIR}/Plugins/Engine/Paths/settings.json PROPERTIES HEADER_FILE_ONLY ON)
 target_include_directories(Paths PUBLIC
 	"${ENGINE_DIR}/Source/Public"
-	"${ENGINE_DIR}/Plugins/Common/Paths/Public"
+	"${ENGINE_DIR}/Plugins/Engine/Paths/Public"
 	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEngine/Public"
 )
 set_target_properties(Paths PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 target_compile_definitions(Paths PRIVATE MAHO_PATHS_MODULE_EXPORTS)
 target_link_libraries(Paths PUBLIC Maho)
 set_property(TARGET Paths PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>")
-set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Common/Paths")
-include("${ENGINE_DIR}/Plugins/Common/Paths/Paths.cmake")
+set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Engine/Paths")
+include("${ENGINE_DIR}/Plugins/Engine/Paths/Paths.cmake")
 unset(_MOD_PLUGIN_DIR)
 
-source_group(TREE "${ENGINE_DIR}/Plugins/Common/Paths" FILES
-	"${ENGINE_DIR}/Plugins/Common/Paths/Public/Paths.h"
-	"${ENGINE_DIR}/Plugins/Common/Paths/Private/Paths.cpp"
+source_group(TREE "${ENGINE_DIR}/Plugins/Engine/Paths" FILES
+	"${ENGINE_DIR}/Plugins/Engine/Paths/Public/Paths.h"
+	"${ENGINE_DIR}/Plugins/Engine/Paths/Private/Paths.cpp"
 )
 
 add_library(Asset SHARED
-	${ENGINE_DIR}/Plugins/Common/Asset/Public/Asset.h
-	${ENGINE_DIR}/Plugins/Common/Asset/Private/Asset.cpp
-	${ENGINE_DIR}/Plugins/Common/Asset/Asset.cplugin
-	${ENGINE_DIR}/Plugins/Common/Asset/Asset.cmake
-	${ENGINE_DIR}/Plugins/Common/Asset/settings.json
+	${ENGINE_DIR}/Plugins/Engine/Asset/Public/Asset.h
+	${ENGINE_DIR}/Plugins/Engine/Asset/Private/Asset.cpp
+	${ENGINE_DIR}/Plugins/Engine/Asset/Asset.cplugin
+	${ENGINE_DIR}/Plugins/Engine/Asset/Asset.cmake
+	${ENGINE_DIR}/Plugins/Engine/Asset/settings.json
 )
-set_source_files_properties(	${ENGINE_DIR}/Plugins/Common/Asset/Asset.cplugin
-	${ENGINE_DIR}/Plugins/Common/Asset/Asset.cmake
-	${ENGINE_DIR}/Plugins/Common/Asset/settings.json PROPERTIES HEADER_FILE_ONLY ON)
+set_source_files_properties(	${ENGINE_DIR}/Plugins/Engine/Asset/Asset.cplugin
+	${ENGINE_DIR}/Plugins/Engine/Asset/Asset.cmake
+	${ENGINE_DIR}/Plugins/Engine/Asset/settings.json PROPERTIES HEADER_FILE_ONLY ON)
 target_include_directories(Asset PUBLIC
 	"${ENGINE_DIR}/Source/Public"
-	"${ENGINE_DIR}/Plugins/Common/Asset/Public"
+	"${ENGINE_DIR}/Plugins/Engine/Asset/Public"
 	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEngine/Public"
-	"${ENGINE_DIR}/Plugins/Common/Paths/Public"
+	"${ENGINE_DIR}/Plugins/Engine/Paths/Public"
 )
 set_target_properties(Asset PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 target_compile_definitions(Asset PRIVATE MAHO_ASSET_MODULE_EXPORTS)
 target_link_libraries(Asset PUBLIC Maho)
 set_property(TARGET Asset PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>")
-set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Common/Asset")
-include("${ENGINE_DIR}/Plugins/Common/Asset/Asset.cmake")
+set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Engine/Asset")
+include("${ENGINE_DIR}/Plugins/Engine/Asset/Asset.cmake")
 unset(_MOD_PLUGIN_DIR)
 
 target_link_libraries(Asset PUBLIC Paths)
 
-source_group(TREE "${ENGINE_DIR}/Plugins/Common/Asset" FILES
-	"${ENGINE_DIR}/Plugins/Common/Asset/Public/Asset.h"
-	"${ENGINE_DIR}/Plugins/Common/Asset/Private/Asset.cpp"
+source_group(TREE "${ENGINE_DIR}/Plugins/Engine/Asset" FILES
+	"${ENGINE_DIR}/Plugins/Engine/Asset/Public/Asset.h"
+	"${ENGINE_DIR}/Plugins/Engine/Asset/Private/Asset.cpp"
 )
 
 add_library(Compress SHARED
@@ -145,31 +145,31 @@ source_group(TREE "${ENGINE_DIR}/Plugins/Common/Compress" FILES
 )
 
 add_library(Config SHARED
-	${ENGINE_DIR}/Plugins/Common/Config/Public/Config.h
-	${ENGINE_DIR}/Plugins/Common/Config/Private/Config.cpp
-	${ENGINE_DIR}/Plugins/Common/Config/Config.cplugin
-	${ENGINE_DIR}/Plugins/Common/Config/Config.cmake
-	${ENGINE_DIR}/Plugins/Common/Config/settings.json
+	${ENGINE_DIR}/Plugins/Engine/Config/Public/Config.h
+	${ENGINE_DIR}/Plugins/Engine/Config/Private/Config.cpp
+	${ENGINE_DIR}/Plugins/Engine/Config/Config.cplugin
+	${ENGINE_DIR}/Plugins/Engine/Config/Config.cmake
+	${ENGINE_DIR}/Plugins/Engine/Config/settings.json
 )
-set_source_files_properties(	${ENGINE_DIR}/Plugins/Common/Config/Config.cplugin
-	${ENGINE_DIR}/Plugins/Common/Config/Config.cmake
-	${ENGINE_DIR}/Plugins/Common/Config/settings.json PROPERTIES HEADER_FILE_ONLY ON)
+set_source_files_properties(	${ENGINE_DIR}/Plugins/Engine/Config/Config.cplugin
+	${ENGINE_DIR}/Plugins/Engine/Config/Config.cmake
+	${ENGINE_DIR}/Plugins/Engine/Config/settings.json PROPERTIES HEADER_FILE_ONLY ON)
 target_include_directories(Config PUBLIC
 	"${ENGINE_DIR}/Source/Public"
-	"${ENGINE_DIR}/Plugins/Common/Config/Public"
+	"${ENGINE_DIR}/Plugins/Engine/Config/Public"
 	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEngine/Public"
 )
 set_target_properties(Config PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 target_compile_definitions(Config PRIVATE MAHO_CONFIG_MODULE_EXPORTS)
 target_link_libraries(Config PUBLIC Maho)
 set_property(TARGET Config PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>")
-set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Common/Config")
-include("${ENGINE_DIR}/Plugins/Common/Config/Config.cmake")
+set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Engine/Config")
+include("${ENGINE_DIR}/Plugins/Engine/Config/Config.cmake")
 unset(_MOD_PLUGIN_DIR)
 
-source_group(TREE "${ENGINE_DIR}/Plugins/Common/Config" FILES
-	"${ENGINE_DIR}/Plugins/Common/Config/Public/Config.h"
-	"${ENGINE_DIR}/Plugins/Common/Config/Private/Config.cpp"
+source_group(TREE "${ENGINE_DIR}/Plugins/Engine/Config" FILES
+	"${ENGINE_DIR}/Plugins/Engine/Config/Public/Config.h"
+	"${ENGINE_DIR}/Plugins/Engine/Config/Private/Config.cpp"
 )
 
 add_library(ConsoleVariable SHARED
@@ -201,31 +201,31 @@ source_group(TREE "${ENGINE_DIR}/Plugins/Common/ConsoleVariable" FILES
 )
 
 add_library(Exception SHARED
-	${ENGINE_DIR}/Plugins/Common/Exception/Public/Exception.h
-	${ENGINE_DIR}/Plugins/Common/Exception/Private/Exception.cpp
-	${ENGINE_DIR}/Plugins/Common/Exception/Exception.cplugin
-	${ENGINE_DIR}/Plugins/Common/Exception/Exception.cmake
-	${ENGINE_DIR}/Plugins/Common/Exception/settings.json
+	${ENGINE_DIR}/Plugins/Engine/Exception/Public/Exception.h
+	${ENGINE_DIR}/Plugins/Engine/Exception/Private/Exception.cpp
+	${ENGINE_DIR}/Plugins/Engine/Exception/Exception.cplugin
+	${ENGINE_DIR}/Plugins/Engine/Exception/Exception.cmake
+	${ENGINE_DIR}/Plugins/Engine/Exception/settings.json
 )
-set_source_files_properties(	${ENGINE_DIR}/Plugins/Common/Exception/Exception.cplugin
-	${ENGINE_DIR}/Plugins/Common/Exception/Exception.cmake
-	${ENGINE_DIR}/Plugins/Common/Exception/settings.json PROPERTIES HEADER_FILE_ONLY ON)
+set_source_files_properties(	${ENGINE_DIR}/Plugins/Engine/Exception/Exception.cplugin
+	${ENGINE_DIR}/Plugins/Engine/Exception/Exception.cmake
+	${ENGINE_DIR}/Plugins/Engine/Exception/settings.json PROPERTIES HEADER_FILE_ONLY ON)
 target_include_directories(Exception PUBLIC
 	"${ENGINE_DIR}/Source/Public"
-	"${ENGINE_DIR}/Plugins/Common/Exception/Public"
+	"${ENGINE_DIR}/Plugins/Engine/Exception/Public"
 	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEngine/Public"
 )
 set_target_properties(Exception PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 target_compile_definitions(Exception PRIVATE MAHO_EXCEPTION_MODULE_EXPORTS)
 target_link_libraries(Exception PUBLIC Maho)
 set_property(TARGET Exception PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>")
-set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Common/Exception")
-include("${ENGINE_DIR}/Plugins/Common/Exception/Exception.cmake")
+set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Engine/Exception")
+include("${ENGINE_DIR}/Plugins/Engine/Exception/Exception.cmake")
 unset(_MOD_PLUGIN_DIR)
 
-source_group(TREE "${ENGINE_DIR}/Plugins/Common/Exception" FILES
-	"${ENGINE_DIR}/Plugins/Common/Exception/Public/Exception.h"
-	"${ENGINE_DIR}/Plugins/Common/Exception/Private/Exception.cpp"
+source_group(TREE "${ENGINE_DIR}/Plugins/Engine/Exception" FILES
+	"${ENGINE_DIR}/Plugins/Engine/Exception/Public/Exception.h"
+	"${ENGINE_DIR}/Plugins/Engine/Exception/Private/Exception.cpp"
 )
 
 add_library(Log SHARED
@@ -257,31 +257,31 @@ source_group(TREE "${ENGINE_DIR}/Plugins/Engine/Log" FILES
 )
 
 add_library(Name SHARED
-	${ENGINE_DIR}/Plugins/Common/Name/Public/Name.h
-	${ENGINE_DIR}/Plugins/Common/Name/Private/Name.cpp
-	${ENGINE_DIR}/Plugins/Common/Name/Name.cplugin
-	${ENGINE_DIR}/Plugins/Common/Name/Name.cmake
-	${ENGINE_DIR}/Plugins/Common/Name/settings.json
+	${ENGINE_DIR}/Plugins/Engine/Name/Public/Name.h
+	${ENGINE_DIR}/Plugins/Engine/Name/Private/Name.cpp
+	${ENGINE_DIR}/Plugins/Engine/Name/Name.cplugin
+	${ENGINE_DIR}/Plugins/Engine/Name/Name.cmake
+	${ENGINE_DIR}/Plugins/Engine/Name/settings.json
 )
-set_source_files_properties(	${ENGINE_DIR}/Plugins/Common/Name/Name.cplugin
-	${ENGINE_DIR}/Plugins/Common/Name/Name.cmake
-	${ENGINE_DIR}/Plugins/Common/Name/settings.json PROPERTIES HEADER_FILE_ONLY ON)
+set_source_files_properties(	${ENGINE_DIR}/Plugins/Engine/Name/Name.cplugin
+	${ENGINE_DIR}/Plugins/Engine/Name/Name.cmake
+	${ENGINE_DIR}/Plugins/Engine/Name/settings.json PROPERTIES HEADER_FILE_ONLY ON)
 target_include_directories(Name PUBLIC
 	"${ENGINE_DIR}/Source/Public"
-	"${ENGINE_DIR}/Plugins/Common/Name/Public"
+	"${ENGINE_DIR}/Plugins/Engine/Name/Public"
 	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEngine/Public"
 )
 set_target_properties(Name PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 target_compile_definitions(Name PRIVATE MAHO_NAME_MODULE_EXPORTS)
 target_link_libraries(Name PUBLIC Maho)
 set_property(TARGET Name PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>")
-set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Common/Name")
-include("${ENGINE_DIR}/Plugins/Common/Name/Name.cmake")
+set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Engine/Name")
+include("${ENGINE_DIR}/Plugins/Engine/Name/Name.cmake")
 unset(_MOD_PLUGIN_DIR)
 
-source_group(TREE "${ENGINE_DIR}/Plugins/Common/Name" FILES
-	"${ENGINE_DIR}/Plugins/Common/Name/Public/Name.h"
-	"${ENGINE_DIR}/Plugins/Common/Name/Private/Name.cpp"
+source_group(TREE "${ENGINE_DIR}/Plugins/Engine/Name" FILES
+	"${ENGINE_DIR}/Plugins/Engine/Name/Public/Name.h"
+	"${ENGINE_DIR}/Plugins/Engine/Name/Private/Name.cpp"
 )
 
 add_library(Platform SHARED
@@ -391,8 +391,8 @@ target_include_directories(Resource PUBLIC
 	"${ENGINE_DIR}/Source/Public"
 	"${ENGINE_DIR}/Plugins/Engine/Resource/Public"
 	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEngine/Public"
-	"${ENGINE_DIR}/Plugins/Common/Name/Public"
-	"${ENGINE_DIR}/Plugins/Common/Paths/Public"
+	"${ENGINE_DIR}/Plugins/Engine/Name/Public"
+	"${ENGINE_DIR}/Plugins/Engine/Paths/Public"
 )
 set_target_properties(Resource PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 target_compile_definitions(Resource PRIVATE MAHO_RESOURCE_MODULE_EXPORTS)
@@ -410,94 +410,94 @@ source_group(TREE "${ENGINE_DIR}/Plugins/Engine/Resource" FILES
 )
 
 add_library(Script SHARED
-	${ENGINE_DIR}/Plugins/Common/Script/Public/Script.h
-	${ENGINE_DIR}/Plugins/Common/Script/Private/Script.cpp
-	${ENGINE_DIR}/Plugins/Common/Script/Script.cplugin
-	${ENGINE_DIR}/Plugins/Common/Script/Script.cmake
-	${ENGINE_DIR}/Plugins/Common/Script/settings.json
+	${ENGINE_DIR}/Plugins/Engine/Script/Public/Script.h
+	${ENGINE_DIR}/Plugins/Engine/Script/Private/Script.cpp
+	${ENGINE_DIR}/Plugins/Engine/Script/Script.cplugin
+	${ENGINE_DIR}/Plugins/Engine/Script/Script.cmake
+	${ENGINE_DIR}/Plugins/Engine/Script/settings.json
 )
-set_source_files_properties(	${ENGINE_DIR}/Plugins/Common/Script/Script.cplugin
-	${ENGINE_DIR}/Plugins/Common/Script/Script.cmake
-	${ENGINE_DIR}/Plugins/Common/Script/settings.json PROPERTIES HEADER_FILE_ONLY ON)
+set_source_files_properties(	${ENGINE_DIR}/Plugins/Engine/Script/Script.cplugin
+	${ENGINE_DIR}/Plugins/Engine/Script/Script.cmake
+	${ENGINE_DIR}/Plugins/Engine/Script/settings.json PROPERTIES HEADER_FILE_ONLY ON)
 target_include_directories(Script PUBLIC
 	"${ENGINE_DIR}/Source/Public"
-	"${ENGINE_DIR}/Plugins/Common/Script/Public"
+	"${ENGINE_DIR}/Plugins/Engine/Script/Public"
 	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEngine/Public"
 	"${ENGINE_DIR}/Plugins/Engine/Resource/Public"
 	"${ENGINE_DIR}/Plugins/Common/ConsoleVariable/Public"
 	"${ENGINE_DIR}/Plugins/Engine/Log/Public"
-	"${ENGINE_DIR}/Plugins/Common/Exception/Public"
+	"${ENGINE_DIR}/Plugins/Engine/Exception/Public"
 	"${ENGINE_DIR}/Plugins/Common/Reflect/Public"
 )
 set_target_properties(Script PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 target_compile_definitions(Script PRIVATE MAHO_SCRIPT_MODULE_EXPORTS)
 target_link_libraries(Script PUBLIC Maho)
 set_property(TARGET Script PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>")
-set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Common/Script")
-include("${ENGINE_DIR}/Plugins/Common/Script/Script.cmake")
+set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Engine/Script")
+include("${ENGINE_DIR}/Plugins/Engine/Script/Script.cmake")
 unset(_MOD_PLUGIN_DIR)
 
 target_link_libraries(Script PUBLIC Resource ConsoleVariable Log Exception Reflect)
 
-source_group(TREE "${ENGINE_DIR}/Plugins/Common/Script" FILES
-	"${ENGINE_DIR}/Plugins/Common/Script/Public/Script.h"
-	"${ENGINE_DIR}/Plugins/Common/Script/Private/Script.cpp"
+source_group(TREE "${ENGINE_DIR}/Plugins/Engine/Script" FILES
+	"${ENGINE_DIR}/Plugins/Engine/Script/Public/Script.h"
+	"${ENGINE_DIR}/Plugins/Engine/Script/Private/Script.cpp"
 )
 
 add_library(Text SHARED
-	${ENGINE_DIR}/Plugins/Common/Text/Public/Text.h
-	${ENGINE_DIR}/Plugins/Common/Text/Private/Text.cpp
-	${ENGINE_DIR}/Plugins/Common/Text/Text.cplugin
-	${ENGINE_DIR}/Plugins/Common/Text/Text.cmake
-	${ENGINE_DIR}/Plugins/Common/Text/settings.json
+	${ENGINE_DIR}/Plugins/Engine/Text/Public/Text.h
+	${ENGINE_DIR}/Plugins/Engine/Text/Private/Text.cpp
+	${ENGINE_DIR}/Plugins/Engine/Text/Text.cplugin
+	${ENGINE_DIR}/Plugins/Engine/Text/Text.cmake
+	${ENGINE_DIR}/Plugins/Engine/Text/settings.json
 )
-set_source_files_properties(	${ENGINE_DIR}/Plugins/Common/Text/Text.cplugin
-	${ENGINE_DIR}/Plugins/Common/Text/Text.cmake
-	${ENGINE_DIR}/Plugins/Common/Text/settings.json PROPERTIES HEADER_FILE_ONLY ON)
+set_source_files_properties(	${ENGINE_DIR}/Plugins/Engine/Text/Text.cplugin
+	${ENGINE_DIR}/Plugins/Engine/Text/Text.cmake
+	${ENGINE_DIR}/Plugins/Engine/Text/settings.json PROPERTIES HEADER_FILE_ONLY ON)
 target_include_directories(Text PUBLIC
 	"${ENGINE_DIR}/Source/Public"
-	"${ENGINE_DIR}/Plugins/Common/Text/Public"
+	"${ENGINE_DIR}/Plugins/Engine/Text/Public"
 	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEngine/Public"
 )
 set_target_properties(Text PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 target_compile_definitions(Text PRIVATE MAHO_TEXT_MODULE_EXPORTS)
 target_link_libraries(Text PUBLIC Maho)
 set_property(TARGET Text PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>")
-set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Common/Text")
-include("${ENGINE_DIR}/Plugins/Common/Text/Text.cmake")
+set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Engine/Text")
+include("${ENGINE_DIR}/Plugins/Engine/Text/Text.cmake")
 unset(_MOD_PLUGIN_DIR)
 
-source_group(TREE "${ENGINE_DIR}/Plugins/Common/Text" FILES
-	"${ENGINE_DIR}/Plugins/Common/Text/Public/Text.h"
-	"${ENGINE_DIR}/Plugins/Common/Text/Private/Text.cpp"
+source_group(TREE "${ENGINE_DIR}/Plugins/Engine/Text" FILES
+	"${ENGINE_DIR}/Plugins/Engine/Text/Public/Text.h"
+	"${ENGINE_DIR}/Plugins/Engine/Text/Private/Text.cpp"
 )
 
 add_library(Timer SHARED
-	${ENGINE_DIR}/Plugins/Common/Timer/Public/Timer.h
-	${ENGINE_DIR}/Plugins/Common/Timer/Private/Timer.cpp
-	${ENGINE_DIR}/Plugins/Common/Timer/Timer.cplugin
-	${ENGINE_DIR}/Plugins/Common/Timer/Timer.cmake
-	${ENGINE_DIR}/Plugins/Common/Timer/settings.json
+	${ENGINE_DIR}/Plugins/Engine/Timer/Public/Timer.h
+	${ENGINE_DIR}/Plugins/Engine/Timer/Private/Timer.cpp
+	${ENGINE_DIR}/Plugins/Engine/Timer/Timer.cplugin
+	${ENGINE_DIR}/Plugins/Engine/Timer/Timer.cmake
+	${ENGINE_DIR}/Plugins/Engine/Timer/settings.json
 )
-set_source_files_properties(	${ENGINE_DIR}/Plugins/Common/Timer/Timer.cplugin
-	${ENGINE_DIR}/Plugins/Common/Timer/Timer.cmake
-	${ENGINE_DIR}/Plugins/Common/Timer/settings.json PROPERTIES HEADER_FILE_ONLY ON)
+set_source_files_properties(	${ENGINE_DIR}/Plugins/Engine/Timer/Timer.cplugin
+	${ENGINE_DIR}/Plugins/Engine/Timer/Timer.cmake
+	${ENGINE_DIR}/Plugins/Engine/Timer/settings.json PROPERTIES HEADER_FILE_ONLY ON)
 target_include_directories(Timer PUBLIC
 	"${ENGINE_DIR}/Source/Public"
-	"${ENGINE_DIR}/Plugins/Common/Timer/Public"
+	"${ENGINE_DIR}/Plugins/Engine/Timer/Public"
 	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEngine/Public"
 )
 set_target_properties(Timer PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 target_compile_definitions(Timer PRIVATE MAHO_TIMER_MODULE_EXPORTS)
 target_link_libraries(Timer PUBLIC Maho)
 set_property(TARGET Timer PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>")
-set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Common/Timer")
-include("${ENGINE_DIR}/Plugins/Common/Timer/Timer.cmake")
+set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Engine/Timer")
+include("${ENGINE_DIR}/Plugins/Engine/Timer/Timer.cmake")
 unset(_MOD_PLUGIN_DIR)
 
-source_group(TREE "${ENGINE_DIR}/Plugins/Common/Timer" FILES
-	"${ENGINE_DIR}/Plugins/Common/Timer/Public/Timer.h"
-	"${ENGINE_DIR}/Plugins/Common/Timer/Private/Timer.cpp"
+source_group(TREE "${ENGINE_DIR}/Plugins/Engine/Timer" FILES
+	"${ENGINE_DIR}/Plugins/Engine/Timer/Public/Timer.h"
+	"${ENGINE_DIR}/Plugins/Engine/Timer/Private/Timer.cpp"
 )
 
 add_library(Unicode SHARED
@@ -638,21 +638,21 @@ target_include_directories(ExampleEngine PUBLIC
 	"${ENGINE_DIR}/Source/Public"
 	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEngine/Public"
 	"${ENGINE_DIR}/Plugins/Common/Archive/Public"
-	"${ENGINE_DIR}/Plugins/Common/Paths/Public"
-	"${ENGINE_DIR}/Plugins/Common/Asset/Public"
+	"${ENGINE_DIR}/Plugins/Engine/Paths/Public"
+	"${ENGINE_DIR}/Plugins/Engine/Asset/Public"
 	"${ENGINE_DIR}/Plugins/Common/Compress/Public"
-	"${ENGINE_DIR}/Plugins/Common/Config/Public"
+	"${ENGINE_DIR}/Plugins/Engine/Config/Public"
 	"${ENGINE_DIR}/Plugins/Common/ConsoleVariable/Public"
-	"${ENGINE_DIR}/Plugins/Common/Exception/Public"
+	"${ENGINE_DIR}/Plugins/Engine/Exception/Public"
 	"${ENGINE_DIR}/Plugins/Engine/Log/Public"
-	"${ENGINE_DIR}/Plugins/Common/Name/Public"
+	"${ENGINE_DIR}/Plugins/Engine/Name/Public"
 	"${ENGINE_DIR}/Plugins/Engine/Platform/Public"
 	"${ENGINE_DIR}/Plugins/Common/RHI/Public"
 	"${ENGINE_DIR}/Plugins/Common/Reflect/Public"
 	"${ENGINE_DIR}/Plugins/Engine/Resource/Public"
-	"${ENGINE_DIR}/Plugins/Common/Script/Public"
-	"${ENGINE_DIR}/Plugins/Common/Text/Public"
-	"${ENGINE_DIR}/Plugins/Common/Timer/Public"
+	"${ENGINE_DIR}/Plugins/Engine/Script/Public"
+	"${ENGINE_DIR}/Plugins/Engine/Text/Public"
+	"${ENGINE_DIR}/Plugins/Engine/Timer/Public"
 	"${ENGINE_DIR}/Plugins/Common/Unicode/Public"
 )
 # Export the extern "C" CreateLayer() bridge — the host's single entry.
@@ -753,21 +753,21 @@ source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEngine" FILES
 # EntryPoint stays at the root (no FOLDER property).
 set_target_properties(Archive PROPERTIES FOLDER "Maho/Plugins/Common")
 
-set_target_properties(Paths PROPERTIES FOLDER "Maho/Plugins/Common")
+set_target_properties(Paths PROPERTIES FOLDER "Maho/Plugins/Engine")
 
-set_target_properties(Asset PROPERTIES FOLDER "Maho/Plugins/Common")
+set_target_properties(Asset PROPERTIES FOLDER "Maho/Plugins/Engine")
 
 set_target_properties(Compress PROPERTIES FOLDER "Maho/Plugins/Common")
 
-set_target_properties(Config PROPERTIES FOLDER "Maho/Plugins/Common")
+set_target_properties(Config PROPERTIES FOLDER "Maho/Plugins/Engine")
 
 set_target_properties(ConsoleVariable PROPERTIES FOLDER "Maho/Plugins/Common")
 
-set_target_properties(Exception PROPERTIES FOLDER "Maho/Plugins/Common")
+set_target_properties(Exception PROPERTIES FOLDER "Maho/Plugins/Engine")
 
 set_target_properties(Log PROPERTIES FOLDER "Maho/Plugins/Engine")
 
-set_target_properties(Name PROPERTIES FOLDER "Maho/Plugins/Common")
+set_target_properties(Name PROPERTIES FOLDER "Maho/Plugins/Engine")
 
 set_target_properties(Platform PROPERTIES FOLDER "Maho/Plugins/Engine")
 
@@ -777,11 +777,11 @@ set_target_properties(Reflect PROPERTIES FOLDER "Maho/Plugins/Common")
 
 set_target_properties(Resource PROPERTIES FOLDER "Maho/Plugins/Engine")
 
-set_target_properties(Script PROPERTIES FOLDER "Maho/Plugins/Common")
+set_target_properties(Script PROPERTIES FOLDER "Maho/Plugins/Engine")
 
-set_target_properties(Text PROPERTIES FOLDER "Maho/Plugins/Common")
+set_target_properties(Text PROPERTIES FOLDER "Maho/Plugins/Engine")
 
-set_target_properties(Timer PROPERTIES FOLDER "Maho/Plugins/Common")
+set_target_properties(Timer PROPERTIES FOLDER "Maho/Plugins/Engine")
 
 set_target_properties(Unicode PROPERTIES FOLDER "Maho/Plugins/Common")
 

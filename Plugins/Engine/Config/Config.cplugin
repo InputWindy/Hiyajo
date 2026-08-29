@@ -1,0 +1,6 @@
+{
+  "FileVersion": 1,
+  "Name": "Config",
+  "Description": "INI-style configuration layer (UE DefaultEngine.ini format; Load/GetString/GetInt/SetString)",
+  "Dependencies": []
+}

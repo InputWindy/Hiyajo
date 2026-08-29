@@ -1,0 +1,6 @@
+{
+  "FileVersion": 1,
+  "Name": "Timer",
+  "Description": "profiling scope timer layer (FTimer hierarchical scope profiler)",
+  "Dependencies": []
+}

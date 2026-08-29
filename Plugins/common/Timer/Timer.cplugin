@@ -1,6 +1,0 @@
-{
-  "FileVersion": 1,
-  "Name": "Timer",
-  "Description": "profiling + game clock singletons (FTimer hierarchical scope profiler + FGameClock real/game time with time-scale/pause)",
-  "Dependencies": []
-}

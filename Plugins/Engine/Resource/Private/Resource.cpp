@@ -156,7 +156,7 @@ bool FResourceSystem::EnqueueImport(
 	std::string AssetPath,
 	std::function<void(std::span<const std::uint8_t>)> OnBulkReady)
 {
-	const std::string PhysicalPath = Paths::FPaths::Get().Resolve(SourcePath).string();
+	const std::string PhysicalPath = Paths::GetPaths()->Resolve(SourcePath).string();
 	FTransferHandle Handle = RequestLoad(PhysicalPath);
 
 	std::lock_guard Lock(Impl->Mutex);

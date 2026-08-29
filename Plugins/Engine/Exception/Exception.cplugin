@@ -1,0 +1,6 @@
+{
+  "FileVersion": 1,
+  "Name": "Exception",
+  "Description": "non-fatal exception broadcast layer (ReportException fans out to OnException multicast subscribers)",
+  "Dependencies": []
+}

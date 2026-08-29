@@ -1,6 +1,0 @@
-{
-  "FileVersion": 1,
-  "Name": "Exception",
-  "Description": "non-fatal exception broadcast singleton (ReportException fans out to OnException multicast subscribers)",
-  "Dependencies": []
-}
