@@ -54,7 +54,7 @@ public:
 class FPlatform : public FLayer<IPreInit, IInit, IPostInit, IBeginFrame, ITick, IEndFrame, IExit, IPreShutdown, IShutdown, IPostShutdown>
 {
 public:
-	MAHO_DECLARE_ENGINE_LAYER(FPlatform, "Platform.dll");
+	MAHO_DECLARE_LAYER(FPlatform, "Platform.dll");
 
 	~FPlatform() override;
 

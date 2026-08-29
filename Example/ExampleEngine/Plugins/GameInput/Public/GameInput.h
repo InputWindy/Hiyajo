@@ -12,7 +12,7 @@ namespace Maho
 // simulating user input in the engine loop.
 class FGameInput : public FLayer<IBeginFrame, ITick, IEndFrame, IExit>
 {
-MAHO_DECLARE_ENGINE_LAYER(FGameInput, "GameInput.dll");
+MAHO_DECLARE_LAYER(FGameInput, "GameInput.dll");
 
 private:
 	// -- engine pipeline stages (scheduler-only) --

@@ -1210,7 +1210,7 @@ def create_plugin(
 			f"}} // namespace Maho\n"
 		)
 	else:
-		# feature (default) — an FEngineLayer node (BeginFrame/Tick/EndFrame stages).
+		# feature (default) - a tick layer (BeginFrame/Tick/EndFrame/Exit stages).
 		header_body = (
 			f"#pragma once\n\n"
 			f'#include "{plugin_name}Api.h"\n'
@@ -1218,13 +1218,13 @@ def create_plugin(
 			f"#include <Engine/Layer.h>\n"
 			f"{child_includes}\n"
 			f"namespace Maho\n{{\n\n"
-			f"// {plugin_name} — an engine feature (one node per stage in the engine\n"
-			f"// pipeline: BeginFrame → Tick → EndFrame).\n"
-			f"class F{plugin_name} : public FEngineLayer\n"
+			f"// {plugin_name} - an engine feature (one node per stage in the engine\n"
+			f"// pipeline: BeginFrame -> Tick -> EndFrame -> Exit).\n"
+			f"class F{plugin_name} : public FLayer<IBeginFrame, ITick, IEndFrame, IExit>\n"
 			f"{{\n"
-			f"MAHO_DECLARE_ENGINE_LAYER(F{plugin_name}, \"{plugin_name}.dll\");\n"
+			f"MAHO_DECLARE_LAYER(F{plugin_name}, \"{plugin_name}.dll\");\n"
 			f"\n"
-			f"public:\n"
+			f"private:\n"
 			f"\tvoid BeginFrame(FEngineBase& Engine) override;\n"
 			f"\tvoid Tick(FEngineBase& Engine) override;\n"
 			f"\tvoid EndFrame(FEngineBase& Engine) override;\n"
@@ -1244,7 +1244,7 @@ def create_plugin(
 			f"void F{plugin_name}::RequestExit(FEngineBase&) {{}}\n\n"
 			f"}} // namespace Maho\n\n"
 			f"// The C export the host looks up BY SYMBOL NAME for dynamic install.\n"
-			f'extern "C" MAHO_{export}_API Maho::FEngineLayer* CreateLayer()\n'
+			f'extern "C" MAHO_{export}_API Maho::FLayerBase* CreateLayer()\n'
 			f"{{\n"
 			f"\treturn Maho::F{plugin_name}::CreateLayer();\n"
 			f"}}\n"

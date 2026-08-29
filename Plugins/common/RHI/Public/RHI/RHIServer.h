@@ -189,7 +189,7 @@ class FRHI final
 	, public IRHI
 {
 public:
-	MAHO_DECLARE_LAYER(FRHI);
+	MAHO_DECLARE_LAYER(FRHI, "RHI.dll");
 
 	virtual ~FRHI() override;
 

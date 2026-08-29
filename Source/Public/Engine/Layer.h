@@ -13,12 +13,17 @@
 #include <vector>
 
 /**
- * Layer identity declaration sugar -- generates StaticName() + GetName()
- * override. Usage: class FWorld : public FLayer<...> { MAHO_DECLARE_LAYER(FWorld); ... };
+ * Layer declaration sugar -- generates StaticName() + GetName() + CreateLayer()
+ * + GetModulePath(). CreateLayer/GetModulePath are NOT engine-layer-specific:
+ * every FLayerBase-derived layer that can be dynamically loaded carries the
+ * factory + module path. Usage:
+ *
+ *   class FWorld : public FLayer<...> { MAHO_DECLARE_LAYER(FWorld, "World.dll"); ... };
+ *
  * The name comes from stringifying the type name (#LayerType); dependency
  * declarations use the same type deduction, so it is self-consistent.
  */
-#define MAHO_DECLARE_LAYER(LayerType)                    \
+#define MAHO_DECLARE_LAYER(LayerType, DLL)               \
 public:                                                  \
 	static constexpr std::string_view StaticName()       \
 	{                                                    \
@@ -27,6 +32,14 @@ public:                                                  \
 	std::string_view GetName() const override            \
 	{                                                    \
 		return StaticName();                              \
+	}                                                    \
+	static Maho::FLayerBase* CreateLayer()               \
+	{                                                    \
+		return new LayerType();                            \
+	}                                                    \
+	static std::string_view GetModulePath()              \
+	{                                                    \
+		return DLL;                                       \
 	}
 
 namespace Maho

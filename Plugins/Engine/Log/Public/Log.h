@@ -46,7 +46,7 @@ enum class ELogLevel
 class FLog : public FLayer<IPreInit, IInit, IPostInit, IPreShutdown, IShutdown, IPostShutdown>
 {
 public:
-	MAHO_DECLARE_ENGINE_LAYER(FLog, "Log.dll");
+	MAHO_DECLARE_LAYER(FLog, "Log.dll");
 
 	FLog();
 	~FLog() override;

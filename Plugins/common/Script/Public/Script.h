@@ -82,7 +82,7 @@ public:
 class FScriptSystem : public FLayer<IPreInit, IInit, IPostInit, IPreShutdown, IShutdown, IPostShutdown>
 {
 public:
-	MAHO_DECLARE_ENGINE_LAYER(FScriptSystem, "Script.dll");
+	MAHO_DECLARE_LAYER(FScriptSystem, "Script.dll");
 
 	/** Fired after each language Initialize succeeds (binder queue already run). */
 	using FOnLanguageReady = TMulticastEvent<void(IScriptLanguage&)>;

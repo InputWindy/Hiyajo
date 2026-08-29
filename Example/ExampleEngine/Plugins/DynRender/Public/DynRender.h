@@ -11,7 +11,7 @@ namespace Maho
 // pipeline: BeginFrame -> Tick -> EndFrame).
 class FDynRender : public FLayer<IBeginFrame, ITick, IEndFrame, IExit>
 {
-MAHO_DECLARE_ENGINE_LAYER(FDynRender, "DynRender.dll");
+MAHO_DECLARE_LAYER(FDynRender, "DynRender.dll");
 
 public:
 	FDynRender()

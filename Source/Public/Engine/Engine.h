@@ -26,17 +26,21 @@ public:                                                 \
 		return DLL;                                     \
 	}                                                   \
 
-#define MAHO_DECLARE_ENGINE_LAYER(FeatureType, DLL)     \
-public:                                                 \
-	MAHO_DECLARE_LAYER(FeatureType)				\
-	static Maho::FLayerBase* CreateLayer()            \
-	{                                                   \
-		return new FeatureType();                       \
-	}                                                   \
-	static std::string_view GetModulePath()             \
-	{                                                   \
-		return DLL;                                     \
-	}                                                   \
+/**
+ * Stage dispatch specializations - the primary template is declared in
+ * Layer.h. Each stage interface gets a full specialization here that
+ * dynamic_casts the layer to the interface and calls its stage method. A layer
+ * that does not implement the interface silently skips.
+ */
+#define MAHO_DECLARE_STAGE_DISPATCH(StageType, CastType, Method)  \
+template <>                                                       \
+inline void Invoke<StageType>(FLayerBase* Layer, FEngineBase& Engine) \
+{                                                                 \
+	if (auto* S = dynamic_cast<CastType*>(Layer))                 \
+	{                                                             \
+		S->Method(Engine);                                        \
+	}                                                             \
+}
 
 namespace Maho
 {
@@ -116,21 +120,7 @@ public:
 	virtual void RequestExit(FEngineBase&) = 0;
 };
 
-/**
- * Stage dispatch specializations - the primary template is declared in
- * Layer.h. Each stage interface gets a full specialization here that
- * dynamic_casts the layer to the interface and calls its stage method. A layer
- * that does not implement the interface silently skips.
- */
-#define MAHO_DECLARE_STAGE_DISPATCH(StageType, CastType, Method)  \
-template <>                                                       \
-inline void Invoke<StageType>(FLayerBase* Layer, FEngineBase& Engine) \
-{                                                                 \
-	if (auto* S = dynamic_cast<CastType*>(Layer))                 \
-	{                                                             \
-		S->Method(Engine);                                        \
-	}                                                             \
-}
+
 
 MAHO_DECLARE_STAGE_DISPATCH(IPreInit,     IPreInit,     PreInitialize)
 MAHO_DECLARE_STAGE_DISPATCH(IInit,        IInit,        Initialize)
@@ -142,8 +132,6 @@ MAHO_DECLARE_STAGE_DISPATCH(IBeginFrame,  IBeginFrame,  BeginFrame)
 MAHO_DECLARE_STAGE_DISPATCH(ITick,        ITick,        Tick)
 MAHO_DECLARE_STAGE_DISPATCH(IEndFrame,    IEndFrame,    EndFrame)
 MAHO_DECLARE_STAGE_DISPATCH(IExit,        IExit,        RequestExit)
-
-#undef MAHO_DECLARE_STAGE_DISPATCH
 
 // Engine base class
 class MAHO_API FEngineBase : public FQuery<FLayerBase>
