@@ -12,8 +12,6 @@
 namespace Maho
 {
 
-FEngineLayer::~FEngineLayer() = default;
-
 FEngineBase::FEngineBase() = default;
 
 FEngineBase::~FEngineBase() = default;
@@ -113,30 +111,33 @@ int FEngineBase::Main()
 	// Merge the layers installed in PreMain into Pipelines. Their Initialize is
 	// driven by the InitGraph below (do NOT call FlushPendingUpdatePipelines here,
 	// which would init them twice).
-	for (FEngineLayer* P : PendingAdded)
+	for (FLayerBase* P : PendingAdded)
 	{
 		Pipelines.push_back(P);
 	}
 	PendingAdded.clear();
 
-	// Init pipeline: drive once with a temporary graph; layers mounting IEngineInitPipeline Initialize in dependency order.
-	FLayerTaskGraph<IEngineInitPipeline, FEngineBase> InitGraph(Pool, *this);
-		InitGraph.Init(Select<IEngineInitPipeline>());
-		if (!InitGraph.Compile())
-		{
-			ReportFatal("FEngineBase::Main: init pipeline Compile failed (missing dependency or cycle)");
-		}
-		InitGraph.Execute();
-		InitGraph.Flush();
+	// Init pipeline: drive once with a temporary graph; layers implementing the
+	// init stage interfaces Initialize in dependency order.
+	using FInitStages = TTypeList<IPreInit, IInit, IPostInit>;
+	FLayerTaskGraph<FInitStages, FEngineBase> InitGraph(Pool, *this);
+	InitGraph.Init(Select<IPreInit, IInit, IPostInit>());
+	if (!InitGraph.Compile())
+	{
+		ReportFatal("FEngineBase::Main: init pipeline Compile failed (missing dependency or cycle)");
+	}
+	InitGraph.Execute();
+	InitGraph.Flush();
 
 	// Tick pipeline: the main loop.
-	FLayerTaskGraph<IEngineTickPipeline, FEngineBase> EngineGraph(Pool, *this);
+	using FTickStages = TTypeList<IBeginFrame, ITick, IEndFrame, IExit>;
+	FLayerTaskGraph<FTickStages, FEngineBase> EngineGraph(Pool, *this);
 	while (true)
 	{
 		EngineGraph.Flush();
 		FlushPendingUpdatePipelines();
 
-		EngineGraph.Init(Select<IEngineTickPipeline>());
+		EngineGraph.Init(Select<IBeginFrame, ITick, IEndFrame, IExit>());
 		if (!EngineGraph.Compile())
 		{
 			ReportFatal("FEngineBase::Main: tick pipeline Compile failed (missing dependency or cycle)");
@@ -152,9 +153,11 @@ int FEngineBase::Main()
 		}
 	}
 
-	// Shutdown pipeline: drive once with a temporary graph; layers mounting IEngineShutdownPipeline Shutdown in dependency order.
-	FLayerTaskGraph<IEngineShutdownPipeline, FEngineBase> ShutdownGraph(Pool, *this);
-	ShutdownGraph.Init(Select<IEngineShutdownPipeline>());
+	// Shutdown pipeline: drive once with a temporary graph; layers implementing
+	// the shutdown stage interfaces Shutdown in dependency order.
+	using FShutdownStages = TTypeList<IPreShutdown, IShutdown, IPostShutdown>;
+	FLayerTaskGraph<FShutdownStages, FEngineBase> ShutdownGraph(Pool, *this);
+	ShutdownGraph.Init(Select<IPreShutdown, IShutdown, IPostShutdown>());
 	if (!ShutdownGraph.Compile())
 	{
 		ReportFatal("FEngineBase::Main: shutdown pipeline Compile failed (missing dependency or cycle)");
@@ -174,7 +177,7 @@ void FEngineBase::RequestExit()
 	bIsShuttingDown.store(true, std::memory_order_release);
 }
 
-void FEngineBase::Install(FEngineLayer* Pipeline)
+void FEngineBase::Install(FLayerBase* Pipeline)
 {
 	PendingAdded.push_back(Pipeline);
 }
@@ -187,14 +190,14 @@ void FEngineBase::Install(std::string_view DllPath, const char* FactorySymbol)
 		return;
 	}
 
-	using CreateFn = FEngineLayer* (*)();
+	using CreateFn = FLayerBase* (*)();
 	auto Create = Asm->GetProcAs<CreateFn>(FactorySymbol);
 	if (Create == nullptr)
 	{
 		return;
 	}
 
-	auto Layer = std::unique_ptr<FEngineLayer>(Create());
+	auto Layer = std::unique_ptr<FLayerBase>(Create());
 	if (!Layer)
 	{
 		return;
@@ -205,7 +208,7 @@ void FEngineBase::Install(std::string_view DllPath, const char* FactorySymbol)
 	Features.push_back(std::move(Layer));
 }
 
-void FEngineBase::RequestUninstall(FEngineLayer* Pipeline)
+void FEngineBase::RequestUninstall(FLayerBase* Pipeline)
 {
 	if (Pipeline != nullptr)
 	{
@@ -219,7 +222,7 @@ void FEngineBase::TryUninstall(std::string_view LayerName)
 	{
 		if (L->GetName() == LayerName)
 		{
-			RequestUninstall(static_cast<FEngineLayer*>(L));
+			RequestUninstall(L);
 			return;
 		}
 	}
@@ -233,14 +236,15 @@ void FEngineBase::FlushPendingUpdatePipelines()
 	{
 		std::vector<FLayerBase*> NewLayers;
 		NewLayers.reserve(PendingAdded.size());
-		for (FEngineLayer* P : PendingAdded)
+		for (FLayerBase* P : PendingAdded)
 		{
 			Pipelines.push_back(P);
 			NewLayers.push_back(P);
 		}
 		PendingAdded.clear();
 
-		FLayerTaskGraph<IEngineInitPipeline, FEngineBase> InitGraph(Pool, *this);
+		using FInitStages = TTypeList<IPreInit, IInit, IPostInit>;
+		FLayerTaskGraph<FInitStages, FEngineBase> InitGraph(Pool, *this);
 		InitGraph.Init(std::move(NewLayers));
 		if (!InitGraph.Compile())
 		{
@@ -255,7 +259,7 @@ void FEngineBase::FlushPendingUpdatePipelines()
 	FlushUnload();
 }
 
-void FEngineBase::DeleteUnloaded(FEngineLayer* Layer)
+void FEngineBase::DeleteUnloaded(FLayerBase* Layer)
 {
 	for (std::size_t I = 0; I < Features.size(); ++I)
 	{
@@ -281,7 +285,7 @@ void FEngineBase::RebuildReverseDeps()
 	{
 		ReverseDepCount[std::string(L->GetName())] = 0;
 	}
-	for (FEngineLayer* L : PendingAdded)
+	for (FLayerBase* L : PendingAdded)
 	{
 		ReverseDepCount[std::string(L->GetName())] = 0;
 	}
@@ -298,7 +302,7 @@ void FEngineBase::RebuildReverseDeps()
 			}
 		}
 	}
-	for (FEngineLayer* L : PendingAdded)
+	for (FLayerBase* L : PendingAdded)
 	{
 		for (const auto& [Stage, Deps] : L->GetDependencies())
 		{
@@ -320,10 +324,10 @@ void FEngineBase::FlushUnload()
 	RebuildReverseDeps();
 
 	// name -> active layer pointer (only Pipelines; PendingAdded was already applied before this function).
-	std::map<std::string, FEngineLayer*> ByName;
+	std::map<std::string, FLayerBase*> ByName;
 	for (FLayerBase* L : Pipelines)
 	{
-		ByName[std::string(L->GetName())] = static_cast<FEngineLayer*>(L);
+		ByName[std::string(L->GetName())] = L;
 	}
 
 	// Min-heap: only holds layers "already requested for unload" (depended-on count, name).
@@ -333,7 +337,7 @@ void FEngineBase::FlushUnload()
 		return A.first > B.first;   // min-heap
 	};
 	std::priority_queue<HeapEntry, std::vector<HeapEntry>, decltype(Cmp)> Heap(Cmp);
-	for (FEngineLayer* L : PendingRemoveRequests)
+	for (FLayerBase* L : PendingRemoveRequests)
 	{
 		const std::string Name = std::string(L->GetName());
 		Heap.push({ ReverseDepCount[Name], Name });
@@ -356,12 +360,11 @@ void FEngineBase::FlushUnload()
 		{
 			continue;   // not in the active set (already unloaded).
 		}
-		FEngineLayer* Layer = It->second;
+		FLayerBase* Layer = It->second;
 		if (!PendingRemoveRequests.count(Layer))
 		{
 			continue;   // already processed.
-		}
-		if (Count > 0)
+		}		if (Count > 0)
 		{
 			break;   // depended on -> the heap only grows after this, abandon remaining requests.
 		}
@@ -393,7 +396,8 @@ void FEngineBase::FlushUnload()
 
 	// Drive the shutdown pipeline over the unloadable layers (their Shutdown
 	// stages run in dependency order), then remove + delete them.
-	FLayerTaskGraph<IEngineShutdownPipeline, FEngineBase> ShutdownGraph(Pool, *this);
+	using FShutdownStages = TTypeList<IPreShutdown, IShutdown, IPostShutdown>;
+	FLayerTaskGraph<FShutdownStages, FEngineBase> ShutdownGraph(Pool, *this);
 	ShutdownGraph.Init(std::move(ToUnload));
 	if (!ShutdownGraph.Compile())
 	{
@@ -405,7 +409,7 @@ void FEngineBase::FlushUnload()
 	for (FLayerBase* L : ToUnload)
 	{
 		Pipelines.erase(std::remove(Pipelines.begin(), Pipelines.end(), L), Pipelines.end());
-		DeleteUnloaded(static_cast<FEngineLayer*>(L));
+		DeleteUnloaded(L);
 	}
 }
 

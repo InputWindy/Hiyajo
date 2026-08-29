@@ -95,7 +95,7 @@ struct TResourceExporter;   // undefined - specialize per resource type
  * std::vector of raw bytes.
  */
 class FResourceSystem
-	: public FEngineLayer
+	: public FLayer<IPreInit, IInit, IPostInit, IBeginFrame, ITick, IEndFrame, IExit, IPreShutdown, IShutdown, IPostShutdown>
 	, public FThreadedServer
 {
 public:
@@ -124,9 +124,16 @@ public:
 
 private:
 	// -- engine pipeline stages (scheduler-only) --
+	void PreInitialize(FEngineBase&) override {}
 	void Initialize(FEngineBase& Engine) override;
-	void Shutdown(FEngineBase& Engine) override;
+	void PostInitialize(FEngineBase&) override {}
+	void BeginFrame(FEngineBase&) override {}
 	void Tick(FEngineBase& Engine) override;
+	void EndFrame(FEngineBase&) override {}
+	void RequestExit(FEngineBase&) override {}
+	void PreShutdown(FEngineBase&) override {}
+	void Shutdown(FEngineBase& Engine) override;
+	void PostShutdown(FEngineBase&) override {}
 
 	FResourceSystem();
 

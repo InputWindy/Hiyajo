@@ -74,7 +74,7 @@ void FLog::LogLine(ELogLevel Level, std::string Message)
 } // namespace Maho
 
 // The C export the host looks up BY SYMBOL NAME for dynamic install.
-extern "C" MAHO_LOG_API Maho::FEngineLayer* CreateLayer()
+extern "C" MAHO_LOG_API Maho::FLayerBase* CreateLayer()
 {
 	return Maho::FLog::CreateLayer();
 }

@@ -185,7 +185,7 @@ class IDynamicRHI;
  * layer. The device itself (IDynamicRHI) stays private to this DLL.
  */
 class FRHI final
-	: public FEngineLayer
+	: public FLayer<IPreInit, IInit, IPostInit, IBeginFrame, ITick, IEndFrame, IExit, IPreShutdown, IShutdown, IPostShutdown>
 	, public IRHI
 {
 public:
@@ -300,12 +300,16 @@ private:
 	// BeginFrame/EndFrame coexist with IRHI frame-primitive overloads (engine
 	// stage takes FEngineBase&, IRHI frame primitives take none); Tick does lazy
 	// init: query Platform through GetPlatform() to get the native window.
+	void PreInitialize(FEngineBase&) override {}
 	void Initialize(FEngineBase& Engine) override;
+	void PostInitialize(FEngineBase&) override {}
 	void Shutdown(FEngineBase& Engine) override;
 	void BeginFrame(FEngineBase& Engine) override;
 	void Tick(FEngineBase& Engine) override;
 	void EndFrame(FEngineBase& Engine) override;
 	void RequestExit(FEngineBase& Engine) override;
+	void PreShutdown(FEngineBase&) override {}
+	void PostShutdown(FEngineBase&) override {}
 
 	/** Bind the RHI device. */
 	[[nodiscard]] bool InitializeRHI(void* NativeWindowHandle, int Width, int Height,

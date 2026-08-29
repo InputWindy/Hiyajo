@@ -272,7 +272,7 @@ bool FPlatform::ShouldClose() const
 } // namespace Maho::Platform
 
 // The C export the host looks up BY SYMBOL NAME for dynamic install.
-extern "C" MAHO_API Maho::FEngineLayer* CreateLayer()
+extern "C" MAHO_API Maho::FLayerBase* CreateLayer()
 {
 	return Maho::Platform::FPlatform::CreateLayer();
 }

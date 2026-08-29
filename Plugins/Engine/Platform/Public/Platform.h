@@ -51,7 +51,7 @@ public:
  *   Platform.CreateWindow(1280, 720, "MyGame");
  *   Engine.Install(&Platform);
  */
-class FPlatform : public FEngineLayer
+class FPlatform : public FLayer<IPreInit, IInit, IPostInit, IBeginFrame, ITick, IEndFrame, IExit, IPreShutdown, IShutdown, IPostShutdown>
 {
 public:
 	MAHO_DECLARE_ENGINE_LAYER(FPlatform, "Platform.dll");
@@ -80,12 +80,16 @@ private:
 	FPlatform() = default;
 
 	// -- engine pipeline stages (scheduler-only) --
+	void PreInitialize(FEngineBase&) override {}
 	void Initialize(FEngineBase& Engine) override;
+	void PostInitialize(FEngineBase&) override {}
 	void Shutdown(FEngineBase& Engine) override;
 	void BeginFrame(FEngineBase& Engine) override;
 	void Tick(FEngineBase& Engine) override;
 	void EndFrame(FEngineBase& Engine) override;
 	void RequestExit(FEngineBase& Engine) override;
+	void PreShutdown(FEngineBase&) override {}
+	void PostShutdown(FEngineBase&) override {}
 
 	std::unique_ptr<IPlatform> Surface;
 	std::function<void()> PollEventsFn;

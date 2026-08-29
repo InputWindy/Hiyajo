@@ -278,7 +278,7 @@ const FResource* FResourceSystem::TryLoad(std::string_view AssetPath)
 } // namespace Maho::Resource
 
 // The C export the host looks up BY SYMBOL NAME for dynamic install.
-extern "C" MAHO_RESOURCE_API Maho::FEngineLayer* CreateLayer()
+extern "C" MAHO_RESOURCE_API Maho::FLayerBase* CreateLayer()
 {
 	return Maho::Resource::FResourceSystem::CreateLayer();
 }

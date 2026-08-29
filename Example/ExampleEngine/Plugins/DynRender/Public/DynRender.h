@@ -9,7 +9,7 @@ namespace Maho
 
 // DynRender - an engine feature (one node per stage in the engine
 // pipeline: BeginFrame -> Tick -> EndFrame).
-class FDynRender : public FEngineLayer
+class FDynRender : public FLayer<IBeginFrame, ITick, IEndFrame, IExit>
 {
 MAHO_DECLARE_ENGINE_LAYER(FDynRender, "DynRender.dll");
 
@@ -25,6 +25,7 @@ private:
 	void BeginFrame(FEngineBase& Engine) override;
 	void Tick(FEngineBase& Engine) override;
 	void EndFrame(FEngineBase& Engine) override;
+	void RequestExit(FEngineBase&) override {}
 };
 
 } // namespace Maho

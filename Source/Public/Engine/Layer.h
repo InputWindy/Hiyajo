@@ -32,6 +32,19 @@ public:                                                  \
 namespace Maho
 {
 
+class FEngineBase;
+class FLayerBase;
+
+/**
+ * Stage dispatch - a free function template specialized per stage interface.
+ * The TaskGraph calls Invoke<TStage>(Layer, Engine) at runtime; each stage
+ * interface gets a full specialization in Engine.h that casts the layer to the
+ * interface and calls its stage method. This replaces the per-pipeline Invoke
+ * member: the pipeline class is gone, the stage list is a plain TTypeList.
+ */
+template <typename TStage>
+void Invoke(FLayerBase* Layer, FEngineBase& Engine);
+
 // -- 1. FLayer: anonymous layer anchor ----------------------------------------------
 
 /**
@@ -120,26 +133,24 @@ template <typename P> struct TStagesOf { using Type = typename P::TStages; };
 
 /**
  * Layer task graph -- bridges a set of anonymous FLayer instances into a
- * FTaskGraph. CONTRACT: TPipeline is an IPipeline<TStages...> type; every
- * FLayer passed in MUST implement exactly that pipeline. The layer and the
- * graph declare the SAME pipeline type, pairing them at compile time.
- *
- * Per layer the graph expands one node per stage:
+ * FTaskGraph. CONTRACT: TStages is a TTypeList<StageInterface...>; every
+ * FLayer passed in MUST implement every stage interface it mounts (filtered by
+ * the caller via FQuery). Per layer the graph expands one node per stage:
  *   - self-progression: stage N depends on stage N-1 of the SAME layer
  *   - cross-object deps: the layer's own declared deps at that stage
- * Then Compile wires everything; Execute dispatches each ready node through
- * FLayer::Invoke (compile-time stage -> method mapping).
+ * Then Compile wires everything; Execute dispatches each ready node through the
+ * free function Invoke<TStage>(Layer, Engine).
  *
- *   using FPipeline = IPipeline<IMain, IShutdown>;
- *   class FWorld : public FLayer, public FPipeline { ... };
- *   FLayerTaskGraph<FPipeline> G(Pool, { &World, &SSAO });
+ *   using FTickStages = TTypeList<IBeginFrame, ITick, IEndFrame, IExit>;
+ *   FLayerTaskGraph<FTickStages> G(Pool, Engine);
+ *   G.Init(Engine.Select<IBeginFrame, ITick, IEndFrame, IExit>());  // or FQuery
  *   if (G.Compile()) { G.Execute(); G.Flush(); }
  */
 
-template <typename TPipeline, typename TContext = FEmptyContext>
+template <typename TStages, typename TContext = FEmptyContext>
 class FLayerTaskGraph : public FTaskGraph
 {
-	using FStages = typename TStagesOf<TPipeline>::Type;
+	using FStages = TStages;
 
 public:
 	struct FNode : FTaskGraphNode
@@ -239,13 +250,10 @@ private:
 	{
 		if (Stage == std::type_index(typeid(TCurrent)))
 		{
-				// TPipeline embeds Invoke<TStage> (stage -> method if-constexpr mapping).
-				// FLayerBase and TPipeline have no inheritance relation (the layer inherits both); the lateral conversion uses dynamic_cast.
-				// A layer that did not mount this pipeline silently skips (in multi-pipeline scenarios, a layer may implement only some of them).
-			if (auto* P = dynamic_cast<TPipeline*>(Layer))
-			{
-				P->template Invoke<TCurrent>(Context);
-			}
+			// Free function dispatch: Invoke<TStage>(Layer, Engine) is specialized
+			// per stage interface in Engine.h. A layer that does not implement this
+			// stage interface silently skips (dynamic_cast inside the specialization).
+			Invoke<TCurrent>(Layer, Context);
 			return;
 		}
 		if constexpr (sizeof...(TRest) > 0)

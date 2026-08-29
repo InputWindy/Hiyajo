@@ -43,7 +43,7 @@ enum class ELogLevel
  *
  *   Engine.Install(&Log);   // install early in PreMain
  */
-class FLog : public FEngineLayer
+class FLog : public FLayer<IPreInit, IInit, IPostInit, IPreShutdown, IShutdown, IPostShutdown>
 {
 public:
 	MAHO_DECLARE_ENGINE_LAYER(FLog, "Log.dll");
@@ -85,8 +85,12 @@ public:
 
 private:
 	// -- engine init/shutdown stages (scheduler-only) --
+	void PreInitialize(FEngineBase&) override {}
 	void Initialize(FEngineBase& Engine) override;
+	void PostInitialize(FEngineBase&) override {}
+	void PreShutdown(FEngineBase&) override {}
 	void Shutdown(FEngineBase& Engine) override;
+	void PostShutdown(FEngineBase&) override {}
 
 	void LogLine(ELogLevel Level, std::string Message);
 

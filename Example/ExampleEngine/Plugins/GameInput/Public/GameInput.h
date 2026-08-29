@@ -10,7 +10,7 @@ namespace Maho
 // GameInput - the input driver layer. Its Tick drives per-frame decisions
 // (dynamic install / random uninstall / exit) through the engine (Context),
 // simulating user input in the engine loop.
-class FGameInput : public FEngineLayer
+class FGameInput : public FLayer<IBeginFrame, ITick, IEndFrame, IExit>
 {
 MAHO_DECLARE_ENGINE_LAYER(FGameInput, "GameInput.dll");
 

@@ -29,7 +29,7 @@ public:                                                 \
 #define MAHO_DECLARE_ENGINE_LAYER(FeatureType, DLL)     \
 public:                                                 \
 	MAHO_DECLARE_LAYER(FeatureType)				\
-	static Maho::FEngineLayer* CreateLayer()            \
+	static Maho::FLayerBase* CreateLayer()            \
 	{                                                   \
 		return new FeatureType();                       \
 	}                                                   \
@@ -116,119 +116,34 @@ public:
 	virtual void RequestExit(FEngineBase&) = 0;
 };
 
-class MAHO_API IEngineInitPipeline : public IPipeline<IPreInit, IInit, IPostInit>
-{
-public:
-	virtual ~IEngineInitPipeline() = default;
+/**
+ * Stage dispatch specializations - the primary template is declared in
+ * Layer.h. Each stage interface gets a full specialization here that
+ * dynamic_casts the layer to the interface and calls its stage method. A layer
+ * that does not implement the interface silently skips.
+ */
+#define MAHO_DECLARE_STAGE_DISPATCH(StageType, CastType, Method)  \
+template <>                                                       \
+inline void Invoke<StageType>(FLayerBase* Layer, FEngineBase& Engine) \
+{                                                                 \
+	if (auto* S = dynamic_cast<CastType*>(Layer))                 \
+	{                                                             \
+		S->Method(Engine);                                        \
+	}                                                             \
+}
 
-	template <typename TStage, typename TContext>
-	void Invoke(TContext& Engine)
-	{
-		if constexpr (std::is_same_v<TStage, IPreInit>)
-		{
-			static_cast<IPreInit&>(*this).PreInitialize(Engine);
-		}
-		else if constexpr (std::is_same_v<TStage, IInit>)
-		{
-			static_cast<IInit&>(*this).Initialize(Engine);
-		}
-		else if constexpr (std::is_same_v<TStage, IPostInit>)
-		{
-			static_cast<IPostInit&>(*this).PostInitialize(Engine);
-		}
-		else
-		{
-			static_assert(sizeof(TStage) == 0, "Unhandled stage -- add a branch in IEngineInitPipeline::Invoke");
-		}
-	}
-};
+MAHO_DECLARE_STAGE_DISPATCH(IPreInit,     IPreInit,     PreInitialize)
+MAHO_DECLARE_STAGE_DISPATCH(IInit,        IInit,        Initialize)
+MAHO_DECLARE_STAGE_DISPATCH(IPostInit,    IPostInit,    PostInitialize)
+MAHO_DECLARE_STAGE_DISPATCH(IPreShutdown, IPreShutdown, PreShutdown)
+MAHO_DECLARE_STAGE_DISPATCH(IShutdown,    IShutdown,    Shutdown)
+MAHO_DECLARE_STAGE_DISPATCH(IPostShutdown,IPostShutdown,PostShutdown)
+MAHO_DECLARE_STAGE_DISPATCH(IBeginFrame,  IBeginFrame,  BeginFrame)
+MAHO_DECLARE_STAGE_DISPATCH(ITick,        ITick,        Tick)
+MAHO_DECLARE_STAGE_DISPATCH(IEndFrame,    IEndFrame,    EndFrame)
+MAHO_DECLARE_STAGE_DISPATCH(IExit,        IExit,        RequestExit)
 
-class MAHO_API IEngineTickPipeline: public IPipeline<IBeginFrame, ITick, IEndFrame, IExit>
-{
-public:
-	virtual ~IEngineTickPipeline() = default;
-
-		/** if-constexpr dispatch from stage to method call (TContext = FEngineBase). */
-	template <typename TStage, typename TContext>
-	void Invoke(TContext& Engine)
-	{
-		if constexpr (std::is_same_v<TStage, IBeginFrame>)
-		{
-			static_cast<IBeginFrame&>(*this).BeginFrame(Engine);
-		}
-		else if constexpr (std::is_same_v<TStage, ITick>)
-		{
-			static_cast<ITick&>(*this).Tick(Engine);
-		}
-		else if constexpr (std::is_same_v<TStage, IEndFrame>)
-		{
-			static_cast<IEndFrame&>(*this).EndFrame(Engine);
-		}
-		else if constexpr (std::is_same_v<TStage, IExit>)
-		{
-			static_cast<IExit&>(*this).RequestExit(Engine);
-		}
-		else
-		{
-			static_assert(sizeof(TStage) == 0, "Unhandled stage -- add a branch in IEngineTickPipeline::Invoke");
-		}
-	}
-};
-
-class MAHO_API IEngineShutdownPipeline : public IPipeline<IPreShutdown,IShutdown, IPostShutdown>
-{
-public:
-	virtual ~IEngineShutdownPipeline() = default;
-
-	template <typename TStage, typename TContext>
-	void Invoke(TContext& Engine)
-	{
-		if constexpr (std::is_same_v<TStage, IPreShutdown>)
-		{
-			static_cast<IPreShutdown&>(*this).PreShutdown(Engine);
-		}
-		else if constexpr (std::is_same_v<TStage, IShutdown>)
-		{
-			static_cast<IShutdown&>(*this).Shutdown(Engine);
-		}
-		else if constexpr (std::is_same_v<TStage, IPostShutdown>)
-		{
-			static_cast<IPostShutdown&>(*this).PostShutdown(Engine);
-		}
-		else
-		{
-			static_assert(sizeof(TStage) == 0, "Unhandled stage -- add a branch in IEngineShutdownPipeline::Invoke");
-		}
-	}
-};
-
-// Engine extension base class
-class MAHO_API FEngineLayer
-	: public FLayer<
-		IEngineInitPipeline, 
-		IEngineTickPipeline, 
-		IEngineShutdownPipeline>
-{
-public:
-	virtual ~FEngineLayer();
-
-	// Default no-op implementations -- features override the stages they care about (the rest silently no-op).
-	virtual void PreInitialize(FEngineBase&) {}
-	virtual void Initialize(FEngineBase&) {}
-	virtual void PostInitialize(FEngineBase&) {}
-
-	virtual void BeginFrame(FEngineBase&) {}
-	virtual void Tick(FEngineBase&) {}
-	virtual void EndFrame(FEngineBase&) {}
-	virtual void RequestExit(FEngineBase&) {}
-
-	virtual void PreShutdown(FEngineBase&) {}
-	virtual void Shutdown(FEngineBase&) {}
-	virtual void PostShutdown(FEngineBase&) {}
-
-protected:
-	FEngineLayer() = default;
-};
+#undef MAHO_DECLARE_STAGE_DISPATCH
 
 // Engine base class
 class MAHO_API FEngineBase : public FQuery<FLayerBase>
@@ -261,7 +176,7 @@ public:
 	[[nodiscard]] const std::map<std::string, std::string>& GetAll() const { return Store; }
 public:
 	/** Get the active feature instances (read-only, for subclass/external queries). */
-	const std::vector<std::unique_ptr<FEngineLayer>>& GetLayers() const
+	const std::vector<std::unique_ptr<FLayerBase>>& GetLayers() const
 	{
 		return Features;
 	}
@@ -270,7 +185,7 @@ public:
 	void RequestExit();
 
 	/** Install sugar: take ownership of a pipeline instance (takes effect next frame). */
-	void Install(FEngineLayer* Pipeline);
+	void Install(FLayerBase* Pipeline);
 
 	/**
 	 * Dynamically load a feature DLL via FAssembly and install it (takes effect
@@ -290,7 +205,7 @@ public:
 	 * request, B pops first and after B is unloaded A's dependency count drops to
 	 * zero, so A pops next -- chained unload within one request.
 	 */
-	void RequestUninstall(FEngineLayer* Pipeline);
+	void RequestUninstall(FLayerBase* Pipeline);
 
 	/**
 	 * Anonymous uninstall request -- unload addressed by layer name (GetName()).
@@ -309,7 +224,7 @@ protected:
 	void FlushPendingUpdatePipelines();
 
 	/** The engine owns feature instances + DLLs; on unload it deletes + FreeLibrary them together. */
-	void DeleteUnloaded(FEngineLayer* Layer);
+	void DeleteUnloaded(FLayerBase* Layer);
 
 private:
 	/** Rebuild the reverse dependency count: layer name -> depended-on count (full recompute over active layers). */
@@ -327,13 +242,13 @@ private:
 
 private:
 	std::vector<FLayerBase*> Pipelines;          // currently active pipelines (anonymous, the graph only knows FLayerBase)
-	std::vector<FEngineLayer*> PendingAdded;     // pending installs
+	std::vector<FLayerBase*> PendingAdded;     // pending installs
 
-	std::set<FEngineLayer*>    PendingRemoveRequests;  // random uninstall request set
+	std::set<FLayerBase*>    PendingRemoveRequests;  // random uninstall request set
 	std::map<std::string, int> ReverseDepCount;        // layer name -> depended-on count
 
 	std::vector<std::unique_ptr<FAssembly>>     Modules;   // DLL keep-alive (move-only)
-	std::vector<std::unique_ptr<FEngineLayer>>  Features;  // feature instance ownership
+	std::vector<std::unique_ptr<FLayerBase>>  Features;  // feature instance ownership
 
 	std::atomic<bool> bIsShuttingDown = false;   // whether the engine is shutting down
 

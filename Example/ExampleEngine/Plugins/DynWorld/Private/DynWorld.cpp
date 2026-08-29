@@ -12,7 +12,7 @@ void FDynWorld::EndFrame(FEngineBase&)   { MAHO_LOG_CORE_INFO("[DynWorld] EndFra
 } // namespace Maho
 
 // The C export the host looks up BY SYMBOL NAME for dynamic install.
-extern "C" MAHO_DYNWORLD_API Maho::FEngineLayer* CreateLayer()
+extern "C" MAHO_DYNWORLD_API Maho::FLayerBase* CreateLayer()
 {
 	return Maho::FDynWorld::CreateLayer();
 }

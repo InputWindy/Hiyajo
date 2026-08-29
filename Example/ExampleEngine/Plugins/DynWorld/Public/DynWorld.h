@@ -9,7 +9,7 @@ namespace Maho
 
 // DynWorld - an engine feature (one node per stage in the engine
 // pipeline: BeginFrame -> Tick -> EndFrame).
-class FDynWorld : public FEngineLayer
+class FDynWorld : public FLayer<IBeginFrame, ITick, IEndFrame, IExit>
 {
 MAHO_DECLARE_ENGINE_LAYER(FDynWorld, "DynWorld.dll");
 
@@ -18,6 +18,7 @@ private:
 	void BeginFrame(FEngineBase& Engine) override;
 	void Tick(FEngineBase& Engine) override;
 	void EndFrame(FEngineBase& Engine) override;
+	void RequestExit(FEngineBase&) override {}
 };
 
 } // namespace Maho

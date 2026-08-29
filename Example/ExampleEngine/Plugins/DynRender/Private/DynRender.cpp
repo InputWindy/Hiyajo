@@ -12,7 +12,7 @@ void FDynRender::EndFrame(FEngineBase&)   { MAHO_LOG_CORE_INFO("[DynRender] EndF
 } // namespace Maho
 
 // The C export the host looks up BY SYMBOL NAME for dynamic install.
-extern "C" MAHO_DYNRENDER_API Maho::FEngineLayer* CreateLayer()
+extern "C" MAHO_DYNRENDER_API Maho::FLayerBase* CreateLayer()
 {
 	return Maho::FDynRender::CreateLayer();
 }
