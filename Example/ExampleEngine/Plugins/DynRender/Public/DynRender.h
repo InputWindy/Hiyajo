@@ -20,6 +20,8 @@ public:
 		AddDependency(std::type_index(typeid(IBeginFrame)), "FDynWorld", std::type_index(typeid(IEndFrame)));
 	}
 
+private:
+	// -- engine pipeline stages (scheduler-only) --
 	void BeginFrame(FEngineBase& Engine) override;
 	void Tick(FEngineBase& Engine) override;
 	void EndFrame(FEngineBase& Engine) override;

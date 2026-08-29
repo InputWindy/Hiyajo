@@ -1,66 +1,170 @@
 #include <Engine/Engine.h>
 
+#include <Core/Fatal.h>
+#include <CLI/CLI.hpp>
+
+#include <algorithm>
+#include <functional>
+#include <string>
+#include <utility>
+#include <vector>
+
 namespace Maho
 {
 
+FEngineLayer::~FEngineLayer() = default;
+
+FEngineBase::FEngineBase() = default;
+
+FEngineBase::~FEngineBase() = default;
+
 void FEngineBase::ParseCommandLine(int Argc, char** Argv)
 {
-	LaunchArgc = Argc;
-	LaunchArgv = Argv;
+	// Normalize each "-key" (or "-key=value") to a "--key" long-option so CLI11
+	// handles single-dash names without interpreting them as short-flag chains.
+	std::vector<std::string> Normalized;
+	Normalized.reserve(static_cast<std::size_t>(Argc) + 1);
+	Normalized.push_back("maho");   // program name slot CLI11 consumes
+	for (int I = 1; I < Argc; ++I)
+	{
+		const std::string Arg = Argv[I];
+		if (Arg.size() < 2 || Arg[0] != '-')
+		{
+			continue;   // positional/non-hyphen junk - ignore
+		}
+		if (Arg[1] == '-')
+		{
+			// already a long option; keep as-is
+			Normalized.push_back(Arg);
+			continue;
+		}
+
+		// single-dash -> long-option. Bind the value inline so we never drop it.
+		std::string Body = Arg.substr(1);
+		if (Body.find('=') != std::string::npos)
+		{
+			Normalized.push_back("--" + Body);   // --key=value
+			continue;
+		}
+
+		if (I + 1 < Argc && Argv[I + 1][0] != '-')
+		{
+			Normalized.push_back("--" + Body + "=" + Argv[I + 1]);   // --key value
+			++I;
+		}
+		else
+		{
+			Normalized.push_back("--" + Body + "=true");   // bare flag -> true
+		}
+	}
+
+	CLI::App App;
+	App.allow_extras();
+
+	// Discover unique option names so we can declare one CLI11 option per key.
+	// CLI11 does the real tokenization / quoted-value work.
+	std::vector<std::string> Keys;
+	for (const std::string& Arg : Normalized)
+	{
+		if (Arg.size() < 2 || Arg[0] != '-')
+		{
+			continue;
+		}
+		std::string Sig = Arg[1] == '-' ? Arg.substr(2) : Arg.substr(1);
+		const std::size_t Eq = Sig.find('=');
+		if (Eq != std::string::npos)
+		{
+			Sig = Sig.substr(0, Eq);
+		}
+		Keys.push_back(Sig);
+	}
+	std::sort(Keys.begin(), Keys.end());
+	Keys.erase(std::unique(Keys.begin(), Keys.end()), Keys.end());
+
+	for (const std::string& Key : Keys)
+	{
+		// every discovered flag now carries a value (=true for bare flags), so a
+		// single expected value binding is deterministic.
+		App.add_option("--" + Key)->expected(1);
+	}
+
+	try
+	{
+		App.parse(Normalized);
+	}
+	catch (const CLI::ParseError&)
+	{
+		// Don't abort on bad input - read back whatever parsed.
+	}
+
+	// Read the parsed results back into the KV store.
+	for (const std::string& Key : Keys)
+	{
+		CLI::Option* Opt = App.get_option_no_throw("--" + Key);
+		if (Opt && Opt->count() > 0 && !Opt->results().empty())
+		{
+			Store[Key] = Opt->results().front();
+		}
+	}
 }
 
 int FEngineBase::Main()
 {
-	// Apply the layers installed in PreMain (must be effective before InitGraph).
-	FlushPendingUpdatePipelines();
+	// Merge the layers installed in PreMain into Pipelines. Their Initialize is
+	// driven by the InitGraph below (do NOT call FlushPendingUpdatePipelines here,
+	// which would init them twice).
+	for (FEngineLayer* P : PendingAdded)
+	{
+		Pipelines.push_back(P);
+	}
+	PendingAdded.clear();
 
 	// Init pipeline: drive once with a temporary graph; layers mounting IEngineInitPipeline Initialize in dependency order.
 	FLayerTaskGraph<IEngineInitPipeline, FEngineBase> InitGraph(Pool, *this);
 	InitGraph.Init(Pipelines);
-	if (InitGraph.Compile())
+	if (!InitGraph.Compile())
 	{
-		InitGraph.Execute();
-		InitGraph.Flush();
+		ReportFatal("FEngineBase::Main: init pipeline Compile failed (missing dependency or cycle)");
+	}
+	InitGraph.Execute();
+	InitGraph.Flush();
 
-		FLayerTaskGraph<IEngineTickPipeline, FEngineBase> EngineGraph(Pool, *this);
+	// Tick pipeline: the main loop.
+	FLayerTaskGraph<IEngineTickPipeline, FEngineBase> EngineGraph(Pool, *this);
+	while (true)
+	{
+		EngineGraph.Flush();
+		FlushPendingUpdatePipelines();
 
-		while (true)
+		EngineGraph.Init(Pipelines);
+		if (!EngineGraph.Compile())
+		{
+			ReportFatal("FEngineBase::Main: tick pipeline Compile failed (missing dependency or cycle)");
+		}
+		EngineGraph.Execute();
+
+		// An input layer (e.g. GameInputLayer) calls RequestExit inside Tick;
+		// this frame's Execute has already finished, so check the exit flag here safely.
+		if (bIsShuttingDown.load(std::memory_order_acquire))
 		{
 			EngineGraph.Flush();
-			FlushPendingUpdatePipelines();
-
-			EngineGraph.Init(Pipelines);
-			if (EngineGraph.Compile())
-			{
-				EngineGraph.Execute();
-			}
-			else
-			{
-				EngineGraph.Flush();
-				break;
-			}
-			// An input layer (e.g. GameInputLayer) calls RequestExit inside Tick;
-			// this frame's Execute has already finished, so check the exit flag here safely.
-			if (bIsShuttingDown.load(std::memory_order_acquire))
-			{
-				EngineGraph.Flush();
-				break;
-			}
+			break;
 		}
-
-		// Shutdown pipeline: drive once with a temporary graph; layers mounting IEngineShutdownPipeline Shutdown in dependency order.
-		FLayerTaskGraph<IEngineShutdownPipeline, FEngineBase> ShutdownGraph(Pool, *this);
-		ShutdownGraph.Init(Pipelines);
-		if (ShutdownGraph.Compile())
-		{
-			ShutdownGraph.Execute();
-		}
-		ShutdownGraph.Flush();
-
-		// Delete feature instances first (virtual dtors live in their own DLLs), then release the DLLs.
-		Features.clear();
-		Modules.clear();
 	}
+
+	// Shutdown pipeline: drive once with a temporary graph; layers mounting IEngineShutdownPipeline Shutdown in dependency order.
+	FLayerTaskGraph<IEngineShutdownPipeline, FEngineBase> ShutdownGraph(Pool, *this);
+	ShutdownGraph.Init(Pipelines);
+	if (!ShutdownGraph.Compile())
+	{
+		ReportFatal("FEngineBase::Main: shutdown pipeline Compile failed (missing dependency or cycle)");
+	}
+	ShutdownGraph.Execute();
+	ShutdownGraph.Flush();
+
+	// Delete feature instances first (virtual dtors live in their own DLLs), then release the DLLs.
+	Features.clear();
+	Modules.clear();
 
 	return 0;
 }
@@ -68,18 +172,6 @@ int FEngineBase::Main()
 void FEngineBase::RequestExit()
 {
 	bIsShuttingDown.store(true, std::memory_order_release);
-}
-
-FEngineLayer* FEngineBase::FindLayer(std::string_view LayerName)
-{
-	for (FLayerBase* L : Pipelines)
-	{
-		if (L->GetName() == LayerName)
-		{
-			return static_cast<FEngineLayer*>(L);
-		}
-	}
-	return nullptr;
 }
 
 void FEngineBase::Install(FEngineLayer* Pipeline)
@@ -135,13 +227,32 @@ void FEngineBase::TryUninstall(std::string_view LayerName)
 
 void FEngineBase::FlushPendingUpdatePipelines()
 {
-	for (FEngineLayer* P : PendingAdded)
+	// 1. Apply pending installs: append to Pipelines, then drive the init pipeline
+	//    over the newly added layers only (their Initialize/PreInit/PostInit run now).
+	if (!PendingAdded.empty())
 	{
-		Pipelines.push_back(P);
-	}
-	PendingAdded.clear();
+		std::vector<FLayerBase*> NewLayers;
+		NewLayers.reserve(PendingAdded.size());
+		for (FEngineLayer* P : PendingAdded)
+		{
+			Pipelines.push_back(P);
+			NewLayers.push_back(P);
+		}
+		PendingAdded.clear();
 
-	FlushUnload();   // min-heap greedy unload (batch application of random uninstall requests)
+		FLayerTaskGraph<IEngineInitPipeline, FEngineBase> InitGraph(Pool, *this);
+		InitGraph.Init(std::move(NewLayers));
+		if (!InitGraph.Compile())
+		{
+			ReportFatal("FEngineBase::FlushPendingUpdatePipelines: install init pipeline Compile failed");
+		}
+		InitGraph.Execute();
+		InitGraph.Flush();
+	}
+
+	// 2. Apply pending uninstalls: min-heap greedy unload drives the shutdown
+	//    pipeline over the unloadable layers, then removes + deletes them.
+	FlushUnload();
 }
 
 void FEngineBase::DeleteUnloaded(FEngineLayer* Layer)
@@ -228,6 +339,8 @@ void FEngineBase::FlushUnload()
 		Heap.push({ ReverseDepCount[Name], Name });
 	}
 
+	// Greedy pass: collect every safely unloadable layer in dependency-safe order.
+	std::vector<FLayerBase*> ToUnload;
 	while (!Heap.empty())
 	{
 		const auto [Count, Name] = Heap.top();
@@ -252,14 +365,12 @@ void FEngineBase::FlushUnload()
 		{
 			break;   // depended on -> the heap only grows after this, abandon remaining requests.
 		}
-		// Safely unload Layer: remove from the pipeline + remove from the request set.
-		Pipelines.erase(std::remove(Pipelines.begin(), Pipelines.end(), Layer), Pipelines.end());
 		ByName.erase(Name);
 		PendingRemoveRequests.erase(Layer);
+		ToUnload.push_back(Layer);
 
-		// First update the depended-on counts of Layer's dependents (-1) and push
-		// them back into the heap to trigger chained unload --
-		// GetDependencies() must be read before deleting Layer.
+		// Update the depended-on counts of Layer's dependents (-1) and push them
+		// back into the heap to trigger chained unload.
 		for (const auto& [Stage, Deps] : Layer->GetDependencies())
 		{
 			(void)Stage;
@@ -270,13 +381,66 @@ void FEngineBase::FlushUnload()
 				Heap.push({ NewCount, Dep.Name });
 			}
 		}
-
-		// Finally delete the instance + FreeLibrary.
-		DeleteUnloaded(Layer);
 	}
 
 	// Abandon the remaining requests of this batch that cannot be safely unloaded (no cross-frame carry-over).
 	PendingRemoveRequests.clear();
+
+	if (ToUnload.empty())
+	{
+		return;
+	}
+
+	// Drive the shutdown pipeline over the unloadable layers (their Shutdown
+	// stages run in dependency order), then remove + delete them.
+	FLayerTaskGraph<IEngineShutdownPipeline, FEngineBase> ShutdownGraph(Pool, *this);
+	ShutdownGraph.Init(std::move(ToUnload));
+	if (!ShutdownGraph.Compile())
+	{
+		ReportFatal("FEngineBase::FlushUnload: shutdown pipeline Compile failed");
+	}
+	ShutdownGraph.Execute();
+	ShutdownGraph.Flush();
+
+	for (FLayerBase* L : ToUnload)
+	{
+		Pipelines.erase(std::remove(Pipelines.begin(), Pipelines.end(), L), Pipelines.end());
+		DeleteUnloaded(static_cast<FEngineLayer*>(L));
+	}
+}
+
+bool FEngineBase::Has(std::string_view Key) const
+{
+	return Store.find(std::string(Key)) != Store.end();
+}
+
+std::string FEngineBase::Get(std::string_view Key) const
+{
+	auto It = Store.find(std::string(Key));
+	return It != Store.end() ? It->second : std::string{};
+}
+
+bool FEngineBase::GetBool(std::string_view Key) const
+{
+	const std::string Value = Get(Key);
+	return Value == "true" || Value == "1" || Value == "yes" || Value == "on";
+}
+
+int FEngineBase::GetInt(std::string_view Key) const
+{
+	const std::string Value = Get(Key);
+	if (Value.empty())
+	{
+		return 0;
+	}
+	try
+	{
+		return std::stoi(Value);
+	}
+	catch (...)
+	{
+		return 0;
+	}
 }
 
 } // namespace Maho

@@ -3,6 +3,8 @@
 namespace Maho
 {
 
+FLayerBase::~FLayerBase() = default;
+
 const FLayerBase::FDependencyTable& FLayerBase::GetDependencies() const
 {
 	return Dependencies;

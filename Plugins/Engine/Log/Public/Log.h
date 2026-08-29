@@ -51,10 +51,6 @@ public:
 	FLog();
 	~FLog() override;
 
-	// -- engine init/shutdown stages --
-	void Initialize(FEngineBase& Engine) override;
-	void Shutdown(FEngineBase& Engine) override;
-
 	// -- logging passthroughs (perfect-forward, fmt compile-time checked) --
 	template <typename... Args>
 	void Trace(fmt::format_string<Args...> Fmt, Args&&... A)
@@ -88,6 +84,10 @@ public:
 	}
 
 private:
+	// -- engine init/shutdown stages (scheduler-only) --
+	void Initialize(FEngineBase& Engine) override;
+	void Shutdown(FEngineBase& Engine) override;
+
 	void LogLine(ELogLevel Level, std::string Message);
 
 	std::shared_ptr<spdlog::logger> Logger;   // incomplete type; dtor in Log.cpp

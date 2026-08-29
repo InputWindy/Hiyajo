@@ -36,18 +36,11 @@ void FLog::Initialize(FEngineBase& Engine)
 	Logger->set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%^%l%$] %v");
 
 	spdlog::level::level_enum Lv = spdlog::level::debug;
-	// read --log-level=trace|debug|info|warn|error from engine launch args
-	char** Argv = Engine.GetLaunchArgv();
-	if (Argv)
+	// read --log-level=trace|debug|info|warn|error from the engine command line
+	const std::string LogLevel = Engine.Get("log-level");
+	if (!LogLevel.empty())
 	{
-		for (int i = 0; Argv[i]; ++i)
-		{
-			if (const char* V = Argv[i][0] == '-' ? Argv[i] + 1 : nullptr;
-				V && std::string_view(V) == "log-level" && Argv[i + 1])
-			{
-				Lv = spdlog::level::from_str(Argv[i + 1]);
-			}
-		}
+		Lv = spdlog::level::from_str(LogLevel);
 	}
 	Logger->set_level(Lv);
 

@@ -14,13 +14,13 @@ class FGameInput : public FEngineLayer
 {
 MAHO_DECLARE_ENGINE_LAYER(FGameInput, "GameInput.dll");
 
-public:
+private:
+	// -- engine pipeline stages (scheduler-only) --
 	void BeginFrame(FEngineBase& Engine) override;
 	void Tick(FEngineBase& Engine) override;
 	void EndFrame(FEngineBase& Engine) override;
 	void RequestExit(FEngineBase& Engine) override;
 
-private:
 	int TickCount = 0;
 };
 

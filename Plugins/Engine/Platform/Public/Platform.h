@@ -18,6 +18,11 @@ namespace Maho
 namespace Platform
 {
 
+class FPlatform;
+
+/** Global platform instance accessor - returns FPlatform* (cross-DLL via function, no bare variable export). */
+MAHO_API FPlatform* GetPlatform();
+
 /** Native surface handle - opaque (GLFWwindow*, EGLContext, ANativeWindow*, UIView*, ...). */
 using FNativeSurface = void*;
 
@@ -38,7 +43,7 @@ public:
 /**
  * Platform system - native surface + events (an FEngineLayer feature). The
  * engine loop drives Tick() -> PollEvents + ShouldClose -> Engine.RequestExit().
- * The RHI finds this instance through the engine (Context) and reads
+ * The RHI reaches this instance through GetPlatform() and reads
  * GetNativeWindow() - no singleton needed.
  *
  *   Platform::FPlatform Platform;
@@ -51,15 +56,7 @@ class FPlatform : public FEngineLayer
 public:
 	MAHO_DECLARE_ENGINE_LAYER(FPlatform, "Platform.dll");
 
-	// -- engine init/shutdown stages (FEngineLayer) --
-	void Initialize(FEngineBase& Engine) override;
-	void Shutdown(FEngineBase& Engine) override;
-
-	// -- engine tick stages (FEngineLayer) --
-	void BeginFrame(FEngineBase& Engine) override;
-	void Tick(FEngineBase& Engine) override;      // PollEvents + ShouldClose -> RequestExit
-	void EndFrame(FEngineBase& Engine) override;
-	void RequestExit(FEngineBase& Engine) override;
+	~FPlatform() override;
 
 	/** Create a window (picks the backend for the current platform). */
 	bool CreateWindow(int Width, int Height, std::string_view Title);
@@ -80,6 +77,16 @@ public:
 	[[nodiscard]] bool ShouldClose() const;
 
 private:
+	FPlatform() = default;
+
+	// -- engine pipeline stages (scheduler-only) --
+	void Initialize(FEngineBase& Engine) override;
+	void Shutdown(FEngineBase& Engine) override;
+	void BeginFrame(FEngineBase& Engine) override;
+	void Tick(FEngineBase& Engine) override;
+	void EndFrame(FEngineBase& Engine) override;
+	void RequestExit(FEngineBase& Engine) override;
+
 	std::unique_ptr<IPlatform> Surface;
 	std::function<void()> PollEventsFn;
 	std::function<bool()> QueryShouldClose;

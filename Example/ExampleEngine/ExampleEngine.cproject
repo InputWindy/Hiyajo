@@ -12,10 +12,6 @@
       "Enabled": true
     },
     {
-      "Name": "CommandParser",
-      "Enabled": true
-    },
-    {
       "Name": "Compress",
       "Enabled": true
     },

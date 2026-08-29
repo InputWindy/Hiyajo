@@ -13,10 +13,11 @@
 namespace Maho::Resource
 {
 
-FResourceSystem& FResourceSystem::Get()
+FResourceSystem* GResourceSystem = nullptr;
+
+MAHO_RESOURCE_API FResourceSystem* GetResourceSystem()
 {
-	static FResourceSystem Instance;
-	return Instance;
+	return GResourceSystem;
 }
 
 namespace
@@ -100,10 +101,12 @@ void FResourceSystem::Initialize(FEngineBase& Engine)
 {
 	(void)Engine;
 	FThreadedServer::Initialize();   // start the async load thread
+	GResourceSystem = this;
 }
 
 void FResourceSystem::Shutdown(FEngineBase&)
 {
+	GResourceSystem = nullptr;
 	FThreadedServer::Shutdown();   // stop + join the IO thread
 	{
 		std::lock_guard Lock(Impl->Mutex);
@@ -113,8 +116,9 @@ void FResourceSystem::Shutdown(FEngineBase&)
 	}
 }
 
-void FResourceSystem::Tick()
+void FResourceSystem::Tick(FEngineBase& Engine)
 {
+	(void)Engine;
 	ProcessReadyIO();   // poll transfers + decode on the game thread
 }
 
@@ -272,3 +276,9 @@ const FResource* FResourceSystem::TryLoad(std::string_view AssetPath)
 }
 
 } // namespace Maho::Resource
+
+// The C export the host looks up BY SYMBOL NAME for dynamic install.
+extern "C" MAHO_RESOURCE_API Maho::FEngineLayer* CreateLayer()
+{
+	return Maho::Resource::FResourceSystem::CreateLayer();
+}

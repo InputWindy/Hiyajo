@@ -118,6 +118,8 @@ public:
 class MAHO_API IEngineInitPipeline : public IPipeline<IPreInit, IInit, IPostInit>
 {
 public:
+	virtual ~IEngineInitPipeline() = default;
+
 	template <typename TStage, typename TContext>
 	void Invoke(TContext& Engine)
 	{
@@ -143,7 +145,9 @@ public:
 class MAHO_API IEngineTickPipeline: public IPipeline<IBeginFrame, ITick, IEndFrame, IExit>
 {
 public:
-			/** if-constexpr dispatch from stage to method call (TContext = FEngineBase). */
+	virtual ~IEngineTickPipeline() = default;
+
+		/** if-constexpr dispatch from stage to method call (TContext = FEngineBase). */
 	template <typename TStage, typename TContext>
 	void Invoke(TContext& Engine)
 	{
@@ -173,6 +177,8 @@ public:
 class MAHO_API IEngineShutdownPipeline : public IPipeline<IPreShutdown,IShutdown, IPostShutdown>
 {
 public:
+	virtual ~IEngineShutdownPipeline() = default;
+
 	template <typename TStage, typename TContext>
 	void Invoke(TContext& Engine)
 	{
@@ -203,6 +209,8 @@ class MAHO_API FEngineLayer
 		IEngineShutdownPipeline>
 {
 public:
+	virtual ~FEngineLayer();
+
 	// Default no-op implementations -- features override the stages they care about (the rest silently no-op).
 	virtual void PreInitialize(FEngineBase&) {}
 	virtual void Initialize(FEngineBase&) {}
@@ -216,12 +224,18 @@ public:
 	virtual void PreShutdown(FEngineBase&) {}
 	virtual void Shutdown(FEngineBase&) {}
 	virtual void PostShutdown(FEngineBase&) {}
+
+protected:
+	FEngineLayer() = default;
 };
 
 // Engine base class
 class MAHO_API FEngineBase
 {
 public:
+	FEngineBase();
+	virtual ~FEngineBase();
+
 	virtual void ParseCommandLine(int Argc, char** Argv);
 
 	virtual void PreMain() = 0;
@@ -229,7 +243,21 @@ public:
 	virtual void PostMain() = 0;
 
 	int Main();
+public:
+	/** True when a flag/key is present (whether or not it carries a value). */
+	[[nodiscard]] bool Has(std::string_view Key) const;
 
+	/** Value for a key; empty string when absent. */
+	[[nodiscard]] std::string Get(std::string_view Key) const;
+
+	/** Value as bool ("true"/"1"/"yes"/"on" -> true). */
+	[[nodiscard]] bool GetBool(std::string_view Key) const;
+
+	/** Value as int; 0 (or fallback) when absent/unparseable. */
+	[[nodiscard]] int GetInt(std::string_view Key) const;
+
+	/** All parsed key->value pairs (const ref). */
+	[[nodiscard]] const std::map<std::string, std::string>& GetAll() const { return Store; }
 public:
 	/** Get the active feature instances (read-only, for subclass/external queries). */
 	const std::vector<std::unique_ptr<FEngineLayer>>& GetLayers() const
@@ -239,13 +267,6 @@ public:
 
 	/** Request the main loop to exit at the next frame boundary. */
 	void RequestExit();
-
-	/** Launch arguments (the IInit stage reads them here, e.g. Log's --log-level). */
-	[[nodiscard]] int GetLaunchArgc() const { return LaunchArgc; }
-	[[nodiscard]] char** GetLaunchArgv() const { return LaunchArgv; }
-
-	/** Find an active feature instance by layer name (GetName()); returns nullptr when missing. */
-	FEngineLayer* FindLayer(std::string_view LayerName);
 
 	/** Install sugar: take ownership of a pipeline instance (takes effect next frame). */
 	void Install(FEngineLayer* Pipeline);
@@ -308,12 +329,13 @@ private:
 	std::vector<std::unique_ptr<FAssembly>>     Modules;   // DLL keep-alive (move-only)
 	std::vector<std::unique_ptr<FEngineLayer>>  Features;  // feature instance ownership
 
-	int     LaunchArgc = 0;
-	char**  LaunchArgv = nullptr;
-
 	std::atomic<bool> bIsShuttingDown = false;   // whether the engine is shutting down
 
 	FThreadPool Pool;
+
+private:
+	// command lines parsing
+	std::map<std::string, std::string> Store;
 };
 
 } // namespace Maho

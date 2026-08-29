@@ -21,6 +21,15 @@
 namespace Maho::Platform
 {
 
+FPlatform* GPlatform = nullptr;
+
+MAHO_API FPlatform* GetPlatform()
+{
+	return GPlatform;
+}
+
+FPlatform::~FPlatform() = default;
+
 namespace
 {
 	static ConsoleVariable::TAutoConsoleVariable<int> GCVarWindowWidth(
@@ -181,10 +190,13 @@ void FPlatform::Initialize(FEngineBase&)
 	const bool bOk = CreateWindow(Width, Height, GCVarWindowTitle.GetValue());
 	MAHO_LOG_CORE_INFO("FPlatform::Initialize - CreateWindow({}, {}) => {}", Width, Height, bOk);
 #endif
+
+	GPlatform = this;
 }
 
 void FPlatform::Shutdown(FEngineBase&)
 {
+	GPlatform = nullptr;
 	DestroyWindow();
 }
 

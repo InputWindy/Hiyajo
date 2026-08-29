@@ -191,18 +191,7 @@ class FRHI final
 public:
 	MAHO_DECLARE_LAYER(FRHI);
 
-	// -- engine init/shutdown stages (FEngineLayer) --
-	void Initialize(FEngineBase& Engine) override;
-	void Shutdown(FEngineBase& Engine) override;
-
-	// -- engine tick stages (FEngineLayer) --
-	// BeginFrame/EndFrame coexist with IRHI frame-primitive overloads (engine
-	// stage takes FEngineBase&, IRHI frame primitives take none); Tick does lazy
-	// init: query Platform through Engine to get the native window.
-	void BeginFrame(FEngineBase& Engine) override;
-	void Tick(FEngineBase& Engine) override;
-	void EndFrame(FEngineBase& Engine) override;
-	void RequestExit(FEngineBase& Engine) override;
+	virtual ~FRHI() override;
 
 	/**
 	 * Record commands into a caller-owned command list on a thread-pool worker
@@ -305,6 +294,19 @@ public:
 		std::uint32_t* OutMissStride) override;
 
 private:
+	FRHI() = default;
+
+	// -- engine pipeline stages (scheduler-only) --
+	// BeginFrame/EndFrame coexist with IRHI frame-primitive overloads (engine
+	// stage takes FEngineBase&, IRHI frame primitives take none); Tick does lazy
+	// init: query Platform through GetPlatform() to get the native window.
+	void Initialize(FEngineBase& Engine) override;
+	void Shutdown(FEngineBase& Engine) override;
+	void BeginFrame(FEngineBase& Engine) override;
+	void Tick(FEngineBase& Engine) override;
+	void EndFrame(FEngineBase& Engine) override;
+	void RequestExit(FEngineBase& Engine) override;
+
 	/** Bind the RHI device. */
 	[[nodiscard]] bool InitializeRHI(void* NativeWindowHandle, int Width, int Height,
 		ERHIBackend Backend = ERHIBackend::Vulkan);

@@ -49,7 +49,7 @@ namespace Maho
 class MAHO_API FLayerBase
 {
 public:
-	virtual ~FLayerBase() = default;
+	virtual ~FLayerBase();
 
 	/** Stable identity name -- the TaskGraph topological key. */
 	virtual std::string_view GetName() const = 0;
@@ -67,6 +67,8 @@ public:
 	virtual const FDependencyTable& GetDependencies() const;
 
 protected:
+	FLayerBase() = default;
+
 	/** Declare: `this` at TMyStage depends on TDepObj at TDepStage. */
 	template <typename TMyStage, typename TDepObj, typename TDepStage>
 	void AddDependency()

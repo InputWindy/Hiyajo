@@ -285,7 +285,10 @@ void FScriptSystem::Initialize(FEngineBase& Engine)
 
 	for (auto& Language : Languages)
 	{
-		if (Language->Initialize(Engine.GetLaunchArgc(), Engine.GetLaunchArgv(), "Scripts"))
+		// Script languages no longer receive raw argc/argv; the engine parses the
+		// command line into FEngineBase::Get(). Pass nulls - the language can read
+		// configuration through the engine instead.
+		if (Language->Initialize(0, nullptr, "Scripts"))
 		{
 			OnLanguageReady.Broadcast(*Language);
 		}

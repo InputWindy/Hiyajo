@@ -13,7 +13,8 @@ class FDynWorld : public FEngineLayer
 {
 MAHO_DECLARE_ENGINE_LAYER(FDynWorld, "DynWorld.dll");
 
-public:
+private:
+	// -- engine pipeline stages (scheduler-only) --
 	void BeginFrame(FEngineBase& Engine) override;
 	void Tick(FEngineBase& Engine) override;
 	void EndFrame(FEngineBase& Engine) override;

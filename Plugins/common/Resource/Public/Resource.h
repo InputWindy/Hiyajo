@@ -1,6 +1,6 @@
 #pragma once
 
-// Resource - typed async resource system (engine Common, TSingleton). Async
+// Resource - typed async resource system (engine Common, FEngineLayer). Async
 // import/export over a dedicated IO thread (FThreadedServer), catalog keyed by
 // FName, virtual paths resolved through FPaths. Importers/exporters are
 // user-specialized templates that only decode/encode raw bytes.
@@ -12,15 +12,17 @@
 //       static bool Import(const FConfig&, std::span<const std::uint8_t>, FMesh&);
 //   };
 //
-//   Resource::FResourceSystem::Get().Import<FMesh>({ "Raw/mesh.fbx" },
+//   Resource::GetResourceSystem()->Import<FMesh>({ "Raw/mesh.fbx" },
 //       [](const Resource::FResource* R) { /* loaded, game thread */ });
 //
-// The host drives the fixed lifecycle: Initialize() starts the IO thread, Tick()
-// is called every frame to apply ready transfers on the game thread, Shutdown()
-// stops the thread and clears the catalog.
-#include <Core/Singleton.h>
+// The engine loop drives the lifecycle: Initialize() starts the IO thread,
+// Tick(FEngineBase&) is called every frame to apply ready transfers on the
+// game thread, Shutdown() stops the thread and clears the catalog.
 #include <Core/ThreadedServer.h>
 #include <Maho.h>
+#include <Engine/Engine.h>
+
+#include "ResourceApi.h"
 
 #include <cstdint>
 #include <functional>
@@ -35,6 +37,11 @@ namespace Maho
 {
 namespace Resource
 {
+
+class FResourceSystem;
+
+/** Global resource system accessor - returns FResourceSystem* (cross-DLL via function). */
+MAHO_RESOURCE_API FResourceSystem* GetResourceSystem();
 
 // Internal implementation types - defined in the .cpp, only forward-declared.
 struct FTransferState;
@@ -80,30 +87,21 @@ struct TResourceExporter;   // undefined - specialize per resource type
 /**
  * Resource system - async transfer server + typed import/export.
  *
- *   Resource::FResourceSystem::Get().Import<FMesh>({ "Raw/mesh.fbx" });
- *   const Resource::FResource* R = Resource::FResourceSystem::Get().TryLoad("Raw/mesh");
+ *   Resource::GetResourceSystem()->Import<FMesh>({ "Raw/mesh.fbx" });
+ *   const Resource::FResource* R = Resource::GetResourceSystem()->TryLoad("Raw/mesh");
  *
  * The async transfer machinery (handle / bulk data / pending queue) is fully
  * internal - the header only forward-declares it. Importers see std::span /
  * std::vector of raw bytes.
  */
 class FResourceSystem
-	: public TSingleton<FResourceSystem>
+	: public FEngineLayer
 	, public FThreadedServer
-	, public IPlugin<IInit, IShutdown>
 {
 public:
-	/** Process-unique accessor - defined in Resource.cpp (in Resource.dll). */
-	static FResourceSystem& Get();
+	MAHO_DECLARE_ENGINE_LAYER(FResourceSystem, "Resource.dll");
 
 	~FResourceSystem() override;
-
-	// The fixed single-Layer lifecycle (host-driven).
-	void Initialize(FEngineBase& Engine) override;
-	void Shutdown(FEngineBase& Engine) override;
-
-	/** Apply ready transfers on the game thread - call once per frame. */
-	void Tick();
 
 	/** Async import; OnDone receives the registered resource or nullptr. */
 	template <typename TResource>
@@ -124,10 +122,12 @@ public:
 	/** Try to load: Find; nullptr when not loaded yet. */
 	[[nodiscard]] const FResource* TryLoad(std::string_view AssetPath);
 
-protected:
-	friend TSingleton<FResourceSystem>;
-	// ISingleton needs TSingleton's default ctor; FThreadedServer's thread is
-	// started lazily in Initialize.
+private:
+	// -- engine pipeline stages (scheduler-only) --
+	void Initialize(FEngineBase& Engine) override;
+	void Shutdown(FEngineBase& Engine) override;
+	void Tick(FEngineBase& Engine) override;
+
 	FResourceSystem();
 
 	bool EnqueueImport(

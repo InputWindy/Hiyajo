@@ -56,6 +56,8 @@ static ConsoleVariable::TAutoConsoleVariable<std::string> GCVarRHIBackend(
 
 // -- lifecycle ---------------------------------------------------------------
 
+FRHI::~FRHI() = default;
+
 void FRHI::Initialize(FEngineBase& Engine)
 {
 		// RHI bring-up is deferred to Tick: the native window comes from the
@@ -74,6 +76,8 @@ void FRHI::Shutdown(FEngineBase&)
 
 void FRHI::Tick(FEngineBase& Engine)
 {
+	(void)Engine;
+
 	// Lazy bring-up: once a native window is available from the Platform
 	// feature, initialize the device with it.
 	if (RHI != nullptr)
@@ -81,7 +85,7 @@ void FRHI::Tick(FEngineBase& Engine)
 		return;   // already initialized
 	}
 
-	auto* Platform = static_cast<Platform::FPlatform*>(Engine.FindLayer("FPlatform"));
+	auto* Platform = Platform::GetPlatform();
 	if (Platform == nullptr)
 	{
 		return;   // Platform feature not installed yet

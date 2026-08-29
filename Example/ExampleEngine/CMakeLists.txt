@@ -116,34 +116,6 @@ source_group(TREE "${ENGINE_DIR}/Plugins/Common/Asset" FILES
 	"${ENGINE_DIR}/Plugins/Common/Asset/Private/Asset.cpp"
 )
 
-add_library(CommandParser SHARED
-	${ENGINE_DIR}/Plugins/Common/CommandParser/Public/CommandParser.h
-	${ENGINE_DIR}/Plugins/Common/CommandParser/Private/CommandParser.cpp
-	${ENGINE_DIR}/Plugins/Common/CommandParser/CommandParser.cplugin
-	${ENGINE_DIR}/Plugins/Common/CommandParser/CommandParser.cmake
-	${ENGINE_DIR}/Plugins/Common/CommandParser/settings.json
-)
-set_source_files_properties(	${ENGINE_DIR}/Plugins/Common/CommandParser/CommandParser.cplugin
-	${ENGINE_DIR}/Plugins/Common/CommandParser/CommandParser.cmake
-	${ENGINE_DIR}/Plugins/Common/CommandParser/settings.json PROPERTIES HEADER_FILE_ONLY ON)
-target_include_directories(CommandParser PUBLIC
-	"${ENGINE_DIR}/Source/Public"
-	"${ENGINE_DIR}/Plugins/Common/CommandParser/Public"
-	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEngine/Public"
-)
-set_target_properties(CommandParser PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
-target_compile_definitions(CommandParser PRIVATE MAHO_COMMANDPARSER_MODULE_EXPORTS)
-target_link_libraries(CommandParser PUBLIC Maho)
-set_property(TARGET CommandParser PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>")
-set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Common/CommandParser")
-include("${ENGINE_DIR}/Plugins/Common/CommandParser/CommandParser.cmake")
-unset(_MOD_PLUGIN_DIR)
-
-source_group(TREE "${ENGINE_DIR}/Plugins/Common/CommandParser" FILES
-	"${ENGINE_DIR}/Plugins/Common/CommandParser/Public/CommandParser.h"
-	"${ENGINE_DIR}/Plugins/Common/CommandParser/Private/CommandParser.cpp"
-)
-
 add_library(Compress SHARED
 	${ENGINE_DIR}/Plugins/Common/Compress/Public/Compress.h
 	${ENGINE_DIR}/Plugins/Common/Compress/Private/Compress.cpp
@@ -668,7 +640,6 @@ target_include_directories(ExampleEngine PUBLIC
 	"${ENGINE_DIR}/Plugins/Common/Archive/Public"
 	"${ENGINE_DIR}/Plugins/Common/Paths/Public"
 	"${ENGINE_DIR}/Plugins/Common/Asset/Public"
-	"${ENGINE_DIR}/Plugins/Common/CommandParser/Public"
 	"${ENGINE_DIR}/Plugins/Common/Compress/Public"
 	"${ENGINE_DIR}/Plugins/Common/Config/Public"
 	"${ENGINE_DIR}/Plugins/Common/ConsoleVariable/Public"
@@ -688,8 +659,8 @@ target_include_directories(ExampleEngine PUBLIC
 set_target_properties(ExampleEngine PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 target_compile_definitions(ExampleEngine PRIVATE MAHO_EXAMPLEENGINE_MODULE_EXPORTS)
 target_link_libraries(ExampleEngine PUBLIC Maho)
-add_dependencies(ExampleEngine Archive Paths Asset CommandParser Compress Config ConsoleVariable Exception Log Name Platform RHI Reflect Resource Script Text Timer Unicode)
-target_link_libraries(ExampleEngine PUBLIC Archive Paths Asset CommandParser Compress Config ConsoleVariable Exception Log Name Platform RHI Reflect Resource Script Text Timer Unicode)
+add_dependencies(ExampleEngine Archive Paths Asset Compress Config ConsoleVariable Exception Log Name Platform RHI Reflect Resource Script Text Timer Unicode)
+target_link_libraries(ExampleEngine PUBLIC Archive Paths Asset Compress Config ConsoleVariable Exception Log Name Platform RHI Reflect Resource Script Text Timer Unicode)
 # Plugin DLLs co-locate with Maho.dll + EntryPoint so relative DLL deps resolve.
 set_property(TARGET ExampleEngine PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>")
 
@@ -768,7 +739,7 @@ endforeach()
 set_property(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" PROPERTY VS_DEBUGGER_WORKING_DIRECTORY "${_MAHO_BIN}/$<CONFIG>")
 # The sln startup project is EntryPoint (the app host), not ZERO_CHECK.
 set_property(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" PROPERTY VS_STARTUP_PROJECT EntryPoint)
-add_dependencies(EntryPoint ExampleEngine Archive Paths Asset CommandParser Compress Config ConsoleVariable Exception Log Name Platform RHI Reflect Resource Script Text Timer Unicode DynWorld DynRender GameInput MahoCheckCycle)
+add_dependencies(EntryPoint ExampleEngine Archive Paths Asset Compress Config ConsoleVariable Exception Log Name Platform RHI Reflect Resource Script Text Timer Unicode DynWorld DynRender GameInput MahoCheckCycle)
 
 # Solution folders: EntryPoint at the ROOT; Maho (engine), Project, ThirdParty.
 # The project root sits at Project/ itself; project plugin DLLs under
@@ -785,8 +756,6 @@ set_target_properties(Archive PROPERTIES FOLDER "Maho/Plugins/Common")
 set_target_properties(Paths PROPERTIES FOLDER "Maho/Plugins/Common")
 
 set_target_properties(Asset PROPERTIES FOLDER "Maho/Plugins/Common")
-
-set_target_properties(CommandParser PROPERTIES FOLDER "Maho/Plugins/Common")
 
 set_target_properties(Compress PROPERTIES FOLDER "Maho/Plugins/Common")
 
