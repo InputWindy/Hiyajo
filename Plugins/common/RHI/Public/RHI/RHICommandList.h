@@ -47,7 +47,7 @@ public:
 };
 
 /**
- * Command recording surface (≈ VkCommandBuffer).
+ * Command recording surface (~= VkCommandBuffer).
  * Capability depends on GetType(); illegal calls assert in Debug.
  */
 class MAHO_RHI_API FRHICommandList
@@ -71,12 +71,12 @@ public:
 	virtual void CopyTextureToBuffer(FRHITexture* Src, FRHIBuffer* Dst, std::uint64_t DstOffset) = 0;
 	virtual void FillBuffer(FRHIBuffer* Buffer, std::uint64_t Offset, std::uint64_t Size, std::uint32_t Data) = 0;
 	/**
-	 * Upload CPU data into a buffer (recorded — runs inside EnqueueTask).
+	 * Upload CPU data into a buffer (recorded - runs inside EnqueueTask).
 	 * Host-visible buffers are written directly; device-local buffers go
 	 * through a staging copy.
 	 */
 	virtual void UpdateBuffer(FRHIBuffer* Buffer, std::uint64_t Offset, std::uint64_t Size, const void* Data) = 0;
-	/** Update descriptor sets (recorded — vkUpdateDescriptorSets, immediate CPU op). */
+	/** Update descriptor sets (recorded - vkUpdateDescriptorSets, immediate CPU op). */
 	virtual void UpdateDescriptorSets(const FRHIDescriptorWrite* Writes, std::uint32_t Count) = 0;
 	virtual void TransitionBuffer(FRHIBuffer* Buffer, ERHIResourceState OldState, ERHIResourceState NewState) = 0;
 	virtual void TransitionTexture(FRHITexture* Texture, ERHIResourceState OldState, ERHIResourceState NewState) = 0;

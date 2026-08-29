@@ -1,6 +1,6 @@
 {
   "FileVersion": 1,
   "Name": "Reflect",
-  "Description": "refl-cpp — compile-time reflection (header-only, C++17); members/functions/enums introspection for auto Lua binding, serialization, inspectors",
+  "Description": "refl-cpp - compile-time reflection (header-only, C++17); members/functions/enums introspection for auto Lua binding, serialization, inspectors",
   "Dependencies": []
 }

@@ -5,7 +5,7 @@
 namespace Maho::Archive
 {
 
-// ── typed serialization (builtins) ──
+// -- typed serialization (builtins) --
 
 FArchive& FArchive::operator<<(std::int32_t& V)
 {
@@ -64,7 +64,7 @@ FArchive& FArchive::operator<<(std::string& V)
 	return *this;
 }
 
-// ── FMemoryReader ──
+// -- FMemoryReader --
 
 FMemoryReader::FMemoryReader(const std::vector<std::uint8_t>& InData)
 	: FArchive(EArchiveMode::Read)
@@ -92,7 +92,7 @@ std::size_t FMemoryReader::Tell() const
 	return Pos;
 }
 
-// ── FMemoryWriter ──
+// -- FMemoryWriter --
 
 FMemoryWriter::FMemoryWriter()
 	: FArchive(EArchiveMode::Write)

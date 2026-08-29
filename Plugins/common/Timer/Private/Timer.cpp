@@ -43,7 +43,7 @@ void FTimer::EndScope()
 {
 	if (Current == &Root)
 	{
-		return;   // unbalanced — ignore
+		return;   // unbalanced - ignore
 	}
 
 	const auto Now = std::chrono::steady_clock::now();
@@ -94,7 +94,7 @@ FScopedTimer::~FScopedTimer()
 	FTimer::Get().EndScope();
 }
 
-// ── FGameClock ──
+// -- FGameClock --
 
 void FGameClock::Initialize(FEngineBase& Engine)
 {

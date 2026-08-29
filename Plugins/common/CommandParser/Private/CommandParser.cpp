@@ -39,7 +39,7 @@ void FCommandParser::Parse(int Argc, char** Argv)
 		const std::string Arg = Argv[I];
 		if (Arg.size() < 2 || Arg[0] != '-')
 		{
-			continue;   // positional/non-hyphen junk — ignore
+			continue;   // positional/non-hyphen junk - ignore
 		}
 		if (Arg[1] == '-')
 		{
@@ -48,7 +48,7 @@ void FCommandParser::Parse(int Argc, char** Argv)
 			continue;
 		}
 
-		// single-dash → long-option. Bind the value inline so we never drop it.
+		// single-dash -> long-option. Bind the value inline so we never drop it.
 		std::string Body = Arg.substr(1);
 		if (Body.find('=') != std::string::npos)
 		{
@@ -63,7 +63,7 @@ void FCommandParser::Parse(int Argc, char** Argv)
 		}
 		else
 		{
-			Normalized.push_back("--" + Body + "=true");   // bare flag → true
+			Normalized.push_back("--" + Body + "=true");   // bare flag -> true
 		}
 	}
 
@@ -103,7 +103,7 @@ void FCommandParser::Parse(int Argc, char** Argv)
 	}
 	catch (const CLI::ParseError&)
 	{
-		// Don't abort on bad input — read back whatever parsed.
+		// Don't abort on bad input - read back whatever parsed.
 	}
 
 	// Read the parsed results back into the KV store.

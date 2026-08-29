@@ -1,36 +1,36 @@
 <!-- mahogen -->
 # Core
 
-## 代码文件
+## Code Files
 
 - [Assembly.cpp](Assembly.cpp)
 - [Fatal.cpp](Fatal.cpp)
 <!-- mahogen end -->
 
-## 实现算法字典
+## Implementation Algorithm Dictionary
 
-引擎核心只在两个 `.cpp` 有实现（其余全 header-only 模板）。
+The engine core has implementations in only two `.cpp` files (the rest are all header-only templates).
 
-### Assembly.cpp —— 动态加载原语
+### Assembly.cpp -- Dynamic Loading Primitive
 
-`FAssembly` 的 OS 加载实现。
+The OS loading implementation of `FAssembly`.
 
-| 函数 | 说明 |
+| Function | Description |
 |------|------|
-| `FAssembly(std::string_view Path)` | `Load` 构造 |
-| `~FAssembly()` | `Unload` 析构 |
-| `Load(Path)` | `LoadLibraryA` / `dlopen`，返回是否成功 |
-| `Unload()` | `FreeLibrary` / `dlclose`，幂等 |
-| `GetProcAddress(Name)` | `::GetProcAddress` / `dlsym`，空句柄返回 `nullptr` |
+| `FAssembly(std::string_view Path)` | `Load` constructor |
+| `~FAssembly()` | `Unload` destructor |
+| `Load(Path)` | `LoadLibraryA` / `dlopen`, returns success |
+| `Unload()` | `FreeLibrary` / `dlclose`, idempotent |
+| `GetProcAddress(Name)` | `::GetProcAddress` / `dlsym`, returns `nullptr` on empty handle |
 
-### Fatal.cpp —— 崩溃兜底
+### Fatal.cpp -- Crash Fallback
 
-| 函数 | 说明 |
+| Function | Description |
 |------|------|
-| `ReportFatal(...)` | 输出致命错误 + 终止进程 |
-| `InstallFatalHandlers()` | 注册结构化异常 / 信号处理器 |
+| `ReportFatal(...)` | outputs fatal error + terminates process |
+| `InstallFatalHandlers()` | registers structured exception / signal handlers |
 
-## 相关文档
+## Related Docs
 
-- [../../Public/Core/CoreDoc.md](../../Public/Core/CoreDoc.md) — 根概念（Public）
-- [../../PrivateDoc.md](../../PrivateDoc.md) — Private 层
+- [../../Public/Core/CoreDoc.md](../../Public/Core/CoreDoc.md) -- root concepts (Public)
+- [../../PrivateDoc.md](../../PrivateDoc.md) -- Private layer

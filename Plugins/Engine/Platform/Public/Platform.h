@@ -8,7 +8,7 @@
 #include <memory>
 #include <string_view>
 
-// Win32 <Windows.h> #defines CreateWindow �?CreateWindowW; keep the clean API name.
+// Win32 <Windows.h> #defines CreateWindow to CreateWindowW; keep the clean API name.
 #ifdef CreateWindow
 #	undef CreateWindow
 #endif
@@ -18,11 +18,11 @@ namespace Maho
 namespace Platform
 {
 
-/** Native surface handle �?opaque (GLFWwindow*, EGLContext, ANativeWindow*, UIView*, ...). */
+/** Native surface handle - opaque (GLFWwindow*, EGLContext, ANativeWindow*, UIView*, ...). */
 using FNativeSurface = void*;
 
 /**
- * Minimal platform interface �?only the native surface for the RHI.
+ * Minimal platform interface - only the native surface for the RHI.
  * Not every platform has a "window" (headless, Android surface, iOS view),
  * so window semantics are hidden behind this single accessor.
  */
@@ -36,10 +36,10 @@ public:
 };
 
 /**
- * Platform system �?native surface + events (an FEngineLayer feature). The
- * engine loop drives Tick() → PollEvents + ShouldClose → Owner->RequestExit().
+ * Platform system - native surface + events (an FEngineLayer feature). The
+ * engine loop drives Tick() -> PollEvents + ShouldClose -> Engine.RequestExit().
  * The RHI finds this instance through the engine (Context) and reads
- * GetNativeWindow() — no singleton needed.
+ * GetNativeWindow() - no singleton needed.
  *
  *   Platform::FPlatform Platform;
  *   Platform.Initialize(0, nullptr);
@@ -51,13 +51,13 @@ class FPlatform : public FEngineLayer
 public:
 	MAHO_DECLARE_ENGINE_LAYER(FPlatform, "Platform.dll");
 
-	// ── engine init/shutdown stages (FEngineLayer) ──
+	// -- engine init/shutdown stages (FEngineLayer) --
 	void Initialize(FEngineBase& Engine) override;
 	void Shutdown(FEngineBase& Engine) override;
 
-	// ── engine tick stages (FEngineLayer) ──
+	// -- engine tick stages (FEngineLayer) --
 	void BeginFrame(FEngineBase& Engine) override;
-	void Tick(FEngineBase& Engine) override;      // PollEvents + ShouldClose → RequestExit
+	void Tick(FEngineBase& Engine) override;      // PollEvents + ShouldClose -> RequestExit
 	void EndFrame(FEngineBase& Engine) override;
 	void RequestExit(FEngineBase& Engine) override;
 

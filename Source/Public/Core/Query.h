@@ -1,6 +1,6 @@
 #pragma once
 
-// TQuery — a type-UNRELATED compile-time LINQ over a type table. It never
+// TQuery -- a type-UNRELATED compile-time LINQ over a type table. It never
 // references instances / schedulers: input is a TTypeList, output is a
 // filtered TTypeList. Select / With / Not are type-set operations evaluated at
 // compile time; runtime driving of the surviving types is the caller's concern.
@@ -8,9 +8,9 @@
 //   using FTable = TTypeList<FLog, FNet, FAudio>;
 //   using FTickable = TQuery<FTable>::Select<ITick>::With<IShared>::Not<ITest>::FResult;
 //
-//   Select<T...>   keep types deriving ANY of T (OR)    — starts from FList
-//   With<T...>     keep types deriving ALL of T (AND)   — refines FList
-//   Not<T...>      drop types deriving ANY of T (NOR)   — subtracts from FList
+//   Select<T...>   keep types deriving ANY of T (OR)    -- starts from FList
+//   With<T...>     keep types deriving ALL of T (AND)   -- refines FList
+//   Not<T...>      drop types deriving ANY of T (NOR)   -- subtracts from FList
 //
 // The chain mutates FList: every call returns a NEW TQuery whose FList is the
 // survivor set so far. FResult is just that running table.
@@ -21,7 +21,7 @@
 namespace Maho
 {
 
-// ── type-set operations (pure type algebra, no engine dependency) ─────────
+// -- type-set operations (pure type algebra, no engine dependency) -----------------------
 
 namespace QueryDetail
 {
@@ -82,24 +82,24 @@ template <typename FList>
 class TQuery
 {
 public:
-	/** The survivor set so far — a TTypeList. */
+	/** The survivor set so far -- a TTypeList. */
 	using FResult = FList;
 
-	/** Keep types deriving ANY of TInterfaces... (OR) — starts from FList. */
+	/** Keep types deriving ANY of TInterfaces... (OR) -- starts from FList. */
 	template <typename... TInterfaces>
 	[[nodiscard]] constexpr auto Select() const
 	{
 		return TQuery<typename QueryDetail::TKeep<FList, TInterfaces...>::Type>{};
 	}
 
-	/** Keep types deriving ALL of TInterfaces... (AND) — refines FList. */
+	/** Keep types deriving ALL of TInterfaces... (AND) -- refines FList. */
 	template <typename... TInterfaces>
 	[[nodiscard]] constexpr auto With() const
 	{
 		return TQuery<typename QueryDetail::TKeepAll<FList, TInterfaces...>::Type>{};
 	}
 
-	/** Drop types deriving ANY of TInterfaces... (NOR) — subtracts from FList. */
+	/** Drop types deriving ANY of TInterfaces... (NOR) -- subtracts from FList. */
 	template <typename... TInterfaces>
 	[[nodiscard]] constexpr auto Not() const
 	{

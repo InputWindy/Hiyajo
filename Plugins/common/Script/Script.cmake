@@ -2,7 +2,7 @@
 # sol2 + lua are owned here; game code that consumes sol2 links Script's public
 # lua target (transitive via this plugin).
 
-# ── Lua 5.4 — FetchContent (populates under the build Intermediate). ──
+# -- Lua 5.4 - FetchContent (populates under the build Intermediate). --
 if(NOT TARGET lua)
 	maho_git_repository_url(_SCRIPT_LUA_URL https://github.com/lua/lua.git)
 	maho_fetchcontent_populate_or_reuse(lua_src ${_SCRIPT_LUA_URL} v5.4.7 lua.h)
@@ -55,7 +55,7 @@ if(NOT TARGET lua)
 	endif()
 endif()
 
-# ── sol2 — header-only bindings; FetchContent. ──
+# -- sol2 - header-only bindings; FetchContent. --
 maho_git_repository_url(_SCRIPT_SOL2_URL https://github.com/ThePhD/sol2.git)
 maho_fetchcontent_populate_or_reuse(sol2 ${_SCRIPT_SOL2_URL} v3.3.1 include/sol/sol.hpp)
 set(_SCRIPT_SOL2_INCLUDE_DIR "${sol2_SOURCE_DIR}/include")

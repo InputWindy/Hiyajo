@@ -15,7 +15,7 @@ namespace Config
 {
 
 /**
- * INI-style configuration singleton �?UE DefaultEngine.ini format. Load parses
+ * INI-style configuration singleton - UE DefaultEngine.ini format. Load parses
  * an INI file; GetString/GetInt/... read; SetString overrides at runtime.
  *   FConfig::Get().GetString("/Script/Engine.Engine", "GameName");
  */
@@ -24,7 +24,7 @@ class FConfig
 	, public IPlugin<IInit, IShutdown>
 {
 public:
-	/** Process-unique accessor �?declared here, defined in Config.cpp (in Config.dll). */
+	/** Process-unique accessor - declared here, defined in Config.cpp (in Config.dll). */
 	static FConfig& Get();
 
 	void Initialize(FEngineBase&) override { Sections.clear(); }

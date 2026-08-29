@@ -1,18 +1,18 @@
-# Engine（Private）
+# Engine (Private)
 
-## 代码文件
+## Code Files
 
-*（无——Engine 层全 header-only，无 .cpp 实现）*
+*(none -- the Engine layer is fully header-only, no .cpp implementation)*
 
-## 说明
+## Notes
 
-`Engine/Layer.h` 是纯模板 + 内联实现（FLayerBase / FLayer / 命令 / DispatchInstance 全在头文件）。无 Private 侧编译单元，因此没有实现算法字典。
+`Engine/Layer.h` is pure templates + inline implementation (FLayerBase / FLayer / commands / DispatchInstance are all in the header). There is no Private-side compilation unit, so there is no implementation algorithm dictionary.
 
-- 层依赖的跨平台原语（DLL 加载、致命错误）在 `Core` 的 `Assembly.cpp` / `Fatal.cpp`——见 `../Core/CoreDoc.md`。
-- 并行执行在 `Core/Schedulers.h` + `Core/ThreadPool.h`（header-only 模板 + 内联）。
+- The cross-platform primitives the layer depends on (DLL loading, fatal errors) are in `Core`'s `Assembly.cpp` / `Fatal.cpp` -- see `../Core/CoreDoc.md`.
+- Parallel execution is in `Core/Schedulers.h` + `Core/ThreadPool.h` (header-only templates + inline).
 
-## 相关文档
+## Related Docs
 
-- [../../Public/Engine/EngineDoc.md](../../Public/Engine/EngineDoc.md) — 层架构（Public）
-- [../../Public/Core/CoreDoc.md](../../Public/Core/CoreDoc.md) — Core 基建概念
-- [../../PrivateDoc.md](../../PrivateDoc.md) — Private 层
+- [../../Public/Engine/EngineDoc.md](../../Public/Engine/EngineDoc.md) -- layer architecture (Public)
+- [../../Public/Core/CoreDoc.md](../../Public/Core/CoreDoc.md) -- Core infrastructure concepts
+- [../../PrivateDoc.md](../../PrivateDoc.md) -- Private layer

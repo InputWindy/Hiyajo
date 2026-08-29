@@ -1,7 +1,7 @@
 <!-- mahogen -->
 # Core
 
-## 代码文件
+## Code Files
 
 - [Assembly.h](Assembly.h)
 - [Core.h](Core.h)
@@ -19,68 +19,68 @@
 - [TypeList.h](TypeList.h)
 <!-- mahogen end -->
 
-## 概念——类型无关的基建积木
+## Concept -- Type-Agnostic Infrastructure Building Blocks
 
-Core 是**零 app 假设、零三方依赖、零 stage 预设**的纯积木。每个组件类型无关（不引用 FLayer/应用概念），可独立使用。
+Core is a pure set of building blocks with **zero app assumptions, zero third-party dependencies, zero stage presets**. Every component is type-agnostic (does not reference FLayer/app concepts) and can be used independently.
 
-### ① 类型表（TypeList）
+### 1. Type List (TypeList)
 
-`TTypeList<T...>` 是编译期有序类型数组。操作：`TCons`（前插）/ `TAppend`（后插）/ `TContains`（成员）/ `TCatch`（拼接）/ `TUnionList_t`（去重并集）。
+`TTypeList<T...>` is a compile-time ordered type array. Operations: `TCons` (prepend) / `TAppend` (append) / `TContains` (membership) / `TCatch` (concatenate) / `TUnionList_t` (deduplicated union).
 
-### ② 依赖拓扑（Topology）
+### 2. Dependency Topology (Topology)
 
-`MAHO_EXTEND_DEPS`（Extension.h）是**通用依赖声明锚点**——任何类可标记依赖（codegen 扫描它生成 `.gen.h` 宏填 `FDepends`）。`TResolveDependsPack`/`TNodeLevel`/`TLevels_t` 编译期算分层序：
+`MAHO_EXTEND_DEPS` (Extension.h) is a **generic dependency declaration anchor** -- any class can mark dependencies (codegen scans it and generates a `.gen.h` macro that fills `FDepends`). `TResolveDependsPack`/`TNodeLevel`/`TLevels_t` compute the layered order at compile time:
 
 ```cpp
 class FWorld : public FLayer<> {
-    MAHO_EXTEND_DEPS(FWorld, FDefaultSlot, (FNoParent, FAI));  // 声明锚点
-    // codegen → World.gen.h: #define MAHO_DEPS_FWorld_FDefaultSlot FAI
-    // 宏填 FDepends = TTypeList<FDefaultSlot, TTypeList<FAI>>
+    MAHO_EXTEND_DEPS(FWorld, FDefaultSlot, (FNoParent, FAI));  // declaration anchor
+    // codegen -> World.gen.h: #define MAHO_DEPS_FWorld_FDefaultSlot FAI
+    // macro fills FDepends = TTypeList<FDefaultSlot, TTypeList<FAI>>
 };
-using FLevels = Topo::TLevels_t<FChildrenList, FDefaultSlot>;  // 分层序
+using FLevels = Topo::TLevels_t<FChildrenList, FDefaultSlot>;  // layered order
 ```
 
-### ③ 类型查询（Query）
+### 3. Type Query (Query)
 
-`TQuery<FList>` 类型无关编译期 LINQ——Select（OR）/ With（AND）/ Not（NOR）链式筛选，输出 `FResult`（TTypeList）：
+`TQuery<FList>` is a type-agnostic compile-time LINQ -- Select (OR) / With (AND) / Not (NOR) chain filtering, outputting `FResult` (TTypeList):
 
 ```cpp
 using FTickable = TQuery<FTable>::Select<ITick>::With<IShared>::Not<ITest>::FResult;
 ```
 
-### ④ 命令队列（Queue）
+### 4. Command Queue (Queue)
 
-`FQueue` **类型无关**：存 `unique_ptr<ICommand>`，命令自带 `GetCatalogId()`（uint64）路由到 catalog lane。FIFO，多线程 Enqueue，消费方 Dequeue 后自行执行：
+`FQueue` is **type-agnostic**: stores `unique_ptr<ICommand>`, commands carry their own `GetCatalogId()` (uint64) to route to a catalog lane. FIFO, multi-threaded Enqueue, consumer Dequeues then executes:
 
 ```cpp
 FQueue Q;
-Q.Enqueue(std::make_unique<FInstallCmd>(...));          // 任意线程
-while (auto Cmd = Q.Dequeue(kInstallLane)) { /* apply */ }  // 消费方执行
+Q.Enqueue(std::make_unique<FInstallCmd>(...));          // any thread
+while (auto Cmd = Q.Dequeue(kInstallLane)) { /* apply */ }  // consumer executes
 ```
 
-`ICommand` 是纯数据载体（仅 `GetCatalogId()`），无执行协议。
+`ICommand` is a pure data carrier (only `GetCatalogId()`), no execution protocol.
 
-### ⑤ 并行执行（Schedulers + ThreadPool）
+### 5. Parallel Execution (Schedulers + ThreadPool)
 
-`FParallelScheduler`（无模板）——两个泛型 ForEach：变参 callable 包 + 运行时容器（MakeTask 投影）。内部 `FThreadPool` 并行 + barrier 收尾。层间串行 / 层内并行的"分层语义"是调用方的事（FLayer 持有）。
+`FParallelScheduler` (non-template) -- two generic ForEach: variadic callable pack + runtime container (MakeTask projection). Internal `FThreadPool` parallel execution + barrier finish. The "layered semantics" of serial between layers / parallel within a layer is the caller's concern (held by FLayer).
 
-`FThreadedServer`——常驻单线程 + FIFO 任务队列（IO 线程/渲染线程等专用角色）。
+`FThreadedServer` -- a resident single thread + FIFO task queue (dedicated roles like IO thread / render thread).
 
-### ⑥ 单例（Singleton）
+### 6. Singleton
 
-`TSingleton<T>` 是**标识基类**（CRTP），无强制生命周期。子类自声明 `static T& Get();`（定义在 .cpp，进程唯一）。需要生命周期经 `IPlugin<IInit,IShutdown>`（Interface.h）组合。
+`TSingleton<T>` is a **marker base class** (CRTP) with no mandatory lifecycle. Subclasses declare their own `static T& Get();` (defined in .cpp, process-unique). Lifecycle, when needed, is composed via `IPlugin<IInit,IShutdown>` (Interface.h).
 
-### ⑦ 能力接口（Interface）
+### 7. Capability Interfaces (Interface)
 
-`IInit`（Initialize(int,char**)）/ `IShutdown`（Shutdown()）/ `IMain`（Main()）/ `IExit`（Exit()）/ `IPlugin<Caps...>`（virtual-base 组合器）。能力**可选组合**——不是所有对象都需要生命周期。
+`IInit` (Initialize(int,char**)) / `IShutdown` (Shutdown()) / `IMain` (Main()) / `IExit` (Exit()) / `IPlugin<Caps...>` (virtual-base combinator). Capabilities are **optionally composable** -- not every object needs a lifecycle.
 
-### ⑧ 加载与致命错误（Assembly / Fatal）
+### 8. Loading and Fatal Errors (Assembly / Fatal)
 
-`FAssembly`——DLL 加载 RAII。`Fatal::ReportFatal`——致命错误（不恢复）。
+`FAssembly` -- DLL loading RAII. `Fatal::ReportFatal` -- fatal error (non-recoverable).
 
-## 相关文档
+## Related Docs
 
-- [Core.h](Core.h) — 聚合头
-- [CoreAPI.html](CoreAPI.html) — API 文档
-- [../Engine/EngineDoc.md](../Engine/EngineDoc.md) — 层架构（FLayerBase 组装以上基建）
-- [../../SourceDoc.md](../../SourceDoc.md) — 源码根
+- [Core.h](Core.h) -- aggregate header
+- [CoreAPI.html](CoreAPI.html) -- API docs
+- [../Engine/EngineDoc.md](../Engine/EngineDoc.md) -- layer architecture (FLayerBase assembles the above infrastructure)
+- [../../SourceDoc.md](../../SourceDoc.md) -- source root

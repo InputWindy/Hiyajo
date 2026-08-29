@@ -8,17 +8,17 @@ namespace Maho
 {
 
 /**
- * Unified app driver — install an engine DLL and execute its root instance.
+ * Unified app driver -- install an engine DLL and execute its root instance.
  *
  * No engine/tool preset: the engine is a self-contained DLL exporting
- * `CreateEngine()` → an FEngineBase*. The entry point loads it via FAssembly,
+ * `CreateEngine()` -> an FEngineBase*. The entry point loads it via FAssembly,
  * brings the anonymous root up (Initialize), forwards to its main capability,
  * then takes it down symmetrically (Shutdown + dtor teardown).
  *
- *   main()/WinMain() → Maho::Main(Argc, Argv)
+ *   main()/WinMain() -> Maho::Main(Argc, Argv)
  *     InstallFatalHandlers()
  *     FAssembly Load(argv[1])          // install
- *     CreateEngine() → FEngineBase*    // create the root instance (anonymous)
+ *     CreateEngine() -> FEngineBase*    // create the root instance (anonymous)
  *     Initialize(Argc, Argv)           // bring the engine up
  *     Main()                           // execute
  *     Shutdown()                       // symmetric teardown
@@ -31,7 +31,7 @@ inline int Main(int Argc, char** Argv)
 #ifndef MAHO_ENGINE_NAME
 #	define MAHO_ENGINE_NAME "Engine.dll"
 #endif
-	// The engine path — first command-line argument, else the project's DLL.
+	// The engine path -- first command-line argument, else the project's DLL.
 	const char* EnginePath = (Argc > 1 && Argv[1] != nullptr) ? Argv[1] : MAHO_ENGINE_NAME;
 
 	// Install (load) the engine.
@@ -41,7 +41,7 @@ inline int Main(int Argc, char** Argv)
 		ReportFatal("Failed to install engine assembly");
 	}
 
-	// Create the root instance — the exported CreateEngine factory.
+	// Create the root instance -- the exported CreateEngine factory.
 	using CreateFunction = FEngineBase* (*)();
 	auto Create = Engine.GetProcAs<CreateFunction>("CreateEngine");
 	if (Create == nullptr)
@@ -56,13 +56,13 @@ inline int Main(int Argc, char** Argv)
 	}
 
 	// Bring the (anonymous) root engine up, run its main loop, then shut it
-	// down symmetrically. The root is never known by concrete type — only by
+	// down symmetrically. The root is never known by concrete type - only by
 	// the FEngineBase anchor.
 	App->ParseCommandLine(Argc, Argv);
 	App->PreMain();
 	const int Result = App->Main();
 	App->PostMain();
-	delete App; // FEngineBase virtual dtor — removes the whole object through the DLL.
+	delete App; // FEngineBase virtual dtor - removes the whole object through the DLL.
 	return Result;
 }
 

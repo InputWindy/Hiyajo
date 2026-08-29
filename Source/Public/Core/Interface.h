@@ -9,7 +9,7 @@ namespace Maho
 {
 
 /**
- * Capability composer — an UNORDERED set of capability traits a class promises.
+ * Capability composer -- an UNORDERED set of capability traits a class promises.
  * No stage ordering is implied; used for capability query (dynamic_cast) and
  * capability-driven dispatch.
  *
@@ -23,9 +23,9 @@ public:
 };
 
 /**
- * Stage pipeline composer — an ORDERED pipeline of lifecycle stages. Argument
+ * Stage pipeline composer -- an ORDERED pipeline of lifecycle stages. Argument
  * order is the layer's own node order: IPipeline<IInit, IMain, IShutdown>
- * means the layer's nodes run Init → Main → Shutdown (auto self-progression
+ * means the layer's nodes run Init -> Main -> Shutdown (auto self-progression
  * edges). Exposes TStages (an ordered TTypeList) so the TaskGraph can expand
  * one node per stage.
  *
@@ -42,7 +42,7 @@ class MAHO_API IPipeline : public virtual TStageTypes...
 public:
 	virtual ~IPipeline() = default;
 
-	/** Ordered stage-interface list — the TaskGraph expands one node per stage. */
+	/** Ordered stage-interface list -- the TaskGraph expands one node per stage. */
 	using TStages = TTypeList<TStageTypes...>;
 };
 

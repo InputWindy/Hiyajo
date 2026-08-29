@@ -20,26 +20,26 @@ struct FTaskGraphDependency
 	std::type_index Stage = std::type_index(typeid(void));   // void = unset
 };
 
-/** Base task-graph node — pure topology. Subclasses extend it with the execution payload. */
+/** Base task-graph node -- pure topology. Subclasses extend it with the execution payload. */
 struct FTaskGraphNode
 {
 	std::string                         Name;          // object identity (e.g. "World")
 	std::type_index                     Stage = std::type_index(typeid(void));  // void = unset
-	std::vector<FTaskGraphDependency>  Dependencies;   // edges: (name, stage) → this node
+	std::vector<FTaskGraphDependency>  Dependencies;   // edges: (name, stage) -> this node
 };
 
 /**
  * Dependency-graph scheduler. Schedules NODES, where a node is an (object,
  * stage) pair. Edges come from each node's dependency tuples. A node is ready
- * when ALL of its direct dependencies have completed — the graph is
+ * when ALL of its direct dependencies have completed -- the graph is
  * stage-agnostic, so a node whose deps finished is released immediately (no
- * stage barrier — this enables cross-stage pipelining).
+ * stage barrier -- this enables cross-stage pipelining).
  *
  * Lifecycle:
- *   Init     — load the full node set (topology data only)
- *   Compile  — wire edges + detect cycles/missing deps → bool
- *   Execute  — topological dispatch (async, submits ready nodes to the pool)
- *   Flush    — block until the graph drains
+ *   Init     -- load the full node set (topology data only)
+ *   Compile  -- wire edges + detect cycles/missing deps -> bool
+ *   Execute  -- topological dispatch (async, submits ready nodes to the pool)
+ *   Flush    -- block until the graph drains
  *
  * Execution protocol is delegated to subclasses via ExecuteNode(): the base
  * FTaskGraphNode carries only {Name, Stage, Dependencies}; a subclass defines
@@ -61,16 +61,16 @@ public:
 	FTaskGraph& operator=(const FTaskGraph&) = delete;
 	virtual ~FTaskGraph() = default;
 
-	/** ① Load the full node set (topology data only). */
+	/** 1. Load the full node set (topology data only). */
 	void Init(std::vector<FNode*> Nodes);
 
-	/** ② Wire edges + validate (cycle / missing dep). Returns false on error. */
+	/** 2. Wire edges + validate (cycle / missing dep). Returns false on error. */
 	bool Compile();
 
-	/** ③ Dispatch ready nodes to the pool (async — call Flush to sync). */
+	/** 3. Dispatch ready nodes to the pool (async -- call Flush to sync). */
 	void Execute();
 
-	/** ④ Block until every submitted task completed (graph drained). */
+	/** 4. Block until every submitted task completed (graph drained). */
 	void Flush();
 
 	/** Re-run the current compiled graph (resets per-node pending counts). */
@@ -78,7 +78,7 @@ public:
 
 protected:
 	/**
-	 * Execution protocol hook — the base graph only knows a node is ready; the
+	 		 * Execution protocol hook -- the base graph only knows a node is ready; the
 	 * subclass casts FNode to its own derived node and drives the callback.
 	 * Runs on a pool worker thread (must be thread-safe).
 	 */
@@ -102,7 +102,7 @@ private:
 	void ExecuteNodeFor(std::size_t Index);
 
 	std::vector<FTask> Tasks;                                              // all nodes
-	std::map<std::pair<std::string, std::type_index>, std::size_t> Lookup; // (name,stage)→task index
+	std::map<std::pair<std::string, std::type_index>, std::size_t> Lookup; // (name,stage) -> task index
 	std::uint32_t Remaining = 0;                                           // tasks not yet completed (Mutex-guarded)
 	std::mutex Mutex;
 };

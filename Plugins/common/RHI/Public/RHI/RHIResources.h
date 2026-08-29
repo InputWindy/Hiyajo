@@ -588,7 +588,7 @@ protected:
 
 struct FRHISbtRecord
 {
-	FRHIShaderModule* Module = nullptr;   // null 鈫?miss/empty record
+	FRHIShaderModule* Module = nullptr;   // null -> miss/empty record
 	const char* EntryPoint = "main";
 };
 

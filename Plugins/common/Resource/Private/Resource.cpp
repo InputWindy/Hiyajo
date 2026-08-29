@@ -29,7 +29,7 @@ std::size_t detail::FindLastDot(std::string_view Path)
 	return Path.find_last_of('.');
 }
 
-// ── internal implementation types (hidden from the header) ──
+// -- internal implementation types (hidden from the header) --
 
 struct FBulkData
 {
@@ -89,7 +89,7 @@ public:
 // can delete it.
 FResourceSystem::~FResourceSystem() = default;
 
-// ── FResourceSystem ──
+// -- FResourceSystem --
 
 FResourceSystem::FResourceSystem()
 	: Impl(std::make_unique<FImpl>())
@@ -196,8 +196,8 @@ const FResource* FResourceSystem::RegisterResource(std::string AssetPath, std::u
 
 void FResourceSystem::ProcessReadyIO()
 {
-	// Hold the impl lock for the WHOLE poll: producers (EnqueueImport/Export on the
-	// IO thread) write PendingIO/PendingExports concurrently — iterating/erasing
+		// Hold the impl lock for the WHOLE poll: producers (EnqueueImport/Export on the
+		// IO thread) write PendingIO/PendingExports concurrently - iterating/erasing
 	// them without the lock is a data race. The decode/OnDone callbacks run under
 	// the lock (they touch the same maps via RegisterResource / Shutdown).
 	std::lock_guard Lock(Impl->Mutex);
@@ -222,7 +222,7 @@ void FResourceSystem::ProcessReadyIO()
 		}
 		else
 		{
-			Ready.OnBulkReady({});   // failed — empty span
+			Ready.OnBulkReady({});   // failed - empty span
 		}
 
 		++Applied;

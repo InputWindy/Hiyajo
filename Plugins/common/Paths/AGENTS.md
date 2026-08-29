@@ -1,13 +1,13 @@
-# Paths — Agent 入口
+# Paths - Agent entry
 
-所有 AI Agent 进本插件前先读本文件。
+All AI agents read this file before entering this plugin.
 
-## 设计约束（强约束）
+## Design constraints (strict)
 
-- 职责边界：路径解析基础设施。读写文件不要硬编码物理路径，先 `SetRoot` 注册别名，再 `Resolve` 虚拟路径。
-- 依赖只走 `.cplugin` `Dependencies`，include `<Paths.h>`，不跨目录相对 include。
-- 实现要点：
-  - `TSingleton<FPaths>`，`Get()` 定义在 `Private/Paths.cpp`（Paths.dll 内进程唯一）。
-  - 内部 `std::map<std::string, std::filesystem::path> Roots`，无锁——`SetRoot/Resolve` 应在初始化期单线程完成。
-  - `Resolve` 同时接受 `Alias/Sub/Path` 与 `Alias:Sub/Path` 两种写法。
-- 遵循根 [AGENTS.md](../../../../AGENTS.md)。
+- Responsibility: path resolution infrastructure. Do not hard-code physical paths when reading/writing files; first `SetRoot` to register an alias, then `Resolve` the virtual path.
+- Dependencies only go through `.cplugin` `Dependencies`; include `<Paths.h>`, no cross-directory relative includes.
+- Implementation notes:
+  - `TSingleton<FPaths>`; `Get()` is defined in `Private/Paths.cpp` (process-unique inside Paths.dll).
+  - Internal `std::map<std::string, std::filesystem::path> Roots`, lock-free - `SetRoot/Resolve` should complete single-threaded during initialization.
+  - `Resolve` accepts both `Alias/Sub/Path` and `Alias:Sub/Path` forms.
+- Follow root [AGENTS.md](../../../../AGENTS.md).

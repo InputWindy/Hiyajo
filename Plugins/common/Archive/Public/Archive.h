@@ -1,6 +1,6 @@
 #pragma once
 
-// Archive — binary serialization (header-only engine Common). FArchive abstract
+// Archive - binary serialization (header-only engine Common). FArchive abstract
 // reader/writer + FMemoryReader/FMemoryWriter byte streams + ISerialize for
 // self-serializing types. Zero third-party; pure std.
 #include <cstddef>
@@ -22,7 +22,7 @@ enum class EArchiveMode : std::uint8_t
 };
 
 /**
- * Binary serialization stream — the bridge between raw bytes and typed data.
+ * Binary serialization stream - the bridge between raw bytes and typed data.
  *
  *   // Writing
  *   FMemoryWriter Writer;
@@ -46,7 +46,7 @@ public:
 	virtual void Seek(std::size_t Pos) = 0;
 	[[nodiscard]] virtual std::size_t Tell() const = 0;
 
-	// ── typed serialization (builtins) ──
+	// -- typed serialization (builtins) --
 
 	FArchive& operator<<(std::int32_t& V);
 	FArchive& operator<<(std::uint32_t& V);

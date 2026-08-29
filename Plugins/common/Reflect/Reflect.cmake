@@ -1,5 +1,5 @@
-# Reflect plugin: refl-cpp — compile-time reflection (header-only, MIT).
-# Header-only → no add_subdirectory; expose an INTERFACE target with the include
+# Reflect plugin: refl-cpp - compile-time reflection (header-only, MIT).
+# Header-only -> no add_subdirectory; expose an INTERFACE target with the include
 # dir so Script / game code can `#include <refl/meta.hpp>` via the transitive link.
 include(FetchContent)
 

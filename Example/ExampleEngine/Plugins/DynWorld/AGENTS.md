@@ -1,9 +1,9 @@
-# DynWorld — Agent 入口
+# DynWorld - Agent Entry
 
-所有 AI Agent 进本插件前先读本文件。
+All AI agents must read this file before entering this plugin.
 
-## 设计约束（强约束）
+## Design Constraints (strict)
 
-- TODO: 插件职责边界
-- 依赖只走 `.cplugin` `Dependencies`，include `<Name.h>`，不跨目录相对 include。
-- 遵循根 [AGENTS.md](../../../../AGENTS.md)。
+- TODO: plugin responsibility boundaries
+- Dependencies only go through `.cplugin` `Dependencies`, include `<Name.h>`, no cross-directory relative includes.
+- Follow root [AGENTS.md](../../../../AGENTS.md).

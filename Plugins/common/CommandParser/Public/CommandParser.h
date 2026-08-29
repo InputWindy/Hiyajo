@@ -1,6 +1,6 @@
 #pragma once
 
-// CommandParser �?command-line parser (engine Common, TSingleton). Parses
+// CommandParser - command-line parser (engine Common, TSingleton). Parses
 // argc/argv into a key-value store. Uses CLI11 (engine third-party, header-only).
 // Both --key value and --key=value forms are accepted; positional args are stored
 // under positional keys. FCommandParser::Get().Initialize(argc, argv) fills the
@@ -38,13 +38,13 @@ public:
 	/** Value for a key; empty string when absent. */
 	[[nodiscard]] std::string Get(std::string_view Key) const;
 
-	/** Value as bool ("true"/"1"/"yes"/"on" �?true). */
+	/** Value as bool ("true"/"1"/"yes"/"on" -> true). */
 	[[nodiscard]] bool GetBool(std::string_view Key) const;
 
 	/** Value as int; 0 (or fallback) when absent/unparseable. */
 	[[nodiscard]] int GetInt(std::string_view Key) const;
 
-	/** All parsed key→value pairs (const ref). */
+	/** All parsed key->value pairs (const ref). */
 	[[nodiscard]] const std::map<std::string, std::string>& GetAll() const { return Store; }
 
 	/** Reset the store. */

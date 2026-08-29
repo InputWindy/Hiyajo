@@ -1,19 +1,19 @@
 # Log
 
-## 代码文件
+## Code Files
 
-- [Log.h](Log.h) — 日志单例 `FLog`（封装 spdlog 的 stdout-color logger）
-- [LogApi.h](LogApi.h) — 跨 DLL 导出宏（`MAHO_LOG_API`）
+- [Log.h](Log.h) - logging singleton `FLog` (wraps spdlog's stdout-color logger)
+- [LogApi.h](LogApi.h) - cross-DLL export macro (`MAHO_LOG_API`)
 
-## 概念——日志服务
+## Concept - Log Service
 
-日志单例服务——封装 **spdlog** 的线程安全 stdout-color logger，fmt 风格格式化（`{}` 占位），全引擎（含其他服务插件）共享同一个 logger。`FLog` 继承 `TSingleton<FLog>` + `IPlugin<IInit, IShutdown>`：`Initialize(argc, argv)` 创建并配置 logger（识别 `--log-level=trace|debug|info|warn|error`），`Shutdown()` flush + 释放。
+Logging singleton service - wraps **spdlog**'s thread-safe stdout-color logger, fmt-style formatting (`{}` placeholders), shared by the whole engine (including other service plugins). `FLog` inherits `TSingleton<FLog>` + `IPlugin<IInit, IShutdown>`: `Initialize(argc, argv)` creates and configures the logger (recognizes `--log-level=trace|debug|info|warn|error`), `Shutdown()` flushes + releases.
 
-### FLog —— 单例 + 静态透传
+### FLog - singleton + static passthrough
 
-- `Logger`（public）：共享 `std::shared_ptr<spdlog::logger>`，一切日志输出走它。
-- 静态透传：`FLog::Info / Warn / Error(fmt, args...)`（fmt 风格，编译期检查格式串）。
-- 宏糖：`MAHO_LOG_CORE_TRACE / DEBUG / INFO / WARN / ERROR / CRITICAL(...)`——直接透传到 `Logger->xxx`。
+- `Logger` (public): shared `std::shared_ptr<spdlog::logger>`, all log output goes through it.
+- Static passthrough: `FLog::Info / Warn / Error(fmt, args...)` (fmt style, compile-time format string checking).
+- Macro sugar: `MAHO_LOG_CORE_TRACE / DEBUG / INFO / WARN / ERROR / CRITICAL(...)` - directly passthrough to `Logger->xxx`.
 
 ```cpp
 FLog::Get().Initialize(argc, argv);
@@ -22,12 +22,12 @@ FLog::Error("boom: code={}", code);
 MAHO_LOG_CORE_INFO("init {}", name);
 ```
 
-`Get()` 声明在头、定义在 `Log.cpp`（编进 Log.dll）——实例进程唯一。依赖插件经 Log.dll 链接 spdlog，无需自带三方。
+`Get()` is declared in the header, defined in `Log.cpp` (compiled into Log.dll) - process-unique instance. Dependent plugins link spdlog through Log.dll, no need to bundle the third-party dep.
 
-## 三方依赖
+## Third-Party Dependencies
 
-- **spdlog**（header-only，`spdlog/spdlog.h` + stdout_color_sinks）——线程安全 stdout-color 日志。
+- **spdlog** (header-only, `spdlog/spdlog.h` + stdout_color_sinks) - thread-safe stdout-color logging.
 
-## 相关文档
+## Related Docs
 
-- [API.html](API.html) — API 文档
+- [API.html](API.html) - API documentation

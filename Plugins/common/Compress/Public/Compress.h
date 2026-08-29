@@ -1,7 +1,7 @@
 #pragma once
 
-// Compress — zstd (de)compression (engine Common, pure library). No state, no
-// singleton — just static helpers. zstd is an ENGINE third-party (compiled C
+// Compress - zstd (de)compression (engine Common, pure library). No state, no
+// singleton - just static helpers. zstd is an ENGINE third-party (compiled C
 // lib; Build/CMake/MahoDependencies.cmake populates + links the static lib).
 //
 //   std::vector<std::uint8_t> Compressed = Compress::Compress(Raw, 3);   // bytes

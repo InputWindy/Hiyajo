@@ -87,7 +87,7 @@ namespace
 void FConsoleVariable::Initialize(FEngineBase& Engine)
 {
 	// Static TAutoConsoleVariable globals registered at static-init already;
-	// nothing to bring up. Explicitly no clear — those globals must survive.
+	// nothing to bring up. Explicitly no clear - those globals must survive.
 	(void)Engine;
 }
 

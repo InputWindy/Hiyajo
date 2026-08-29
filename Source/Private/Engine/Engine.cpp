@@ -11,10 +11,10 @@ void FEngineBase::ParseCommandLine(int Argc, char** Argv)
 
 int FEngineBase::Main()
 {
-	// 应用 PreMain 里 Install 的挂起层（InitGraph 前必须生效）。
+	// Apply the layers installed in PreMain (must be effective before InitGraph).
 	FlushPendingUpdatePipelines();
 
-	// 初始化管线：临时图驱动一次，挂 IEngineInitPipeline 的 layer 按依赖序 Initialize。
+	// Init pipeline: drive once with a temporary graph; layers mounting IEngineInitPipeline Initialize in dependency order.
 	FLayerTaskGraph<IEngineInitPipeline, FEngineBase> InitGraph(Pool, *this);
 	InitGraph.Init(Pipelines);
 	if (InitGraph.Compile())
@@ -39,8 +39,8 @@ int FEngineBase::Main()
 				EngineGraph.Flush();
 				break;
 			}
-			// 输入层（如 GameInputLayer）在 Tick 里调用 RequestExit 后，
-			// 本帧 Execute 已结束，此处安全检查退出标志。
+			// An input layer (e.g. GameInputLayer) calls RequestExit inside Tick;
+			// this frame's Execute has already finished, so check the exit flag here safely.
 			if (bIsShuttingDown.load(std::memory_order_acquire))
 			{
 				EngineGraph.Flush();
@@ -48,7 +48,7 @@ int FEngineBase::Main()
 			}
 		}
 
-		// 卸载管线：临时图驱动一次，挂 IEngineShutdownPipeline 的 layer 按依赖序 Shutdown。
+		// Shutdown pipeline: drive once with a temporary graph; layers mounting IEngineShutdownPipeline Shutdown in dependency order.
 		FLayerTaskGraph<IEngineShutdownPipeline, FEngineBase> ShutdownGraph(Pool, *this);
 		ShutdownGraph.Init(Pipelines);
 		if (ShutdownGraph.Compile())
@@ -57,7 +57,7 @@ int FEngineBase::Main()
 		}
 		ShutdownGraph.Flush();
 
-		// 先删 feature 实例（虚析构在各自 DLL），再释放 DLL。
+		// Delete feature instances first (virtual dtors live in their own DLLs), then release the DLLs.
 		Features.clear();
 		Modules.clear();
 	}
@@ -141,7 +141,7 @@ void FEngineBase::FlushPendingUpdatePipelines()
 	}
 	PendingAdded.clear();
 
-	FlushUnload();   // 小顶堆贪心卸载（随机卸载请求的批量应用）
+	FlushUnload();   // min-heap greedy unload (batch application of random uninstall requests)
 }
 
 void FEngineBase::DeleteUnloaded(FEngineLayer* Layer)
@@ -150,7 +150,7 @@ void FEngineBase::DeleteUnloaded(FEngineLayer* Layer)
 	{
 		if (Features[I].get() == Layer)
 		{
-			// 先 delete feature（虚析构在 DLL），再释放 DLL。
+			// Delete the feature first (virtual dtor lives in the DLL), then release the DLL.
 			Features[I].reset();
 			if (I < Modules.size())
 			{
@@ -165,7 +165,7 @@ void FEngineBase::RebuildReverseDeps()
 {
 	ReverseDepCount.clear();
 
-	// 活跃层名全量初始化为 0（无依赖/无被依赖的层也在内）。
+	// Initialize all active layer names to 0 (layers with no dependencies and no dependents are included too).
 	for (FLayerBase* L : Pipelines)
 	{
 		ReverseDepCount[std::string(L->GetName())] = 0;
@@ -175,7 +175,7 @@ void FEngineBase::RebuildReverseDeps()
 		ReverseDepCount[std::string(L->GetName())] = 0;
 	}
 
-	// 累加：每个活跃层声明的依赖 → 被依赖者计数 +1。
+	// Accumulate: every dependency declared by an active layer -> depended-on count +1.
 	for (FLayerBase* L : Pipelines)
 	{
 		for (const auto& [Stage, Deps] : L->GetDependencies())
@@ -208,14 +208,14 @@ void FEngineBase::FlushUnload()
 	}
 	RebuildReverseDeps();
 
-	// name → 活跃层指针（仅 Pipelines；PendingAdded 已在本函数前应用）。
+	// name -> active layer pointer (only Pipelines; PendingAdded was already applied before this function).
 	std::map<std::string, FEngineLayer*> ByName;
 	for (FLayerBase* L : Pipelines)
 	{
 		ByName[std::string(L->GetName())] = static_cast<FEngineLayer*>(L);
 	}
 
-	// 小顶堆：只装"已请求卸载"的层 (被依赖数, name)。
+	// Min-heap: only holds layers "already requested for unload" (depended-on count, name).
 	using HeapEntry = std::pair<int, std::string>;
 	auto Cmp = [](const HeapEntry& A, const HeapEntry& B)
 	{
@@ -233,7 +233,7 @@ void FEngineBase::FlushUnload()
 		const auto [Count, Name] = Heap.top();
 		Heap.pop();
 
-		// 过期条目：计数已被更早的弹出更新过。
+		// Stale entry: the count was already updated by an earlier pop.
 		if (ReverseDepCount[Name] != Count)
 		{
 			continue;
@@ -241,24 +241,25 @@ void FEngineBase::FlushUnload()
 		auto It = ByName.find(Name);
 		if (It == ByName.end())
 		{
-			continue;   // 不在活跃集（已被卸载）。
+			continue;   // not in the active set (already unloaded).
 		}
 		FEngineLayer* Layer = It->second;
 		if (!PendingRemoveRequests.count(Layer))
 		{
-			continue;   // 已处理。
+			continue;   // already processed.
 		}
 		if (Count > 0)
 		{
-			break;   // 被依赖 → 堆后只会更大，放弃剩余请求。
+			break;   // depended on -> the heap only grows after this, abandon remaining requests.
 		}
-		// 安全卸载 Layer：移出管线 + 移出请求集合。
+		// Safely unload Layer: remove from the pipeline + remove from the request set.
 		Pipelines.erase(std::remove(Pipelines.begin(), Pipelines.end(), Layer), Pipelines.end());
 		ByName.erase(Name);
 		PendingRemoveRequests.erase(Layer);
 
-		// 先更新 Layer 依赖者的被依赖数（-1），重入堆以触发连锁卸载 ——
-		// 必须在 delete Layer 之前读 GetDependencies()。
+		// First update the depended-on counts of Layer's dependents (-1) and push
+		// them back into the heap to trigger chained unload --
+		// GetDependencies() must be read before deleting Layer.
 		for (const auto& [Stage, Deps] : Layer->GetDependencies())
 		{
 			(void)Stage;
@@ -270,11 +271,11 @@ void FEngineBase::FlushUnload()
 			}
 		}
 
-		// 最后 delete 实例 + FreeLibrary。
+		// Finally delete the instance + FreeLibrary.
 		DeleteUnloaded(Layer);
 	}
 
-	// 放弃本批无法安全卸载的剩余请求（不跨帧追认）。
+	// Abandon the remaining requests of this batch that cannot be safely unloaded (no cross-frame carry-over).
 	PendingRemoveRequests.clear();
 }
 

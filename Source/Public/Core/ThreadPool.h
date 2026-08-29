@@ -16,15 +16,15 @@ namespace Maho
  * Fixed-size thread pool (persistent workers + FIFO task queue).
  *
  * Submit:   enqueue one task (returns immediately; runs out of order on workers).
- * Flush:    lockstep barrier — block until every task submitted SO FAR completed.
+ * Flush:    lockstep barrier -- block until every task submitted SO FAR completed.
  *
  * Workers are lazily started on the first Submit (never shrink). Tasks must be
- * thread-safe — they run concurrently on distinct workers.
+ * thread-safe -- they run concurrently on distinct workers.
  */
 class FThreadPool
 {
 public:
-	/** NumThreads = 0 → std::thread::hardware_concurrency(). */
+	/** NumThreads = 0 -> std::thread::hardware_concurrency(). */
 	explicit FThreadPool(std::uint32_t NumThreads = 0);
 	~FThreadPool();
 
@@ -37,7 +37,7 @@ public:
 	/**
 	 * Barrier (lockstep) over the batch of tasks submitted SO FAR. The pool
 	 * runs tasks out of order (multiple workers); this waits until every task
-	 * submitted before the call has COMPLETED — not merely dequeued.
+	 		 * submitted before the call has COMPLETED -- not merely dequeued.
 	 *
 	 * The caller must not Submit new tasks concurrently with Flush.
 	 */
@@ -49,7 +49,7 @@ public:
 	}
 
 private:
-	/** Grow the pool to at least Required workers (lazy — never shrinks). */
+	/** Grow the pool to at least Required workers (lazy -- never shrinks). */
 	void EnsureThreads(std::uint32_t Required);
 
 	void WorkerLoop();
@@ -70,7 +70,7 @@ inline FThreadPool::FThreadPool(std::uint32_t InNumThreads)
 	{
 		NumThreads = 1;
 	}
-	// Zero workers at construction — lazily started on first Submit.
+	// Zero workers at construction -- lazily started on first Submit.
 	Workers.reserve(NumThreads);
 }
 

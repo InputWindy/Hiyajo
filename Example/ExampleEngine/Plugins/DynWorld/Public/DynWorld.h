@@ -7,8 +7,8 @@
 namespace Maho
 {
 
-// DynWorld — an engine feature (one node per stage in the engine
-// pipeline: BeginFrame → Tick → EndFrame).
+// DynWorld - an engine feature (one node per stage in the engine
+// pipeline: BeginFrame -> Tick -> EndFrame).
 class FDynWorld : public FEngineLayer
 {
 MAHO_DECLARE_ENGINE_LAYER(FDynWorld, "DynWorld.dll");

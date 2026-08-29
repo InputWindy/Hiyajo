@@ -14,7 +14,7 @@ void android_main(struct android_app* App)
 {
 	(void)App;
 
-	// Main needs (Argc, Argv); Android has no argv — pass a placeholder.
+	// Main needs (Argc, Argv); Android has no argv -- pass a placeholder.
 	char Dummy = '\0';
 	char* Argv[] = { &Dummy };
 	Maho::Main(1, Argv);

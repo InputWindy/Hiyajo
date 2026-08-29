@@ -6,8 +6,9 @@ namespace Maho
 {
 void FExampleEngine::PreMain()
 {
-	// 引擎服务层（Log）与输入驱动层提前安装；DynLog/DynWorld/DynRender
-	// 由 GameInput 的 Tick 逐帧动态安装。
+	// The engine service layer (Log) and the input driver layer are installed
+	// up front; DynLog/DynWorld/DynRender are dynamically installed per-frame
+	// by GameInput's Tick.
 	Install("Log.dll");
 	Install("GameInput.dll");
 	Install("Platform.dll");

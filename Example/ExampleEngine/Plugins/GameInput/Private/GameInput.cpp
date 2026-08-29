@@ -20,28 +20,29 @@ void FGameInput::Tick(FEngineBase& Engine)
 		Engine.Install("DynRender.dll");
 		break;
 
-	// 装齐后跑 1 帧稳定。
+	// Run one frame to stabilize once everything is installed.
 	case 3:
 		MAHO_LOG_CORE_INFO("[Frame] tick={} (2 features running)", TickCount);
 		break;
 
-	// 场景 A：单独匿名卸载被依赖的 World —— 应放弃（卸载不掉）。
+	// Scenario A: anonymous uninstall of a depended-on World - should be dropped (cannot uninstall).
 	case 4:
 		Engine.TryUninstall("FDynWorld");
 		break;
 
-	// 场景 A 观察帧：World 仍在（请求被放弃）。
+	// Scenario A observation frame: World is still there (request was dropped).
 	case 5:
 		MAHO_LOG_CORE_INFO("[Frame] tick={} (World uninstall should be dropped)", TickCount);
 		break;
 
-	// 场景 B：同帧匿名卸载 World + Render —— 依赖者先弹，连锁卸载两者。
+	// Scenario B: anonymous uninstall of World + Render in the same frame -
+	// the dependent pops first, then both are uninstalled in a chain.
 	case 6:
 		Engine.TryUninstall("FDynWorld");
 		Engine.TryUninstall("FDynRender");
 		break;
 
-	// 场景 B 观察帧：只剩 Log。
+	// Scenario B observation frame: only Log remains.
 	case 7:
 		MAHO_LOG_CORE_INFO("[Frame] tick={} (only Log should remain)", TickCount);
 		break;
@@ -55,7 +56,7 @@ void FGameInput::EndFrame(FEngineBase&) {}
 
 void FGameInput::RequestExit(FEngineBase&)
 {
-	// 退出逻辑在 Tick 的 default 分支；RequestExit stage 本身 no-op。
+	// Exit logic lives in Tick's default branch; the RequestExit stage itself is a no-op.
 }
 
 } // namespace Maho

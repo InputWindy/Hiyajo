@@ -1,7 +1,7 @@
 # DynWorld
 
-待补
+TBD
 
-## 相关文档
+## Related Docs
 
-- [API.html](API.html) — API 文档
+- [API.html](API.html) - API documentation

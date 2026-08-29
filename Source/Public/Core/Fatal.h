@@ -18,10 +18,10 @@ MAHO_API void InstallFatalHandlers();
 
 } // namespace Maho
 
-// ── UE-style check/ensure macros ─────────────────────────────────────────
+// -- UE-style check/ensure macros -------------------------------------------------------
 
 /**
- * MAHO_CHECK — hard invariant. False → ReportFatal (crash). The expression is
+ * MAHO_CHECK -- hard invariant. False -> ReportFatal (crash). The expression is
  * compiled out in Shipping (use MAHO_VERIFY to keep side effects).
  */
 #define MAHO_CHECK(Expr)                                                              \
@@ -31,7 +31,7 @@ MAHO_API void InstallFatalHandlers();
 		}                                                                             \
 	} while (0)
 
-/** MAHO_CHECKF — hard invariant with a formatted message. */
+/** MAHO_CHECKF -- hard invariant with a formatted message. */
 #define MAHO_CHECKF(Expr, Fmt, ...)                                                   \
 	do {                                                                              \
 		if (!(Expr)) {                                                                \
@@ -42,7 +42,7 @@ MAHO_API void InstallFatalHandlers();
 	} while (0)
 
 /**
- * MAHO_VERIFY — like MAHO_CHECK but the expression is ALWAYS evaluated (side
+ * MAHO_VERIFY -- like MAHO_CHECK but the expression is ALWAYS evaluated (side
  * effects preserved even when assertions are off).
  */
 #define MAHO_VERIFY(Expr)                                                             \
@@ -53,8 +53,8 @@ MAHO_API void InstallFatalHandlers();
 	} while (0)
 
 /**
- * MAHO_ENSURE — soft invariant. False → report ONCE (no crash), then continue.
- * Use for "shouldn't happen but not fatal" — e.g. a service not yet initialized.
+ * MAHO_ENSURE -- soft invariant. False -> report ONCE (no crash), then continue.
+ * Use for "shouldn't happen but not fatal" -- e.g. a service not yet initialized.
  */
 #define MAHO_ENSURE(Expr)                                                             \
 	do {                                                                              \
@@ -65,7 +65,7 @@ MAHO_API void InstallFatalHandlers();
 		}                                                                             \
 	} while (0)
 
-/** MAHO_ENSURE_NOT_NULL — soft null guard: report once when null, then skip. */
+/** MAHO_ENSURE_NOT_NULL -- soft null guard: report once when null, then skip. */
 #define MAHO_ENSURE_NOT_NULL(PtrExpr, Name)                                           \
 	MAHO_ENSURE((PtrExpr) != nullptr);                                                \
 	for (auto* Name = (PtrExpr); Name != nullptr; Name = nullptr)

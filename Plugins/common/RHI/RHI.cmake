@@ -1,12 +1,12 @@
 # RHI plugin: Vulkan backend + VMA (header-only). Public headers stay
 # backend-agnostic (no vulkan.h / VMA types).
 
-# ── Vulkan SDK — headers + vulkan-1 lib. ──
+# -- Vulkan SDK - headers + vulkan-1 lib. --
 # VULKAN_SDK env var (LunarG installer) or find_package(Vulkan).
 find_package(Vulkan REQUIRED)
 target_link_libraries(RHI PUBLIC Vulkan::Vulkan)
 
-# ── Vulkan Memory Allocator (header-only) — FetchContent. ──
+# -- Vulkan Memory Allocator (header-only) - FetchContent. --
 if(NOT TARGET vma)
 	include(FetchContent)
 	FetchContent_Declare(vma

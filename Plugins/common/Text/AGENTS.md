@@ -1,13 +1,13 @@
-# Text — Agent 入口
+# Text - Agent Entry
 
-所有 AI Agent 进本插件前先读本文件。
+All AI agents must read this file before entering this plugin.
 
-## 设计约束（强约束）
+## Design Constraints (strict)
 
-- 职责边界：本地化。面向用户展示的字符串做成 `FText`，不要直接散落硬编码；UI 文案统一经 `FTextManager` 目录管理。
-- 依赖只走 `.cplugin` `Dependencies`，include `<Text.h>`，不跨目录相对 include。
-- 实现要点：
-  - `TSingleton<FTextManager>`，`Get()` 定义在 `Private/Text.cpp`（Text.dll 内进程唯一）。
-  - 目录线程安全（mutex）；`FText::Resolve` 按当前 culture 查目录，缺失回退 Source。
-  - JSON 翻译格式：`[{ "Namespace", "Key", "Culture", "Text" }, ...]`。
-- 遵循根 [AGENTS.md](../../../../AGENTS.md)。
+- Responsibility boundary: localization. User-facing display strings become `FText`; do not scatter hard-coded literals. All UI copy goes through the `FTextManager` catalog.
+- Dependencies go only through `.cplugin` `Dependencies`; include `<Text.h>`, no cross-directory relative includes.
+- Implementation notes:
+  - `TSingleton<FTextManager>`, `Get()` defined in `Private/Text.cpp` (process-unique inside Text.dll).
+  - Catalog is thread-safe (mutex); `FText::Resolve` looks up the current culture and falls back to Source when missing.
+  - JSON translation format: `[{ "Namespace", "Key", "Culture", "Text" }, ...]`.
+- Follow root [AGENTS.md](../../../../AGENTS.md).

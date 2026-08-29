@@ -1,6 +1,6 @@
 {
   "FileVersion": 1,
   "Name": "Compress",
-  "Description": "zstd (de)compression — pure library, free functions (Compress/Decompress/GetDecompressedSize)",
+  "Description": "zstd (de)compression - pure library, free functions (Compress/Decompress/GetDecompressedSize)",
   "Dependencies": []
 }

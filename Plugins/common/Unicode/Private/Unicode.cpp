@@ -145,7 +145,7 @@ std::string Utf32ToUtf8(std::u32string_view In)
 std::u16string Utf8ToUtf16(std::string_view In)
 {
 	std::u16string Out;
-	// treat input as raw bytes → widen (best effort; Windows is the real target)
+// treat input as raw bytes -> widen (best effort; Windows is the real target)
 	Out.assign(In.begin(), In.end());
 	return Out;
 }

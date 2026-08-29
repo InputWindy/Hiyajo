@@ -48,18 +48,18 @@ static ConsoleVariable::TAutoConsoleVariable<std::string> GCVarRHIBackend(
 	{
 		return ERHIBackend::Vulkan;
 	}
-	MAHO_LOG_CORE_WARN("FRHI: unknown backend '{}' — falling back to Vulkan", std::string(Name));
+	MAHO_LOG_CORE_WARN("FRHI: unknown backend '{}' - falling back to Vulkan", std::string(Name));
 	return ERHIBackend::Vulkan;
 }
 
 } // namespace
 
-// ── lifecycle ──────────────────────────────────────────────────────────────
+// -- lifecycle ---------------------------------------------------------------
 
 void FRHI::Initialize(FEngineBase& Engine)
 {
-	// RHI bring-up is deferred to Tick: the native window comes from the
-	// Platform feature, queried through the engine — not from a singleton,
+		// RHI bring-up is deferred to Tick: the native window comes from the
+		// Platform feature, queried through the engine - not from a singleton,
 	// not from launch args.
 	(void)Engine;
 }
@@ -70,7 +70,7 @@ void FRHI::Shutdown(FEngineBase&)
 	MAHO_LOG_CORE_INFO("FRHI: RHI shut down");
 }
 
-// ── engine loop stages (FEngineLayer) ──
+// -- engine loop stages (FEngineLayer) --
 
 void FRHI::Tick(FEngineBase& Engine)
 {
@@ -113,7 +113,7 @@ void FRHI::RequestExit(FEngineBase&)
 {
 }
 
-// ── device bring-up / teardown ─────────────────────────────────────────────
+// -- device bring-up / teardown ----------------------------------------------
 
 bool FRHI::InitializeRHI(void* NativeWindowHandle, int Width, int Height, ERHIBackend Backend)
 {
@@ -163,7 +163,7 @@ void FRHI::ShutdownRHI()
 	RHI.reset();
 }
 
-// ── frame pipeline (server-thread ordered) ─────────────────────────────────
+// -- frame pipeline (server-thread ordered) ----------------------------------
 
 void FRHI::EnqueueTask(
 	FRHICommandList* CmdList,
@@ -173,7 +173,7 @@ void FRHI::EnqueueTask(
 	{
 		return;
 	}
-	// Parallel command recording — each task owns its command list (Vulkan
+	// Parallel command recording - each task owns its command list (Vulkan
 	// forbids concurrent recording into the same buffer, so callers must never
 	// share a CmdList across tasks). Record here; the caller (RDG) submits the
 	// recorded lists serially afterwards via Submit.
@@ -187,12 +187,12 @@ void FRHI::EnqueueTask(
 
 void FRHI::Flush()
 {
-	// Drain all pending recording tasks — guarantees every EnqueueTask finished
-	// before the caller proceeds to Submit (record-all → submit-all ordering).
+	// Drain all pending recording tasks - guarantees every EnqueueTask finished
+	// before the caller proceeds to Submit (record-all -> submit-all ordering).
 	RecordingPool.Flush();
 }
 
-// ── frame primitives — direct forwarding (caller guarantees queue serial) ──
+// -- frame primitives - direct forwarding (caller guarantees queue serial) --
 
 void FRHI::BeginFrame()
 {
@@ -226,7 +226,7 @@ void FRHI::Resize(int Width, int Height)
 	}
 }
 
-// ── command lists ──────────────────────────────────────────────────────────
+// -- command lists -----------------------------------------------------------
 
 FRHICommandList* FRHI::CreateCommandList(ERHICommandListType Type)
 {
@@ -331,7 +331,7 @@ bool FRHI::IsFenceSignaled(FRHIFence* Fence)
 	return RHI != nullptr && RHI->IsFenceSignaled(Fence);
 }
 
-// ── resource factories — direct forwarding ─────────────────────────────────
+// -- resource factories - direct forwarding ----------------------------------
 
 FRHIBuffer* FRHI::CreateBuffer(const FRHIBufferDesc& Desc)
 {

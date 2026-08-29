@@ -1,10 +1,10 @@
 #pragma once
 
-// ThreadedServer — a dedicated resident worker: one persistent thread + FIFO
+// ThreadedServer -- a dedicated resident worker: one persistent thread + FIFO
 // task queue (not in Engine/Common: it's engine infrastructure alongside
 // FThreadPool, not a service). Use for long-lived ROLES (render thread, IO load
 // thread, ...) that need a private always-on thread with a serial command
-// queue — NOT for transient parallel work (use FThreadPool).
+// queue -- NOT for transient parallel work (use FThreadPool).
 //
 //   class FResourceSystem : public TSingleton<FResourceSystem>
 //                          , public FThreadedServer { ... };

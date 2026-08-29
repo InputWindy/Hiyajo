@@ -20,10 +20,10 @@ namespace Maho
 
 class FLog;
 
-/** 进程全局日志实例访问器 —— 返回 FLog*（跨 DLL 经函数，不用裸变量导出）。 */
+/** Global log instance accessor - returns FLog* (cross-DLL via function, no bare variable export). */
 MAHO_LOG_API FLog* GetLog();
 
-/** 日志级别（对 spdlog level 的类型擦除，头文件不暴露 spdlog）。 */
+/** Log level (type-erases spdlog level; the header never exposes spdlog). */
 enum class ELogLevel
 {
 	Trace,
@@ -35,13 +35,13 @@ enum class ELogLevel
 };
 
 /**
- * Logging layer — an FEngineLayer (no singleton). Its Initialize stage brings
+ * Logging layer - an FEngineLayer (no singleton). Its Initialize stage brings
  * the logger up (stdout color + rotating file, honoring `--log-level`) and
  * publishes `this` via GetLog(); Shutdown flushes + drops it. The spdlog
  * logger is hidden behind Trace/Debug/Info/Warn/Error/Critical perfect-forward
- * templates — callers never see spdlog types.
+ * templates - callers never see spdlog types.
  *
- *   Engine.Install(&Log);   // PreMain 里提前安装
+ *   Engine.Install(&Log);   // install early in PreMain
  */
 class FLog : public FEngineLayer
 {
@@ -51,11 +51,11 @@ public:
 	FLog();
 	~FLog() override;
 
-	// ── engine init/shutdown stages ──
+	// -- engine init/shutdown stages --
 	void Initialize(FEngineBase& Engine) override;
 	void Shutdown(FEngineBase& Engine) override;
 
-	// ── logging passthroughs (perfect-forward, fmt compile-time checked) ──
+	// -- logging passthroughs (perfect-forward, fmt compile-time checked) --
 	template <typename... Args>
 	void Trace(fmt::format_string<Args...> Fmt, Args&&... A)
 	{
@@ -90,14 +90,14 @@ public:
 private:
 	void LogLine(ELogLevel Level, std::string Message);
 
-	std::shared_ptr<spdlog::logger> Logger;   // 不完整类型；析构在 Log.cpp
+	std::shared_ptr<spdlog::logger> Logger;   // incomplete type; dtor in Log.cpp
 };
 
 } // namespace Maho
 
-// ── syntax sugar: CORE-logging macros (fmt-style) ────────────────────────
+// -- syntax sugar: CORE-logging macros (fmt-style) -------------------------
 // Format like the engine core; call after the Log layer is installed + initialized.
-// GLog may be null before the Log layer's Initialize runs — macros report once
+// GLog may be null before the Log layer's Initialize runs - macros report once
 // (ensure) and skip.
 //
 //   MAHO_LOG_CORE_INFO("init {}", name);

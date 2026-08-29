@@ -1,7 +1,7 @@
 <!-- mahogen -->
 # Public
 
-## 代码文件
+## Code Files
 
 - [EntryPoint.h](EntryPoint.h)
 - [EntryPointAndroid.h](EntryPointAndroid.h)
@@ -11,20 +11,20 @@
 - [EntryPointXbox.h](EntryPointXbox.h)
 - [Maho.h](Maho.h)
 
-## 子层级
+## Sub Layers
 
 - [Core](Core/CoreDoc.md)
 - [Engine](Engine/EngineDoc.md)
 <!-- mahogen end -->
 
-## 概念——入口与聚合
+## Concept -- Entry and Aggregation
 
-- [Maho.h](Maho.h) — 引擎聚合头（统一 include 核心 public 头）
-- [EntryPoint.h](EntryPoint.h) — 通用入口驱动：`FAssembly` 加载项目根插件 DLL → `CreateEngine()` → 驱动 `FEngineBase`
-- `EntryPoint{Windows,Linux,Android,IOS,Xbox}.h` — 各平台入口转发
+- [Maho.h](Maho.h) -- engine aggregate header (unified include of core public headers)
+- [EntryPoint.h](EntryPoint.h) -- generic entry driver: `FAssembly` loads the project root plugin DLL -> `CreateEngine()` -> drives `FEngineBase`
+- `EntryPoint{Windows,Linux,Android,IOS,Xbox}.h` -- per-platform entry forwarding
 
-## 相关文档
+## Related Docs
 
-- [Core/CoreDoc.md](Core/CoreDoc.md) — 核心基础设施（类型无关积木）
-- [Engine/EngineDoc.md](Engine/EngineDoc.md) — 层架构（FLayerBase/FLayer/FLayerTaskGraph/主循环）
-- [../SourceDoc.md](../SourceDoc.md) — 源码根
+- [Core/CoreDoc.md](Core/CoreDoc.md) -- core infrastructure (type-agnostic building blocks)
+- [Engine/EngineDoc.md](Engine/EngineDoc.md) -- layer architecture (FLayerBase/FLayer/FLayerTaskGraph/main loop)
+- [../SourceDoc.md](../SourceDoc.md) -- source root

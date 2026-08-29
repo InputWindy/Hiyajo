@@ -1,13 +1,13 @@
-# Timer — Agent 入口
+# Timer - Agent Entry
 
-所有 AI Agent 进本插件前先读本文件。
+All AI agents must read this file before entering this plugin.
 
-## 设计约束（强约束）
+## Design Constraints (strict)
 
-- 职责边界：性能计时 + 游戏时钟。热点函数用 `FScopedTimer`；游戏逻辑时间用 `FGameClock`，不要自己搓 chrono。
-- 依赖只走 `.cplugin` `Dependencies`，include `<Timer.h>`，不跨目录相对 include。
-- 实现要点：
-  - **两个单例**：`FTimer` 与 `FGameClock`，`Get()` 都定义在 `Private/Timer.cpp`（Timer.dll 内进程唯一）。
-  - `FScopedTimer` 是栈式作用域计时，必须与 `BeginScope/EndScope` 配平。
-  - `FGameClock` 惰性推进——`GetGameSeconds()` 时按距上次推进的 wall-clock delta × TimeScale 累积，无需每帧调用。
-- 遵循根 [AGENTS.md](../../../../AGENTS.md)。
+- Responsibility boundary: performance timing + game clock. Use `FScopedTimer` for hot functions; use `FGameClock` for game logic time; do not hand-roll chrono.
+- Dependencies go only through `.cplugin` `Dependencies`; include `<Timer.h>`, no cross-directory relative includes.
+- Implementation notes:
+  - **Two singletons**: `FTimer` and `FGameClock`; both `Get()` definitions live in `Private/Timer.cpp` (process-unique inside Timer.dll).
+  - `FScopedTimer` is stack-scope timing; must pair `BeginScope/EndScope`.
+  - `FGameClock` advances lazily - `GetGameSeconds()` accumulates wall-clock delta since the last advance x TimeScale; no per-frame call required.
+- Follow root [AGENTS.md](../../../../AGENTS.md).

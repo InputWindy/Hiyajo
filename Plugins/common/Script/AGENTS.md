@@ -1,50 +1,50 @@
-# Script — Agent 入口
+# Script - Agent Entry
 
-所有 AI Agent 进本插件前先读本文件。
+All AI agents must read this file before entering this plugin.
 
-## 定位
+## Purpose
 
-多语言脚本宿主（`FScriptSystem`）+ 每语言一个后端（`IScriptLanguage`）。
-宿主只做语言注册/调度/生命周期；VM 细节、类型绑定、脚本路径全在各自后端里。
+Multi-language script host (`FScriptSystem`) + one backend per language (`IScriptLanguage`).
+The host only does language registration / dispatch / lifecycle; VM details, type binding, and script paths all live inside each backend.
 
-## 架构（强约束）
+## Architecture (strict)
 
 ```
-FScriptSystem（宿主，`FScriptSystem::Get()` 进程唯一）
-  └─ IScriptLanguage（抽象后端接口，`Script.h`）
-       ├─ FLuaLanguage    — Lua 后端（sol2，当前 default）
-       ├─ FPythonLanguage — Python 后端（CPython 嵌入 + Scapix 桥，TestGame 工程内）
-       └─ FScriptCSharp   — C# 后端（规划中：Mono + Scapix）
+FScriptSystem (host, `FScriptSystem::Get()` process-unique)
+  `- IScriptLanguage (abstract backend interface, `Script.h`)
+       |- FLuaLanguage    - Lua backend (sol2, current default)
+       |- FPythonLanguage - Python backend (CPython embed + Scapix bridge, inside TestGame project)
+       `- FScriptCSharp   - C# backend (planned: Mono + Scapix)
 ```
 
-- **宿主零语言知识**：`RegisterLanguage(IScriptLanguage*)` 按 `GetName()` 幂等注册；`GetActive()` 返回第一个注册的后端；`DoFile/Call/LoadScript<>` 转发到 active 后端。
-- **后端必须自己管生命周期**：宿主 `Initialize` 会逐个 `Initialize(Argc, Argv, "Scripts")`；`Shutdown` 对称关闭。
-- **语言无关值 = opaque `void*`**：`GetState()`/`CallHandle(void*)`/`FTypeBinder = void(*)(void*)` 全部不透明；只有知道语言类型的调用方在 `include <sol/sol.hpp>` 等之后 cast。
-- **Lua 绑定宏**（`MAHO_LUA_BIND_BEGIN/FIELD/METHOD_FN/BIND_END` + `MAHO_LUA_BIND_REGISTER`）只生成 sol2 代码，属于 Lua 后端专属语法糖，勿用于其他语言。
-- 宿主不耦合项目逻辑：脚本文件加载、每帧 `OnUpdate` 驱动都是宿主/项目层的事，FScriptSystem 只给执行原语。
-- 依赖只走 `.cplugin` `Dependencies`；`Script.h` 必须保持 sol-free（sol2 只出现在 `Private/Script.cpp`）。
+- **Host has zero language knowledge**: `RegisterLanguage(IScriptLanguage*)` registers idempotently by `GetName()`; `GetActive()` returns the first registered backend; `DoFile/Call/LoadScript<>` forward to the active backend.
+- **Backends must manage their own lifecycle**: host `Initialize` calls `Initialize(Argc, Argv, "Scripts")` on each; `Shutdown` shuts them down symmetrically.
+- **Language-neutral value = opaque `void*`**: `GetState()`/`CallHandle(void*)`/`FTypeBinder = void(*)(void*)` are all opaque; only the caller that knows the language type casts after `include <sol/sol.hpp>` etc.
+- **Lua binding macros** (`MAHO_LUA_BIND_BEGIN/FIELD/METHOD_FN/BIND_END` + `MAHO_LUA_BIND_REGISTER`) only generate sol2 code. They are Lua-backend-specific sugar; do not use them for other languages.
+- Host does not couple to project logic: script file loading and per-frame `OnUpdate` driving are host/project concerns; FScriptSystem only provides execution primitives.
+- Dependencies go only through `.cplugin` `Dependencies`; `Script.h` must stay sol-free (sol2 appears only in `Private/Script.cpp`).
 
-## 已知问题 / 待办
+## Known Issues / TODO
 
-### ⚠️ Scapix 生成器不支持中文路径（2026-08-26 验证）
+### WARNING: Scapix generator does not support Chinese paths (verified 2026-08-26)
 
-- **现象**：引擎位于 `C:\Users\luchunyi01\Desktop\书架\Hiyajo`（含中文 `书架`）。`scapix.exe`（clang 内核，预编译 `scapix_bin`）解析桥头文件时报 `error: no such file or directory`，中文被当 GBK 字节处理 → 生成失败 → MSBuild 反复重试，表现为"构建卡住"（一堆 cmake/python 进程无 CPU）。
-- **验证**：ASCII 路径（`C:\temp\scapix_test`）下 scapix.exe 正常生成 python/cs/java/js/objc 全部桥代码；中文路径必现失败。
-- **影响**：`ScriptPython` 桥（`scapix_bridge_headers`）在中文路径下无法构建。当前已在 `TestGame.cproject` 中 `Enabled: false`。
-- **候选解法**：
-  1. 引擎 + 工程迁到纯 ASCII 路径（如 `C:\Maho`）— 彻底解决。
-  2. CMake 里把桥头复制到 ASCII 临时目录生成，产物拷回 — 复杂。
-  3. 放弃 Scapix，改用纯 pybind11 手写绑定 — 失去自动生成。
-- **恢复条件**：路径 ASCII 化后才能重新 `Enabled: true`。
+- **Symptom**: engine sits at `C:\Users\luchunyi01\Desktop\shujia\Hiyajo` (contains Chinese `shujia`). `scapix.exe` (clang core, precompiled `scapix_bin`) reports `error: no such file or directory` when parsing bridge headers; the Chinese chars are treated as GBK bytes -> generation fails -> MSBuild retries repeatedly, appearing as a "stuck build" (a pile of cmake/python processes with no CPU).
+- **Verification**: under an ASCII path (`C:\temp\scapix_test`) scapix.exe generates all python/cs/java/js/objc bridge code fine; the Chinese path fails every time.
+- **Impact**: the `ScriptPython` bridge (`scapix_bridge_headers`) cannot build under a Chinese path. Currently `Enabled: false` in `TestGame.cproject`.
+- **Candidate fixes**:
+  1. Move engine + project to a pure ASCII path (e.g. `C:\Maho`) - complete fix.
+  2. In CMake, copy bridge headers to an ASCII temp dir for generation, copy products back - complex.
+  3. Drop Scapix, hand-write bindings with pybind11 - lose auto-generation.
+- **Re-enable condition**: only after the path becomes ASCII.
 
-### Python 后端接入要点（供恢复时参考）
+### Python backend integration notes (for reference when restoring)
 
-- `ScriptPython.cmake`：cmodule（v2.3.0）→ `find_package(Scapix)` → 两个 target 身份分离：
-  - `ScriptPython.dll`（宿主，导出 `CreateLayer` 给引擎，禁 include 桥头）
-  - `ScriptPythonBridge.pyd`（Scapix `PYBIND11_MODULE`，`scapix_bridge_headers` 独立 target）
-- MSVC Debug 嵌入 CPython：`pyconfig.h` 在 `_DEBUG` 下 pragma 链接 `pythonXXX_d.lib`（官方安装包没有）→ 用 `target_link_options /NODEFAULTLIB:python<M><m>_d.lib` + include Python.h 前临时 `#undef _DEBUG`。
-- 宿主 `Initialize` 里 `PyImport_ImportModule("ScriptPythonBridge")` 导入桥模块，桥类落在 `testgame` 命名空间。
+- `ScriptPython.cmake`: cmodule (v2.3.0) -> `find_package(Scapix)` -> two target identities:
+  - `ScriptPython.dll` (host, exports `CreateLayer` to the engine, excludes bridge headers)
+  - `ScriptPythonBridge.pyd` (Scapix `PYBIND11_MODULE`, `scapix_bridge_headers` as its own target)
+- MSVC Debug embedding CPython: `pyconfig.h` under `_DEBUG` pragma-links `pythonXXX_d.lib` (not in the official installer) -> use `target_link_options /NODEFAULTLIB:python<M><m>_d.lib` + temporary `#undef _DEBUG` before including Python.h.
+- Host `Initialize` imports the bridge module via `PyImport_ImportModule("ScriptPythonBridge")`; bridge classes land in the `testgame` namespace.
 
-## 文档
+## Docs
 
-- 遵循根 [AGENTS.md](../../../../AGENTS.md)
+- Follow root [AGENTS.md](../../../../AGENTS.md)

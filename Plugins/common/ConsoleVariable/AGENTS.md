@@ -1,13 +1,13 @@
-# ConsoleVariable — Agent 入口
+# ConsoleVariable - Agent entry
 
-所有 AI Agent 进本插件前先读本文件。
+All AI agents read this file before entering this plugin.
 
-## 设计约束（强约束）
+## Design constraints (strict)
 
-- 职责边界：CVar 注册表。可调参数定义成 `TAutoConsoleVariable` 静态全局（static-init 自注册），运行时用 `FConsoleVariable::Get().Find(name)` 查询。
-- 依赖只走 `.cplugin` `Dependencies`，include `<ConsoleVariable.h>`，不跨目录相对 include。
-- 实现要点：
-  - `TSingleton<FConsoleVariable>`，`Get()` 定义在 `Private/ConsoleVariable.cpp`（ConsoleVariable.dll 内进程唯一）。
-  - 值存字符串、类型化访问时解析；`ReadOnly` 变量 `Set` 被忽略。
-  - `Initialize` 后注册表可用，`Shutdown` 清空。
-- 遵循根 [AGENTS.md](../../../../AGENTS.md)。
+- Responsibility: CVar registry. Tunable parameters are defined as `TAutoConsoleVariable` static globals (self-registering at static-init); query them at runtime with `FConsoleVariable::Get().Find(name)`.
+- Dependencies only go through `.cplugin` `Dependencies`; include `<ConsoleVariable.h>`, no cross-directory relative includes.
+- Implementation notes:
+  - `TSingleton<FConsoleVariable>`; `Get()` is defined in `Private/ConsoleVariable.cpp` (process-unique inside ConsoleVariable.dll).
+  - Values are stored as strings and parsed on typed access; `Set` is ignored for `ReadOnly` variables.
+  - The registry is usable after `Initialize`; `Shutdown` clears it.
+- Follow root [AGENTS.md](../../../../AGENTS.md).

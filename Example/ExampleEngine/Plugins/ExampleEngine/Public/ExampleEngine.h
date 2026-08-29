@@ -7,7 +7,7 @@
 namespace Maho
 {
 
-// ExampleEngine — the application root (an FEngineBase). Installs only the input
+// ExampleEngine - the application root (an FEngineBase). Installs only the input
 // driver layer; DynLog/DynWorld/DynRender are dynamically installed/uninstalled
 // by GameInput's Tick through the engine's Install/TryUninstall surface.
 class FExampleEngine : public FEngineBase

@@ -7,7 +7,7 @@ namespace Maho
 
 void FDynRender::BeginFrame(FEngineBase&) { MAHO_LOG_CORE_INFO("[DynRender] BeginFrame"); }
 void FDynRender::Tick(FEngineBase&)       { MAHO_LOG_CORE_INFO("[DynRender] Tick"); }
-void FDynRender::EndFrame(FEngineBase&)   { MAHO_LOG_CORE_INFO("[DynRender] EndFrame (依赖 DynWorld.EndFrame)"); }
+void FDynRender::EndFrame(FEngineBase&)   { MAHO_LOG_CORE_INFO("[DynRender] EndFrame (depends on DynWorld.EndFrame)"); }
 
 } // namespace Maho
 

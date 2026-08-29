@@ -1,13 +1,13 @@
-# Unicode — Agent 入口
+# Unicode - Agent Entry
 
-所有 AI Agent 进本插件前先读本文件。
+All AI agents must read this file before entering this plugin.
 
-## 设计约束（强约束）
+## Design Constraints (strict)
 
-- 职责边界：编码转换积木，**纯库**——无单例、无状态，自由函数。别给它加生命周期。
-- 引擎内部一律 UTF-8 `std::string`；只在平台边界（Windows API 调用、文件路径）用 `ToNative/FromNative` 转换，不要到处转码。
-- 依赖只走 `.cplugin` `Dependencies`，include `<Unicode.h>`，不跨目录相对 include。
-- 实现要点：
-  - 接口全在 `Public/Unicode.h`，`Private/Unicode.cpp` 实现；Windows 下经 WinAPI 转 UTF-16，其他平台 passthrough。
-  - `EnsureConsoleUtf8` 仅 Windows 生效。
-- 遵循根 [AGENTS.md](../../../../AGENTS.md)。
+- Responsibility boundary: encoding conversion building blocks, **pure library** - no singleton, no state, free functions. Do not give it a lifecycle.
+- Engine internals are always UTF-8 `std::string`; use `ToNative/FromNative` only at platform boundaries (Windows API calls, file paths); do not transcode everywhere.
+- Dependencies go only through `.cplugin` `Dependencies`; include `<Unicode.h>`, no cross-directory relative includes.
+- Implementation notes:
+  - All interfaces in `Public/Unicode.h`, implementation in `Private/Unicode.cpp`; on Windows convert via WinAPI to UTF-16, other platforms passthrough.
+  - `EnsureConsoleUtf8` only takes effect on Windows.
+- Follow root [AGENTS.md](../../../../AGENTS.md).

@@ -328,7 +328,7 @@ namespace
 
 [[nodiscard]] VkDescriptorType ToVkDescriptorType(ERHIDescriptorType Type)
 {
-	// ERHIDescriptorType is dense and skips Vulkan texel-buffer enums — never static_cast.
+	// ERHIDescriptorType is dense and skips Vulkan texel-buffer enums - never static_cast.
 	switch (Type)
 	{
 	case ERHIDescriptorType::Sampler:

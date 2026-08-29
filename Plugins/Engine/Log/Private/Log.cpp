@@ -1,6 +1,6 @@
 // Log is an FEngineLayer. Initialize brings the spdlog logger up + publishes
 // `this` via GetLog(); Shutdown flushes + drops it. The spdlog type stays in
-// this TU — the header only sees the forward declaration.
+// this TU - the header only sees the forward declaration.
 #include "Log.h"
 
 #include <spdlog/spdlog.h>
@@ -19,11 +19,11 @@ MAHO_LOG_API FLog* GetLog()
 
 FLog::FLog() = default;
 
-FLog::~FLog() = default;   // 完整类型 spdlog::logger 在此可见
+FLog::~FLog() = default;   // full type spdlog::logger is visible here
 
 void FLog::Initialize(FEngineBase& Engine)
 {
-	// stdout (color) + rotating file — GUI apps (WIN32 subsystem) have no
+	// stdout (color) + rotating file - GUI apps (WIN32 subsystem) have no
 	// console, so the file sink is the durable log destination.
 	auto ConsoleSink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
 	auto FileSink = std::make_shared<spdlog::sinks::rotating_file_sink_mt>(
@@ -36,7 +36,7 @@ void FLog::Initialize(FEngineBase& Engine)
 	Logger->set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%^%l%$] %v");
 
 	spdlog::level::level_enum Lv = spdlog::level::debug;
-	// 从引擎启动参数取 --log-level=trace|debug|info|warn|error
+	// read --log-level=trace|debug|info|warn|error from engine launch args
 	char** Argv = Engine.GetLaunchArgv();
 	if (Argv)
 	{

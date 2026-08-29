@@ -2,8 +2,8 @@
 
 // DLL export / import (UE-style module boundary).
 //
-// Five platforms: Windows + Xbox (MSVC/MinGW → __declspec), Linux + Android +
-// iOS (GCC/Clang → visibility). Xbox is MSVC-based but does not define
+// Five platforms: Windows + Xbox (MSVC/MinGW -> __declspec), Linux + Android +
+// iOS (GCC/Clang -> visibility). Xbox is MSVC-based but does not define
 // _WIN32, so _MSC_VER is checked explicitly.
 #if defined(MAHO_BUILD_SHARED)
 #	if defined(_MSC_VER) || defined(_WIN32) || defined(_WIN64)
@@ -25,13 +25,13 @@
 #	define MAHO_API
 #endif
 
-// STL members in exported classes (unique_ptr, string, ...) — safe with matching CRT (/MD).
+// STL members in exported classes (unique_ptr, string, ...) -- safe with matching CRT (/MD).
 #if defined(_MSC_VER)
 #	pragma warning(disable : 4251)
 #endif
 
 /**
- * Null-guard statement — evaluate a possibly-null pointer expression ONCE and
+ * Null-guard statement -- evaluate a possibly-null pointer expression ONCE and
  * run the statement only when non-null. The bound name is a local, so the
  * expression is not re-evaluated. Use for optional services reached through a
  * global accessor (e.g. GetLog()).

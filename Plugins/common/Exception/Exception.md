@@ -1,20 +1,20 @@
 # Exception
 
-## 代码文件
+## Code files
 
-- [Exception.h](Exception.h) — 非致命异常广播（`TMulticastEvent` + `FException`）
+- [Exception.h](Exception.h) - non-fatal exception broadcast (`TMulticastEvent` + `FException`)
 
-## 概念——异常广播
+## Concept - exception broadcast
 
-非致命异常广播单例服务——`ReportException` 把消息分发到所有 `OnException` 订阅者（日志、遥测、崩溃上报）。**本插件绝不 abort**：致命错误走 `Core/Fatal`，这里只做"报告给感兴趣的人"。引擎暂无独立委托积木，因此自带一个最小多播事件（`TMulticastEvent`，仅需 `void(const std::string&)` 广播）。
+Non-fatal exception broadcast singleton service - `ReportException` fans messages out to every `OnException` subscriber (logging, telemetry, crash reporting). **This plugin never aborts**: fatal errors go through `Core/Fatal`; here we only "report to interested parties". The engine has no standalone delegate building block yet, so a minimal multicast event is bundled (`TMulticastEvent`, only needing `void(const std::string&)` broadcast).
 
-### FException —— 报告入口（单例服务）
+### FException - report entry point (singleton service)
 
-`TSingleton<FException>` + `IPlugin<IInit, IShutdown>`（Initialize/Shutdown 清空订阅）。`ReportException(std::string_view)` 直接广播；`ReportException(const std::exception&)` 转发 `what()`。
+`TSingleton<FException>` + `IPlugin<IInit, IShutdown>` (Initialize/Shutdown clear subscriptions). `ReportException(std::string_view)` broadcasts directly; `ReportException(const std::exception&)` forwards `what()`.
 
-### TMulticastEvent —— 最小多播事件
+### TMulticastEvent - minimal multicast event
 
-模板 `TMulticastEvent<void(Args...)>`：`Bind(FHandler)` 追加订阅（`std::function`）、`Broadcast(Args...)` 顺序调用非空 handler、`RemoveAll()` 清空。无锁——单线程广播语义。
+Template `TMulticastEvent<void(Args...)>`: `Bind(FHandler)` appends a subscription (`std::function`), `Broadcast(Args...)` calls non-empty handlers in order, `RemoveAll()` clears. Lock-free - single-threaded broadcast semantics.
 
 ```cpp
 Exception::FException::Get().OnException.Bind([](const std::string& M) {
@@ -23,10 +23,10 @@ Exception::FException::Get().OnException.Bind([](const std::string& M) {
 Exception::FException::Get().ReportException("failed to load texture");
 ```
 
-## 三方依赖
+## Third-party dependencies
 
-- 无（纯 std）。
+- None (pure std).
 
-## 相关文档
+## Related docs
 
-- [API.html](API.html) — API 文档
+- [API.html](API.html) - API documentation

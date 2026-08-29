@@ -52,7 +52,7 @@ void FAssetRegistry::Scan(const std::filesystem::path& ContentDir, std::string_v
 		return;
 	}
 
-	// The mount alias is a FPaths root — re-map it so asset paths follow the
+	// The mount alias is a FPaths root - re-map it so asset paths follow the
 	// platform-root abstraction.
 	Paths::FPaths::Get().SetRoot(MountAlias, ContentDir);
 
@@ -68,7 +68,7 @@ void FAssetRegistry::Scan(const std::filesystem::path& ContentDir, std::string_v
 		const std::size_t Dot = Relative.find_last_of('.');
 		if (Dot == std::string::npos)
 		{
-			continue;   // no extension — skip
+			continue;   // no extension - skip
 		}
 
 		FAssetData Data;
@@ -88,7 +88,7 @@ const FAssetData* FAssetRegistry::Find(const FAssetPath& Path) const
 
 std::filesystem::path FAssetRegistry::Resolve(const FAssetPath& Path) const
 {
-	// "/Game/Materials/M_Metal" → FPaths root "Game" + "Materials/M_Metal".
+	// "/Game/Materials/M_Metal" -> FPaths root "Game" + "Materials/M_Metal".
 	std::string_view P = Path.GetPath();
 	if (!P.empty() && P.front() == '/')
 	{

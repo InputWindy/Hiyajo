@@ -1,13 +1,13 @@
-# Compress — Agent 入口
+# Compress - Agent entry
 
-所有 AI Agent 进本插件前先读本文件。
+All AI agents read this file before entering this plugin.
 
-## 设计约束（强约束）
+## Design constraints (strict)
 
-- 职责边界：字节压缩积木，**纯库**——无单例、无状态，只有自由函数。别给它加生命周期。
-- 依赖只走 `.cplugin` `Dependencies`，include `<Compress.h>`，不跨目录相对 include。
-- 实现要点：
-  - 接口全在 `Public/Compress.h`，`Private/Compress.cpp` 调 zstd C API。
-  - zstd 是引擎三方静态库，include 路径与链接由构建系统补全，插件侧不手配。
-  - 所有函数失败返回 `std::nullopt`，不抛异常。
-- 遵循根 [AGENTS.md](../../../../AGENTS.md)。
+- Responsibility: byte compression building blocks, a **pure library** - no singleton, no state, only free functions. Do not give it a lifecycle.
+- Dependencies only go through `.cplugin` `Dependencies`; include `<Compress.h>`, no cross-directory relative includes.
+- Implementation notes:
+  - All interfaces live in `Public/Compress.h`; `Private/Compress.cpp` calls the zstd C API.
+  - zstd is an engine third-party static library; include paths and linking are provided by the build system - do not configure them on the plugin side.
+  - All functions return `std::nullopt` on failure, no exceptions.
+- Follow root [AGENTS.md](../../../../AGENTS.md).

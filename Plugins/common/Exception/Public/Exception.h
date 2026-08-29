@@ -1,6 +1,6 @@
 #pragma once
 
-// Exception ?non-fatal exception broadcast (engine Common, TSingleton).
+// Exception - non-fatal exception broadcast (engine Common, TSingleton).
 // ReportException fans out to every OnException subscriber (logging, telemetry,
 // crash reporters). Nothing aborts here; fatal errors go through Core/Fatal.
 // The multicast event comes from Core/Delegate (Maho::TMulticastEvent).
@@ -30,7 +30,7 @@ class FException
 	, public IPlugin<IInit, IShutdown>
 {
 public:
-	/** Process-unique accessor ?declared here, defined in Exception.cpp (in Exception.dll). */
+	/** Process-unique accessor - declared here, defined in Exception.cpp (in Exception.dll). */
 	static FException& Get();
 
 	void Initialize(FEngineBase& Engine) override;

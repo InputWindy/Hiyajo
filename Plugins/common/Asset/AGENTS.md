@@ -1,13 +1,13 @@
-# Asset — Agent 入口
+# Asset - Agent entry
 
-所有 AI Agent 进本插件前先读本文件。
+All AI agents read this file before entering this plugin.
 
-## 设计约束（强约束）
+## Design constraints (strict)
 
-- 职责边界：资产编目。逻辑路径统一 `/Game/...`（无扩展名）；文件系统访问走 `Resolve/Load`，不要直接拼物理路径。
-- 依赖只走 `.cplugin` `Dependencies`（`["Paths"]`），include `<Asset.h>`，不跨目录相对 include。
-- 实现要点：
-  - `TSingleton<FAssetRegistry>`，`Get()` 定义在 `Private/Asset.cpp`（Asset.dll 内进程唯一）。
-  - 内部 `std::map<std::string, FAssetData>` + mutex；`Scan` 递归走目录、按扩展名定类型。
-  - `Resolve` 依赖 Paths 插件（MountAlias 即根别名）。
-- 遵循根 [AGENTS.md](../../../../AGENTS.md)。
+- Responsibility: asset catalog. Logical paths are always `/Game/...` (no extension); filesystem access goes through `Resolve/Load`, never hand-built physical paths.
+- Dependencies only go through `.cplugin` `Dependencies` (`["Paths"]`); include `<Asset.h>`, no cross-directory relative includes.
+- Implementation notes:
+  - `TSingleton<FAssetRegistry>`; `Get()` is defined in `Private/Asset.cpp` (process-unique inside Asset.dll).
+  - Internal `std::map<std::string, FAssetData>` + mutex; `Scan` walks directories recursively and determines the type by extension.
+  - `Resolve` depends on the Paths plugin (MountAlias is the root alias).
+- Follow root [AGENTS.md](../../../../AGENTS.md).

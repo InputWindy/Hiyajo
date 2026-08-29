@@ -13,9 +13,10 @@
 #include <vector>
 
 /**
- * Layer 身份声明语法糖 —— 生成 StaticName() + GetName() 覆盖。
- * 用法：class FWorld : public FLayer<...> { MAHO_DECLARE_LAYER(FWorld); ... };
- * 名字取自类型名字符串化（#LayerType），依赖声明用同一类型推导，自洽。
+ * Layer identity declaration sugar -- generates StaticName() + GetName()
+ * override. Usage: class FWorld : public FLayer<...> { MAHO_DECLARE_LAYER(FWorld); ... };
+ * The name comes from stringifying the type name (#LayerType); dependency
+ * declarations use the same type deduction, so it is self-consistent.
  */
 #define MAHO_DECLARE_LAYER(LayerType)                    \
 public:                                                  \
@@ -31,13 +32,13 @@ public:                                                  \
 namespace Maho
 {
 
-// ── ① FLayer：匿名层锚点 ──────────────────────────────────────────────────
+// -- 1. FLayer: anonymous layer anchor ----------------------------------------------
 
 /**
- * Anonymous layer anchor — the polymorphic base a (possibly dynamically
+ * Anonymous layer anchor - the polymorphic base a (possibly dynamically
  * loaded) feature derives from. It carries identity + per-stage dependency
  * declaration. Lifecycle stages are composed via IPipeline<TStages...>; a
- * layer NEVER manages its deps' lifecycle — the loader/TaskGraph guarantees
+ * layer NEVER manages its deps' lifecycle - the loader/TaskGraph guarantees
  * the execution context is complete before a layer runs. The layer only closes
  * over itself.
  *
@@ -50,7 +51,7 @@ class MAHO_API FLayerBase
 public:
 	virtual ~FLayerBase() = default;
 
-	/** Stable identity name — the TaskGraph topological key. */
+	/** Stable identity name -- the TaskGraph topological key. */
 	virtual std::string_view GetName() const = 0;
 
 	/** Named dep of `this` at a given stage. */
@@ -60,7 +61,7 @@ public:
 		std::type_index Stage;   // dep object's stage interface (void = unset)
 	};
 
-	/** My stage (interface type) → what I depend on in that stage. */
+	/** My stage (interface type) -> what I depend on in that stage. */
 	using FDependencyTable = std::map<std::type_index, std::vector<FDependency>>;
 
 	virtual const FDependencyTable& GetDependencies() const;
@@ -77,7 +78,7 @@ protected:
 	}
 
 	/** Runtime dependency: `this` at MyStage depends on DepName at DepStage.
-	 *  For dynamically-loaded features that cannot name the dep's type — the
+	 *  For dynamically-loaded features that cannot name the dep's type -- the
 	 *  dep is addressed by its layer name (== GetName()/StaticName()). */
 	void AddDependency(std::type_index MyStage, std::string_view DepName, std::type_index DepStage);
 
@@ -85,7 +86,7 @@ protected:
 };
 
 /**
- * Layer syntax sugar — binds FLayerBase (identity + deps) with ONE OR MORE
+ * Layer syntax sugar -- binds FLayerBase (identity + deps) with ONE OR MORE
  * pipelines (ordered stages + the stage-invoke dispatch). Inherit from this
  * instead of spelling the bases:
  *
@@ -105,18 +106,18 @@ class MAHO_API FLayer
 {
 };
 
-// ── ② 无参管线的空上下文占位 ─────────────────────────────────────────────
+// -- 2. Empty context placeholder for parameterless pipelines ---------------------------
 
 struct FEmptyContext {};
 
-// ── ③ 从 pipeline 提取 stage 序列（pipeline 暴露 TStages 成员）─────────
+// -- 3. Extract the stage sequence from a pipeline (pipeline exposes the TStages member) --
 
 template <typename P> struct TStagesOf { using Type = typename P::TStages; };
 
-// ── ④ FLayerTaskGraph：一组 FLayer → 编译 → 执行 ─────────────────────────
+// -- 4. FLayerTaskGraph: a set of FLayer -> compile -> execute -------------------------
 
 /**
- * Layer task graph — bridges a set of anonymous FLayer instances into a
+ * Layer task graph -- bridges a set of anonymous FLayer instances into a
  * FTaskGraph. CONTRACT: TPipeline is an IPipeline<TStages...> type; every
  * FLayer passed in MUST implement exactly that pipeline. The layer and the
  * graph declare the SAME pipeline type, pairing them at compile time.
@@ -125,7 +126,7 @@ template <typename P> struct TStagesOf { using Type = typename P::TStages; };
  *   - self-progression: stage N depends on stage N-1 of the SAME layer
  *   - cross-object deps: the layer's own declared deps at that stage
  * Then Compile wires everything; Execute dispatches each ready node through
- * FLayer::Invoke (compile-time stage → method mapping).
+ * FLayer::Invoke (compile-time stage -> method mapping).
  *
  *   using FPipeline = IPipeline<IMain, IShutdown>;
  *   class FWorld : public FLayer, public FPipeline { ... };
@@ -150,7 +151,7 @@ public:
 	{
 	}
 
-	/** (Re)build the graph from a layer set — callable repeatedly (每帧/重配). */
+			/** (Re)build the graph from a layer set -- callable repeatedly (each frame / reconfigure). */
 	void Init(std::vector<FLayerBase*> Layers)
 	{
 		NodeStorage.clear();
@@ -196,13 +197,13 @@ private:
 		Node.Stage = std::type_index(typeid(TCurrent));
 		Node.Layer = Layer;
 
-		// 自递进：依赖自己前一个 stage。
-		if (PrevStage != NoStage)
-		{
-			Node.Dependencies.push_back({ Node.Name, PrevStage });
-		}
+			// Self-progression: depend on my own previous stage.
+			if (PrevStage != NoStage)
+			{
+				Node.Dependencies.push_back({ Node.Name, PrevStage });
+			}
 
-		// 跨对象依赖：本 stage 声明的依赖元组。
+			// Cross-object dependencies: the dependency tuples declared at this stage.
 		if (auto It = Layer->GetDependencies().find(Node.Stage);
 			It != Layer->GetDependencies().end())
 		{
@@ -225,7 +226,7 @@ private:
 	{
 	}
 
-	// 运行时 stage → 编译期类型匹配 + 层内嵌 Invoke 分发。
+			// Runtime stage -> compile-time type match + the layer's embedded Invoke dispatch.
 	void Dispatch(FLayerBase* Layer, const std::type_index& Stage)
 	{
 		DispatchImpl(Layer, Stage, FStages{});
@@ -236,9 +237,9 @@ private:
 	{
 		if (Stage == std::type_index(typeid(TCurrent)))
 		{
-			// TPipeline 内嵌 Invoke<TStage>（stage → 方法的 if-constexpr 映射）。
-			// FLayerBase 与 TPipeline 无继承关系（层同时继承两者），侧向转换用 dynamic_cast。
-			// 未挂此管线的层静默跳过（多管线场景下，一层可能只实现其中几条）。
+				// TPipeline embeds Invoke<TStage> (stage -> method if-constexpr mapping).
+				// FLayerBase and TPipeline have no inheritance relation (the layer inherits both); the lateral conversion uses dynamic_cast.
+				// A layer that did not mount this pipeline silently skips (in multi-pipeline scenarios, a layer may implement only some of them).
 			if (auto* P = dynamic_cast<TPipeline*>(Layer))
 			{
 				P->template Invoke<TCurrent>(Context);

@@ -16,7 +16,7 @@ namespace Maho
 {
 
 /**
- * Custom deleter for the OS module handle — a DLL is released with
+ * Custom deleter for the OS module handle -- a DLL is released with
  * FreeLibrary/dlclose, not `delete`. FAssembly owns the handle and releases it
  * on destruction, so the host's FModuleManager just owns FAssembly values.
  */
@@ -37,16 +37,16 @@ struct FModuleDeleter
 };
 
 /**
- * A dynamically-loaded code unit — the OS module handle + symbol lookup.
+ * A dynamically-loaded code unit -- the OS module handle + symbol lookup.
  *
  * Pure loading primitive: knows nothing about plugins, manifests, or
  * factories. How to interpret a loaded module (which symbols to probe and
- * what they mean) is decided entirely by the consumer — the plugin manager,
+ * what they mean) is decided entirely by the consumer -- the plugin manager,
  * a thin launcher, or any project-defined loader.
  *
- * Ownership: this is the single owner of the module handle (unique_ptr →
+ * Ownership: this is the single owner of the module handle (unique_ptr ->
  * move-only). The host must keep a loaded FAssembly alive as long as any
- * instance constructed from it lives — vtables and dtors live in the module,
+ * instance constructed from it lives -- vtables and dtors live in the module,
  * so unloading first is a use-after-free.
  */
 class MAHO_API FAssembly

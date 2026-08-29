@@ -1,20 +1,20 @@
 # Config
 
-## 代码文件
+## Code files
 
-- [Config.h](Config.h) — INI 配置单例 `FConfig`
+- [Config.h](Config.h) - INI config singleton `FConfig`
 
-## 概念——INI 配置
+## Concept - INI config
 
-INI 风格配置单例服务（UE `DefaultEngine.ini` 格式）——`Load` 解析 INI 文件为 Section → Key → Value 两级表，`GetString / GetInt / GetFloat / GetBool` 按 Section/Key 读值（带默认值），`SetString` 运行时覆盖。内部分层 `std::map<std::string, FSection>`。
+INI-style config singleton service (UE `DefaultEngine.ini` format) - `Load` parses an INI file into a two-level Section -> Key -> Value table, `GetString / GetInt / GetFloat / GetBool` read by Section/Key (with defaults), `SetString` overrides at runtime. Internal layered `std::map<std::string, FSection>`.
 
-### FConfig —— Section/Key 读取
+### FConfig - Section/Key reads
 
-`TSingleton<FConfig>` + `IPlugin<IInit, IShutdown>`（Initialize/Shutdown 清 `Sections`）。解析规则：
+`TSingleton<FConfig>` + `IPlugin<IInit, IShutdown>` (Initialize/Shutdown clear `Sections`). Parsing rules:
 
-- `[Section]` 行切换当前段；`Key = Value` 行入库（去首尾空白）。
-- `;` / `#` 开头为注释；空行跳过。
-- `GetBool` 接受 `true / 1 / yes / on`（大小写不敏感）。
+- `[Section]` lines switch the current section; `Key = Value` lines are stored (trimmed).
+- Lines starting with `;` / `#` are comments; blank lines are skipped.
+- `GetBool` accepts `true / 1 / yes / on` (case-insensitive).
 
 ```cpp
 FConfig::Get().Load("Engine/Config/DefaultEngine.ini");
@@ -23,10 +23,10 @@ const std::int64_t MaxFPS = FConfig::Get().GetInt("SystemSettings", "MaxFPS", 60
 FConfig::Get().SetString("SystemSettings", "MaxFPS", "120");
 ```
 
-## 三方依赖
+## Third-party dependencies
 
-- 无（纯 std）。
+- None (pure std).
 
-## 相关文档
+## Related docs
 
-- [API.html](API.html) — API 文档
+- [API.html](API.html) - API documentation

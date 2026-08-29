@@ -1,16 +1,16 @@
 # Timer
 
-## 代码文件
+## Code Files
 
-- [Timer.h](Timer.h) — 计时与时钟（`FTimer` / `FScopedTimer` / `FGameClock`）
+- [Timer.h](Timer.h) - timing and clock (`FTimer` / `FScopedTimer` / `FGameClock`)
 
-## 概念——计时分析 + 游戏时钟
+## Concept - Timing Analysis + Game Clock
 
-Timer 插件提供**两个独立单例**（`FTimer` + `FGameClock`）：`FTimer` 是栈式作用域计时器（分层计时插桩），`FGameClock` 是带时间缩放/暂停的实时/游戏时钟（惰性推进、无需每帧 Tick）。
+Timer plugin provides **two independent singletons** (`FTimer` + `FGameClock`): `FTimer` is a stack-based scope timer (hierarchical timing instrumentation); `FGameClock` is a real/game clock with time scale / pause (lazily advanced, no per-frame Tick required).
 
-### FTimer —— 分层作用域计时（单例服务）
+### FTimer - Hierarchical Scope Timing (Singleton Service)
 
-`TSingleton<FTimer>` + `IPlugin<IInit, IShutdown>`。内部 `FNode` 树（Root → Children map）：`BeginScope(Name)` 下推（同名节点累加），`EndScope()` 上弹并累计 elapsed（Total/Max/Count），`DumpToString()` 输出毫秒缩进文本树。Initialize/Shutdown/Reset 清树。
+`TSingleton<FTimer>` + `IPlugin<IInit, IShutdown>`. Internal `FNode` tree (Root -> Children map): `BeginScope(Name)` pushes down (same-name nodes accumulate); `EndScope()` pops up and accumulates elapsed (Total/Max/Count); `DumpToString()` outputs a millisecond-indented text tree. Initialize/Shutdown/Reset clear the tree.
 
 ```cpp
 void Render()
@@ -21,23 +21,23 @@ void Render()
 Timer::FTimer::Get().DumpToString();       // "Render: 1.23 ms (n calls, avg, max)"
 ```
 
-`FScopedTimer` 是 RAII 封装——构造 `BeginScope`、析构 `EndScope`（禁拷贝）。
+`FScopedTimer` is an RAII wrapper - `BeginScope` on construction, `EndScope` on destruction (non-copyable).
 
-### FGameClock —— 游戏时钟（单例服务）
+### FGameClock - Game Clock (Singleton Service)
 
-`TSingleton<FGameClock>` + `IPlugin<IInit, IShutdown>`。**惰性推进**：`GetGameSeconds()` 在调用时累计「距上次调用的墙钟差 × TimeScale」，无需每帧 Tick；暂停时冻结（`SetPaused(true)` 前先推进一次）。`GetDeltaSeconds()` 返回上一次推进的游戏时间差。
+`TSingleton<FGameClock>` + `IPlugin<IInit, IShutdown>`. **Lazy advance**: `GetGameSeconds()` accumulates, on call, "wall-clock delta since last call x TimeScale"; no per-frame Tick required; freezes while paused (advance once before `SetPaused(true)`). `GetDeltaSeconds()` returns the game-time delta of the previous advance.
 
 ```cpp
 const double Real = FGameClock::Get().GetRealSeconds();
 const double Game = FGameClock::Get().GetGameSeconds();
-FGameClock::Get().SetTimeScale(0.5);   // 慢放
-FGameClock::Get().SetPaused(true);     // 冻结
+FGameClock::Get().SetTimeScale(0.5);   // slow motion
+FGameClock::Get().SetPaused(true);     // freeze
 ```
 
-## 三方依赖
+## Third-Party Dependencies
 
-- 无（纯 std，`std::chrono`）。
+- None (pure std, `std::chrono`).
 
-## 相关文档
+## Related Docs
 
-- [API.html](API.html) — API 文档
+- [API.html](API.html) - API docs

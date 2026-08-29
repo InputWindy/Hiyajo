@@ -13,7 +13,7 @@
 #	include <EGL/eglext.h>
 #endif
 
-// GLFW pulls in <Windows.h>, which #defines CreateWindow → CreateWindowW.
+// GLFW pulls in <Windows.h>, which #defines CreateWindow -> CreateWindowW.
 #ifdef CreateWindow
 #	undef CreateWindow
 #endif
@@ -33,7 +33,7 @@ namespace
 		"r.Window.Title", "Maho", "Platform window title");
 
 #if !defined(MAHO_HEADLESS)
-	// ── GLFW backend (desktop: Windows / Linux, windowed) ──
+			// -- GLFW backend (desktop: Windows / Linux, windowed) --
 
 	class FGlfwWindow final : public IPlatform
 	{
@@ -69,7 +69,7 @@ namespace
 #endif // !MAHO_HEADLESS
 
 #if defined(__linux__)
-	// ── EGL headless backend (Linux, no OS window) ──
+			// -- EGL headless backend (Linux, no OS window) --
 	// Surfaceless EGL platform + pbuffer surface + OpenGL ES 2.0 context.
 
 	class FEGLHeadlessWindow final : public IPlatform
@@ -174,12 +174,12 @@ namespace
 
 void FPlatform::Initialize(FEngineBase&)
 {
-	// 默认创建窗口（CVar 可配）。Headless 构建跳过。
+	// create the default window (CVar-configurable); skipped in headless builds.
 #if !defined(MAHO_HEADLESS)
 	const int Width = GCVarWindowWidth.GetValue();
 	const int Height = GCVarWindowHeight.GetValue();
 	const bool bOk = CreateWindow(Width, Height, GCVarWindowTitle.GetValue());
-	MAHO_LOG_CORE_INFO("FPlatform::Initialize — CreateWindow({}, {}) => {}", Width, Height, bOk);
+	MAHO_LOG_CORE_INFO("FPlatform::Initialize - CreateWindow({}, {}) => {}", Width, Height, bOk);
 #endif
 }
 
@@ -223,7 +223,7 @@ void FPlatform::PollEvents()
 	}
 }
 
-// ── engine loop stages (FEngineLayer) ──
+// -- engine loop stages (FEngineLayer) --
 
 void FPlatform::BeginFrame(FEngineBase&)
 {
@@ -240,7 +240,7 @@ void FPlatform::EndFrame(FEngineBase&)
 
 void FPlatform::RequestExit(FEngineBase& Engine)
 {
-	// 窗口请求关闭 → 通知宿主引擎退出主循环。
+	// window close request -> tell the host engine to exit the main loop.
 	if (ShouldClose())
 	{
 		Engine.RequestExit();

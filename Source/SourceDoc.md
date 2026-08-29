@@ -1,23 +1,23 @@
 <!-- mahogen -->
 # Source
 
-## 子层级
+## Sub Layers
 
 - [Private](Private/PrivateDoc.md)
 - [Public](Public/PublicDoc.md)
 <!-- mahogen end -->
 
-## 概念——源码根
+## Concept -- Source Root
 
-引擎源码根：`Public/` 放接口与头文件，`Private/` 放实现（.cpp）。
+Engine source root: `Public/` holds interfaces and headers, `Private/` holds implementations (.cpp).
 
-- [Public/PublicDoc.md](Public/PublicDoc.md) — 接口 + 聚合头
-- [Private/PrivateDoc.md](Private/PrivateDoc.md) — 实现
+- [Public/PublicDoc.md](Public/PublicDoc.md) -- interfaces + aggregate headers
+- [Private/PrivateDoc.md](Private/PrivateDoc.md) -- implementations
 
-引擎是**纯脚手架**——只提供类型无关基建（Core）+ 层体系（Engine/）。具体服务全部是可安装插件（`Plugins/Common/`）。引擎 .cpp 仅 `Assembly.cpp` / `Fatal.cpp` / `TaskGraph.cpp`，其余基建 header-only（模板 + inline）。
+The engine is a **pure scaffold** -- only type-agnostic infrastructure (Core) + layer system (Engine/). All concrete services are installable plugins (`Plugins/Common/`). The engine .cpp files are only `Assembly.cpp` / `Fatal.cpp` / `TaskGraph.cpp`; the rest of the infrastructure is header-only (templates + inline).
 
-### 分层
+### Layering
 
-- **Core**（`Public/Core/`）：类型无关基建积木——TypeList/Query/Singleton/Interface/TaskGraph/Assembly/Fatal/ThreadPool。
-- **Engine**（`Public/Engine/`）：层体系——`Layer.h`（FLayerBase/FLayer/FLayerTaskGraph/插件宏）+ `Engine.h`（主循环三阶段 + IEnginePipeline/FEngineLayer/FEngineBase）。
-- **Plugins**（`Plugins/`）：可安装插件——`Common/`（服务插件，纯库或单例）。引擎零 app 假设，一切逻辑在插件。
+- **Core** (`Public/Core/`): type-agnostic infrastructure building blocks -- TypeList/Query/Singleton/Interface/TaskGraph/Assembly/Fatal/ThreadPool.
+- **Engine** (`Public/Engine/`): layer system -- `Layer.h` (FLayerBase/FLayer/FLayerTaskGraph/plugin macro) + `Engine.h` (three-stage main loop + IEnginePipeline/FEngineLayer/FEngineBase).
+- **Plugins** (`Plugins/`): installable plugins -- `Common/` (service plugins, pure libraries or singletons). The engine makes zero app assumptions; all logic lives in plugins.

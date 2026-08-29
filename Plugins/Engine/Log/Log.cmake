@@ -1,6 +1,6 @@
-# Log plugin: third-party dependencies (spdlog — header-only).
+# Log plugin: third-party dependencies (spdlog - header-only).
 # Fetch spdlog via the engine's clone helper; wire it as the SPDLOG_POPULATED
-# interface target the Log DLL links. Header-only → no add_subdirectory.
+# interface target the Log DLL links. Header-only -> no add_subdirectory.
 include(FetchContent)
 
 set(SPDLOG_VER v1.14.1)

@@ -1,13 +1,13 @@
-# Config — Agent 入口
+# Config - Agent entry
 
-所有 AI Agent 进本插件前先读本文件。
+All AI agents read this file before entering this plugin.
 
-## 设计约束（强约束）
+## Design constraints (strict)
 
-- 职责边界：INI 配置读写。静态 ini 配置走本插件；启动参数类配置建议走 CommandParser。
-- 依赖只走 `.cplugin` `Dependencies`，include `<Config.h>`，不跨目录相对 include。
-- 实现要点：
-  - `TSingleton<FConfig>`，`Get()` 定义在 `Private/Config.cpp`（Config.dll 内进程唯一）。
-  - 内部 `std::map<Section, std::map<Key, std::string>>`，值恒为字符串，读取时解析为 int/float/bool。
-  - 无锁——`Load` 与读写应在初始化期单线程完成。
-- 遵循根 [AGENTS.md](../../../../AGENTS.md)。
+- Responsibility: INI config read/write. Static ini config goes through this plugin; startup-parameter style config should use CommandParser.
+- Dependencies only go through `.cplugin` `Dependencies`; include `<Config.h>`, no cross-directory relative includes.
+- Implementation notes:
+  - `TSingleton<FConfig>`; `Get()` is defined in `Private/Config.cpp` (process-unique inside Config.dll).
+  - Internal `std::map<Section, std::map<Key, std::string>>`; values are always strings, parsed to int/float/bool on read.
+  - Lock-free - `Load` and read/write should complete single-threaded during initialization.
+- Follow root [AGENTS.md](../../../../AGENTS.md).

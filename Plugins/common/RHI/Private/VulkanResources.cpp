@@ -157,7 +157,7 @@ FVulkanFramebuffer::~FVulkanFramebuffer()
 
 FVulkanAccelerationStructure::~FVulkanAccelerationStructure()
 {
-	// KHR functions are not guaranteed in the static Vulkan loader — resolve
+	// KHR functions are not guaranteed in the static Vulkan loader - resolve
 	// per-device like the rest of the dynamic Vulkan usage in this plugin.
 	if (Device != VK_NULL_HANDLE && Accel != VK_NULL_HANDLE)
 	{

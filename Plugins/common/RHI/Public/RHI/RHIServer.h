@@ -25,7 +25,7 @@ struct IRHI
 
 	/**
 	 * Create a command list for the given type. Command-list LIFECYCLE belongs
-	 * to the caller (e.g. the RDG, which owns frame isolation) �� the RHI only
+	 		 * to the caller (e.g. the RDG, which owns frame isolation) - the RHI only
 	 * provides the raw object. Record via EnqueueTask, destroy with
 	 * DestroyCommandList.
 	 */
@@ -36,7 +36,7 @@ struct IRHI
 	 * Submit a recorded command list on the RHI worker, routing to the queue
 	 * that matches the command-list type (graphics/compute/transfer, honoring
 	 * native-queue fallback). When to submit is the caller's (RDG) scheduling
-	 * decision �� this only performs the queue submit itself.
+	 		 * decision - this only performs the queue submit itself.
 	 */
 	virtual void Submit(
 		FRHICommandList* CmdList,
@@ -49,7 +49,7 @@ struct IRHI
 
 	/**
 	 * Run a recording task on a worker thread from the pool (parallel command
-	 * recording). The callback receives ITS OWN command list �� never share a
+	 		 * recording). The callback receives ITS OWN command list - never share a
 	 * command list across tasks (Vulkan forbids concurrent recording into the
 	 * same buffer). After tasks complete, the caller (RDG) submits the recorded
 	 * command lists serially via Submit.
@@ -60,12 +60,12 @@ struct IRHI
 
 	/**
 	 * Barrier: wait until every EnqueueTask submitted so far has finished
-	 * recording. Call BEFORE Submit to guarantee the "record all �� submit all"
+	 		 * recording. Call BEFORE Submit to guarantee the "record all - submit all"
 	 * ordering when using parallel command recording.
 	 */
 	virtual void Flush() = 0;
 
-	// ���� frame primitives (call inside EnqueueTask to run on the server thread) ����
+	// -- frame primitives (call inside EnqueueTask to run on the server thread) --
 	virtual void BeginFrame() = 0;
 	virtual void Clear(float R, float G, float B, float A) = 0;
 	virtual void EndFrame() = 0;
@@ -123,7 +123,7 @@ struct IRHI
 	/**
 	 * Copy query results to the destination buffer (GPU) or CPU memory.
 	 * When bWait is true this blocks until results are available (a
-	 * synchronized read �� call off the RHI thread).
+	 		 * synchronized read - call off the RHI thread).
 	 */
 	virtual bool GetQueryPoolResults(
 		FRHIQueryPool* Pool,
@@ -173,11 +173,11 @@ struct IRHI
 class IDynamicRHI;
 
 /**
- * RHI layer �� backend-agnostic GPU device surface (engine Common, a Layer node).
+ * RHI layer - backend-agnostic GPU device surface (engine Common, a Layer node).
  * Hosts the IDynamicRHI device and exposes the IRHI capability surface.
  * Command recording is parallel via EnqueueTask (thread pool); queue submits
- * and frame primitives are direct calls �� the caller (RDG) keeps them serial.
- * Backend-agnostic �� higher layers (RDG / render plugin) never touch a
+ * and frame primitives are direct calls - the caller (RDG) keeps them serial.
+ * Backend-agnostic - higher layers (RDG / render plugin) never touch a
  * concrete backend type.
  *
  * The public capability is IRHI: the parent layer (e.g. FRenderThread) picks it
@@ -191,13 +191,14 @@ class FRHI final
 public:
 	MAHO_DECLARE_LAYER(FRHI);
 
-	// ── engine init/shutdown stages (FEngineLayer) ──
+	// -- engine init/shutdown stages (FEngineLayer) --
 	void Initialize(FEngineBase& Engine) override;
 	void Shutdown(FEngineBase& Engine) override;
 
-	// ── engine tick stages (FEngineLayer) ──
-	// BeginFrame/EndFrame 与 IRHI 帧原语重载共存（引擎 stage 带 FEngineBase&，
-	// IRHI 帧原语无参）；Tick 做懒初始化：经 Engine 查 Platform 拿 native window。
+	// -- engine tick stages (FEngineLayer) --
+	// BeginFrame/EndFrame coexist with IRHI frame-primitive overloads (engine
+	// stage takes FEngineBase&, IRHI frame primitives take none); Tick does lazy
+	// init: query Platform through Engine to get the native window.
 	void BeginFrame(FEngineBase& Engine) override;
 	void Tick(FEngineBase& Engine) override;
 	void EndFrame(FEngineBase& Engine) override;
@@ -205,8 +206,8 @@ public:
 
 	/**
 	 * Record commands into a caller-owned command list on a thread-pool worker
-	 * (parallel recording). The caller (RDG) owns the command list's lifecycle
-	 * (frame isolation) and decides WHEN to submit �� call Submit explicitly.
+		 * (parallel recording). The caller (RDG) owns the command list's lifecycle
+		 * (frame isolation) and decides WHEN to submit - call Submit explicitly.
 	 */
 	void EnqueueTask(
 		FRHICommandList* CmdList,
@@ -224,13 +225,13 @@ public:
 		std::uint32_t SignalCount = 0,
 		FRHIFence* SignalFence = nullptr) override;
 
-	// ���� IRHI frame primitives (forward to the private IDynamicRHI) ����
+	// -- IRHI frame primitives (forward to the private IDynamicRHI) --
 	void BeginFrame() override;
 	void Clear(float R, float G, float B, float A) override;
 	void EndFrame() override;
 	void Resize(int Width, int Height) override;
 
-	// ���� IRHI device methods (forward to the private IDynamicRHI) ����
+	// -- IRHI device methods (forward to the private IDynamicRHI) --
 	[[nodiscard]] bool IsInitialized() const override;
 
 	[[nodiscard]] FRHIFence* CreateFence(bool bSignaled) override;

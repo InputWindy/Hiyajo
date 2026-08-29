@@ -3,7 +3,7 @@
 /**
  * Windows entry shim. Include in exactly one .cpp (the thin Main.cpp).
  * IDE: WinMain for the GUI subsystem (no console box) + main for the console
- * subsystem — both drive Maho::Main.
+ * subsystem -- both drive Maho::Main.
  */
 
 #include <EntryPoint.h>

@@ -1,13 +1,13 @@
-# Log — Agent 入口
+# Log - Agent Entry
 
-所有 AI Agent 进本插件前先读本文件。
+All AI agents must read this file before entering this plugin.
 
-## 设计约束（强约束）
+## Design Constraints (strict)
 
-- 职责边界：全引擎唯一日志出口。任何插件要打日志，走 `FLog::Get().Logger` / `FLog::Info/Warn/Error` / `MAHO_LOG_CORE_*` 宏，不要自建 logger。
-- 依赖只走 `.cplugin` `Dependencies`，include `<Log.h>`，不跨目录相对 include。
-- 实现要点：
-  - `TSingleton<FLog>`，`Get()` 定义在 `Private/Log.cpp`（Log.dll 内进程唯一；依赖插件通过它链接 spdlog，不直接碰 spdlog）。
-  - 静态 `Info/Warn/Error` 只是 `Get().Logger` 的透传；`MAHO_LOG_CORE_*` 宏同义。
-  - `Initialize` 支持 `--log-level=`；`Shutdown` flush + 释放 logger。
-- 遵循根 [AGENTS.md](../../../../AGENTS.md)。
+- Responsibility boundary: the single log outlet for the whole engine. Any plugin that needs to log goes through `FLog::Get().Logger` / `FLog::Info/Warn/Error` / `MAHO_LOG_CORE_*` macros. Do not create your own logger.
+- Dependencies only go through `.cplugin` `Dependencies`; include `<Log.h>`, no cross-directory relative includes.
+- Implementation notes:
+  - `TSingleton<FLog>`, `Get()` is defined in `Private/Log.cpp` (process-unique inside Log.dll; dependent plugins link spdlog through it, and do not touch spdlog directly).
+  - Static `Info/Warn/Error` just passthrough `Get().Logger`; `MAHO_LOG_CORE_*` macros are synonymous.
+  - `Initialize` supports `--log-level=`; `Shutdown` flushes + releases the logger.
+- Follow the root [AGENTS.md](../../../../AGENTS.md).

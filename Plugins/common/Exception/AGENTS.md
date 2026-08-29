@@ -1,13 +1,13 @@
-# Exception — Agent 入口
+# Exception - Agent entry
 
-所有 AI Agent 进本插件前先读本文件。
+All AI agents read this file before entering this plugin.
 
-## 设计约束（强约束）
+## Design constraints (strict)
 
-- 职责边界：非致命异常的中枢分发。业务代码捕获到可恢复错误就 `ReportException`；致命错误请用 Core/Fatal，不要在本插件 abort。
-- 依赖只走 `.cplugin` `Dependencies`，include `<Exception.h>`，不跨目录相对 include。
-- 实现要点：
-  - `TSingleton<FException>`，`Get()` 定义在 `Private/Exception.cpp`（Exception.dll 内进程唯一）。
-  - 自带最小 `TMulticastEvent`（引擎尚无独立 Delegate 积木，先内置，勿外借）。
-  - `ReportException` 同步广播给订阅者。
-- 遵循根 [AGENTS.md](../../../../AGENTS.md)。
+- Responsibility: central dispatch for non-fatal exceptions. Business code calls `ReportException` when it catches a recoverable error; for fatal errors use Core/Fatal, do not abort in this plugin.
+- Dependencies only go through `.cplugin` `Dependencies`; include `<Exception.h>`, no cross-directory relative includes.
+- Implementation notes:
+  - `TSingleton<FException>`; `Get()` is defined in `Private/Exception.cpp` (process-unique inside Exception.dll).
+  - Bundles a minimal `TMulticastEvent` (the engine has no standalone Delegate building block yet; keep it internal, do not share).
+  - `ReportException` broadcasts synchronously to subscribers.
+- Follow root [AGENTS.md](../../../../AGENTS.md).

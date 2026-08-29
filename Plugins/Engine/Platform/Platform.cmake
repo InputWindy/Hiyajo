@@ -1,7 +1,7 @@
 # Platform plugin: window (GLFW) + headless (EGL) native surfaces.
 # The DLL target is built by codegen; this file only pulls GLFW and links it.
 
-# Headless build switch — no window, no GLFW.
+# Headless build switch - no window, no GLFW.
 #   cmake -DMAHO_HEADLESS=ON ...
 if(NOT DEFINED MAHO_HEADLESS AND DEFINED ENV{MAHO_HEADLESS})
 	set(MAHO_HEADLESS "$ENV{MAHO_HEADLESS}")
@@ -26,7 +26,7 @@ else()
 	target_compile_definitions(Platform PRIVATE MAHO_HEADLESS=1)
 endif()
 
-# Headless backend: EGL (Linux) — available in both modes.
+# Headless backend: EGL (Linux) - available in both modes.
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
 	find_package(EGL REQUIRED)
 	target_link_libraries(Platform PUBLIC EGL::EGL)

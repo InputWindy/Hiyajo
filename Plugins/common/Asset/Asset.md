@@ -1,41 +1,41 @@
 # Asset
 
-## 代码文件
+## Code files
 
-- [Asset.h](Asset.h) — 资产注册表（`EAssetType` / `FAssetPath` / `FAssetData` / `FAssetRegistry`）
+- [Asset.h](Asset.h) - asset registry (`EAssetType` / `FAssetPath` / `FAssetData` / `FAssetRegistry`)
 
-## 概念——资产注册表
+## Concept - asset registry
 
-资产注册表单例服务——**逻辑路径（`/Game/...`）→ 资产元数据**。`Scan()` 递归索引 content 目录并登记每个资产文件，`Find()` 按逻辑路径查询，`Resolve()` 经 FPaths 根别名映射到物理文件，`Load()` 读原始字节。逻辑路径**无扩展名、无对象部分**（本引擎无 UObject 系统）。
+Asset registry singleton service - **logical path (`/Game/...`) -> asset metadata**. `Scan()` recursively indexes a content directory and registers every asset file, `Find()` queries by logical path, `Resolve()` maps to a physical file via FPaths root aliases, `Load()` reads raw bytes. Logical paths have **no extension and no object part** (this engine has no UObject system).
 
-### FAssetPath —— 逻辑资产路径
+### FAssetPath - logical asset path
 
-无扩展名逻辑路径（`"/Game/Materials/M_Metal"`），默认构造空。`GetPath()` / 全比较运算；可作 map key。
+Extension-less logical path (`"/Game/Materials/M_Metal"`), default-constructed empty. `GetPath()` / full comparison operators; usable as a map key.
 
-### FAssetData —— 资产元数据
+### FAssetData - asset metadata
 
-`{Path, Type, File(物理文件), Dependencies}`——`Dependencies` 由反序列化填充（延迟解析）。
+`{Path, Type, File(physical file), Dependencies}` - `Dependencies` are filled by deserialization (deferred resolution).
 
-### FAssetRegistry —— 注册表单例
+### FAssetRegistry - registry singleton
 
-`TSingleton<FAssetRegistry>` + `IPlugin<IInit, IShutdown>`（`Mutex` 保护）：
+`TSingleton<FAssetRegistry>` + `IPlugin<IInit, IShutdown>` (`Mutex` protected):
 
-- `Scan(ContentDir, MountAlias = "Game")`：递归索引；`Content/Materials/M_Metal.material → /Game/Materials/M_Metal (Material)`。类型按磁盘扩展名推断（`.material` / `.texture`）；**MountAlias 同时注册为 FPaths 根别名**。
-- `Find(Path)`：查逻辑路径，无则 `nullptr`。
-- `Resolve(Path)`：`"/Game/..." → FPaths 根 "Game" + 子路径` 拼物理路径。
-- `Load(Path)`：读资产文件原始字节（`std::optional<vector<uint8_t>>`）。
+- `Scan(ContentDir, MountAlias = "Game")`: recursive indexing; `Content/Materials/M_Metal.material -> /Game/Materials/M_Metal (Material)`. Type is inferred from the disk extension (`.material` / `.texture`); **MountAlias is also registered as an FPaths root alias**.
+- `Find(Path)`: look up a logical path; `nullptr` when absent.
+- `Resolve(Path)`: `"/Game/..." -> FPaths root "Game" + sub-path` to build the physical path.
+- `Load(Path)`: read the asset file's raw bytes (`std::optional<vector<uint8_t>>`).
 
 ```cpp
-FAssetRegistry::Get().Scan(ContentDir);   // Content/Materials/M_Metal.material → /Game/Materials/M_Metal (Material)
+FAssetRegistry::Get().Scan(ContentDir);   // Content/Materials/M_Metal.material -> /Game/Materials/M_Metal (Material)
 const FAssetData* D = FAssetRegistry::Get().Find(FAssetPath("/Game/Materials/M_Metal"));
 auto Bytes = FAssetRegistry::Get().Load(FAssetPath("/Game/Materials/M_Metal"));
 ```
 
-## 三方依赖
+## Third-party dependencies
 
-- 无。
-- 其他插件：**Paths**（`.cplugin` Dependencies = `["Paths"]`）——`Resolve` 用根别名解析物理路径，MountAlias 即根别名。
+- None.
+- Other plugins: **Paths** (`.cplugin` Dependencies = `["Paths"]`) - `Resolve` uses root aliases to resolve physical paths; MountAlias is the root alias.
 
-## 相关文档
+## Related docs
 
-- [API.html](API.html) — API 文档
+- [API.html](API.html) - API documentation

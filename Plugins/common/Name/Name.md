@@ -1,33 +1,33 @@
 # Name
 
-## 代码文件
+## Code files
 
-- [Name.h](Name.h) — 字符串驻留标识（`FName` + `FNamePool` + `std::hash` 特化）
+- [Name.h](Name.h) - string interning identifier (`FName` + `FNamePool` + `std::hash` specialization)
 
-## 概念——字符串驻留
+## Concept - string interning
 
-Name 插件提供**不可变字符串标识符**——构造 `FName` 时把字符串 intern 进全局池，相同字符串共享同一条目，比较 O(1)（按内部 Id，无逐字节比较）。引擎里高频重复的字符串（资源目录 key、CVar 名等）用 FName 免去重复存储与比较开销。
+The Name plugin provides **immutable string identifiers** - constructing an `FName` interns the string into the global pool, identical strings share one entry, comparison is O(1) (by internal Id, no byte-by-byte comparison). Frequently repeated engine strings (resource directory keys, CVar names, etc.) use FName to avoid duplicate storage and comparison cost.
 
-### FName —— interned 标识符
+### FName - interned identifier
 
-默认构造 = None（空，`Id == 0`）。显式构造 `FName("head")` 走 `FNamePool::Get().Intern`；`ToString()` 反查池内字符串。
+Default-constructed = None (empty, `Id == 0`). Explicit construction `FName("head")` goes through `FNamePool::Get().Intern`; `ToString()` reverses the lookup into the pool.
 
 ```cpp
 const FName Bone = "head";
-const FName Also = "head";       // 同一池条目
-Bone == Also;                    // true，O(1)
+const FName Also = "head";       // same pool entry
+Bone == Also;                    // true, O(1)
 ```
 
-配套 `std::hash<FName>` 特化（按 `GetId()`）——可直接作 `unordered_map` 的 key。
+A matching `std::hash<FName>` specialization (by `GetId()`) - usable directly as an `unordered_map` key.
 
-### FNamePool —— 全局驻留池（单例服务）
+### FNamePool - global interning pool (singleton service)
 
-`TSingleton<FNamePool>` + `IPlugin<IInit, IShutdown>`，`Mutex` 保护，线程安全。`Intern` 幂等（已存在返回规范条目），`StringForId` 反查。Initialize/Shutdown 清池（`free()`）。
+`TSingleton<FNamePool>` + `IPlugin<IInit, IShutdown>`, `Mutex` protected, thread-safe. `Intern` is idempotent (returns the canonical entry when it exists), `StringForId` reverses. Initialize/Shutdown clear the pool (`free()`).
 
-## 三方依赖
+## Third-party dependencies
 
-- 无（纯 std）。
+- None (pure std).
 
-## 相关文档
+## Related docs
 
-- [API.html](API.html) — API 文档
+- [API.html](API.html) - API documentation

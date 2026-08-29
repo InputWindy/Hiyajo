@@ -887,7 +887,7 @@ bool FVulkanRHI::CreateLogicalDevice()
 	vkGetDeviceQueue(Device, ComputeQueueFamilyIndex, ComputeQueueIndex, &ComputeVkQueue);
 	vkGetDeviceQueue(Device, TransferQueueFamilyIndex, TransferQueueIndex, &TransferVkQueue);
 
-	// Ray tracing KHR device functions — resolve dynamically (not in the
+			// Ray tracing KHR device functions - resolve dynamically (not in the
 	// static loader on all platforms). Presence == capability (extensions were
 	// requested above; missing symbols mean the driver refuses RT).
 	CreateAccelerationStructureKHR = reinterpret_cast<PFN_vkCreateAccelerationStructureKHR>(
@@ -924,7 +924,7 @@ bool FVulkanRHI::CreateLogicalDevice()
 	}
 	else
 	{
-		MAHO_LOG_CORE_WARN("Vulkan ray tracing (KHR) NOT available — RT APIs will fail");
+		MAHO_LOG_CORE_WARN("Vulkan ray tracing (KHR) NOT available - RT APIs will fail");
 	}
 
 	MAHO_LOG_CORE_INFO(
@@ -1603,7 +1603,7 @@ VkFormat FVulkanRHI::ToVkFormat(ERHIFormat Format)
 
 VkDescriptorType FVulkanRHI::ToVkDescriptorType(ERHIDescriptorType Type)
 {
-	// ERHIDescriptorType is dense and skips Vulkan texel-buffer enums — never static_cast.
+	// ERHIDescriptorType is dense and skips Vulkan texel-buffer enums - never static_cast.
 	switch (Type)
 	{
 	case ERHIDescriptorType::Sampler:
@@ -1800,7 +1800,7 @@ FRHIGraphicsPipeline* FVulkanRHI::CreateGraphicsPipeline(const FRHIGraphicsPipel
 	}
 	else
 	{
-		// Dynamic rendering — declare attachment formats via pNext
+					// Dynamic rendering - declare attachment formats via pNext
 		RenderingInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
 		RenderingInfo.colorAttachmentCount = 1;
 		VkFormat ColorFmt = ToVkFormat(Desc.ColorFormat);
@@ -2125,7 +2125,7 @@ FRHIRayTracingPipeline* FVulkanRHI::CreateRayTracingPipeline(const FRHIRayTracin
 		return nullptr;
 	}
 
-	// ── stages: every module with its entry point ──
+	// -- stages: every module with its entry point --
 	std::vector<VkPipelineShaderStageCreateInfo> Stages;
 	std::vector<VkRayTracingShaderGroupCreateInfoKHR> Groups;
 	Stages.reserve(16);
@@ -2176,7 +2176,7 @@ FRHIRayTracingPipeline* FVulkanRHI::CreateRayTracingPipeline(const FRHIRayTracin
 		AddModule(Module, ERHIShaderStage::Callable);
 	}
 
-	// ── groups: raygen / miss×N / hit (closest+any+intersection per geometry) ──
+	// -- groups: raygen / miss x N / hit (closest+any+intersection per geometry) --
 	{
 		VkRayTracingShaderGroupCreateInfoKHR Group{};
 		Group.sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR;
@@ -2259,7 +2259,7 @@ FRHIAccelerationStructure* FVulkanRHI::CreateAccelerationStructure(const FRHIRay
 		return nullptr;
 	}
 
-	// ── build sizes (accel + scratch) from the geometry list ──
+	// -- build sizes (accel + scratch) from the geometry list --
 	std::vector<VkAccelerationStructureGeometryKHR> Geometries;
 	Geometries.reserve(Desc.Geometries.size());
 
@@ -2313,7 +2313,7 @@ FRHIAccelerationStructure* FVulkanRHI::CreateAccelerationStructure(const FRHIRay
 		return nullptr;
 	}
 
-	// ── storage buffer (GPU-only, acceleration-structure flag + device address) ──
+	// -- storage buffer (GPU-only, acceleration-structure flag + device address) --
 	VkBufferCreateInfo BufferInfo{};
 	BufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
 	BufferInfo.size = Sizes.accelerationStructureSize;
@@ -2334,7 +2334,7 @@ FRHIAccelerationStructure* FVulkanRHI::CreateAccelerationStructure(const FRHIRay
 	AddressInfo.buffer = StorageBuffer;
 	const std::uint64_t BufferAddress = vkGetBufferDeviceAddress(Device, &AddressInfo);
 
-	// ── create the acceleration structure object ──
+	// -- create the acceleration structure object --
 	VkAccelerationStructureCreateInfoKHR AccelInfo{};
 	AccelInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR;
 	AccelInfo.buffer = StorageBuffer;
@@ -2442,7 +2442,7 @@ FRHIBuffer* FVulkanRHI::CreateShaderBindingTable(
 
 	auto* VkPipeline = static_cast<FVulkanRayTracingPipeline*>(Pipeline);
 
-	// ── per-stage group count (raygen 1, miss N, hit N) ──
+	// -- per-stage group count (raygen 1, miss N, hit N) --
 	std::uint32_t RayGenCount = 0;
 	std::uint32_t HitCount = 0;
 	std::uint32_t MissCount = 0;
@@ -2463,15 +2463,15 @@ FRHIBuffer* FVulkanRHI::CreateShaderBindingTable(
 		}
 	}
 
-	// ── query the pipeline's total shader group count + handle size ──
+	// -- query the pipeline's total shader group count + handle size --
 	// The pipeline groups order (as created): raygen(1) + miss(N) + hit(N).
-	// We query one handle per pipeline group — the SBT record count must match
+	// We query one handle per pipeline group - the SBT record count must match
 	// the pipeline's group count for vkCmdTraceRaysKHR indexing.
 	const std::uint32_t TotalGroups = 1 + MissCount + HitCount;
 	const std::uint32_t HandleSize = 32; // VK_RAY_TRACING_SHADER_GROUP_HANDLE_SIZE_KHR
 	const std::uint32_t HandleAligned = (HandleSize + 15) & ~15u;
 
-	// ── offsets: raygen 0, miss after, hit after ──
+	// -- offsets: raygen 0, miss after, hit after --
 	const std::uint32_t RayGenOffset = 0;
 	const std::uint32_t MissOffset = HandleAligned * RayGenCount;
 	const std::uint32_t HitOffset = MissOffset + HandleAligned * MissCount;
@@ -2484,7 +2484,7 @@ FRHIBuffer* FVulkanRHI::CreateShaderBindingTable(
 	if (OutHitOffset) *OutHitOffset = HitOffset;
 	if (OutHitStride) *OutHitStride = HandleAligned;
 
-	// ── SBT storage buffer: CPU→GPU, device-address capable ──
+	// -- SBT storage buffer: CPU->GPU, device-address capable --
 	FRHIBufferDesc BufDesc;
 	BufDesc.Size = TotalSize;
 	BufDesc.Usage = ERHIBufferUsage::DeviceAddress | ERHIBufferUsage::TransferDst;
@@ -2509,7 +2509,7 @@ FRHIBuffer* FVulkanRHI::CreateShaderBindingTable(
 	}
 	std::memset(Mapped, 0, TotalSize);
 
-	// ── fetch each pipeline group's handle, write into the SBT ──
+	// -- fetch each pipeline group's handle, write into the SBT --
 	std::vector<std::uint8_t> Handles(TotalGroups * HandleSize);
 	if (!CheckVkResult(
 			GetRayTracingShaderGroupHandlesKHR(

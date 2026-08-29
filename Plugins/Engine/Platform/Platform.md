@@ -1,27 +1,27 @@
 # Platform
 
-## 代码文件
+## Code Files
 
-- [Platform.h](Platform.h) — 原生表面服务（`FNativeSurface` / `IPlatform` / `FPlatformSystem`）
+- [Platform.h](Platform.h) - native surface service (`FNativeSurface` / `IPlatform` / `FPlatformSystem`)
 
-## 概念——原生表面 + 事件
+## Concept - Native Surface + Events
 
-原生表面单例服务——给 RHI 提供**原生窗口/上下文句柄**：`FNativeSurface` 是 `void*` 不透明指针（`GLFWwindow*` / `EGLContext` / `ANativeWindow*` / `UIView*` ...）。桌面端（Win32/Linux）走 **GLFW 窗口**；Linux 可走 **EGL pbuffer 无头上下文**（无 OS 窗口）。窗口语义藏在 `IPlatform::GetNativeWindow()` 单一访问器后面——无窗口平台（headless / Android surface / iOS view）不必暴露窗口概念。
+Native surface singleton service - provides **native window/context handles** to RHI: `FNativeSurface` is a `void*` opaque pointer (`GLFWwindow*` / `EGLContext` / `ANativeWindow*` / `UIView*` ...). Desktop (Win32/Linux) uses a **GLFW window**; Linux can use an **EGL pbuffer headless context** (no OS window). Window semantics are hidden behind the single `IPlatform::GetNativeWindow()` accessor - windowless platforms (headless / Android surface / iOS view) do not need to expose the window concept.
 
-### FPlatformSystem —— 表面服务（单例）
+### FPlatformSystem - surface service (singleton)
 
-`TSingleton<FPlatformSystem>` + `IPlugin<IInit, IShutdown>`：
+`TSingleton<FPlatformSystem>` + `IPlugin<IInit, IShutdown>`:
 
-- **Initialize(Argc, Argv)**：空启动——backend 由 `CreateWindow` / `CreateHeadlessContext` **惰性创建**。
-- **CreateWindow(W, H, Title)**：按当前平台选 backend（桌面 GLFW 窗口），成功返回 true（Surface 且原生句柄非空）。
-- **CreateHeadlessContext(W, H)**：Linux 下 EGL pbuffer 无头上下文（OpenGL ES 2.0）。
-- **DestroyWindow**：销毁 backend（reset 表面 + 事件闭包）——可切换到无头。
-- **PollEvents**：显式泵送平台事件（每帧一次）——引擎无隐式 stage 循环；无 backend 时为空操作。
-- **GetNativeWindow**：原生句柄；无头或创建失败为 `nullptr`。
-- **IsHeadless**：`Surface == nullptr`。
-- **ShouldClose**：窗口关闭请求（`glfwWindowShouldClose`）；无头或无事件恒 false。
+- **Initialize(Argc, Argv)**: empty startup - backend is **lazily created** by `CreateWindow` / `CreateHeadlessContext`.
+- **CreateWindow(W, H, Title)**: selects the backend for the current platform (desktop GLFW window), returns true on success (Surface and native handle non-null).
+- **CreateHeadlessContext(W, H)**: EGL pbuffer headless context on Linux (OpenGL ES 2.0).
+- **DestroyWindow**: destroys the backend (reset surface + event closure) - can switch to headless.
+- **PollEvents**: explicitly pumps platform events (once per frame) - the engine has no implicit stage loop; no-op when there is no backend.
+- **GetNativeWindow**: native handle; `nullptr` when headless or creation failed.
+- **IsHeadless**: `Surface == nullptr`.
+- **ShouldClose**: window close request (`glfwWindowShouldClose`); always false when headless or no events.
 
-宿主驱动固定生命周期：
+Host-driven fixed lifecycle:
 
 ```cpp
 Platform::FPlatformSystem::Get().Initialize(0, nullptr);
@@ -34,13 +34,13 @@ while (!Platform::FPlatformSystem::Get().ShouldClose())
 Platform::FPlatformSystem::Get().Shutdown();
 ```
 
-## 三方依赖
+## Third-Party Dependencies
 
-- **GLFW 3.4**（`Platform.cmake` FetchContent，桌面窗口 backend；`-DMAHO_HEADLESS=ON` 时不拉取）。
-- **EGL**（Linux，无头 backend，两种模式都可用）。
-- 其他插件：无——`.cplugin` Dependencies = `[]`（引擎核心经 codegen 自动 link）。
+- **GLFW 3.4** (`Platform.cmake` FetchContent, desktop window backend; not fetched when `-DMAHO_HEADLESS=ON`).
+- **EGL** (Linux, headless backend, available in both modes).
+- Other plugins: none - `.cplugin` Dependencies = `[]` (engine core is auto-linked via codegen).
 
-## 相关文档
+## Related Docs
 
-- [API.html](API.html) — API 文档（公开签名）
-- [ImplAPI.html](ImplAPI.html) — 实现算法字典（cpp 函数伪代码）
+- [API.html](API.html) - API documentation (public signatures)
+- [ImplAPI.html](ImplAPI.html) - implementation algorithm dictionary (cpp function pseudocode)

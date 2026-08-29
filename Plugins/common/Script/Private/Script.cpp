@@ -25,7 +25,7 @@ namespace
 	}
 }
 
-// ── Lua backend ────────────────────────────────────────────────────────────
+// -- Lua backend ------------------------------------------------------------
 
 class FLuaLanguage : public IScriptLanguage
 {
@@ -269,7 +269,7 @@ private:
 	std::vector<FTypeBinder> PendingTypeBinders;
 };
 
-// ── Host (FScriptSystem) ───────────────────────────────────────────────────
+// -- Host (FScriptSystem) ---------------------------------------------------
 
 FScriptSystem& FScriptSystem::Get()
 {

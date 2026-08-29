@@ -1,10 +1,10 @@
 #pragma once
 
-// Reflect — refl-cpp compile-time reflection (header-only, MIT). This plugin
+// Reflect - refl-cpp compile-time reflection (header-only, MIT). This plugin
 // bundles the library so consumers `#include <Reflect.h>` and use `refl::*`
-// directly. No singleton, no state — a pure library.
+// directly. No singleton, no state - a pure library.
 //
-//   MAHO_REFLECT(Person, field(name), field(age));      // 声明可反射类型
+//   MAHO_REFLECT(Person, field(name), field(age));      // declare reflectable type
 //   refl::for_each(refl::reflect<Person>().members, [](auto m) {
 //       std::cout << m.name << "\n";   // "name", "age"
 //   });
@@ -12,25 +12,28 @@
 
 #include <cstddef>
 
-// ── 反射宏语法糖 ────────────────────────────────────────────────────────
+// -- reflection macro sugar ---------------------------------------------------
 
 /**
- * 声明一个可反射类型（refl-cpp 的 REFL_AUTO 包装）。fields 是
- * `field(成员名), field(成员名), ...` 逗号列表；可加 `bases<>` 等。
+ * Declare a reflectable type (refl-cpp REFL_AUTO wrapper). `fields` is a
+ * `field(member), field(member), ...` comma list; `bases<>` may be added.
  *
- * ⚠️ **必须在全局命名空间展开**——refl-cpp 注入 `namespace refl_impl::metadata`
- * 于全局；在命名空间内会特化到错误位置，编译报 "does not support reflection"。
+ * WARNING: MUST be expanded in the GLOBAL namespace - refl-cpp injects
+ * `namespace refl_impl::metadata` at global scope; inside a namespace it
+ * specializes in the wrong place and compilation fails with
+ * "does not support reflection".
  *
- *   MAHO_REFLECT(Person, field(name), field(age));      // 全局
- *   MAHO_REFLECT(FUnit, bases<FEntity>, field(hp));     // 全局
+ *   MAHO_REFLECT(Person, field(name), field(age));      // global
+ *   MAHO_REFLECT(FUnit, bases<FEntity>, field(hp));     // global
  */
 #define MAHO_REFLECT(Type, ...) \
 	REFL_AUTO(type(Type), __VA_ARGS__)
 
 /**
- * 遍历可反射类型的全部成员。member 描述符含 `.name`（const char*）、`.value`、
- * `.is_readable()` / `.is_writable()`（成员函数则为 `.callable()`）。第二个参数
- * 是编译期索引（std::size_t）。
+ * Iterate all members of a reflectable type. The member descriptor has `.name`
+ * (const char*), `.value`, `.is_readable()` / `.is_writable()` (member
+ * functions use `.callable()`). The second parameter is the compile-time index
+ * (std::size_t).
  *
  *   MAHO_FOR_EACH_MEMBER(Person, [](auto member, auto index) {
  *       std::printf("%zu: %s\n", index, member.name);
@@ -39,17 +42,18 @@
 #define MAHO_FOR_EACH_MEMBER(Type, Visitor) \
 	refl::util::for_each(refl::reflect<Type>().members, Visitor)
 
-/** 可反射类型的成员数量（编译期）。 */
+/** Member count of a reflectable type (compile-time). */
 #define MAHO_MEMBER_COUNT(Type) \
 	refl::reflect<Type>().members.size
 
-/** 可反射类型的类型描述符（refl::reflect<Type>()）。 */
+/** Member descriptor of a reflectable type (refl::reflect<Type>()). */
 #define MAHO_MEMBER_DESCRIPTOR(Type) \
 	refl::reflect<Type>().members
 
 /**
- * 遍历可反射类型中可读的字段成员（排除成员函数）。回调签名为
- * `[](auto field, auto index) { ... }`，field 有 `.name` / `.value`。
+ * Iterate readable field members of a reflectable type (skips member
+ * functions). Callback signature is `[](auto field, auto index) { ... }`;
+ * field has `.name` / `.value`.
  *
  *   MAHO_FOR_EACH_FIELD(Person, [](auto field, auto index) {
  *       std::printf("field %s\n", field.name);

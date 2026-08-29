@@ -107,7 +107,7 @@ public:
 	virtual void EndFrame(FEngineBase&) = 0;
 };
 
-/** Exit capability — request a running loop (IMain) to stop. */
+/** Exit capability -- request a running loop (IMain) to stop. */
 class MAHO_API IExit
 {
 public:
@@ -135,7 +135,7 @@ public:
 		}
 		else
 		{
-			static_assert(sizeof(TStage) == 0, "Unhandled stage — add a branch in IEngineInitPipeline::Invoke");
+			static_assert(sizeof(TStage) == 0, "Unhandled stage -- add a branch in IEngineInitPipeline::Invoke");
 		}
 	}
 };
@@ -143,7 +143,7 @@ public:
 class MAHO_API IEngineTickPipeline: public IPipeline<IBeginFrame, ITick, IEndFrame, IExit>
 {
 public:
-	/** stage → 方法调用的 if-constexpr 分派（TContext = FEngineBase）。 */
+			/** if-constexpr dispatch from stage to method call (TContext = FEngineBase). */
 	template <typename TStage, typename TContext>
 	void Invoke(TContext& Engine)
 	{
@@ -165,7 +165,7 @@ public:
 		}
 		else
 		{
-			static_assert(sizeof(TStage) == 0, "Unhandled stage — add a branch in IEngineTickPipeline::Invoke");
+			static_assert(sizeof(TStage) == 0, "Unhandled stage -- add a branch in IEngineTickPipeline::Invoke");
 		}
 	}
 };
@@ -190,12 +190,12 @@ public:
 		}
 		else
 		{
-			static_assert(sizeof(TStage) == 0, "Unhandled stage — add a branch in IEngineShutdownPipeline::Invoke");
+			static_assert(sizeof(TStage) == 0, "Unhandled stage -- add a branch in IEngineShutdownPipeline::Invoke");
 		}
 	}
 };
 
-// 引擎拓展基类
+// Engine extension base class
 class MAHO_API FEngineLayer
 	: public FLayer<
 		IEngineInitPipeline, 
@@ -203,7 +203,7 @@ class MAHO_API FEngineLayer
 		IEngineShutdownPipeline>
 {
 public:
-	// 默认空实现 —— feature 按需 override 关心的 stage（其余静默 no-op）。
+	// Default no-op implementations -- features override the stages they care about (the rest silently no-op).
 	virtual void PreInitialize(FEngineBase&) {}
 	virtual void Initialize(FEngineBase&) {}
 	virtual void PostInitialize(FEngineBase&) {}
@@ -218,7 +218,7 @@ public:
 	virtual void PostShutdown(FEngineBase&) {}
 };
 
-// 引擎基类
+// Engine base class
 class MAHO_API FEngineBase
 {
 public:
@@ -231,79 +231,87 @@ public:
 	int Main();
 
 public:
-	/** 取回活跃 feature 实例（只读，供子类/外部查询）。 */
+	/** Get the active feature instances (read-only, for subclass/external queries). */
 	const std::vector<std::unique_ptr<FEngineLayer>>& GetLayers() const
 	{
 		return Features;
 	}
 
-	/** 请求主循环在下一帧边界退出。 */
+	/** Request the main loop to exit at the next frame boundary. */
 	void RequestExit();
 
-	/** 启动参数（IInit stage 经此取，如 Log 的 --log-level）。 */
+	/** Launch arguments (the IInit stage reads them here, e.g. Log's --log-level). */
 	[[nodiscard]] int GetLaunchArgc() const { return LaunchArgc; }
 	[[nodiscard]] char** GetLaunchArgv() const { return LaunchArgv; }
 
-	/** 按层名（GetName()）查找活跃 feature 实例；找不到返回 nullptr。 */
+	/** Find an active feature instance by layer name (GetName()); returns nullptr when missing. */
 	FEngineLayer* FindLayer(std::string_view LayerName);
 
-	/** 安装语法糖：接管一个管线实例（下帧生效）。 */
+	/** Install sugar: take ownership of a pipeline instance (takes effect next frame). */
 	void Install(FEngineLayer* Pipeline);
 
 	/**
-	 * 经 FAssembly 动态加载一个 feature DLL 并安装（下帧生效）。
-	 * 引擎持有 FAssembly + FEngineLayer 的 unique_ptr（Modules/Features），
-	 * 卸载时引擎自行 delete 实例并 FreeLibrary。
+	 * Dynamically load a feature DLL via FAssembly and install it (takes effect
+	 * next frame). The engine holds a unique_ptr for FAssembly + FEngineLayer
+	 * (Modules/Features); on unload the engine deletes the instance and calls
+	 * FreeLibrary itself.
 	 */
 	void Install(std::string_view DllPath, const char* FactorySymbol = "CreateLayer");
 
 	/**
-	 * 随机卸载请求 —— 无条件记入待卸载集合（不即时校验）。
+	 * Random uninstall request -- unconditionally recorded into the pending
+	 * uninstall set (no immediate validation).
 	 *
-	 * 安全点 FlushUnload 先应用 PendingAdded，再用全部 pending remove 建
-	 * 小顶堆贪心卸载：同帧内 A 可能被 B 挡住，但若 B 也在卸载请求里，B 先
-	 * 弹出卸载后 A 的依赖数归零、随之弹出 —— 一次请求内连锁卸载。
+	 * The safe point FlushUnload first applies PendingAdded, then builds a
+	 * min-heap from all pending remove requests and greedily unloads: within the
+	 * same frame A may be blocked by B, but if B is also in the uninstall
+	 * request, B pops first and after B is unloaded A's dependency count drops to
+	 * zero, so A pops next -- chained unload within one request.
 	 */
 	void RequestUninstall(FEngineLayer* Pipeline);
 
 	/**
-	 * 匿名卸载请求 —— 按 layer 名（GetName()）寻址卸载。等价 RequestUninstall，
-	 * 只是按名字而非指针。找不到同名活跃层则忽略。
+	 * Anonymous uninstall request -- unload addressed by layer name (GetName()).
+	 * Equivalent to RequestUninstall, just by name instead of pointer. If no
+	 * active layer with the same name exists, it is ignored.
 	 */
 	void TryUninstall(std::string_view LayerName);
 
 protected:
-	/** 应用挂起的安装/卸载（主循环安全点调用）。 */
+	/** Apply pending installs/uninstalls (called at the main loop safe point). */
 	void FlushPendingUpdatePipelines();
 
-	/** 引擎持有 feature 实例 + DLL；卸载时一并 delete + FreeLibrary。 */
+	/** The engine owns feature instances + DLLs; on unload it deletes + FreeLibrary them together. */
 	void DeleteUnloaded(FEngineLayer* Layer);
 
 private:
-	/** 重建反向依赖计数：layer 名 → 被依赖数（活跃层全量重算）。 */
+	/** Rebuild the reverse dependency count: layer name -> depended-on count (full recompute over active layers). */
 	void RebuildReverseDeps();
 
 	/**
-	 * 小顶堆贪心卸载 —— 用全部 pending remove 请求建堆（按被依赖数），每次
-	 * 卸一个被依赖数为 0 的层，更新其依赖者的计数并重入堆，直到堆顶被依赖
-	 * 数 > 0（剩下的都还被依赖，放弃）。依赖者的请求在同一批内连锁完成。
+	 * Min-heap greedy unload -- build a heap from all pending remove requests
+	 * (ordered by depended-on count). Each step unloads one layer whose
+	 * depended-on count is 0, updates the counters of its dependents and pushes
+	 * them back into the heap, until the heap top has depended-on count > 0 (the
+	 * rest are still depended on, so they are abandoned). Dependent requests in
+	 * the same batch complete in a chain.
 	 */
 	void FlushUnload();
 
 private:
-	std::vector<FLayerBase*> Pipelines;          // 当前活跃管线（匿名，图只认 FLayerBase）
-	std::vector<FEngineLayer*> PendingAdded;     // 挂起安装
+	std::vector<FLayerBase*> Pipelines;          // currently active pipelines (anonymous, the graph only knows FLayerBase)
+	std::vector<FEngineLayer*> PendingAdded;     // pending installs
 
-	std::set<FEngineLayer*>    PendingRemoveRequests;  // 随机卸载请求集合
-	std::map<std::string, int> ReverseDepCount;        // layer 名 → 被依赖数
+	std::set<FEngineLayer*>    PendingRemoveRequests;  // random uninstall request set
+	std::map<std::string, int> ReverseDepCount;        // layer name -> depended-on count
 
-	std::vector<std::unique_ptr<FAssembly>>     Modules;   // DLL 保活（move-only）
-	std::vector<std::unique_ptr<FEngineLayer>>  Features;  // feature 实例所有权
+	std::vector<std::unique_ptr<FAssembly>>     Modules;   // DLL keep-alive (move-only)
+	std::vector<std::unique_ptr<FEngineLayer>>  Features;  // feature instance ownership
 
 	int     LaunchArgc = 0;
 	char**  LaunchArgv = nullptr;
 
-	std::atomic<bool> bIsShuttingDown = false;   // 引擎是否正在关闭
+	std::atomic<bool> bIsShuttingDown = false;   // whether the engine is shutting down
 
 	FThreadPool Pool;
 };

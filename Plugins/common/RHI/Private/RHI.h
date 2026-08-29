@@ -109,7 +109,7 @@ public:
 	/**
 	 * Copy query results to the destination buffer (GPU) or CPU memory.
 	 * When bWait is true this blocks until results are available (a
-	 * synchronized read — call off the RHI thread).
+	 		 * synchronized read - call off the RHI thread).
 	 */
 	virtual bool GetQueryPoolResults(
 		FRHIQueryPool* Pool,
