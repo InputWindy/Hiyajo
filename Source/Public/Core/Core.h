@@ -4,7 +4,6 @@
 // Include this to use the whole Core module.
 
 #include <Core/TypeList.h>
-#include <Core/Query.h>
 #include <Core/Delegate.h>
 #include <Core/Singleton.h>
 #include <Core/TaskGraph.h>

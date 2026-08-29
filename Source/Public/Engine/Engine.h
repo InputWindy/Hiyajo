@@ -2,8 +2,9 @@
 
 #include <Core/Assembly.h>
 #include <Core/Interface.h>
-#include <Core/Query.h>
+#include <Engine/Query.h>
 #include <Engine/Layer.h>
+#include <Engine/LayerTaskGraph.h>
 
 #include <algorithm>
 #include <atomic>
