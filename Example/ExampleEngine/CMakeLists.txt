@@ -528,100 +528,65 @@ source_group(TREE "${ENGINE_DIR}/Plugins/Common/Unicode" FILES
 	"${ENGINE_DIR}/Plugins/Common/Unicode/Private/Unicode.cpp"
 )
 
-add_library(DynWorld SHARED
-	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/DynWorld/Public/DynWorld.h
-	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/DynWorld/Private/DynWorld.cpp
-	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/DynWorld/DynWorld.cplugin
-	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/DynWorld/DynWorld.cmake
-	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/DynWorld/settings.json
+add_library(Render SHARED
+	${ENGINE_DIR}/Plugins/Engine/Render/Public/Render.h
+	${ENGINE_DIR}/Plugins/Engine/Render/Private/Render.cpp
+	${ENGINE_DIR}/Plugins/Engine/Render/Render.cplugin
+	${ENGINE_DIR}/Plugins/Engine/Render/Render.cmake
+	${ENGINE_DIR}/Plugins/Engine/Render/settings.json
 )
-set_source_files_properties(	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/DynWorld/DynWorld.cplugin
-	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/DynWorld/DynWorld.cmake
-	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/DynWorld/settings.json PROPERTIES HEADER_FILE_ONLY ON)
-target_include_directories(DynWorld PUBLIC
+set_source_files_properties(	${ENGINE_DIR}/Plugins/Engine/Render/Render.cplugin
+	${ENGINE_DIR}/Plugins/Engine/Render/Render.cmake
+	${ENGINE_DIR}/Plugins/Engine/Render/settings.json PROPERTIES HEADER_FILE_ONLY ON)
+target_include_directories(Render PUBLIC
 	"${ENGINE_DIR}/Source/Public"
-	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/DynWorld/Public"
+	"${ENGINE_DIR}/Plugins/Engine/Render/Public"
 	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEngine/Public"
-	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEngine/Public"
-	"${ENGINE_DIR}/Plugins/Engine/Log/Public"
+	"${ENGINE_DIR}/Plugins/Common/RHI/Public"
+	"${ENGINE_DIR}/Plugins/Engine/Platform/Public"
 )
-set_target_properties(DynWorld PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
-target_compile_definitions(DynWorld PRIVATE MAHO_DYNWORLD_MODULE_EXPORTS)
-target_link_libraries(DynWorld PUBLIC Maho)
-set_property(TARGET DynWorld PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>")
-set(_MOD_PLUGIN_DIR "${CMAKE_CURRENT_SOURCE_DIR}/Plugins/DynWorld")
-include("${CMAKE_CURRENT_SOURCE_DIR}/Plugins/DynWorld/DynWorld.cmake")
+set_target_properties(Render PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
+target_compile_definitions(Render PRIVATE MAHO_RENDER_MODULE_EXPORTS)
+target_link_libraries(Render PUBLIC Maho)
+set_property(TARGET Render PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>")
+set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Engine/Render")
+include("${ENGINE_DIR}/Plugins/Engine/Render/Render.cmake")
 unset(_MOD_PLUGIN_DIR)
 
-target_link_libraries(DynWorld PUBLIC Log)
+target_link_libraries(Render PUBLIC RHI Platform)
 
-source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/Plugins/DynWorld" FILES
-	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/DynWorld/Public/DynWorld.h"
-	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/DynWorld/Private/DynWorld.cpp"
+source_group(TREE "${ENGINE_DIR}/Plugins/Engine/Render" FILES
+	"${ENGINE_DIR}/Plugins/Engine/Render/Public/Render.h"
+	"${ENGINE_DIR}/Plugins/Engine/Render/Private/Render.cpp"
 )
 
-add_library(DynRender SHARED
-	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/DynRender/Public/DynRender.h
-	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/DynRender/Private/DynRender.cpp
-	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/DynRender/DynRender.cplugin
-	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/DynRender/DynRender.cmake
-	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/DynRender/settings.json
+add_library(ClearFeature SHARED
+	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ClearFeature/Public/ClearFeature.h
+	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ClearFeature/Private/ClearFeature.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ClearFeature/ClearFeature.cplugin
+	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ClearFeature/ClearFeature.cmake
 )
-set_source_files_properties(	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/DynRender/DynRender.cplugin
-	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/DynRender/DynRender.cmake
-	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/DynRender/settings.json PROPERTIES HEADER_FILE_ONLY ON)
-target_include_directories(DynRender PUBLIC
+set_source_files_properties(	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ClearFeature/ClearFeature.cplugin
+	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ClearFeature/ClearFeature.cmake PROPERTIES HEADER_FILE_ONLY ON)
+target_include_directories(ClearFeature PUBLIC
 	"${ENGINE_DIR}/Source/Public"
-	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/DynRender/Public"
+	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ClearFeature/Public"
 	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEngine/Public"
-	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEngine/Public"
-	"${ENGINE_DIR}/Plugins/Engine/Log/Public"
+	"${ENGINE_DIR}/Plugins/Engine/Render/Public"
 )
-set_target_properties(DynRender PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
-target_compile_definitions(DynRender PRIVATE MAHO_DYNRENDER_MODULE_EXPORTS)
-target_link_libraries(DynRender PUBLIC Maho)
-set_property(TARGET DynRender PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>")
-set(_MOD_PLUGIN_DIR "${CMAKE_CURRENT_SOURCE_DIR}/Plugins/DynRender")
-include("${CMAKE_CURRENT_SOURCE_DIR}/Plugins/DynRender/DynRender.cmake")
+set_target_properties(ClearFeature PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
+target_compile_definitions(ClearFeature PRIVATE MAHO_CLEARFEATURE_MODULE_EXPORTS)
+target_link_libraries(ClearFeature PUBLIC Maho)
+set_property(TARGET ClearFeature PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>")
+set(_MOD_PLUGIN_DIR "${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ClearFeature")
+include("${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ClearFeature/ClearFeature.cmake")
 unset(_MOD_PLUGIN_DIR)
 
-target_link_libraries(DynRender PUBLIC Log)
+target_link_libraries(ClearFeature PUBLIC Render)
 
-source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/Plugins/DynRender" FILES
-	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/DynRender/Public/DynRender.h"
-	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/DynRender/Private/DynRender.cpp"
-)
-
-add_library(GameInput SHARED
-	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/GameInput/Public/GameInput.h
-	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/GameInput/Private/GameInput.cpp
-	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/GameInput/GameInput.cplugin
-	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/GameInput/GameInput.cmake
-	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/GameInput/settings.json
-)
-set_source_files_properties(	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/GameInput/GameInput.cplugin
-	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/GameInput/GameInput.cmake
-	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/GameInput/settings.json PROPERTIES HEADER_FILE_ONLY ON)
-target_include_directories(GameInput PUBLIC
-	"${ENGINE_DIR}/Source/Public"
-	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/GameInput/Public"
-	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEngine/Public"
-	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEngine/Public"
-	"${ENGINE_DIR}/Plugins/Engine/Log/Public"
-)
-set_target_properties(GameInput PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
-target_compile_definitions(GameInput PRIVATE MAHO_GAMEINPUT_MODULE_EXPORTS)
-target_link_libraries(GameInput PUBLIC Maho)
-set_property(TARGET GameInput PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>")
-set(_MOD_PLUGIN_DIR "${CMAKE_CURRENT_SOURCE_DIR}/Plugins/GameInput")
-include("${CMAKE_CURRENT_SOURCE_DIR}/Plugins/GameInput/GameInput.cmake")
-unset(_MOD_PLUGIN_DIR)
-
-target_link_libraries(GameInput PUBLIC Log)
-
-source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/Plugins/GameInput" FILES
-	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/GameInput/Public/GameInput.h"
-	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/GameInput/Private/GameInput.cpp"
+source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ClearFeature" FILES
+	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ClearFeature/Public/ClearFeature.h"
+	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ClearFeature/Private/ClearFeature.cpp"
 )
 
 # The project root — the entry plugin (under Plugins/, Public header + Private impl).
@@ -654,13 +619,14 @@ target_include_directories(ExampleEngine PUBLIC
 	"${ENGINE_DIR}/Plugins/Engine/Text/Public"
 	"${ENGINE_DIR}/Plugins/Engine/Timer/Public"
 	"${ENGINE_DIR}/Plugins/Common/Unicode/Public"
+	"${ENGINE_DIR}/Plugins/Engine/Render/Public"
 )
 # Export the extern "C" CreateLayer() bridge — the host's single entry.
 set_target_properties(ExampleEngine PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 target_compile_definitions(ExampleEngine PRIVATE MAHO_EXAMPLEENGINE_MODULE_EXPORTS)
 target_link_libraries(ExampleEngine PUBLIC Maho)
-add_dependencies(ExampleEngine Archive Paths Asset Compress Config ConsoleVariable Exception Log Name Platform RHI Reflect Resource Script Text Timer Unicode)
-target_link_libraries(ExampleEngine PUBLIC Archive Paths Asset Compress Config ConsoleVariable Exception Log Name Platform RHI Reflect Resource Script Text Timer Unicode)
+add_dependencies(ExampleEngine Archive Paths Asset Compress Config ConsoleVariable Exception Log Name Platform RHI Reflect Resource Script Text Timer Unicode Render)
+target_link_libraries(ExampleEngine PUBLIC Archive Paths Asset Compress Config ConsoleVariable Exception Log Name Platform RHI Reflect Resource Script Text Timer Unicode Render)
 # Plugin DLLs co-locate with Maho.dll + EntryPoint so relative DLL deps resolve.
 set_property(TARGET ExampleEngine PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>")
 
@@ -739,7 +705,7 @@ endforeach()
 set_property(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" PROPERTY VS_DEBUGGER_WORKING_DIRECTORY "${_MAHO_BIN}/$<CONFIG>")
 # The sln startup project is EntryPoint (the app host), not ZERO_CHECK.
 set_property(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" PROPERTY VS_STARTUP_PROJECT EntryPoint)
-add_dependencies(EntryPoint ExampleEngine Archive Paths Asset Compress Config ConsoleVariable Exception Log Name Platform RHI Reflect Resource Script Text Timer Unicode DynWorld DynRender GameInput MahoCheckCycle)
+add_dependencies(EntryPoint ExampleEngine Archive Paths Asset Compress Config ConsoleVariable Exception Log Name Platform RHI Reflect Resource Script Text Timer Unicode Render ClearFeature MahoCheckCycle)
 
 # Solution folders: EntryPoint at the ROOT; Maho (engine), Project, ThirdParty.
 # The project root sits at Project/ itself; project plugin DLLs under
@@ -785,9 +751,7 @@ set_target_properties(Timer PROPERTIES FOLDER "Maho/Plugins/Engine")
 
 set_target_properties(Unicode PROPERTIES FOLDER "Maho/Plugins/Common")
 
-set_target_properties(DynWorld PROPERTIES FOLDER "Project/Plugins")
+set_target_properties(Render PROPERTIES FOLDER "Maho/Plugins/Engine")
 
-set_target_properties(DynRender PROPERTIES FOLDER "Project/Plugins")
-
-set_target_properties(GameInput PROPERTIES FOLDER "Project/Plugins")
+set_target_properties(ClearFeature PROPERTIES FOLDER "Project/Plugins")
 

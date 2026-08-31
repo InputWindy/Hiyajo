@@ -45,18 +45,36 @@ public:                                                  \
 namespace Maho
 {
 
-class FEngineBase;
 class FLayerBase;
 
 /**
- * Stage dispatch - a free function template specialized per stage interface.
- * The TaskGraph calls Invoke<TStage>(Layer, Engine) at runtime; each stage
- * interface gets a full specialization in Engine.h that casts the layer to the
- * interface and calls its stage method. This replaces the per-pipeline Invoke
- * member: the pipeline class is gone, the stage list is a plain TTypeList.
+ * Stage dispatch - a free function template specialized per (stage, context)
+ * pair. FLayerTaskGraph calls Invoke<TStage>(Layer, Context) at runtime; each
+ * stage interface gets full specializations per context type (e.g.
+ * Invoke<IInit, FEngineBase> in Engine.h, Invoke<IBeginRender, FRender> in
+ * Render.h). A layer that does not implement the interface silently skips.
  */
-template <typename TStage>
-void Invoke(FLayerBase* Layer, FEngineBase& Engine);
+template <typename TStage, typename TContext>
+void Invoke(FLayerBase* Layer, TContext& Context);
+
+/**
+ * Stage dispatch specialization sugar - full-specializes Invoke<TStage,
+ * TContext> to dynamic_cast the layer to CastType and call Method(Context).
+ * Each context type (FEngineBase, FRender, ...) declares its own specializations
+ * for the stage interfaces it schedules.
+ *
+ *   MAHO_DECLARE_STAGE_DISPATCH(FEngineBase, IInit, IInit, Initialize)
+ *   // => Invoke<IInit, FEngineBase>(Layer, Engine) -> cast IInit -> Initialize(Engine)
+ */
+#define MAHO_DECLARE_STAGE_DISPATCH(ContextType, StageType, CastType, Method) \
+template <>                                                                    \
+inline void Invoke<StageType, ContextType>(FLayerBase* Layer, ContextType& Context) \
+{                                                                              \
+	if (auto* S = dynamic_cast<CastType*>(Layer))                              \
+	{                                                                          \
+		S->Method(Context);                                                     \
+	}                                                                          \
+}
 
 // -- 1. FLayer: anonymous layer anchor ----------------------------------------------
 

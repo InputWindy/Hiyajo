@@ -102,6 +102,13 @@ public:
 	[[nodiscard]] virtual FRHIFramebuffer* CreateFramebuffer(const FRHIFramebufferDesc& Desc) = 0;
 	virtual void DestroyFramebuffer(FRHIFramebuffer* Framebuffer) = 0;
 
+	// Swapchain access (WSI) - the swapchain lives inside the device; these
+	// read-only accessors let the caller render into the backbuffer framebuffer
+	// through the same BeginRenderPass path as any off-screen target.
+	[[nodiscard]] virtual FRHIFramebuffer* GetBackBufferFramebuffer(std::uint32_t ImageIndex) = 0;
+	[[nodiscard]] virtual FRHIRenderPass* GetSwapchainRenderPass() = 0;
+	[[nodiscard]] virtual std::uint32_t GetCurrentBackBufferIndex() const = 0;
+
 	// GPU queries (occlusion / timestamp)
 	[[nodiscard]] virtual FRHIQueryPool* CreateQueryPool(ERHIQueryType Type, std::uint32_t QueryCount) = 0;
 	virtual void DestroyQueryPool(FRHIQueryPool* Pool) = 0;

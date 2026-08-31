@@ -1,12 +1,9 @@
 #include <Engine/Engine.h>
 
-#include <Core/Fatal.h>
 #include <CLI/CLI.hpp>
 
 #include <algorithm>
-#include <functional>
 #include <string>
-#include <utility>
 #include <vector>
 
 namespace Maho
@@ -88,11 +85,12 @@ void FEngineBase::ParseCommandLine(int Argc, char** Argv)
 
 	try
 	{
-		App.parse(Normalized);
+		App.parse(Argc, Argv);
 	}
-	catch (const CLI::ParseError&)
+	catch (const CLI::ParseError& E)
 	{
-		// Don't abort on bad input - read back whatever parsed.
+		// Parse errors are non-fatal: log + continue with whatever was parsed.
+		(void)E;
 	}
 
 	// Read the parsed results back into the KV store.
@@ -135,7 +133,7 @@ int FEngineBase::Main()
 	while (true)
 	{
 		EngineGraph.Flush();
-		FlushPendingUpdatePipelines();
+		FlushPendingUpdatePipelines<IPreInit, IInit, IPostInit>();
 
 		EngineGraph.Init(Select<IBeginFrame, ITick, IEndFrame, IExit>());
 		if (!EngineGraph.Compile())
@@ -175,242 +173,6 @@ int FEngineBase::Main()
 void FEngineBase::RequestExit()
 {
 	bIsShuttingDown.store(true, std::memory_order_release);
-}
-
-void FEngineBase::Install(FLayerBase* Pipeline)
-{
-	PendingAdded.push_back(Pipeline);
-}
-
-void FEngineBase::Install(std::string_view DllPath, const char* FactorySymbol)
-{
-	auto Asm = std::make_unique<FAssembly>(DllPath);
-	if (!Asm->IsLoaded())
-	{
-		return;
-	}
-
-	using CreateFn = FLayerBase* (*)();
-	auto Create = Asm->GetProcAs<CreateFn>(FactorySymbol);
-	if (Create == nullptr)
-	{
-		return;
-	}
-
-	auto Layer = std::unique_ptr<FLayerBase>(Create());
-	if (!Layer)
-	{
-		return;
-	}
-
-	Install(Layer.get());
-	Modules.push_back(std::move(Asm));
-	Features.push_back(std::move(Layer));
-}
-
-void FEngineBase::RequestUninstall(FLayerBase* Pipeline)
-{
-	if (Pipeline != nullptr)
-	{
-		PendingRemoveRequests.insert(Pipeline);
-	}
-}
-
-void FEngineBase::TryUninstall(std::string_view LayerName)
-{
-	for (FLayerBase* L : Pipelines)
-	{
-		if (L->GetName() == LayerName)
-		{
-			RequestUninstall(L);
-			return;
-		}
-	}
-}
-
-void FEngineBase::FlushPendingUpdatePipelines()
-{
-	// 1. Apply pending installs: append to Pipelines, then drive the init pipeline
-	//    over the newly added layers only (their Initialize/PreInit/PostInit run now).
-	if (!PendingAdded.empty())
-	{
-		std::vector<FLayerBase*> NewLayers;
-		NewLayers.reserve(PendingAdded.size());
-		for (FLayerBase* P : PendingAdded)
-		{
-			Pipelines.push_back(P);
-			NewLayers.push_back(P);
-		}
-		PendingAdded.clear();
-
-		using FInitStages = TTypeList<IPreInit, IInit, IPostInit>;
-		FLayerTaskGraph<FInitStages, FEngineBase> InitGraph(Pool, *this);
-		InitGraph.Init(std::move(NewLayers));
-		if (!InitGraph.Compile())
-		{
-			ReportFatal("FEngineBase::FlushPendingUpdatePipelines: install init pipeline Compile failed");
-		}
-		InitGraph.Execute();
-		InitGraph.Flush();
-	}
-
-	// 2. Apply pending uninstalls: min-heap greedy unload drives the shutdown
-	//    pipeline over the unloadable layers, then removes + deletes them.
-	FlushUnload();
-}
-
-void FEngineBase::DeleteUnloaded(FLayerBase* Layer)
-{
-	for (std::size_t I = 0; I < Features.size(); ++I)
-	{
-		if (Features[I].get() == Layer)
-		{
-			// Delete the feature first (virtual dtor lives in the DLL), then release the DLL.
-			Features[I].reset();
-			if (I < Modules.size())
-			{
-				Modules[I].reset();
-			}
-			return;
-		}
-	}
-}
-
-void FEngineBase::RebuildReverseDeps()
-{
-	ReverseDepCount.clear();
-
-	// Initialize all active layer names to 0 (layers with no dependencies and no dependents are included too).
-	for (FLayerBase* L : Pipelines)
-	{
-		ReverseDepCount[std::string(L->GetName())] = 0;
-	}
-	for (FLayerBase* L : PendingAdded)
-	{
-		ReverseDepCount[std::string(L->GetName())] = 0;
-	}
-
-	// Accumulate: every dependency declared by an active layer -> depended-on count +1.
-	for (FLayerBase* L : Pipelines)
-	{
-		for (const auto& [Stage, Deps] : L->GetDependencies())
-		{
-			(void)Stage;
-			for (const auto& Dep : Deps)
-			{
-				ReverseDepCount[Dep.Name] += 1;
-			}
-		}
-	}
-	for (FLayerBase* L : PendingAdded)
-	{
-		for (const auto& [Stage, Deps] : L->GetDependencies())
-		{
-			(void)Stage;
-			for (const auto& Dep : Deps)
-			{
-				ReverseDepCount[Dep.Name] += 1;
-			}
-		}
-	}
-}
-
-void FEngineBase::FlushUnload()
-{
-	if (PendingRemoveRequests.empty())
-	{
-		return;
-	}
-	RebuildReverseDeps();
-
-	// name -> active layer pointer (only Pipelines; PendingAdded was already applied before this function).
-	std::map<std::string, FLayerBase*> ByName;
-	for (FLayerBase* L : Pipelines)
-	{
-		ByName[std::string(L->GetName())] = L;
-	}
-
-	// Min-heap: only holds layers "already requested for unload" (depended-on count, name).
-	using HeapEntry = std::pair<int, std::string>;
-	auto Cmp = [](const HeapEntry& A, const HeapEntry& B)
-	{
-		return A.first > B.first;   // min-heap
-	};
-	std::priority_queue<HeapEntry, std::vector<HeapEntry>, decltype(Cmp)> Heap(Cmp);
-	for (FLayerBase* L : PendingRemoveRequests)
-	{
-		const std::string Name = std::string(L->GetName());
-		Heap.push({ ReverseDepCount[Name], Name });
-	}
-
-	// Greedy pass: collect every safely unloadable layer in dependency-safe order.
-	std::vector<FLayerBase*> ToUnload;
-	while (!Heap.empty())
-	{
-		const auto [Count, Name] = Heap.top();
-		Heap.pop();
-
-		// Stale entry: the count was already updated by an earlier pop.
-		if (ReverseDepCount[Name] != Count)
-		{
-			continue;
-		}
-		auto It = ByName.find(Name);
-		if (It == ByName.end())
-		{
-			continue;   // not in the active set (already unloaded).
-		}
-		FLayerBase* Layer = It->second;
-		if (!PendingRemoveRequests.count(Layer))
-		{
-			continue;   // already processed.
-		}		if (Count > 0)
-		{
-			break;   // depended on -> the heap only grows after this, abandon remaining requests.
-		}
-		ByName.erase(Name);
-		PendingRemoveRequests.erase(Layer);
-		ToUnload.push_back(Layer);
-
-		// Update the depended-on counts of Layer's dependents (-1) and push them
-		// back into the heap to trigger chained unload.
-		for (const auto& [Stage, Deps] : Layer->GetDependencies())
-		{
-			(void)Stage;
-			for (const auto& Dep : Deps)
-			{
-				const int NewCount = ReverseDepCount[Dep.Name] - 1;
-				ReverseDepCount[Dep.Name] = NewCount;
-				Heap.push({ NewCount, Dep.Name });
-			}
-		}
-	}
-
-	// Abandon the remaining requests of this batch that cannot be safely unloaded (no cross-frame carry-over).
-	PendingRemoveRequests.clear();
-
-	if (ToUnload.empty())
-	{
-		return;
-	}
-
-	// Drive the shutdown pipeline over the unloadable layers (their Shutdown
-	// stages run in dependency order), then remove + delete them.
-	using FShutdownStages = TTypeList<IPreShutdown, IShutdown, IPostShutdown>;
-	FLayerTaskGraph<FShutdownStages, FEngineBase> ShutdownGraph(Pool, *this);
-	ShutdownGraph.Init(std::move(ToUnload));
-	if (!ShutdownGraph.Compile())
-	{
-		ReportFatal("FEngineBase::FlushUnload: shutdown pipeline Compile failed");
-	}
-	ShutdownGraph.Execute();
-	ShutdownGraph.Flush();
-
-	for (FLayerBase* L : ToUnload)
-	{
-		Pipelines.erase(std::remove(Pipelines.begin(), Pipelines.end(), L), Pipelines.end());
-		DeleteUnloaded(L);
-	}
 }
 
 bool FEngineBase::Has(std::string_view Key) const

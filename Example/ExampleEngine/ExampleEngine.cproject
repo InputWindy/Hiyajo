@@ -76,15 +76,11 @@
       "Enabled": true
     },
     {
-      "Name": "DynWorld",
+      "Name": "Render",
       "Enabled": true
     },
     {
-      "Name": "DynRender",
-      "Enabled": true
-    },
-    {
-      "Name": "GameInput",
+      "Name": "ClearFeature",
       "Enabled": true
     }
   ]

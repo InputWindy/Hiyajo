@@ -1,9 +1,9 @@
 {
   "FileVersion": 1,
-  "Name": "DynWorld",
+  "Name": "Render",
   "Description": "",
   "Dependencies": [
-    "ExampleEngine",
-    "Log"
+    "RHI",
+    "Platform"
   ]
 }

@@ -6,14 +6,13 @@ namespace Maho
 {
 void FExampleEngine::PreMain()
 {
-	// The engine service layer (Log) and the input driver layer are installed
-	// up front; DynLog/DynWorld/DynRender are dynamically installed per-frame
-	// by GameInput's Tick.
+	// Engine service layers installed up front; the window drives the engine
+	// loop and FPlatform requests exit when the window is closed.
 	Install("Log.dll");
-	Install("GameInput.dll");
 	Install("Platform.dll");
 	Install("Resource.dll");
 	Install("Script.dll");
+	Install("Render.dll");
 }
 
 void FExampleEngine::PostMain()

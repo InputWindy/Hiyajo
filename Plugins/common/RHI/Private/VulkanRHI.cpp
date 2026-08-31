@@ -49,11 +49,6 @@ constexpr const char* GDeviceExtensions[] =
 	VK_KHR_SWAPCHAIN_EXTENSION_NAME,
 	VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME,
 	VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME,
-	// Ray tracing (Vulkan 1.2-era KHR; core in 1.3 but these names stay valid).
-	VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME,
-	VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME,
-	VK_KHR_RAY_QUERY_EXTENSION_NAME,
-	VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME,
 };
 
 [[nodiscard]] bool CheckVkResult(VkResult Result, const char* Context)
@@ -257,6 +252,14 @@ void FVulkanRHI::Shutdown()
 	}
 
 	DestroySwapchainResources();
+
+	// Free the non-owning render pass wrapper (skips Vk destroy; the Vk render
+	// pass is destroyed below).
+	if (SwapchainRenderPassRHI != nullptr)
+	{
+		delete SwapchainRenderPassRHI;
+		SwapchainRenderPassRHI = nullptr;
+	}
 
 	if (Device != VK_NULL_HANDLE && RenderPass != VK_NULL_HANDLE)
 	{
@@ -840,28 +843,8 @@ bool FVulkanRHI::CreateLogicalDevice()
 	Features12.shaderUniformBufferArrayNonUniformIndexing = VK_TRUE;
 	Features12.shaderStorageBufferArrayNonUniformIndexing = VK_TRUE;
 
-	// Ray tracing (KHR extensions).
-	VkPhysicalDeviceAccelerationStructureFeaturesKHR AccelStructure{};
-	AccelStructure.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR;
-	AccelStructure.accelerationStructure = VK_TRUE;
-	AccelStructure.accelerationStructureCaptureReplay = VK_FALSE;
-	AccelStructure.accelerationStructureIndirectBuild = VK_TRUE;
-	AccelStructure.accelerationStructureHostCommands = VK_FALSE;
-	AccelStructure.descriptorBindingAccelerationStructureUpdateAfterBind = VK_TRUE;
-
-	VkPhysicalDeviceRayTracingPipelineFeaturesKHR RayTracingPipeline{};
-	RayTracingPipeline.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR;
-	RayTracingPipeline.rayTracingPipeline = VK_TRUE;
-	RayTracingPipeline.rayTracingPipelineShaderGroupHandleCaptureReplay = VK_FALSE;
-	RayTracingPipeline.rayTracingPipelineTraceRaysIndirect = VK_TRUE;
-
-	VkPhysicalDeviceRayQueryFeaturesKHR RayQuery{};
-	RayQuery.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR;
-	RayQuery.rayQuery = VK_TRUE;
-
-	AccelStructure.pNext = &RayTracingPipeline;
-	RayTracingPipeline.pNext = &RayQuery;
-	Features12.pNext = &AccelStructure;
+	// Ray tracing is optional; enable it only when the KHR extensions were
+	// requested. Skipped for now (device creation must not fail on optional RT).
 
 	Features11.pNext = &Features12;
 	DescriptorIndexing.pNext = &Features11;
@@ -952,6 +935,14 @@ bool FVulkanRHI::CreateLogicalDevice()
 
 void FVulkanRHI::DestroySwapchainResources()
 {
+	// Free the non-owning RHI wrappers first (they skip Vk destroy; the swapchain
+	// frees the Vk handles below).
+	for (FRHIFramebuffer* FB : SwapchainFramebufferRHI)
+	{
+		delete FB;
+	}
+	SwapchainFramebufferRHI.clear();
+
 	if (Device != VK_NULL_HANDLE)
 	{
 		for (VkFramebuffer Framebuffer : SwapchainFramebuffers)
@@ -1077,6 +1068,15 @@ bool FVulkanRHI::CreateSwapchain()
 			Capabilities.maxImageExtent.height);
 	}
 
+	// A hidden / not-yet-mapped window reports a 0 extent; fall back to the
+	// requested framebuffer size so vkCreateSwapchainKHR does not fail with
+	// VK_ERROR_INITIALIZATION_FAILED.
+	if (SwapchainExtent.width == 0 || SwapchainExtent.height == 0)
+	{
+		SwapchainExtent.width = static_cast<std::uint32_t>(FramebufferWidth);
+		SwapchainExtent.height = static_cast<std::uint32_t>(FramebufferHeight);
+	}
+
 	const int ExtraImages = (std::max)(0, GCVarSwapchainExtraImages.GetValue());
 	std::uint32_t ImageCount = Capabilities.minImageCount + static_cast<std::uint32_t>(ExtraImages);
 	if (Capabilities.maxImageCount > 0 && ImageCount > Capabilities.maxImageCount)
@@ -1114,6 +1114,17 @@ bool FVulkanRHI::CreateSwapchain()
 
 	if (!CheckVkResult(vkCreateSwapchainKHR(Device, &CreateInfo, nullptr, &Swapchain), "vkCreateSwapchainKHR"))
 	{
+		Swapchain = VK_NULL_HANDLE;
+		MAHO_LOG_CORE_ERROR(
+			"vkCreateSwapchainKHR inputs: format={} colorspace={} extent={}x{} images={} presentMode={} curExtent={}x{} min={}x{} max={}x{}",
+			static_cast<int>(CreateInfo.imageFormat),
+			static_cast<int>(CreateInfo.imageColorSpace),
+			CreateInfo.imageExtent.width, CreateInfo.imageExtent.height,
+			CreateInfo.minImageCount,
+			static_cast<int>(CreateInfo.presentMode),
+			Capabilities.currentExtent.width, Capabilities.currentExtent.height,
+			Capabilities.minImageExtent.width, Capabilities.minImageExtent.height,
+			Capabilities.maxImageExtent.width, Capabilities.maxImageExtent.height);
 		return false;
 	}
 
@@ -1238,6 +1249,18 @@ bool FVulkanRHI::CreateFramebuffers()
 	}
 
 	MAHO_LOG_CORE_INFO("Vulkan framebuffers created ({})", SwapchainFramebuffers.size());
+
+	// Non-owning RHI views of the swapchain framebuffers (the swapchain owns the
+	// Vk handles; these wrappers skip destroy and are only for BeginRenderPass).
+	SwapchainFramebufferRHI.resize(SwapchainFramebuffers.size());
+	for (std::size_t Index = 0; Index < SwapchainFramebuffers.size(); ++Index)
+	{
+		SwapchainFramebufferRHI[Index] = new FVulkanFramebuffer(Device, SwapchainFramebuffers[Index], /*bOwnsHandle=*/false);
+	}
+	if (SwapchainRenderPassRHI == nullptr)
+	{
+		SwapchainRenderPassRHI = new FVulkanRenderPass(Device, RenderPass);
+	}
 	return true;
 }
 
@@ -3048,6 +3071,21 @@ IDynamicRHI* FRHIFactory::Create(ERHIBackend Backend)
 
 	MAHO_LOG_CORE_ERROR("FRHIFactory::Create: unsupported ERHIBackend ({})", static_cast<std::uint32_t>(Backend));
 	return nullptr;
+}
+
+FRHIFramebuffer* FVulkanRHI::GetBackBufferFramebuffer(std::uint32_t ImageIndex)
+{
+	return (ImageIndex < SwapchainFramebufferRHI.size()) ? SwapchainFramebufferRHI[ImageIndex] : nullptr;
+}
+
+FRHIRenderPass* FVulkanRHI::GetSwapchainRenderPass()
+{
+	return SwapchainRenderPassRHI;
+}
+
+std::uint32_t FVulkanRHI::GetCurrentBackBufferIndex() const
+{
+	return CurrentImageIndex;
 }
 
 } // namespace Maho

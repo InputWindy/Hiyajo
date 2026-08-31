@@ -142,10 +142,10 @@ private:
 	{
 		if (Stage == std::type_index(typeid(TCurrent)))
 		{
-			// Free function dispatch: Invoke<TStage>(Layer, Engine) is specialized
-			// per stage interface in Engine.h. A layer that does not implement this
-			// stage interface silently skips (dynamic_cast inside the specialization).
-			Invoke<TCurrent>(Layer, Context);
+			// Free function dispatch: Invoke<TStage, TContext>(Layer, Context) is
+			// specialized per (stage, context) pair. A layer that does not implement
+			// this stage interface silently skips (dynamic_cast inside the specialization).
+			Invoke<TCurrent, TContext>(Layer, Context);
 			return;
 		}
 		if constexpr (sizeof...(TRest) > 0)

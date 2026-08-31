@@ -84,6 +84,11 @@ public:
 	[[nodiscard]] virtual FRHIFramebuffer* CreateFramebuffer(const FRHIFramebufferDesc& Desc) override;
 	virtual void DestroyFramebuffer(FRHIFramebuffer* Framebuffer) override;
 
+	// Swapchain access (WSI)
+	[[nodiscard]] virtual FRHIFramebuffer* GetBackBufferFramebuffer(std::uint32_t ImageIndex) override;
+	[[nodiscard]] virtual FRHIRenderPass* GetSwapchainRenderPass() override;
+	[[nodiscard]] virtual std::uint32_t GetCurrentBackBufferIndex() const override;
+
 	[[nodiscard]] virtual FRHIQueryPool* CreateQueryPool(ERHIQueryType Type, std::uint32_t QueryCount) override;
 	virtual void DestroyQueryPool(FRHIQueryPool* Pool) override;
 	virtual bool GetQueryPoolResults(
@@ -207,6 +212,11 @@ private:
 	std::vector<VkImage> SwapchainImages;
 	std::vector<VkImageView> SwapchainImageViews;
 	std::vector<VkFramebuffer> SwapchainFramebuffers;
+
+	// Non-owning RHI views of the swapchain framebuffers + render pass (the
+	// swapchain owns the Vk handles; these are only for BeginRenderPass).
+	std::vector<FRHIFramebuffer*> SwapchainFramebufferRHI;
+	FRHIRenderPass* SwapchainRenderPassRHI = nullptr;
 
 	VkRenderPass RenderPass = VK_NULL_HANDLE;
 

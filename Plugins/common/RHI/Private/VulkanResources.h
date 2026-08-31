@@ -471,9 +471,10 @@ private:
 class FVulkanRenderPass final : public FRHIRenderPass
 {
 public:
-	FVulkanRenderPass(VkDevice InDevice, VkRenderPass InPass)
+	FVulkanRenderPass(VkDevice InDevice, VkRenderPass InPass, bool bInOwnsHandle = true)
 		: Device(InDevice)
 		, Pass(InPass)
+		, bOwnsHandle(bInOwnsHandle)
 	{
 	}
 
@@ -487,14 +488,16 @@ public:
 private:
 	VkDevice Device = VK_NULL_HANDLE;
 	VkRenderPass Pass = VK_NULL_HANDLE;
+	bool bOwnsHandle = true;   // false for the swapchain render pass (swapchain frees it)
 };
 
 class FVulkanFramebuffer final : public FRHIFramebuffer
 {
 public:
-	FVulkanFramebuffer(VkDevice InDevice, VkFramebuffer InFB)
+	FVulkanFramebuffer(VkDevice InDevice, VkFramebuffer InFB, bool bInOwnsHandle = true)
 		: Device(InDevice)
 		, FB(InFB)
+		, bOwnsHandle(bInOwnsHandle)
 	{
 	}
 
@@ -508,6 +511,7 @@ public:
 private:
 	VkDevice Device = VK_NULL_HANDLE;
 	VkFramebuffer FB = VK_NULL_HANDLE;
+	bool bOwnsHandle = true;   // false for swapchain framebuffers (swapchain frees them)
 };
 
 } // namespace Maho

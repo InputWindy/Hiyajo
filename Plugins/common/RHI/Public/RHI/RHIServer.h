@@ -116,6 +116,13 @@ struct IRHI
 	[[nodiscard]] virtual FRHIFramebuffer* CreateFramebuffer(const FRHIFramebufferDesc& Desc) = 0;
 	virtual void DestroyFramebuffer(FRHIFramebuffer* Framebuffer) = 0;
 
+	// Swapchain access (WSI) - the swapchain lives inside the RHI; read-only
+	// accessors let the caller render into the backbuffer framebuffer through
+	// the same BeginRenderPass path as any off-screen target.
+	[[nodiscard]] virtual FRHIFramebuffer* GetBackBufferFramebuffer(std::uint32_t ImageIndex) = 0;
+	[[nodiscard]] virtual FRHIRenderPass* GetSwapchainRenderPass() = 0;
+	[[nodiscard]] virtual std::uint32_t GetCurrentBackBufferIndex() const = 0;
+
 	// GPU queries (occlusion / timestamp)
 	[[nodiscard]] virtual FRHIQueryPool* CreateQueryPool(ERHIQueryType Type, std::uint32_t QueryCount) = 0;
 	virtual void DestroyQueryPool(FRHIQueryPool* Pool) = 0;
@@ -173,25 +180,30 @@ struct IRHI
 class IDynamicRHI;
 
 /**
- * RHI layer - backend-agnostic GPU device surface (engine Common, a Layer node).
- * Hosts the IDynamicRHI device and exposes the IRHI capability surface.
- * Command recording is parallel via EnqueueTask (thread pool); queue submits
- * and frame primitives are direct calls - the caller (RDG) keeps them serial.
- * Backend-agnostic - higher layers (RDG / render plugin) never touch a
- * concrete backend type.
- *
- * The public capability is IRHI: the parent layer (e.g. FRenderThread) picks it
- * up via Query().Select<IRHI>() and drives frames without knowing the concrete
- * layer. The device itself (IDynamicRHI) stays private to this DLL.
+ * RHI - backend-agnostic GPU device surface, a RENDER SERVER (FThreadedServer),
+ * NOT a scheduled layer. Hosts the IDynamicRHI device and exposes the IRHI
+ * capability surface. The render owner (FRender) holds it and interacts only
+ * through the IRHI command surface (EnqueueTask / Submit / frame primitives) -
+ * the render thread is the server thread. Command recording is parallel via
+ * EnqueueTask (thread pool); queue submits and frame primitives are direct
+ * calls - the caller (RDG) keeps them serial. Backend-agnostic - higher layers
+ * (RDG / render plugin) never touch a concrete backend type. The device itself
+ * (IDynamicRHI) stays private to this DLL.
  */
 class FRHI final
-	: public FLayer<IPreInit, IInit, IPostInit, IBeginFrame, ITick, IEndFrame, IExit, IPreShutdown, IShutdown, IPostShutdown>
+	: public FThreadedServer
 	, public IRHI
 {
 public:
-	MAHO_DECLARE_LAYER(FRHI, "RHI.dll");
-
+	FRHI();
 	virtual ~FRHI() override;
+
+	/** Bring the render server up (start the thread) + initialize the device. */
+	bool Initialize(void* NativeWindowHandle, int Width, int Height,
+		ERHIBackend Backend = ERHIBackend::Vulkan);
+
+	/** Tear the device + server down (idempotent). */
+	void ShutdownRHI();
 
 	/**
 	 * Record commands into a caller-owned command list on a thread-pool worker
@@ -264,6 +276,11 @@ public:
 	[[nodiscard]] FRHIFramebuffer* CreateFramebuffer(const FRHIFramebufferDesc& Desc) override;
 	void DestroyFramebuffer(FRHIFramebuffer* Framebuffer) override;
 
+	// -- IRHI swapchain accessors (forward to the private IDynamicRHI) --
+	[[nodiscard]] FRHIFramebuffer* GetBackBufferFramebuffer(std::uint32_t ImageIndex) override;
+	[[nodiscard]] FRHIRenderPass* GetSwapchainRenderPass() override;
+	[[nodiscard]] std::uint32_t GetCurrentBackBufferIndex() const override;
+
 	[[nodiscard]] FRHIQueryPool* CreateQueryPool(ERHIQueryType Type, std::uint32_t QueryCount) override;
 	void DestroyQueryPool(FRHIQueryPool* Pool) override;
 	bool GetQueryPoolResults(
@@ -292,30 +309,6 @@ public:
 		std::uint32_t* OutHitStride,
 		std::uint32_t* OutMissOffset,
 		std::uint32_t* OutMissStride) override;
-
-private:
-	FRHI() = default;
-
-	// -- engine pipeline stages (scheduler-only) --
-	// BeginFrame/EndFrame coexist with IRHI frame-primitive overloads (engine
-	// stage takes FEngineBase&, IRHI frame primitives take none); Tick does lazy
-	// init: query Platform through GetPlatform() to get the native window.
-	void PreInitialize(FEngineBase&) override {}
-	void Initialize(FEngineBase& Engine) override;
-	void PostInitialize(FEngineBase&) override {}
-	void Shutdown(FEngineBase& Engine) override;
-	void BeginFrame(FEngineBase& Engine) override;
-	void Tick(FEngineBase& Engine) override;
-	void EndFrame(FEngineBase& Engine) override;
-	void RequestExit(FEngineBase& Engine) override;
-	void PreShutdown(FEngineBase&) override {}
-	void PostShutdown(FEngineBase&) override {}
-
-	/** Bind the RHI device. */
-	[[nodiscard]] bool InitializeRHI(void* NativeWindowHandle, int Width, int Height,
-		ERHIBackend Backend = ERHIBackend::Vulkan);
-	/** Tear down the device (idempotent). */
-	void ShutdownRHI();
 
 private:
 	std::unique_ptr<IDynamicRHI> RHI;

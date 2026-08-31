@@ -1,9 +1,0 @@
-{
-  "FileVersion": 1,
-  "Name": "GameInput",
-  "Description": "",
-  "Dependencies": [
-    "ExampleEngine",
-    "Log"
-  ]
-}

@@ -4,7 +4,13 @@
 #include <Log.h>
 
 #if !defined(MAHO_HEADLESS)
+#	if defined(_WIN32)
+#		define GLFW_EXPOSE_NATIVE_WIN32
+#	endif
 #	include <GLFW/glfw3.h>
+#	if defined(_WIN32)
+#		include <GLFW/glfw3native.h>
+#	endif
 #endif
 
 #if defined(__linux__)
@@ -66,7 +72,12 @@ namespace
 
 		[[nodiscard]] FNativeSurface GetNativeWindow() const override
 		{
+#if defined(_WIN32)
+			// The RHI needs the real OS window handle (HWND), not the GLFWwindow*.
+			return static_cast<FNativeSurface>(glfwGetWin32Window(Window));
+#else
 			return static_cast<FNativeSurface>(Window);
+#endif
 		}
 
 		void PollEvents() { glfwPollEvents(); }

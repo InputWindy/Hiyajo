@@ -139,7 +139,7 @@ FVulkanDescriptorPool::~FVulkanDescriptorPool()
 
 FVulkanRenderPass::~FVulkanRenderPass()
 {
-	if (Device != VK_NULL_HANDLE && Pass != VK_NULL_HANDLE)
+	if (bOwnsHandle && Device != VK_NULL_HANDLE && Pass != VK_NULL_HANDLE)
 	{
 		vkDestroyRenderPass(Device, Pass, nullptr);
 		Pass = VK_NULL_HANDLE;
@@ -148,7 +148,7 @@ FVulkanRenderPass::~FVulkanRenderPass()
 
 FVulkanFramebuffer::~FVulkanFramebuffer()
 {
-	if (Device != VK_NULL_HANDLE && FB != VK_NULL_HANDLE)
+	if (bOwnsHandle && Device != VK_NULL_HANDLE && FB != VK_NULL_HANDLE)
 	{
 		vkDestroyFramebuffer(Device, FB, nullptr);
 		FB = VK_NULL_HANDLE;

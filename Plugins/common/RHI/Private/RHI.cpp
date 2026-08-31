@@ -56,87 +56,28 @@ static ConsoleVariable::TAutoConsoleVariable<std::string> GCVarRHIBackend(
 
 // -- lifecycle ---------------------------------------------------------------
 
+FRHI::FRHI() = default;
+
 FRHI::~FRHI() = default;
 
-void FRHI::Initialize(FEngineBase& Engine)
-{
-		// RHI bring-up is deferred to Tick: the native window comes from the
-		// Platform feature, queried through the engine - not from a singleton,
-	// not from launch args.
-	(void)Engine;
-}
-
-void FRHI::Shutdown(FEngineBase&)
-{
-	ShutdownRHI();
-	MAHO_LOG_CORE_INFO("FRHI: RHI shut down");
-}
-
-// -- engine loop stages (FEngineLayer) --
-
-void FRHI::Tick(FEngineBase& Engine)
-{
-	(void)Engine;
-
-	// Lazy bring-up: once a native window is available from the Platform
-	// feature, initialize the device with it.
-	if (RHI != nullptr)
-	{
-		return;   // already initialized
-	}
-
-	auto* Platform = Platform::GetPlatform();
-	if (Platform == nullptr)
-	{
-		return;   // Platform feature not installed yet
-	}
-
-	void* NativeWindow = Platform->GetNativeWindow();
-	if (NativeWindow == nullptr)
-	{
-		return;   // headless / window not created yet
-	}
-
-	const int Width = GCVarRHIWidth.GetValue();
-	const int Height = GCVarRHIHeight.GetValue();
-	const ERHIBackend Backend = BackendFromName(GCVarRHIBackend.GetValue());
-	InitializeRHI(NativeWindow, Width, Height, Backend);
-}
-
-void FRHI::BeginFrame(FEngineBase&)
-{
-	BeginFrame();
-}
-
-void FRHI::EndFrame(FEngineBase&)
-{
-	EndFrame();
-}
-
-void FRHI::RequestExit(FEngineBase&)
-{
-}
-
-// -- device bring-up / teardown ----------------------------------------------
-
-bool FRHI::InitializeRHI(void* NativeWindowHandle, int Width, int Height, ERHIBackend Backend)
+bool FRHI::Initialize(void* NativeWindowHandle, int Width, int Height, ERHIBackend Backend)
 {
 	if (!NativeWindowHandle)
 	{
-		MAHO_LOG_CORE_INFO("FRHI::InitializeRHI: headless; skipping RHI");
+		MAHO_LOG_CORE_INFO("FRHI::Initialize: headless; skipping RHI");
 		return true;
 	}
 
 	if (Width <= 0 || Height <= 0)
 	{
-		MAHO_LOG_CORE_ERROR("FRHI::InitializeRHI: invalid framebuffer {}x{}", Width, Height);
+		MAHO_LOG_CORE_ERROR("FRHI::Initialize: invalid framebuffer {}x{}", Width, Height);
 		return false;
 	}
 
 	RHI.reset(FRHIFactory::Create(Backend));
 	if (!RHI)
 	{
-		MAHO_LOG_CORE_ERROR("FRHI::InitializeRHI: FRHIFactory::Create failed");
+		MAHO_LOG_CORE_ERROR("FRHI::Initialize: FRHIFactory::Create failed");
 		return false;
 	}
 
@@ -148,10 +89,13 @@ bool FRHI::InitializeRHI(void* NativeWindowHandle, int Width, int Height, ERHIBa
 
 	if (!RHI->Initialize(Desc))
 	{
-		MAHO_LOG_CORE_ERROR("FRHI::InitializeRHI: backend initialize failed");
+		MAHO_LOG_CORE_ERROR("FRHI::Initialize: backend initialize failed");
 		RHI.reset();
 		return false;
 	}
+
+	// Start the render server thread.
+	FThreadedServer::Initialize();
 
 	MAHO_LOG_CORE_INFO("FRHI RHI ready ({}x{})", Width, Height);
 	return true;
@@ -159,12 +103,14 @@ bool FRHI::InitializeRHI(void* NativeWindowHandle, int Width, int Height, ERHIBa
 
 void FRHI::ShutdownRHI()
 {
-	if (!RHI)
+	// Stop the render server thread first (idempotent).
+	FThreadedServer::Shutdown();
+
+	if (RHI)
 	{
-		return;
+		RHI->Shutdown();
+		RHI.reset();
 	}
-	RHI->Shutdown();
-	RHI.reset();
 }
 
 // -- frame pipeline (server-thread ordered) ----------------------------------
@@ -530,6 +476,21 @@ void FRHI::DestroyFramebuffer(FRHIFramebuffer* Framebuffer)
 	{
 		RHI->DestroyFramebuffer(Framebuffer);
 	}
+}
+
+FRHIFramebuffer* FRHI::GetBackBufferFramebuffer(std::uint32_t ImageIndex)
+{
+	return RHI ? RHI->GetBackBufferFramebuffer(ImageIndex) : nullptr;
+}
+
+FRHIRenderPass* FRHI::GetSwapchainRenderPass()
+{
+	return RHI ? RHI->GetSwapchainRenderPass() : nullptr;
+}
+
+std::uint32_t FRHI::GetCurrentBackBufferIndex() const
+{
+	return RHI ? RHI->GetCurrentBackBufferIndex() : 0;
 }
 
 FRHIQueryPool* FRHI::CreateQueryPool(ERHIQueryType Type, std::uint32_t QueryCount)
