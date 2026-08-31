@@ -1,18 +1,21 @@
-# Engine (Private)
+# Engine（Private）
 
 ## Code Files
 
-*(none -- the Engine layer is fully header-only, no .cpp implementation)*
+- [Engine.cpp](Engine.cpp) — FEngineBase 主循环 / 命令行解析 / 退出标志
+- [Layer.cpp](Layer.cpp) — FLayerBase 析构 / 运行时依赖声明
 
-## Notes
+## Concept -- Implementation
 
-`Engine/Layer.h` is pure templates + inline implementation (FLayerBase / FLayer / commands / DispatchInstance are all in the header). There is no Private-side compilation unit, so there is no implementation algorithm dictionary.
+Engine 层主体（`FLayerBase` / `FLayer` / `FLayerTaskGraph` / `LayerCollector`）是模板 + 内联实现，全在 `Source/Public/Engine/` 头文件里。Private 侧只有两个 cpp：
 
-- The cross-platform primitives the layer depends on (DLL loading, fatal errors) are in `Core`'s `Assembly.cpp` / `Fatal.cpp` -- see `../Core/CoreDoc.md`.
-- Parallel execution is in `Core/Schedulers.h` + `Core/ThreadPool.h` (header-only templates + inline).
+- **Engine.cpp**：`FEngineBase` 的非模板成员——命令行解析（CLI11）、`Main()` 主循环（Init 图 → Tick 循环 → Shutdown 图）、`RequestExit()`、KV 读取。
+- **Layer.cpp**：`FLayerBase` 的虚析构、`GetDependencies()`、运行时字符串寻址的 `AddDependency` 重载。
+
+逐函数伪代码见 [EngineAPI.md](EngineAPI.md)。
 
 ## Related Docs
 
-- [../../Public/Engine/EngineDoc.md](../../Public/Engine/EngineDoc.md) -- layer architecture (Public)
-- [../../Public/Core/CoreDoc.md](../../Public/Core/CoreDoc.md) -- Core infrastructure concepts
-- [../../PrivateDoc.md](../../PrivateDoc.md) -- Private layer
+- [EngineAPI.md](EngineAPI.md) — 实现算法字典
+- [公开 API](../../Public/Engine/EngineAPI.md) — 签名入口
+- [EngineDoc.md](../../Public/Engine/EngineDoc.md) — 层架构

@@ -1,36 +1,22 @@
-<!-- mahogen -->
-# Core
+# Core（Private）
 
 ## Code Files
 
-- [Assembly.cpp](Assembly.cpp)
-- [Fatal.cpp](Fatal.cpp)
-<!-- mahogen end -->
+- [Assembly.cpp](Assembly.cpp) — FAssembly（header-only，占位文件）
+- [Fatal.cpp](Fatal.cpp) — 致命路径 / 崩溃兜底
+- [TaskGraph.cpp](TaskGraph.cpp) — 依赖图调度器
 
 ## Implementation Algorithm Dictionary
 
-The engine core has implementations in only two `.cpp` files (the rest are all header-only templates).
+逐函数伪代码见 [CoreAPI.md](CoreAPI.md)（实现算法字典）：
 
-### Assembly.cpp -- Dynamic Loading Primitive
-
-The OS loading implementation of `FAssembly`.
-
-| Function | Description |
-|------|------|
-| `FAssembly(std::string_view Path)` | `Load` constructor |
-| `~FAssembly()` | `Unload` destructor |
-| `Load(Path)` | `LoadLibraryA` / `dlopen`, returns success |
-| `Unload()` | `FreeLibrary` / `dlclose`, idempotent |
-| `GetProcAddress(Name)` | `::GetProcAddress` / `dlsym`, returns `nullptr` on empty handle |
-
-### Fatal.cpp -- Crash Fallback
-
-| Function | Description |
-|------|------|
-| `ReportFatal(...)` | outputs fatal error + terminates process |
-| `InstallFatalHandlers()` | registers structured exception / signal handlers |
+| cpp | 函数 |
+|-----|------|
+| `Fatal.cpp` | `InstallFatalHandlers` / `ReportFatal` / `ReportError` / `TerminateHandler` / `AppendFatalLogFile` |
+| `TaskGraph.cpp` | `Init` / `Compile` / `Reset` / `Execute` / `SubmitTask` / `ExecuteNodeFor` / `Flush` |
 
 ## Related Docs
 
-- [../../Public/Core/CoreDoc.md](../../Public/Core/CoreDoc.md) -- root concepts (Public)
-- [../../PrivateDoc.md](../../PrivateDoc.md) -- Private layer
+- [CoreAPI.md](CoreAPI.md) — 实现算法字典
+- [公开 API](../../Public/Core/CoreAPI.md) — 签名入口
+- [CoreDoc.md](../../Public/Core/CoreDoc.md) — 概念

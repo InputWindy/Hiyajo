@@ -1,30 +1,20 @@
 # ExampleEngine - Maho Sample Project
 
-A minimal but complete Maho project showing the engine's core usage: **anonymous layers + stage pipeline + dependency-graph scheduling + dynamic install/uninstall + input-driven closed loop**.
+A minimal but complete Maho project showing the engine's core usage: **anonymous layers + stage pipeline + dependency-graph scheduling + dynamic install/uninstall + a real rendering subsystem**. It mounts the engine service layers and draws a triangle into a shared scene target through the render subsystem.
 
 ## What the Project Does
 
 ```
-tick 1-3 : GameInput dynamically installs DynLog -> DynWorld -> DynRender per frame
-tick 4   : three features scheduled in parallel (dependency-free stages run in parallel)
-tick 5   : GameInput requests uninstall of DynWorld (depended on by DynRender) -> dropped
-tick 6   : DynWorld still running (request was correctly rejected)
-tick 7   : GameInput requests uninstall of DynWorld + DynRender in the same frame -> dependent pops first, chain uninstall
-tick 8   : only DynLog remains
-tick 9   : GameInput calls RequestExit -> engine exits
+PreMain  : installs Log / Config / Platform / Resource / Script / Render (engine service layers)
+Frame    : FPlatform polls events (requests exit when the window closes)
+           FRender drives its own render features on a dedicated render thread:
+             Scene (BeginRender -> Render -> EndRender) -> Present
+           DrawTriangleFeature draws a triangle into Scene's color target after Scene's clear
+Exit     : closing the window -> FPlatform::RequestExit -> main loop ends -> symmetric shutdown
 ```
 
-Run log excerpt:
-
-```
-[info] FExampleEngine::Initialize - input-driven install/uninstall test
-[info] [DynLog] BeginFrame
-[info] [DynWorld] Tick (depends on DynLog.EndFrame)
-[info] [DynRender] EndFrame (depends on DynWorld.EndFrame)
-[info] [Frame] tick=4 (3 features running)
-[info] [Frame] tick=6 (World uninstall should be dropped)
-[info] [Frame] tick=8 (only Log should remain)
-```
+- **Scene** is a global render-resource feature: it owns the shared off-screen targets (`SceneColor` / `SceneDepth`), clears them in its `Render` stage, and blits the color target to the swapchain backbuffer in `Present`.
+- **DrawTriangleFeature** mounts only the `IRender` stage. It lazily compiles an embedded fullscreen-triangle GLSL (via `FShaderCompilerServer`), builds a Vulkan graphics pipeline with dynamic rendering, and draws after Scene's clear (declared dependency `Scene.Render`).
 
 ## Directory Structure
 
@@ -38,15 +28,15 @@ ExampleEngine/
   Plugins/
     ExampleEngine/                1 entry plugin
       Public/ExampleEngine.h      FExampleEngine : FEngineBase
-      Private/ExampleEngine.cpp   Initialize/Shutdown + CreateEngine bridge
+      Private/ExampleEngine.cpp   PreMain installs the engine service layers
       ExampleEngine.cplugin
-    GameInput/                    2 input driver layer (feature)
-      Public/GameInput.h          FGameInput : FEngineLayer
-      Private/GameInput.cpp       Tick drives install/uninstall/exit per frame
-      GameInput.cplugin
-    DynLog/                       3 log layer (feature, no dependencies)
-    DynWorld/                     4 world layer (feature, Tick depends on DynLog.EndFrame)
-    DynRender/                    5 render layer (feature, BeginFrame depends on DynWorld.EndFrame)
+    RenderFeature/                render feature plugins
+      Scene/                      2 scene feature (global render resources)
+        Public/Scene.h            FScene : FLayer<IBeginRender, IRender, IEndRender, IPresent>
+        Private/Scene.cpp         owns SceneColor/SceneDepth; clears + presents
+      DrawTriangleFeature/        3 triangle feature
+        Public/DrawTriangleFeature.h  FDrawTriangleFeature : FLayer<IRender>
+        Private/DrawTriangleFeature.cpp  compiles shaders, builds pipeline, draws 3 verts
 ```
 
 ## Per-File Code Walkthrough
@@ -58,169 +48,140 @@ ExampleEngine/
 ```cpp
 class FExampleEngine : public FEngineBase
 {
-MAHO_DECLARE_ENGINE(FExampleEngine, "ExampleEngine.dll");
+    MAHO_DECLARE_ENGINE(FExampleEngine, "ExampleEngine.dll");
 
 public:
-	void Initialize(int Argc, char** Argv) override;
-	void Shutdown() override;
+    void PreMain() override;
+    void PostMain() override;
 };
 ```
 
-**`Private/ExampleEngine.cpp`** - installs only the input layer, leaves the rest to it:
+**`Private/ExampleEngine.cpp`** - installs the engine service layers up front:
 
 ```cpp
-void FExampleEngine::Initialize(int Argc, char** Argv)
+void FExampleEngine::PreMain()
 {
-	FLog::Get().Initialize(Argc, Argv);
-	Install("GameInput.dll");   // install only the input driver layer
+    // Engine service layers installed up front; the window drives the engine
+    // loop and FPlatform requests exit when the window is closed.
+    Install("Log.dll");
+    Install("Config.dll");
+    Install("Platform.dll");
+    Install("Resource.dll");
+    Install("Script.dll");
+    Install("Render.dll");
 }
+```
 
-void FExampleEngine::Shutdown()
-{
-	FLog::Get().Shutdown();     // features + DLLs already released by FEngineBase::Shutdown
-}
-
+```cpp
 // C export bridge: EntryPoint looks it up by symbol name
 extern "C" MAHO_EXAMPLEENGINE_API Maho::FEngineBase* CreateEngine()
 {
-	return Maho::FExampleEngine::CreateEngine();
+    return Maho::FExampleEngine::CreateEngine();
 }
 ```
 
-### 2 Input Driver Layer (GameInput)
+### 2 Scene Feature (RenderFeature/Scene)
 
-**`Public/GameInput.h`** - an ordinary feature, on the same level as other layers:
+**`Public/Scene.h`** - the global render-resource feature, mounts all four render stages:
 
 ```cpp
-class FGameInput : public FEngineLayer
+namespace Maho::Scene
 {
-MAHO_DECLARE_LAYER(FGameInput);
-MAHO_DECLARE_FEATURE(FGameInput, "GameInput.dll");
+class FScene : public FLayer<IBeginRender, IRender, IEndRender, IPresent>
+{
+    MAHO_DECLARE_LAYER(FScene, "Scene.dll");
 
 public:
-	void BeginFrame() override;
-	void Tick() override;
-	void EndFrame() override;
+    FRDGTextureRef GetSceneColor() const { return SceneColor; }
+    FRDGTextureRef GetSceneDepth() const { return SceneDepth; }
 
-private:
-	int TickCount = 0;
+    void BeginRender(FRender& R) override;
+    void Render(FRender& R) override;
+    void EndRender(FRender& R) override;
+    void Present(FRender& R) override;
+    ...
+};
+
+MAHO_SCENE_API FScene* GetScene();   // global accessor (cross-DLL)
+}
+```
+
+Stage behavior:
+
+- `BeginRender` - ensure the shared targets exist at the current swapchain size (`EnsureTargets`), recreating them when the extent changes. Transitions fresh images to `RenderTarget` / `DepthWrite`.
+- `Render` - the scene-pass head: clears `SceneColor` (0.15/0.25/0.45) and `SceneDepth`, so later features draw with `LoadOp Load` on top.
+- `EndRender` - no-op.
+- `Present` - `R.Present(SceneColor)`: blits the color target to the swapchain backbuffer - the only touch point with the swapchain.
+
+### 3 DrawTriangleFeature (RenderFeature/DrawTriangleFeature)
+
+**`Public/DrawTriangleFeature.h`** - a render feature that mounts only `IRender`:
+
+```cpp
+class FDrawTriangleFeature : public FLayer<IRender>
+{
+    MAHO_DECLARE_LAYER(FDrawTriangleFeature, "DrawTriangleFeature.dll");
+public:
+    void Render(FRender& R) override;
+    ...
 };
 ```
 
-**`Private/GameInput.cpp`** - simulates user input in `Tick`, drives the engine:
+Its constructor declares the cross-feature dependency - draw after Scene's clear:
 
 ```cpp
-void FGameInput::Tick()
+FDrawTriangleFeature::FDrawTriangleFeature()
 {
-	++TickCount;
-	switch (TickCount)
-	{
-	case 1: Owner->Install("DynLog.dll");    break;   // install one per frame
-	case 2: Owner->Install("DynWorld.dll");   break;
-	case 3: Owner->Install("DynRender.dll");  break;
-	case 4: MAHO_LOG_CORE_INFO("[Frame] 3 features running"); break;
-	case 5: Owner->TryUninstall("FDynWorld"); break;   // depended on -> dropped
-	case 7:
-		Owner->TryUninstall("FDynWorld");              // two requests in the same frame
-		Owner->TryUninstall("FDynRender");             // dependent pops first, chain uninstall
-		break;
-	default: Owner->RequestExit();            break;   // exit the main loop
-	}
+    AddDependency(std::type_index(typeid(IRender)), "FScene", std::type_index(typeid(IRender)));
 }
 ```
 
-Key point: `Owner` is a member pointer of `FEngineLayer`, injected automatically by the engine as `FEngineBase*` at `Install` time. The feature schedules install/uninstall/exit through it - **the input strategy is a plugin, not engine built-in**.
+In `Render`, it lazily compiles embedded GLSL (`#version 460`, fullscreen triangle via `gl_VertexIndex`), builds VS/FS shader modules + an empty pipeline layout + a graphics pipeline (dynamic rendering, `RenderPass = nullptr`), then records `BeginRendering -> BindGraphicsPipeline -> SetViewport/SetScissor -> Draw(3) -> EndRendering` on the frame command list.
 
-### 3/4/5 Three Business Features
+## Render Subsystem as a Layer of Layers
 
-**DynLog** - no dependencies, three-stage tracing:
+`FRender` is the key recursive pattern:
 
-```cpp
-void FDynLog::BeginFrame() { MAHO_LOG_CORE_INFO("[DynLog] BeginFrame"); }
-void FDynLog::Tick()       { MAHO_LOG_CORE_INFO("[DynLog] Tick"); }
-void FDynLog::EndFrame()   { MAHO_LOG_CORE_INFO("[DynLog] EndFrame"); }
-```
+- to the **host engine** it is one ordinary layer (mounts `IInit`/`ITick`/... engine stages);
+- internally it is its own **`FLayerCollector<FRender>`** with a **dedicated render thread** (`FThreadedServer`);
+- it defines its **own stage interfaces** (`IBeginRender`/`IRender`/`IEndRender`/`IPresent`, all taking `FRender&`) and schedules render features with its own `FLayerTaskGraph`.
 
-**DynWorld** - declares a cross-DLL dependency in its constructor (string addressing):
-
-```cpp
-FDynWorld()
-{
-	// my Tick depends on DynLog's EndFrame
-	AddDependency(std::type_index(typeid(ITick)), "FDynLog", std::type_index(typeid(IEndFrame)));
-}
-```
-
-**DynRender** - same idea:
-
-```cpp
-FDynRender()
-{
-	// my BeginFrame depends on DynWorld's EndFrame
-	AddDependency(std::type_index(typeid(IBeginFrame)), "FDynWorld", std::type_index(typeid(IEndFrame)));
-}
-```
-
-Dependency chain: `DynLog.EndFrame <- DynWorld.Tick <- DynRender.BeginFrame`, enforced by `FLayerTaskGraph` topological sorting.
+The host engine only sees `FRender` as a layer; render features are installed and scheduled entirely inside it, pipelined across frames on the render thread.
 
 ## Runtime Anonymous Plugin Install
 
-The main DLL (`ExampleEngine.dll`) has **zero compile-time dependency** on the 4 features (DynLog/DynWorld/DynRender/GameInput) - no linking, no including their headers, no knowledge of their types. Everything is loaded by name at runtime.
-
-### codegen Dependency Layering
-
-`ExampleEngine.cproject` selects all plugins, but codegen splits them into two classes by plugin ownership:
-
-| Plugin type | Location | Main DLL compile-time | Runtime |
-|---------|------|--------------|--------|
-| **Engine service plugin** | `Hiyajo/Plugins/Common/` (Log/Platform/RHI...) | YES link + include (main DLL header directly `#include <Log.h>`) | static dependency with the main DLL |
-| **Project feature plugin** | this project's `Plugins/` (DynLog/GameInput...) | NO link, no include | YES `Install("Xxx.dll")` via FAssembly dynamic load |
-
-In the generated CMakeLists:
-
-```cmake
-# main DLL only links engine core + engine service plugins (no Dyn*/GameInput)
-target_link_libraries(ExampleEngine PUBLIC Maho Archive Paths ... Unicode)
-
-# EntryPoint depends on all (ensures feature DLLs are also built + copied to Binaries)
-add_dependencies(EntryPoint ExampleEngine ... DynLog DynWorld DynRender GameInput ...)
-```
+The main DLL (`ExampleEngine.dll`) has **zero compile-time dependency** on the render features (`Scene` / `DrawTriangleFeature`) - no linking, no including their headers, no knowledge of their types. Everything is loaded by name at runtime through `Install("Scene.dll")` / `Install("DrawTriangleFeature.dll")` (performed by the render plugin, or by the user's own feature).
 
 ### Anonymous Load Chain
 
 ```cpp
-Install("DynLog.dll")                    // 1 pass a name only; the main DLL does not know the FDynLog type
-  `- FAssembly("DynLog.dll")             // 2 LoadLibrary
+Install("Scene.dll")                     // 1 pass a name only; the main DLL does not know the FScene type
+  `- FAssembly("Scene.dll")              // 2 LoadLibrary
        `- GetProcAddress("CreateLayer")  // 3 look up the C export by symbol name
-            `- FDynLog::CreateLayer()    // 4 returns FEngineLayer* (base pointer)
-                 `- Install(Layer.get()) // 5 engine owns it + injects Owner
+            `- FScene::CreateLayer()     // 4 returns FLayerBase* (base pointer)
+                 `- Install(Layer.get()) // 5 owner records it; applied at next safe point
 ```
 
-The main DLL only ever sees the `FEngineLayer*` base pointer; the concrete `FDynLog` type only exists inside `DynLog.dll`. This is **real plugin isolation**:
-
-- the main DLL depends on no compile-time symbol of the feature
-- features can compile independently, be replaced independently, and be hot-swapped at runtime
-- the main DLL and features interact only through the `FLayerBase`/`FEngineLayer` base contract
+The main DLL only ever sees the `FLayerBase*` base pointer; the concrete `FScene` type only exists inside `Scene.dll`. Features interact only through the `FLayerBase` base contract + the render stage interfaces.
 
 ### Uninstall Is the Same
 
 ```cpp
-TryUninstall("FDynLog")                  // anonymous addressing by layer name (GetName())
+TryUninstall("FScene")                   // anonymous addressing by layer name (GetName())
   -> reverse-dependency-count min-heap greedy -> engine deletes the instance + FreeLibrary
 ```
-
-The main DLL likewise does not need the feature's concrete type to uninstall it - `GetName()` (the stringified class name from `MAHO_DECLARE_LAYER`) is all the identity information.
 
 ## Architecture Highlights
 
 | Concept | How this project shows it |
 |------|-----------------|
-| **Anonymous layer** (FLayerBase) | each feature only exposes `GetName()` (class name) + dependency table, no self-contained lifecycle |
-| **stage pipeline** (IPipeline) | `IEnginePipeline` = BeginFrame -> Tick -> EndFrame |
-| **dependency-graph scheduling** (FLayerTaskGraph) | `FEngineBase::Main` runs `Init -> Compile -> Execute -> Flush` each frame |
-| **dynamic install** | `Install("Xxx.dll")` via FAssembly load + engine holds ownership |
+| **Anonymous layer** (FLayerBase) | each feature only exposes `GetName()` (class name) + dependency table |
+| **stage pipeline** (IPipeline) | engine stages: `IBeginFrame -> ITick -> IEndFrame`; render stages: `IBeginRender -> IRender -> IEndRender -> IPresent` |
+| **dependency-graph scheduling** (FLayerTaskGraph) | `FEngineBase::Main` runs Init -> Compile -> Execute -> Flush each frame |
+| **dynamic install** | `Install("Xxx.dll")` via FAssembly load + owner holds ownership |
 | **dependency-safe uninstall** | `TryUninstall` uses reverse-dependency-count min-heap greedy; if depended on, drop |
-| **input-driven** | GameInput is an ordinary feature; its Tick schedules the engine via `Owner` |
+| **recursive subsystem** (FRender) | a layer that is itself a layer-collector with its own render thread + stage pipeline |
+| **context-parameterized stages** | `void Render(FRender&)` - render features reach RHI through the `FRender` context |
 
 ## Build and Run
 
@@ -241,7 +202,7 @@ cd Intermediate\Binaries\Debug
 EntryPoint.exe ExampleEngine.dll
 ```
 
-Output: under `Intermediate/Binaries/Debug/`, `EntryPoint.exe` + `Maho.dll` + all plugin DLLs + this project's 5 plugin DLLs. Logs go to both the console and `Logs/Maho.log` (5MB rolling, 3 files).
+Output: under `Intermediate/Binaries/Debug/`, `EntryPoint.exe` + `Maho.dll` + all engine plugin DLLs + this project's plugin DLLs. Logs go to both the console and `Logs/Maho.log` (rolling).
 
 ## Relationship with the Engine
 
@@ -249,10 +210,10 @@ Output: under `Intermediate/Binaries/Debug/`, `EntryPoint.exe` + `Maho.dll` + al
 EntryPoint.exe
   `- FAssembly loads ExampleEngine.dll
        `- CreateEngine() -> FExampleEngine* (FEngineBase)
-            |- Initialize: Install(GameInput.dll)
+            |- PreMain: install Log/Config/Platform/Resource/Script/Render
             |- Main: main loop (dependency-graph scheduling)
-            |    `- GameInput.Tick -> Install/TryUninstall/RequestExit
+            |    `- Platform polls events; Render drives Scene/DrawTriangleFeature
             `- Shutdown: release all features + DLLs
 ```
 
-The engine (`../..`, i.e. `Hiyajo/`) only provides `Core` (TypeList/Query/TaskGraph/Assembly...) + `Engine` (Layer/Engine layer system); all business logic lives in `Plugins/`. This project does not modify any engine code, it is pure plugin assembly.
+The engine (`../..`, i.e. `Hiyajo/`) only provides `Core` (TypeList/TaskGraph/ThreadPool/Assembly...) + `Engine` (layer system); all business logic lives in `Plugins/`. This project does not modify any engine code, it is pure plugin assembly.

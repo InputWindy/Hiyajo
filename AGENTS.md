@@ -6,15 +6,15 @@ All AI agents must read this file before entering this engine.
 
 - This engine is **pure scaffolding** - zero app assumptions, zero third-party dependencies, zero stage presets. Every concrete function is an installable plugin.
 - **Layers**:
-  - **Core** (`Source/Public/Core/`): type-agnostic infrastructure blocks - `TypeList` (TTypeList + operations), `Query` (TQuery Select/With/Not), `Singleton` (TSingleton marker base), `Interface` (IInit/IShutdown/IMain/IExit/IPlugin capability interfaces), `TaskGraph` (FTaskGraph dependency-graph scheduling), `ThreadPool`, `Assembly` (FAssembly DLL loading), `Fatal`.
-  - **Engine** (`Source/Public/Engine/`): layer system - `Layer.h` (`FLayerBase`/`FLayer`/`FLayerTaskGraph`/`MAHO_DECLARE_LAYER`) + `Engine.h` (main-loop three stages + `IEnginePipeline`/`FEngineLayer`/`FEngineBase`). **Engine only assembles Core infrastructure, contains no concrete service**.
+  - **Core** (`Source/Public/Core/`): type-agnostic infrastructure blocks - `TypeList` (TTypeList + operations), `Delegate` (TMulticastEvent), `Singleton` (TSingleton marker base), `Interface` (IPlugin/IPipeline capability composers), `TaskGraph` (FTaskGraph dependency-graph scheduling), `ThreadPool`, `ThreadedServer`, `Assembly` (FAssembly DLL loading), `Fatal`.
+  - **Engine** (`Source/Public/Engine/`): layer system - `Layer.h` (`FLayerBase`/`FLayer`/`Invoke` dispatch/`MAHO_DECLARE_LAYER`) + `LayerTaskGraph.h` (`FLayerTaskGraph` layer→graph expansion) + `LayerCollector.h` (`FLayerCollector` install/uninstall) + `Engine.h` (10 stage interfaces + `FEngineBase`). **Engine only assembles Core infrastructure, contains no concrete service**.
   - **Plugins** (`Plugins/`): installable plugins - `Common/` (service plugins: TSingleton or pure libraries). The engine has zero app assumptions, all logic lives in plugins.
 - **FLayerBase = anonymous layer anchor**: closes over only itself - `GetName()` (stable identity name) + `GetDependencies()` (per-stage dependency table). **Does not manage dependency lifetimes**; execution-context integrity is guaranteed by `FLayerTaskGraph`.
 - **FLayer<TPipeline>**: assembly sugar - `FLayerBase` + `IPipeline` (ordered stage list). A layer inherits both (no inheritance relation between them), with `dynamic_cast` side conversion at scheduling time.
 - **IPipeline<TStageTypes...>**: ordered stage sequence (`TStages = TTypeList<...>`). Only carries the stage list; the stage-to-method `Invoke` protocol is implemented by the **concrete pipeline class**.
 - **FLayerTaskGraph<TPipeline, TContext>**: a set of anonymous `FLayer*` -> compile -> execute. Each layer expands into one node per stage (self-advancing + cross-object dependency), scheduled topologically.
 - **FEngineBase**: engine base class - lifecycle capabilities (IInit/IMain/IExit/IShutdown) + main loop + feature ownership (`unique_ptr` container). The entry plugin is the only host, exports `CreateEngine()`.
-- **Optional capability composition**: `IInit`/`IShutdown`/`IMain`/`IExit` composed explicitly via `IPlugin<Caps...>` - not every object needs a lifecycle. `TSingleton<T>` is a pure marker base, no forced interface.
+- **Optional capability composition**: a layer mounts only the stage interfaces it implements (unimplemented stages are silently skipped by `dynamic_cast` in the dispatch specialization). Not every object needs a lifecycle. `TSingleton<T>` is a pure marker base, no forced interface.
 - **Singleton process-unique**: `static T& Get()` declared in the Public header, defined in the Private cpp (compiled into that plugin DLL) - the instance is process-unique within its own DLL. Cross-DLL via dllimport symbol, not header inline (avoid one copy per DLL).
 - **`.cplugin` `Dependencies`**: build-level (compile target + include), does not fill the FLayer template. Runtime dependencies are declared by the layer itself via `AddDependency` (compile-time template or string addressing).
 - **Lifecycle owned by host**: `FEngineBase::Shutdown` releases all features + DLLs. Feature destructors do not silently teardown; init/shutdown are explicitly driven by the user through the `IInit`/`IShutdown` capabilities.
@@ -46,7 +46,7 @@ engine core + engine plugins + project core  <--  project plugins (link Maho, ge
 
 - **TSingleton services**: `Get()` process-unique (header declaration + cpp definition); lifecycle optionally composed via `IPlugin<IInit,IShutdown>`.
 - **Pure libraries** (Archive/Compress/Unicode): free functions/classes, no singleton, no state, no lifecycle.
-- **FEngineLayer**: install/uninstall via `FEngineBase`'s `Install`/`RequestUninstall` (pending set, applied at the next-frame safe point `FlushPendingUpdatePipelines`).
+- **服务层（FLayer 派生）**: install/uninstall via `FLayerCollector`/`FEngineBase`'s `Install`/`TryUninstall` (pending set, applied at the next-frame safe point `FlushPendingUpdatePipelines`).
 
 ## Driving Mechanism
 
@@ -68,7 +68,7 @@ When extending project-side code, follow these three rules:
 ### 2 Create Code with Tools
 
 - For new plugins, call `CreatePlugin.bat` / `Tools/create_plugin_ui.py` to auto-create, **do not hand-write directories/`.cplugin`**.
-- The tool generates `Public/` + `Private/` + `.cplugin`, and automatically adds the parent plugin to `Dependencies`.
+- The tool generates `Public/` + `Private/` + `.cplugin`, and automatically adds the parent plugin (the project anchor) to `Dependencies`; **other dependency plugins are hand-filled in `Dependencies`** — the UI no longer offers a selection tree.
 
 ### 3 Install Third-Party Plugins as a Whole into Extension
 
@@ -78,6 +78,7 @@ When extending project-side code, follow these three rules:
 
 ## Docs
 
+- [Docs.md](Docs.md) - full repository documentation index
 - [Source/SourceDoc.md](Source/SourceDoc.md) - source root (layers)
 - [Source/Public/Core/CoreDoc.md](Source/Public/Core/CoreDoc.md) - Core infrastructure concepts
 - [Source/Public/Engine/EngineDoc.md](Source/Public/Engine/EngineDoc.md) - layer architecture (FLayerBase/FLayer/FLayerTaskGraph/main loop)

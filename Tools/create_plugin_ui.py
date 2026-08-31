@@ -14,13 +14,8 @@ sys.path.insert(0, str(TOOLS_DIR))
 from maho_tools import (  # noqa: E402
 	ENGINE_ROOT,
 	create_plugin,
-	discover_cplugin_files,
 	is_valid_project_name,
-	read_cplugin,
 )
-
-_CHECKED = "☑"
-_UNCHECKED = "☐"
 
 _ENGINE_KIND = "引擎插件 (Engine/Plugins)"
 _PROJECT_KIND = "项目插件 (项目根/Plugins)"
@@ -39,15 +34,10 @@ class CreatePluginApp(tk.Tk):
 		self.var_plugins_dir = tk.StringVar(value=str(default_plugins_dir or Path.cwd() / "Plugins"))
 		self.var_project_root = tk.StringVar(value=str(Path.cwd()))
 
-		self._parents: list[dict] = []
-		self._checked: dict[str, bool] = {}
-
 		self._build()
 		self.protocol("WM_DELETE_WINDOW", self.destroy)
 		self.var_kind.trace_add("write", lambda *_: self._sync_target())
-		self.var_plugins_dir.trace_add("write", lambda *_: self._reload_parents())
 		self._sync_target()
-		self._reload_parents()
 
 	def _build(self) -> None:
 		pad = {"padx": 12, "pady": 6}
@@ -75,31 +65,18 @@ class CreatePluginApp(tk.Tk):
 		self.btn_browse = ttk.Button(frm, text="Browse…", command=self._browse)
 		self.btn_browse.grid(row=3, column=2, sticky="e", **pad)
 
-		# Enabled/dependency plugins — a multi-select group (optional; cascaded
-		# into this plugin's .cplugin Dependencies so a project pulls them too).
-		ttk.Label(frm, text="启用/依赖插件（可多选，级联）").grid(row=4, column=0, sticky="nw", **pad)
-		parent_frame = ttk.Frame(frm)
-		parent_frame.grid(row=4, column=1, columnspan=2, sticky="nsew", **pad)
-		parent_frame.columnconfigure(0, weight=1)
-		parent_frame.rowconfigure(0, weight=1)
-		self.parent_tree = ttk.Treeview(parent_frame, show="tree", selectmode="none")
-		scroll = ttk.Scrollbar(parent_frame, orient=tk.VERTICAL, command=self.parent_tree.yview)
-		self.parent_tree.configure(yscrollcommand=scroll.set)
-		self.parent_tree.grid(row=0, column=0, sticky="nsew")
-		scroll.grid(row=0, column=1, sticky="ns")
-		self.parent_tree.bind("<Button-1>", self._on_tree_click)
-
-		ttk.Label(frm, text="Description").grid(row=5, column=0, sticky="nw", **pad)
+		# Enabled/dependency plugins are now hand-filled by the user in the
+		# plugin's .cplugin `Dependencies` — no selection UI here.
+		ttk.Label(frm, text="Description").grid(row=4, column=0, sticky="nw", **pad)
 		self.txt_desc = tk.Text(frm, height=3, wrap=tk.WORD)
-		self.txt_desc.grid(row=5, column=1, columnspan=2, sticky="nsew", **pad)
+		self.txt_desc.grid(row=4, column=1, columnspan=2, sticky="nsew", **pad)
 
 		ttk.Button(frm, text="Create Plugin", command=self._create).grid(
-			row=6, column=1, columnspan=2, sticky="e", **pad
+			row=5, column=1, columnspan=2, sticky="e", **pad
 		)
 
 		frm.columnconfigure(1, weight=1)
-		frm.rowconfigure(4, weight=3)
-		frm.rowconfigure(5, weight=1)
+		frm.rowconfigure(4, weight=1)
 
 	def _sync_target(self) -> None:
 		"""引擎插件 → 固定到 引擎根/Plugins；项目插件 → 项目根/Plugins（可 Browse）。"""
@@ -123,63 +100,6 @@ class CreatePluginApp(tk.Tk):
 			self.var_project_root.set(path)
 			self.var_plugins_dir.set(str((Path(path) / "Plugins").resolve()))
 
-	def _reload_parents(self) -> None:
-		for item in self.parent_tree.get_children():
-			self.parent_tree.delete(item)
-		self._parents = []
-		self._checked = {}
-
-		# scan the engine Plugins/ + the target Plugins/ for candidate parents,
-		# building the tree from the FILESYSTEM hierarchy under each Plugins/ root.
-		roots = [ENGINE_ROOT / "Plugins", Path(self.var_plugins_dir.get().strip())]
-		seen: set[str] = set()
-		merged: list[dict] = []
-		for root in roots:
-			root = root.resolve()
-			if not root.is_dir():
-				continue
-			for cplugin_path in discover_cplugin_files([root]):
-				data = read_cplugin(cplugin_path)
-				name = data.get("Name") or cplugin_path.parent.name
-				# folder hierarchy under the Plugins root, EXCLUDING the plugin's
-				# own directory (create_plugin nests each plugin in its own folder,
-				# so the last segment is the plugin itself, not a group).
-				group = list(cplugin_path.parent.relative_to(root).parts[:-1])
-				key = "/".join(group + [name])
-				if key in seen:
-					continue
-				seen.add(key)
-				merged.append({"Name": name, "Group": group})
-		self._parents = merged
-		for p in self._parents:
-			self._insert_parent(p)
-
-	def _insert_parent(self, p: dict) -> None:
-		name = p["Name"]
-		self._checked[name] = False
-		parent = ""
-		group = p.get("Group") or []
-		for i in range(len(group)):
-			gid = "group:" + "/".join(group[: i + 1])
-			if not self.parent_tree.exists(gid):
-				self.parent_tree.insert(parent, tk.END, iid=gid, text=group[i], open=True)
-			parent = gid
-		if self.parent_tree.exists(name):
-			return
-		self.parent_tree.insert(parent, tk.END, iid=name, text=self._label(name), open=True)
-
-	def _label(self, name: str) -> str:
-		mark = _CHECKED if self._checked.get(name) else _UNCHECKED
-		return f"{mark} {name}"
-
-	def _on_tree_click(self, event) -> None:
-		iid = self.parent_tree.identify_row(event.y)
-		if not iid or iid.startswith("group:"):
-			return
-		# multi-select — a group of enabled/dependency plugins (optional)
-		self._checked[iid] = not self._checked.get(iid, False)
-		self.parent_tree.item(iid, text=self._label(iid))
-
 	def _create(self) -> None:
 		name = self.var_name.get().strip()
 		plugins_dir = Path(self.var_plugins_dir.get().strip())
@@ -193,17 +113,15 @@ class CreatePluginApp(tk.Tk):
 				messagebox.showerror("Maho", f"Cannot create plugins path:\n{plugins_dir}\n\n{ex}")
 				return
 		desc = self.txt_desc.get("1.0", tk.END).strip()
-		deps = sorted(n for n in self._checked if self._checked[n])
 		try:
 			path = create_plugin(
-				name, ENGINE_ROOT, description=desc, inherits=deps, plugins_dir=plugins_dir
+				name, ENGINE_ROOT, description=desc, plugins_dir=plugins_dir
 			)
 		except Exception as ex:  # noqa: BLE001
 			messagebox.showerror("Maho", f"Create plugin failed:\n{ex}")
 			return
 		messagebox.showinfo("Maho", f"Plugin created:\n{path}")
 		self.var_name.set("MyPlugin")
-		self._reload_parents()
 
 
 def main() -> int:

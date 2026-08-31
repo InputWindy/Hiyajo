@@ -15,16 +15,11 @@ sys.path.insert(0, str(TOOLS_DIR))
 from maho_tools import (  # noqa: E402
 	ENGINE_ROOT,
 	create_project,
-	discover_cplugin_files,
 	install_cproject_association,
 	install_cplugin_association,
 	is_valid_project_name,
 	open_in_file_manager,
-	read_cplugin,
 )
-
-_CHECKED = "☑"
-_UNCHECKED = "☐"
 
 
 class CreateProjectApp(tk.Tk):
@@ -40,10 +35,6 @@ class CreateProjectApp(tk.Tk):
 		self.var_engine = tk.StringVar(value=str(ENGINE_ROOT))
 		self.var_author = tk.StringVar(value="土豆泥大王")
 		self.var_open_folder = tk.BooleanVar(value=True)
-
-		self._parents: list[dict] = []
-		self._checked: dict[str, bool] = {}
-		self._selected: str | None = None  # the single chosen plugin to mount
 
 		self._build()
 		self.protocol("WM_DELETE_WINDOW", self.destroy)
@@ -77,97 +68,14 @@ class CreateProjectApp(tk.Tk):
 		self.txt_desc.grid(row=5, column=1, columnspan=2, sticky="nsew", **pad)
 		self.txt_desc.insert("1.0", "哈哈，我是土豆泥大王！")
 
-		# Optional: a plugin to mount as the project's child (empty project allowed).
-		ttk.Label(frm, text="Plugins（可选，勾选装配为一个子层）").grid(row=6, column=0, sticky="nw", **pad)
-		tree_frame = ttk.Frame(frm)
-		tree_frame.grid(row=6, column=1, columnspan=2, sticky="nsew", **pad)
-		tree_frame.columnconfigure(0, weight=1)
-		tree_frame.rowconfigure(0, weight=1)
-		self.parent_tree = ttk.Treeview(tree_frame, show="tree", selectmode="none")
-		scroll = ttk.Scrollbar(tree_frame, orient=tk.VERTICAL, command=self.parent_tree.yview)
-		self.parent_tree.configure(yscrollcommand=scroll.set)
-		self.parent_tree.grid(row=0, column=0, sticky="nsew")
-		scroll.grid(row=0, column=1, sticky="ns")
-		self.parent_tree.bind("<Button-1>", self._on_tree_click)
-
 		# Bottom row: open-folder checkbox (left) + Create Project (right).
 		bottom = ttk.Frame(frm)
-		bottom.grid(row=7, column=0, columnspan=3, sticky="ew", **pad)
+		bottom.grid(row=6, column=0, columnspan=3, sticky="ew", **pad)
 		ttk.Checkbutton(bottom, text="Open project folder", variable=self.var_open_folder).pack(side=tk.LEFT)
 		ttk.Button(bottom, text="Create Project", command=self._create).pack(side=tk.RIGHT)
 
 		frm.columnconfigure(1, weight=1)
 		frm.rowconfigure(5, weight=1)
-		frm.rowconfigure(6, weight=3)
-
-		self._reload_plugins()
-
-	# ── parent tree (single selection) ────────────────────────────────────
-
-	def _reload_plugins(self) -> None:
-		for item in self.parent_tree.get_children():
-			self.parent_tree.delete(item)
-		self._parents = []
-		self._checked = {}
-		self._selected = None
-
-		engine = Path(self.var_engine.get().strip())
-		roots = [engine / "Plugins"]
-		seen: set[str] = set()
-		for root in roots:
-			root = root.resolve()
-			if not root.is_dir():
-				continue
-			for cplugin_path in discover_cplugin_files([root]):
-				data = read_cplugin(cplugin_path)
-				name = data.get("Name") or cplugin_path.parent.name
-				group = list(cplugin_path.parent.relative_to(root).parts[:-1])
-				key = "/".join(group + [name])
-				if key in seen:
-					continue
-				seen.add(key)
-				self._parents.append({"Name": name, "Group": group})
-		for p in self._parents:
-			self._insert_parent(p)
-
-	def _insert_parent(self, p: dict) -> None:
-		name = p["Name"]
-		self._checked[name] = False
-		parent = ""
-		group = p.get("Group") or []
-		for i in range(len(group)):
-			gid = "group:" + "/".join(group[: i + 1])
-			if not self.parent_tree.exists(gid):
-				self.parent_tree.insert(parent, tk.END, iid=gid, text=group[i], open=True)
-			parent = gid
-		if not self.parent_tree.exists(name):
-			self.parent_tree.insert(parent, tk.END, iid=name, text=self._label(name), open=True)
-
-	def _label(self, name: str) -> str:
-		mark = _CHECKED if self._checked.get(name) else _UNCHECKED
-		return f"{mark} {name}"
-
-	def _refresh_item(self, name: str) -> None:
-		if self.parent_tree.exists(name):
-			self.parent_tree.item(name, text=self._label(name))
-
-	def _on_tree_click(self, event: tk.Event) -> None:
-		iid = self.parent_tree.identify_row(event.y)
-		if iid and iid.startswith("group:"):
-			return
-		if iid in self._checked:
-			self._select(iid)
-
-	def _select(self, name: str) -> None:
-		"""Single selection: pick one plugin to mount, clear the rest."""
-		if self._selected == name:
-			return
-		if self._selected:
-			self._checked[self._selected] = False
-			self._refresh_item(self._selected)
-		self._selected = name
-		self._checked[name] = True
-		self._refresh_item(name)
 
 	# ── actions ──────────────────────────────────────────────────────────
 
@@ -180,7 +88,6 @@ class CreateProjectApp(tk.Tk):
 		path = filedialog.askdirectory(initialdir=self.var_engine.get() or str(ENGINE_ROOT))
 		if path:
 			self.var_engine.set(path)
-			self._reload_plugins()
 
 	def log_line(self, message: str) -> None:
 		print(message, end="" if message.endswith("\n") else "\n")
@@ -223,14 +130,12 @@ class CreateProjectApp(tk.Tk):
 			return
 
 		try:
-			plugins = [self._selected] if self._selected else []
 			cproject = create_project(
 				name,
 				parent,
 				engine,
 				description=desc,
 				author=author,
-				plugins=plugins,
 			)
 		except Exception as ex:  # noqa: BLE001
 			messagebox.showerror("Maho", str(ex))

@@ -1,41 +1,49 @@
 # Text
 
-## Code Files
+## Code files
 
-- [Text.h](Text.h) - localized text (`Culture` / `FText` / `FTextManager`)
+- [Text.h](Public/Text.h) — 本地化文本（`FText` 句柄 + `FTextManager` 目录 + `Culture` 常量）
+- [TextApi.h](Public/TextApi.h) — `MAHO_TEXT_API` 导出宏
+- [Text.cpp](Private/Text.cpp) — 目录实现 + `CreateLayer` 导出
 
 ## Concept - Localized Text
 
-Localized text singleton service - `FText` text handle + `FTextManager` translation catalog. `SetCulture` switches culture; `FText::Resolve()` looks up the current culture's translation and falls back to the source text when missing. Catalog key = `Namespace + US + Key + US + Culture` (US = 0x1f separator, prevents concatenation collisions). `Mutex` protected, thread-safe.
+Text 是本地化文本层：`FText` 句柄 + `FTextManager` 目录。`SetCulture` 选文化，`FText::Resolve()` 查当前文化的翻译并回退到源文本。依赖引擎固定的 JSON（nlohmann）做 `LoadTranslationsFromJson`。
 
-### FText - Text Handle
+### 1. FText - 本地化句柄（数据类）
 
-Stores a `{Namespace, Key, Source}` triple. `Resolve()` looks up a translation via `FTextManager::Get().FindTranslation(Namespace, Key, current culture)` and returns Source when absent. Equality compares Namespace + Key only.
-
-### FTextManager - Catalog Manager (Singleton Service)
-
-`TSingleton<FTextManager>` + `IPlugin<IInit, IShutdown>`:
-
-- `SetCulture / GetCulture`: switch / read the current culture (default `en-US`).
-- `AddTranslation(Namespace, Key, Culture, Text)`: register one translation (thread-safe).
-- `LoadTranslationsFromJson(JsonText)`: bulk-load a JSON array `[{ "Namespace", "Key", "Culture", "Text" }, ...]` - parsed with **nlohmann/json**.
-- `FindTranslation(...)`: lookup; `nullptr` when absent.
+`FText` 存 `{Namespace, Key, Source}`，不持有状态，`Resolve()` 经全局 `GetTextManager()` 查翻译。可复制、按 `{Namespace, Key}` 判等。
 
 ```cpp
 using namespace Maho::Text;
-FTextManager::Get().AddTranslation("MainMenu", "Title", Culture::Chinese, "Main Menu (zh)");
-FTextManager::Get().AddTranslation("MainMenu", "Title", Culture::Japanese, "Main Menu (ja)");
+
+// 启动时注册翻译（例如从配置文件）。
+GetTextManager()->AddTranslation("MainMenu", "Title", Culture::Chinese, "主菜单");
+GetTextManager()->AddTranslation("MainMenu", "Title", Culture::Japanese, "メインメニュー");
+
 const FText Title = FText("MainMenu", "Title", "Main Menu");
-FTextManager::Get().SetCulture(std::string(Culture::Chinese));
-const std::string Shown = Title.Resolve();   // "Main Menu (zh)"
+GetTextManager()->SetCulture(std::string(Culture::Chinese));
+const std::string Shown = Title.Resolve();   // "主菜单"
 ```
 
-`Culture` provides constants: `English = "en-US"` / `Chinese = "zh-CN"` / `Japanese = "ja-JP"` (strings are UTF-8).
+### 2. FTextManager - 目录（服务层）
 
-## Third-Party Dependencies
+`FTextManager : FLayer<IPreInit, IInit, IPostInit, IPreShutdown, IShutdown, IPostShutdown>`，6 个生命周期阶段。目录键 = `Namespace + 0x1f + Key + 0x1f + Culture`（单位分隔符避免 `"a"+"bc" == "ab"+"c"` 冲突）。
 
-- **nlohmann/json** (`nlohmann/json.hpp`, engine third-party header-only) - used by `LoadTranslationsFromJson`.
+- **SetCulture**：切换当前文化，后续 Resolve 生效。
+- **AddTranslation**：注册单条翻译（线程安全）。
+- **LoadTranslationsFromJson**：批量加载 JSON 对象数组。
+- **FindTranslation**：按 (Namespace, Key, Culture) 精确查；无则 nullptr。
 
-## Related Docs
+### 3. 线程安全
 
-- [API.html](API.html) - API docs
+目录读写在同一个 `Mutex` 下串行；`FText::Resolve` 内部走 `FindTranslation`，从任意线程调用安全。
+
+## Third-party dependencies
+
+- **nlohmann/json**（`Text.cmake` FetchContent，`LoadTranslationsFromJson` 解析用）
+- 其他插件：无——`.cplugin` Dependencies = `[]`
+
+## Related docs
+
+- [API.md](API.md) - API documentation

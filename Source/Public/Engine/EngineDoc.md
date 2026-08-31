@@ -2,163 +2,80 @@
 
 ## Code Files
 
-- [Layer.h](Layer.h) -- anonymous layer + stage pipeline + task graph (header-only: `FLayerBase` / `FLayer` / `FLayerTaskGraph` / `MAHO_DECLARE_LAYER`)
-- [Engine.h](Engine.h) -- engine main loop (`IBeginFrame` / `ITick` / `IEndFrame` / `IEnginePipeline` / `FEngineLayer` / `FEngineBase`)
+- [Engine.h](Engine.h) — 10 个 stage 能力接口 + FEngineBase + MAHO_DECLARE_ENGINE
+- [Layer.h](Layer.h) — FLayerBase / FLayer / Invoke 派发 / MAHO_DECLARE_LAYER / MAHO_DECLARE_STAGE_DISPATCH
+- [LayerCollector.h](LayerCollector.h) — FLayerCollector（层集合：安装/卸载/依赖安全卸载）
+- [LayerTaskGraph.h](LayerTaskGraph.h) — FLayerTaskGraph（层 → 依赖图展开）
+- [Query.h](Query.h) — TQuery（编译期类型筛选）/ FQuery / FQueryResult（运行时实例筛选）
 
 ## Concept -- Anonymous Layer + Ordered Stage Pipeline
 
-The Engine layer is header-only (templates + inline, no .cpp). It defines the layer system: a "layer" is an **installable runtime node schedulable by the task graph**, with anonymous identity (only a name), whose behavior is determined by the stage sequence (pipeline) it implements.
+Engine 层把应用拆成一组**单职责匿名层**，每层沿**有序 stage 管线**展开成任务图节点，由依赖图调度器自动编排——有依赖串行、无依赖并行，依赖边即隐式屏障。
 
-Unlike the old "layer nests layer recursive startup" approach, this architecture **does not self-close its lifecycle**: a layer only declares who it is and who it depends on at each stage; global scheduling (order, parallelism, missing-dependency detection) is uniformly handled by `FLayerTaskGraph`.
+### 1. 匿名层（FLayerBase）
 
-### 1. FLayerBase -- Anonymous Anchor
+层只闭合自己：`GetName()`（稳定身份名 = 拓扑键）+ `GetDependencies()`（逐 stage 依赖表）。**不管理依赖生命周期**——执行上下文完整性由 `FLayerTaskGraph` 保证。层可动态加载（DLL），宿主只持有 `FLayerBase*`。
 
-```cpp
-class FLayerBase
-{
-    virtual std::string_view GetName() const = 0;   // stable identity name (topology key of the task graph)
-    const FDependencyTable& GetDependencies() const; // dependency table for each stage
-protected:
-    template <typename TMyStage, typename TDepObj, typename TDepStage>
-    void AddDependency();   // declares: this depends on TDepObj at TDepStage while at TMyStage
-};
-```
+### 2. 有序阶段管线（IPipeline）
 
-- A layer **closes over only itself**: identity (`GetName`) + per-stage dependencies (`AddDependency`).
-- **Does not manage dependency lifetimes** -- whether the execution context is complete is guaranteed by `FLayerTaskGraph`.
-- Dependency table structure: `map<my stage interface type_index, vector<{dep name, dep stage type_index}>>`.
+`IPipeline<TStageTypes...>` 定义有序阶段序列（`TStages`）；引擎提供 10 个 stage 能力接口（IPreInit/IInit/IPostInit/IBeginFrame/ITick/IEndFrame/IExit/IPreShutdown/IShutdown/IPostShutdown），stage→方法调用的 `Invoke` 协议按 (stage, context) 对特化。**可选能力组合**：层只继承自己要的阶段接口，没实现的 stage 被 `dynamic_cast` 静默跳过。
 
-### 2. IPipeline -- Ordered Stage Sequence (Core/Interface.h)
+### 3. 层展开（FLayerTaskGraph）
+
+每层沿管线展开成**每阶段一个节点**：自推进（阶段 N 依赖同层阶段 N-1）+ 跨对象依赖（层声明的元组）。节点就绪即释放——**无阶段屏障**，跨阶段管线（A 的 Tick 依赖 B 的 BeginFrame）天然成立。
+
+### 4. 依赖声明（AddDependency）
+
+编译期模板（同 DLL 内点名类型）或运行时字符串寻址（跨 DLL 用层名）：
 
 ```cpp
-template <typename... TStageTypes>
-class IPipeline : public virtual TStageTypes...
-{
-    using TStages = TTypeList<TStageTypes...>;   // ordered stage list
-};
+AddDependency<ITick, FLog, IBeginFrame>();                              // 编译期
+AddDependency(std::type_index(typeid(ITick)), "FLog", std::type_index(typeid(IBeginFrame)));  // 运行时
 ```
 
-- Template parameter order = the layer's own node order: `IPipeline<IInit, IMain, IShutdown>` means nodes expand as Init -> Main -> Shutdown (automatic self-progression edges).
-- `IPipeline` **only carries the stage list**; the stage -> method call `Invoke` protocol is implemented by the **concrete pipeline class**.
+### 5. 层集合（FLayerCollector）
 
-### 3. FLayer -- Assembly Sugar
+`Install` / `TryUninstall` 记录进 pending 集，在每帧安全点 `FlushPendingUpdatePipelines` 统一应用（先 Init 后 Shutdown）。卸载用**反向依赖计数最小堆贪心**：被依赖的层拒绝卸载，依赖者先弹出、链式卸载。
 
-```cpp
-template <typename TPipeline>
-class FLayer : public FLayerBase, public TPipeline {};
+## Engine Main Loop
+
+`FEngineBase::Main()` 驱动一个 `FLayerTaskGraph`：
+
+```text
+Init 图（IPreInit→IInit→IPostInit，一次）→ 编译 → 执行 → 排空
+Tick 循环（每帧）：
+  Flush（等上一帧排空）→ FlushPendingUpdatePipelines（应用安装/卸载）
+  → 重建 Tick 图（IBeginFrame→ITick→IEndFrame→IExit）→ 编译 → 异步执行
+  → 检查 RequestExit 标志
+Shutdown 图（IPreShutdown→IShutdown→IPostShutdown，一次）→ 释放实例 + DLL
 ```
-
-`FLayer<IPipeline<IMain, IShutdown>>` == `FLayerBase` + `IPipeline<IMain, IShutdown>`. A layer inherits both at once (no inheritance relation between them); scheduling performs a lateral conversion via `dynamic_cast`.
-
-### 4. FLayerTaskGraph -- Global Scheduling
-
-```cpp
-template <typename TPipeline, typename TContext = FEmptyContext>
-class FLayerTaskGraph : public FTaskGraph;
-```
-
-A set of anonymous `FLayer*` -> compile -> execute. **Contract**: every layer passed in must implement the same `TPipeline`.
-
-- **Construct** `(FThreadPool&, TContext&)`: only binds the thread pool + execution context (references, not copied).
-- **Init(vector<FLayerBase*>)**: public, repeatable (rebuilds nodes each frame / on reconfiguration).
-- **Compile()**: wiring + cycle / missing-dependency detection.
-- **Execute()/Flush()**: asynchronous dispatch + barrier finish.
-
-Each layer expands into **one node per stage**:
-
-1. **Self-progression**: stage N depends on stage N-1 of the same layer (guarantees intra-layer order).
-2. **Cross-object dependencies**: the dependency tuples the layer declares via `AddDependency`.
-
-Dispatch uses `dynamic_cast<TPipeline&>(*Layer).Invoke<TCurrent>(Context)` -- runtime stage type_index matches compile-time type.
-
-### 5. FTaskGraph -- Dependency Graph Scheduler (Core/TaskGraph.h)
-
-Node = `(object name, stage)` pair. Edges come from each node's dependency tuples. A node becomes schedulable immediately after **all its direct dependencies complete** (stage-independent -- no stage barrier, supports cross-stage pipelining).
-
-Lifecycle: `Init` (load topology) -> `Compile` (wiring + validation) -> `Execute` (async topology dispatch) -> `Flush` (block until drained).
-
-## Engine Main Loop (Engine.h)
-
-### Three-Stage Stages
-
-```cpp
-class IBeginFrame { virtual void BeginFrame() = 0; };
-class ITick       { virtual void Tick()       = 0; };
-class IEndFrame   { virtual void EndFrame()   = 0; };
-```
-
-### IEnginePipeline -- Fixed Pipeline
-
-```cpp
-class IEnginePipeline : public IPipeline<IBeginFrame, ITick, IEndFrame>
-{
-    template <typename TStage, typename TContext>
-    void Invoke(TContext& Engine);   // if-constexpr: stage -> BeginFrame/Tick/EndFrame
-};
-```
-
-### FEngineLayer -- Engine Feature Base Class
-
-```cpp
-class FEngineLayer : public FLayer<IEnginePipeline> {};
-```
-
-Business features inherit it and implement the three stage methods; cross-feature dependencies call `AddDependency<ITick, FOther, IBeginFrame>()` in the constructor.
-
-### FEngineBase -- Engine Base Class
-
-```cpp
-class FEngineBase : public IPlugin<IInit, IMain, IExit, IShutdown>
-{
-    int Main() final override;   // main loop: Flush -> apply pending changes -> Init -> Compile -> Execute
-protected:
-    void Install(FEngineLayer*);          // takes effect next frame
-    void TryUninstall(std::string_view);  // anonymous uninstall (by layer name)
-};
-```
-
-`FEngineBase` is the sole anchor exported by the entry plugin (`MAHO_DECLARE_ENGINE` + `extern "C" CreateEngine()` bridge). `EntryPoint` looks up `"CreateEngine"` via `FAssembly` -> `FEngineBase*` -> `Initialize/Main/Shutdown`. It owns the feature instances + DLLs (`unique_ptr` containers), not a pure interface.
 
 ## Plugin Macros
 
-```cpp
-MAHO_DECLARE_LAYER(FWorld)
-// expands to: static constexpr std::string_view StaticName() { return "FWorld"; }
-//      + std::string_view GetName() const override { return StaticName(); }
-// The name comes from stringifying the type name; dependency declarations use the same type deduction, keeping topology keys self-consistent.
-
-MAHO_DECLARE_ENGINE(FMyApp, "MyApp.dll")
-// expands to: static Maho::FEngineBase* CreateEngine() { return new FMyApp(); }
-//      + static std::string_view GetModulePath() { return "MyApp.dll"; }
-```
+| 宏 | 用途 |
+|----|------|
+| `MAHO_DECLARE_LAYER(LayerType, DLL)` | 层类内生成 StaticName / GetName / CreateLayer / GetModulePath |
+| `MAHO_DECLARE_ENGINE(EngineType, DLL)` | 引擎类内生成 CreateEngine 工厂 / GetModulePath |
+| `MAHO_DECLARE_STAGE_DISPATCH(Context, Stage, Cast, Method)` | 生成 `Invoke<Stage, Context>` 全特化（dynamic_cast + 调用） |
 
 ## Dependency / Linking / Include Rules
 
-**Link direction (`.cplugin` Dependencies / CMake `target_link_libraries`) -- layered one-way, arrow = linked target**:
+链接方向分层单向（箭头 = 链接目标）：
 
 ```
-engine core (Maho)  <--- engine plugins (each engine plugin links Maho)
-engine core + engine plugins  <--- project core (entry plugin, links Maho + all mounted engine plugins)
-engine core + engine plugins + project core  <--- project plugins (link Maho, get upper-layer includes transitively via .cplugin)
+engine core (Maho)  <--  engine plugins（每个引擎插件链接 Maho）
+engine core + engine plugins  <--  project core（入口层，链接 Maho + 全部挂载引擎插件）
+engine core + engine plugins + project core  <--  project plugins（链接父层，经 .cplugin 传递获得 include）
 ```
 
-- **Engine plugins**: `.cplugin Dependencies` only declares same-layer plugin dependencies; engine core is auto-linked by codegen.
-- **Project core (entry plugin)**: links engine core + all mounted engine plugins + project plugins; it is the sole host (inherits `FEngineBase` and exports `CreateEngine()`).
-- **Project plugins**: `.cplugin Dependencies` declares parent (project core) + engine plugin dependencies; get engine core includes transitively.
-
-**Include direction (compile time)**:
-
-- **Engine core <-> engine plugins**: **one-way** -- engine plugins include engine core (`<Maho.h>`/`<Layer.h>`/`<Engine.h>`); engine core makes zero app assumptions and includes no plugins.
-- **Project core <-> project plugins**: **two-way** -- project core includes project plugin headers (feature type references), project plugins include project core headers (child -> parent, via .cplugin). Include paths are added by codegen for all mounted plugin Public/.
-
-**Acyclic guarantee**: build dependencies (`.cplugin`) stay layered one-way (child -> parent); parent including child is only a compile-time type reference and does not form a build cycle.
+Include 方向：**引擎核心 ↔ 引擎插件**单向（插件 include 核心，核心零应用假设）；**项目核心 ↔ 项目插件**双向（核心以编译期类型引用子类，无构建环）。构建依赖（.cplugin）保持分层单向，父层仅以编译期类型引用子层，不构成构建环。
 
 ## Lifecycle
 
-`FLayer`/`FEngineLayer` do not force `IInit/IShutdown` -- lifecycle capabilities are composed via `IPlugin<...>` (Core/Interface.h) and invoked explicitly by the user in the driver loop. `FEngineBase` is the only base class with a complete lifecycle (IInit/IMain/IExit/IShutdown). Destructors do not silently teardown.
+生命周期由宿主拥有：`FEngineBase::Shutdown` 释放全部 feature + DLL。feature 析构不静默 teardown；init/shutdown 由用户经 `IInit`/`IShutdown` 能力显式驱动。`FEngineBase::Main` 末尾先 `Features.clear()`（虚析构在各自 DLL），再 `Modules.clear()`（FreeLibrary）。
 
 ## Related Docs
 
-- [EngineAPI.html](EngineAPI.html) -- API docs
-- [../Core/CoreDoc.md](../Core/CoreDoc.md) -- Core infrastructure concepts
-- [../PublicDoc.md](../PublicDoc.md) -- Public root
+- [EngineAPI.md](EngineAPI.md) — API 文档
+- [CoreAPI.md](../Core/CoreAPI.md) — Core 基建
+- [README.md](../../../README.md) — 引擎总览

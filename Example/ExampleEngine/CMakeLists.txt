@@ -629,8 +629,10 @@ add_library(ExampleEngine SHARED
 	Plugins/ExampleEngine/ExampleEngine.cplugin
 	Plugins/ExampleEngine/ExampleEngine.cmake
 	Plugins/ExampleEngine/settings.json
+	Plugins/ExampleEngine/ExampleEngine.md
+	Plugins/ExampleEngine/API.md
 )
-set_source_files_properties(Plugins/ExampleEngine/ExampleEngine.cplugin, Plugins/ExampleEngine/ExampleEngine.cmake, Plugins/ExampleEngine/settings.json PROPERTIES HEADER_FILE_ONLY ON)
+set_source_files_properties(Plugins/ExampleEngine/ExampleEngine.cplugin, Plugins/ExampleEngine/ExampleEngine.cmake, Plugins/ExampleEngine/settings.json, Plugins/ExampleEngine/ExampleEngine.md, Plugins/ExampleEngine/API.md PROPERTIES HEADER_FILE_ONLY ON)
 
 target_include_directories(ExampleEngine PUBLIC
 	"${ENGINE_DIR}/Source/Public"
@@ -727,17 +729,17 @@ target_compile_definitions(EntryPoint PRIVATE MAHO_ENGINE_NAME="ExampleEngine.dl
 target_link_libraries(EntryPoint PRIVATE Maho)
 
 # Copy the project's Config/ directory next to the binary (DefaultEngine.ini etc.
-# are loaded at runtime relative to the working directory). A custom target (ALL)
-# so it re-runs every build - editing an ini must not require a relink.
+# are loaded at runtime relative to the working directory). Folded into
+# EntryPoint's POST_BUILD so no standalone CopyConfig project appears in the
+# solution tree - the copy runs whenever EntryPoint (re)links.
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/Config")
-	add_custom_target(CopyConfig ALL
+	add_custom_command(TARGET EntryPoint POST_BUILD
 		COMMAND ${CMAKE_COMMAND} -E copy_directory
 			"${CMAKE_CURRENT_SOURCE_DIR}/Config"
 			"${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>/Config"
 		COMMENT "Copying Config/ to runtime dir"
 		VERBATIM
 	)
-	add_dependencies(EntryPoint CopyConfig)
 endif()
 
 # One Binaries/<Config> dir for the exe + Maho.dll + every plugin DLL, so at

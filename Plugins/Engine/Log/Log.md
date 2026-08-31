@@ -1,33 +1,54 @@
 # Log
 
-## Code Files
+## Code files
 
-- [Log.h](Log.h) - logging singleton `FLog` (wraps spdlog's stdout-color logger)
-- [LogApi.h](LogApi.h) - cross-DLL export macro (`MAHO_LOG_API`)
+- [Log.h](Public/Log.h) — 日志层头：`ELogLevel` / `FLog` + `MAHO_LOG_CORE_*` 宏
+- [LogApi.h](Public/LogApi.h) — DLL 导出宏 `MAHO_LOG_API`
+- [Log.cpp](Private/Log.cpp) — spdlog 日志器装配 + `LogLine` 分发 + 跨 DLL 访问器 `GetLog`
 
-## Concept - Log Service
+## Concept - fmt-Formatted Logging Behind an Incomplete Type
 
-Logging singleton service - wraps **spdlog**'s thread-safe stdout-color logger, fmt-style formatting (`{}` placeholders), shared by the whole engine (including other service plugins). `FLog` inherits `TSingleton<FLog>` + `IPlugin<IInit, IShutdown>`: `Initialize(argc, argv)` creates and configures the logger (recognizes `--log-level=trace|debug|info|warn|error`), `Shutdown()` flushes + releases.
+Log 是引擎的**格式化日志通道**。它把 spdlog 完整藏在 `std::shared_ptr<spdlog::logger>` 不完整类型后面——头文件只前向声明 `spdlog::logger`，全部 spdlog 类型只出现在 `Log.cpp`。调用方只接触 `GetLog()->Info("{}", v)` 这类 fmt 风格接口。
 
-### FLog - singleton + static passthrough
+### 1. 装配（Initialize）
 
-- `Logger` (public): shared `std::shared_ptr<spdlog::logger>`, all log output goes through it.
-- Static passthrough: `FLog::Info / Warn / Error(fmt, args...)` (fmt style, compile-time format string checking).
-- Macro sugar: `MAHO_LOG_CORE_TRACE / DEBUG / INFO / WARN / ERROR / CRITICAL(...)` - directly passthrough to `Logger->xxx`.
+`Initialize` 构造两条 sink：
+
+- **stdout 彩色** sink（`stdout_color_sink_mt`）。
+- **轮转文件** sink（`Logs/Maho.log`，5MB × 3）——GUI 子系统应用没有控制台，文件是持久日志目的地。
+
+日志器名 `"Maho"`，格式 `[%Y-%m-%d %H:%M:%S.%e] [%^%l%$] %v`，级别从引擎命令行 `--log-level` 读取（`Engine.Get("log-level")`，缺省 `debug`）。
+
+### 2. 使用（模板方法 + 宏）
+
+六档模板方法做 perfect-forward + fmt 编译期检查；`MAHO_LOG_CORE_*` 宏在 `GetLog()` 可能为 null 的场景（Log 层 Initialize 前）安全跳过。
 
 ```cpp
-FLog::Get().Initialize(argc, argv);
-FLog::Info("init: {}", name);
-FLog::Error("boom: code={}", code);
-MAHO_LOG_CORE_INFO("init {}", name);
+#include <Log.h>
+
+using namespace Maho;
+
+// 直接经访问器（须先装层）
+if (FLog* L = GetLog())
+{
+    L->Info("init {}", name);
+}
+
+// 宏版本（null 安全，仅报一次）
+MAHO_LOG_CORE_INFO("boot");
+MAHO_LOG_CORE_ERROR("boom: code={}", code);
 ```
 
-`Get()` is declared in the header, defined in `Log.cpp` (compiled into Log.dll) - process-unique instance. Dependent plugins link spdlog through Log.dll, no need to bundle the third-party dep.
+### 3. 收尾（Shutdown）
 
-## Third-Party Dependencies
+`Shutdown` 撤回 `GLog`、`spdlog::shutdown()`（flush 全部 sink）、释放 `Logger`。
 
-- **spdlog** (header-only, `spdlog/spdlog.h` + stdout_color_sinks) - thread-safe stdout-color logging.
+## Third-party dependencies
 
-## Related Docs
+- spdlog（`stdout_color_sink_mt` / `rotating_file_sink_mt`，fmt 随附）——完整类型只出现在 `Log.cpp`。
 
-- [API.html](API.html) - API documentation
+## Related docs
+
+- [API.md](API.md) - API documentation
+- [ImplAPI.md](ImplAPI.md) - 实现算法字典
+- [EngineDoc.md](../../../Source/Public/Engine/EngineDoc.md) - 层架构

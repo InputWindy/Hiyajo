@@ -516,17 +516,17 @@ target_compile_definitions(EntryPoint PRIVATE MAHO_ENGINE_NAME="{name}.dll")
 target_link_libraries(EntryPoint PRIVATE Maho)
 
 # Copy the project's Config/ directory next to the binary (DefaultEngine.ini etc.
-# are loaded at runtime relative to the working directory). A custom target (ALL)
-# so it re-runs every build - editing an ini must not require a relink.
+# are loaded at runtime relative to the working directory). Folded into
+# EntryPoint's POST_BUILD so no standalone CopyConfig project appears in the
+# solution tree - the copy runs whenever EntryPoint (re)links.
 if(EXISTS "${{CMAKE_CURRENT_SOURCE_DIR}}/Config")
-	add_custom_target(CopyConfig ALL
+	add_custom_command(TARGET EntryPoint POST_BUILD
 		COMMAND ${{CMAKE_COMMAND}} -E copy_directory
 			"${{CMAKE_CURRENT_SOURCE_DIR}}/Config"
 			"${{CMAKE_BINARY_DIR}}/Binaries/$<CONFIG>/Config"
 		COMMENT "Copying Config/ to runtime dir"
 		VERBATIM
 	)
-	add_dependencies(EntryPoint CopyConfig)
 endif()
 
 # One Binaries/<Config> dir for the exe + Maho.dll + every plugin DLL, so at
@@ -926,8 +926,8 @@ def _write_cmake_lists(
 		f"{project_name}.cplugin",
 		f"{project_name}.cmake",
 		"settings.json",
-		f"{project_name}Doc.md",
-		f"{project_name}API.html",
+		f"{project_name}.md",
+		"API.md",
 	):
 		if (host_dir / fn).is_file():
 			host_aux.append(f"Plugins/{project_name}/{fn}")
@@ -978,8 +978,9 @@ def create_project(
 	project_dir.mkdir(parents=True, exist_ok=True)
 
 	if plugins is None:
-		engine_plugins = list_engine_plugins(engine_root)
-		selected = [p["Name"] for p in engine_plugins]
+		# Empty project by default — the user hand-edits the .cproject Plugins
+		# to mount engine/feature plugins. No auto-selection.
+		selected = []
 	else:
 		selected = list(plugins)
 
@@ -1048,9 +1049,20 @@ def create_project(
 	intermediate_dir.mkdir(exist_ok=True)
 	(intermediate_dir / "Main.cpp").write_text(MAIN_CPP, encoding="utf-8", newline="\n")
 
-	# Extension/ — third-party plugins (collected by the entry plugin). Empty at
-	# creation; drop pre-fetched plugins here.
-	(project_dir / "Extension").mkdir(exist_ok=True)
+	# Config/ — copy the engine's default config (DefaultEngine.ini) so the
+	# project has runtime config (the Config plugin + the CopyConfig build
+	# target expect it). Fall back to writing a minimal one if the engine
+	# template is absent.
+	config_dir = project_dir / "Config"
+	engine_config = engine_root / "Config"
+	if engine_config.is_dir():
+		shutil.copytree(engine_config, config_dir, dirs_exist_ok=True)
+	else:
+		config_dir.mkdir(exist_ok=True)
+		(config_dir / "DefaultEngine.ini").write_text(
+			"[ConsoleVariables]\nr.Window.Width=100\nr.Window.Height=100\n",
+			encoding="utf-8", newline="\n",
+		)
 
 	# CMakeLists.txt (core + plugin DLL targets + include dirs) + package.bat.
 	_write_cmake_lists(project_dir, project_name, engine_root, cproject)
@@ -1155,15 +1167,23 @@ def create_plugin(
 		encoding="utf-8", newline="\n",
 	)
 
-	# Docs
+	# Docs (Markdown — the repo's doc format; no API.html).
 	(dst / f"{plugin_name}.md").write_text(
-		f"# {plugin_name}\n\n{description or '待补'}\n\n## 相关文档\n\n- [API.html](API.html) — API 文档\n",
+		f"# {plugin_name}\n\n{description or '待补'}\n\n"
+		f"## Code files\n"
+		f"- [Public/{plugin_name}.h](Public/{plugin_name}.h) — 层声明（挂载 stage 接口）\n"
+		f"- [Private/{plugin_name}.cpp](Private/{plugin_name}.cpp) — 实现\n\n"
+		f"## Related docs\n"
+		f"- [API.md](API.md) - API documentation\n",
 		encoding="utf-8", newline="\n",
 	)
-	(dst / "API.html").write_text(
-		f"<!DOCTYPE html>\n<html lang=\"zh\">\n<head>\n<meta charset=\"UTF-8\">\n<title>{plugin_name} — API</title>\n"
-		f"<style>body{{background:#14181f;color:#d8e1f0;font-family:Segoe UI,sans-serif;padding:32px}}</style>\n"
-		f"</head>\n<body>\n<h1>{plugin_name} — API</h1>\n<p>占位。</p>\n</body>\n</html>\n",
+	(dst / "API.md").write_text(
+		f"# {plugin_name} — API 文档\n\n"
+		f"{description or '空插件骨架——挂载 stage 接口后补全。'}\n\n"
+		f"## F{plugin_name} <class : FLayer<...>>\n\n"
+		f"插件骨架。把要实现的 stage 接口（IInit/ITick/...）填进 `FLayer<...>` 模板列表并覆写，\n"
+		f"然后在 `.cplugin` 的 `Dependencies` 手填依赖插件。\n\n"
+		f"- [{plugin_name}.md]({plugin_name}.md) — 概念\n",
 		encoding="utf-8", newline="\n",
 	)
 

@@ -61,9 +61,14 @@ if(_RENDER_GLSLANG_SRC AND EXISTS "${_RENDER_GLSLANG_SRC}/CMakeLists.txt")
 
 	if(TARGET glslang AND TARGET OSDependent AND TARGET SPIRV)
 		set(_RENDER_HAS_GLSLANG 1)
-		set_target_properties(glslang PROPERTIES FOLDER "Plugins/Render")
-		set_target_properties(OSDependent PROPERTIES FOLDER "Plugins/Render")
-		set_target_properties(SPIRV PROPERTIES FOLDER "Plugins/Render")
+		# Group ALL glslang build targets under ThirdParty/glslang — never a stray
+		# top-level "Plugins" folder (the engine already uses "Plugins" under Maho)
+		# or glslang's own "glslang" root folder.
+		foreach(_glslang_folder_tgt IN ITEMS glslang OSDependent SPIRV MachineIndependent GenericCodeGen glslang-default-resource-limits)
+			if(TARGET ${_glslang_folder_tgt})
+				set_target_properties(${_glslang_folder_tgt} PROPERTIES FOLDER "ThirdParty/glslang")
+			endif()
+		endforeach()
 		# glslang sources may contain non-UTF-8 bytes; force UTF-8 so MSVC's
 		# structured CL diagnostics (JSON) do not choke on invalid text.
 		if(MSVC)

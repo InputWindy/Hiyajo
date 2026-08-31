@@ -2,26 +2,41 @@
 
 ## Code files
 
-- [Exception.h](Exception.h) - non-fatal exception broadcast (`TMulticastEvent` + `FException`)
+- [Exception.h](Public/Exception.h) — 异常中心头：`FException` + `OnException` 多播事件
+- [ExceptionApi.h](Public/ExceptionApi.h) — DLL 导出宏 `MAHO_EXCEPTION_API`
+- [Exception.cpp](Private/Exception.cpp) — `ReportException` 广播 + 跨 DLL 访问器 `GetExceptionCenter`
 
-## Concept - exception broadcast
+## Concept - Non-Fatal Exception Broadcast
 
-Non-fatal exception broadcast singleton service - `ReportException` fans messages out to every `OnException` subscriber (logging, telemetry, crash reporting). **This plugin never aborts**: fatal errors go through `Core/Fatal`; here we only "report to interested parties". The engine has no standalone delegate building block yet, so a minimal multicast event is bundled (`TMulticastEvent`, only needing `void(const std::string&)` broadcast).
+Exception 是一个**广播中枢**：引擎各处把"出错了但不必死"的事件上报给它，订阅者（日志、遥测、崩溃上报）各自决定怎么处理。上报本身只做一件事——把消息分发给所有订阅者，**不终止、不记录、不写盘**。致命错误不属于这里，走 `Core/Fatal` 的 `ReportFatal`。
 
-### FException - report entry point (singleton service)
+### 1. 订阅（OnException）
 
-`TSingleton<FException>` + `IPlugin<IInit, IShutdown>` (Initialize/Shutdown clear subscriptions). `ReportException(std::string_view)` broadcasts directly; `ReportException(const std::exception&)` forwards `what()`.
-
-### TMulticastEvent - minimal multicast event
-
-Template `TMulticastEvent<void(Args...)>`: `Bind(FHandler)` appends a subscription (`std::function`), `Broadcast(Args...)` calls non-empty handlers in order, `RemoveAll()` clears. Lock-free - single-threaded broadcast semantics.
+`OnException` 是 `TMulticastEvent<void(const std::string&)>`（`Core/Delegate`），在拥有线程上用 `Bind` 注册处理器；**非线程安全**——跨线程上报请走队列。
 
 ```cpp
-Exception::FException::Get().OnException.Bind([](const std::string& M) {
-    Log::Error("exception: {}", M);
+#include <Exception.h>
+
+using namespace Maho;
+
+Exception::GetExceptionCenter()->OnException.Bind([](const std::string& M) {
+    if (auto* L = ::Maho::GetLog())
+    {
+        L->Error("exception: {}", M);   // 或转发给遥测 / 上报
+    }
 });
-Exception::FException::Get().ReportException("failed to load texture");
 ```
+
+### 2. 上报（ReportException）
+
+- `ReportException("...")` 直接广播字符串消息。
+- `ReportException(const std::exception&)` 转发 `what()`。
+
+```cpp
+Exception::GetExceptionCenter()->ReportException("failed to load texture");
+```
+
+生命周期：`FException::Initialize` 清空订阅并发布 `this`；`Shutdown` 撤回 `this` 并清空订阅。
 
 ## Third-party dependencies
 
@@ -29,4 +44,6 @@ Exception::FException::Get().ReportException("failed to load texture");
 
 ## Related docs
 
-- [API.html](API.html) - API documentation
+- [API.md](API.md) - API documentation
+- [ImplAPI.md](ImplAPI.md) - 实现算法字典
+- [EngineDoc.md](../../../Source/Public/Engine/EngineDoc.md) - 层架构

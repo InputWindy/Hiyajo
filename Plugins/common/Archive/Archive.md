@@ -2,26 +2,27 @@
 
 ## Code files
 
-- [Archive.h](Archive.h) - binary serialization pure library (`EArchiveMode` / `FArchive` / `ISerialize` / `FMemoryReader` / `FMemoryWriter`)
+- [Archive.h](Public/Archive.h) — 二进制序列化纯库（`EArchiveMode` / `FArchive` / `ISerialize` / `FMemoryReader` / `FMemoryWriter`）
+- [Archive.cpp](Private/Archive.cpp) — 内建 typed 序列化算子 + 内存字节流实现
 
-## Concept - binary serialization
+## Concept - 二进制序列化
 
-Binary serialization **pure library** - abstract read/write stream + memory byte streams + self-serialization interface. **No singleton, no state, zero third-party**, header-only implementation, compiled into users. `FArchive` is the bridge between raw bytes and typed data: write direction streams data with `<<`, read direction recovers from the stream.
+二进制序列化**纯库**——抽象读写流 + 内存字节流 + 自序列化接口。**无单例、无状态、零第三方依赖**，接口集中在 `Archive.h`，内建 typed 算子在 `Archive.cpp` 编译进插件目标。`FArchive` 是原始字节与类型化数据之间的桥：写入方向经 `<<` 把数据流进字节流，读取方向从字节流恢复出数据。
 
-### FArchive - abstract read/write stream
+### FArchive — 抽象读写流
 
-- Virtual interface: `Serialize(void*, size_t)` (memcpy semantics) / `Seek` / `Tell`; `IsReading / IsWriting` distinguish direction.
-- Built-in `operator<<`: int32/uint32/int64/uint64/float/double/bool/`std::string` (string prefixed with a uint32 length).
-- Generic POD template `operator<<(T&)`: `static_assert` trivially copyable (e.g. `glm::vec3`), serialized as a whole block.
+- 虚接口：`Serialize(void*, size_t)`（memcpy 语义）/ `Seek` / `Tell`；`IsReading` / `IsWriting` 区分方向。
+- 内建 `operator<<`：int32/uint32/int64/uint64/float/double/bool/`std::string`（string 前带 `uint32` 长度前缀）。
+- 通用 POD 模板 `operator<<(T&)`：`static_assert` 平凡可拷贝（如 `glm::vec3`），整块序列化，header 内联。
 
-### ISerialize - self-serialization interface
+### ISerialize — 自序列化接口
 
-Types implement `void Serialize(FArchive& Ar)` and push all fields out with `Ar <<` - the same function handles both read and write.
+类型实现 `void Serialize(FArchive& Ar)` 并把所有字段用 `Ar <<` 推出——同一个函数同时处理读和写。
 
-### FMemoryReader / FMemoryWriter - memory byte streams
+### FMemoryReader / FMemoryWriter — 内存字节流
 
-- `FMemoryReader`: holds an **external** buffer reference (the buffer must outlive the reader); out-of-bounds reads are silently skipped.
-- `FMemoryWriter`: writes into an **owned** buffer; `GetBytes()` views / `TakeBytes()` moves it away.
+- `FMemoryReader`：持有**外部**缓冲的引用（缓冲须比 reader 存活更久）；越界读静默跳过（TODO 报告越界）。
+- `FMemoryWriter`：写进**自有**缓冲；`GetBytes()` 只读视图 / `TakeBytes()` 移动取走。
 
 ```cpp
 // Writing
@@ -36,8 +37,8 @@ int Y = 0; Reader << Y;   // Y == 42
 
 ## Third-party dependencies
 
-- None (pure std).
+- None（pure std）。
 
 ## Related docs
 
-- [API.html](API.html) - API documentation
+- [API.md](API.md) - API documentation

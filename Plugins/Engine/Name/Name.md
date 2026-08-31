@@ -2,27 +2,35 @@
 
 ## Code files
 
-- [Name.h](Name.h) - string interning identifier (`FName` + `FNamePool` + `std::hash` specialization)
+- [Name.h](Public/Name.h) — 名称池头：`FName` + `FNamePool` + `std::hash` 特化
+- [NameApi.h](Public/NameApi.h) — DLL 导出宏 `MAHO_NAME_API`
+- [Name.cpp](Private/Name.cpp) — 驻留算法 + 跨 DLL 访问器 `GetNamePool`
 
-## Concept - string interning
+## Concept - Interned String Identifiers
 
-The Name plugin provides **immutable string identifiers** - constructing an `FName` interns the string into the global pool, identical strings share one entry, comparison is O(1) (by internal Id, no byte-by-byte comparison). Frequently repeated engine strings (resource directory keys, CVar names, etc.) use FName to avoid duplicate storage and comparison cost.
+Name 提供 UE FName 式的**字符串驻留**：把字符串存进全局池一次，后续以 `uint32_t` id 引用。相同字符串共享同一池条目 → 比较 / 散列是 O(1) 整数运算，比 `strcmp` 快得多。适合"反复出现、需快速相等比较"的标识（骨骼名、资源名、消息名）。
 
-### FName - interned identifier
+### 1. 驻留（Intern）
 
-Default-constructed = None (empty, `Id == 0`). Explicit construction `FName("head")` goes through `FNamePool::Get().Intern`; `ToString()` reverses the lookup into the pool.
+`FNamePool::Intern(Str)` 线程安全：查 `Lookup`（`unordered_map<string, uint32_t>`）；命中返回既有 id，未命中追加进 `Pool` 并记新 id。**空串不驻留**——直接返回 None（`Id == 0`），None 同时是"空"与"未设置"的标记。
 
 ```cpp
-const FName Bone = "head";
-const FName Also = "head";       // same pool entry
-Bone == Also;                    // true, O(1)
+#include <Name.h>
+
+using namespace Maho;
+
+const Name::FName Bone = "head";
+const Name::FName Also = "head";   // 同一池条目
+Bone == Also;                       // true，O(1)
+
+Bone.ToString();                    // "head"
+Bone.IsNone();                      // false
+Name::FName{}.IsNone();             // true（默认构造）
 ```
 
-A matching `std::hash<FName>` specialization (by `GetId()`) - usable directly as an `unordered_map` key.
+### 2. 生命周期与前提
 
-### FNamePool - global interning pool (singleton service)
-
-`TSingleton<FNamePool>` + `IPlugin<IInit, IShutdown>`, `Mutex` protected, thread-safe. `Intern` is idempotent (returns the canonical entry when it exists), `StringForId` reverses. Initialize/Shutdown clear the pool (`free()`).
+`FNamePool` 须先经引擎层系统初始化（`GetNamePool()` 非空）——`FName(Str)` 构造和 `ToString()` 都依赖它。`Initialize` 先清空池，`Shutdown` 清空池并撤回。
 
 ## Third-party dependencies
 
@@ -30,4 +38,6 @@ A matching `std::hash<FName>` specialization (by `GetId()`) - usable directly as
 
 ## Related docs
 
-- [API.html](API.html) - API documentation
+- [API.md](API.md) - API documentation
+- [ImplAPI.md](ImplAPI.md) - 实现算法字典
+- [EngineDoc.md](../../../Source/Public/Engine/EngineDoc.md) - 层架构
