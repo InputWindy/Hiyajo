@@ -76,7 +76,7 @@ public:
 		PendingTypeBinders.clear();
 		Impl.reset();
 		bInitialized = false;
-		MAHO_LOG_CORE_INFO("Script Lua backend shut down");
+		// No log here: shutdown ordering vs the Log layer is not guaranteed.
 	}
 
 	bool IsInitialized() const override { return bInitialized; }
@@ -276,6 +276,12 @@ FScriptSystem* GScriptSystem = nullptr;
 MAHO_SCRIPT_API FScriptSystem* GetScriptSystem()
 {
 	return GScriptSystem;
+}
+
+FScriptSystem::FScriptSystem()
+{
+	// Script logs in Initialize; the Log layer must be initialized first.
+	AddDependency(std::type_index(typeid(IInit)), "FLog", std::type_index(typeid(IInit)));
 }
 
 void FScriptSystem::Initialize(FEngineBase& Engine)

@@ -1,5 +1,7 @@
 #include "Config.h"
 
+#include <ConsoleVariable.h>
+
 #include <fstream>
 #include <string>
 #include <utility>
@@ -14,10 +16,46 @@ FConfig* GetConfig()
 	return GConfig;
 }
 
+namespace
+{
+	/** Current platform name for the per-platform ini override (e.g. "Windows"). */
+	[[nodiscard]] const char* GetPlatformName()
+	{
+#if defined(_WIN32)
+		return "Windows";
+#elif defined(__ANDROID__)
+		return "Android";
+#elif defined(__APPLE__)
+#	if defined(TARGET_OS_TV)
+		return "IOS";   // TODO: distinguish tvOS when needed
+#	else
+		return "IOS";
+#	endif
+#elif defined(__linux__)
+		return "Linux";
+#else
+		return "Unknown";
+#endif
+	}
+}
+
 void FConfig::Initialize(FEngineBase&)
 {
 	GConfig = this;
 	Sections.clear();
+
+	// Load the common default, then the per-platform override (later wins).
+	Load("Config/DefaultEngine.ini");
+	Load("Config/" + std::string(GetPlatformName()) + ".ini");
+
+	// Push [ConsoleVariables] values into the CVar registry: key == CVar name.
+	for (const auto& [Key, Value] : Sections["ConsoleVariables"])
+	{
+		if (ConsoleVariable::IConsoleVariable* Var = ConsoleVariable::FConsoleVariable::Get().Find(Key))
+		{
+			Var->Set(Value);
+		}
+	}
 }
 
 void FConfig::Shutdown(FEngineBase&)

@@ -144,34 +144,6 @@ source_group(TREE "${ENGINE_DIR}/Plugins/Common/Compress" FILES
 	"${ENGINE_DIR}/Plugins/Common/Compress/Private/Compress.cpp"
 )
 
-add_library(Config SHARED
-	${ENGINE_DIR}/Plugins/Engine/Config/Public/Config.h
-	${ENGINE_DIR}/Plugins/Engine/Config/Private/Config.cpp
-	${ENGINE_DIR}/Plugins/Engine/Config/Config.cplugin
-	${ENGINE_DIR}/Plugins/Engine/Config/Config.cmake
-	${ENGINE_DIR}/Plugins/Engine/Config/settings.json
-)
-set_source_files_properties(	${ENGINE_DIR}/Plugins/Engine/Config/Config.cplugin
-	${ENGINE_DIR}/Plugins/Engine/Config/Config.cmake
-	${ENGINE_DIR}/Plugins/Engine/Config/settings.json PROPERTIES HEADER_FILE_ONLY ON)
-target_include_directories(Config PUBLIC
-	"${ENGINE_DIR}/Source/Public"
-	"${ENGINE_DIR}/Plugins/Engine/Config/Public"
-	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEngine/Public"
-)
-set_target_properties(Config PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
-target_compile_definitions(Config PRIVATE MAHO_CONFIG_MODULE_EXPORTS)
-target_link_libraries(Config PUBLIC Maho)
-set_property(TARGET Config PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>")
-set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Engine/Config")
-include("${ENGINE_DIR}/Plugins/Engine/Config/Config.cmake")
-unset(_MOD_PLUGIN_DIR)
-
-source_group(TREE "${ENGINE_DIR}/Plugins/Engine/Config" FILES
-	"${ENGINE_DIR}/Plugins/Engine/Config/Public/Config.h"
-	"${ENGINE_DIR}/Plugins/Engine/Config/Private/Config.cpp"
-)
-
 add_library(ConsoleVariable SHARED
 	${ENGINE_DIR}/Plugins/Common/ConsoleVariable/Public/ConsoleVariable.h
 	${ENGINE_DIR}/Plugins/Common/ConsoleVariable/Private/ConsoleVariable.cpp
@@ -198,6 +170,37 @@ unset(_MOD_PLUGIN_DIR)
 source_group(TREE "${ENGINE_DIR}/Plugins/Common/ConsoleVariable" FILES
 	"${ENGINE_DIR}/Plugins/Common/ConsoleVariable/Public/ConsoleVariable.h"
 	"${ENGINE_DIR}/Plugins/Common/ConsoleVariable/Private/ConsoleVariable.cpp"
+)
+
+add_library(Config SHARED
+	${ENGINE_DIR}/Plugins/Engine/Config/Public/Config.h
+	${ENGINE_DIR}/Plugins/Engine/Config/Private/Config.cpp
+	${ENGINE_DIR}/Plugins/Engine/Config/Config.cplugin
+	${ENGINE_DIR}/Plugins/Engine/Config/Config.cmake
+	${ENGINE_DIR}/Plugins/Engine/Config/settings.json
+)
+set_source_files_properties(	${ENGINE_DIR}/Plugins/Engine/Config/Config.cplugin
+	${ENGINE_DIR}/Plugins/Engine/Config/Config.cmake
+	${ENGINE_DIR}/Plugins/Engine/Config/settings.json PROPERTIES HEADER_FILE_ONLY ON)
+target_include_directories(Config PUBLIC
+	"${ENGINE_DIR}/Source/Public"
+	"${ENGINE_DIR}/Plugins/Engine/Config/Public"
+	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEngine/Public"
+	"${ENGINE_DIR}/Plugins/Common/ConsoleVariable/Public"
+)
+set_target_properties(Config PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
+target_compile_definitions(Config PRIVATE MAHO_CONFIG_MODULE_EXPORTS)
+target_link_libraries(Config PUBLIC Maho)
+set_property(TARGET Config PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>")
+set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Engine/Config")
+include("${ENGINE_DIR}/Plugins/Engine/Config/Config.cmake")
+unset(_MOD_PLUGIN_DIR)
+
+target_link_libraries(Config PUBLIC ConsoleVariable)
+
+source_group(TREE "${ENGINE_DIR}/Plugins/Engine/Config" FILES
+	"${ENGINE_DIR}/Plugins/Engine/Config/Public/Config.h"
+	"${ENGINE_DIR}/Plugins/Engine/Config/Private/Config.cpp"
 )
 
 add_library(Exception SHARED
@@ -560,33 +563,33 @@ source_group(TREE "${ENGINE_DIR}/Plugins/Engine/Render" FILES
 	"${ENGINE_DIR}/Plugins/Engine/Render/Private/Render.cpp"
 )
 
-add_library(ClearFeature SHARED
-	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ClearFeature/Public/ClearFeature.h
-	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ClearFeature/Private/ClearFeature.cpp
-	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ClearFeature/ClearFeature.cplugin
-	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ClearFeature/ClearFeature.cmake
+add_library(DrawTriangleFeature SHARED
+	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/DrawTriangleFeature/Public/DrawTriangleFeature.h
+	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/DrawTriangleFeature/Private/DrawTriangleFeature.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/DrawTriangleFeature/DrawTriangleFeature.cplugin
+	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/DrawTriangleFeature/DrawTriangleFeature.cmake
 )
-set_source_files_properties(	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ClearFeature/ClearFeature.cplugin
-	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ClearFeature/ClearFeature.cmake PROPERTIES HEADER_FILE_ONLY ON)
-target_include_directories(ClearFeature PUBLIC
+set_source_files_properties(	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/DrawTriangleFeature/DrawTriangleFeature.cplugin
+	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/DrawTriangleFeature/DrawTriangleFeature.cmake PROPERTIES HEADER_FILE_ONLY ON)
+target_include_directories(DrawTriangleFeature PUBLIC
 	"${ENGINE_DIR}/Source/Public"
-	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ClearFeature/Public"
+	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/DrawTriangleFeature/Public"
 	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEngine/Public"
 	"${ENGINE_DIR}/Plugins/Engine/Render/Public"
 )
-set_target_properties(ClearFeature PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
-target_compile_definitions(ClearFeature PRIVATE MAHO_CLEARFEATURE_MODULE_EXPORTS)
-target_link_libraries(ClearFeature PUBLIC Maho)
-set_property(TARGET ClearFeature PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>")
-set(_MOD_PLUGIN_DIR "${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ClearFeature")
-include("${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ClearFeature/ClearFeature.cmake")
+set_target_properties(DrawTriangleFeature PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
+target_compile_definitions(DrawTriangleFeature PRIVATE MAHO_DRAWTRIANGLEFEATURE_MODULE_EXPORTS)
+target_link_libraries(DrawTriangleFeature PUBLIC Maho)
+set_property(TARGET DrawTriangleFeature PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>")
+set(_MOD_PLUGIN_DIR "${CMAKE_CURRENT_SOURCE_DIR}/Plugins/DrawTriangleFeature")
+include("${CMAKE_CURRENT_SOURCE_DIR}/Plugins/DrawTriangleFeature/DrawTriangleFeature.cmake")
 unset(_MOD_PLUGIN_DIR)
 
-target_link_libraries(ClearFeature PUBLIC Render)
+target_link_libraries(DrawTriangleFeature PUBLIC Render)
 
-source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ClearFeature" FILES
-	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ClearFeature/Public/ClearFeature.h"
-	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ClearFeature/Private/ClearFeature.cpp"
+source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/Plugins/DrawTriangleFeature" FILES
+	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/DrawTriangleFeature/Public/DrawTriangleFeature.h"
+	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/DrawTriangleFeature/Private/DrawTriangleFeature.cpp"
 )
 
 # The project root — the entry plugin (under Plugins/, Public header + Private impl).
@@ -606,8 +609,8 @@ target_include_directories(ExampleEngine PUBLIC
 	"${ENGINE_DIR}/Plugins/Engine/Paths/Public"
 	"${ENGINE_DIR}/Plugins/Engine/Asset/Public"
 	"${ENGINE_DIR}/Plugins/Common/Compress/Public"
-	"${ENGINE_DIR}/Plugins/Engine/Config/Public"
 	"${ENGINE_DIR}/Plugins/Common/ConsoleVariable/Public"
+	"${ENGINE_DIR}/Plugins/Engine/Config/Public"
 	"${ENGINE_DIR}/Plugins/Engine/Exception/Public"
 	"${ENGINE_DIR}/Plugins/Engine/Log/Public"
 	"${ENGINE_DIR}/Plugins/Engine/Name/Public"
@@ -625,8 +628,8 @@ target_include_directories(ExampleEngine PUBLIC
 set_target_properties(ExampleEngine PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 target_compile_definitions(ExampleEngine PRIVATE MAHO_EXAMPLEENGINE_MODULE_EXPORTS)
 target_link_libraries(ExampleEngine PUBLIC Maho)
-add_dependencies(ExampleEngine Archive Paths Asset Compress Config ConsoleVariable Exception Log Name Platform RHI Reflect Resource Script Text Timer Unicode Render)
-target_link_libraries(ExampleEngine PUBLIC Archive Paths Asset Compress Config ConsoleVariable Exception Log Name Platform RHI Reflect Resource Script Text Timer Unicode Render)
+add_dependencies(ExampleEngine Archive Paths Asset Compress ConsoleVariable Config Exception Log Name Platform RHI Reflect Resource Script Text Timer Unicode Render)
+target_link_libraries(ExampleEngine PUBLIC Archive Paths Asset Compress ConsoleVariable Config Exception Log Name Platform RHI Reflect Resource Script Text Timer Unicode Render)
 # Plugin DLLs co-locate with Maho.dll + EntryPoint so relative DLL deps resolve.
 set_property(TARGET ExampleEngine PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>")
 
@@ -693,6 +696,20 @@ add_executable(EntryPoint WIN32 Intermediate/Main.cpp)
 target_compile_definitions(EntryPoint PRIVATE MAHO_ENGINE_NAME="ExampleEngine.dll")
 target_link_libraries(EntryPoint PRIVATE Maho)
 
+# Copy the project's Config/ directory next to the binary (DefaultEngine.ini etc.
+# are loaded at runtime relative to the working directory). A custom target (ALL)
+# so it re-runs every build - editing an ini must not require a relink.
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/Config")
+	add_custom_target(CopyConfig ALL
+		COMMAND ${CMAKE_COMMAND} -E copy_directory
+			"${CMAKE_CURRENT_SOURCE_DIR}/Config"
+			"${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>/Config"
+		COMMENT "Copying Config/ to runtime dir"
+		VERBATIM
+	)
+	add_dependencies(EntryPoint CopyConfig)
+endif()
+
 # One Binaries/<Config> dir for the exe + Maho.dll + every plugin DLL, so at
 # runtime they all resolve each other (both Maho.dll and the plugin DLLs must
 # sit next to the EntryPoint exe). Multi-config (MSVC): per-config suffix.
@@ -705,7 +722,7 @@ endforeach()
 set_property(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" PROPERTY VS_DEBUGGER_WORKING_DIRECTORY "${_MAHO_BIN}/$<CONFIG>")
 # The sln startup project is EntryPoint (the app host), not ZERO_CHECK.
 set_property(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" PROPERTY VS_STARTUP_PROJECT EntryPoint)
-add_dependencies(EntryPoint ExampleEngine Archive Paths Asset Compress Config ConsoleVariable Exception Log Name Platform RHI Reflect Resource Script Text Timer Unicode Render ClearFeature MahoCheckCycle)
+add_dependencies(EntryPoint ExampleEngine Archive Paths Asset Compress ConsoleVariable Config Exception Log Name Platform RHI Reflect Resource Script Text Timer Unicode Render DrawTriangleFeature MahoCheckCycle)
 
 # Solution folders: EntryPoint at the ROOT; Maho (engine), Project, ThirdParty.
 # The project root sits at Project/ itself; project plugin DLLs under
@@ -725,9 +742,9 @@ set_target_properties(Asset PROPERTIES FOLDER "Maho/Plugins/Engine")
 
 set_target_properties(Compress PROPERTIES FOLDER "Maho/Plugins/Common")
 
-set_target_properties(Config PROPERTIES FOLDER "Maho/Plugins/Engine")
-
 set_target_properties(ConsoleVariable PROPERTIES FOLDER "Maho/Plugins/Common")
+
+set_target_properties(Config PROPERTIES FOLDER "Maho/Plugins/Engine")
 
 set_target_properties(Exception PROPERTIES FOLDER "Maho/Plugins/Engine")
 
@@ -753,5 +770,5 @@ set_target_properties(Unicode PROPERTIES FOLDER "Maho/Plugins/Common")
 
 set_target_properties(Render PROPERTIES FOLDER "Maho/Plugins/Engine")
 
-set_target_properties(ClearFeature PROPERTIES FOLDER "Project/Plugins")
+set_target_properties(DrawTriangleFeature PROPERTIES FOLDER "Project/Plugins")
 

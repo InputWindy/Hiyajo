@@ -56,6 +56,7 @@ class FPlatform : public FLayer<IPreInit, IInit, IPostInit, IBeginFrame, ITick, 
 public:
 	MAHO_DECLARE_LAYER(FPlatform, "Platform.dll");
 
+	FPlatform();
 	~FPlatform() override;
 
 	/** Create a window (picks the backend for the current platform). */
@@ -76,9 +77,11 @@ public:
 	/** Window close request (false when headless or no events). */
 	[[nodiscard]] bool ShouldClose() const;
 
-private:
-	FPlatform() = default;
+	/** Created window size (from DefaultEngine.ini). */
+	[[nodiscard]] std::uint32_t GetWindowWidth() const { return WindowWidth; }
+	[[nodiscard]] std::uint32_t GetWindowHeight() const { return WindowHeight; }
 
+private:
 	// -- engine pipeline stages (scheduler-only) --
 	void PreInitialize(FEngineBase&) override {}
 	void Initialize(FEngineBase& Engine) override;
@@ -94,6 +97,9 @@ private:
 	std::unique_ptr<IPlatform> Surface;
 	std::function<void()> PollEventsFn;
 	std::function<bool()> QueryShouldClose;
+
+	std::uint32_t WindowWidth = 0;
+	std::uint32_t WindowHeight = 0;
 };
 
 } // namespace Platform

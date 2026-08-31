@@ -149,6 +149,9 @@ FShaderCompilerServer::FShaderCompilerServer() = default;
 FShaderCompilerServer::~FShaderCompilerServer()
 {
 	Shutdown();
+#ifdef MAHO_WITH_GLSLANG
+	glslang::FinalizeProcess();
+#endif
 }
 
 bool FShaderCompilerServer::Initialize()

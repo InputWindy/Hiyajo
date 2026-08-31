@@ -28,6 +28,13 @@ public:
 	virtual void Clear(float R, float G, float B, float A) override;
 	virtual void EndFrame() override;
 
+	virtual void DrawPrimitive(
+		FRHIGraphicsPipeline* Pipeline,
+		std::uint32_t VertexCount,
+		std::uint32_t ViewportWidth,
+		std::uint32_t ViewportHeight,
+		float ClearR, float ClearG, float ClearB, float ClearA) override;
+
 	virtual void Resize(int Width, int Height) override;
 
 	[[nodiscard]] virtual bool IsInitialized() const override;
@@ -88,6 +95,8 @@ public:
 	[[nodiscard]] virtual FRHIFramebuffer* GetBackBufferFramebuffer(std::uint32_t ImageIndex) override;
 	[[nodiscard]] virtual FRHIRenderPass* GetSwapchainRenderPass() override;
 	[[nodiscard]] virtual std::uint32_t GetCurrentBackBufferIndex() const override;
+	[[nodiscard]] virtual std::uint32_t GetFramebufferWidth() const override;
+	[[nodiscard]] virtual std::uint32_t GetFramebufferHeight() const override;
 
 	[[nodiscard]] virtual FRHIQueryPool* CreateQueryPool(ERHIQueryType Type, std::uint32_t QueryCount) override;
 	virtual void DestroyQueryPool(FRHIQueryPool* Pool) override;

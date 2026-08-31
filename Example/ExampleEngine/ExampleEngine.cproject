@@ -80,7 +80,7 @@
       "Enabled": true
     },
     {
-      "Name": "ClearFeature",
+      "Name": "DrawTriangleFeature",
       "Enabled": true
     }
   ]

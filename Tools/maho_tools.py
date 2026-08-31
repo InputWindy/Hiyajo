@@ -515,6 +515,20 @@ add_executable(EntryPoint WIN32 Intermediate/Main.cpp)
 target_compile_definitions(EntryPoint PRIVATE MAHO_ENGINE_NAME="{name}.dll")
 target_link_libraries(EntryPoint PRIVATE Maho)
 
+# Copy the project's Config/ directory next to the binary (DefaultEngine.ini etc.
+# are loaded at runtime relative to the working directory). A custom target (ALL)
+# so it re-runs every build - editing an ini must not require a relink.
+if(EXISTS "${{CMAKE_CURRENT_SOURCE_DIR}}/Config")
+	add_custom_target(CopyConfig ALL
+		COMMAND ${{CMAKE_COMMAND}} -E copy_directory
+			"${{CMAKE_CURRENT_SOURCE_DIR}}/Config"
+			"${{CMAKE_BINARY_DIR}}/Binaries/$<CONFIG>/Config"
+		COMMENT "Copying Config/ to runtime dir"
+		VERBATIM
+	)
+	add_dependencies(EntryPoint CopyConfig)
+endif()
+
 # One Binaries/<Config> dir for the exe + Maho.dll + every plugin DLL, so at
 # runtime they all resolve each other (both Maho.dll and the plugin DLLs must
 # sit next to the EntryPoint exe). Multi-config (MSVC): per-config suffix.

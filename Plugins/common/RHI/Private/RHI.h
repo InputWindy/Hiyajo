@@ -44,6 +44,18 @@ public:
 	virtual void Clear(float R, float G, float B, float A) = 0;
 	virtual void EndFrame() = 0;
 
+	/**
+	 * Record one frame of raster work into the frame command buffer: clear the
+	 * swapchain backbuffer, bind the pipeline, set a full viewport/scissor, then
+	 * draw. Call between BeginFrame and EndFrame.
+	 */
+	virtual void DrawPrimitive(
+		FRHIGraphicsPipeline* Pipeline,
+		std::uint32_t VertexCount,
+		std::uint32_t ViewportWidth,
+		std::uint32_t ViewportHeight,
+		float ClearR, float ClearG, float ClearB, float ClearA) = 0;
+
 	virtual void Resize(int Width, int Height) = 0;
 
 	[[nodiscard]] virtual bool IsInitialized() const = 0;
@@ -108,6 +120,10 @@ public:
 	[[nodiscard]] virtual FRHIFramebuffer* GetBackBufferFramebuffer(std::uint32_t ImageIndex) = 0;
 	[[nodiscard]] virtual FRHIRenderPass* GetSwapchainRenderPass() = 0;
 	[[nodiscard]] virtual std::uint32_t GetCurrentBackBufferIndex() const = 0;
+
+	/** Current framebuffer size (window size; may change after a resize). */
+	[[nodiscard]] virtual std::uint32_t GetFramebufferWidth() const = 0;
+	[[nodiscard]] virtual std::uint32_t GetFramebufferHeight() const = 0;
 
 	// GPU queries (occlusion / timestamp)
 	[[nodiscard]] virtual FRHIQueryPool* CreateQueryPool(ERHIQueryType Type, std::uint32_t QueryCount) = 0;

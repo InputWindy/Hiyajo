@@ -412,6 +412,51 @@ void FVulkanRHI::EndMainPass()
 	}
 }
 
+void FVulkanRHI::DrawPrimitive(
+	FRHIGraphicsPipeline* Pipeline,
+	std::uint32_t VertexCount,
+	std::uint32_t ViewportWidth,
+	std::uint32_t ViewportHeight,
+	float ClearR, float ClearG, float ClearB, float ClearA)
+{
+	if (!bInitialized)
+	{
+		MAHO_LOG_CORE_ERROR("FVulkanRHI::DrawPrimitive: not initialized");
+		return;
+	}
+
+	auto* VkPipeline = static_cast<FVulkanGraphicsPipeline*>(Pipeline);
+	if (VkPipeline == nullptr || VkPipeline->GetVkPipeline() == VK_NULL_HANDLE)
+	{
+		MAHO_LOG_CORE_ERROR("FVulkanRHI::DrawPrimitive: null pipeline");
+		return;
+	}
+
+	// Open the swapchain render pass with the clear color.
+	BeginMainPass(ClearR, ClearG, ClearB, ClearA);
+
+	// Bind the pipeline + full viewport/scissor, then draw (all dynamic state).
+	vkCmdBindPipeline(CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, VkPipeline->GetVkPipeline());
+
+	VkViewport Viewport{};
+	Viewport.x = 0.0f;
+	Viewport.y = 0.0f;
+	Viewport.width = static_cast<float>(ViewportWidth);
+	Viewport.height = static_cast<float>(ViewportHeight);
+	Viewport.minDepth = 0.0f;
+	Viewport.maxDepth = 1.0f;
+	vkCmdSetViewport(CommandBuffer, 0, 1, &Viewport);
+
+	VkRect2D Scissor{};
+	Scissor.offset = { 0, 0 };
+	Scissor.extent = { ViewportWidth, ViewportHeight };
+	vkCmdSetScissor(CommandBuffer, 0, 1, &Scissor);
+
+	vkCmdDraw(CommandBuffer, VertexCount, 1, 0, 0);
+
+	EndMainPass();
+}
+
 void FVulkanRHI::EndFrame()
 {
 	if (!bInitialized)
@@ -3086,6 +3131,16 @@ FRHIRenderPass* FVulkanRHI::GetSwapchainRenderPass()
 std::uint32_t FVulkanRHI::GetCurrentBackBufferIndex() const
 {
 	return CurrentImageIndex;
+}
+
+std::uint32_t FVulkanRHI::GetFramebufferWidth() const
+{
+	return SwapchainExtent.width;
+}
+
+std::uint32_t FVulkanRHI::GetFramebufferHeight() const
+{
+	return SwapchainExtent.height;
 }
 
 } // namespace Maho

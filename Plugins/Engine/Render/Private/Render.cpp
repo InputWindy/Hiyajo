@@ -29,7 +29,7 @@ void FRender::Initialize(FEngineBase& Engine)
 	if (P != nullptr && P->GetNativeWindow() != nullptr)
 	{
 		RHI = std::make_unique<FRHI>();
-		if (!RHI->Initialize(P->GetNativeWindow(), 1280, 720))
+		if (!RHI->Initialize(P->GetNativeWindow(), P->GetWindowWidth(), P->GetWindowHeight()))
 		{
 			MAHO_LOG_CORE_ERROR("FRender::Initialize: RHI initialization failed");
 			RHI.reset();
@@ -43,9 +43,9 @@ void FRender::Initialize(FEngineBase& Engine)
 	// Persistent render graph: Flush at frame start, Execute at frame end.
 	RenderGraph = std::make_unique<FLayerTaskGraph<FRenderStages, FRender>>(Pool, *this);
 
-	// Install the clear-color render feature into OUR layer collection (not the
+	// Install the triangle render feature into OUR layer collection (not the
 	// host engine's) so the render graph drives it.
-	Install("ClearFeature.dll");
+	Install("DrawTriangleFeature.dll");
 
 	FThreadedServer::Initialize();
 }

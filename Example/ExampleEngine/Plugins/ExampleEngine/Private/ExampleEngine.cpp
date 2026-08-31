@@ -9,6 +9,7 @@ void FExampleEngine::PreMain()
 	// Engine service layers installed up front; the window drives the engine
 	// loop and FPlatform requests exit when the window is closed.
 	Install("Log.dll");
+	Install("Config.dll");
 	Install("Platform.dll");
 	Install("Resource.dll");
 	Install("Script.dll");

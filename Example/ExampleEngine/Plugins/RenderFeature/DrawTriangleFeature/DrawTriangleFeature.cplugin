@@ -1,0 +1,8 @@
+{
+  "FileVersion": 1,
+  "Name": "DrawTriangleFeature",
+  "Description": "draw triangle render feature",
+  "Dependencies": [
+    "Render"
+  ]
+}

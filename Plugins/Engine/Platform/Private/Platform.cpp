@@ -36,6 +36,13 @@ MAHO_API FPlatform* GetPlatform()
 
 FPlatform::~FPlatform() = default;
 
+FPlatform::FPlatform()
+{
+	// The window size is read from the Config layer in Initialize - Config must
+	// be initialized first.
+	AddDependency(std::type_index(typeid(IInit)), "FConfig", std::type_index(typeid(IInit)));
+}
+
 namespace
 {
 	static ConsoleVariable::TAutoConsoleVariable<int> GCVarWindowWidth(
@@ -194,12 +201,14 @@ namespace
 
 void FPlatform::Initialize(FEngineBase&)
 {
-	// create the default window (CVar-configurable); skipped in headless builds.
+	// Window size comes from the CVars; the Config layer already pushed the
+	// [ConsoleVariables] ini values into them (r.Window.Width/Height).
+	WindowWidth = static_cast<std::uint32_t>(GCVarWindowWidth.GetValue());
+	WindowHeight = static_cast<std::uint32_t>(GCVarWindowHeight.GetValue());
+
 #if !defined(MAHO_HEADLESS)
-	const int Width = GCVarWindowWidth.GetValue();
-	const int Height = GCVarWindowHeight.GetValue();
-	const bool bOk = CreateWindow(Width, Height, GCVarWindowTitle.GetValue());
-	MAHO_LOG_CORE_INFO("FPlatform::Initialize - CreateWindow({}, {}) => {}", Width, Height, bOk);
+	const bool bOk = CreateWindow(WindowWidth, WindowHeight, GCVarWindowTitle.GetValue());
+	MAHO_LOG_CORE_INFO("FPlatform::Initialize - CreateWindow({}, {}) => {}", WindowWidth, WindowHeight, bOk);
 #endif
 
 	GPlatform = this;

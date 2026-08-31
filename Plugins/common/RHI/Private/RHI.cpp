@@ -176,6 +176,19 @@ void FRHI::Resize(int Width, int Height)
 	}
 }
 
+void FRHI::DrawPrimitive(
+	FRHIGraphicsPipeline* Pipeline,
+	std::uint32_t VertexCount,
+	std::uint32_t ViewportWidth,
+	std::uint32_t ViewportHeight,
+	float ClearR, float ClearG, float ClearB, float ClearA)
+{
+	if (RHI)
+	{
+		RHI->DrawPrimitive(Pipeline, VertexCount, ViewportWidth, ViewportHeight, ClearR, ClearG, ClearB, ClearA);
+	}
+}
+
 // -- command lists -----------------------------------------------------------
 
 FRHICommandList* FRHI::CreateCommandList(ERHICommandListType Type)
@@ -491,6 +504,16 @@ FRHIRenderPass* FRHI::GetSwapchainRenderPass()
 std::uint32_t FRHI::GetCurrentBackBufferIndex() const
 {
 	return RHI ? RHI->GetCurrentBackBufferIndex() : 0;
+}
+
+std::uint32_t FRHI::GetFramebufferWidth() const
+{
+	return RHI ? RHI->GetFramebufferWidth() : 0;
+}
+
+std::uint32_t FRHI::GetFramebufferHeight() const
+{
+	return RHI ? RHI->GetFramebufferHeight() : 0;
 }
 
 FRHIQueryPool* FRHI::CreateQueryPool(ERHIQueryType Type, std::uint32_t QueryCount)
