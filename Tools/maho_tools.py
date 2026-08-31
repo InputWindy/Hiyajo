@@ -658,15 +658,13 @@ def _all_plugin_infos(
 		_register(cplugin, "${ENGINE_DIR}", f"Plugins/{rel}", group)
 
 	if project_dir is not None:
-		# Project plugins: Plugins/<name>/ (entry + child plugins), each dir
-		# named after the plugin with <name>.cplugin inside.
+		# Project plugins: Plugins/<group>/.../<name>/<name>.cplugin (the entry
+		# plugin sits at Plugins/<name>; feature plugins may nest under groups).
 		proj_src = project_dir / "Plugins"
-		for child in sorted(proj_src.iterdir()):
-			if not child.is_dir():
-				continue
-			cplugin = child / f"{child.name}.cplugin"
-			if cplugin.is_file():
-				_register(cplugin, "${CMAKE_CURRENT_SOURCE_DIR}", f"Plugins/{child.name}", "")
+		for cplugin in discover_cplugin_files([proj_src]):
+			rel = cplugin.parent.relative_to(proj_src).as_posix()
+			group = "/".join(rel.split("/")[:-1]) if "/" in rel else ""
+			_register(cplugin, "${CMAKE_CURRENT_SOURCE_DIR}", f"Plugins/{rel}", group)
 		# Third-party plugins: Extension/<name>/.
 		proj_ext = project_dir / "Extension"
 		for cplugin in discover_cplugin_files([proj_ext]):
@@ -1508,7 +1506,7 @@ def run_package(
 	if cancel_event is not None and cancel_event.is_set():
 		raise OperationCancelled("Cancelled")
 
-	# Copy the build outputs (exe + extension dll) into Packaged/<platform>/.
+	# Copy the build outputs (exe + extension dll + Config dir) into Packaged/.
 	# CMake sets RUNTIME_OUTPUT_DIRECTORY to <Intermediate>/Binaries/<CONFIG>.
 	bin_dir = intermediate / "Binaries" / config
 	copied = 0
@@ -1516,6 +1514,11 @@ def run_package(
 		for src in bin_dir.glob(ext):
 			shutil.copy2(src, packaged / src.name)
 			copied += 1
+	# Config/ (DefaultEngine.ini + platform overrides) is staged into the
+	# runtime dir by the CopyConfig target; ship it alongside the binaries.
+	config_dir = bin_dir / "Config"
+	if config_dir.is_dir():
+		shutil.copytree(config_dir, packaged / "Config", dirs_exist_ok=True)
 	if copied == 0:
 		raise RuntimeError(f"No build outputs found under {bin_dir}")
 

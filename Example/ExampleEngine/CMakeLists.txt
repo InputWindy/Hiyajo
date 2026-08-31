@@ -564,16 +564,16 @@ source_group(TREE "${ENGINE_DIR}/Plugins/Engine/Render" FILES
 )
 
 add_library(DrawTriangleFeature SHARED
-	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/DrawTriangleFeature/Public/DrawTriangleFeature.h
-	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/DrawTriangleFeature/Private/DrawTriangleFeature.cpp
-	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/DrawTriangleFeature/DrawTriangleFeature.cplugin
-	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/DrawTriangleFeature/DrawTriangleFeature.cmake
+	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/DrawTriangleFeature/Public/DrawTriangleFeature.h
+	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/DrawTriangleFeature/Private/DrawTriangleFeature.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/DrawTriangleFeature/DrawTriangleFeature.cplugin
+	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/DrawTriangleFeature/DrawTriangleFeature.cmake
 )
-set_source_files_properties(	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/DrawTriangleFeature/DrawTriangleFeature.cplugin
-	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/DrawTriangleFeature/DrawTriangleFeature.cmake PROPERTIES HEADER_FILE_ONLY ON)
+set_source_files_properties(	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/DrawTriangleFeature/DrawTriangleFeature.cplugin
+	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/DrawTriangleFeature/DrawTriangleFeature.cmake PROPERTIES HEADER_FILE_ONLY ON)
 target_include_directories(DrawTriangleFeature PUBLIC
 	"${ENGINE_DIR}/Source/Public"
-	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/DrawTriangleFeature/Public"
+	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/DrawTriangleFeature/Public"
 	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEngine/Public"
 	"${ENGINE_DIR}/Plugins/Engine/Render/Public"
 )
@@ -581,15 +581,15 @@ set_target_properties(DrawTriangleFeature PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS 
 target_compile_definitions(DrawTriangleFeature PRIVATE MAHO_DRAWTRIANGLEFEATURE_MODULE_EXPORTS)
 target_link_libraries(DrawTriangleFeature PUBLIC Maho)
 set_property(TARGET DrawTriangleFeature PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>")
-set(_MOD_PLUGIN_DIR "${CMAKE_CURRENT_SOURCE_DIR}/Plugins/DrawTriangleFeature")
-include("${CMAKE_CURRENT_SOURCE_DIR}/Plugins/DrawTriangleFeature/DrawTriangleFeature.cmake")
+set(_MOD_PLUGIN_DIR "${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/DrawTriangleFeature")
+include("${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/DrawTriangleFeature/DrawTriangleFeature.cmake")
 unset(_MOD_PLUGIN_DIR)
 
 target_link_libraries(DrawTriangleFeature PUBLIC Render)
 
-source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/Plugins/DrawTriangleFeature" FILES
-	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/DrawTriangleFeature/Public/DrawTriangleFeature.h"
-	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/DrawTriangleFeature/Private/DrawTriangleFeature.cpp"
+source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/DrawTriangleFeature" FILES
+	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/DrawTriangleFeature/Public/DrawTriangleFeature.h"
+	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/DrawTriangleFeature/Private/DrawTriangleFeature.cpp"
 )
 
 # The project root — the entry plugin (under Plugins/, Public header + Private impl).
@@ -770,5 +770,5 @@ set_target_properties(Unicode PROPERTIES FOLDER "Maho/Plugins/Common")
 
 set_target_properties(Render PROPERTIES FOLDER "Maho/Plugins/Engine")
 
-set_target_properties(DrawTriangleFeature PROPERTIES FOLDER "Project/Plugins")
+set_target_properties(DrawTriangleFeature PROPERTIES FOLDER "Project/Plugins/RenderFeature")
 
