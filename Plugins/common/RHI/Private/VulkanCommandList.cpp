@@ -486,6 +486,7 @@ void FVulkanCommandList::TransitionTexture(FRHITexture* Texture, ERHIResourceSta
 	};
 
 	const FRHITextureDesc& Desc = Tex->GetDesc();
+	const bool bDepth = RHIEnumHas(Desc.Usage, ERHITextureUsage::DepthStencil);
 	VkImageMemoryBarrier Barrier{};
 	Barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
 	Barrier.oldLayout = ToLayout(OldState);
@@ -493,7 +494,7 @@ void FVulkanCommandList::TransitionTexture(FRHITexture* Texture, ERHIResourceSta
 	Barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 	Barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 	Barrier.image = Tex->GetVkImage();
-	Barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	Barrier.subresourceRange.aspectMask = bDepth ? VK_IMAGE_ASPECT_DEPTH_BIT : VK_IMAGE_ASPECT_COLOR_BIT;
 	Barrier.subresourceRange.baseMipLevel = 0;
 	Barrier.subresourceRange.levelCount = Desc.MipLevels;
 	Barrier.subresourceRange.baseArrayLayer = 0;

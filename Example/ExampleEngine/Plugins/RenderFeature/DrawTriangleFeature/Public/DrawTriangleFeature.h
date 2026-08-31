@@ -10,11 +10,13 @@ namespace Maho
 {
 
 // DrawTriangleFeature - a render feature that compiles a fullscreen triangle
-// shader and draws it into the swapchain backbuffer each frame. Mounts only
-// the IRender stage.
+// shader and draws it into the shared FScene::SceneColor target each frame
+// (dynamic rendering, Load over the scene clear). Mounts only the IRender stage.
 class FDrawTriangleFeature : public FLayer<IRender>
 {
 MAHO_DECLARE_LAYER(FDrawTriangleFeature, "DrawTriangleFeature.dll");
+
+	FDrawTriangleFeature();
 
 private:
 	void Render(FRender& R) override;

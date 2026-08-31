@@ -41,22 +41,19 @@ public:
 	virtual void Shutdown() = 0;
 
 	virtual void BeginFrame() = 0;
-	virtual void Clear(float R, float G, float B, float A) = 0;
 	virtual void EndFrame() = 0;
+	virtual void Resize(int Width, int Height) = 0;
 
 	/**
-	 * Record one frame of raster work into the frame command buffer: clear the
-	 * swapchain backbuffer, bind the pipeline, set a full viewport/scissor, then
-	 * draw. Call between BeginFrame and EndFrame.
+	 * Borrow the frame command buffer (already begun by BeginFrame, ended and
+	 * submitted by EndFrame) as a non-owning recording surface.
 	 */
-	virtual void DrawPrimitive(
-		FRHIGraphicsPipeline* Pipeline,
-		std::uint32_t VertexCount,
-		std::uint32_t ViewportWidth,
-		std::uint32_t ViewportHeight,
-		float ClearR, float ClearG, float ClearB, float ClearA) = 0;
+	[[nodiscard]] virtual FRHICommandList* GetFrameCommandList() = 0;
 
-	virtual void Resize(int Width, int Height) = 0;
+	/** Blit an off-screen texture to the current swapchain backbuffer. */
+	virtual void PresentTexture(FRHITexture* Src) = 0;
+
+	[[nodiscard]] virtual ERHIFormat GetSwapchainFormat() const = 0;
 
 	[[nodiscard]] virtual bool IsInitialized() const = 0;
 
@@ -114,14 +111,8 @@ public:
 	[[nodiscard]] virtual FRHIFramebuffer* CreateFramebuffer(const FRHIFramebufferDesc& Desc) = 0;
 	virtual void DestroyFramebuffer(FRHIFramebuffer* Framebuffer) = 0;
 
-	// Swapchain access (WSI) - the swapchain lives inside the device; these
-	// read-only accessors let the caller render into the backbuffer framebuffer
-	// through the same BeginRenderPass path as any off-screen target.
-	[[nodiscard]] virtual FRHIFramebuffer* GetBackBufferFramebuffer(std::uint32_t ImageIndex) = 0;
-	[[nodiscard]] virtual FRHIRenderPass* GetSwapchainRenderPass() = 0;
-	[[nodiscard]] virtual std::uint32_t GetCurrentBackBufferIndex() const = 0;
-
-	/** Current framebuffer size (window size; may change after a resize). */
+	// Swapchain stays device-private; only the framebuffer size is exposed (the
+	// scene target must match it, and its format must match GetSwapchainFormat).
 	[[nodiscard]] virtual std::uint32_t GetFramebufferWidth() const = 0;
 	[[nodiscard]] virtual std::uint32_t GetFramebufferHeight() const = 0;
 

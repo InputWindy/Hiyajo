@@ -67,21 +67,26 @@ struct IRHI
 
 	// -- frame primitives (call inside EnqueueTask to run on the server thread) --
 	virtual void BeginFrame() = 0;
-	virtual void Clear(float R, float G, float B, float A) = 0;
 	virtual void EndFrame() = 0;
 	virtual void Resize(int Width, int Height) = 0;
 
 	/**
-	 * Record one frame of raster work into the frame command buffer: clear the
-	 * swapchain backbuffer, bind the pipeline, set a full viewport/scissor, then
-	 * draw. Call between BeginFrame and EndFrame.
+	 * Borrow the frame command buffer as a recording surface. The buffer is
+	 * already begun by BeginFrame and will be ended/submitted by EndFrame -
+	 * features only record render passes / draws into it. Non-owning; never call
+	 * Begin/End on the returned list.
 	 */
-	virtual void DrawPrimitive(
-		FRHIGraphicsPipeline* Pipeline,
-		std::uint32_t VertexCount,
-		std::uint32_t ViewportWidth,
-		std::uint32_t ViewportHeight,
-		float ClearR, float ClearG, float ClearB, float ClearA) = 0;
+	[[nodiscard]] virtual FRHICommandList* GetFrameCommandList() = 0;
+
+	/**
+	 * Copy an off-screen texture to the current swapchain backbuffer (blit) on
+	 * the frame command buffer. Call after all scene recording, before EndFrame.
+	 * The swapchain render pass / framebuffer stay RHI-private.
+	 */
+	virtual void PresentTexture(FRHITexture* Src) = 0;
+
+	/** Current swapchain image format (off-screen scene targets must match it for blit). */
+	[[nodiscard]] virtual ERHIFormat GetSwapchainFormat() const = 0;
 
 	[[nodiscard]] virtual bool IsInitialized() const = 0;
 
@@ -128,14 +133,9 @@ struct IRHI
 	[[nodiscard]] virtual FRHIFramebuffer* CreateFramebuffer(const FRHIFramebufferDesc& Desc) = 0;
 	virtual void DestroyFramebuffer(FRHIFramebuffer* Framebuffer) = 0;
 
-	// Swapchain access (WSI) - the swapchain lives inside the RHI; read-only
-	// accessors let the caller render into the backbuffer framebuffer through
-	// the same BeginRenderPass path as any off-screen target.
-	[[nodiscard]] virtual FRHIFramebuffer* GetBackBufferFramebuffer(std::uint32_t ImageIndex) = 0;
-	[[nodiscard]] virtual FRHIRenderPass* GetSwapchainRenderPass() = 0;
-	[[nodiscard]] virtual std::uint32_t GetCurrentBackBufferIndex() const = 0;
-
-	/** Current framebuffer size (window size; may change after a resize). */
+	// Swapchain stays RHI-private: features render off-screen and hand FRender a
+	// color texture, which PresentTexture blits to the backbuffer. Only the
+	// format and framebuffer size are exposed (scene targets must match both).
 	[[nodiscard]] virtual std::uint32_t GetFramebufferWidth() const = 0;
 	[[nodiscard]] virtual std::uint32_t GetFramebufferHeight() const = 0;
 
@@ -244,15 +244,11 @@ public:
 
 	// -- IRHI frame primitives (forward to the private IDynamicRHI) --
 	void BeginFrame() override;
-	void Clear(float R, float G, float B, float A) override;
 	void EndFrame() override;
 	void Resize(int Width, int Height) override;
-	void DrawPrimitive(
-		FRHIGraphicsPipeline* Pipeline,
-		std::uint32_t VertexCount,
-		std::uint32_t ViewportWidth,
-		std::uint32_t ViewportHeight,
-		float ClearR, float ClearG, float ClearB, float ClearA) override;
+	[[nodiscard]] FRHICommandList* GetFrameCommandList() override;
+	void PresentTexture(FRHITexture* Src) override;
+	[[nodiscard]] ERHIFormat GetSwapchainFormat() const override;
 
 	// -- IRHI device methods (forward to the private IDynamicRHI) --
 	[[nodiscard]] bool IsInitialized() const override;
@@ -299,9 +295,6 @@ public:
 	void DestroyFramebuffer(FRHIFramebuffer* Framebuffer) override;
 
 	// -- IRHI swapchain accessors (forward to the private IDynamicRHI) --
-	[[nodiscard]] FRHIFramebuffer* GetBackBufferFramebuffer(std::uint32_t ImageIndex) override;
-	[[nodiscard]] FRHIRenderPass* GetSwapchainRenderPass() override;
-	[[nodiscard]] std::uint32_t GetCurrentBackBufferIndex() const override;
 	[[nodiscard]] std::uint32_t GetFramebufferWidth() const override;
 	[[nodiscard]] std::uint32_t GetFramebufferHeight() const override;
 

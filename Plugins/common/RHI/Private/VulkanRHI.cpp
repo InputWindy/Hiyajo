@@ -246,6 +246,9 @@ void FVulkanRHI::Shutdown()
 
 	if (Device != VK_NULL_HANDLE && CommandPool != VK_NULL_HANDLE)
 	{
+		// Free the non-owning wrapper first (the Vk buffer dies with the pool).
+		delete FrameCommandListRHI;
+		FrameCommandListRHI = nullptr;
 		vkDestroyCommandPool(Device, CommandPool, nullptr);
 		CommandPool = VK_NULL_HANDLE;
 		CommandBuffer = VK_NULL_HANDLE;
@@ -346,115 +349,136 @@ void FVulkanRHI::BeginFrame()
 	{
 		return;
 	}
+
+	// Begin the frame command buffer so features can record into it via the
+	// borrowed command list. The wrapper keeps its recording flag in sync (the
+	// buffer is reset/begun here, ended/submitted by EndFrame).
+	if (FrameCommandListRHI == nullptr)
+	{
+		return;
+	}
+	FrameCommandListRHI->Begin();
 }
 
-void FVulkanRHI::Clear(float R, float G, float B, float A)
+FRHICommandList* FVulkanRHI::GetFrameCommandList()
 {
-	BeginMainPass(R, G, B, A);
-	EndMainPass();
+	return FrameCommandListRHI;
 }
 
-void FVulkanRHI::BeginMainPass(float R, float G, float B, float A)
+ERHIFormat FVulkanRHI::GetSwapchainFormat() const
 {
-	if (!bInitialized)
+	// The swapchain picks B8G8R8A8_SRGB when available; the off-screen scene
+	// target must match exactly (blit requires identical formats).
+	if (SwapchainImageFormat == VK_FORMAT_B8G8R8A8_SRGB)
 	{
-		MAHO_LOG_CORE_ERROR("FVulkanRHI::BeginMainPass: not initialized");
-		return;
+		return ERHIFormat::B8G8R8A8_SRGB;
 	}
-
-	ClearColorR = R;
-	ClearColorG = G;
-	ClearColorB = B;
-	ClearColorA = A;
-
-	if (!CheckVkResult(vkResetCommandBuffer(CommandBuffer, 0), "vkResetCommandBuffer"))
+	if (SwapchainImageFormat == VK_FORMAT_B8G8R8A8_UNORM)
 	{
-		return;
+		return ERHIFormat::B8G8R8A8_UNORM;
 	}
-
-	VkCommandBufferBeginInfo BeginInfo{};
-	BeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-	BeginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-
-	if (!CheckVkResult(vkBeginCommandBuffer(CommandBuffer, &BeginInfo), "vkBeginCommandBuffer"))
+	if (SwapchainImageFormat == VK_FORMAT_R8G8B8A8_SRGB)
 	{
-		return;
+		return ERHIFormat::R8G8B8A8_UNORM;
 	}
-
-	VkClearValue ClearValue{};
-	ClearValue.color = {{ClearColorR, ClearColorG, ClearColorB, ClearColorA}};
-
-	VkRenderPassBeginInfo RenderPassInfo{};
-	RenderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-	RenderPassInfo.renderPass = RenderPass;
-	RenderPassInfo.framebuffer = SwapchainFramebuffers[CurrentImageIndex];
-	RenderPassInfo.renderArea.offset = {0, 0};
-	RenderPassInfo.renderArea.extent = SwapchainExtent;
-	RenderPassInfo.clearValueCount = 1;
-	RenderPassInfo.pClearValues = &ClearValue;
-
-	vkCmdBeginRenderPass(CommandBuffer, &RenderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+	if (SwapchainImageFormat == VK_FORMAT_R8G8B8A8_UNORM)
+	{
+		return ERHIFormat::R8G8B8A8_UNORM;
+	}
+	return ERHIFormat::B8G8R8A8_UNORM;
 }
 
-void FVulkanRHI::EndMainPass()
+void FVulkanRHI::PresentTexture(FRHITexture* Src)
 {
 	if (!bInitialized)
 	{
-		MAHO_LOG_CORE_ERROR("FVulkanRHI::EndMainPass: not initialized");
+		MAHO_LOG_CORE_ERROR("FVulkanRHI::PresentTexture: not initialized");
 		return;
 	}
 
-	vkCmdEndRenderPass(CommandBuffer);
-
-	if (!CheckVkResult(vkEndCommandBuffer(CommandBuffer), "vkEndCommandBuffer"))
+	auto* SrcVk = static_cast<FVulkanTexture*>(Src);
+	if (SrcVk == nullptr || SrcVk->GetVkImage() == VK_NULL_HANDLE)
 	{
+		MAHO_LOG_CORE_ERROR("FVulkanRHI::PresentTexture: null source texture");
 		return;
 	}
-}
 
-void FVulkanRHI::DrawPrimitive(
-	FRHIGraphicsPipeline* Pipeline,
-	std::uint32_t VertexCount,
-	std::uint32_t ViewportWidth,
-	std::uint32_t ViewportHeight,
-	float ClearR, float ClearG, float ClearB, float ClearA)
-{
-	if (!bInitialized)
+	const VkImage SrcImage = SrcVk->GetVkImage();
+	const VkImage DstImage = SwapchainImages[CurrentImageIndex];
+	const FRHITextureDesc& SrcDesc = SrcVk->GetDesc();
+
+	// Transition source to transfer-src and the swapchain image to transfer-dst.
+	auto TransitionImage = [this](VkImage Image, VkImageLayout Old, VkImageLayout New,
+		VkAccessFlags SrcAccess, VkAccessFlags DstAccess, VkPipelineStageFlags SrcStage,
+		VkPipelineStageFlags DstStage, std::uint32_t MipLevels, std::uint32_t Layers)
 	{
-		MAHO_LOG_CORE_ERROR("FVulkanRHI::DrawPrimitive: not initialized");
-		return;
-	}
+		VkImageMemoryBarrier Barrier{};
+		Barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+		Barrier.oldLayout = Old;
+		Barrier.newLayout = New;
+		Barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		Barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		Barrier.image = Image;
+		Barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		Barrier.subresourceRange.baseMipLevel = 0;
+		Barrier.subresourceRange.levelCount = MipLevels;
+		Barrier.subresourceRange.baseArrayLayer = 0;
+		Barrier.subresourceRange.layerCount = Layers;
+		Barrier.srcAccessMask = SrcAccess;
+		Barrier.dstAccessMask = DstAccess;
+		vkCmdPipelineBarrier(CommandBuffer, SrcStage, DstStage, 0, 0, nullptr, 0, nullptr, 1, &Barrier);
+	};
 
-	auto* VkPipeline = static_cast<FVulkanGraphicsPipeline*>(Pipeline);
-	if (VkPipeline == nullptr || VkPipeline->GetVkPipeline() == VK_NULL_HANDLE)
-	{
-		MAHO_LOG_CORE_ERROR("FVulkanRHI::DrawPrimitive: null pipeline");
-		return;
-	}
+	TransitionImage(SrcImage, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+		VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+		VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT,
+		VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+		SrcDesc.MipLevels, SrcDesc.ArrayLayers);
 
-	// Open the swapchain render pass with the clear color.
-	BeginMainPass(ClearR, ClearG, ClearB, ClearA);
+	TransitionImage(DstImage, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+		0, VK_ACCESS_TRANSFER_WRITE_BIT,
+		VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+		1, 1);
 
-	// Bind the pipeline + full viewport/scissor, then draw (all dynamic state).
-	vkCmdBindPipeline(CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, VkPipeline->GetVkPipeline());
+	VkImageBlit Blit{};
+	Blit.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	Blit.srcSubresource.mipLevel = 0;
+	Blit.srcSubresource.baseArrayLayer = 0;
+	Blit.srcSubresource.layerCount = 1;
+	Blit.srcOffsets[0] = { 0, 0, 0 };
+	Blit.srcOffsets[1] = {
+		static_cast<std::int32_t>(SrcDesc.Extent.Width),
+		static_cast<std::int32_t>(SrcDesc.Extent.Height),
+		1 };
+	Blit.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	Blit.dstSubresource.mipLevel = 0;
+	Blit.dstSubresource.baseArrayLayer = 0;
+	Blit.dstSubresource.layerCount = 1;
+	Blit.dstOffsets[0] = { 0, 0, 0 };
+	Blit.dstOffsets[1] = {
+		static_cast<std::int32_t>(SwapchainExtent.width),
+		static_cast<std::int32_t>(SwapchainExtent.height),
+		1 };
 
-	VkViewport Viewport{};
-	Viewport.x = 0.0f;
-	Viewport.y = 0.0f;
-	Viewport.width = static_cast<float>(ViewportWidth);
-	Viewport.height = static_cast<float>(ViewportHeight);
-	Viewport.minDepth = 0.0f;
-	Viewport.maxDepth = 1.0f;
-	vkCmdSetViewport(CommandBuffer, 0, 1, &Viewport);
+	vkCmdBlitImage(
+		CommandBuffer,
+		SrcImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+		DstImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+		1, &Blit, VK_FILTER_LINEAR);
 
-	VkRect2D Scissor{};
-	Scissor.offset = { 0, 0 };
-	Scissor.extent = { ViewportWidth, ViewportHeight };
-	vkCmdSetScissor(CommandBuffer, 0, 1, &Scissor);
+	// Transition the swapchain image to present-src before submit.
+	TransitionImage(DstImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+		VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+		VK_ACCESS_TRANSFER_WRITE_BIT, 0,
+		VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+		1, 1);
 
-	vkCmdDraw(CommandBuffer, VertexCount, 1, 0, 0);
-
-	EndMainPass();
+	// Return the source to color-attachment so the next frame can render into it.
+	TransitionImage(SrcImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+		VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+		VK_ACCESS_TRANSFER_READ_BIT, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+		VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+		SrcDesc.MipLevels, SrcDesc.ArrayLayers);
 }
 
 void FVulkanRHI::EndFrame()
@@ -463,6 +487,13 @@ void FVulkanRHI::EndFrame()
 	{
 		MAHO_LOG_CORE_ERROR("FVulkanRHI::EndFrame: not initialized");
 		return;
+	}
+
+	// Close the frame command buffer (opened by BeginFrame, recorded by features
+	// + PresentTexture) before submitting.
+	if (FrameCommandListRHI != nullptr)
+	{
+		FrameCommandListRHI->End();
 	}
 
 	VkPipelineStageFlags WaitStages[] = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
@@ -1137,7 +1168,7 @@ bool FVulkanRHI::CreateSwapchain()
 	CreateInfo.imageColorSpace = ColorSpace;
 	CreateInfo.imageExtent = SwapchainExtent;
 	CreateInfo.imageArrayLayers = 1;
-	CreateInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+	CreateInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
 	CreateInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
 	CreateInfo.preTransform = Capabilities.currentTransform;
 	CreateInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
@@ -1304,7 +1335,7 @@ bool FVulkanRHI::CreateFramebuffers()
 	}
 	if (SwapchainRenderPassRHI == nullptr)
 	{
-		SwapchainRenderPassRHI = new FVulkanRenderPass(Device, RenderPass);
+		SwapchainRenderPassRHI = new FVulkanRenderPass(Device, RenderPass, /*bOwnsHandle=*/false);
 	}
 	return true;
 }
@@ -1331,6 +1362,14 @@ bool FVulkanRHI::CreateCommandPoolAndBuffer()
 	{
 		return false;
 	}
+
+	// Non-owning wrapper so features borrow the frame buffer via GetFrameCommandList.
+	FVulkanCommandList::FRTRuntime RT;
+	RT.BuildAccel = CmdBuildAccelerationStructuresKHR;
+	RT.CopyAccel = CmdCopyAccelerationStructureKHR;
+	RT.TraceRays = CmdTraceRaysKHR;
+	FrameCommandListRHI = new FVulkanCommandList(
+		ERHICommandListType::Graphics, Device, CommandPool, CommandBuffer, MemoryAllocator.get(), RT);
 
 	MAHO_LOG_CORE_INFO("Vulkan command pool and buffer created");
 	return true;
@@ -1652,6 +1691,8 @@ VkFormat FVulkanRHI::ToVkFormat(ERHIFormat Format)
 		return VK_FORMAT_R8G8B8A8_UNORM;
 	case ERHIFormat::B8G8R8A8_UNORM:
 		return VK_FORMAT_B8G8R8A8_UNORM;
+	case ERHIFormat::B8G8R8A8_SRGB:
+		return VK_FORMAT_B8G8R8A8_SRGB;
 	case ERHIFormat::R32_SFLOAT:
 		return VK_FORMAT_R32_SFLOAT;
 	case ERHIFormat::R32G32_SFLOAT:
@@ -3116,21 +3157,6 @@ IDynamicRHI* FRHIFactory::Create(ERHIBackend Backend)
 
 	MAHO_LOG_CORE_ERROR("FRHIFactory::Create: unsupported ERHIBackend ({})", static_cast<std::uint32_t>(Backend));
 	return nullptr;
-}
-
-FRHIFramebuffer* FVulkanRHI::GetBackBufferFramebuffer(std::uint32_t ImageIndex)
-{
-	return (ImageIndex < SwapchainFramebufferRHI.size()) ? SwapchainFramebufferRHI[ImageIndex] : nullptr;
-}
-
-FRHIRenderPass* FVulkanRHI::GetSwapchainRenderPass()
-{
-	return SwapchainRenderPassRHI;
-}
-
-std::uint32_t FVulkanRHI::GetCurrentBackBufferIndex() const
-{
-	return CurrentImageIndex;
 }
 
 std::uint32_t FVulkanRHI::GetFramebufferWidth() const

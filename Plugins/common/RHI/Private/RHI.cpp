@@ -152,14 +152,6 @@ void FRHI::BeginFrame()
 	}
 }
 
-void FRHI::Clear(float R, float G, float B, float A)
-{
-	if (RHI)
-	{
-		RHI->Clear(R, G, B, A);
-	}
-}
-
 void FRHI::EndFrame()
 {
 	if (RHI)
@@ -176,17 +168,22 @@ void FRHI::Resize(int Width, int Height)
 	}
 }
 
-void FRHI::DrawPrimitive(
-	FRHIGraphicsPipeline* Pipeline,
-	std::uint32_t VertexCount,
-	std::uint32_t ViewportWidth,
-	std::uint32_t ViewportHeight,
-	float ClearR, float ClearG, float ClearB, float ClearA)
+FRHICommandList* FRHI::GetFrameCommandList()
+{
+	return RHI ? RHI->GetFrameCommandList() : nullptr;
+}
+
+void FRHI::PresentTexture(FRHITexture* Src)
 {
 	if (RHI)
 	{
-		RHI->DrawPrimitive(Pipeline, VertexCount, ViewportWidth, ViewportHeight, ClearR, ClearG, ClearB, ClearA);
+		RHI->PresentTexture(Src);
 	}
+}
+
+ERHIFormat FRHI::GetSwapchainFormat() const
+{
+	return RHI ? RHI->GetSwapchainFormat() : ERHIFormat::Unknown;
 }
 
 // -- command lists -----------------------------------------------------------
@@ -489,21 +486,6 @@ void FRHI::DestroyFramebuffer(FRHIFramebuffer* Framebuffer)
 	{
 		RHI->DestroyFramebuffer(Framebuffer);
 	}
-}
-
-FRHIFramebuffer* FRHI::GetBackBufferFramebuffer(std::uint32_t ImageIndex)
-{
-	return RHI ? RHI->GetBackBufferFramebuffer(ImageIndex) : nullptr;
-}
-
-FRHIRenderPass* FRHI::GetSwapchainRenderPass()
-{
-	return RHI ? RHI->GetSwapchainRenderPass() : nullptr;
-}
-
-std::uint32_t FRHI::GetCurrentBackBufferIndex() const
-{
-	return RHI ? RHI->GetCurrentBackBufferIndex() : 0;
 }
 
 std::uint32_t FRHI::GetFramebufferWidth() const

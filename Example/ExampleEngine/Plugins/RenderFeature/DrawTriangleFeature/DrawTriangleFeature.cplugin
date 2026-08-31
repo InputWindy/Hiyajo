@@ -3,6 +3,7 @@
   "Name": "DrawTriangleFeature",
   "Description": "draw triangle render feature",
   "Dependencies": [
-    "Render"
+    "Render",
+    "Scene"
   ]
 }

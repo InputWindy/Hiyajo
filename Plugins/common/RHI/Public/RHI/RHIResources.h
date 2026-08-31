@@ -54,6 +54,15 @@ struct FRHIBufferDesc
 	std::uint64_t Size = 0;
 	ERHIBufferUsage Usage = ERHIBufferUsage::None;
 	ERHIMemoryUsage MemoryUsage = ERHIMemoryUsage::GPUOnly;
+
+	[[nodiscard]] bool operator==(const FRHIBufferDesc& O) const
+	{
+		return Size == O.Size && Usage == O.Usage && MemoryUsage == O.MemoryUsage;
+	}
+	[[nodiscard]] bool operator!=(const FRHIBufferDesc& O) const
+	{
+		return !(*this == O);
+	}
 };
 
 class MAHO_RHI_API FRHIBuffer : public FRHIResource
@@ -127,6 +136,15 @@ struct FRHIExtent3D
 	std::uint32_t Width = 1;
 	std::uint32_t Height = 1;
 	std::uint32_t Depth = 1;
+
+	[[nodiscard]] bool operator==(const FRHIExtent3D& O) const
+	{
+		return Width == O.Width && Height == O.Height && Depth == O.Depth;
+	}
+	[[nodiscard]] bool operator!=(const FRHIExtent3D& O) const
+	{
+		return !(*this == O);
+	}
 };
 
 struct FRHITextureDesc
@@ -138,6 +156,21 @@ struct FRHITextureDesc
 	std::uint32_t ArrayLayers = 1;
 	ERHITextureUsage Usage = ERHITextureUsage::None;
 	ERHIMemoryUsage MemoryUsage = ERHIMemoryUsage::GPUOnly;
+
+	[[nodiscard]] bool operator==(const FRHITextureDesc& O) const
+	{
+		return Format == O.Format
+			&& Dimension == O.Dimension
+			&& Extent == O.Extent
+			&& MipLevels == O.MipLevels
+			&& ArrayLayers == O.ArrayLayers
+			&& Usage == O.Usage
+			&& MemoryUsage == O.MemoryUsage;
+	}
+	[[nodiscard]] bool operator!=(const FRHITextureDesc& O) const
+	{
+		return !(*this == O);
+	}
 };
 
 class MAHO_RHI_API FRHITexture : public FRHIResource

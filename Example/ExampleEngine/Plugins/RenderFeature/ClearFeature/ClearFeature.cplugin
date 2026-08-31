@@ -1,8 +1,0 @@
-{
-  "FileVersion": 1,
-  "Name": "ClearFeature",
-  "Description": "clear-color render feature",
-  "Dependencies": [
-    "Render"
-  ]
-}

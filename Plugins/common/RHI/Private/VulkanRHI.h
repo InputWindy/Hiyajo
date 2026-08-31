@@ -25,17 +25,12 @@ public:
 	virtual void Shutdown() override;
 
 	virtual void BeginFrame() override;
-	virtual void Clear(float R, float G, float B, float A) override;
 	virtual void EndFrame() override;
-
-	virtual void DrawPrimitive(
-		FRHIGraphicsPipeline* Pipeline,
-		std::uint32_t VertexCount,
-		std::uint32_t ViewportWidth,
-		std::uint32_t ViewportHeight,
-		float ClearR, float ClearG, float ClearB, float ClearA) override;
-
 	virtual void Resize(int Width, int Height) override;
+
+	[[nodiscard]] virtual FRHICommandList* GetFrameCommandList() override;
+	virtual void PresentTexture(FRHITexture* Src) override;
+	[[nodiscard]] virtual ERHIFormat GetSwapchainFormat() const override;
 
 	[[nodiscard]] virtual bool IsInitialized() const override;
 
@@ -91,10 +86,7 @@ public:
 	[[nodiscard]] virtual FRHIFramebuffer* CreateFramebuffer(const FRHIFramebufferDesc& Desc) override;
 	virtual void DestroyFramebuffer(FRHIFramebuffer* Framebuffer) override;
 
-	// Swapchain access (WSI)
-	[[nodiscard]] virtual FRHIFramebuffer* GetBackBufferFramebuffer(std::uint32_t ImageIndex) override;
-	[[nodiscard]] virtual FRHIRenderPass* GetSwapchainRenderPass() override;
-	[[nodiscard]] virtual std::uint32_t GetCurrentBackBufferIndex() const override;
+	// Swapchain stays device-private; only framebuffer size is exposed.
 	[[nodiscard]] virtual std::uint32_t GetFramebufferWidth() const override;
 	[[nodiscard]] virtual std::uint32_t GetFramebufferHeight() const override;
 
@@ -126,12 +118,6 @@ public:
 		std::uint32_t* OutHitStride,
 		std::uint32_t* OutMissOffset,
 		std::uint32_t* OutMissStride) override;
-
-	/** Begin command buffer + main swapchain render pass (clear). Leaves the pass open. */
-	void BeginMainPass(float R, float G, float B, float A);
-
-	/** End main render pass + command buffer. */
-	void EndMainPass();
 
 	[[nodiscard]] VkInstance GetVkInstance() const
 	{
@@ -232,6 +218,9 @@ private:
 	/** Frame path command pool (graphics family). */
 	VkCommandPool CommandPool = VK_NULL_HANDLE;
 	VkCommandBuffer CommandBuffer = VK_NULL_HANDLE;
+
+	/** Non-owning recording surface wrapping CommandBuffer (borrowed by features). */
+	FRHICommandList* FrameCommandListRHI = nullptr;
 
 	VkCommandPool GraphicsCmdPool = VK_NULL_HANDLE;
 	VkCommandPool ComputeCmdPool = VK_NULL_HANDLE;

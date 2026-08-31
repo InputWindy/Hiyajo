@@ -80,6 +80,10 @@
       "Enabled": true
     },
     {
+      "Name": "Scene",
+      "Enabled": true
+    },
+    {
       "Name": "DrawTriangleFeature",
       "Enabled": true
     }

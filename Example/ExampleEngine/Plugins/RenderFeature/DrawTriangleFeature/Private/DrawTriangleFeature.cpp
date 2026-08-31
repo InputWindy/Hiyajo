@@ -1,6 +1,7 @@
 #include "DrawTriangleFeature.h"
 
 #include <Log.h>
+#include <Scene.h>
 
 namespace Maho
 {
@@ -27,6 +28,12 @@ void main()
 )";
 }
 
+FDrawTriangleFeature::FDrawTriangleFeature()
+{
+	// Draw AFTER FScene clears the shared scene targets.
+	AddDependency(std::type_index(typeid(IRender)), "FScene", std::type_index(typeid(IRender)));
+}
+
 void FDrawTriangleFeature::Render(FRender& R)
 {
 	IRHI* RHI = R.GetRHI();
@@ -36,7 +43,15 @@ void FDrawTriangleFeature::Render(FRender& R)
 		return;
 	}
 
-	// Lazy one-time build: compile shaders + create the pipeline.
+	// Locate the global scene feature for its shared color/depth targets.
+	Scene::FScene* Scene = Scene::GetScene();
+	if (Scene == nullptr || !Scene->GetSceneColor().IsValid())
+	{
+		return;
+	}
+
+	// Lazy one-time build: compile shaders + create the pipeline (dynamic
+	// rendering - the pipeline declares formats, no render pass).
 	if (!bBuilt)
 	{
 		FShaderCompileDesc VDesc;
@@ -95,11 +110,15 @@ void FDrawTriangleFeature::Render(FRender& R)
 		PipelineDesc.VertexEntryPoint = "main";
 		PipelineDesc.FragmentEntryPoint = "main";
 		PipelineDesc.Layout = Layout;
-		PipelineDesc.RenderPass = RHI->GetSwapchainRenderPass();
+		PipelineDesc.RenderPass = nullptr;   // dynamic rendering (formats below)
 		PipelineDesc.Topology = ERHIPrimitiveTopology::TriangleList;
 		PipelineDesc.VertexStride = 0;
 		PipelineDesc.CullMode = ERHICullMode::None;
 		PipelineDesc.FillMode = ERHIFillMode::Solid;
+		PipelineDesc.ColorFormat = R.GetSwapchainFormat();
+		PipelineDesc.DepthFormat = ERHIFormat::D32_SFLOAT;
+		PipelineDesc.bDepthTest = true;
+		PipelineDesc.bDepthWrite = false;
 
 		Pipeline = RHI->CreateGraphicsPipeline(PipelineDesc);
 		if (Pipeline == nullptr)
@@ -112,10 +131,36 @@ void FDrawTriangleFeature::Render(FRender& R)
 		MAHO_LOG_CORE_INFO("DrawTriangleFeature: triangle pipeline built");
 	}
 
-	RHI->DrawPrimitive(
-		Pipeline, 3,
-		RHI->GetFramebufferWidth(), RHI->GetFramebufferHeight(),
-		0.15f, 0.25f, 0.45f, 1.0f);
+	// Record into the shared scene color target (Load - FScene already cleared).
+	FRHICommandList* Cmd = R.GetFrameCommandList();
+	if (Cmd == nullptr)
+	{
+		return;
+	}
+
+	FRHIRenderingAttachmentInfo Color;
+	Color.View = Scene->GetSceneColor().GetView();
+	Color.LoadOp = ERHILoadOp::Load;
+	Color.StoreOp = ERHIStoreOp::Store;
+
+	FRHIRenderingAttachmentInfo Depth;
+	const FRHIRenderingAttachmentInfo* PDepth = nullptr;
+	if (Scene->GetSceneDepth().IsValid())
+	{
+		Depth.View = Scene->GetSceneDepth().GetView();
+		Depth.LoadOp = ERHILoadOp::Load;
+		Depth.StoreOp = ERHIStoreOp::DontCare;
+		PDepth = &Depth;
+	}
+
+	Cmd->BeginRendering(&Color, 1, PDepth, R.GetFramebufferWidth(), R.GetFramebufferHeight());
+	Cmd->BindGraphicsPipeline(Pipeline);
+	Cmd->SetViewport(0.0f, 0.0f,
+		static_cast<float>(R.GetFramebufferWidth()),
+		static_cast<float>(R.GetFramebufferHeight()));
+	Cmd->SetScissor(0, 0, R.GetFramebufferWidth(), R.GetFramebufferHeight());
+	Cmd->Draw(3);
+	Cmd->EndRendering();
 }
 
 } // namespace Maho

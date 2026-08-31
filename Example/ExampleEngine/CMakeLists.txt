@@ -563,6 +563,35 @@ source_group(TREE "${ENGINE_DIR}/Plugins/Engine/Render" FILES
 	"${ENGINE_DIR}/Plugins/Engine/Render/Private/Render.cpp"
 )
 
+add_library(Scene SHARED
+	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/Scene/Public/Scene.h
+	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/Scene/Private/Scene.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/Scene/Scene.cplugin
+	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/Scene/Scene.cmake
+)
+set_source_files_properties(	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/Scene/Scene.cplugin
+	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/Scene/Scene.cmake PROPERTIES HEADER_FILE_ONLY ON)
+target_include_directories(Scene PUBLIC
+	"${ENGINE_DIR}/Source/Public"
+	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/Scene/Public"
+	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEngine/Public"
+	"${ENGINE_DIR}/Plugins/Engine/Render/Public"
+)
+set_target_properties(Scene PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
+target_compile_definitions(Scene PRIVATE MAHO_SCENE_MODULE_EXPORTS)
+target_link_libraries(Scene PUBLIC Maho)
+set_property(TARGET Scene PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>")
+set(_MOD_PLUGIN_DIR "${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/Scene")
+include("${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/Scene/Scene.cmake")
+unset(_MOD_PLUGIN_DIR)
+
+target_link_libraries(Scene PUBLIC Render)
+
+source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/Scene" FILES
+	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/Scene/Public/Scene.h"
+	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/Scene/Private/Scene.cpp"
+)
+
 add_library(DrawTriangleFeature SHARED
 	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/DrawTriangleFeature/Public/DrawTriangleFeature.h
 	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/DrawTriangleFeature/Private/DrawTriangleFeature.cpp
@@ -576,6 +605,7 @@ target_include_directories(DrawTriangleFeature PUBLIC
 	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/DrawTriangleFeature/Public"
 	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEngine/Public"
 	"${ENGINE_DIR}/Plugins/Engine/Render/Public"
+	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/Scene/Public"
 )
 set_target_properties(DrawTriangleFeature PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 target_compile_definitions(DrawTriangleFeature PRIVATE MAHO_DRAWTRIANGLEFEATURE_MODULE_EXPORTS)
@@ -585,7 +615,7 @@ set(_MOD_PLUGIN_DIR "${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/DrawTrian
 include("${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/DrawTriangleFeature/DrawTriangleFeature.cmake")
 unset(_MOD_PLUGIN_DIR)
 
-target_link_libraries(DrawTriangleFeature PUBLIC Render)
+target_link_libraries(DrawTriangleFeature PUBLIC Render Scene)
 
 source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/DrawTriangleFeature" FILES
 	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/DrawTriangleFeature/Public/DrawTriangleFeature.h"
@@ -722,7 +752,7 @@ endforeach()
 set_property(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" PROPERTY VS_DEBUGGER_WORKING_DIRECTORY "${_MAHO_BIN}/$<CONFIG>")
 # The sln startup project is EntryPoint (the app host), not ZERO_CHECK.
 set_property(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" PROPERTY VS_STARTUP_PROJECT EntryPoint)
-add_dependencies(EntryPoint ExampleEngine Archive Paths Asset Compress ConsoleVariable Config Exception Log Name Platform RHI Reflect Resource Script Text Timer Unicode Render DrawTriangleFeature MahoCheckCycle)
+add_dependencies(EntryPoint ExampleEngine Archive Paths Asset Compress ConsoleVariable Config Exception Log Name Platform RHI Reflect Resource Script Text Timer Unicode Render Scene DrawTriangleFeature MahoCheckCycle)
 
 # Solution folders: EntryPoint at the ROOT; Maho (engine), Project, ThirdParty.
 # The project root sits at Project/ itself; project plugin DLLs under
@@ -769,6 +799,8 @@ set_target_properties(Timer PROPERTIES FOLDER "Maho/Plugins/Engine")
 set_target_properties(Unicode PROPERTIES FOLDER "Maho/Plugins/Common")
 
 set_target_properties(Render PROPERTIES FOLDER "Maho/Plugins/Engine")
+
+set_target_properties(Scene PROPERTIES FOLDER "Project/Plugins/RenderFeature")
 
 set_target_properties(DrawTriangleFeature PROPERTIES FOLDER "Project/Plugins/RenderFeature")
 
