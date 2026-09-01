@@ -8,6 +8,11 @@
 #include <memory>
 #include <string_view>
 
+// GLFW is an opaque toolkit handle -- forward-declared so the public header
+// needs no glfw.h (the backend keeps the real pointer; ImGui's glfw backend
+// installs its input callbacks on it).
+struct GLFWwindow;
+
 // Win32 <Windows.h> #defines CreateWindow to CreateWindowW; keep the clean API name.
 #ifdef CreateWindow
 #	undef CreateWindow
@@ -81,6 +86,15 @@ public:
 	[[nodiscard]] std::uint32_t GetWindowWidth() const { return WindowWidth; }
 	[[nodiscard]] std::uint32_t GetWindowHeight() const { return WindowHeight; }
 
+	/** The raw toolkit window handle (GLFWwindow*) -- for ImGui's glfw backend,
+	 *  which installs its input callbacks on it. Null when headless. This is a
+	 *  narrow bridge (like the RHI's ImGui bridge); GetNativeWindow() (HWND)
+	 *  remains what the RHI uses. */
+	[[nodiscard]] GLFWwindow* GetToolkitWindowHandle() const
+	{
+		return GlfwWindowFn ? GlfwWindowFn() : nullptr;
+	}
+
 private:
 	// -- engine pipeline stages (scheduler-only) --
 	void PreInitialize(FEngineBase&) override {}
@@ -97,6 +111,7 @@ private:
 	std::unique_ptr<IPlatform> Surface;
 	std::function<void()> PollEventsFn;
 	std::function<bool()> QueryShouldClose;
+	std::function<GLFWwindow*()> GlfwWindowFn;
 
 	std::uint32_t WindowWidth = 0;
 	std::uint32_t WindowHeight = 0;

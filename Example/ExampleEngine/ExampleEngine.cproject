@@ -90,6 +90,10 @@
     {
       "Name": "Frame",
       "Enabled": true
+    },
+    {
+      "Name": "ImGuiRender",
+      "Enabled": true
     }
   ]
 }

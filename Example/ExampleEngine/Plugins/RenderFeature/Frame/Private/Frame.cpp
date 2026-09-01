@@ -1,6 +1,7 @@
 #include "Frame.h"
 
 #include <DrawTriangleFeature.h>
+#include <ImGuiRender.h>
 #include <RHI/RHIServer.h>
 #include <Scene.h>
 
@@ -14,6 +15,7 @@ FFrame::FFrame()
 	// for now -- no automatic "last stage per feature" wiring yet.
 	WaitFor<IPresent, Scene::FScene, IEndRender>();
 	WaitFor<IPresent, FDrawTriangleFeature, IEndRender>();
+	WaitFor<IPresent, FImGuiRenderFeature, IEndRender>();   // present blit carries the UI
 }
 
 void FFrame::BeginFrame(FRender& R)

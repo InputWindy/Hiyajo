@@ -2,6 +2,8 @@
 
 #include <DrawTriangleFeature.h>
 #include <Frame.h>
+#include <ImGuiRender.h>
+#include <ImGuiSystem.h>
 #include <Log.h>
 #include <Platform.h>
 #include <Scene.h>
@@ -15,6 +17,12 @@
 namespace Maho
 {
 
+FRender* GRender = nullptr;
+MAHO_RENDER_API FRender* GetRender()
+{
+	return GRender;
+}
+
 FRender::FRender()
 {
 	// Init: I read the window from Platform (its PostInitialize) and log heavily
@@ -27,6 +35,10 @@ FRender::FRender()
 	// their Shutdown AFTER mine. Declared here (I know them), not by them.
 	BlockOn<FLog, IShutdown, IShutdown>();
 	BlockOn<Platform::FPlatform, IShutdown, IShutdown>();
+
+	// Input: Platform's Tick polls GLFW first, then the ImGui host feeds io and
+	// builds the UI (same frame).
+	WaitFor<ITick, Platform::FPlatform, ITick>();
 }
 
 FRender::~FRender() = default;
@@ -38,6 +50,7 @@ void FRender::PreInitialize(FEngineBase&)
 void FRender::Initialize(FEngineBase& Engine)
 {
 	(void)Engine;
+	GRender = this;
 
 	// Create the render server (RHI) with the native window from the Platform.
 	Platform::FPlatform* P = Platform::GetPlatform();
@@ -54,6 +67,14 @@ void FRender::Initialize(FEngineBase& Engine)
 	// RDG resource pool (off-screen textures/buffers, cross-frame reuse).
 	ResourcePool = std::make_unique<FRenderResourcePool>(RHI.get());
 
+	// ImGui host (owned like the RHI; NewFrame driven in Tick). Init only when
+	// there is a real RHI + window (the RHI bridge needs the raw handles).
+	if (RHI != nullptr && P != nullptr)
+	{
+		ImGui = std::make_unique<FImGuiSystem>();
+		ImGui->Initialize(RHI.get(), P);
+	}
+
 	// Async shader compiler (dedicated compile thread).
 	ShaderCompiler = std::make_unique<FShaderCompilerServer>();
 	ShaderCompiler->Initialize();
@@ -69,6 +90,7 @@ void FRender::Initialize(FEngineBase& Engine)
 	Install<Scene::FScene>();
 	Install<FDrawTriangleFeature>();
 	Install<FFrame>();
+	Install<FImGuiRenderFeature>();
 }
 
 void FRender::PostInitialize(FEngineBase&)
@@ -86,6 +108,7 @@ void FRender::Shutdown(FEngineBase&)
 	// so this layer must be quiescent before we touch shared state -- the render
 	// feature graph pool first (a task still in flight holds the graph pointer),
 	// then the two threaded servers (shader-compile thread + RHI render-server
+	GRender = nullptr;
 	// thread). All of them drain their queues and join here.
 	//
 	// The leftover render tasks drained below (e.g. the last frame's EndFrame)
@@ -130,6 +153,14 @@ void FRender::Shutdown(FEngineBase&)
 
 	// The compile server thread was already joined above; just release the server.
 	ShaderCompiler.reset();
+
+	// Shut the ImGui host down after the render features (the ImGuiRender feature
+	// was using imgui's Vulkan objects) and before the RHI device goes away.
+	if (ImGui)
+	{
+		ImGui->Shutdown();
+		ImGui.reset();
+	}
 
 	// Release pooled resources before the RHI device goes away.
 	if (ResourcePool)
@@ -203,6 +234,15 @@ void FRender::Tick(FEngineBase&)
 	{
 		ReportFatal("FRender::Tick: render pipeline Compile failed");
 	}
+
+	// Build the ImGui frame (input + NewFrame + UI + Render) BEFORE the render
+	// graph executes -- the ImGuiRender feature records this same frame's draw
+	// data, and it is ordered after FPlatform::Tick (input polled first).
+	if (ImGui)
+	{
+		ImGui->NewFrame();
+	}
+
 	RenderGraph->Execute();
 	// No trailing Flush: the render graph pipelines across frames -- the next
 	// Tick's leading Flush (above) waits this frame's tasks. At shutdown the

@@ -548,9 +548,11 @@ target_include_directories(Render PUBLIC
 	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEngine/Public"
 	"${ENGINE_DIR}/Plugins/Common/RHI/Public"
 	"${ENGINE_DIR}/Plugins/Engine/Platform/Public"
+	"${ENGINE_DIR}/Plugins/Engine/ImGui/Public"
 	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/Scene/Public"
 	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/DrawTriangleFeature/Public"
 	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/Frame/Public"
+	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/ImGuiRender/Public"
 )
 set_target_properties(Render PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 target_compile_definitions(Render PRIVATE MAHO_RENDER_MODULE_EXPORTS)
@@ -560,7 +562,7 @@ set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Engine/Render")
 include("${ENGINE_DIR}/Plugins/Engine/Render/Render.cmake")
 unset(_MOD_PLUGIN_DIR)
 
-target_link_libraries(Render PUBLIC RHI Platform)
+target_link_libraries(Render PUBLIC RHI Platform ImGui)
 
 source_group(TREE "${ENGINE_DIR}/Plugins/Engine/Render" FILES
 	"${ENGINE_DIR}/Plugins/Engine/Render/Public/Render.h"
@@ -645,6 +647,7 @@ target_include_directories(Frame PUBLIC
 	"${ENGINE_DIR}/Plugins/Engine/Render/Public"
 	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/Scene/Public"
 	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/DrawTriangleFeature/Public"
+	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/ImGuiRender/Public"
 )
 set_target_properties(Frame PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 target_compile_definitions(Frame PRIVATE MAHO_FRAME_MODULE_EXPORTS)
@@ -659,6 +662,83 @@ target_link_libraries(Frame PUBLIC Render Scene)
 source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/Frame" FILES
 	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/Frame/Public/Frame.h"
 	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/Frame/Private/Frame.cpp"
+)
+
+# -- ImGui host (FRender owns it as a field; library, not a layer) -------------
+add_library(ImGui SHARED
+	${ENGINE_DIR}/Plugins/Engine/ImGui/Public/ImGuiSystem.h
+	${ENGINE_DIR}/Plugins/Engine/ImGui/Public/ImGuiApi.h
+	${ENGINE_DIR}/Plugins/Engine/ImGui/Private/ImGuiSystem.cpp
+	${ENGINE_DIR}/Plugins/Engine/ImGui/ImGui.cplugin
+	${ENGINE_DIR}/Plugins/Engine/ImGui/ImGui.cmake
+	${ENGINE_DIR}/Plugins/Engine/ImGui/settings.json
+)
+set_source_files_properties(${ENGINE_DIR}/Plugins/Engine/ImGui/ImGui.cplugin
+	${ENGINE_DIR}/Plugins/Engine/ImGui/ImGui.cmake
+	${ENGINE_DIR}/Plugins/Engine/ImGui/settings.json PROPERTIES HEADER_FILE_ONLY ON)
+target_include_directories(ImGui PUBLIC
+	"${ENGINE_DIR}/Source/Public"
+	"${ENGINE_DIR}/Plugins/Engine/ImGui/Public"
+	"${ENGINE_DIR}/Plugins/Engine/Log/Public"
+	"${ENGINE_DIR}/Plugins/Common/ConsoleVariable/Public"
+	"${ENGINE_DIR}/Plugins/Common/RHI/Public"
+	"${ENGINE_DIR}/Plugins/Engine/Render/Public"
+	"${ENGINE_DIR}/Plugins/Engine/Platform/Public"
+)
+set_target_properties(ImGui PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
+target_compile_definitions(ImGui PRIVATE MAHO_IMGUI_MODULE_EXPORTS)
+target_link_libraries(ImGui PUBLIC Maho)
+set_property(TARGET ImGui PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>")
+set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Engine/ImGui")
+include("${ENGINE_DIR}/Plugins/Engine/ImGui/ImGui.cmake")
+unset(_MOD_PLUGIN_DIR)
+
+# ImGui gets the RHI + Platform passed in (no Render dependency -- avoids a
+# Render <-> ImGui link cycle). Render links ImGui below.
+target_link_libraries(ImGui PUBLIC Platform RHI)
+
+source_group(TREE "${ENGINE_DIR}/Plugins/Engine/ImGui" PREFIX "ImGui" FILES
+	"${ENGINE_DIR}/Plugins/Engine/ImGui/Public/ImGuiSystem.h"
+	"${ENGINE_DIR}/Plugins/Engine/ImGui/Public/ImGuiApi.h"
+	"${ENGINE_DIR}/Plugins/Engine/ImGui/Private/ImGuiSystem.cpp"
+)
+
+# -- ImGuiRender feature (records the ImGui layer's draw data into SceneColor) -
+add_library(ImGuiRender SHARED
+	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/ImGuiRender/Public/ImGuiRender.h
+	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/ImGuiRender/Public/ImGuiRenderApi.h
+	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/ImGuiRender/Private/ImGuiRender.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/ImGuiRender/ImGuiRender.cplugin
+	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/ImGuiRender/ImGuiRender.cmake
+	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/ImGuiRender/settings.json
+)
+set_source_files_properties(${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/ImGuiRender/ImGuiRender.cplugin
+	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/ImGuiRender/ImGuiRender.cmake
+	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/ImGuiRender/settings.json PROPERTIES HEADER_FILE_ONLY ON)
+target_include_directories(ImGuiRender PUBLIC
+	"${ENGINE_DIR}/Source/Public"
+	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/ImGuiRender/Public"
+	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEngine/Public"
+	"${ENGINE_DIR}/Plugins/Engine/Render/Public"
+	"${ENGINE_DIR}/Plugins/Engine/ImGui/Public"
+	"${ENGINE_DIR}/Plugins/Common/RHI/Public"
+	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/Scene/Public"
+	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/Frame/Public"
+)
+set_target_properties(ImGuiRender PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
+target_compile_definitions(ImGuiRender PRIVATE MAHO_IMGUIRENDER_MODULE_EXPORTS)
+target_link_libraries(ImGuiRender PUBLIC Maho)
+set_property(TARGET ImGuiRender PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>")
+set(_MOD_PLUGIN_DIR "${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/ImGuiRender")
+include("${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/ImGuiRender/ImGuiRender.cmake")
+unset(_MOD_PLUGIN_DIR)
+
+target_link_libraries(ImGuiRender PUBLIC Render Scene ImGui)
+
+source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/ImGuiRender" FILES
+	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/ImGuiRender/Public/ImGuiRender.h"
+	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/ImGuiRender/Public/ImGuiRenderApi.h"
+	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/ImGuiRender/Private/ImGuiRender.cpp"
 )
 
 # The project root — the entry plugin (under Plugins/, Public header + Private impl).
@@ -694,13 +774,14 @@ target_include_directories(ExampleEngine PUBLIC
 	"${ENGINE_DIR}/Plugins/Engine/Timer/Public"
 	"${ENGINE_DIR}/Plugins/Common/Unicode/Public"
 	"${ENGINE_DIR}/Plugins/Engine/Render/Public"
+	"${ENGINE_DIR}/Plugins/Engine/ImGui/Public"
 )
 # Export the extern "C" CreateLayer() bridge — the host's single entry.
 set_target_properties(ExampleEngine PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 target_compile_definitions(ExampleEngine PRIVATE MAHO_EXAMPLEENGINE_MODULE_EXPORTS)
 target_link_libraries(ExampleEngine PUBLIC Maho)
-add_dependencies(ExampleEngine Archive Paths Asset Compress ConsoleVariable Config Exception Log Name Platform RHI Reflect Resource Script Text Timer Unicode Render)
-target_link_libraries(ExampleEngine PUBLIC Archive Paths Asset Compress ConsoleVariable Config Exception Log Name Platform RHI Reflect Resource Script Text Timer Unicode Render)
+add_dependencies(ExampleEngine Archive Paths Asset Compress ConsoleVariable Config Exception Log Name Platform RHI Reflect Resource Script Text Timer Unicode Render ImGui)
+target_link_libraries(ExampleEngine PUBLIC Archive Paths Asset Compress ConsoleVariable Config Exception Log Name Platform RHI Reflect Resource Script Text Timer Unicode Render ImGui)
 # Plugin DLLs co-locate with Maho.dll + EntryPoint so relative DLL deps resolve.
 set_property(TARGET ExampleEngine PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>")
 
@@ -793,7 +874,7 @@ endforeach()
 set_property(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" PROPERTY VS_DEBUGGER_WORKING_DIRECTORY "${_MAHO_BIN}/$<CONFIG>")
 # The sln startup project is EntryPoint (the app host), not ZERO_CHECK.
 set_property(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" PROPERTY VS_STARTUP_PROJECT EntryPoint)
-add_dependencies(EntryPoint ExampleEngine Archive Paths Asset Compress ConsoleVariable Config Exception Log Name Platform RHI Reflect Resource Script Text Timer Unicode Render Scene DrawTriangleFeature Frame MahoCheckCycle)
+add_dependencies(EntryPoint ExampleEngine Archive Paths Asset Compress ConsoleVariable Config Exception Log Name Platform RHI Reflect Resource Script Text Timer Unicode Render Scene DrawTriangleFeature Frame ImGui ImGuiRender MahoCheckCycle)
 
 # Solution folders: EntryPoint at the ROOT; Maho (engine), Project, ThirdParty.
 # The project root sits at Project/ itself; project plugin DLLs under
@@ -846,4 +927,8 @@ set_target_properties(Scene PROPERTIES FOLDER "Project/Plugins/RenderFeature")
 set_target_properties(DrawTriangleFeature PROPERTIES FOLDER "Project/Plugins/RenderFeature")
 
 set_target_properties(Frame PROPERTIES FOLDER "Project/Plugins/RenderFeature")
+
+set_target_properties(ImGui PROPERTIES FOLDER "Maho/Plugins/Engine")
+
+set_target_properties(ImGuiRender PROPERTIES FOLDER "Project/Plugins/RenderFeature")
 

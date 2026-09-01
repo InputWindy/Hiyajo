@@ -449,6 +449,13 @@ FRHICommandList* FVulkanRHI::GetFrameCommandList()
 	return FrameCommandListRHI;
 }
 
+VkImageView FVulkanRHI::GetRawTextureView(FRHITextureView* View) const
+{
+	// ImGui official-backend bridge: raw VkImageView of an RHI texture view
+	// (ImGui renders into SceneColor). The wrapper's Vk handle is a member.
+	return View != nullptr ? static_cast<const FVulkanTextureView*>(View)->GetVkImageView() : VK_NULL_HANDLE;
+}
+
 ERHIFormat FVulkanRHI::GetSwapchainFormat() const
 {
 	// The swapchain picks B8G8R8A8_SRGB when available; the off-screen scene

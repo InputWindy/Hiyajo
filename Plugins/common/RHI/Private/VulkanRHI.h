@@ -154,6 +154,15 @@ public:
 	}
 	[[nodiscard]] std::uint32_t GetMinImageCount() const;
 
+	// -- IDynamicRHI ImGui bridge (raw Vulkan, narrow exception; see IRHI) --
+	[[nodiscard]] VkInstance GetRawInstance() const override { return GetVkInstance(); }
+	[[nodiscard]] VkPhysicalDevice GetRawPhysicalDevice() const override { return GetVkPhysicalDevice(); }
+	[[nodiscard]] VkDevice GetRawDevice() const override { return GetVkDevice(); }
+	[[nodiscard]] VkQueue GetRawGraphicsQueue() const override { return GetVkGraphicsQueue(); }
+	[[nodiscard]] std::uint32_t GetRawGraphicsQueueFamilyIndex() const override { return GetGraphicsQueueFamilyIndex(); }
+	[[nodiscard]] std::uint32_t GetRawSwapchainImageCount() const override { return GetSwapchainImageCount(); }
+	[[nodiscard]] VkImageView GetRawTextureView(FRHITextureView* View) const override;
+
 private:
 	bool CreateInstance();
 	void CreateDebugMessenger();

@@ -192,6 +192,16 @@ ERHIFormat FRHI::GetSwapchainFormat() const
 	return RHI ? RHI->GetSwapchainFormat() : ERHIFormat::Unknown;
 }
 
+// -- IRHI ImGui bridge (forward to the private IDynamicRHI) -------------------
+
+VkInstance FRHI::GetRawInstance() const { return RHI ? RHI->GetRawInstance() : VK_NULL_HANDLE; }
+VkPhysicalDevice FRHI::GetRawPhysicalDevice() const { return RHI ? RHI->GetRawPhysicalDevice() : VK_NULL_HANDLE; }
+VkDevice FRHI::GetRawDevice() const { return RHI ? RHI->GetRawDevice() : VK_NULL_HANDLE; }
+VkQueue FRHI::GetRawGraphicsQueue() const { return RHI ? RHI->GetRawGraphicsQueue() : VK_NULL_HANDLE; }
+std::uint32_t FRHI::GetRawGraphicsQueueFamilyIndex() const { return RHI ? RHI->GetRawGraphicsQueueFamilyIndex() : 0; }
+std::uint32_t FRHI::GetRawSwapchainImageCount() const { return RHI ? RHI->GetRawSwapchainImageCount() : 0; }
+VkImageView FRHI::GetRawTextureView(FRHITextureView* View) const { return RHI ? RHI->GetRawTextureView(View) : VK_NULL_HANDLE; }
+
 // -- command lists -----------------------------------------------------------
 
 FRHICommandList* FRHI::CreateCommandList(ERHICommandListType Type)

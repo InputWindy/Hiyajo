@@ -56,6 +56,16 @@ public:
 
 	[[nodiscard]] virtual ERHIFormat GetSwapchainFormat() const = 0;
 
+	// -- ImGui official-backend bridge (narrow exception to the backend-agnostic
+	//    surface; ONLY for imgui_impl_vulkan). Do not add more raw-Vulkan escapes.
+	[[nodiscard]] virtual VkInstance GetRawInstance() const = 0;
+	[[nodiscard]] virtual VkPhysicalDevice GetRawPhysicalDevice() const = 0;
+	[[nodiscard]] virtual VkDevice GetRawDevice() const = 0;
+	[[nodiscard]] virtual VkQueue GetRawGraphicsQueue() const = 0;
+	[[nodiscard]] virtual std::uint32_t GetRawGraphicsQueueFamilyIndex() const = 0;
+	[[nodiscard]] virtual std::uint32_t GetRawSwapchainImageCount() const = 0;
+	[[nodiscard]] virtual VkImageView GetRawTextureView(FRHITextureView* View) const = 0;
+
 	[[nodiscard]] virtual bool IsInitialized() const = 0;
 
 	[[nodiscard]] virtual IDynamicRHIMemoryAllocator* GetMemoryAllocator() = 0;

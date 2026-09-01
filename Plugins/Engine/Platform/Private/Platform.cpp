@@ -95,6 +95,9 @@ namespace
 		void PollEvents() { glfwPollEvents(); }
 		[[nodiscard]] bool ShouldClose() const { return Window != nullptr && glfwWindowShouldClose(Window); }
 
+		/** Raw GLFW window handle -- for ImGui's glfw backend (input callbacks). */
+		[[nodiscard]] GLFWwindow* GetGlfwWindow() const { return Window; }
+
 	private:
 		GLFWwindow* Window = nullptr;
 	};
@@ -176,6 +179,7 @@ namespace
 		std::unique_ptr<IPlatform> Surface;
 		std::function<void()> PollEvents;
 		std::function<bool()> ShouldClose;
+		std::function<GLFWwindow*()> GetGlfwWindow;
 	};
 
 	FPlatformBackend CreateWindowBackend(int Width, int Height, std::string_view Title)
@@ -187,6 +191,7 @@ namespace
 			std::move(Backend),
 			[Raw]() { Raw->PollEvents(); },
 			[Raw]() { return Raw->ShouldClose(); },
+			[Raw]() { return Raw->GetGlfwWindow(); },
 		};
 #else
 		return {};
@@ -232,6 +237,7 @@ bool FPlatform::CreateWindow(int Width, int Height, std::string_view Title)
 	Surface = std::move(Backend.Surface);
 	PollEventsFn = std::move(Backend.PollEvents);
 	QueryShouldClose = std::move(Backend.ShouldClose);
+	GlfwWindowFn = std::move(Backend.GetGlfwWindow);
 	return Surface != nullptr && Surface->GetNativeWindow() != nullptr;
 }
 
@@ -242,6 +248,7 @@ bool FPlatform::CreateHeadlessContext(int Width, int Height)
 	Surface = std::move(Backend.Surface);
 	PollEventsFn = std::move(Backend.PollEvents);
 	QueryShouldClose = std::move(Backend.ShouldClose);
+	GlfwWindowFn = std::move(Backend.GetGlfwWindow);
 	return Surface != nullptr && Surface->GetNativeWindow() != nullptr;
 }
 
@@ -250,6 +257,7 @@ void FPlatform::DestroyWindow()
 	Surface.reset();
 	PollEventsFn = {};
 	QueryShouldClose = {};
+	GlfwWindowFn = {};
 }
 
 void FPlatform::PollEvents()
