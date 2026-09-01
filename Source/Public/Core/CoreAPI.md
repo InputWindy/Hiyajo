@@ -109,7 +109,12 @@ class FMyEngine : public virtual IPlugin<IMain, IInit, IShutdown> {};
 
 依赖图调度器。节点 = (对象, 阶段) 对，边来自每个节点的依赖元组。**一个节点在所有直接依赖完成后立即就绪并释放——无阶段屏障**（图对 stage 无感，跨阶段管线天然成立）。
 
-生命周期：`Init`（装载拓扑）→ `Compile`（接线 + 环/缺失检测）→ `Execute`（异步拓扑派发）→ `Flush`（屏障）。执行协议经虚函数 `ExecuteNode` 委托给子类——基类节点只携带 `{Name, Stage, Dependencies}`，子类定义自己的节点（持有任意回调/上下文）并在 `ExecuteNode` 里转回派生类型。
+生命周期：`Init`（装载拓扑）→ `Compile`（接线 + **环检测 + 缺失校验**）→ `Execute`（异步拓扑派发）→ `Flush`（屏障）。执行协议经虚函数 `ExecuteNode` 委托给子类——基类节点只携带 `{Name, Stage, Dependencies}`，子类定义自己的节点（持有任意回调/上下文）并在 `ExecuteNode` 里转回派生类型。
+
+**扩展性 / 隔离设计**：
+- 释放路径**无锁**（`std::atomic_ref` fetch_sub，last-arrival-wins——恰好一个前置负责提交就绪的下游），无全局互斥锁、无每帧字符串查找。
+- `Compile` 检测**依赖环**（DFS 回边）与缺失依赖；失败经 `GetCompileErrorNode()` 给出**肇事层名**（节点名 == 层名），宿主据此报告/处理而非中止引擎。
+- 节点异常被捕获并**非致命报告**（`ReportError`），且**仍释放下游**——一个抛异常的 stage 不杀宿主、不挂图。
 
 #### 接口
 
@@ -121,6 +126,7 @@ class FMyEngine : public virtual IPlugin<IMain, IInit, IShutdown> {};
 | `void Execute()` | 把就绪节点派发给线程池（异步——调 Flush 同步） |
 | `void Flush()` | 阻塞到图排空（池 barrier） |
 | `void Reset()` | 复用当前已编译图（重置每节点 pending 计数） |
+| `const std::string& GetCompileErrorNode() const` | 上次 Compile 失败时肇事节点名（== 层名）；无则空 |
 | `virtual void ExecuteNode(FNode*) protected` | 执行协议钩子——子类把 FNode 转回派生节点并驱动回调；跑在池 worker 上（须线程安全） |
 
 ## ThreadPool.h

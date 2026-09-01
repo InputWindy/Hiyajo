@@ -38,6 +38,10 @@ Core 是一组类型无关的基础设施块，**零 app 假设、零第三方�
 
 `FTaskGraph` 依赖图调度器：节点 = (对象, 阶段) 对，边来自依赖元组。节点在全部直接依赖完成后立即就绪释放——**无阶段屏障**。生命周期 Init → Compile → Execute → Flush，执行协议经 `ExecuteNode` 委托给子类。
 
+- 释放路径**无锁**（atomic_ref last-arrival-wins），无全局互斥锁。
+- `Compile` 检测**依赖环**（DFS 回边）与缺失依赖；失败经 `GetCompileErrorNode()` 给肇事层名。
+- 节点异常**非致命**（`ReportError`）且仍释放下游——坏 stage 不杀宿主、不挂图。
+
 ### 6. Thread Pool (ThreadPool)
 
 `FThreadPool` 固定规模线程池（常驻 worker + FIFO 队列）。`Submit` 入队即返，`Flush` 锁步 barrier（等真正"执行完"而非"出队"）。瞬时并行工作用它。

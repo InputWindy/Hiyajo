@@ -158,6 +158,7 @@ public:
 
 private:
 	std::atomic<bool> bIsShuttingDown = false;   // whether the engine is shutting down
+	bool bLayersDirty = true;                    // set when OnLayersChanged fires; Main re-expands the cached graph
 
 private:
 	// command lines parsing

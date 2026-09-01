@@ -161,7 +161,7 @@ public:
 };
 ```
 
-### Dynamic Install / Uninstall
+### Dynamic Install / Uninstall / Reload
 
 ```cpp
 // dynamic load + install (engine owns the DLL + instance)
@@ -172,11 +172,20 @@ Install("Renderer.dll");
 //   - no dependencies -> min-heap greedy, dependents pop first with chain uninstall
 TryUninstall("FRenderer");
 
+// hot reload: uninstall at the next safe point, re-install the same DLL the frame after
+Reload("FRenderer");
+
 // exit the main loop
 RequestExit();
 ```
 
-Install/uninstall are recorded into pending sets and applied at the next safe point (`FlushPendingUpdatePipelines`), so the execution context stays complete.
+Install/uninstall are recorded into pending sets and applied at the next safe point (`FlushPendingUpdatePipelines`), which broadcasts `OnLayersChanged` so the host re-expands its cached graph. Failures are loud, not silent:
+
+- layers are always loaded by name (`Install("X.dll")`) -- there is no raw-pointer install;
+- a duplicate layer name (one instance per name) is refused;
+- a layer whose declared dependency is not yet installed is refused (**deps first**) -- a failed install propagates to its dependents, mirroring uninstall's "depended-on is refused";
+- a load / symbol / factory failure reports the reason;
+- a throwing stage method is reported non-fatally and its downstreams are still released.
 
 ### Optional Capability Composition
 

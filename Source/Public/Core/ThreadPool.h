@@ -149,13 +149,13 @@ inline void FThreadPool::WorkerLoop()
 		}
 		catch (const std::exception& E)
 		{
-			// An exception escaping a worker thread bypasses the main-thread
-			// try-catch and would std::terminate; report it here.
-			ReportFatal(E.what());
+			// A throwing task must not kill the host -- a buggy plugin stage should
+			// be isolated. Report (non-fatal) and keep the worker serving.
+			ReportError(E.what());
 		}
 		catch (...)
 		{
-			ReportFatal("Unknown exception in thread-pool worker");
+			ReportError("Unknown exception in thread-pool worker");
 		}
 		{
 			std::lock_guard Lock(Mutex);

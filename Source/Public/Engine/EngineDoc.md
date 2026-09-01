@@ -44,17 +44,27 @@ AddDependency(std::type_index(typeid(ITick)), "FLog", std::type_index(typeid(IBe
 ```text
 Init 图（IPreInit→IInit→IPostInit，一次）→ 编译 → 执行 → 排空
 Tick 循环（每帧）：
-  Flush（等上一帧排空）→ FlushPendingUpdatePipelines（应用安装/卸载）
-  → 重建 Tick 图（IBeginFrame→ITick→IEndFrame→IExit）→ 编译 → 异步执行
+  Flush（等上一帧前台排空）→ FlushPendingUpdatePipelines（应用安装/卸载）
+  → 若 OnLayersChanged 触发（bLayersDirty）：重建 Tick 图（IBeginFrame→ITick→IEndFrame→IExit）+ 编译
+  → Reset + 异步执行（层集不变时跳过重建/重编译/重过滤）
   → 检查 RequestExit 标志
 Shutdown 图（IPreShutdown→IShutdown→IPostShutdown，一次）→ 释放实例 + DLL
 ```
+
+**缓存**：Tick 图由 `FLayerCollector::OnLayersChanged` **广播委托驱动**（push，非轮询）——安装/卸载/重载在安全点应用后广播，`FEngineBase::Main` 绑定它置 `bLayersDirty` 才重建。层集不变的普通帧只 `Reset + Execute`，不再每帧重建节点、重新连线、重新 `dynamic_cast` 过滤。
+
+**失败隔离**（坏插件不杀宿主）：
+- 编译失败（缺失依赖 / 依赖环）→ `ReportError`（每种破损**报告一次**，不刷屏）+ 坏层暂不调度（空图停帧），拓扑修复后自动重试。
+- 安装失败 → `ReportError`，不再静默；且**失败传播**——重名、DLL 加载失败、或依赖的层未先装，该层安装被拒，它的依赖者也随之装不上（与卸载的"被依赖则拒绝"对称）。
+- 节点/worker 抛异常 → `ReportError`（非致命），并**仍释放下游**，图不挂起。
+
+**热重载**：`Reload("LayerName")` 下个安全点卸旧层（依赖安全，被依赖则拒绝）、下一帧装回同 DLL 新副本——旧模块先释放再装载，可用于迭代。
 
 ## Plugin Macros
 
 | 宏 | 用途 |
 |----|------|
-| `MAHO_DECLARE_LAYER(LayerType, DLL)` | 层类内生成 StaticName / GetName / CreateLayer / GetModulePath |
+| `MAHO_DECLARE_LAYER(LayerType, DLL)` | 层类内生成 StaticName / GetName / GetModulePath（静态）/ CreateLayer |
 | `MAHO_DECLARE_ENGINE(EngineType, DLL)` | 引擎类内生成 CreateEngine 工厂 / GetModulePath |
 | `MAHO_DECLARE_STAGE_DISPATCH(Context, Stage, Cast, Method)` | 生成 `Invoke<Stage, Context>` 全特化（dynamic_cast + 调用） |
 

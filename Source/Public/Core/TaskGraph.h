@@ -2,9 +2,10 @@
 
 #include <Core/ThreadPool.h>
 
+#include <atomic>
 #include <cstdint>
 #include <map>
-#include <mutex>
+#include <memory>
 #include <string>
 #include <string_view>
 #include <typeindex>
@@ -37,14 +38,20 @@ struct FTaskGraphNode
  *
  * Lifecycle:
  *   Init     -- load the full node set (topology data only)
- *   Compile  -- wire edges + detect cycles/missing deps -> bool
+ *   Compile  -- wire edges + detect cycles/missing deps -> bool. On failure the
+ *               offending node name is available via GetCompileErrorNode().
  *   Execute  -- topological dispatch (async, submits ready nodes to the pool)
- *   Flush    -- block until the graph drains
+ *   Flush    -- block until every task completed (graph drained)
+ *   Reset    -- re-run the current compiled graph (resets per-node pending counts)
  *
  * Execution protocol is delegated to subclasses via ExecuteNode(): the base
  * FTaskGraphNode carries only {Name, Stage, Dependencies}; a subclass defines
  * its own node (holding whatever callback/context it needs) and casts it back
  * inside ExecuteNode.
+ *
+ * Failure isolation: a throwing ExecuteNode is caught and reported (ReportError,
+ * non-fatal) and its downstreams are still released -- a buggy layer never kills
+ * the host nor hangs the graph.
  */
 class FTaskGraph
 {
@@ -64,21 +71,26 @@ public:
 	/** 1. Load the full node set (topology data only). */
 	void Init(std::vector<FNode*> Nodes);
 
-	/** 2. Wire edges + validate (cycle / missing dep). Returns false on error. */
+	/** 2. Wire edges + validate (cycle / missing dep). Returns false on error;
+	 *  the offending node (== the layer name) is in GetCompileErrorNode(). */
 	bool Compile();
 
 	/** 3. Dispatch ready nodes to the pool (async -- call Flush to sync). */
 	void Execute();
 
-	/** 4. Block until every submitted task completed (graph drained). */
+	/** 4. Block until every task completed (graph drained). */
 	void Flush();
 
 	/** Re-run the current compiled graph (resets per-node pending counts). */
 	void Reset();
 
+	/** Name of the node whose dependency broke the last Compile (empty if none).
+	 *  Since node Name == the layer name, this identifies the offending layer. */
+	[[nodiscard]] const std::string& GetCompileErrorNode() const { return CompileErrorNode; }
+
 protected:
 	/**
-	 		 * Execution protocol hook -- the base graph only knows a node is ready; the
+	 * Execution protocol hook -- the base graph only knows a node is ready; the
 	 * subclass casts FNode to its own derived node and drives the callback.
 	 * Runs on a pool worker thread (must be thread-safe).
 	 */
@@ -92,19 +104,20 @@ private:
 		FNode* Node = nullptr;
 		std::vector<std::size_t> Downstreams;          // task indices this one releases
 		std::uint32_t InitPending = 0;                 // compiled initial dep count
-		std::uint32_t Pending = 0;                     // live dep count (Mutex-guarded)
+		std::atomic<std::uint32_t> Pending{0};         // live dep count (last-arrival-wins)
 	};
 
-	/** Submit one task's runner to the pool (release + resubmit downstreams). */
+	/** Submit one task's runner to its pool (release + resubmit downstreams). */
 	void SubmitTask(std::size_t Index);
 
 	/** Execute the task's node via the subclass protocol hook. */
 	void ExecuteNodeFor(std::size_t Index);
 
-	std::vector<FTask> Tasks;                                              // all nodes
+	// Each FTask is heap-allocated so its std::atomic member is a stable address
+	// (a plain vector element could not hold a non-movable atomic).
+	std::vector<std::unique_ptr<FTask>> Tasks;
 	std::map<std::pair<std::string, std::type_index>, std::size_t> Lookup; // (name,stage) -> task index
-	std::uint32_t Remaining = 0;                                           // tasks not yet completed (Mutex-guarded)
-	std::mutex Mutex;
+	std::string CompileErrorNode;                                          // node that broke Compile
 };
 
 } // namespace Maho

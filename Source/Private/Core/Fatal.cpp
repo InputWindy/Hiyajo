@@ -137,6 +137,9 @@ void InstallFatalHandlers()
 
 void ReportError(const char* Message)
 {
+	// Serialize concurrent reports -- a plugin exception can be reported from any
+	// pool worker, and the console/log append must not interleave.
+	std::lock_guard<std::mutex> Lock(GFatalMutex);
 	const char* Text = Message ? Message : "(null)";
 	std::fprintf(stderr, "Maho ERROR: %s\n", Text);
 	std::fflush(stderr);

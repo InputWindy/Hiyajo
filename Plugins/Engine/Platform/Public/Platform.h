@@ -49,7 +49,7 @@ public:
  *   Platform::FPlatform Platform;
  *   Platform.Initialize(0, nullptr);
  *   Platform.CreateWindow(1280, 720, "MyGame");
- *   Engine.Install(&Platform);
+ *   Engine.Install("Platform.dll");
  */
 class FPlatform : public FLayer<IPreInit, IInit, IPostInit, IBeginFrame, ITick, IEndFrame, IExit, IPreShutdown, IShutdown, IPostShutdown>
 {

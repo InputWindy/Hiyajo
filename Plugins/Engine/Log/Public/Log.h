@@ -41,7 +41,7 @@ enum class ELogLevel
  * logger is hidden behind Trace/Debug/Info/Warn/Error/Critical perfect-forward
  * templates - callers never see spdlog types.
  *
- *   Engine.Install(&Log);   // install early in PreMain
+ *   Engine.Install("Log.dll");   // install early in PreMain
  */
 class FLog : public FLayer<IPreInit, IInit, IPostInit, IPreShutdown, IShutdown, IPostShutdown>
 {

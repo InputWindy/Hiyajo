@@ -116,29 +116,54 @@ int FEngineBase::Main()
 	PendingAdded.clear();
 
 	// Init pipeline: drive once with a temporary graph; layers implementing the
-	// init stage interfaces Initialize in dependency order.
+	// init stage interfaces Initialize in dependency order. A broken layer is
+	// reported (non-fatal) and simply never initializes until the topology is
+	// fixed -- no guessing/healing here, the tick graph re-validates below.
 	using FInitStages = TTypeList<IPreInit, IInit, IPostInit>;
 	FLayerTaskGraph<FInitStages, FEngineBase> InitGraph(Pool, *this);
 	InitGraph.Init(Select<IPreInit, IInit, IPostInit>());
 	if (!InitGraph.Compile())
 	{
-		ReportFatal("FEngineBase::Main: init pipeline Compile failed (missing dependency or cycle)");
+		ReportError((std::string("init graph compile failed (layer '")
+			+ InitGraph.GetCompileErrorNode() + "' has a bad dependency)").c_str());
 	}
-	InitGraph.Execute();
-	InitGraph.Flush();
+	else
+	{
+		InitGraph.Execute();
+		InitGraph.Flush();
+	}
 
-	// Tick pipeline: the main loop.
+	// Tick pipeline: the main loop. The graph is CACHED across frames and only
+	// re-expanded when OnLayersChanged fires (a layer-set change at a safe point);
+	// the common per-frame path is just Reset + Execute -- no re-Select, no re-wire.
 	using FTickStages = TTypeList<IBeginFrame, ITick, IEndFrame, IExit>;
 	FLayerTaskGraph<FTickStages, FEngineBase> EngineGraph(Pool, *this);
+	std::string LastCompileErrorNode;
+	OnLayersChanged.Bind([this]() { bLayersDirty = true; });
 	while (true)
 	{
-		EngineGraph.Flush();
+		EngineGraph.Flush();   // drain the previous frame's foreground tasks
 		FlushPendingUpdatePipelines<IPreInit, IInit, IPostInit>();
 
-		EngineGraph.Init(Select<IBeginFrame, ITick, IEndFrame, IExit>());
-		if (!EngineGraph.Compile())
+		if (bLayersDirty)
 		{
-			ReportFatal("FEngineBase::Main: tick pipeline Compile failed (missing dependency or cycle)");
+			bLayersDirty = false;
+			EngineGraph.Init(Select<IBeginFrame, ITick, IEndFrame, IExit>());
+			if (!EngineGraph.Compile())
+			{
+				// Report ONCE per distinct breakage (no per-frame spam) and leave a
+				// known-empty graph so Execute() is a no-op. The broken layer is not
+				// scheduled until the topology changes (retried then).
+				const std::string Bad = EngineGraph.GetCompileErrorNode();
+				if (Bad != LastCompileErrorNode)
+				{
+					LastCompileErrorNode = Bad;
+					ReportError((std::string("layer graph compile failed (missing dependency or cycle); "
+						"layer '") + Bad + "' is not scheduled until the topology is fixed").c_str());
+				}
+				EngineGraph.Init({});   // empty graph -> Execute() is a no-op
+				continue;
+			}
 		}
 		EngineGraph.Execute();
 
@@ -151,6 +176,10 @@ int FEngineBase::Main()
 		}
 	}
 
+	// Drain the pool before tearing down -- a last-frame task must not race the
+	// shutdown graph below.
+	Pool.Flush();
+
 	// Shutdown pipeline: drive once with a temporary graph; layers implementing
 	// the shutdown stage interfaces Shutdown in dependency order.
 	using FShutdownStages = TTypeList<IPreShutdown, IShutdown, IPostShutdown>;
@@ -158,10 +187,13 @@ int FEngineBase::Main()
 	ShutdownGraph.Init(Select<IPreShutdown, IShutdown, IPostShutdown>());
 	if (!ShutdownGraph.Compile())
 	{
-		ReportFatal("FEngineBase::Main: shutdown pipeline Compile failed (missing dependency or cycle)");
+		ReportError("FEngineBase::Main: shutdown pipeline Compile failed");
 	}
-	ShutdownGraph.Execute();
-	ShutdownGraph.Flush();
+	else
+	{
+		ShutdownGraph.Execute();
+		ShutdownGraph.Flush();
+	}
 
 	// Delete feature instances first (virtual dtors live in their own DLLs), then release the DLLs.
 	Features.clear();

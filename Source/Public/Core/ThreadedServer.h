@@ -168,13 +168,13 @@ inline void FThreadedServer::RunLoop()
 		}
 		catch (const std::exception& E)
 		{
-			// An exception escaping the dedicated worker bypasses the main-thread
-			// try-catch; report it here.
-			ReportFatal(E.what());
+			// A throwing task must not kill the host -- report (non-fatal) and
+			// keep serving.
+			ReportError(E.what());
 		}
 		catch (...)
 		{
-			ReportFatal("Unknown exception in threaded server");
+			ReportError("Unknown exception in threaded server");
 		}
 	}
 }

@@ -51,7 +51,7 @@ class FWorldMulti : public FLayer<IEngineTickPipeline, IEngineInitPipeline> {};
 
 ### MAHO_DECLARE_LAYER(LayerType, DLL) <宏>
 
-层声明糖——生成 `StaticName()` + `GetName()` + `CreateLayer()` + `GetModulePath()`。名字来自类型名字符串化（`#LayerType`），依赖声明用同一类型推导，拓扑键自洽：
+层声明糖——生成 `StaticName()` + `GetName()` + `GetModulePath()`（静态）+ `CreateLayer()`。名字来自类型名字符串化（`#LayerType`），依赖声明用同一类型推导，拓扑键自洽：
 
 ```cpp
 #define MAHO_DECLARE_LAYER(LayerType, DLL)             \
@@ -105,11 +105,12 @@ if (G.Compile()) { G.Execute(); G.Flush(); }
 | 签名 | 说明 |
 |------|------|
 | `const vector<unique_ptr<FLayerBase>>& GetLayers() const` | 活动层实例（只读） |
-| `void Install(FLayerBase*)` | 注册层实例（下帧安全点生效） |
-| `void Install(string_view DllPath, const char* FactorySymbol = "CreateLayer")` | 经 FAssembly 动态加载层 DLL 并安装（下帧安全点生效） |
+| `TMulticastEvent<void()> OnLayersChanged` | 层集变化广播（安全点触发，push 而非轮询）——宿主绑定它来重编缓存图 |
+| `bool Install(string_view DllPath, const char* FactorySymbol = "CreateLayer")` | **唯一的安装入口**（匿名加载，无指针 Install）。经 FAssembly 加载层 DLL 并安装（下帧安全点生效）；**拒绝重名层**（一名一实例）+ **拒绝依赖未装的层**（deps 先装，失败传播到依赖者）+ 加载/符号/工厂失败均报错 |
+| `void Reload(string_view LayerName)` | **热重载**：下个安全点卸旧层（依赖安全，被依赖则拒绝报错）、下一帧装回同 DLL 新副本 |
 | `void RequestUninstall(FLayerBase*)` | 卸载请求（无条件入 pending） |
 | `void TryUninstall(string_view LayerName)` | 匿名卸载（按 `GetName()` 查第一匹配） |
-| `template<TInitStages...> void FlushPendingUpdatePipelines() protected` | 应用挂起安装（驱动 Init 阶段）+ 挂起卸载（驱动 Shutdown 阶段） |
+| `template<TInitStages...> void FlushPendingUpdatePipelines() protected` | 应用挂起安装（驱动 Init 阶段）+ 挂起卸载（驱动 Shutdown 阶段）；编译失败非致命（报告一次）；有变化则广播 `OnLayersChanged` |
 
 卸载算法：`RebuildReverseDeps` 重建反向依赖计数（层名 → 被依赖次数），`FlushUnload` 用**最小堆贪心**——被依赖的层拒绝卸载，依赖者先弹出并链式卸载。
 
@@ -146,7 +147,7 @@ if (G.Compile()) { G.Execute(); G.Flush(); }
 | `virtual void ParseCommandLine(int Argc, char** Argv)` | 解析 `-key`/`--key=value` 等命令行 |
 | `virtual void PreMain() = 0` | 入口钩子：安装引擎服务层（Log/Config/...） |
 | `virtual void PostMain() = 0` | 出口钩子 |
-| `virtual int Main()` | 主循环：Init 图 → Tick 循环 → Shutdown 图 |
+| `virtual int Main()` | 主循环：Init 图 → Tick 循环 → Shutdown 图；Tick 图**按代际缓存**（层集不变时只 Reset+Execute，不重建/重编译/重过滤） |
 | `bool Has(string_view Key) const` | 命令行是否有该 key |
 | `string Get(string_view Key) const` | key 的值（缺省空串） |
 | `bool GetBool(string_view Key) const` | 值是否 "true/1/yes/on" |
