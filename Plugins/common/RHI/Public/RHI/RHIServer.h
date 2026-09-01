@@ -70,6 +70,11 @@ struct IRHI
 	virtual void EndFrame() = 0;
 	virtual void Resize(int Width, int Height) = 0;
 
+	/** Block until all submitted GPU work has completed (device idle). Call
+	 *  BEFORE destroying resources that a submitted command buffer may still
+	 *  reference (engine shutdown / swapchain teardown). */
+	virtual void WaitIdle() = 0;
+
 	/**
 	 * Borrow the frame command buffer as a recording surface. The buffer is
 	 * already begun by BeginFrame and will be ended/submitted by EndFrame -
@@ -246,6 +251,7 @@ public:
 	void BeginFrame() override;
 	void EndFrame() override;
 	void Resize(int Width, int Height) override;
+	void WaitIdle() override;
 	[[nodiscard]] FRHICommandList* GetFrameCommandList() override;
 	void PresentTexture(FRHITexture* Src) override;
 	[[nodiscard]] ERHIFormat GetSwapchainFormat() const override;
@@ -329,7 +335,7 @@ public:
 
 private:
 	std::unique_ptr<IDynamicRHI> RHI;
-	FThreadPool RecordingPool;   // parallel command recording workers
+	FThreadPool RecordingPool{1};   // serial recording worker -- keeps dependent submits ordered
 };
 
 } // namespace Maho

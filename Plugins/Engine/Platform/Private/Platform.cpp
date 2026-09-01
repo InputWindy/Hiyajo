@@ -1,5 +1,6 @@
 #include "Platform.h"
 
+#include <Config.h>
 #include <ConsoleVariable.h>
 #include <Log.h>
 
@@ -40,7 +41,11 @@ FPlatform::FPlatform()
 {
 	// The window size is read from the Config layer in Initialize - Config must
 	// be initialized first.
-	AddDependency(std::type_index(typeid(IInit)), "FConfig", std::type_index(typeid(IInit)));
+	WaitFor<IInit, Config::FConfig, IInit>();
+	// Initialize logs "CreateWindow"; the Log layer must be initialized first.
+	WaitFor<IInit, FLog, IInit>();
+	// Note: "the window/surface must outlive FRender" is declared by FRender
+	// itself via BlockOn (it is the consumer of our window); we do not know it.
 }
 
 namespace

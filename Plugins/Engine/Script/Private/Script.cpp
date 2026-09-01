@@ -281,7 +281,7 @@ MAHO_SCRIPT_API FScriptSystem* GetScriptSystem()
 FScriptSystem::FScriptSystem()
 {
 	// Script logs in Initialize; the Log layer must be initialized first.
-	AddDependency(std::type_index(typeid(IInit)), "FLog", std::type_index(typeid(IInit)));
+	WaitFor<IInit, FLog, IInit>();
 }
 
 void FScriptSystem::Initialize(FEngineBase& Engine)

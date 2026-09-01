@@ -10,6 +10,7 @@
 #endif
 
 #include <algorithm>
+#include <cstdio>
 #include <cstring>
 #include <map>
 #include <set>
@@ -35,6 +36,62 @@ static ConsoleVariable::TAutoConsoleVariable<int> GCVarMinSwapchainImages(
 	"r.MinSwapchainImages",
 	2,
 	"Reported minimum swapchain image count (ImGui / present contract)");
+
+static ConsoleVariable::TAutoConsoleVariable<int> GCVarRHIValidation(
+	"r.RHI.Validation",
+	1,
+	"0=off, 1=on (Khronos validation layers + debug messenger)");
+
+/** Vulkan validation messenger callback -- routes every message to the Maho log. */
+VKAPI_ATTR VkBool32 VKAPI_CALL GValidationCallback(
+	VkDebugUtilsMessageSeverityFlagBitsEXT Severity,
+	VkDebugUtilsMessageTypeFlagsEXT /*Type*/,
+	const VkDebugUtilsMessengerCallbackDataEXT* CallbackData,
+	void* /*UserData*/)
+{
+	if (CallbackData == nullptr || CallbackData->pMessage == nullptr)
+	{
+		return VK_FALSE;
+	}
+	// The logger may already be torn down: the engine shutdown graph runs the
+	// IShutdown stages concurrently, so a message arriving during teardown can
+	// race the Log layer's Shutdown (GetLog() == null). Fall back to stderr
+	// instead of tripping the MAHO_ENSURE inside the log macros.
+	if (FLog* Log = ::Maho::GetLog())
+	{
+		if (Severity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT)
+		{
+			Log->Error("Vulkan validation: {}", CallbackData->pMessage);
+		}
+		else if (Severity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT)
+		{
+			Log->Warn("Vulkan validation: {}", CallbackData->pMessage);
+		}
+		else
+		{
+			Log->Info("Vulkan validation: {}", CallbackData->pMessage);
+		}
+	}
+	else
+	{
+		std::fprintf(stderr, "[Vulkan validation] %s\n", CallbackData->pMessage);
+	}
+	return VK_FALSE;
+}
+
+/** Image view aspect from an ERHIFormat: depth(+stencil) formats are NOT color. */
+VkImageAspectFlags GetImageAspectForFormat(ERHIFormat Format)
+{
+	switch (Format)
+	{
+	case ERHIFormat::D24_UNORM_S8_UINT:
+		return VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
+	case ERHIFormat::D32_SFLOAT:
+		return VK_IMAGE_ASPECT_DEPTH_BIT;
+	default:
+		return VK_IMAGE_ASPECT_COLOR_BIT;
+	}
+}
 
 constexpr const char* GInstanceExtensions[] =
 {
@@ -185,6 +242,22 @@ void FVulkanRHI::Shutdown()
 		vkDeviceWaitIdle(Device);
 	}
 
+	// Drop the debug messenger BEFORE any teardown: destroying objects while the
+	// messenger is armed can emit validation messages, and those may arrive after
+	// the engine's log layer has shut down (the shutdown graph runs the IShutdown
+	// stages concurrently, so GetLog() is not guaranteed here). Nothing routes to
+	// the callback after this point, so teardown noise can't reach a dead logger.
+	if (DebugMessenger != VK_NULL_HANDLE)
+	{
+		auto DestroyFn = reinterpret_cast<PFN_vkDestroyDebugUtilsMessengerEXT>(
+			vkGetInstanceProcAddr(Instance, "vkDestroyDebugUtilsMessengerEXT"));
+		if (DestroyFn != nullptr)
+		{
+			DestroyFn(Instance, DebugMessenger, nullptr);
+		}
+		DebugMessenger = VK_NULL_HANDLE;
+	}
+
 	if (MemoryAllocator)
 	{
 		MemoryAllocator->Shutdown();
@@ -197,11 +270,14 @@ void FVulkanRHI::Shutdown()
 		InFlightFence = VK_NULL_HANDLE;
 	}
 
-	if (Device != VK_NULL_HANDLE && RenderFinishedSemaphore != VK_NULL_HANDLE)
+	for (VkSemaphore Sem : RenderFinishedSemaphores)
 	{
-		vkDestroySemaphore(Device, RenderFinishedSemaphore, nullptr);
-		RenderFinishedSemaphore = VK_NULL_HANDLE;
+		if (Device != VK_NULL_HANDLE && Sem != VK_NULL_HANDLE)
+		{
+			vkDestroySemaphore(Device, Sem, nullptr);
+		}
 	}
+	RenderFinishedSemaphores.clear();
 
 	if (Device != VK_NULL_HANDLE && ImageAvailableSemaphore != VK_NULL_HANDLE)
 	{
@@ -296,6 +372,14 @@ void FVulkanRHI::Shutdown()
 	bInitialized = false;
 	bFramebufferResized = false;
 	NativeWindowHandle = nullptr;
+}
+
+void FVulkanRHI::WaitIdle()
+{
+	if (Device != VK_NULL_HANDLE)
+	{
+		vkDeviceWaitIdle(Device);
+	}
 }
 
 void FVulkanRHI::BeginFrame()
@@ -506,7 +590,9 @@ void FVulkanRHI::EndFrame()
 	SubmitInfo.commandBufferCount = 1;
 	SubmitInfo.pCommandBuffers = &CommandBuffer;
 	SubmitInfo.signalSemaphoreCount = 1;
-	SubmitInfo.pSignalSemaphores = &RenderFinishedSemaphore;
+	SubmitInfo.pSignalSemaphores = RenderFinishedSemaphores.empty()
+		? nullptr
+		: &RenderFinishedSemaphores[CurrentImageIndex < RenderFinishedSemaphores.size() ? CurrentImageIndex : 0];
 
 	if (!CheckVkResult(vkQueueSubmit(GraphicsVkQueue, 1, &SubmitInfo, InFlightFence), "vkQueueSubmit"))
 	{
@@ -516,7 +602,9 @@ void FVulkanRHI::EndFrame()
 	VkPresentInfoKHR PresentInfo{};
 	PresentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
 	PresentInfo.waitSemaphoreCount = 1;
-	PresentInfo.pWaitSemaphores = &RenderFinishedSemaphore;
+	PresentInfo.pWaitSemaphores = RenderFinishedSemaphores.empty()
+		? nullptr
+		: &RenderFinishedSemaphores[CurrentImageIndex < RenderFinishedSemaphores.size() ? CurrentImageIndex : 0];
 	PresentInfo.swapchainCount = 1;
 	PresentInfo.pSwapchains = &Swapchain;
 	PresentInfo.pImageIndices = &CurrentImageIndex;
@@ -570,23 +658,92 @@ bool FVulkanRHI::CreateInstance()
 	AppInfo.applicationVersion = VK_MAKE_VERSION(0, 1, 0);
 	AppInfo.pEngineName = "Maho";
 	AppInfo.engineVersion = VK_MAKE_VERSION(0, 1, 0);
-	// 1.2+ required for drawIndirectCount / bufferDeviceAddress / descriptorIndexing.
-	AppInfo.apiVersion = VK_API_VERSION_1_2;
+	// 1.2+ required for drawIndirectCount / bufferDeviceAddress / descriptorIndexing;
+	// 1.3 for dynamic rendering (vkCmdBeginRendering) -- requesting 1.3 also makes
+	// the loader/validation layer dispatch the 1.3 global functions correctly.
+	AppInfo.apiVersion = VK_API_VERSION_1_3;
+
+	std::vector<const char*> InstanceExtensions(GInstanceExtensions, GInstanceExtensions + std::size(GInstanceExtensions));
+	std::vector<const char*> InstanceLayers;
+
+	const bool bValidation = GCVarRHIValidation.GetValue() != 0;
+	if (bValidation)
+	{
+		// Only enable the Khronos validation layer if it is actually installed.
+		std::uint32_t LayerCount = 0;
+		vkEnumerateInstanceLayerProperties(&LayerCount, nullptr);
+		std::vector<VkLayerProperties> Layers(LayerCount);
+		vkEnumerateInstanceLayerProperties(&LayerCount, Layers.data());
+		bool bFound = false;
+		for (const auto& Layer : Layers)
+		{
+			if (std::strcmp(Layer.layerName, "VK_LAYER_KHRONOS_validation") == 0)
+			{
+				bFound = true;
+				break;
+			}
+		}
+		if (bFound)
+		{
+			InstanceLayers.push_back("VK_LAYER_KHRONOS_validation");
+			InstanceExtensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+			MAHO_LOG_CORE_INFO("Vulkan validation layers enabled");
+		}
+		else
+		{
+			MAHO_LOG_CORE_WARN(
+				"Vulkan validation requested (r.RHI.Validation=1) but VK_LAYER_KHRONOS_validation is not installed");
+		}
+	}
 
 	VkInstanceCreateInfo CreateInfo{};
 	CreateInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
 	CreateInfo.pApplicationInfo = &AppInfo;
-	CreateInfo.enabledExtensionCount = static_cast<std::uint32_t>(std::size(GInstanceExtensions));
-	CreateInfo.ppEnabledExtensionNames = GInstanceExtensions;
-	CreateInfo.enabledLayerCount = 0;
+	CreateInfo.enabledExtensionCount = static_cast<std::uint32_t>(InstanceExtensions.size());
+	CreateInfo.ppEnabledExtensionNames = InstanceExtensions.data();
+	CreateInfo.enabledLayerCount = static_cast<std::uint32_t>(InstanceLayers.size());
+	CreateInfo.ppEnabledLayerNames = InstanceLayers.data();
 
 	if (!CheckVkResult(vkCreateInstance(&CreateInfo, nullptr, &Instance), "vkCreateInstance"))
 	{
 		return false;
 	}
 
+	if (bValidation)
+	{
+		CreateDebugMessenger();
+	}
+
 	MAHO_LOG_CORE_INFO("Vulkan instance created");
 	return true;
+}
+
+void FVulkanRHI::CreateDebugMessenger()
+{
+	auto CreateFn = reinterpret_cast<PFN_vkCreateDebugUtilsMessengerEXT>(
+		vkGetInstanceProcAddr(Instance, "vkCreateDebugUtilsMessengerEXT"));
+	if (CreateFn == nullptr)
+	{
+		MAHO_LOG_CORE_WARN("Vulkan validation: vkCreateDebugUtilsMessengerEXT unavailable");
+		return;
+	}
+
+	VkDebugUtilsMessengerCreateInfoEXT Info{};
+	Info.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
+	Info.messageSeverity =
+		VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
+		VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
+	Info.messageType =
+		VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
+		VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
+		VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
+	Info.pfnUserCallback = GValidationCallback;
+
+	if (CreateFn(Instance, &Info, nullptr, &DebugMessenger) != VK_SUCCESS)
+	{
+		MAHO_LOG_CORE_WARN("Vulkan validation: failed to create debug messenger");
+		DebugMessenger = VK_NULL_HANDLE;
+	}
 }
 
 bool FVulkanRHI::CreateSurface()
@@ -893,18 +1050,14 @@ bool FVulkanRHI::CreateLogicalDevice()
 	DynamicRendering.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES;
 	DynamicRendering.dynamicRendering = VK_TRUE;
 
-	VkPhysicalDeviceDescriptorIndexingFeatures DescriptorIndexing{};
-	DescriptorIndexing.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES;
-	DescriptorIndexing.shaderSampledImageArrayNonUniformIndexing = VK_TRUE;
-	DescriptorIndexing.descriptorBindingPartiallyBound = VK_TRUE;
-	DescriptorIndexing.descriptorBindingVariableDescriptorCount = VK_TRUE;
-	DescriptorIndexing.runtimeDescriptorArray = VK_TRUE;
-
 	// Vulkan 1.2 core: GPU-controlled indirect draw count.
 	VkPhysicalDeviceVulkan11Features Features11{};
 	Features11.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES;
 	Features11.shaderDrawParameters = VK_TRUE;
 
+	// The descriptor-indexing features live in the 1.2 struct (they were promoted
+	// from VkPhysicalDeviceDescriptorIndexingFeatures -- do NOT also append that
+	// struct, validation rejects two overlapping feature structures).
 	VkPhysicalDeviceVulkan12Features Features12{};
 	Features12.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
 	Features12.drawIndirectCount = VK_TRUE;
@@ -923,8 +1076,7 @@ bool FVulkanRHI::CreateLogicalDevice()
 	// requested. Skipped for now (device creation must not fail on optional RT).
 
 	Features11.pNext = &Features12;
-	DescriptorIndexing.pNext = &Features11;
-	DynamicRendering.pNext = &DescriptorIndexing;
+	DynamicRendering.pNext = &Features11;
 
 	VkDeviceCreateInfo CreateInfo{};
 	CreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
@@ -1385,7 +1537,7 @@ bool FVulkanRHI::CreateSyncObjects()
 		return false;
 	}
 
-	if (!CheckVkResult(vkCreateSemaphore(Device, &SemaphoreInfo, nullptr, &RenderFinishedSemaphore), "vkCreateSemaphore (render finished)"))
+	if (!CreateRenderFinishedSemaphores())
 	{
 		return false;
 	}
@@ -1400,6 +1552,36 @@ bool FVulkanRHI::CreateSyncObjects()
 	}
 
 	MAHO_LOG_CORE_INFO("Vulkan sync objects created");
+	return true;
+}
+
+bool FVulkanRHI::CreateRenderFinishedSemaphores()
+{
+	// One render-finished semaphore per swapchain image, indexed by
+	// CurrentImageIndex. A present on image i waits semaphore[i]; reusing a single
+	// semaphore while an older present is still pending is a Vulkan error
+	// (VUID-vkQueueSubmit-pSignalSemaphores-00067).
+	for (VkSemaphore Sem : RenderFinishedSemaphores)
+	{
+		if (Device != VK_NULL_HANDLE && Sem != VK_NULL_HANDLE)
+		{
+			vkDestroySemaphore(Device, Sem, nullptr);
+		}
+	}
+	RenderFinishedSemaphores.clear();
+
+	VkSemaphoreCreateInfo SemaphoreInfo{};
+	SemaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+	RenderFinishedSemaphores.reserve(SwapchainImages.size());
+	for (std::size_t I = 0; I < SwapchainImages.size(); ++I)
+	{
+		VkSemaphore Sem = VK_NULL_HANDLE;
+		if (!CheckVkResult(vkCreateSemaphore(Device, &SemaphoreInfo, nullptr, &Sem), "vkCreateSemaphore (render finished)"))
+		{
+			return false;
+		}
+		RenderFinishedSemaphores.push_back(Sem);
+	}
 	return true;
 }
 
@@ -1499,8 +1681,26 @@ VkCommandPool FVulkanRHI::GetPoolForType(ERHICommandListType Type) const
 
 FRHICommandList* FVulkanRHI::CreateCommandList(ERHICommandListType Type)
 {
-	VkCommandPool Pool = GetPoolForType(Type);
-	if (Pool == VK_NULL_HANDLE)
+	// Each command list gets its OWN command pool: Vulkan command pools are NOT
+	// thread-safe, and the RDG records feature lists concurrently on the recording
+	// pool -- sharing a pool across threads corrupts allocation/recording.
+	std::uint32_t Family = GraphicsQueueFamilyIndex;
+	if (Type == ERHICommandListType::Compute)
+	{
+		Family = ComputeQueueFamilyIndex;
+	}
+	else if (Type == ERHICommandListType::Transfer)
+	{
+		Family = TransferQueueFamilyIndex;
+	}
+
+	VkCommandPoolCreateInfo PoolInfo{};
+	PoolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+	PoolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;   // per-list vkResetCommandBuffer
+	PoolInfo.queueFamilyIndex = Family;
+
+	VkCommandPool Pool = VK_NULL_HANDLE;
+	if (!CheckVkResult(vkCreateCommandPool(Device, &PoolInfo, nullptr, &Pool), "vkCreateCommandPool"))
 	{
 		return nullptr;
 	}
@@ -1514,6 +1714,7 @@ FRHICommandList* FVulkanRHI::CreateCommandList(ERHICommandListType Type)
 	VkCommandBuffer CmdBuffer = VK_NULL_HANDLE;
 	if (!CheckVkResult(vkAllocateCommandBuffers(Device, &AllocateInfo, &CmdBuffer), "vkAllocateCommandBuffers (logical)"))
 	{
+		vkDestroyCommandPool(Device, Pool, nullptr);
 		return nullptr;
 	}
 
@@ -1537,6 +1738,10 @@ void FVulkanRHI::DestroyCommandList(FRHICommandList* CmdList)
 	if (Device != VK_NULL_HANDLE && Pool != VK_NULL_HANDLE && Buf != VK_NULL_HANDLE)
 	{
 		vkFreeCommandBuffers(Device, Pool, 1, &Buf);
+	}
+	if (Device != VK_NULL_HANDLE && Pool != VK_NULL_HANDLE)
+	{
+		vkDestroyCommandPool(Device, Pool, nullptr);
 	}
 	delete VulkanCL;
 }
@@ -1902,6 +2107,10 @@ FRHIGraphicsPipeline* FVulkanRHI::CreateGraphicsPipeline(const FRHIGraphicsPipel
 
 	VkRenderPass VkRp = VK_NULL_HANDLE;
 	VkPipelineRenderingCreateInfo RenderingInfo{};
+	// ColorFmt must outlive the else block -- RenderingInfo.pColorAttachmentFormats
+	// is a POINTER to it, read later by vkCreateGraphicsPipelines. Declaring it
+	// inside the block made the pointer dangle (garbage format -> broken pipeline).
+	VkFormat ColorFmt = VK_FORMAT_UNDEFINED;
 	if (Desc.RenderPass != nullptr)
 	{
 		auto* VkPass = static_cast<FVulkanRenderPass*>(Desc.RenderPass);
@@ -1912,7 +2121,7 @@ FRHIGraphicsPipeline* FVulkanRHI::CreateGraphicsPipeline(const FRHIGraphicsPipel
 					// Dynamic rendering - declare attachment formats via pNext
 		RenderingInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
 		RenderingInfo.colorAttachmentCount = 1;
-		VkFormat ColorFmt = ToVkFormat(Desc.ColorFormat);
+		ColorFmt = ToVkFormat(Desc.ColorFormat);
 		RenderingInfo.pColorAttachmentFormats = &ColorFmt;
 		if (Desc.DepthFormat != ERHIFormat::Unknown)
 		{
@@ -2740,7 +2949,7 @@ FRHITextureView* FVulkanRHI::CreateTextureView(const FRHITextureViewDesc& Desc)
 	Info.image = VkTex->GetVkImage();
 	Info.format = ToVkFormat(Desc.Format);
 	Info.viewType = VK_IMAGE_VIEW_TYPE_2D;
-	Info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	Info.subresourceRange.aspectMask = GetImageAspectForFormat(Desc.Format);
 	Info.subresourceRange.baseMipLevel = Desc.BaseMip;
 	Info.subresourceRange.levelCount = Desc.MipCount;
 	Info.subresourceRange.baseArrayLayer = Desc.BaseArrayLayer;
@@ -3127,6 +3336,13 @@ bool FVulkanRHI::RecreateSwapchain()
 	DestroySwapchainResources();
 
 	if (!CreateSwapchain())
+	{
+		return false;
+	}
+
+	// The image count may have changed on recreation -- rebuild the per-image
+	// render-finished semaphores to match.
+	if (!CreateRenderFinishedSemaphores())
 	{
 		return false;
 	}

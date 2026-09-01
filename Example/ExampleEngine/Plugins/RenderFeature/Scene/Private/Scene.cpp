@@ -1,5 +1,7 @@
 #include "Scene.h"
 
+#include <Frame.h>
+#include <Log.h>
 #include <RHI/RHICommandList.h>
 #include <RHI/RHIEnums.h>
 
@@ -18,17 +20,33 @@ FScene* GetScene()
 FScene::FScene()
 {
 	GScene = this;
+
+	// BeginRender acquires a command list and (re)creates the pool targets --
+	// order it AFTER the frame feature's IFrameBegin, which waits the previous
+	// frame's fence, recycles the previous frame's command lists and begins the
+	// resource pool. The graph runs a stage node as soon as its deps complete;
+	// without this edge IFrameBegin races this feature's list acquisition and
+	// can free the freshly-acquired (still recording) list (vkFreeCommandBuffers
+	// "is in use").
+	WaitFor<IBeginRender, FFrame, IFrameBegin>();
 }
 
 void FScene::BeginRender(FRender& R)
 {
+	// Acquire this feature's command list; Render records into it, EndRender submits.
+	RenderList = R.AcquireRenderList();
 	EnsureTargets(R);
 }
 
 void FScene::EnsureTargets(FRender& R)
 {
-	const std::uint32_t W = R.GetFramebufferWidth();
-	const std::uint32_t H = R.GetFramebufferHeight();
+	IRHI* RHIPtr = R.GetRHI();
+	if (RHIPtr == nullptr)
+	{
+		return;
+	}
+	const std::uint32_t W = RHIPtr->GetFramebufferWidth();
+	const std::uint32_t H = RHIPtr->GetFramebufferHeight();
 	if (W == 0 || H == 0)
 	{
 		return;
@@ -49,7 +67,7 @@ void FScene::EnsureTargets(FRender& R)
 	}
 
 	FRHITextureDesc ColorDesc;
-	ColorDesc.Format = R.GetSwapchainFormat();
+	ColorDesc.Format = RHIPtr->GetSwapchainFormat();
 	ColorDesc.Dimension = ERHITextureDimension::Tex2D;
 	ColorDesc.Extent = { W, H, 1 };
 	ColorDesc.MipLevels = 1;
@@ -69,12 +87,10 @@ void FScene::EnsureTargets(FRender& R)
 	SceneDepth = R.CreateTexture(DepthDesc, /*bTransient=*/false);
 
 	// Dynamic rendering needs the attachments in the correct layout before the
-	// first BeginRendering; transition the fresh (UNDEFINED) images now.
-	if (FRHICommandList* Cmd = R.GetFrameCommandList())
-	{
-		Cmd->TransitionTexture(SceneColor.GetRHI(), ERHIResourceState::Common, ERHIResourceState::RenderTarget);
-		Cmd->TransitionTexture(SceneDepth.GetRHI(), ERHIResourceState::Common, ERHIResourceState::DepthWrite);
-	}
+	// first BeginRendering. The transition is recorded at the START of this
+	// feature's own command list (the first list to use the targets), not the
+	// frame buffer -- see Render().
+	bTargetsNeedTransition = true;
 
 	CachedWidth = W;
 	CachedHeight = H;
@@ -82,12 +98,25 @@ void FScene::EnsureTargets(FRender& R)
 
 void FScene::Render(FRender& R)
 {
-	// Scene pass head: clear the shared color + depth targets. Scene render
-	// features (DrawTriangle, ...) then draw into them with LoadOp Load.
-	FRHICommandList* Cmd = R.GetFrameCommandList();
-	if (Cmd == nullptr || !SceneColor.IsValid())
+	// Scene pass head: record into OUR OWN command list. Fresh targets get their
+	// initial layout transition at the start; then the clear. Scene render features
+	// (DrawTriangle, ...) draw into the same targets afterwards with LoadOp Load.
+	if (RenderList == nullptr || !SceneColor.IsValid())
 	{
 		return;
+	}
+	IRHI* RHIPtr = R.GetRHI();
+	if (RHIPtr == nullptr)
+	{
+		return;
+	}
+	FRHICommandList* Cmd = RenderList;
+	Cmd->Begin();
+	if (bTargetsNeedTransition)
+	{
+		bTargetsNeedTransition = false;
+		Cmd->TransitionTexture(SceneColor.GetRHI(), ERHIResourceState::Common, ERHIResourceState::RenderTarget);
+		Cmd->TransitionTexture(SceneDepth.GetRHI(), ERHIResourceState::Common, ERHIResourceState::DepthWrite);
 	}
 
 	FRHIRenderingAttachmentInfo Color;
@@ -110,19 +139,24 @@ void FScene::Render(FRender& R)
 		PDepth = &Depth;
 	}
 
-	Cmd->BeginRendering(&Color, 1, PDepth, R.GetFramebufferWidth(), R.GetFramebufferHeight());
+	Cmd->BeginRendering(&Color, 1, PDepth, RHIPtr->GetFramebufferWidth(), RHIPtr->GetFramebufferHeight());
 	Cmd->EndRendering();
+	Cmd->End();
 }
 
-void FScene::EndRender(FRender&)
+void FScene::EndRender(FRender& R)
 {
-}
-
-void FScene::Present(FRender& R)
-{
-	// The global scene feature is the present point: blit SceneColor to the
-	// swapchain backbuffer at the end of the frame.
-	R.Present(SceneColor);
+	// Submit this feature's recorded command list. The graph deps order this after
+	// every draw that targets the scene (DrawTriangle.EndRender depends on my
+	// EndRender), so the clear is submitted before the draw.
+	if (RenderList != nullptr)
+	{
+		if (IRHI* RHIPtr = R.GetRHI())
+		{
+			RHIPtr->Submit(RenderList, ERHICommandListType::Graphics);
+		}
+		RenderList = nullptr;
+	}
 }
 
 } // namespace Scene

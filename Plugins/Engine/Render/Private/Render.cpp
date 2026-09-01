@@ -1,6 +1,10 @@
 #include "Render.h"
 
+#include <DrawTriangleFeature.h>
+#include <Frame.h>
+#include <Log.h>
 #include <Platform.h>
+#include <Scene.h>
 #include "RenderResourcePool.h"
 
 // Unity build: fold the shader compiler + resource pool TUs in (the codegen
@@ -13,9 +17,16 @@ namespace Maho
 
 FRender::FRender()
 {
-	// My Initialize depends on Platform's PostInitialize: the window must be
-	// created (and GPlatform published) before the RHI reads the native handle.
-	AddDependency(std::type_index(typeid(IInit)), "FPlatform", std::type_index(typeid(IPostInit)));
+	// Init: I read the window from Platform (its PostInitialize) and log heavily
+	// (Log must be up first) -- both declared by ME, the consumer.
+	WaitFor<IInit, Platform::FPlatform, IPostInit>();
+	WaitFor<IInit, FLog, IInit>();
+
+	// Shutdown: my teardown drains render tasks that may log, and I hold the RHI
+	// surface created from Platform's window -- so Log and Platform must run
+	// their Shutdown AFTER mine. Declared here (I know them), not by them.
+	BlockOn<FLog, IShutdown, IShutdown>();
+	BlockOn<Platform::FPlatform, IShutdown, IShutdown>();
 }
 
 FRender::~FRender() = default;
@@ -52,11 +63,12 @@ void FRender::Initialize(FEngineBase& Engine)
 
 	// Install the global scene feature + the triangle render feature into OUR
 	// layer collection (not the host engine's) so the render graph drives them.
-	// Both are project plugins (Scene.dll / DrawTriangleFeature.dll).
-	Install("Scene.dll");
-	Install("DrawTriangleFeature.dll");
-
-	FThreadedServer::Initialize();
+	// All are project plugins (Scene.dll / DrawTriangleFeature.dll / Frame.dll);
+	// Frame drives the swapchain begin/end as a scheduled stage and must load last
+	// (its IPresent depends on the other features' IEndRender).
+	Install<Scene::FScene>();
+	Install<FDrawTriangleFeature>();
+	Install<FFrame>();
 }
 
 void FRender::PostInitialize(FEngineBase&)
@@ -69,16 +81,55 @@ void FRender::PreShutdown(FEngineBase&)
 
 void FRender::Shutdown(FEngineBase&)
 {
-	// Wait pending render tasks, then release the render graph (before the pool
-	// in FLayerCollector is destroyed).
-	RenderGraph.reset();
-
-	// Stop the shader compile thread first.
+	// Clean-exit guarantee: drain EVERY async worker BEFORE tearing anything
+	// down. The engine's shutdown graph runs the IShutdown stages concurrently,
+	// so this layer must be quiescent before we touch shared state -- the render
+	// feature graph pool first (a task still in flight holds the graph pointer),
+	// then the two threaded servers (shader-compile thread + RHI render-server
+	// thread). All of them drain their queues and join here.
+	//
+	// The leftover render tasks drained below (e.g. the last frame's EndFrame)
+	// may still present; the swapchain surface is still alive here because
+	// FPlatform's Shutdown is ordered AFTER ours (it owns the window/surface the
+	// RHI was created from). The RHI stays a stateless task processor -- it
+	// never refuses work, it just runs what it is given.
+	if (RenderGraph)
+	{
+		RenderGraph->Flush();   // render feature graph pool (quiescence barrier)
+	}
 	if (ShaderCompiler)
 	{
-		ShaderCompiler->FlushCompiles();
-		ShaderCompiler.reset();
+		ShaderCompiler->Shutdown();   // compile thread: drain pending compiles, stop + join
 	}
+	if (RHI)
+	{
+		RHI->Shutdown();   // render-server thread: drain + join (device teardown stays in ShutdownRHI)
+	}
+	RenderGraph.reset();
+
+	// All render work for the last frame was submitted (the graph drives the
+	// features synchronously); the GPU may still be executing it. Wait here so
+	// every resource destroyed below is released only after the device is idle.
+	if (RHI)
+	{
+		RHI->WaitIdle();
+
+		// The last frame's feature command lists are only recycled at the next
+		// frame's IFrameBegin -- which never comes after the loop breaks. Destroy
+		// them while the device is still alive (their VkCommandPools must not be
+		// outstanding when the device is destroyed).
+		ReleaseFrameLists();
+
+		// Destroy the render feature instances explicitly BEFORE the RHI goes
+		// away: their destructors free Vulkan objects (pipelines / shader
+		// modules) that must be released while the device exists. The collector
+		// would otherwise destroy them only when this FRender dies -- after the
+		// RHI.
+		Features.clear();
+	}
+
+	// The compile server thread was already joined above; just release the server.
+	ShaderCompiler.reset();
 
 	// Release pooled resources before the RHI device goes away.
 	if (ResourcePool)
@@ -89,10 +140,9 @@ void FRender::Shutdown(FEngineBase&)
 
 	if (RHI)
 	{
-		RHI->ShutdownRHI();
+		RHI->ShutdownRHI();   // re-joining the server thread is a no-op; tears down the device
 		RHI.reset();
 	}
-	FThreadedServer::Shutdown();
 }
 
 void FRender::PostShutdown(FEngineBase&)
@@ -101,10 +151,31 @@ void FRender::PostShutdown(FEngineBase&)
 
 void FRender::BeginFrame(FEngineBase&)
 {
-	if (RHI)
+	// Frame begin/end are driven by the frame render feature (IFrameBegin/IFrameEnd)
+	// inside the render graph -- this host stage is intentionally empty.
+}
+
+void FRender::ReleaseFrameLists()
+{
+	// The previous frame's feature command lists were submitted in their IEndRender
+	// stages; after the frame feature's IFrameBegin waited the swapchain fence, they
+	// are no longer executing -- destroy them now.
+	std::vector<FRHICommandList*> Lists;
 	{
-		RHI->BeginFrame();
+		std::lock_guard<std::mutex> Lock(RenderListsMutex);
+		Lists.swap(PendingRenderLists);
 	}
+	for (FRHICommandList* List : Lists)
+	{
+		if (RHI)
+		{
+			RHI->DestroyCommandList(List);
+		}
+	}
+}
+
+void FRender::BeginResourcePool()
+{
 	if (ResourcePool)
 	{
 		ResourcePool->BeginFrame();
@@ -118,37 +189,32 @@ void FRender::Tick(FEngineBase&)
 		return;
 	}
 
-	// Apply pending installs/uninstalls of render features, then drive the
-	// render feature graph (IBeginRender -> IRender -> IEndRender).
-	FlushPendingUpdatePipelines<IBeginRender, IRender, IEndRender>();
+	// Frame-start barrier: wait the PREVIOUS frame's render-graph tasks before
+	// rebuilding the graph. The render CPU work runs during the interval and is
+	// collected here, so Init never races with in-flight Render() calls.
+	RenderGraph->Flush();
 
-	RenderGraph->Init(Select<IBeginRender, IRender, IEndRender>());
+	// Rebuild + drive the render feature graph. All frame work (swapchain begin,
+	// feature acquire/record/submit, present, swapchain end) is a scheduled stage --
+	// FRender only schedules; the frame feature + per-feature deps order it all.
+	FlushPendingUpdatePipelines<IFrameBegin, IBeginRender, IRender, IEndRender, IPresent, IFrameEnd>();
+	RenderGraph->Init(Select<IFrameBegin, IBeginRender, IRender, IEndRender, IPresent, IFrameEnd>());
 	if (!RenderGraph->Compile())
 	{
 		ReportFatal("FRender::Tick: render pipeline Compile failed");
 	}
 	RenderGraph->Execute();
-	// The RHI frame primitives (BeginFrame/Present/EndFrame) are serial and must
-	// complete before EndFrame submits, so wait for the render features now.
-	RenderGraph->Flush();
-
-	// IPresent runs AFTER the graph drains: the present point records into the
-	// SAME shared frame command buffer, so it must never overlap graph nodes.
-	// Only the IPresent capability is dispatched - FRender has no knowledge of
-	// which concrete feature (Scene, UI) provides the present surface.
-	auto Presenters = Select<IPresent>();
-	for (FLayerBase* L : Presenters.Data)
-	{
-		Invoke<IPresent, FRender>(L, *this);
-	}
+	// No trailing Flush: the render graph pipelines across frames -- the next
+	// Tick's leading Flush (above) waits this frame's tasks. At shutdown the
+	// leftover tasks are drained by FRender::Shutdown (render-pool Flush at its
+	// start) and FLog's Shutdown is ordered after FRender's, so any teardown
+	// logging lands in a live logger.
 }
 
 void FRender::EndFrame(FEngineBase&)
 {
-	if (RHI)
-	{
-		RHI->EndFrame();
-	}
+	// Frame begin/end are driven by the frame render feature (IFrameBegin/IFrameEnd)
+	// inside the render graph -- this host stage is intentionally empty.
 }
 
 void FRender::RequestExit(FEngineBase&)
@@ -181,12 +247,19 @@ void FRender::ReleaseBuffer(FRDGBufferRef& Ref)
 	}
 }
 
-void FRender::Present(FRDGTextureRef& Src)
+FRHICommandList* FRender::AcquireRenderList()
 {
-	if (RHI && Src.IsValid())
+	if (RHI == nullptr)
 	{
-		RHI->PresentTexture(Src.GetRHI());
+		return nullptr;
 	}
+	FRHICommandList* List = RHI->CreateCommandList(ERHICommandListType::Graphics);
+	if (List != nullptr)
+	{
+		std::lock_guard<std::mutex> Lock(RenderListsMutex);
+		PendingRenderLists.push_back(List);
+	}
+	return List;
 }
 
 } // namespace Maho

@@ -1,6 +1,11 @@
 #include "ExampleEngine.h"
 
+#include <Config.h>
 #include <Log.h>
+#include <Platform.h>
+#include <Render.h>
+#include <Resource.h>
+#include <Script.h>
 
 namespace Maho
 {
@@ -8,12 +13,12 @@ void FExampleEngine::PreMain()
 {
 	// Engine service layers installed up front; the window drives the engine
 	// loop and FPlatform requests exit when the window is closed.
-	Install("Log.dll");
-	Install("Config.dll");
-	Install("Platform.dll");
-	Install("Resource.dll");
-	Install("Script.dll");
-	Install("Render.dll");
+	Install<FLog>();
+	Install<Config::FConfig>();
+	Install<Platform::FPlatform>();
+	Install<Resource::FResourceSystem>();
+	Install<Script::FScriptSystem>();
+	Install<FRender>();
 }
 
 void FExampleEngine::PostMain()

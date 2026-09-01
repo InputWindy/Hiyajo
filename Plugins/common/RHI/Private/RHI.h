@@ -43,6 +43,7 @@ public:
 	virtual void BeginFrame() = 0;
 	virtual void EndFrame() = 0;
 	virtual void Resize(int Width, int Height) = 0;
+	virtual void WaitIdle() = 0;
 
 	/**
 	 * Borrow the frame command buffer (already begun by BeginFrame, ended and

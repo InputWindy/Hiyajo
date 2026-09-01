@@ -20,12 +20,13 @@ class FScene;
 MAHO_SCENE_API FScene* GetScene();
 
 /**
- * FScene - the global render resource feature (UE-aligned). Mounts all render
- * stages; cross-frame owns the shared scene targets (SceneColor / SceneDepth).
- * Other features read them through Scene::GetScene() - no named slots in
- * FRender. Targets are rebuilt when the swapchain extent changes.
+ * FScene - the global render resource feature (UE-aligned). Mounts the render
+ * record stages; cross-frame owns the shared scene targets (SceneColor /
+ * SceneDepth). Other features read them through Scene::GetScene() - no named
+ * slots in FRender. Targets are rebuilt when the swapchain extent changes.
+ * (The present/blit lives in the Frame feature, not here.)
  */
-class MAHO_SCENE_API FScene : public FLayer<IBeginRender, IRender, IEndRender, IPresent>
+class MAHO_SCENE_API FScene : public FLayer<IBeginRender, IRender, IEndRender>
 {
 	MAHO_DECLARE_LAYER(FScene, "Scene.dll");
 
@@ -38,15 +39,17 @@ public:
 	void BeginRender(FRender& R) override;
 	void Render(FRender& R) override;
 	void EndRender(FRender& R) override;
-	void Present(FRender& R) override;
 
 private:
 	void EnsureTargets(FRender& R);
+
+	FRHICommandList* RenderList = nullptr;   // acquired in BeginRender, recorded in Render, submitted in EndRender
 
 	FRDGTextureRef SceneColor;
 	FRDGTextureRef SceneDepth;
 	std::uint32_t CachedWidth = 0;
 	std::uint32_t CachedHeight = 0;
+	bool bTargetsNeedTransition = true;   // fresh targets need Common -> RenderTarget once
 };
 
 } // namespace Scene

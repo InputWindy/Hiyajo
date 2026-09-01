@@ -86,6 +86,10 @@
     {
       "Name": "DrawTriangleFeature",
       "Enabled": true
+    },
+    {
+      "Name": "Frame",
+      "Enabled": true
     }
   ]
 }

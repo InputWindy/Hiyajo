@@ -48,6 +48,15 @@ public:
 	 *  binds this to re-expand its cached task graph (push, not poll). */
 	TMulticastEvent<void()> OnLayersChanged;
 
+	/** Typed install: install a plugin by its layer type, resolving the DLL path
+	 *  from T::GetModulePath() (the layer type knows its own module). Equivalent
+	 *  to Install("T's dll"). Use this wherever the type is visible. */
+	template <typename T>
+	bool Install()
+	{
+		return Install(std::string(T::GetModulePath()));
+	}
+
 	/** Dynamically load a layer DLL via FAssembly and install it (next safe point).
 	 *  Layers are ALWAYS loaded by name (anonymous-loading convention) -- there is
 	 *  no raw-pointer install. Refuses, with a non-fatal error:
@@ -91,24 +100,12 @@ public:
 			return false;
 		}
 
-		// Fail-fast dependency check, symmetric to unload's refusal: every declared
-		// dep must already be installed or pending. If this layer's install fails,
-		// no dependent can install either -- the failure propagates cleanly instead
-		// of leaving a dangling dependency for the graph to trip over.
-		for (const auto& [Stage, Deps] : Layer->GetDependencies())
-		{
-			(void)Stage;
-			for (const auto& Dep : Deps)
-			{
-				if (!HasLayerName(Dep.Name))
-				{
-					ReportError((std::string("Install refused: layer '") + std::string(Name)
-						+ "' depends on unknown layer '" + Dep.Name
-						+ "' (install its dependencies first)").c_str());
-					return false;
-				}
-			}
-		}
+		// No fail-fast dependency refusal here: features may legitimately reference
+		// each other cross-stage in ANY install order (e.g. Scene.Present depends on
+		// DrawTriangle.Render while DrawTriangle.Render depends on Scene.Render).
+		// A per-name check cannot see that the cycle is valid across stages, so it
+		// would refuse valid mutual deps. The stage-aware graph Compile validates
+		// missing deps / real cycles instead (and reports once, non-fatal).
 
 		PendingAdded.push_back(Layer.get());
 		Modules.push_back(std::move(Asm));

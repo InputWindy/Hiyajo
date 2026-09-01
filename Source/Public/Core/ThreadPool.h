@@ -37,11 +37,12 @@ public:
 	void Submit(std::function<void()> Task);
 
 	/**
-	 * Barrier (lockstep) over the batch of tasks submitted SO FAR. The pool
-	 * runs tasks out of order (multiple workers); this waits until every task
-	 		 * submitted before the call has COMPLETED -- not merely dequeued.
-	 *
-	 * The caller must not Submit new tasks concurrently with Flush.
+	 * Quiescence barrier: block until the pool is TRULY idle -- every task
+	 * submitted before the call, AND any task a concurrent worker submits while
+	 * draining (nested/dependent graph work), has completed. Unlike a FIFO
+	 * no-op barrier this tolerates Submit during the flush: the loop re-waits
+	 * whenever PendingCount goes back up, so no task can escape the barrier and
+	 * run later (e.g. race the engine's shutdown graph).
 	 */
 	void Flush();
 
@@ -120,12 +121,16 @@ inline void FThreadPool::Submit(std::function<void()> Task)
 
 inline void FThreadPool::Flush()
 {
-	// The no-op barrier task is queued after every previously submitted task;
-	// WorkerLoop drains PendingCount only after a task COMPLETED, so waiting
-	// for zero means all prior tasks truly finished (not just dequeued).
-	Submit([]{});
+	// Wait for true quiescence: the queue empty AND PendingCount zero (a running
+	// task only decrements after it COMPLETED, so zero means nothing is in
+	// flight). The while-loop re-waits if a concurrent Submit bumps the count
+	// while we drain -- a nested graph (e.g. the render graph dispatching its
+	// downstream stages) can submit from a worker, and those must not escape.
 	std::unique_lock Lock(Mutex);
-	CondVar.wait(Lock, [&] { return PendingCount == 0; });
+	while (PendingCount != 0 || !Queue.empty())
+	{
+		CondVar.wait(Lock, [&] { return PendingCount == 0 && Queue.empty(); });
+	}
 }
 
 inline void FThreadPool::WorkerLoop()

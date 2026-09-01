@@ -1,5 +1,6 @@
 #include "DrawTriangleFeature.h"
 
+#include <Frame.h>
 #include <Log.h>
 #include <Scene.h>
 
@@ -30,8 +31,53 @@ void main()
 
 FDrawTriangleFeature::FDrawTriangleFeature()
 {
-	// Draw AFTER FScene clears the shared scene targets.
-	AddDependency(std::type_index(typeid(IRender)), "FScene", std::type_index(typeid(IRender)));
+	// Draw AFTER FScene clears (record order), and submit AFTER FScene's clear is
+	// submitted (submit order -- the clear must reach the queue before the draw).
+	WaitFor<IRender, Scene::FScene, IRender>();
+	WaitFor<IEndRender, Scene::FScene, IEndRender>();
+
+	// BeginRender acquires a command list -- order it AFTER the frame feature's
+	// IFrameBegin (waits the previous fence, recycles the previous frame's
+	// lists). Without this edge the frame feature can free this feature's
+	// freshly-acquired list while it is still recording (vkFreeCommandBuffers
+	// "is in use").
+	WaitFor<IBeginRender, FFrame, IFrameBegin>();
+}
+
+FDrawTriangleFeature::~FDrawTriangleFeature()
+{
+	// Release the Vulkan objects while the RHI/device is still alive: FRender
+	// clears its features BEFORE tearing the RHI down. Without this the
+	// VkPipeline / VkShaderModules / VkPipelineLayout would leak -- and stay
+	// outstanding at vkDestroyDevice, which the validation layers report.
+	if (OwnerRHI == nullptr)
+	{
+		return;
+	}
+	if (Pipeline) { OwnerRHI->DestroyGraphicsPipeline(Pipeline); Pipeline = nullptr; }
+	if (Layout)   { OwnerRHI->DestroyPipelineLayout(Layout);     Layout = nullptr; }
+	if (FS)       { OwnerRHI->DestroyShaderModule(FS);            FS = nullptr; }
+	if (VS)       { OwnerRHI->DestroyShaderModule(VS);            VS = nullptr; }
+}
+
+void FDrawTriangleFeature::BeginRender(FRender& R)
+{
+	// Acquire this feature's command list; Render records into it, EndRender submits.
+	RenderList = R.AcquireRenderList();
+}
+
+void FDrawTriangleFeature::EndRender(FRender& R)
+{
+	// Submit this feature's recorded command list. The graph deps order this after
+	// FScene's EndRender, so the clear is submitted before the draw.
+	if (RenderList != nullptr)
+	{
+		if (IRHI* RHIPtr = R.GetRHI())
+		{
+			RHIPtr->Submit(RenderList, ERHICommandListType::Graphics);
+		}
+		RenderList = nullptr;
+	}
 }
 
 void FDrawTriangleFeature::Render(FRender& R)
@@ -54,6 +100,9 @@ void FDrawTriangleFeature::Render(FRender& R)
 	// rendering - the pipeline declares formats, no render pass).
 	if (!bBuilt)
 	{
+		// Cache the RHI the objects are created on -- the destructor releases
+		// whatever was created through it, even on a partial build failure.
+		OwnerRHI = RHI;
 		FShaderCompileDesc VDesc;
 		VDesc.Source = kVertexShader;
 		VDesc.Stage = ERHIShaderStage::Vertex;
@@ -115,7 +164,7 @@ void FDrawTriangleFeature::Render(FRender& R)
 		PipelineDesc.VertexStride = 0;
 		PipelineDesc.CullMode = ERHICullMode::None;
 		PipelineDesc.FillMode = ERHIFillMode::Solid;
-		PipelineDesc.ColorFormat = R.GetSwapchainFormat();
+		PipelineDesc.ColorFormat = RHI->GetSwapchainFormat();
 		PipelineDesc.DepthFormat = ERHIFormat::D32_SFLOAT;
 		PipelineDesc.bDepthTest = true;
 		PipelineDesc.bDepthWrite = false;
@@ -131,13 +180,14 @@ void FDrawTriangleFeature::Render(FRender& R)
 		MAHO_LOG_CORE_INFO("DrawTriangleFeature: triangle pipeline built");
 	}
 
-	// Record into the shared scene color target (Load - FScene already cleared).
-	FRHICommandList* Cmd = R.GetFrameCommandList();
-	if (Cmd == nullptr)
+	// Record the draw into our OWN command list (Load - FScene already cleared).
+	// EndRender submits it.
+	if (RenderList == nullptr)
 	{
 		return;
 	}
-
+	FRHICommandList* Cmd = RenderList;
+	Cmd->Begin();
 	FRHIRenderingAttachmentInfo Color;
 	Color.View = Scene->GetSceneColor().GetView();
 	Color.LoadOp = ERHILoadOp::Load;
@@ -153,14 +203,15 @@ void FDrawTriangleFeature::Render(FRender& R)
 		PDepth = &Depth;
 	}
 
-	Cmd->BeginRendering(&Color, 1, PDepth, R.GetFramebufferWidth(), R.GetFramebufferHeight());
+	Cmd->BeginRendering(&Color, 1, PDepth, RHI->GetFramebufferWidth(), RHI->GetFramebufferHeight());
 	Cmd->BindGraphicsPipeline(Pipeline);
 	Cmd->SetViewport(0.0f, 0.0f,
-		static_cast<float>(R.GetFramebufferWidth()),
-		static_cast<float>(R.GetFramebufferHeight()));
-	Cmd->SetScissor(0, 0, R.GetFramebufferWidth(), R.GetFramebufferHeight());
+		static_cast<float>(RHI->GetFramebufferWidth()),
+		static_cast<float>(RHI->GetFramebufferHeight()));
+	Cmd->SetScissor(0, 0, RHI->GetFramebufferWidth(), RHI->GetFramebufferHeight());
 	Cmd->Draw(3);
 	Cmd->EndRendering();
+	Cmd->End();
 }
 
 } // namespace Maho

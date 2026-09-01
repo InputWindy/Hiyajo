@@ -10,7 +10,10 @@
 #include "RDG.h"
 #include "ShaderCompiler.h"
 
+#include <functional>
 #include <memory>
+#include <mutex>
+#include <vector>
 
 namespace Maho
 {
@@ -46,27 +49,48 @@ public:
 	virtual void Present(FRender&) = 0;
 };
 
+/** Frame lifecycle stages -- implemented by a dedicated "frame" render feature so
+ *  the host FRender is a pure scheduler and the swapchain begin/end is part of the
+ *  render graph (scheduled like any stage). */
+class MAHO_RENDER_API IFrameBegin
+{
+public:
+	virtual ~IFrameBegin() = default;
+	virtual void BeginFrame(FRender&) = 0;
+};
+
+class MAHO_RENDER_API IFrameEnd
+{
+public:
+	virtual ~IFrameEnd() = default;
+	virtual void EndFrame(FRender&) = 0;
+};
+
 MAHO_DECLARE_STAGE_DISPATCH(FRender, IBeginRender, IBeginRender, BeginRender)
 MAHO_DECLARE_STAGE_DISPATCH(FRender, IRender,      IRender,      Render)
 MAHO_DECLARE_STAGE_DISPATCH(FRender, IEndRender,   IEndRender,   EndRender)
 MAHO_DECLARE_STAGE_DISPATCH(FRender, IPresent,     IPresent,     Present)
+MAHO_DECLARE_STAGE_DISPATCH(FRender, IFrameBegin,  IFrameBegin,  BeginFrame)
+MAHO_DECLARE_STAGE_DISPATCH(FRender, IFrameEnd,    IFrameEnd,    EndFrame)
 
 /**
  * Render subsystem - a layer in the host engine (mounted as IInit/ITick/...),
  * plus its own layer collector for render features (implementing IBeginRender/
- * IRender/IEndRender/IPresent), plus a dedicated render thread (FThreadedServer).
- * The host engine only sees FRender as one layer; render features are installed
- * and scheduled entirely inside FRender.
+ * IRender/IEndRender/IPresent). The dedicated threads live INSIDE the pieces it
+ * owns: the RHI (FRHI) is a render server (FThreadedServer) and the shader
+ * compiler (FShaderCompilerServer) is its own FThreadedServer - FRender itself
+ * is NOT a server. The host engine only sees FRender as one layer; render
+ * features are installed and scheduled entirely inside FRender.
  *
  * FRender is also the RDG resource pool: features create off-screen resources
  * through CreateTexture/CreateBuffer and hand back FRDG*Ref handles; the native
- * FRHITexture/FRHIBuffer live in the pool (cross-frame reuse). Present(Ref) is
- * the ONLY touch point with the swapchain backbuffer.
+ * FRHITexture/FRHIBuffer live in the pool (cross-frame reuse). The swapchain
+ * backbuffer is only ever touched by the frame feature (via RHI->PresentTexture
+ * on GetRHI()).
  */
 class MAHO_RENDER_API FRender
 	: public FLayer<IPreInit, IInit, IPostInit, IBeginFrame, ITick, IEndFrame, IExit, IPreShutdown, IShutdown, IPostShutdown>
 	, public FLayerCollector<FRender>
-	, public FThreadedServer
 {
 MAHO_DECLARE_LAYER(FRender, "Render.dll");
 
@@ -80,21 +104,25 @@ public:
 	/** The async shader compiler (render features submit compile requests). */
 	FShaderCompilerServer* GetShaderCompiler() const { return ShaderCompiler.get(); }
 
-	/** Borrow the frame command buffer (already begun; ended/submitted by FRender). */
-	FRHICommandList* GetFrameCommandList() const { return RHI ? RHI->GetFrameCommandList() : nullptr; }
-
-	[[nodiscard]] std::uint32_t GetFramebufferWidth() const { return RHI ? RHI->GetFramebufferWidth() : 0; }
-	[[nodiscard]] std::uint32_t GetFramebufferHeight() const { return RHI ? RHI->GetFramebufferHeight() : 0; }
-	[[nodiscard]] ERHIFormat GetSwapchainFormat() const { return RHI ? RHI->GetSwapchainFormat() : ERHIFormat::Unknown; }
-
 	// -- RDG resource pool (off-screen resources) --
 	[[nodiscard]] FRDGTextureRef CreateTexture(const FRHITextureDesc& Desc, bool bTransient = false);
 	[[nodiscard]] FRDGBufferRef CreateBuffer(const FRHIBufferDesc& Desc, bool bTransient = false);
 	void ReleaseTexture(FRDGTextureRef& Ref);
 	void ReleaseBuffer(FRDGBufferRef& Ref);
 
-	/** Copy an off-screen color texture to the swapchain backbuffer (IPresent stage). */
-	void Present(FRDGTextureRef& Src);
+	/** Destroy the previous frame's feature command lists -- call after the frame
+	 *  feature's IFrameBegin has waited the swapchain fence (their submits are done). */
+	void ReleaseFrameLists();
+
+	/** Advance the RDG resource pool (expire transients) -- called by the frame
+	 *  feature's IFrameBegin. */
+	void BeginResourcePool();
+
+	/** Record a render-feature pass into ITS OWN command list. The feature owns the
+	 *  list lifecycle across its stages: acquire in IBeginRender, record in IRender,
+	 *  submit in IEndRender. The list is tracked here for deferred destruction
+	 *  (it may still be executing on the GPU until the next frame's fence wait). */
+	[[nodiscard]] FRHICommandList* AcquireRenderList();
 
 protected:
 	// -- host engine stages (FEngineBase context) --
@@ -119,8 +147,15 @@ private:
 	// thread pipelines work across frames. IPresent is NOT part of the graph: it
 	// is driven by FRender::Tick after the graph flushes, so the shared frame
 	// command buffer is never recorded concurrently.
-	using FRenderStages = TTypeList<IBeginRender, IRender, IEndRender>;
+	// Render graph stages. The frame feature (IFrameBegin/IFrameEnd) drives the
+	// swapchain begin/end as a scheduled stage, and IPresent is scheduled too -- the
+	// present feature declares its deps on the other features' last stage, so the
+	// TaskGraph orders everything. FRender itself does no frame work.
+	using FRenderStages = TTypeList<IFrameBegin, IBeginRender, IRender, IEndRender, IPresent, IFrameEnd>;
 	std::unique_ptr<FLayerTaskGraph<FRenderStages, FRender>> RenderGraph;
+
+	std::vector<FRHICommandList*> PendingRenderLists;   // lists acquired this frame; destroyed at the next BeginFrame
+	std::mutex RenderListsMutex;                        // guards PendingRenderLists (features acquire on pool workers)
 };
 
 } // namespace Maho

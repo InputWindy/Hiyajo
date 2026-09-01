@@ -1,0 +1,62 @@
+#include "Frame.h"
+
+#include <DrawTriangleFeature.h>
+#include <RHI/RHIServer.h>
+#include <Scene.h>
+
+namespace Maho
+{
+
+FFrame::FFrame()
+{
+	// IPresent (the blit) must run after every render feature's IEndRender (their
+	// submits), so the swapchain blit copies the fully-rendered scene. Hand-wired
+	// for now -- no automatic "last stage per feature" wiring yet.
+	WaitFor<IPresent, Scene::FScene, IEndRender>();
+	WaitFor<IPresent, FDrawTriangleFeature, IEndRender>();
+}
+
+void FFrame::BeginFrame(FRender& R)
+{
+	if (IRHI* RHI = R.GetRHI())
+	{
+		RHI->BeginFrame();   // wait previous fence, acquire swapchain image, begin frame buffer
+	}
+	// The previous frame's feature command lists are no longer executing.
+	R.ReleaseFrameLists();
+	R.BeginResourcePool();
+}
+
+void FFrame::Present(FRender& R)
+{
+	Scene::FScene* Scene = Scene::GetScene();
+	if (Scene != nullptr)
+	{
+		FRDGTextureRef Color = Scene->GetSceneColor();
+		if (Color.IsValid())
+		{
+			// Blit the scene color to the swapchain backbuffer -- the frame
+			// feature owns the present point, FRender just exposes the RHI.
+			if (IRHI* RHIPtr = R.GetRHI())
+			{
+				RHIPtr->PresentTexture(Color.GetRHI());
+			}
+		}
+	}
+}
+
+void FFrame::EndFrame(FRender& R)
+{
+	if (IRHI* RHI = R.GetRHI())
+	{
+		RHI->EndFrame();   // end + submit the frame buffer (with the blit), present the swapchain
+	}
+}
+
+} // namespace Maho
+
+// The C export the host looks up BY SYMBOL NAME for dynamic install.
+extern "C" MAHO_FRAME_API Maho::FLayerBase* CreateLayer()
+{
+	return Maho::FFrame::CreateLayer();
+}

@@ -302,6 +302,7 @@ target_include_directories(Platform PUBLIC
 	"${ENGINE_DIR}/Plugins/Engine/Platform/Public"
 	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEngine/Public"
 	"${ENGINE_DIR}/Plugins/Common/ConsoleVariable/Public"
+	"${ENGINE_DIR}/Plugins/Engine/Config/Public"
 	"${ENGINE_DIR}/Plugins/Engine/Log/Public"
 )
 set_target_properties(Platform PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
@@ -547,6 +548,9 @@ target_include_directories(Render PUBLIC
 	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEngine/Public"
 	"${ENGINE_DIR}/Plugins/Common/RHI/Public"
 	"${ENGINE_DIR}/Plugins/Engine/Platform/Public"
+	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/Scene/Public"
+	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/DrawTriangleFeature/Public"
+	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/Frame/Public"
 )
 set_target_properties(Render PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 target_compile_definitions(Render PRIVATE MAHO_RENDER_MODULE_EXPORTS)
@@ -576,6 +580,7 @@ target_include_directories(Scene PUBLIC
 	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/Scene/Public"
 	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEngine/Public"
 	"${ENGINE_DIR}/Plugins/Engine/Render/Public"
+	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/Frame/Public"
 )
 set_target_properties(Scene PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 target_compile_definitions(Scene PRIVATE MAHO_SCENE_MODULE_EXPORTS)
@@ -606,6 +611,7 @@ target_include_directories(DrawTriangleFeature PUBLIC
 	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEngine/Public"
 	"${ENGINE_DIR}/Plugins/Engine/Render/Public"
 	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/Scene/Public"
+	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/Frame/Public"
 )
 set_target_properties(DrawTriangleFeature PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 target_compile_definitions(DrawTriangleFeature PRIVATE MAHO_DRAWTRIANGLEFEATURE_MODULE_EXPORTS)
@@ -620,6 +626,39 @@ target_link_libraries(DrawTriangleFeature PUBLIC Render Scene)
 source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/DrawTriangleFeature" FILES
 	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/DrawTriangleFeature/Public/DrawTriangleFeature.h"
 	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/DrawTriangleFeature/Private/DrawTriangleFeature.cpp"
+)
+
+add_library(Frame SHARED
+	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/Frame/Public/Frame.h
+	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/Frame/Private/Frame.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/Frame/Frame.cplugin
+	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/Frame/Frame.cmake
+	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/Frame/settings.json
+)
+set_source_files_properties(	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/Frame/Frame.cplugin
+	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/Frame/Frame.cmake
+	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/Frame/settings.json PROPERTIES HEADER_FILE_ONLY ON)
+target_include_directories(Frame PUBLIC
+	"${ENGINE_DIR}/Source/Public"
+	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/Frame/Public"
+	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEngine/Public"
+	"${ENGINE_DIR}/Plugins/Engine/Render/Public"
+	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/Scene/Public"
+	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/DrawTriangleFeature/Public"
+)
+set_target_properties(Frame PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
+target_compile_definitions(Frame PRIVATE MAHO_FRAME_MODULE_EXPORTS)
+target_link_libraries(Frame PUBLIC Maho)
+set_property(TARGET Frame PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>")
+set(_MOD_PLUGIN_DIR "${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/Frame")
+include("${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/Frame/Frame.cmake")
+unset(_MOD_PLUGIN_DIR)
+
+target_link_libraries(Frame PUBLIC Render Scene)
+
+source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/Frame" FILES
+	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/Frame/Public/Frame.h"
+	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/Frame/Private/Frame.cpp"
 )
 
 # The project root — the entry plugin (under Plugins/, Public header + Private impl).
@@ -754,7 +793,7 @@ endforeach()
 set_property(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" PROPERTY VS_DEBUGGER_WORKING_DIRECTORY "${_MAHO_BIN}/$<CONFIG>")
 # The sln startup project is EntryPoint (the app host), not ZERO_CHECK.
 set_property(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" PROPERTY VS_STARTUP_PROJECT EntryPoint)
-add_dependencies(EntryPoint ExampleEngine Archive Paths Asset Compress ConsoleVariable Config Exception Log Name Platform RHI Reflect Resource Script Text Timer Unicode Render Scene DrawTriangleFeature MahoCheckCycle)
+add_dependencies(EntryPoint ExampleEngine Archive Paths Asset Compress ConsoleVariable Config Exception Log Name Platform RHI Reflect Resource Script Text Timer Unicode Render Scene DrawTriangleFeature Frame MahoCheckCycle)
 
 # Solution folders: EntryPoint at the ROOT; Maho (engine), Project, ThirdParty.
 # The project root sits at Project/ itself; project plugin DLLs under
@@ -805,4 +844,6 @@ set_target_properties(Render PROPERTIES FOLDER "Maho/Plugins/Engine")
 set_target_properties(Scene PROPERTIES FOLDER "Project/Plugins/RenderFeature")
 
 set_target_properties(DrawTriangleFeature PROPERTIES FOLDER "Project/Plugins/RenderFeature")
+
+set_target_properties(Frame PROPERTIES FOLDER "Project/Plugins/RenderFeature")
 

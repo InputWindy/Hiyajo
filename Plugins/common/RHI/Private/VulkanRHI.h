@@ -27,6 +27,7 @@ public:
 	virtual void BeginFrame() override;
 	virtual void EndFrame() override;
 	virtual void Resize(int Width, int Height) override;
+	virtual void WaitIdle() override;
 
 	[[nodiscard]] virtual FRHICommandList* GetFrameCommandList() override;
 	virtual void PresentTexture(FRHITexture* Src) override;
@@ -155,6 +156,7 @@ public:
 
 private:
 	bool CreateInstance();
+	void CreateDebugMessenger();
 	bool CreateSurface();
 	bool PickPhysicalDevice();
 	bool CreateLogicalDevice();
@@ -167,6 +169,7 @@ private:
 	bool CreateLogicalQueuesAndPools();
 	bool CreateMemoryAllocator();
 	bool CreateSyncObjects();
+	bool CreateRenderFinishedSemaphores();
 	bool RecreateSwapchain();
 
 	[[nodiscard]] bool IsDeviceSuitable(VkPhysicalDevice InPhysicalDevice);
@@ -188,6 +191,7 @@ private:
 	bool bInitialized = false;
 
 	VkInstance Instance = VK_NULL_HANDLE;
+	VkDebugUtilsMessengerEXT DebugMessenger = VK_NULL_HANDLE;
 	VkSurfaceKHR Surface = VK_NULL_HANDLE;
 	VkPhysicalDevice PhysicalDevice = VK_NULL_HANDLE;
 	VkDevice Device = VK_NULL_HANDLE;
@@ -227,7 +231,7 @@ private:
 	VkCommandPool TransferCmdPool = VK_NULL_HANDLE;
 
 	VkSemaphore ImageAvailableSemaphore = VK_NULL_HANDLE;
-	VkSemaphore RenderFinishedSemaphore = VK_NULL_HANDLE;
+	std::vector<VkSemaphore> RenderFinishedSemaphores;   // one per swapchain image (indexed by CurrentImageIndex)
 	VkFence InFlightFence = VK_NULL_HANDLE;
 
 	std::uint32_t GraphicsQueueFamilyIndex = 0;

@@ -110,25 +110,54 @@ public:
 
 	virtual const FDependencyTable& GetDependencies() const;
 
+	/** Reverse dependency: "OtherName at Stage waits for MY MyStage" -- the edge
+	 *  a CONSUMER declares on behalf of a producer that does not know it is used
+	 *  (e.g. "the Log layer must outlive my teardown"). Applied by the graph at
+	 *  Init; skipped when OtherName is not installed. */
+	struct FDependent
+	{
+		std::string     Name;      // layer that must wait for me
+		std::type_index Stage;     // its stage that waits
+		std::type_index MyStage;   // my stage it is blocked on
+	};
+	const std::vector<FDependent>& GetDependents() const { return Dependents; }
+
 protected:
 	FLayerBase() = default;
 
-	/** Declare: `this` at TMyStage depends on TDepObj at TDepStage. */
-	template <typename TMyStage, typename TDepObj, typename TDepStage>
-	void AddDependency()
+	// -- forward dependency: MY TMyStage waits for TOther@TOtherStage ----------
+	/** Typed: the consumer names the producer's type (it uses it, so it knows it). */
+	template <typename TMyStage, typename TOther, typename TOtherStage>
+	void WaitFor()
 	{
 		Dependencies[std::type_index(typeid(TMyStage))].push_back({
-			std::string(TDepObj::StaticName()),
-			std::type_index(typeid(TDepStage))
+			std::string(TOther::StaticName()),
+			std::type_index(typeid(TOtherStage))
 		});
 	}
 
-	/** Runtime dependency: `this` at MyStage depends on DepName at DepStage.
-	 *  For dynamically-loaded features that cannot name the dep's type -- the
-	 *  dep is addressed by its layer name (== GetName()/StaticName()). */
-	void AddDependency(std::type_index MyStage, std::string_view DepName, std::type_index DepStage);
+	/** Anonymous: same edge addressed by the producer's layer name, for
+	 *  dynamically-loaded plugins that reference each other without a compile-time
+	 *  type coupling (no header include). */
+	void WaitFor(std::type_index MyStage, std::string_view OtherName, std::type_index OtherStage);
+
+	// -- reverse dependency: TOther@TOtherStage waits for MY TMyStage ----------
+	/** Typed: "TOther is blocked on me at TMyStage" (TOther runs after me). */
+	template <typename TOther, typename TOtherStage, typename TMyStage>
+	void BlockOn()
+	{
+		Dependents.push_back({
+			std::string(TOther::StaticName()),
+			std::type_index(typeid(TOtherStage)),
+			std::type_index(typeid(TMyStage))
+		});
+	}
+
+	/** Anonymous: same edge addressed by the other layer's name. */
+	void BlockOn(std::string_view OtherName, std::type_index OtherStage, std::type_index MyStage);
 
 	FDependencyTable Dependencies;
+	std::vector<FDependent> Dependents;
 };
 
 /**

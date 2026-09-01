@@ -70,6 +70,29 @@ public:
 			ExpandLayer(L);
 		}
 
+		// Apply reverse dependencies (BlockOn): the declaring layer is the CONSUMER
+		// that knows the producer; it adds an edge "OtherName@Stage -> my MyStage" to
+		// the producer's node. Skipped when the target is not in this graph (the
+		// producer is not installed) -- a consumer's declaration degrades gracefully.
+		for (FLayerBase* L : Layers)
+		{
+			if (L == nullptr)
+			{
+				continue;
+			}
+			for (const auto& Dep : L->GetDependents())
+			{
+				for (FNode& N : NodeStorage)
+				{
+					if (N.Name == Dep.Name && N.Stage == Dep.Stage)
+					{
+						N.Dependencies.push_back({ std::string(L->GetName()), Dep.MyStage });
+						break;
+					}
+				}
+			}
+		}
+
 		BaseNodes.clear();
 		BaseNodes.reserve(NodeStorage.size());
 		for (FNode& N : NodeStorage)

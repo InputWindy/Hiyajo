@@ -1,0 +1,9 @@
+{
+  "FileVersion": 1,
+  "Name": "Frame",
+  "Description": "frame render feature: drives swapchain begin/end + present",
+  "Dependencies": [
+    "Render",
+    "Scene"
+  ]
+}

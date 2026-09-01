@@ -123,15 +123,13 @@ void FRHI::EnqueueTask(
 	{
 		return;
 	}
-	// Parallel command recording - each task owns its command list (Vulkan
-	// forbids concurrent recording into the same buffer, so callers must never
-	// share a CmdList across tasks). Record here; the caller (RDG) submits the
-	// recorded lists serially afterwards via Submit.
+	// The callback owns the command list lifecycle (Begin/record/End/Submit) --
+	// it may submit the recorded list itself via IRHI::Submit. Recording is serial
+	// (single worker) so callbacks run in EnqueueTask order, keeping the submits of
+	// dependent features ordered (a draw must be submitted after the clear).
 	RecordingPool.Submit([CmdList, Task = std::move(Task)]()
 	{
-		CmdList->Begin();
 		Task(CmdList);
-		CmdList->End();
 	});
 }
 
@@ -165,6 +163,14 @@ void FRHI::Resize(int Width, int Height)
 	if (RHI && Width > 0 && Height > 0)
 	{
 		RHI->Resize(Width, Height);
+	}
+}
+
+void FRHI::WaitIdle()
+{
+	if (RHI)
+	{
+		RHI->WaitIdle();
 	}
 }
 

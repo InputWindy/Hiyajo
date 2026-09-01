@@ -10,9 +10,14 @@ const FLayerBase::FDependencyTable& FLayerBase::GetDependencies() const
 	return Dependencies;
 }
 
-void FLayerBase::AddDependency(std::type_index MyStage, std::string_view DepName, std::type_index DepStage)
+void FLayerBase::WaitFor(std::type_index MyStage, std::string_view OtherName, std::type_index OtherStage)
 {
-	Dependencies[MyStage].push_back({ std::string(DepName), DepStage });
+	Dependencies[MyStage].push_back({ std::string(OtherName), OtherStage });
+}
+
+void FLayerBase::BlockOn(std::string_view OtherName, std::type_index OtherStage, std::type_index MyStage)
+{
+	Dependents.push_back({ std::string(OtherName), OtherStage, MyStage });
 }
 
 } // namespace Maho
