@@ -29,6 +29,7 @@ public:
 	void EndRender(FRender& R) override;
 
 private:
+	bool EnsureBackend(FRender& R);
 	struct FData;
 	std::unique_ptr<FData> Data;
 };

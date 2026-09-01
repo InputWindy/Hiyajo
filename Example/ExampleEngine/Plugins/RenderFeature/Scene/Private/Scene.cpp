@@ -1,6 +1,7 @@
 #include "Scene.h"
 
 #include <Frame.h>
+#include <ImGuiSystem.h>
 #include <Log.h>
 #include <RHI/RHICommandList.h>
 #include <RHI/RHIEnums.h>
@@ -29,6 +30,15 @@ FScene::FScene()
 	// can free the freshly-acquired (still recording) list (vkFreeCommandBuffers
 	// "is in use").
 	WaitFor<IBeginRender, FFrame, IFrameBegin>();
+
+	// Receive the ImGui draw data each frame (the ImGui host pushes it via this
+	// sink -- a callback, so the engine ImGui plugin does not link this feature).
+	SetImGuiDrawDataSink([](void* DrawData) {
+		if (FScene* S = GScene)
+		{
+			S->SetImGuiDrawData(DrawData);
+		}
+	});
 }
 
 void FScene::BeginRender(FRender& R)

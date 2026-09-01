@@ -36,6 +36,12 @@ public:
 	[[nodiscard]] FRDGTextureRef GetSceneColor() const { return SceneColor; }
 	[[nodiscard]] FRDGTextureRef GetSceneDepth() const { return SceneDepth; }
 
+	/** The latest ImGui draw data (ImDrawData*, backend-agnostic void*), pushed by
+	 *  the ImGui host each frame through a registered sink. The UI render feature
+	 *  reads + draws it, like this feature draws SceneColor. */
+	void SetImGuiDrawData(void* DrawData) { ImGuiDrawData = DrawData; }
+	[[nodiscard]] void* GetImGuiDrawData() const { return ImGuiDrawData; }
+
 	void BeginRender(FRender& R) override;
 	void Render(FRender& R) override;
 	void EndRender(FRender& R) override;
@@ -47,6 +53,7 @@ private:
 
 	FRDGTextureRef SceneColor;
 	FRDGTextureRef SceneDepth;
+	void* ImGuiDrawData = nullptr;   // ImDrawData* from the ImGui host
 	std::uint32_t CachedWidth = 0;
 	std::uint32_t CachedHeight = 0;
 	bool bTargetsNeedTransition = true;   // fresh targets need Common -> RenderTarget once

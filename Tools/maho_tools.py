@@ -622,15 +622,17 @@ def _all_plugin_infos(
 			if dep not in deps:
 				deps.append(dep)
 
-		# The per-plugin .cmake/.cplugin live in the plugin's own directory; the
-		# directory basename is the stable file prefix (the Name may override the
-		# header later, but the module file keeps the directory name).
-		mod_file = Path(cmake_dir).name
+		# The plugin's own directory basename is the stable prefix for its
+		# .cmake/.cplugin/settings.json; a plugin whose implementation file
+		# differs from the directory name (e.g. ImGui → ImGuiSystem.cpp) overrides
+		# the module file with a "Module" field.
+		dir_name = Path(cmake_dir).name
+		mod_file = data.get("Module") or dir_name
 		aux: list[str] = []
 		plugin_dir = cplugin.parent
 		for fn in (
 			cplugin.name,
-			f"{mod_file}.cmake",
+			f"{dir_name}.cmake",
 			"settings.json",
 			f"{name}Doc.md",
 			f"{name}API.html",
@@ -641,7 +643,7 @@ def _all_plugin_infos(
 			"Dependencies": deps,
 			"public_dir": f"{prefix}/{cmake_dir}/Public",
 			"private_dir": f"{prefix}/{cmake_dir}/Private",
-			"cmake_file": f"{prefix}/{cmake_dir}/{mod_file}.cmake",
+			"cmake_file": f"{prefix}/{cmake_dir}/{dir_name}.cmake",
 			"group": group,
 			"header": header,
 			"mod_file": mod_file,
@@ -1470,8 +1472,13 @@ def generate_from_cproject(
 	gen_h = codegen_plugin_extensions(cproject_path)
 	log(f"[Maho] Gen     : {gen_h.relative_to(project_dir)}")
 
-	# Regenerate CMakeLists so project-side create-plugin targets reach the sln.
-	_write_cmake_lists(project_dir, project_name, engine_root, data)
+	# Regenerate CMakeLists so project-side create-plugin targets reach the sln --
+	# but only when the project has none yet. An existing CMakeLists.txt is
+	# hand-maintained here (the generator's dependency inference is incomplete and
+	# would overwrite manual include/link fixes), so double-click regeneration
+	# keeps it and just re-runs CMake on it.
+	if not (project_dir / "CMakeLists.txt").is_file():
+		_write_cmake_lists(project_dir, project_name, engine_root, data)
 
 	lock = _GenerateLock(intermediate)
 	lock.acquire()

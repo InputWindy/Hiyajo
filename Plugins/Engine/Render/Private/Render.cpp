@@ -235,14 +235,6 @@ void FRender::Tick(FEngineBase&)
 		ReportFatal("FRender::Tick: render pipeline Compile failed");
 	}
 
-	// Build the ImGui frame (input + NewFrame + UI + Render) BEFORE the render
-	// graph executes -- the ImGuiRender feature records this same frame's draw
-	// data, and it is ordered after FPlatform::Tick (input polled first).
-	if (ImGui)
-	{
-		ImGui->NewFrame();
-	}
-
 	RenderGraph->Execute();
 	// No trailing Flush: the render graph pipelines across frames -- the next
 	// Tick's leading Flush (above) waits this frame's tasks. At shutdown the
