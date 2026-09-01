@@ -48,7 +48,6 @@ void main()
 struct FImGuiRenderFeature::FData
 {
 	bool bInitialized = false;
-	bool bHasRecorded = false;
 	bool bFontUploaded = false;
 	IRHI* RHIPtr = nullptr;
 
@@ -103,18 +102,13 @@ FImGuiRenderFeature::FImGuiRenderFeature()
 {
 	Data = std::make_unique<FData>();
 
-	// Acquire order: after the frame feature begins the frame.
-	WaitFor<IBeginRender, FFrame, IFrameBegin>();
-	// Record order: UI draws LAST -- after FScene's clear AND every scene render
-	// feature (DrawTriangle, ...), so the UI always composites over the scene
-	// (LoadOp Load, no defined order otherwise).
-	WaitFor<IRender, Scene::FScene, IRender>();
-	WaitFor<IRender, FDrawTriangleFeature, IRender>();
-	// Submit order: after FScene's and DrawTriangle's submits, so the UI command
-	// buffer reaches the queue last.
-	WaitFor<IEndRender, Scene::FScene, IEndRender>();
-	WaitFor<IEndRender, FDrawTriangleFeature, IEndRender>();
-	// (FFrame additionally declares IPresent waits for my IEndRender.)
+	// Data integration (NewFrame) runs after the host FRender::BeginFrame (engine
+	// stage) -- the swapchain extent feeds the ImGui display size. UI draws +
+	// submits LAST -- after every scene render feature's IEndRender (their
+	// submits reach the queue first), so the UI composites over the scene.
+	WaitFor<IRenderUI, Scene::FScene, IEndRender>();
+	WaitFor<IRenderUI, FDrawTriangleFeature, IEndRender>();
+	// (FFrame additionally declares IPresent waits for my IRenderUI.)
 }
 
 FImGuiRenderFeature::~FImGuiRenderFeature()
@@ -125,15 +119,11 @@ FImGuiRenderFeature::~FImGuiRenderFeature()
 	}
 }
 
-void FImGuiRenderFeature::BeginRender(FRender& R)
+void FImGuiRenderFeature::InitViews(FRender& R)
 {
-	Data->RenderList = R.AcquireRenderList();
-
-	// Build the ImGui frame (input + NewFrame + UI + Render) in the IBeginRender
-	// stage -- the renderer-backend NewFrame duty (UE InitViews analogue: game-side
-	// UI state -> render-side ImDrawData). Must run before our own IRender, which
-	// draws that data this same frame; same feature, so self-progression
-	// (BeginRender -> Render) orders it for free.
+	// CPU-side data integration (UE InitViews analogue): build the ImGui frame
+	// (input + NewFrame + UI + Render) and push the draw data to FScene, which
+	// RenderUI draws this same frame (self-progression InitViews -> RenderUI).
 	if (FImGuiSystem* ImGui = R.GetImGui())
 	{
 		ImGui->NewFrame();
@@ -306,11 +296,11 @@ bool FImGuiRenderFeature::EnsureBackend(FRender& R)
 	return true;
 }
 
-void FImGuiRenderFeature::Render(FRender& R)
+void FImGuiRenderFeature::RenderUI(FRender& R)
 {
 	IRHI* RHIPtr = R.GetRHI();
 	Scene::FScene* Scene = Scene::GetScene();
-	if (RHIPtr == nullptr || Scene == nullptr || Data->RenderList == nullptr)
+	if (RHIPtr == nullptr || Scene == nullptr)
 	{
 		return;
 	}
@@ -323,12 +313,18 @@ void FImGuiRenderFeature::Render(FRender& R)
 			DrawData != nullptr ? DrawData->CmdListsCount : -1);
 		return;
 	}
-	if (!EnsureBackend(R))
+	if (!Scene->GetSceneColor().IsValid())
 	{
 		return;
 	}
-	if (!Scene->GetSceneColor().IsValid())
+
+	// This feature owns its command list -- acquire it here (the UI draw stage),
+	// then record + submit within RenderUI, so the feature is a single "draw the
+	// UI" step on the graph.
+	Data->RenderList = R.AcquireRenderList();
+	if (!EnsureBackend(R))
 	{
+		Data->RenderList = nullptr;
 		return;
 	}
 
@@ -456,20 +452,8 @@ void FImGuiRenderFeature::Render(FRender& R)
 
 	Cmd->EndRendering();
 	Cmd->End();
-	Data->bHasRecorded = true;
-}
-
-void FImGuiRenderFeature::EndRender(FRender& R)
-{
-	if (Data->bHasRecorded && Data->RenderList != nullptr)
-	{
-		if (IRHI* RHIPtr = R.GetRHI())
-		{
-			RHIPtr->Submit(Data->RenderList, ERHICommandListType::Graphics);
-		}
-		Data->RenderList = nullptr;
-		Data->bHasRecorded = false;
-	}
+	RHIPtr->Submit(Data->RenderList, ERHICommandListType::Graphics);
+	Data->RenderList = nullptr;
 }
 
 } // namespace Maho

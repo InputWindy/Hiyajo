@@ -15,18 +15,7 @@ FFrame::FFrame()
 	// for now -- no automatic "last stage per feature" wiring yet.
 	WaitFor<IPresent, Scene::FScene, IEndRender>();
 	WaitFor<IPresent, FDrawTriangleFeature, IEndRender>();
-	WaitFor<IPresent, FImGuiRenderFeature, IEndRender>();   // present blit carries the UI
-}
-
-void FFrame::BeginFrame(FRender& R)
-{
-	if (IRHI* RHI = R.GetRHI())
-	{
-		RHI->BeginFrame();   // wait previous fence, acquire swapchain image, begin frame buffer
-	}
-	// The previous frame's feature command lists are no longer executing.
-	R.ReleaseFrameLists();
-	R.BeginResourcePool();
+	WaitFor<IPresent, FImGuiRenderFeature, IRenderUI>();   // present blit carries the UI
 }
 
 void FFrame::Present(FRender& R)
@@ -44,14 +33,6 @@ void FFrame::Present(FRender& R)
 				RHIPtr->PresentTexture(Color.GetRHI());
 			}
 		}
-	}
-}
-
-void FFrame::EndFrame(FRender& R)
-{
-	if (IRHI* RHI = R.GetRHI())
-	{
-		RHI->EndFrame();   // end + submit the frame buffer (with the blit), present the swapchain
 	}
 }
 

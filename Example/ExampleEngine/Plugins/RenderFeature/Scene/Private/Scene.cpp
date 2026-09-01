@@ -22,14 +22,9 @@ FScene::FScene()
 {
 	GScene = this;
 
-	// BeginRender acquires a command list and (re)creates the pool targets --
-	// order it AFTER the frame feature's IFrameBegin, which waits the previous
-	// frame's fence, recycles the previous frame's command lists and begins the
-	// resource pool. The graph runs a stage node as soon as its deps complete;
-	// without this edge IFrameBegin races this feature's list acquisition and
-	// can free the freshly-acquired (still recording) list (vkFreeCommandBuffers
-	// "is in use").
-	WaitFor<IBeginRender, FFrame, IFrameBegin>();
+	// BeginRender runs after the host FRender::BeginFrame (engine stage), which
+	// already waited the previous fence, recycled the previous frame's lists and
+	// began the frame buffer -- so list acquisition here cannot race the recycle.
 
 	// Receive the ImGui draw data each frame (the ImGui host pushes it via this
 	// sink -- a callback, so the engine ImGui plugin does not link this feature).

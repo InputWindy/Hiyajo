@@ -36,12 +36,9 @@ FDrawTriangleFeature::FDrawTriangleFeature()
 	WaitFor<IRender, Scene::FScene, IRender>();
 	WaitFor<IEndRender, Scene::FScene, IEndRender>();
 
-	// BeginRender acquires a command list -- order it AFTER the frame feature's
-	// IFrameBegin (waits the previous fence, recycles the previous frame's
-	// lists). Without this edge the frame feature can free this feature's
-	// freshly-acquired list while it is still recording (vkFreeCommandBuffers
-	// "is in use").
-	WaitFor<IBeginRender, FFrame, IFrameBegin>();
+	// BeginRender acquires a command list -- the host FRender::BeginFrame (engine
+	// stage) already recycled the previous frame's lists before the render graph
+	// runs, so list acquisition here cannot race the recycle.
 }
 
 FDrawTriangleFeature::~FDrawTriangleFeature()

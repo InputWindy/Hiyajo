@@ -138,7 +138,7 @@ void FRender::Shutdown(FEngineBase&)
 		RHI->WaitIdle();
 
 		// The last frame's feature command lists are only recycled at the next
-		// frame's IFrameBegin -- which never comes after the loop breaks. Destroy
+		// host BeginFrame -- which never comes after the loop breaks. Destroy
 		// them while the device is still alive (their VkCommandPools must not be
 		// outstanding when the device is destroyed).
 		ReleaseFrameLists();
@@ -182,14 +182,23 @@ void FRender::PostShutdown(FEngineBase&)
 
 void FRender::BeginFrame(FEngineBase&)
 {
-	// Frame begin/end are driven by the frame render feature (IFrameBegin/IFrameEnd)
-	// inside the render graph -- this host stage is intentionally empty.
+	// Swapchain frame lifecycle lives on the host (engine) stages, not the render
+	// graph: RHI->BeginFrame waits the previous fence, acquires the swapchain
+	// image and begins the frame buffer; then the previous frame's feature
+	// command lists are recycled (their submits are done) and the resource pool
+	// advances -- all before the render graph runs in Tick.
+	if (IRHI* RHIp = RHI.get())
+	{
+		RHIp->BeginFrame();
+	}
+	ReleaseFrameLists();
+	BeginResourcePool();
 }
 
 void FRender::ReleaseFrameLists()
 {
 	// The previous frame's feature command lists were submitted in their IEndRender
-	// stages; after the frame feature's IFrameBegin waited the swapchain fence, they
+	// stages; after the host BeginFrame waited the swapchain fence, they
 	// are no longer executing -- destroy them now.
 	std::vector<FRHICommandList*> Lists;
 	{
@@ -228,8 +237,8 @@ void FRender::Tick(FEngineBase&)
 	// Rebuild + drive the render feature graph. All frame work (swapchain begin,
 	// feature acquire/record/submit, present, swapchain end) is a scheduled stage --
 	// FRender only schedules; the frame feature + per-feature deps order it all.
-	FlushPendingUpdatePipelines<IFrameBegin, IBeginRender, IRender, IEndRender, IPresent, IFrameEnd>();
-	RenderGraph->Init(Select<IFrameBegin, IBeginRender, IRender, IEndRender, IPresent, IFrameEnd>());
+	FlushPendingUpdatePipelines<IInitViews, IBeginRender, IRender, IEndRender, IPostProcess, IRenderUI, IPresent>();
+	RenderGraph->Init(Select<IInitViews, IBeginRender, IRender, IEndRender, IPostProcess, IRenderUI, IPresent>());
 	if (!RenderGraph->Compile())
 	{
 		ReportFatal("FRender::Tick: render pipeline Compile failed");
@@ -245,8 +254,19 @@ void FRender::Tick(FEngineBase&)
 
 void FRender::EndFrame(FEngineBase&)
 {
-	// Frame begin/end are driven by the frame render feature (IFrameBegin/IFrameEnd)
-	// inside the render graph -- this host stage is intentionally empty.
+	// RHI->EndFrame (end + submit the frame buffer, present the swapchain) must
+	// run after every feature submit, so drain the async render-graph tasks first.
+	// This serializes the present behind this frame's draws (the graph is no
+	// longer cross-frame pipelined across Tick -- a later auto-barrier pass can
+	// restore the overlap).
+	if (RenderGraph)
+	{
+		RenderGraph->Flush();
+	}
+	if (IRHI* RHIp = RHI.get())
+	{
+		RHIp->EndFrame();
+	}
 }
 
 void FRender::RequestExit(FEngineBase&)

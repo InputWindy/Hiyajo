@@ -10,26 +10,21 @@ namespace Maho
 {
 
 /**
- * Frame render feature - drives the swapchain frame lifecycle as a scheduled
- * render stage, so FRender stays a pure scheduler (no host-side frame work):
- *   IFrameBegin : acquire the swapchain image + begin the frame buffer + recycle
- *                 the previous frame's command lists
- *   IPresent    : blit the scene color to the swapchain backbuffer
- *   IFrameEnd   : submit the frame buffer + present
- * The pipeline self-progression orders IFrameBegin -> IPresent -> IFrameEnd; its
- * IPresent depends on every render feature's IEndRender, so the present is ordered
- * after all draws.
+ * Frame render feature - owns the present blit as a scheduled render stage. The
+ * swapchain frame lifecycle (acquire / end + present) lives on the host
+ * FRender::BeginFrame/EndFrame (engine stages), not here:
+ *   IPresent : blit the scene color to the swapchain backbuffer
+ * IPresent depends on every render feature's last draw stage, so the present is
+ * ordered after all draws.
  */
-class MAHO_FRAME_API FFrame : public FLayer<IFrameBegin, IPresent, IFrameEnd>
+class MAHO_FRAME_API FFrame : public FLayer<IPresent>
 {
 MAHO_DECLARE_LAYER(FFrame, "Frame.dll");
 
 	FFrame();
 
 public:
-	void BeginFrame(FRender& R) override;
 	void Present(FRender& R) override;
-	void EndFrame(FRender& R) override;
 };
 
 } // namespace Maho

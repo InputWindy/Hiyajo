@@ -27,6 +27,13 @@ class FImGuiSystem;
  *  ImGui layer) use it to reach the RHI. */
 MAHO_RENDER_API FRender* GetRender();
 
+class MAHO_RENDER_API IInitViews
+{
+public:
+	virtual ~IInitViews() = default;
+	virtual void InitViews(FRender&) = 0;
+};
+
 class MAHO_RENDER_API IBeginRender
 {
 public:
@@ -48,6 +55,20 @@ public:
 	virtual void EndRender(FRender&) = 0;
 };
 
+class MAHO_RENDER_API IPostProcess
+{
+public:
+	virtual ~IPostProcess() = default;
+	virtual void PostProcess(FRender&) = 0;
+};
+
+class MAHO_RENDER_API IRenderUI
+{
+public:
+	virtual ~IRenderUI() = default;
+	virtual void RenderUI(FRender&) = 0;
+};
+
 class MAHO_RENDER_API IPresent
 {
 public:
@@ -55,29 +76,13 @@ public:
 	virtual void Present(FRender&) = 0;
 };
 
-/** Frame lifecycle stages -- implemented by a dedicated "frame" render feature so
- *  the host FRender is a pure scheduler and the swapchain begin/end is part of the
- *  render graph (scheduled like any stage). */
-class MAHO_RENDER_API IFrameBegin
-{
-public:
-	virtual ~IFrameBegin() = default;
-	virtual void BeginFrame(FRender&) = 0;
-};
-
-class MAHO_RENDER_API IFrameEnd
-{
-public:
-	virtual ~IFrameEnd() = default;
-	virtual void EndFrame(FRender&) = 0;
-};
-
+MAHO_DECLARE_STAGE_DISPATCH(FRender, IInitViews,   IInitViews,   InitViews)
 MAHO_DECLARE_STAGE_DISPATCH(FRender, IBeginRender, IBeginRender, BeginRender)
 MAHO_DECLARE_STAGE_DISPATCH(FRender, IRender,      IRender,      Render)
 MAHO_DECLARE_STAGE_DISPATCH(FRender, IEndRender,   IEndRender,   EndRender)
+MAHO_DECLARE_STAGE_DISPATCH(FRender, IPostProcess, IPostProcess, PostProcess)
+MAHO_DECLARE_STAGE_DISPATCH(FRender, IRenderUI,    IRenderUI,    RenderUI)
 MAHO_DECLARE_STAGE_DISPATCH(FRender, IPresent,     IPresent,     Present)
-MAHO_DECLARE_STAGE_DISPATCH(FRender, IFrameBegin,  IFrameBegin,  BeginFrame)
-MAHO_DECLARE_STAGE_DISPATCH(FRender, IFrameEnd,    IFrameEnd,    EndFrame)
 
 /**
  * Render subsystem - a layer in the host engine (mounted as IInit/ITick/...),
@@ -120,11 +125,11 @@ public:
 	void ReleaseBuffer(FRDGBufferRef& Ref);
 
 	/** Destroy the previous frame's feature command lists -- call after the frame
-	 *  feature's IFrameBegin has waited the swapchain fence (their submits are done). */
+	 *  host BeginFrame has waited the swapchain fence (their submits are done). */
 	void ReleaseFrameLists();
 
 	/** Advance the RDG resource pool (expire transients) -- called by the frame
-	 *  feature's IFrameBegin. */
+	 *  host BeginFrame. */
 	void BeginResourcePool();
 
 	/** Record a render-feature pass into ITS OWN command list. The feature owns the
@@ -152,16 +157,12 @@ private:
 	std::unique_ptr<FRenderResourcePool> ResourcePool;   // RDG resource pool
 	std::unique_ptr<FImGuiSystem> ImGui;   // the ImGui host (context + imgui_impl_vulkan)
 
-	// Persistent render graph - Flush() at frame start waits the previous frame's
-	// async tasks, Execute() at frame end submits the next frame's, so the render
-	// thread pipelines work across frames. IPresent is NOT part of the graph: it
-	// is driven by FRender::Tick after the graph flushes, so the shared frame
-	// command buffer is never recorded concurrently.
-	// Render graph stages. The frame feature (IFrameBegin/IFrameEnd) drives the
-	// swapchain begin/end as a scheduled stage, and IPresent is scheduled too -- the
-	// present feature declares its deps on the other features' last stage, so the
+	// Render graph stages. The swapchain frame lifecycle (acquire / end + present)
+	// lives on the host FRender::BeginFrame/EndFrame (engine stages); the graph
+	// runs the draw passes + the present blit, and FRender::EndFrame drains it
+	// (Flush) before RHI->EndFrame so the present waits every submit.
 	// TaskGraph orders everything. FRender itself does no frame work.
-	using FRenderStages = TTypeList<IFrameBegin, IBeginRender, IRender, IEndRender, IPresent, IFrameEnd>;
+	using FRenderStages = TTypeList<IInitViews, IBeginRender, IRender, IEndRender, IPostProcess, IRenderUI, IPresent>;
 	std::unique_ptr<FLayerTaskGraph<FRenderStages, FRender>> RenderGraph;
 
 	std::vector<FRHICommandList*> PendingRenderLists;   // lists acquired this frame; destroyed at the next BeginFrame
