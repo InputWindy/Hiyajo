@@ -37,7 +37,7 @@ public:
 	[[nodiscard]] FRDGTextureRef GetSceneDepth() const { return SceneDepth; }
 
 	/** The latest ImGui draw data (ImDrawData*, backend-agnostic void*), pushed by
-	 *  the ImGui host each frame through a registered sink. The UI render feature
+	 *  the UI layer each frame through a registered sink. The UI render feature
 	 *  reads + draws it, like this feature draws SceneColor. */
 	void SetImGuiDrawData(void* DrawData) { ImGuiDrawData = DrawData; }
 	[[nodiscard]] void* GetImGuiDrawData() const { return ImGuiDrawData; }

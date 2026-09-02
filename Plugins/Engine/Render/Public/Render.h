@@ -20,7 +20,6 @@ namespace Maho
 
 class FRender;
 class FRenderResourcePool;
-class FImGuiSystem;
 
 /** Global render instance accessor (cross-DLL via function, no bare variable
  *  export) -- set when the Render layer initializes. Other layers (e.g. the
@@ -115,9 +114,6 @@ public:
 	/** The async shader compiler (render features submit compile requests). */
 	FShaderCompilerServer* GetShaderCompiler() const { return ShaderCompiler.get(); }
 
-	/** The ImGui host (owned like the RHI; driven by this layer's stages). */
-	FImGuiSystem* GetImGui() const { return ImGui.get(); }
-
 	// -- RDG resource pool (off-screen resources) --
 	[[nodiscard]] FRDGTextureRef CreateTexture(const FRHITextureDesc& Desc, bool bTransient = false);
 	[[nodiscard]] FRDGBufferRef CreateBuffer(const FRHIBufferDesc& Desc, bool bTransient = false);
@@ -155,7 +151,6 @@ private:
 	std::unique_ptr<FRHI> RHI;   // the render server (not a scheduled layer)
 	std::unique_ptr<FShaderCompilerServer> ShaderCompiler;   // async GLSL -> SPIR-V
 	std::unique_ptr<FRenderResourcePool> ResourcePool;   // RDG resource pool
-	std::unique_ptr<FImGuiSystem> ImGui;   // the ImGui host (context + imgui_impl_vulkan)
 
 	// Render graph stages. The swapchain frame lifecycle (acquire / end + present)
 	// lives on the host FRender::BeginFrame/EndFrame (engine stages); the graph

@@ -33,8 +33,8 @@ FDrawTriangleFeature::FDrawTriangleFeature()
 {
 	// Draw AFTER FScene clears (record order), and submit AFTER FScene's clear is
 	// submitted (submit order -- the clear must reach the queue before the draw).
-	WaitFor<IRender, Scene::FScene, IRender>();
-	WaitFor<IEndRender, Scene::FScene, IEndRender>();
+	MyStage<IRender>().IsWaiting<Scene::FScene>().ForStage<IRender>();
+	MyStage<IEndRender>().IsWaiting<Scene::FScene>().ForStage<IEndRender>();
 
 	// BeginRender acquires a command list -- the host FRender::BeginFrame (engine
 	// stage) already recycled the previous frame's lists before the render graph

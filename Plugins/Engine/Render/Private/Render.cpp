@@ -3,7 +3,6 @@
 #include <DrawTriangleFeature.h>
 #include <Frame.h>
 #include <UIFeature.h>
-#include <ImGuiSystem.h>
 #include <Log.h>
 #include <Platform.h>
 #include <Scene.h>
@@ -66,14 +65,6 @@ void FRender::Initialize(FEngineBase& Engine)
 
 	// RDG resource pool (off-screen textures/buffers, cross-frame reuse).
 	ResourcePool = std::make_unique<FRenderResourcePool>(RHI.get());
-
-	// ImGui host (owned like the RHI; NewFrame driven in Tick). Init only when
-	// there is a real RHI + window (the RHI bridge needs the raw handles).
-	if (RHI != nullptr && P != nullptr)
-	{
-		ImGui = std::make_unique<FImGuiSystem>();
-		ImGui->Initialize(RHI.get(), P);
-	}
 
 	// Async shader compiler (dedicated compile thread).
 	ShaderCompiler = std::make_unique<FShaderCompilerServer>();
@@ -153,14 +144,6 @@ void FRender::Shutdown(FEngineBase&)
 
 	// The compile server thread was already joined above; just release the server.
 	ShaderCompiler.reset();
-
-	// Shut the ImGui host down after the render features (the UI feature was
-	// using imgui's Vulkan objects) and before the RHI device goes away.
-	if (ImGui)
-	{
-		ImGui->Shutdown();
-		ImGui.reset();
-	}
 
 	// Release pooled resources before the RHI device goes away.
 	if (ResourcePool)

@@ -13,9 +13,9 @@ FFrame::FFrame()
 	// IPresent (the blit) must run after every render feature's IEndRender (their
 	// submits), so the swapchain blit copies the fully-rendered scene. Hand-wired
 	// for now -- no automatic "last stage per feature" wiring yet.
-	WaitFor<IPresent, Scene::FScene, IEndRender>();
-	WaitFor<IPresent, FDrawTriangleFeature, IEndRender>();
-	WaitFor<IPresent, FUIFeature, IRenderUI>();   // present blit carries the UI
+	MyStage<IPresent>().IsWaiting<Scene::FScene>().ForStage<IEndRender>();
+	MyStage<IPresent>().IsWaiting<FDrawTriangleFeature>().ForStage<IEndRender>();
+	MyStage<IPresent>().IsWaiting<FUIFeature>().ForStage<IRenderUI>();   // present blit carries the UI
 }
 
 void FFrame::Present(FRender& R)

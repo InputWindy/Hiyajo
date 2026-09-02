@@ -3,6 +3,7 @@
   "Name": "Scene",
   "Description": "global render resource feature (SceneColor/SceneDepth, present)",
   "Dependencies": [
-    "Render"
+    "Render",
+    "UI"
   ]
 }

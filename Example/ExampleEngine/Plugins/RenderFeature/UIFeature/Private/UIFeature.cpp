@@ -3,7 +3,6 @@
 #include <cstddef>
 #include <DrawTriangleFeature.h>
 #include <Frame.h>
-#include <ImGuiSystem.h>
 #include <Log.h>
 #include <Scene.h>
 #include <RHI/RHICommandList.h>
@@ -51,26 +50,26 @@ struct FUIFeature::FData
 	bool bFontUploaded = false;
 	IRHI* RHIPtr = nullptr;
 
-	// Font texture + sampling.
-	FRHITexture* FontTexture = nullptr;
-	FRHITextureView* FontView = nullptr;
+	// Font texture + sampling (texture/buffer are pooled FRDG resources; the view
+	// comes from FontTexture.GetView(), no separate native view is held).
+	FRDGTextureRef FontTexture;
 	FRHISampler* FontSampler = nullptr;
 	FRHIDescriptorSetLayout* FontSetLayout = nullptr;
 	FRHIPipelineLayout* PipelineLayout = nullptr;
 	FRHIDescriptorPool* FontDescriptorPool = nullptr;
 	FRHIDescriptorSet* FontDescriptorSet = nullptr;
-	FRHIBuffer* FontStaging = nullptr;
+	FRDGBufferRef FontStaging;
 
 	// ImGui pipeline.
 	FRHIShaderModule* VS = nullptr;
 	FRHIShaderModule* FS = nullptr;
 	FRHIGraphicsPipeline* Pipeline = nullptr;
 
-	// Per-frame vertex/index upload (CPUToGPU, grown on demand).
-	FRHIBuffer* VertexBuffer = nullptr;
-	FRHIBuffer* IndexBuffer = nullptr;
-	std::size_t VertexCapacity = 0;
-	std::size_t IndexCapacity = 0;
+	// Per-frame vertex/index upload -- pooled transient buffers, recreated each
+	// frame (the pool destroys them at the next BeginFrame fence wait and recycles
+	// the slots, so the UI feature never touches native RHI buffers).
+	FRDGBufferRef VertexBuffer;
+	FRDGBufferRef IndexBuffer;
 
 	FRHICommandList* RenderList = nullptr;   // our own list (acquired in BeginRender)
 
@@ -89,12 +88,9 @@ struct FUIFeature::FData
 		if (PipelineLayout) { RHIPtr->DestroyPipelineLayout(PipelineLayout);     PipelineLayout = nullptr; }
 		if (FontSetLayout)  { RHIPtr->DestroyDescriptorSetLayout(FontSetLayout);  FontSetLayout = nullptr; }
 		if (FontSampler)    { RHIPtr->DestroySampler(FontSampler);              FontSampler = nullptr; }
-		if (FontView)       { RHIPtr->DestroyTextureView(FontView);             FontView = nullptr; }
-		if (FontTexture)    { RHIPtr->DestroyTexture(FontTexture);              FontTexture = nullptr; }
-		if (FontStaging)    { RHIPtr->DestroyBuffer(FontStaging);               FontStaging = nullptr; }
-		if (VertexBuffer)   { RHIPtr->DestroyBuffer(VertexBuffer);              VertexBuffer = nullptr; }
-		if (IndexBuffer)    { RHIPtr->DestroyBuffer(IndexBuffer);               IndexBuffer = nullptr; }
-		VertexCapacity = IndexCapacity = 0;
+		// FontTexture / FontStaging / Vertex / Index are pooled FRDG resources --
+		// FRender's resource pool owns their lifetime (transients reclaimed each
+		// frame after the fence wait; the pool Shutdown tears everything down).
 	}
 };
 
@@ -102,12 +98,10 @@ FUIFeature::FUIFeature()
 {
 	Data = std::make_unique<FData>();
 
-	// Data integration (NewFrame) runs after the host FRender::BeginFrame (engine
-	// stage) -- the swapchain extent feeds the ImGui display size. UI draws +
-	// submits LAST -- after every scene render feature's IEndRender (their
-	// submits reach the queue first), so the UI composites over the scene.
-	WaitFor<IRenderUI, Scene::FScene, IEndRender>();
-	WaitFor<IRenderUI, FDrawTriangleFeature, IEndRender>();
+	// UI draws + submits LAST -- after every scene render feature's IEndRender
+	// (their submits reach the queue first), so the UI composites over the scene.
+	MyStage<IRenderUI>().IsWaiting<Scene::FScene>().ForStage<IEndRender>();
+	MyStage<IRenderUI>().IsWaiting<FDrawTriangleFeature>().ForStage<IEndRender>();
 	// (FFrame additionally declares IPresent waits for my IRenderUI.)
 }
 
@@ -121,13 +115,11 @@ FUIFeature::~FUIFeature()
 
 void FUIFeature::InitViews(FRender& R)
 {
-	// CPU-side data integration (UE InitViews analogue): build the ImGui frame
-	// (input + NewFrame + UI + Render) and push the draw data to FScene, which
-	// RenderUI draws this same frame (self-progression InitViews -> RenderUI).
-	if (FImGuiSystem* ImGui = R.GetImGui())
-	{
-		ImGui->NewFrame();
-	}
+	// CPU-side data integration (UE InitViews analogue) now lives in the UI
+	// engine layer's ITick, which produces the draw data FScene receives via the
+	// sink. This stage stays as a graph no-op so the feature's stage list and the
+	// render-graph topology are unchanged.
+	(void)R;
 }
 
 bool FUIFeature::EnsureBackend(FRender& R)
@@ -223,13 +215,8 @@ bool FUIFeature::EnsureBackend(FRender& R)
 	TexDesc.ArrayLayers = 1;
 	TexDesc.Usage = ERHITextureUsage::Sampled | ERHITextureUsage::TransferDst;
 	TexDesc.MemoryUsage = ERHIMemoryUsage::GPUOnly;
-	Data->FontTexture = RHIPtr->CreateTexture(TexDesc);
-	FRHITextureViewDesc ViewDesc;
-	ViewDesc.Texture = Data->FontTexture;
-	ViewDesc.Format = TexDesc.Format;
-	ViewDesc.MipCount = 1;
-	ViewDesc.ArrayLayerCount = 1;
-	Data->FontView = RHIPtr->CreateTextureView(ViewDesc);
+	// Pooled persistent font texture (the pool owns the native + view lifetime).
+	Data->FontTexture = R.CreateTexture(TexDesc, /*bTransient=*/false);
 	FRHISamplerDesc SamplerDesc;
 	SamplerDesc.AddressU = ERHIAddressMode::ClampToEdge;
 	SamplerDesc.AddressV = ERHIAddressMode::ClampToEdge;
@@ -244,7 +231,7 @@ bool FUIFeature::EnsureBackend(FRender& R)
 	FontWrite.Set = Data->FontDescriptorSet;
 	FontWrite.Binding = 0;
 	FontWrite.Type = ERHIDescriptorType::CombinedImageSampler;
-	FontWrite.TextureView = Data->FontView;
+	FontWrite.TextureView = Data->FontTexture.GetView();
 	FontWrite.Sampler = Data->FontSampler;
 	// Immediate CPU op (vkUpdateDescriptorSets) -- record it on our command list.
 	Data->RenderList->UpdateDescriptorSets(&FontWrite, 1);
@@ -253,7 +240,9 @@ bool FUIFeature::EnsureBackend(FRender& R)
 	StagingDesc.Size = static_cast<std::uint64_t>(FontW) * FontH * 4;
 	StagingDesc.Usage = ERHIBufferUsage::TransferSrc;
 	StagingDesc.MemoryUsage = ERHIMemoryUsage::CPUToGPU;
-	Data->FontStaging = RHIPtr->CreateBuffer(StagingDesc);
+	// Pooled transient staging buffer -- the pool destroys it after the upload's
+	// fence wait (one frame), so no native buffer is held by the feature.
+	Data->FontStaging = R.CreateBuffer(StagingDesc, /*bTransient=*/true);
 
 	// The ImGui font texture id (ImTextureID) is the descriptor set handle.
 	Fonts->TexID = reinterpret_cast<ImTextureID>(Data->FontDescriptorSet);
@@ -338,10 +327,10 @@ void FUIFeature::RenderUI(FRender& R)
 		unsigned char* Pixels = nullptr;
 		int FontW = 0, FontH = 0, FontBpp = 0;
 		Fonts->GetTexDataAsRGBA32(&Pixels, &FontW, &FontH, &FontBpp);
-		Cmd->UpdateBuffer(Data->FontStaging, 0, static_cast<std::uint64_t>(FontW) * FontH * 4, Pixels);
-		Cmd->TransitionTexture(Data->FontTexture, ERHIResourceState::Common, ERHIResourceState::CopyDst);
-		Cmd->CopyBufferToTexture(Data->FontStaging, Data->FontTexture, 0);
-		Cmd->TransitionTexture(Data->FontTexture, ERHIResourceState::CopyDst, ERHIResourceState::ShaderResource);
+		Cmd->UpdateBuffer(Data->FontStaging.GetRHI(), 0, static_cast<std::uint64_t>(FontW) * FontH * 4, Pixels);
+		Cmd->TransitionTexture(Data->FontTexture.GetRHI(), ERHIResourceState::Common, ERHIResourceState::CopyDst);
+		Cmd->CopyBufferToTexture(Data->FontStaging.GetRHI(), Data->FontTexture.GetRHI(), 0);
+		Cmd->TransitionTexture(Data->FontTexture.GetRHI(), ERHIResourceState::CopyDst, ERHIResourceState::ShaderResource);
 		Data->bFontUploaded = true;
 	}
 
@@ -358,26 +347,18 @@ void FUIFeature::RenderUI(FRender& R)
 		Cmd->End();
 		return;
 	}
-	if (TotalVerts > Data->VertexCapacity)
-	{
-		if (Data->VertexBuffer) { RHIPtr->DestroyBuffer(Data->VertexBuffer); }
-		FRHIBufferDesc VDesc;
-		VDesc.Size = static_cast<std::uint64_t>(TotalVerts) * sizeof(ImDrawVert);
-		VDesc.Usage = ERHIBufferUsage::Vertex;
-		VDesc.MemoryUsage = ERHIMemoryUsage::CPUToGPU;
-		Data->VertexBuffer = RHIPtr->CreateBuffer(VDesc);
-		Data->VertexCapacity = TotalVerts;
-	}
-	if (TotalIndices > Data->IndexCapacity)
-	{
-		if (Data->IndexBuffer) { RHIPtr->DestroyBuffer(Data->IndexBuffer); }
-		FRHIBufferDesc IDesc;
-		IDesc.Size = static_cast<std::uint64_t>(TotalIndices) * sizeof(ImDrawIdx);
-		IDesc.Usage = ERHIBufferUsage::Index;
-		IDesc.MemoryUsage = ERHIMemoryUsage::CPUToGPU;
-		Data->IndexBuffer = RHIPtr->CreateBuffer(IDesc);
-		Data->IndexCapacity = TotalIndices;
-	}
+	// Pooled transient vertex/index buffers -- recreated each frame; the pool
+	// destroys last frame's natives after the fence wait and recycles the slots.
+	FRHIBufferDesc VDesc;
+	VDesc.Size = static_cast<std::uint64_t>(TotalVerts) * sizeof(ImDrawVert);
+	VDesc.Usage = ERHIBufferUsage::Vertex;
+	VDesc.MemoryUsage = ERHIMemoryUsage::CPUToGPU;
+	Data->VertexBuffer = R.CreateBuffer(VDesc, /*bTransient=*/true);
+	FRHIBufferDesc IDesc;
+	IDesc.Size = static_cast<std::uint64_t>(TotalIndices) * sizeof(ImDrawIdx);
+	IDesc.Usage = ERHIBufferUsage::Index;
+	IDesc.MemoryUsage = ERHIMemoryUsage::CPUToGPU;
+	Data->IndexBuffer = R.CreateBuffer(IDesc, /*bTransient=*/true);
 	std::vector<ImDrawVert> CombinedVerts;
 	std::vector<ImDrawIdx> CombinedIndices;
 	CombinedVerts.reserve(TotalVerts);
@@ -388,8 +369,8 @@ void FUIFeature::RenderUI(FRender& R)
 		CombinedVerts.insert(CombinedVerts.end(), List->VtxBuffer.Data, List->VtxBuffer.Data + List->VtxBuffer.Size);
 		CombinedIndices.insert(CombinedIndices.end(), List->IdxBuffer.Data, List->IdxBuffer.Data + List->IdxBuffer.Size);
 	}
-	Cmd->UpdateBuffer(Data->VertexBuffer, 0, TotalVerts * sizeof(ImDrawVert), CombinedVerts.data());
-	Cmd->UpdateBuffer(Data->IndexBuffer, 0, TotalIndices * sizeof(ImDrawIdx), CombinedIndices.data());
+	Cmd->UpdateBuffer(Data->VertexBuffer.GetRHI(), 0, TotalVerts * sizeof(ImDrawVert), CombinedVerts.data());
+	Cmd->UpdateBuffer(Data->IndexBuffer.GetRHI(), 0, TotalIndices * sizeof(ImDrawIdx), CombinedIndices.data());
 
 	// Dynamic rendering over SceneColor (Load) + the ImGui draw loop.
 	FRHIRenderingAttachmentInfo Color;
@@ -405,8 +386,8 @@ void FUIFeature::RenderUI(FRender& R)
 	Cmd->SetViewport(0.0f, 0.0f,
 		static_cast<float>(RHIPtr->GetFramebufferWidth()),
 		static_cast<float>(RHIPtr->GetFramebufferHeight()));
-	Cmd->BindVertexBuffer(0, Data->VertexBuffer, 0);
-	Cmd->BindIndexBuffer(Data->IndexBuffer, 0, sizeof(ImDrawIdx) == 4);
+	Cmd->BindVertexBuffer(0, Data->VertexBuffer.GetRHI(), 0);
+	Cmd->BindIndexBuffer(Data->IndexBuffer.GetRHI(), 0, sizeof(ImDrawIdx) == 4);
 	FRHIDescriptorSet* FontSet = Data->FontDescriptorSet;
 	Cmd->BindDescriptorSets(0, &FontSet, 1);
 

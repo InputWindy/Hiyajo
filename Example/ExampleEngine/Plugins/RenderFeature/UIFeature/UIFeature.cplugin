@@ -5,6 +5,6 @@
   "Dependencies": [
     "Render",
     "Scene",
-    "ImGui"
+    "UI"
   ]
 }

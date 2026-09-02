@@ -1,7 +1,7 @@
 #include "Scene.h"
 
 #include <Frame.h>
-#include <ImGuiSystem.h>
+#include <UI.h>
 #include <Log.h>
 #include <RHI/RHICommandList.h>
 #include <RHI/RHIEnums.h>
@@ -26,8 +26,8 @@ FScene::FScene()
 	// already waited the previous fence, recycled the previous frame's lists and
 	// began the frame buffer -- so list acquisition here cannot race the recycle.
 
-	// Receive the ImGui draw data each frame (the ImGui host pushes it via this
-	// sink -- a callback, so the engine ImGui plugin does not link this feature).
+	// Receive the ImGui draw data each frame (the UI layer pushes it via this
+	// sink -- a callback, so the engine UI plugin does not link this feature).
 	SetImGuiDrawDataSink([](void* DrawData) {
 		if (FScene* S = GScene)
 		{

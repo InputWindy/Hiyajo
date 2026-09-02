@@ -164,6 +164,81 @@ protected:
 	/** Anonymous: same edge addressed by the other layer's name. */
 	void BlockOn(std::string_view OtherName, std::type_index OtherStage, std::type_index MyStage);
 
+	// -- dependency DSL: fluent synonym over the typed WaitFor/BlockOn templates --
+	//
+	//   MyStage<TMy>().IsWaiting<TOther>().ForStage<TOtherStage>();
+	//     == WaitFor<TMy, TOther, TOtherStage>()          (forward dep)
+	//   MyStage<TMy>().IsBlocking<TOther>().OnStage<TOtherStage>();
+	//     == BlockOn<TOther, TOtherStage, TMy>()          (reverse dep)
+	//
+	// A single member named MyStage cannot be overloaded by return type (the two
+	// directions would collide), so one MyStage entry fans out via
+	// IsWaiting (forward) / IsBlocking (reverse). Each hop carries the first
+	// stage type; WaitFor/BlockFor remain the sole mutation point.
+
+	// forward dep: my TMyStage waits for TOther@TOtherStage.
+	template <typename TMyStage, typename TOther>
+	class FWaitForBuilder
+	{
+	public:
+		explicit FWaitForBuilder(FLayerBase* InSelf) : Self(InSelf) {}
+
+		template <typename TOtherStage>
+		void ForStage() const
+		{
+			Self->WaitFor<TMyStage, TOther, TOtherStage>();
+		}
+
+	private:
+		FLayerBase* Self;
+	};
+
+	// reverse dep: TOther@TOtherStage waits for my TMyStage.
+	template <typename TMyStage, typename TOther>
+	class FBlockOnBuilder
+	{
+	public:
+		explicit FBlockOnBuilder(FLayerBase* InSelf) : Self(InSelf) {}
+
+		template <typename TOtherStage>
+		void OnStage() const
+		{
+			Self->BlockOn<TOther, TOtherStage, TMyStage>();
+		}
+
+	private:
+		FLayerBase* Self;
+	};
+
+	// entry: MyStage<TMy>() -> IsWaiting (forward) or IsBlocking (reverse).
+	template <typename TMyStage>
+	class FMyStageBuilder
+	{
+	public:
+		explicit FMyStageBuilder(FLayerBase* InSelf) : Self(InSelf) {}
+
+		template <typename TOther>
+		FWaitForBuilder<TMyStage, TOther> IsWaiting() const
+		{
+			return FWaitForBuilder<TMyStage, TOther>(Self);
+		}
+
+		template <typename TOther>
+		FBlockOnBuilder<TMyStage, TOther> IsBlocking() const
+		{
+			return FBlockOnBuilder<TMyStage, TOther>(Self);
+		}
+
+	private:
+		FLayerBase* Self;
+	};
+
+	template <typename TMyStage>
+	FMyStageBuilder<TMyStage> MyStage()
+	{
+		return FMyStageBuilder<TMyStage>(this);
+	}
+
 	FDependencyTable Dependencies;
 	std::vector<FDependent> Dependents;
 };
