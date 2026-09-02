@@ -355,6 +355,17 @@ struct FRHIGraphicsPipelineDesc
 	ERHICompareOp DepthCompare = ERHICompareOp::Less;
 	std::vector<FRHIAttachmentBlend> AttachmentBlends;
 	bool bAlphaToCoverage = false;
+
+	/**
+	 * Shader-bytecode fingerprints. The caller fills these after compiling the
+	 * modules (e.g. a FNV hash over the SPIR-V words); a higher layer's PSO cache
+	 * uses them as its identity key. The modules themselves are transient (a
+	 * pipeline, once created, owns the compiled GPU binary), so the cache must
+	 * key on CONTENT, not on the module pointers -- two pipelines compiled from
+	 * the same bytecode share a cache entry even though their modules differ.
+	 */
+	std::uint64_t VertexShaderHash = 0;
+	std::uint64_t FragmentShaderHash = 0;
 };
 
 class MAHO_RHI_API FRHIGraphicsPipeline : public FRHIResource

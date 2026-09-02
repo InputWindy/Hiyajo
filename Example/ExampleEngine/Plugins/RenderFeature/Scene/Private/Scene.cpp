@@ -34,12 +34,19 @@ FScene::FScene()
 			S->SetImGuiDrawData(DrawData);
 		}
 	});
+
+	// Test producer of the draw protocol: hardcode the fullscreen triangle. No
+	// vertex buffer -- the vertex shader generates its 3 positions from
+	// gl_VertexIndex, so AddPass records it as Draw(VertexCount=3).
+	FDrawBatch Triangle;
+	Triangle.VertexCount = 3;
+	TriangleDrawList.Add(Triangle);
 }
 
 void FScene::BeginRender(FRender& R)
 {
-	// Acquire this feature's command list; Render records into it, EndRender submits.
-	RenderList = R.AcquireRenderList();
+	// Targets are (re)built on (re)size; the clear is recorded + submitted in
+	// Render via AddPass. The feature no longer owns a command list here.
 	EnsureTargets(R);
 }
 
@@ -79,7 +86,7 @@ void FScene::EnsureTargets(FRender& R)
 	ColorDesc.ArrayLayers = 1;
 	ColorDesc.Usage = ERHITextureUsage::ColorAttachment | ERHITextureUsage::Sampled | ERHITextureUsage::TransferSrc;
 	ColorDesc.MemoryUsage = ERHIMemoryUsage::GPUOnly;
-	SceneColor = R.CreateTexture(ColorDesc, /*bTransient=*/false);
+	SceneColor = R.CreateTexture(ColorDesc, ERDGResourceLifetime::Persistent);
 
 	FRHITextureDesc DepthDesc;
 	DepthDesc.Format = ERHIFormat::D32_SFLOAT;
@@ -89,7 +96,7 @@ void FScene::EnsureTargets(FRender& R)
 	DepthDesc.ArrayLayers = 1;
 	DepthDesc.Usage = ERHITextureUsage::DepthStencil;
 	DepthDesc.MemoryUsage = ERHIMemoryUsage::GPUOnly;
-	SceneDepth = R.CreateTexture(DepthDesc, /*bTransient=*/false);
+	SceneDepth = R.CreateTexture(DepthDesc, ERDGResourceLifetime::Persistent);
 
 	// Dynamic rendering needs the attachments in the correct layout before the
 	// first BeginRendering. The transition is recorded at the START of this
@@ -103,10 +110,13 @@ void FScene::EnsureTargets(FRender& R)
 
 void FScene::Render(FRender& R)
 {
-	// Scene pass head: record into OUR OWN command list. Fresh targets get their
-	// initial layout transition at the start; then the clear. Scene render features
-	// (DrawTriangle, ...) draw into the same targets afterwards with LoadOp Load.
-	if (RenderList == nullptr || !SceneColor.IsValid())
+	// Scene pass head: RECORD + SUBMIT the clear in one AddPass (AddPass acquires
+	// the list, Begin/End it, and submits at this call site -- so the clear runs in
+	// the IRender stage). Draw features target the scene after me: their IRender is
+	// ordered after my IEndRender (stage deps), which is after this submit, so the
+	// clear reaches the queue before every draw. Fresh targets get their initial
+	// layout transition at the start.
+	if (!SceneColor.IsValid())
 	{
 		return;
 	}
@@ -115,53 +125,47 @@ void FScene::Render(FRender& R)
 	{
 		return;
 	}
-	FRHICommandList* Cmd = RenderList;
-	Cmd->Begin();
-	if (bTargetsNeedTransition)
+	R.AddPass(ERHICommandListType::Graphics, [&](FRHICommandList& Cmd)
 	{
-		bTargetsNeedTransition = false;
-		Cmd->TransitionTexture(SceneColor.GetRHI(), ERHIResourceState::Common, ERHIResourceState::RenderTarget);
-		Cmd->TransitionTexture(SceneDepth.GetRHI(), ERHIResourceState::Common, ERHIResourceState::DepthWrite);
-	}
+		if (bTargetsNeedTransition)
+		{
+			bTargetsNeedTransition = false;
+			Cmd.TransitionTexture(SceneColor.GetRHI(), ERHIResourceState::Common, ERHIResourceState::RenderTarget);
+			Cmd.TransitionTexture(SceneDepth.GetRHI(), ERHIResourceState::Common, ERHIResourceState::DepthWrite);
+		}
 
-	FRHIRenderingAttachmentInfo Color;
-	Color.View = SceneColor.GetView();
-	Color.LoadOp = ERHILoadOp::Clear;
-	Color.StoreOp = ERHIStoreOp::Store;
-	Color.ClearColor[0] = 0.15f;
-	Color.ClearColor[1] = 0.25f;
-	Color.ClearColor[2] = 0.45f;
-	Color.ClearColor[3] = 1.0f;
+		FRHIRenderingAttachmentInfo Color;
+		Color.View = SceneColor.GetView();
+		Color.LoadOp = ERHILoadOp::Clear;
+		Color.StoreOp = ERHIStoreOp::Store;
+		Color.ClearColor[0] = 0.15f;
+		Color.ClearColor[1] = 0.25f;
+		Color.ClearColor[2] = 0.45f;
+		Color.ClearColor[3] = 1.0f;
 
-	FRHIRenderingAttachmentInfo Depth;
-	const FRHIRenderingAttachmentInfo* PDepth = nullptr;
-	if (SceneDepth.IsValid())
-	{
-		Depth.View = SceneDepth.GetView();
-		Depth.LoadOp = ERHILoadOp::Clear;
-		Depth.StoreOp = ERHIStoreOp::Store;
-		Depth.ClearColor[0] = 1.0f;   // depth clear
-		PDepth = &Depth;
-	}
+		FRHIRenderingAttachmentInfo Depth;
+		const FRHIRenderingAttachmentInfo* PDepth = nullptr;
+		if (SceneDepth.IsValid())
+		{
+			Depth.View = SceneDepth.GetView();
+			Depth.LoadOp = ERHILoadOp::Clear;
+			Depth.StoreOp = ERHIStoreOp::Store;
+			Depth.ClearColor[0] = 1.0f;   // depth clear
+			PDepth = &Depth;
+		}
 
-	Cmd->BeginRendering(&Color, 1, PDepth, RHIPtr->GetFramebufferWidth(), RHIPtr->GetFramebufferHeight());
-	Cmd->EndRendering();
-	Cmd->End();
+		Cmd.BeginRendering(&Color, 1, PDepth, RHIPtr->GetFramebufferWidth(), RHIPtr->GetFramebufferHeight());
+		Cmd.EndRendering();
+	});
 }
 
 void FScene::EndRender(FRender& R)
 {
-	// Submit this feature's recorded command list. The graph deps order this after
-	// every draw that targets the scene (DrawTriangle.EndRender depends on my
-	// EndRender), so the clear is submitted before the draw.
-	if (RenderList != nullptr)
-	{
-		if (IRHI* RHIPtr = R.GetRHI())
-		{
-			RHIPtr->Submit(RenderList, ERHICommandListType::Graphics);
-		}
-		RenderList = nullptr;
-	}
+	// The clear is submitted at the end of Render (AddPass submits at its call
+	// site), so this stage is now a no-op. It stays in the stage list so the draw
+	// features' `WaitFor ... Scene::IEndRender` deps keep the same ordering -- their
+	// IRender still runs after this stage, i.e. after the clear's submit above.
+	(void)R;
 }
 
 } // namespace Scene

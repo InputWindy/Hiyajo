@@ -156,6 +156,8 @@ enum class ERHIShaderStage : std::uint32_t
 	Callable = 1u << 8,
 	AllGraphics = Vertex | Fragment,
 	AllRayTracing = RayGen | AnyHit | ClosestHit | Miss | Intersection | Callable,
+
+	MAX_COUNT = 9,
 };
 
 enum class ERHIPrimitiveTopology : std::uint8_t

@@ -20,6 +20,23 @@ struct FShaderCompileResult
 	std::string ErrorLog;
 };
 
+/**
+ * Shader CONTENT fingerprint (FNV-1a 64-bit over the SPIR-V words). The PSO cache
+ * keys a graphics pipeline on its VS/FS content hash, because shader modules are
+ * transient (rebuilt from identical bytes across passes) -- content, not pointers,
+ * is the stable identity.
+ */
+inline std::uint64_t HashShaderWords(const std::uint32_t* Words, std::size_t Count)
+{
+	std::uint64_t H = 1469598103934665603ULL;
+	for (std::size_t I = 0; I < Count; ++I)
+	{
+		H ^= Words[I];
+		H *= 1099511628211ULL;
+	}
+	return H;
+}
+
 /** Shader compile request (GLSL source + stage + entry point). */
 struct FShaderCompileDesc
 {

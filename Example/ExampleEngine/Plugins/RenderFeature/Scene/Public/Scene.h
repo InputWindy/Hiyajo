@@ -6,6 +6,7 @@
 #include <Engine/Layer.h>
 #include <Render.h>
 #include <RDG.h>
+#include <RenderDrawList.h>
 
 #include <cstdint>
 
@@ -42,6 +43,14 @@ public:
 	void SetImGuiDrawData(void* DrawData) { ImGuiDrawData = DrawData; }
 	[[nodiscard]] void* GetImGuiDrawData() const { return ImGuiDrawData; }
 
+	/**
+	 * Test producer of the draw protocol: the hardcoded fullscreen triangle. AddPass
+	 * consumes the list as-is and never knows it came from here (a real scene
+	 * renderer replaces it later). The triangle has no vertex buffer -- the vertex
+	 * shader generates its 3 positions from gl_VertexIndex.
+	 */
+	[[nodiscard]] const FDrawList& GetTriangleDrawList() const { return TriangleDrawList; }
+
 	void BeginRender(FRender& R) override;
 	void Render(FRender& R) override;
 	void EndRender(FRender& R) override;
@@ -49,10 +58,9 @@ public:
 private:
 	void EnsureTargets(FRender& R);
 
-	FRHICommandList* RenderList = nullptr;   // acquired in BeginRender, recorded in Render, submitted in EndRender
-
 	FRDGTextureRef SceneColor;
 	FRDGTextureRef SceneDepth;
+	FDrawList TriangleDrawList;   // hardcoded triangle draw protocol (test producer)
 	void* ImGuiDrawData = nullptr;   // ImDrawData* from the ImGui host
 	std::uint32_t CachedWidth = 0;
 	std::uint32_t CachedHeight = 0;

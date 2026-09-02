@@ -8,11 +8,14 @@
 #include <Engine/Engine.h>
 #include <RHI/RHIServer.h>
 #include "RDG.h"
+#include "RenderDrawList.h"
 #include "ShaderCompiler.h"
 
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <mutex>
+#include <string>
 #include <vector>
 
 namespace Maho
@@ -20,6 +23,38 @@ namespace Maho
 
 class FRender;
 class FRenderResourcePool;
+
+template <typename T> class TShaderHandle;
+
+namespace Detail
+{
+	/** Resolve a shader type's optional static entry point (default "main"). */
+	template <typename T>
+	inline const char* GetVertexEntryPoint()
+	{
+		if constexpr (requires { T::GetVertexEntryPoint(); })
+		{
+			return T::GetVertexEntryPoint();
+		}
+		else
+		{
+			return "main";
+		}
+	}
+
+	template <typename T>
+	inline const char* GetFragmentEntryPoint()
+	{
+		if constexpr (requires { T::GetFragmentEntryPoint(); })
+		{
+			return T::GetFragmentEntryPoint();
+		}
+		else
+		{
+			return "main";
+		}
+	}
+}
 
 /** Global render instance accessor (cross-DLL via function, no bare variable
  *  export) -- set when the Render layer initializes. Other layers (e.g. the
@@ -115,26 +150,203 @@ public:
 	FShaderCompilerServer* GetShaderCompiler() const { return ShaderCompiler.get(); }
 
 	// -- RDG resource pool (off-screen resources) --
-	[[nodiscard]] FRDGTextureRef CreateTexture(const FRHITextureDesc& Desc, bool bTransient = false);
-	[[nodiscard]] FRDGBufferRef CreateBuffer(const FRHIBufferDesc& Desc, bool bTransient = false);
+	[[nodiscard]] FRDGTextureRef CreateTexture(const FRHITextureDesc& Desc, ERDGResourceLifetime Lifetime = ERDGResourceLifetime::Persistent);
+	[[nodiscard]] FRDGBufferRef CreateBuffer(const FRHIBufferDesc& Desc, ERDGResourceLifetime Lifetime = ERDGResourceLifetime::Persistent);
 	void ReleaseTexture(FRDGTextureRef& Ref);
 	void ReleaseBuffer(FRDGBufferRef& Ref);
 
-	/** Destroy the previous frame's feature command lists -- call after the frame
-	 *  host BeginFrame has waited the swapchain fence (their submits are done). */
-	void ReleaseFrameLists();
-
-	/** Advance the RDG resource pool (expire transients) -- called by the frame
-	 *  host BeginFrame. */
+	/** Advance the RDG resource pool (expire transients + recycle the frame's
+	 *  command lists) -- called by the frame host BeginFrame AFTER the swapchain
+	 *  fence wait (their submits are done, no in-flight GPU references). */
 	void BeginResourcePool();
 
-	/** Record a render-feature pass into ITS OWN command list. The feature owns the
-	 *  list lifecycle across its stages: acquire in IBeginRender, record in IRender,
-	 *  submit in IEndRender. The list is tracked here for deferred destruction
-	 *  (it may still be executing on the GPU until the next frame's fence wait). */
-	[[nodiscard]] FRHICommandList* AcquireRenderList();
+	/** Record + submit a render-feature pass in one call (syntactic sugar over
+	 *  AcquireRenderList + Begin/End + Submit). The lambda receives the command list
+	 *  mid-pass: record draw commands, do NOT call Begin/End/Submit yourself. The
+	 *  pass submits here, so it runs at the AddPass call site (the feature's IRender
+	 *  stage). Order between passes is the order features call AddPass -- guarantee
+	 *  it with stage deps against the feature(s) that must submit first. */
+	void AddPass(ERHICommandListType PassType, std::function<void(FRHICommandList&)> PassFn);
 
-protected:
+	/** Acquire a render list, run Record mid-pass, End + Submit. Shared by the
+	 *  plain AddPass and the PSO-resolving AddPass (which records
+	 *  BeginRendering/Bind/End around the feature's draw lambda). Keeping this
+	 *  non-template keeps FRenderResourcePool complete only in Render.cpp. */
+	void SubmitPass(ERHICommandListType PassType, std::function<void(FRHICommandList&)> Record);
+
+	/**
+	 * Typed pass: the feature describes the pipeline config (with the VS/FS shader
+	 * MODULES already resolved + filled in), the render target and the layout, and
+	 * AddPass resolves the PSO (via the pool's PSO cache), starts the dynamic render
+	 * pass, BINDS the graphics pipeline implicitly, then runs the draw lambda.
+	 * The feature never queries a pipeline/layout and never calls BindGraphicsPipeline
+	 * itself -- it only records the draws (viewport/scissor/draw).
+	 *
+	 * The feature fetches the modules itself (TryGetShader<T> + Wait + GetVertex/
+	 * GetFragment) and stores them in PipelineDesc.VertexShader/FragmentShader (plus
+	 * the bytecode hashes + entry points); GetOrCreateGraphicsPipeline keys on those
+	 * hashes, so repeated calls return the pool-owned pipeline without rebuilding.
+	 * PipelineDesc is copied, so the caller may keep a state table once.
+	 */
+	void AddPass(
+		ERHICommandListType PassType,
+		FRHIGraphicsPipelineDesc PipelineDesc,
+		const FRenderPassDesc& Pass,
+		std::function<void(FRHICommandList&)> PassFn)
+	{
+		PipelineDesc.Layout = GetOrCreatePipelineLayout(Pass.Layout);
+		FRHIGraphicsPipeline* Pipeline = nullptr;
+		if (PipelineDesc.Layout != nullptr)
+		{
+			Pipeline = GetOrCreateGraphicsPipeline(PipelineDesc);
+		}
+
+		// Resolve the declared RDG target into concrete rendering attachments.
+		std::vector<FRHIRenderingAttachmentInfo> Colors;
+		Colors.reserve(Pass.Target.Color.size());
+		for (const auto& A : Pass.Target.Color)
+		{
+			FRHIRenderingAttachmentInfo Info;
+			Info.View = A.View.GetView();
+			Info.LoadOp = A.LoadOp;
+			Info.StoreOp = A.StoreOp;
+			for (std::uint32_t i = 0; i < 4; ++i) { Info.ClearColor[i] = A.ClearColor[i]; }
+			Colors.push_back(Info);
+		}
+		FRHIRenderingAttachmentInfo Depth;
+		const FRHIRenderingAttachmentInfo* PDepth = nullptr;
+		if (Pass.Target.bHasDepth)
+		{
+			Depth.View = Pass.Target.Depth.View.GetView();
+			Depth.LoadOp = Pass.Target.Depth.LoadOp;
+			Depth.StoreOp = Pass.Target.Depth.StoreOp;
+			for (std::uint32_t i = 0; i < 4; ++i) { Depth.ClearColor[i] = Pass.Target.Depth.ClearColor[i]; }
+			PDepth = &Depth;
+		}
+
+		// Snapshot the attachment pointers/extent into locals so the record lambda
+		// does not copy the (vector-owning) Colors by value. Width/Height default to
+		// the first color attachment's extent when the target did not set them.
+		const FRHIRenderingAttachmentInfo* ColorsPtr = Colors.empty() ? nullptr : Colors.data();
+		const std::uint32_t ColorCount = static_cast<std::uint32_t>(Colors.size());
+		std::uint32_t Width = Pass.Target.Width;
+		std::uint32_t Height = Pass.Target.Height;
+		if (Width == 0 && Height == 0 && !Pass.Target.Color.empty())
+		{
+			Width = Pass.Target.Color[0].View.GetWidth();
+			Height = Pass.Target.Color[0].View.GetHeight();
+		}
+
+		FRHIGraphicsPipeline* Bound = Pipeline;
+		SubmitPass(PassType, [=](FRHICommandList& List)
+		{
+			// Dynamic rendering: start the feature's render pass, bind the pipeline
+			// (implicit -- the feature never queries it), then run the draws.
+			List.BeginRendering(ColorsPtr, ColorCount, PDepth, Width, Height);
+			if (Bound != nullptr)
+			{
+				List.BindGraphicsPipeline(Bound);
+			}
+		PassFn(List);
+		List.EndRendering();
+	});
+}
+
+	/** PSO cache: get-or-create a shader module / pipeline layout / graphics
+	 *  pipeline by descriptor. The pool owns the native lifetime (destroyed at
+	 *  Shutdown); a feature holds only the handle. Shader identity is matched by
+	 *  bytecode content, so a pass can share one compiled module across frames
+	 *  instead of rebuilding a transient one each time. */
+	[[nodiscard]] FRHIShaderModule* GetOrCreateShaderModule(const FRHIShaderModuleDesc& Desc);
+	[[nodiscard]] FRHIPipelineLayout* GetOrCreatePipelineLayout(const FRHIPipelineLayoutDesc& Desc);
+	[[nodiscard]] FRHIDescriptorSetLayout* GetOrCreateDescriptorSetLayout(const FRHIDescriptorSetLayoutDesc& Desc);
+	[[nodiscard]] FRHIGraphicsPipeline* GetOrCreateGraphicsPipeline(const FRHIGraphicsPipelineDesc& Desc);
+
+	/**
+	 * Shader resource: async compile + explicit-sync handle. The first call per T
+	 * submits the VS/FS compile to the shader server thread (CompileAsync, off the
+	 * render thread) and returns a TShaderHandle<T>. The handle's Wait() blocks until
+	 * that compile completes -- a feature typically calls TryGetShader in IBeginRender
+	 * (before the pass) and Wait()s it, then fires its IRender pass against the ready
+	 * modules. Later calls return the same cached handle (no recompile). There is NO
+	 * fallback: if a feature uses the shader before Wait() the handle returns null
+	 * modules, so the feature must Wait() before use.
+	 *
+	 * T contract (all STATIC, provided by the shader type):
+	 *   static const char* GetVertexSource();     // nullptr => no VS
+	 *   static const char* GetFragmentSource();   // nullptr => no FS
+	 *   static const char* GetVertexEntryPoint();   // optional; default "main"
+	 *   static const char* GetFragmentEntryPoint(); // optional; default "main"
+	 */
+	template <typename T>
+	[[nodiscard]] TShaderHandle<T> TryGetShader()
+	{
+		auto& S = TShaderHandle<T>::GetState();
+		{
+			std::lock_guard Lock(S.Mutex);
+			if (!S.bSubmitted && ShaderCompiler)
+			{
+				S.bSubmitted = true;
+				// Static cache cannot be reference-captured by the callbacks (they run
+				// on the shader-server thread); capture an automatic pointer instead.
+				auto* PS = &S;
+				if (const char* Src = T::GetVertexSource(); Src != nullptr)
+				{
+					FShaderCompileDesc D;
+					D.Source = Src;
+					D.Stage = ERHIShaderStage::Vertex;
+					D.EntryPoint = Detail::GetVertexEntryPoint<T>();
+					const std::string Entry = D.EntryPoint;
+					ShaderCompiler->CompileAsync(D, [PS, Entry](const FShaderCompileResult& R)
+					{
+						std::lock_guard L(PS->Mutex);
+						if (!R.bSuccess) { PS->bFailed = true; }
+						else
+						{
+							PS->VS = R.Bytecode;
+							PS->VHash = HashShaderWords(PS->VS.data(), PS->VS.size());
+							PS->VEntry = Entry;
+						}
+						PS->bVComplete = true;
+						PS->bReady = PS->bVComplete && PS->bFComplete;
+					});
+				}
+				else { S.bVComplete = true; }
+
+				if (const char* Src = T::GetFragmentSource(); Src != nullptr)
+				{
+					FShaderCompileDesc D;
+					D.Source = Src;
+					D.Stage = ERHIShaderStage::Fragment;
+					D.EntryPoint = Detail::GetFragmentEntryPoint<T>();
+					const std::string Entry = D.EntryPoint;
+					ShaderCompiler->CompileAsync(D, [PS, Entry](const FShaderCompileResult& R)
+					{
+						std::lock_guard L(PS->Mutex);
+						if (!R.bSuccess) { PS->bFailed = true; }
+						else
+						{
+							PS->FS = R.Bytecode;
+							PS->FHash = HashShaderWords(PS->FS.data(), PS->FS.size());
+							PS->FEntry = Entry;
+						}
+						PS->bFComplete = true;
+						PS->bReady = PS->bVComplete && PS->bFComplete;
+					});
+				}
+				else { S.bFComplete = true; }
+			}
+		}
+		return TShaderHandle<T>(this);
+	}
+
+	/**
+	 * Block until every async shader compile submitted so far completes (the shader
+	 * server's quiescence barrier). A feature calls this (through the handle's Wait)
+	 * before using the shader it TryGetShader'd -- the "sync before use" point.
+	 */
+	void WaitShaderCompiles();
+
 	// -- host engine stages (FEngineBase context) --
 	void PreInitialize(FEngineBase&) override;
 	void Initialize(FEngineBase& Engine) override;
@@ -159,9 +371,136 @@ private:
 	// TaskGraph orders everything. FRender itself does no frame work.
 	using FRenderStages = TTypeList<IInitViews, IBeginRender, IRender, IEndRender, IPostProcess, IRenderUI, IPresent>;
 	std::unique_ptr<FLayerTaskGraph<FRenderStages, FRender>> RenderGraph;
+};
 
-	std::vector<FRHICommandList*> PendingRenderLists;   // lists acquired this frame; destroyed at the next BeginFrame
-	std::mutex RenderListsMutex;                        // guards PendingRenderLists (features acquire on pool workers)
+/**
+ * Shader handle: an explicit-sync wrapper over a T's async compile (see
+ * FRender::TryGetShader). Every instantiation of T shares ONE FShaderState (build
+ * the native modules + bytecode once, reuse across frames). A feature calls Wait()
+ * before use -- that is the "sync before use" point, guaranteed by flushing the
+ * shader server. There is NO fallback: before Wait() the getters return null.
+ *
+ * The compile is driven entirely by FRender::TryGetShader (the friend); this class
+ * only exposes the sync + accessors. The native module (VModule/FModule) is created
+ * lazily on the calling thread through the pool's PSO cache, so a feature owns a
+ * plain module pointer, not the native lifetime.
+ */
+template <typename T>
+class TShaderHandle
+{
+	// FRender::TryGetShader<T> constructs and drives the per-T state.
+	friend class FRender;
+
+	explicit TShaderHandle(FRender* InOwner) : Owner(InOwner) {}
+
+public:
+	TShaderHandle() = default;
+	TShaderHandle(const TShaderHandle&) = default;
+	TShaderHandle& operator=(const TShaderHandle&) = default;
+
+	/** Block until every async shader compile submitted so far completes, then
+	 *  report whether the requested stages compiled successfully. A feature must
+	 *  call this before using the modules (the "sync before use" point). */
+	bool Wait()
+	{
+		if (Owner)
+		{
+			Owner->WaitShaderCompiles();
+		}
+		auto& State = GetState();
+		std::lock_guard Lock(State.Mutex);
+		return State.bReady && !State.bFailed;
+	}
+
+	/** True once the requested stages compiled successfully (no blocking). */
+	[[nodiscard]] bool IsReady() const
+	{
+		auto& State = GetState();
+		std::lock_guard Lock(State.Mutex);
+		return State.bReady && !State.bFailed;
+	}
+
+	/** Vertex module (build once via the pool, cached). Null if no VS / not ready. */
+	[[nodiscard]] FRHIShaderModule* GetVertex()
+	{
+		auto& State = GetState();
+		std::lock_guard Lock(State.Mutex);
+		if (State.VS.empty())
+		{
+			return nullptr;
+		}
+		if (!State.VModule)
+		{
+			FRHIShaderModuleDesc D;
+			D.Stage = ERHIShaderStage::Vertex;
+			D.Bytecode = State.VS.data();
+			D.BytecodeSize = State.VS.size() * sizeof(std::uint32_t);
+			D.EntryPoint = State.VEntry.c_str();
+			State.VModule = Owner ? Owner->GetOrCreateShaderModule(D) : nullptr;
+		}
+		return State.VModule;
+	}
+
+	/** Fragment module (build once via the pool, cached). Null if no FS / not ready. */
+	[[nodiscard]] FRHIShaderModule* GetFragment()
+	{
+		auto& State = GetState();
+		std::lock_guard Lock(State.Mutex);
+		if (State.FS.empty())
+		{
+			return nullptr;
+		}
+		if (!State.FModule)
+		{
+			FRHIShaderModuleDesc D;
+			D.Stage = ERHIShaderStage::Fragment;
+			D.Bytecode = State.FS.data();
+			D.BytecodeSize = State.FS.size() * sizeof(std::uint32_t);
+			D.EntryPoint = State.FEntry.c_str();
+			State.FModule = Owner ? Owner->GetOrCreateShaderModule(D) : nullptr;
+		}
+		return State.FModule;
+	}
+
+	/** Content hash of the compiled vertex stage (0 if none / not ready). */
+	[[nodiscard]] std::uint64_t GetVertexHash() const
+	{
+		auto& State = GetState();
+		std::lock_guard Lock(State.Mutex);
+		return State.VHash;
+	}
+
+	/** Content hash of the compiled fragment stage (0 if none / not ready). */
+	[[nodiscard]] std::uint64_t GetFragmentHash() const
+	{
+		auto& State = GetState();
+		std::lock_guard Lock(State.Mutex);
+		return State.FHash;
+	}
+
+private:
+	/** Per-T compile/ready state (one per instantiation, shared by all handles). */
+	struct FShaderState
+	{
+		std::mutex Mutex;
+		bool bSubmitted = false;
+		bool bReady = false;
+		bool bFailed = false;
+		bool bVComplete = false;
+		bool bFComplete = false;
+		std::vector<std::uint32_t> VS, FS;
+		std::uint64_t VHash = 0, FHash = 0;
+		std::string VEntry = "main", FEntry = "main";
+		FRHIShaderModule* VModule = nullptr;
+		FRHIShaderModule* FModule = nullptr;
+	};
+	static FShaderState& GetState()
+	{
+		static FShaderState S;
+		return S;
+	}
+
+	FRender* Owner = nullptr;
 };
 
 } // namespace Maho

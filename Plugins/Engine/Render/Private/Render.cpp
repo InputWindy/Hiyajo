@@ -88,6 +88,18 @@ void FRender::PostInitialize(FEngineBase&)
 {
 }
 
+void FRender::WaitShaderCompiles()
+{
+	if (ShaderCompiler)
+	{
+		// The shader server is a quiescence barrier: FlushCompiles waits until every
+		// CompileAsync submitted so far has completed. Calling this from a handle's
+		// Wait() is the "sync before use" point -- after it returns, the per-T state
+		// holds the compiled bytecode (and bReady).
+		ShaderCompiler->FlushCompiles();
+	}
+}
+
 void FRender::PreShutdown(FEngineBase&)
 {
 }
@@ -128,11 +140,9 @@ void FRender::Shutdown(FEngineBase&)
 	{
 		RHI->WaitIdle();
 
-		// The last frame's feature command lists are only recycled at the next
-		// host BeginFrame -- which never comes after the loop breaks. Destroy
-		// them while the device is still alive (their VkCommandPools must not be
-		// outstanding when the device is destroyed).
-		ReleaseFrameLists();
+		// The last frame's feature command lists + pooled resources are destroyed
+		// below by ResourcePool->Shutdown() while the device is still alive (their
+		// VkCommandPools / VkBuffers must not be outstanding when the device dies).
 
 		// Destroy the render feature instances explicitly BEFORE the RHI goes
 		// away: their destructors free Vulkan objects (pipelines / shader
@@ -174,27 +184,7 @@ void FRender::BeginFrame(FEngineBase&)
 	{
 		RHIp->BeginFrame();
 	}
-	ReleaseFrameLists();
 	BeginResourcePool();
-}
-
-void FRender::ReleaseFrameLists()
-{
-	// The previous frame's feature command lists were submitted in their IEndRender
-	// stages; after the host BeginFrame waited the swapchain fence, they
-	// are no longer executing -- destroy them now.
-	std::vector<FRHICommandList*> Lists;
-	{
-		std::lock_guard<std::mutex> Lock(RenderListsMutex);
-		Lists.swap(PendingRenderLists);
-	}
-	for (FRHICommandList* List : Lists)
-	{
-		if (RHI)
-		{
-			RHI->DestroyCommandList(List);
-		}
-	}
 }
 
 void FRender::BeginResourcePool()
@@ -256,14 +246,14 @@ void FRender::RequestExit(FEngineBase&)
 {
 }
 
-FRDGTextureRef FRender::CreateTexture(const FRHITextureDesc& Desc, bool bTransient)
+FRDGTextureRef FRender::CreateTexture(const FRHITextureDesc& Desc, ERDGResourceLifetime Lifetime)
 {
-	return ResourcePool ? ResourcePool->CreateTexture(Desc, bTransient) : FRDGTextureRef{};
+	return ResourcePool ? ResourcePool->CreateTexture(Desc, Lifetime) : FRDGTextureRef{};
 }
 
-FRDGBufferRef FRender::CreateBuffer(const FRHIBufferDesc& Desc, bool bTransient)
+FRDGBufferRef FRender::CreateBuffer(const FRHIBufferDesc& Desc, ERDGResourceLifetime Lifetime)
 {
-	return ResourcePool ? ResourcePool->CreateBuffer(Desc, bTransient) : FRDGBufferRef{};
+	return ResourcePool ? ResourcePool->CreateBuffer(Desc, Lifetime) : FRDGBufferRef{};
 }
 
 void FRender::ReleaseTexture(FRDGTextureRef& Ref)
@@ -282,19 +272,45 @@ void FRender::ReleaseBuffer(FRDGBufferRef& Ref)
 	}
 }
 
-FRHICommandList* FRender::AcquireRenderList()
+void FRender::AddPass(ERHICommandListType PassType, std::function<void(FRHICommandList&)> PassFn)
 {
-	if (RHI == nullptr)
+	SubmitPass(PassType, std::move(PassFn));
+}
+
+void FRender::SubmitPass(ERHICommandListType PassType, std::function<void(FRHICommandList&)> Record)
+{
+	FRHICommandList* List = ResourcePool ? ResourcePool->AcquireRenderList() : nullptr;
+	if (List == nullptr)
 	{
-		return nullptr;
+		return;
 	}
-	FRHICommandList* List = RHI->CreateCommandList(ERHICommandListType::Graphics);
-	if (List != nullptr)
+	List->Begin();
+	Record(*List);
+	List->End();
+	if (IRHI* P = RHI.get())
 	{
-		std::lock_guard<std::mutex> Lock(RenderListsMutex);
-		PendingRenderLists.push_back(List);
+		P->Submit(List, PassType);
 	}
-	return List;
+}
+
+FRHIShaderModule* FRender::GetOrCreateShaderModule(const FRHIShaderModuleDesc& Desc)
+{
+	return ResourcePool ? ResourcePool->GetOrCreateShaderModule(Desc) : nullptr;
+}
+
+FRHIPipelineLayout* FRender::GetOrCreatePipelineLayout(const FRHIPipelineLayoutDesc& Desc)
+{
+	return ResourcePool ? ResourcePool->GetOrCreatePipelineLayout(Desc) : nullptr;
+}
+
+FRHIDescriptorSetLayout* FRender::GetOrCreateDescriptorSetLayout(const FRHIDescriptorSetLayoutDesc& Desc)
+{
+	return ResourcePool ? ResourcePool->GetOrCreateDescriptorSetLayout(Desc) : nullptr;
+}
+
+FRHIGraphicsPipeline* FRender::GetOrCreateGraphicsPipeline(const FRHIGraphicsPipelineDesc& Desc)
+{
+	return ResourcePool ? ResourcePool->GetOrCreateGraphicsPipeline(Desc) : nullptr;
 }
 
 } // namespace Maho

@@ -15,17 +15,6 @@
 #include <memory>
 #include <mutex>
 
-// Opaque Vulkan handle aliases -- the ONLY Vulkan types that escape the RHI,
-// and only via the narrow ImGui official-backend bridge below (imgui_impl_vulkan
-// needs raw handles). Declared at GLOBAL scope so the RHI's own TUs (which use
-// the real vulkan.h types) are not shadowed by a Maho:: namespace alias; the
-// definitions (from vulkan.h) are identical typedefs, so no conflict.
-struct VkInstance_T;         using VkInstance = VkInstance_T*;
-struct VkPhysicalDevice_T;   using VkPhysicalDevice = VkPhysicalDevice_T*;
-struct VkDevice_T;           using VkDevice = VkDevice_T*;
-struct VkQueue_T;            using VkQueue = VkQueue_T*;
-struct VkImageView_T;        using VkImageView = VkImageView_T*;
-
 namespace Maho
 {
 
@@ -154,18 +143,6 @@ struct IRHI
 	// format and framebuffer size are exposed (scene targets must match both).
 	[[nodiscard]] virtual std::uint32_t GetFramebufferWidth() const = 0;
 	[[nodiscard]] virtual std::uint32_t GetFramebufferHeight() const = 0;
-
-	// -- ImGui official-backend bridge (narrow exception to the backend-agnostic
-	//    surface; ONLY for imgui_impl_vulkan, which needs raw Vulkan handles).
-	//    Do not add more raw-Vulkan escapes -- other layers use the abstractions.
-	[[nodiscard]] virtual VkInstance GetRawInstance() const = 0;
-	[[nodiscard]] virtual VkPhysicalDevice GetRawPhysicalDevice() const = 0;
-	[[nodiscard]] virtual VkDevice GetRawDevice() const = 0;
-	[[nodiscard]] virtual VkQueue GetRawGraphicsQueue() const = 0;
-	[[nodiscard]] virtual std::uint32_t GetRawGraphicsQueueFamilyIndex() const = 0;
-	[[nodiscard]] virtual std::uint32_t GetRawSwapchainImageCount() const = 0;
-	/** Raw image view of an RHI texture view (ImGui renders into SceneColor). */
-	[[nodiscard]] virtual VkImageView GetRawTextureView(FRHITextureView* View) const = 0;
 
 	// GPU queries (occlusion / timestamp)
 	[[nodiscard]] virtual FRHIQueryPool* CreateQueryPool(ERHIQueryType Type, std::uint32_t QueryCount) = 0;
@@ -326,15 +303,6 @@ public:
 	// -- IRHI swapchain accessors (forward to the private IDynamicRHI) --
 	[[nodiscard]] std::uint32_t GetFramebufferWidth() const override;
 	[[nodiscard]] std::uint32_t GetFramebufferHeight() const override;
-
-	// -- IRHI ImGui bridge (forward to the private IDynamicRHI) --
-	[[nodiscard]] VkInstance GetRawInstance() const override;
-	[[nodiscard]] VkPhysicalDevice GetRawPhysicalDevice() const override;
-	[[nodiscard]] VkDevice GetRawDevice() const override;
-	[[nodiscard]] VkQueue GetRawGraphicsQueue() const override;
-	[[nodiscard]] std::uint32_t GetRawGraphicsQueueFamilyIndex() const override;
-	[[nodiscard]] std::uint32_t GetRawSwapchainImageCount() const override;
-	[[nodiscard]] VkImageView GetRawTextureView(FRHITextureView* View) const override;
 
 	[[nodiscard]] FRHIQueryPool* CreateQueryPool(ERHIQueryType Type, std::uint32_t QueryCount) override;
 	void DestroyQueryPool(FRHIQueryPool* Pool) override;

@@ -28,7 +28,7 @@ public:
 	void RenderUI(FRender& R) override;
 
 private:
-	bool EnsureBackend(FRender& R);
+	bool EnsureBackend(FRender& R, FRHICommandList& Cmd);
 	struct FData;
 	std::unique_ptr<FData> Data;
 };
