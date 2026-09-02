@@ -1,9 +1,0 @@
-{
-  "FileVersion": 1,
-  "Name": "UI",
-  "Description": "UI engine layer: hosts the Dear ImGui context (CPU side) and drives it from the engine stages (IInit/ITick/IShutdown); the UI render feature draws the produced draw data over the scene before present",
-  "Dependencies": [
-    "Platform",
-    "Log"
-  ]
-}

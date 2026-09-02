@@ -1,2 +1,2 @@
-# ImGuiRender plugin: no third-party dependencies (imgui + imgui_impl_vulkan come
-# from the ImGui engine layer; Vulkan/glfw propagate via Render).
+# UIFeature: no third-party deps. The ImGui symbols come from Render.dll (which
+# compiles Dear ImGui into it); Vulkan/glfw propagate via Render.

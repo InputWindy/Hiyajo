@@ -26,8 +26,8 @@ struct FUIShader
 
 /**
  * ImGui render feature - the render-side half of the UI integration. The CPU
- * side (the UI engine layer's ITick) builds the ImGui frame and pushes the draw
- * data to FScene via the sink; this feature draws that data in IRenderUI over
+ * side (FRender's ImGui context) builds the ImGui frame and stores the draw data
+ * in FRender::UIData; this feature draws that data in IRenderUI over
  * the shared SceneColor (LoadOp Load, after the scene), submitted before the
  * frame feature's present blit.
  *

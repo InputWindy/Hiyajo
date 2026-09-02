@@ -8,6 +8,14 @@
 #include <Scene.h>
 #include "RenderResourcePool.h"
 
+// Dear ImGui — compiled INTO this DLL (Render.cmake); the UI's CPU-side context
+// is created/driven here, the render backend lives in UIFeature.
+#include "imgui.h"
+
+#if defined(_WIN32)
+#	include <windows.h>
+#endif
+
 // Unity build: fold the shader compiler + resource pool TUs in (the codegen
 // target only compiles Render.cpp; the RHI plugin uses the same pattern).
 #include "ShaderCompiler.cpp"
@@ -36,14 +44,8 @@ FRender::FRender()
 	MyStage<IShutdown>().IsBlocking<Platform::FPlatform>().OnStage<IShutdown>();
 
 	// Input: Platform's Tick polls GLFW first, then the ImGui host feeds io and
-	// builds the UI (same frame).
+	// builds the UI (same frame). FRender owns the ImGui context directly.
 	MyStage<ITick>().IsWaiting<Platform::FPlatform>().ForStage<ITick>();
-
-	// UI data is produced by FUI::ITick; my render graph drives the UI feature's
-	// RenderUI in ITS Tick. Render depends on UI (unidirectional), so the wait
-	// is declared HERE, by the consumer (me): my Tick runs after FUI::Tick, so
-	// ProcessUIData has already filled UIData before the UI feature draws it.
-	MyStage<ITick>().IsWaiting<FUI>().ForStage<ITick>();
 }
 
 FRender::~FRender() = default;
@@ -88,6 +90,25 @@ void FRender::Initialize(FEngineBase& Engine)
 	Install<FDrawTriangleFeature>();
 	Install<FFrame>();
 	Install<FUIFeature>();
+
+	// ImGui context (CPU side) — created from the Platform layer's window; the
+	// render backend (UIFeature, installed above) consumes the draw data this
+	// context produces each frame. FRender owns the context lifetime.
+	Platform::FPlatform* UI_P = Platform::GetPlatform();
+	if (UI_P == nullptr || UI_P->GetWindowWidth() == 0 || UI_P->GetToolkitWindowHandle() == nullptr)
+	{
+		MAHO_LOG_CORE_ERROR("FRender::Initialize: no window; UI disabled");
+	}
+	else
+	{
+		IMGUI_CHECKVERSION();
+		ImGui::CreateContext();
+		ImGuiIO& IO = ImGui::GetIO();
+		IO.ConfigFlags |= ImGuiConfigFlags_DockingEnable;   // the editor shell docks later
+		ImGui::StyleColorsDark();
+		bUIInitialized = true;
+		MAHO_LOG_CORE_INFO("FRender: ImGui context created (CPU side; render backend in UIFeature)");
+	}
 }
 
 void FRender::PostInitialize(FEngineBase&)
@@ -173,6 +194,14 @@ void FRender::Shutdown(FEngineBase&)
 		RHI->ShutdownRHI();   // re-joining the server thread is a no-op; tears down the device
 		RHI.reset();
 	}
+
+	// ImGui context (CPU-side; independent of the RHI device). Destroy after all
+	// render teardown so no in-flight draw path touches it.
+	if (bUIInitialized)
+	{
+		ImGui::DestroyContext();
+		bUIInitialized = false;
+	}
 }
 
 void FRender::PostShutdown(FEngineBase&)
@@ -191,6 +220,61 @@ void FRender::BeginFrame(FEngineBase&)
 		RHIp->BeginFrame();
 	}
 	BeginResourcePool();
+
+	// ImGui frame feed -- display size + Win32 input + the (lazy) font-atlas build,
+	// then NewFrame. CPU side only; the render backend uploads the atlas lazily.
+	if (bUIInitialized)
+	{
+		ImGuiIO& IO = ImGui::GetIO();
+		Platform::FPlatform* P = Platform::GetPlatform();
+		if (P != nullptr)
+		{
+			// Display size must match the render target (SceneColor = swapchain
+			// extent), not the window's logical size -- ImGui lays out in DisplaySize
+			// coordinates and the render feature clips against it.
+			IO.DisplaySize = ImVec2(
+				static_cast<float>(P->GetWindowWidth()),
+				static_cast<float>(P->GetWindowHeight()));
+#if defined(_WIN32)
+			// Input bypasses GLFW's message-driven cursor state (the window is created
+			// on a pool worker and polled on another, so WM_MOUSEMOVE never reaches
+			// glfwGetCursorPos). Win32 global state works from any thread.
+			if (HWND Hwnd = static_cast<HWND>(P->GetNativeWindow()))
+			{
+				POINT Pt{};
+				if (::GetCursorPos(&Pt) && ::ScreenToClient(Hwnd, &Pt))
+				{
+					RECT Client{};
+					::GetClientRect(Hwnd, &Client);
+					const float ScaleX = Client.right > 0 ? IO.DisplaySize.x / static_cast<float>(Client.right) : 1.f;
+					const float ScaleY = Client.bottom > 0 ? IO.DisplaySize.y / static_cast<float>(Client.bottom) : 1.f;
+					IO.AddMousePosEvent(static_cast<float>(Pt.x) * ScaleX, static_cast<float>(Pt.y) * ScaleY);
+				}
+				IO.AddMouseButtonEvent(0, (::GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0);
+				IO.AddMouseButtonEvent(1, (::GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0);
+				IO.AddMouseButtonEvent(2, (::GetAsyncKeyState(VK_MBUTTON) & 0x8000) != 0);
+			}
+#endif
+		}
+
+		// Renderer-backend NewFrame duty (mirrors the imgui_impl_* backends, which
+		// must be called before ImGui::NewFrame()): the font atlas is built lazily by
+		// ImFontAtlas::Build() and ImGui::NewFrame() asserts IsBuilt(). Calling
+		// GetTexDataAsRGBA32() triggers that build on the first frame and returns the
+		// existing pixels afterwards; the GPU upload happens later, in the UIFeature
+		// backend's EnsureUIBackend, which calls it again and gets the same pixels.
+		unsigned char* FontPixels = nullptr;
+		int FontW = 0, FontH = 0, FontBpp = 0;
+		IO.Fonts->GetTexDataAsRGBA32(&FontPixels, &FontW, &FontH, &FontBpp);
+		if (FontPixels == nullptr || FontW <= 0 || FontH <= 0)
+		{
+			MAHO_LOG_CORE_ERROR("FRender: font atlas not built");
+		}
+		else
+		{
+			ImGui::NewFrame();
+		}
+	}
 }
 
 void FRender::BeginResourcePool()
@@ -212,6 +296,18 @@ void FRender::Tick(FEngineBase&)
 	// rebuilding the graph. The render CPU work runs during the interval and is
 	// collected here, so Init never races with in-flight Render() calls.
 	RenderGraph->Flush();
+
+	// Build the ImGui frame (CPU side) between NewFrame and Render. The ImGui
+	// API is called directly (no wrapper layer); ShowDemoWindow() is a placeholder
+	// -- replace with the editor shell (menu bar + DockSpace + panels) or register
+	// a UI-building callback here. The draw data feeds the UIFeature render
+	// backend (reads R.UIData) inside the render graph below.
+	if (bUIInitialized)
+	{
+		ImGui::ShowDemoWindow();
+		ImGui::Render();
+		UIData = ImGui::GetDrawData();
+	}
 
 	// Rebuild + drive the render feature graph. All frame work (swapchain begin,
 	// feature acquire/record/submit, present, swapchain end) is a scheduled stage --

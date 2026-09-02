@@ -6,7 +6,6 @@
 #include <Render.h>
 #include <Resource.h>
 #include <Script.h>
-#include <UI.h>
 
 namespace Maho
 {
@@ -20,7 +19,6 @@ void FExampleEngine::PreMain()
 	Install<Resource::FResourceSystem>();
 	Install<Script::FScriptSystem>();
 	Install<FRender>();
-	Install<FUI>();
 }
 
 void FExampleEngine::PostMain()

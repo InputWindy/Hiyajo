@@ -4,7 +4,6 @@
   "Description": "UI render feature: draws the UI layer's draw data (currently ImGui) into SceneColor (before present)",
   "Dependencies": [
     "Render",
-    "Scene",
-    "UI"
+    "Scene"
   ]
 }

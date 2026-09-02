@@ -12,7 +12,6 @@ struct ImDrawData;
 #include <Engine/LayerCollector.h>
 #include <Engine/LayerTaskGraph.h>
 #include <Engine/Engine.h>
-#include <UI.h>
 #include <RHI/RHIServer.h>
 #include "RDG.h"
 #include "RenderDrawList.h"
@@ -142,7 +141,6 @@ MAHO_DECLARE_STAGE_DISPATCH(FRender, IPresent,     IPresent,     Present)
  */
 class MAHO_RENDER_API FRender
 	: public FLayer<IPreInit, IInit, IPostInit, IBeginFrame, ITick, IEndFrame, IExit, IPreShutdown, IShutdown, IPostShutdown>
-	, public IPlugin<IProcessUIData>
 	, public FLayerCollector<FRender>
 {
 MAHO_DECLARE_LAYER(FRender, "Render.dll");
@@ -150,12 +148,12 @@ MAHO_DECLARE_LAYER(FRender, "Render.dll");
 	FRender();
 	~FRender() override;
 public:
-	void ProcessUIData(void* Data) override
-	{
-		UIData = static_cast<ImDrawData*>(Data);
-	};
-
+	/** The UI's CPU-side ImGui context is owned by FRender (created in Initialize,
+	 *  driven across BeginFrame/Tick/Shutdown). ImGui::GetDrawData() is stored here
+	 *  each Tick and consumed by the UIFeature render backend. */
 	ImDrawData* UIData = nullptr;
+	/** Whether the ImGui context has been created (guards BeginFrame/Tick/Shutdown). */
+	bool bUIInitialized = false;
 public:
 	/** The async shader compiler (render features submit compile requests). */
 	FShaderCompilerServer* GetShaderCompiler() const { return ShaderCompiler.get(); }
