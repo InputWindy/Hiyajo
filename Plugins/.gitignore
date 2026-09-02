@@ -1,6 +1,0 @@
-# Engine plugins — Tools/create_plugin_ui.py output is not committed, but
-# EXPLICITLY shipped engine plugins (e.g. common/log) are force-added.
-# (git cannot re-include below an ignored directory, so a `!` cannot un-ignore
-# them; shipping plugins are tracked with `git add -f`.)
-*
-!.gitignore
