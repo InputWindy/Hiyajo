@@ -1,11 +1,18 @@
 #pragma once
 
+// Forward declaration of Dear ImGui's draw-data (global namespace). The RHI
+// backend consumes ImDrawData*; only the pointer is stored here, so an
+// incomplete type suffices. The UI feature (which includes imgui.h) provides
+// the full definition.
+struct ImDrawData;
+
 #include "RenderApi.h"
 #include <Maho.h>
 #include <Engine/Layer.h>
 #include <Engine/LayerCollector.h>
 #include <Engine/LayerTaskGraph.h>
 #include <Engine/Engine.h>
+#include <UI.h>
 #include <RHI/RHIServer.h>
 #include "RDG.h"
 #include "RenderDrawList.h"
@@ -135,19 +142,32 @@ MAHO_DECLARE_STAGE_DISPATCH(FRender, IPresent,     IPresent,     Present)
  */
 class MAHO_RENDER_API FRender
 	: public FLayer<IPreInit, IInit, IPostInit, IBeginFrame, ITick, IEndFrame, IExit, IPreShutdown, IShutdown, IPostShutdown>
+	, public IPlugin<IProcessUIData>
 	, public FLayerCollector<FRender>
 {
 MAHO_DECLARE_LAYER(FRender, "Render.dll");
 
 	FRender();
 	~FRender() override;
-
 public:
-	/** The RHI command surface (render features reach it through this). */
-	IRHI* GetRHI() const { return RHI.get(); }
+	void ProcessUIData(void* Data) override
+	{
+		UIData = static_cast<ImDrawData*>(Data);
+	};
 
+	ImDrawData* UIData = nullptr;
+public:
 	/** The async shader compiler (render features submit compile requests). */
 	FShaderCompilerServer* GetShaderCompiler() const { return ShaderCompiler.get(); }
+
+	// -- render surface / canvas info + present. FRender owns the RHI; features
+	// never reach the raw IRHI* (no GetRHI()). The canvas is the swapchain geometry
+	// the scene color target is sized to, and the swapchain format it is created in.
+	[[nodiscard]] std::uint32_t GetCanvasWidth() const;
+	[[nodiscard]] std::uint32_t GetCanvasHeight() const;
+	[[nodiscard]] ERHIFormat GetSwapchainFormat() const;
+	/** Blit a scene-color RDG texture to the swapchain backbuffer (the frame feature's present point). */
+	void PresentTexture(const FRDGTextureRef& Texture);
 
 	// -- RDG resource pool (off-screen resources) --
 	[[nodiscard]] FRDGTextureRef CreateTexture(const FRHITextureDesc& Desc, ERDGResourceLifetime Lifetime = ERDGResourceLifetime::Persistent);
@@ -261,6 +281,16 @@ public:
 	[[nodiscard]] FRHIPipelineLayout* GetOrCreatePipelineLayout(const FRHIPipelineLayoutDesc& Desc);
 	[[nodiscard]] FRHIDescriptorSetLayout* GetOrCreateDescriptorSetLayout(const FRHIDescriptorSetLayoutDesc& Desc);
 	[[nodiscard]] FRHIGraphicsPipeline* GetOrCreateGraphicsPipeline(const FRHIGraphicsPipelineDesc& Desc);
+
+	/** Pool-owned sampler: get-or-create by descriptor. The pool owns the native
+	 *  (destroyed at Shutdown); a feature holds only the handle. */
+	[[nodiscard]] FRHISampler* CreateSampler(const FRHISamplerDesc& Desc);
+
+	/** Pool-owned descriptor set: allocates one set from a pool the pool owns (sized
+	 *  from the set layout's bindings) and returns the set handle. Each call is a
+	 *  fresh set -- a feature creates it once (backend setup) and keeps the handle;
+	 *  the pool destroys pool+set at Shutdown. */
+	[[nodiscard]] FRHIDescriptorSet* CreateDescriptorSet(FRHIDescriptorSetLayout* Layout, const FRHIDescriptorSetLayoutDesc& LayoutDesc);
 
 	/**
 	 * Shader resource: async compile + explicit-sync handle. The first call per T

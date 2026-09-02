@@ -27,11 +27,8 @@ void FFrame::Present(FRender& R)
 		if (Color.IsValid())
 		{
 			// Blit the scene color to the swapchain backbuffer -- the frame
-			// feature owns the present point, FRender just exposes the RHI.
-			if (IRHI* RHIPtr = R.GetRHI())
-			{
-				RHIPtr->PresentTexture(Color.GetRHI());
-			}
+			// feature owns the present point, FRender just exposes the present.
+			R.PresentTexture(Color);
 		}
 	}
 }

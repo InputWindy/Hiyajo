@@ -548,6 +548,7 @@ target_include_directories(Render PUBLIC
 	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEngine/Public"
 	"${ENGINE_DIR}/Plugins/Common/RHI/Public"
 	"${ENGINE_DIR}/Plugins/Engine/Platform/Public"
+	"${ENGINE_DIR}/Plugins/Engine/UI/Public"
 	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/Scene/Public"
 	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/DrawTriangleFeature/Public"
 	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/Frame/Public"
@@ -561,7 +562,7 @@ set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Engine/Render")
 include("${ENGINE_DIR}/Plugins/Engine/Render/Render.cmake")
 unset(_MOD_PLUGIN_DIR)
 
-target_link_libraries(Render PUBLIC RHI Platform)
+target_link_libraries(Render PUBLIC RHI Platform UI)
 
 source_group(TREE "${ENGINE_DIR}/Plugins/Engine/Render" FILES
 	"${ENGINE_DIR}/Plugins/Engine/Render/Public/Render.h"
@@ -679,8 +680,6 @@ target_include_directories(UI PUBLIC
 	"${ENGINE_DIR}/Plugins/Engine/UI/Public"
 	"${ENGINE_DIR}/Plugins/Engine/Log/Public"
 	"${ENGINE_DIR}/Plugins/Engine/Platform/Public"
-	"${ENGINE_DIR}/Plugins/Engine/Render/Public"
-	"${ENGINE_DIR}/Plugins/Common/RHI/Public"
 )
 set_target_properties(UI PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 target_compile_definitions(UI PRIVATE MAHO_UI_MODULE_EXPORTS)
@@ -690,10 +689,9 @@ set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Engine/UI")
 include("${ENGINE_DIR}/Plugins/Engine/UI/UI.cmake")
 unset(_MOD_PLUGIN_DIR)
 
-# UI links the Render layer (GetRender), the Platform layer (GetPlatform), the
-# Log layer (MAHO_LOG_CORE) + the RHI (IRHI*). The Render layer does NOT link
-# UI (unidirectional: UI -> Render), so no cycle.
-target_link_libraries(UI PUBLIC Render Platform Log RHI)
+# UI links the Platform layer (GetPlatform) + the Log layer (MAHO_LOG_CORE).
+# The Render layer DOES link UI (unidirectional: Render -> UI), so no cycle.
+target_link_libraries(UI PUBLIC Platform Log)
 
 source_group(TREE "${ENGINE_DIR}/Plugins/Engine/UI" PREFIX "UI" FILES
 	"${ENGINE_DIR}/Plugins/Engine/UI/Public/UI.h"

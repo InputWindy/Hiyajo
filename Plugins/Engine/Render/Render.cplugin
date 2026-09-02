@@ -4,6 +4,7 @@
   "Description": "",
   "Dependencies": [
     "RHI",
-    "Platform"
+    "Platform",
+    "UI"
   ]
 }

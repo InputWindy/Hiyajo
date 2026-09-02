@@ -26,18 +26,24 @@ FRender::FRender()
 {
 	// Init: I read the window from Platform (its PostInitialize) and log heavily
 	// (Log must be up first) -- both declared by ME, the consumer.
-	WaitFor<IInit, Platform::FPlatform, IPostInit>();
-	WaitFor<IInit, FLog, IInit>();
+	MyStage<IInit>().IsWaiting<Platform::FPlatform>().ForStage<IPostInit>();
+	MyStage<IInit>().IsWaiting<FLog>().ForStage<IInit>();
 
 	// Shutdown: my teardown drains render tasks that may log, and I hold the RHI
 	// surface created from Platform's window -- so Log and Platform must run
 	// their Shutdown AFTER mine. Declared here (I know them), not by them.
-	BlockOn<FLog, IShutdown, IShutdown>();
-	BlockOn<Platform::FPlatform, IShutdown, IShutdown>();
+	MyStage<IShutdown>().IsBlocking<FLog>().OnStage<IShutdown>();
+	MyStage<IShutdown>().IsBlocking<Platform::FPlatform>().OnStage<IShutdown>();
 
 	// Input: Platform's Tick polls GLFW first, then the ImGui host feeds io and
 	// builds the UI (same frame).
-	WaitFor<ITick, Platform::FPlatform, ITick>();
+	MyStage<ITick>().IsWaiting<Platform::FPlatform>().ForStage<ITick>();
+
+	// UI data is produced by FUI::ITick; my render graph drives the UI feature's
+	// RenderUI in ITS Tick. Render depends on UI (unidirectional), so the wait
+	// is declared HERE, by the consumer (me): my Tick runs after FUI::Tick, so
+	// ProcessUIData has already filled UIData before the UI feature draws it.
+	MyStage<ITick>().IsWaiting<FUI>().ForStage<ITick>();
 }
 
 FRender::~FRender() = default;
@@ -311,6 +317,39 @@ FRHIDescriptorSetLayout* FRender::GetOrCreateDescriptorSetLayout(const FRHIDescr
 FRHIGraphicsPipeline* FRender::GetOrCreateGraphicsPipeline(const FRHIGraphicsPipelineDesc& Desc)
 {
 	return ResourcePool ? ResourcePool->GetOrCreateGraphicsPipeline(Desc) : nullptr;
+}
+
+FRHISampler* FRender::CreateSampler(const FRHISamplerDesc& Desc)
+{
+	return ResourcePool ? ResourcePool->CreateSampler(Desc) : nullptr;
+}
+
+FRHIDescriptorSet* FRender::CreateDescriptorSet(FRHIDescriptorSetLayout* Layout, const FRHIDescriptorSetLayoutDesc& LayoutDesc)
+{
+	return ResourcePool ? ResourcePool->CreateDescriptorSet(Layout, LayoutDesc) : nullptr;
+}
+
+std::uint32_t FRender::GetCanvasWidth() const
+{
+	return RHI ? RHI->GetFramebufferWidth() : 0;
+}
+
+std::uint32_t FRender::GetCanvasHeight() const
+{
+	return RHI ? RHI->GetFramebufferHeight() : 0;
+}
+
+ERHIFormat FRender::GetSwapchainFormat() const
+{
+	return RHI ? RHI->GetSwapchainFormat() : ERHIFormat::Unknown;
+}
+
+void FRender::PresentTexture(const FRDGTextureRef& Texture)
+{
+	if (RHI && ResourcePool)
+	{
+		RHI->PresentTexture(ResourcePool->GetTexture(Texture));
+	}
 }
 
 } // namespace Maho

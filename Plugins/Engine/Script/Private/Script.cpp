@@ -281,7 +281,7 @@ MAHO_SCRIPT_API FScriptSystem* GetScriptSystem()
 FScriptSystem::FScriptSystem()
 {
 	// Script logs in Initialize; the Log layer must be initialized first.
-	WaitFor<IInit, FLog, IInit>();
+	MyStage<IInit>().IsWaiting<FLog>().ForStage<IInit>();
 }
 
 void FScriptSystem::Initialize(FEngineBase& Engine)

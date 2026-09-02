@@ -37,12 +37,6 @@ public:
 	[[nodiscard]] FRDGTextureRef GetSceneColor() const { return SceneColor; }
 	[[nodiscard]] FRDGTextureRef GetSceneDepth() const { return SceneDepth; }
 
-	/** The latest ImGui draw data (ImDrawData*, backend-agnostic void*), pushed by
-	 *  the UI layer each frame through a registered sink. The UI render feature
-	 *  reads + draws it, like this feature draws SceneColor. */
-	void SetImGuiDrawData(void* DrawData) { ImGuiDrawData = DrawData; }
-	[[nodiscard]] void* GetImGuiDrawData() const { return ImGuiDrawData; }
-
 	/**
 	 * Test producer of the draw protocol: the hardcoded fullscreen triangle. AddPass
 	 * consumes the list as-is and never knows it came from here (a real scene
@@ -61,7 +55,6 @@ private:
 	FRDGTextureRef SceneColor;
 	FRDGTextureRef SceneDepth;
 	FDrawList TriangleDrawList;   // hardcoded triangle draw protocol (test producer)
-	void* ImGuiDrawData = nullptr;   // ImDrawData* from the ImGui host
 	std::uint32_t CachedWidth = 0;
 	std::uint32_t CachedHeight = 0;
 	bool bTargetsNeedTransition = true;   // fresh targets need Common -> RenderTarget once

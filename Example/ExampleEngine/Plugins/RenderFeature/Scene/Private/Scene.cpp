@@ -1,10 +1,10 @@
 #include "Scene.h"
 
 #include <Frame.h>
-#include <UI.h>
 #include <Log.h>
 #include <RHI/RHICommandList.h>
 #include <RHI/RHIEnums.h>
+#include <RHI/RHIResources.h>
 
 namespace Maho
 {
@@ -26,15 +26,6 @@ FScene::FScene()
 	// already waited the previous fence, recycled the previous frame's lists and
 	// began the frame buffer -- so list acquisition here cannot race the recycle.
 
-	// Receive the ImGui draw data each frame (the UI layer pushes it via this
-	// sink -- a callback, so the engine UI plugin does not link this feature).
-	SetImGuiDrawDataSink([](void* DrawData) {
-		if (FScene* S = GScene)
-		{
-			S->SetImGuiDrawData(DrawData);
-		}
-	});
-
 	// Test producer of the draw protocol: hardcode the fullscreen triangle. No
 	// vertex buffer -- the vertex shader generates its 3 positions from
 	// gl_VertexIndex, so AddPass records it as Draw(VertexCount=3).
@@ -52,13 +43,8 @@ void FScene::BeginRender(FRender& R)
 
 void FScene::EnsureTargets(FRender& R)
 {
-	IRHI* RHIPtr = R.GetRHI();
-	if (RHIPtr == nullptr)
-	{
-		return;
-	}
-	const std::uint32_t W = RHIPtr->GetFramebufferWidth();
-	const std::uint32_t H = RHIPtr->GetFramebufferHeight();
+	const std::uint32_t W = R.GetCanvasWidth();
+	const std::uint32_t H = R.GetCanvasHeight();
 	if (W == 0 || H == 0)
 	{
 		return;
@@ -79,7 +65,7 @@ void FScene::EnsureTargets(FRender& R)
 	}
 
 	FRHITextureDesc ColorDesc;
-	ColorDesc.Format = RHIPtr->GetSwapchainFormat();
+	ColorDesc.Format = R.GetSwapchainFormat();
 	ColorDesc.Dimension = ERHITextureDimension::Tex2D;
 	ColorDesc.Extent = { W, H, 1 };
 	ColorDesc.MipLevels = 1;
@@ -120,11 +106,6 @@ void FScene::Render(FRender& R)
 	{
 		return;
 	}
-	IRHI* RHIPtr = R.GetRHI();
-	if (RHIPtr == nullptr)
-	{
-		return;
-	}
 	R.AddPass(ERHICommandListType::Graphics, [&](FRHICommandList& Cmd)
 	{
 		if (bTargetsNeedTransition)
@@ -154,7 +135,7 @@ void FScene::Render(FRender& R)
 			PDepth = &Depth;
 		}
 
-		Cmd.BeginRendering(&Color, 1, PDepth, RHIPtr->GetFramebufferWidth(), RHIPtr->GetFramebufferHeight());
+		Cmd.BeginRendering(&Color, 1, PDepth, R.GetCanvasWidth(), R.GetCanvasHeight());
 		Cmd.EndRendering();
 	});
 }

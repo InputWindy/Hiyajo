@@ -41,9 +41,9 @@ FPlatform::FPlatform()
 {
 	// The window size is read from the Config layer in Initialize - Config must
 	// be initialized first.
-	WaitFor<IInit, Config::FConfig, IInit>();
+	MyStage<IInit>().IsWaiting<Config::FConfig>().ForStage<IInit>();
 	// Initialize logs "CreateWindow"; the Log layer must be initialized first.
-	WaitFor<IInit, FLog, IInit>();
+	MyStage<IInit>().IsWaiting<FLog>().ForStage<IInit>();
 	// Note: "the window/surface must outlive FRender" is declared by FRender
 	// itself via BlockOn (it is the consumer of our window); we do not know it.
 }
