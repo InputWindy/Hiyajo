@@ -1,6 +1,6 @@
 #pragma once
 
-#include "ImGuiRenderApi.h"
+#include "UIFeatureApi.h"
 #include <Engine/Layer.h>
 #include <Render.h>
 
@@ -16,12 +16,12 @@ namespace Maho
  * feature draws that data in IRenderUI over the shared SceneColor (LoadOp Load,
  * after the scene), submitted before the frame feature's present blit.
  */
-class MAHO_IMGUIRENDER_API FImGuiRenderFeature : public FLayer<IInitViews, IRenderUI>
+class MAHO_UIFEATURE_API FUIFeature : public FLayer<IInitViews, IRenderUI>
 {
-MAHO_DECLARE_LAYER(FImGuiRenderFeature, "ImGuiRender.dll");
+MAHO_DECLARE_LAYER(FUIFeature, "UIFeature.dll");
 
-	FImGuiRenderFeature();
-	~FImGuiRenderFeature() override;
+	FUIFeature();
+	~FUIFeature() override;
 
 public:
 	void InitViews(FRender& R) override;

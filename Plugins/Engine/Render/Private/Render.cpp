@@ -2,7 +2,7 @@
 
 #include <DrawTriangleFeature.h>
 #include <Frame.h>
-#include <ImGuiRender.h>
+#include <UIFeature.h>
 #include <ImGuiSystem.h>
 #include <Log.h>
 #include <Platform.h>
@@ -90,7 +90,7 @@ void FRender::Initialize(FEngineBase& Engine)
 	Install<Scene::FScene>();
 	Install<FDrawTriangleFeature>();
 	Install<FFrame>();
-	Install<FImGuiRenderFeature>();
+	Install<FUIFeature>();
 }
 
 void FRender::PostInitialize(FEngineBase&)
@@ -154,8 +154,8 @@ void FRender::Shutdown(FEngineBase&)
 	// The compile server thread was already joined above; just release the server.
 	ShaderCompiler.reset();
 
-	// Shut the ImGui host down after the render features (the ImGuiRender feature
-	// was using imgui's Vulkan objects) and before the RHI device goes away.
+	// Shut the ImGui host down after the render features (the UI feature was
+	// using imgui's Vulkan objects) and before the RHI device goes away.
 	if (ImGui)
 	{
 		ImGui->Shutdown();

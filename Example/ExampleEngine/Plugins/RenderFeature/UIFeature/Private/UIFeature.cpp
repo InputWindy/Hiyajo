@@ -1,4 +1,4 @@
-#include "ImGuiRender.h"
+#include "UIFeature.h"
 
 #include <cstddef>
 #include <DrawTriangleFeature.h>
@@ -45,7 +45,7 @@ void main()
 )";
 } // namespace
 
-struct FImGuiRenderFeature::FData
+struct FUIFeature::FData
 {
 	bool bInitialized = false;
 	bool bFontUploaded = false;
@@ -98,7 +98,7 @@ struct FImGuiRenderFeature::FData
 	}
 };
 
-FImGuiRenderFeature::FImGuiRenderFeature()
+FUIFeature::FUIFeature()
 {
 	Data = std::make_unique<FData>();
 
@@ -111,7 +111,7 @@ FImGuiRenderFeature::FImGuiRenderFeature()
 	// (FFrame additionally declares IPresent waits for my IRenderUI.)
 }
 
-FImGuiRenderFeature::~FImGuiRenderFeature()
+FUIFeature::~FUIFeature()
 {
 	if (Data != nullptr)
 	{
@@ -119,7 +119,7 @@ FImGuiRenderFeature::~FImGuiRenderFeature()
 	}
 }
 
-void FImGuiRenderFeature::InitViews(FRender& R)
+void FUIFeature::InitViews(FRender& R)
 {
 	// CPU-side data integration (UE InitViews analogue): build the ImGui frame
 	// (input + NewFrame + UI + Render) and push the draw data to FScene, which
@@ -130,7 +130,7 @@ void FImGuiRenderFeature::InitViews(FRender& R)
 	}
 }
 
-bool FImGuiRenderFeature::EnsureBackend(FRender& R)
+bool FUIFeature::EnsureBackend(FRender& R)
 {
 	if (Data->bInitialized)
 	{
@@ -151,7 +151,7 @@ bool FImGuiRenderFeature::EnsureBackend(FRender& R)
 	FShaderCompileResult VResult = FShaderCompilerServer::CompileStage(VDesc);
 	if (!VResult.bSuccess)
 	{
-		MAHO_LOG_CORE_ERROR("FImGuiRenderFeature: VS compile failed: {}", VResult.ErrorLog);
+		MAHO_LOG_CORE_ERROR("FUIFeature: VS compile failed: {}", VResult.ErrorLog);
 		return false;
 	}
 	FShaderCompileDesc FDesc;
@@ -161,7 +161,7 @@ bool FImGuiRenderFeature::EnsureBackend(FRender& R)
 	FShaderCompileResult FResult = FShaderCompilerServer::CompileStage(FDesc);
 	if (!FResult.bSuccess)
 	{
-		MAHO_LOG_CORE_ERROR("FImGuiRenderFeature: FS compile failed: {}", FResult.ErrorLog);
+		MAHO_LOG_CORE_ERROR("FUIFeature: FS compile failed: {}", FResult.ErrorLog);
 		return false;
 	}
 	FRHIShaderModuleDesc VSDesc;
@@ -178,7 +178,7 @@ bool FImGuiRenderFeature::EnsureBackend(FRender& R)
 	Data->FS = RHIPtr->CreateShaderModule(FSDesc);
 	if (Data->VS == nullptr || Data->FS == nullptr)
 	{
-		MAHO_LOG_CORE_ERROR("FImGuiRenderFeature: CreateShaderModule failed");
+		MAHO_LOG_CORE_ERROR("FUIFeature: CreateShaderModule failed");
 		return false;
 	}
 
@@ -201,7 +201,7 @@ bool FImGuiRenderFeature::EnsureBackend(FRender& R)
 	Data->PipelineLayout = RHIPtr->CreatePipelineLayout(LayoutDesc);
 	if (Data->FontSetLayout == nullptr || Data->PipelineLayout == nullptr)
 	{
-		MAHO_LOG_CORE_ERROR("FImGuiRenderFeature: descriptor/pipeline layout failed");
+		MAHO_LOG_CORE_ERROR("FUIFeature: descriptor/pipeline layout failed");
 		return false;
 	}
 
@@ -212,7 +212,7 @@ bool FImGuiRenderFeature::EnsureBackend(FRender& R)
 	Fonts->GetTexDataAsRGBA32(&Pixels, &FontW, &FontH, &FontBpp);
 	if (Pixels == nullptr || FontW <= 0 || FontH <= 0)
 	{
-		MAHO_LOG_CORE_ERROR("FImGuiRenderFeature: no font atlas");
+		MAHO_LOG_CORE_ERROR("FUIFeature: no font atlas");
 		return false;
 	}
 	FRHITextureDesc TexDesc;
@@ -287,16 +287,16 @@ bool FImGuiRenderFeature::EnsureBackend(FRender& R)
 	Data->Pipeline = RHIPtr->CreateGraphicsPipeline(PipelineDesc);
 	if (Data->Pipeline == nullptr)
 	{
-		MAHO_LOG_CORE_ERROR("FImGuiRenderFeature: CreateGraphicsPipeline failed");
+		MAHO_LOG_CORE_ERROR("FUIFeature: CreateGraphicsPipeline failed");
 		return false;
 	}
 
 	Data->bInitialized = true;
-	MAHO_LOG_CORE_INFO("FImGuiRenderFeature: custom FRHI backend ready (font + pipeline)");
+	MAHO_LOG_CORE_INFO("FUIFeature: custom FRHI backend ready (font + pipeline)");
 	return true;
 }
 
-void FImGuiRenderFeature::RenderUI(FRender& R)
+void FUIFeature::RenderUI(FRender& R)
 {
 	IRHI* RHIPtr = R.GetRHI();
 	Scene::FScene* Scene = Scene::GetScene();
@@ -308,7 +308,7 @@ void FImGuiRenderFeature::RenderUI(FRender& R)
 	ImDrawData* DrawData = static_cast<ImDrawData*>(Scene->GetImGuiDrawData());
 	if (DrawData == nullptr || !DrawData->Valid || DrawData->CmdListsCount <= 0)
 	{
-		MAHO_LOG_CORE_INFO("FImGuiRenderFeature: no draw data (dd={} valid={} lists={})",
+		MAHO_LOG_CORE_INFO("FUIFeature: no draw data (dd={} valid={} lists={})",
 			DrawData != nullptr, DrawData != nullptr && DrawData->Valid,
 			DrawData != nullptr ? DrawData->CmdListsCount : -1);
 		return;
@@ -459,7 +459,7 @@ void FImGuiRenderFeature::RenderUI(FRender& R)
 } // namespace Maho
 
 // The C export FRender looks up BY SYMBOL NAME for dynamic install.
-extern "C" MAHO_IMGUIRENDER_API Maho::FLayerBase* CreateLayer()
+extern "C" MAHO_UIFEATURE_API Maho::FLayerBase* CreateLayer()
 {
-	return Maho::FImGuiRenderFeature::CreateLayer();
+	return Maho::FUIFeature::CreateLayer();
 }

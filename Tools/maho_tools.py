@@ -1533,13 +1533,19 @@ def run_package(
 	if cancel_event is not None and cancel_event.is_set():
 		raise OperationCancelled("Cancelled")
 
-	# Copy the build outputs (exe + extension dll + Config dir) into Packaged/.
-	# CMake sets RUNTIME_OUTPUT_DIRECTORY to <Intermediate>/Binaries/<CONFIG>.
+	# Copy the build outputs (exe + plugin dlls + Config dir) into Packaged/,
+	# preserving the sln-FOLDER-mirrored subdirectory tree -- plugin DLLs build
+	# into Binaries/<Config>/<FOLDER>/ and must stay in their own subfolder so
+	# same-named modules from different groups (e.g. a project Scene.dll vs a
+	# game Scene.dll) never collide when flattened.
 	bin_dir = intermediate / "Binaries" / config
 	copied = 0
 	for ext in ("*.exe", "*.dll"):
-		for src in bin_dir.glob(ext):
-			shutil.copy2(src, packaged / src.name)
+		for src in bin_dir.rglob(ext):
+			rel = src.relative_to(bin_dir)
+			dst = packaged / rel
+			dst.parent.mkdir(parents=True, exist_ok=True)
+			shutil.copy2(src, dst)
 			copied += 1
 	# Config/ (DefaultEngine.ini + platform overrides) is staged into the
 	# runtime dir by the CopyConfig target; ship it alongside the binaries.
