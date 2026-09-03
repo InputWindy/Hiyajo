@@ -1,0 +1,9 @@
+#pragma once
+
+#include <Core/Export.h>
+
+#ifdef MAHO_EXAMPLEEDITOR_MODULE_EXPORTS
+#	define MAHO_EXAMPLEEDITOR_API MAHO_EXPORT
+#else
+#	define MAHO_EXAMPLEEDITOR_API MAHO_IMPORT
+#endif

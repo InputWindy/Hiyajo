@@ -92,7 +92,11 @@
       "Enabled": true
     },
     {
-      "Name": "ImGuiRender",
+      "Name": "UIFeature",
+      "Enabled": true
+    },
+    {
+      "Name": "ExampleEditor",
       "Enabled": true
     }
   ]

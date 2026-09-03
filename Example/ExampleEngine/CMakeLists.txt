@@ -58,62 +58,62 @@ source_group(TREE "${ENGINE_DIR}/Plugins/Common/Archive" FILES
 )
 
 add_library(Paths SHARED
-	${ENGINE_DIR}/Plugins/Engine/Paths/Public/Paths.h
-	${ENGINE_DIR}/Plugins/Engine/Paths/Private/Paths.cpp
-	${ENGINE_DIR}/Plugins/Engine/Paths/Paths.cplugin
-	${ENGINE_DIR}/Plugins/Engine/Paths/Paths.cmake
-	${ENGINE_DIR}/Plugins/Engine/Paths/settings.json
+	${ENGINE_DIR}/Plugins/Engine/Core/Paths/Public/Paths.h
+	${ENGINE_DIR}/Plugins/Engine/Core/Paths/Private/Paths.cpp
+	${ENGINE_DIR}/Plugins/Engine/Core/Paths/Paths.cplugin
+	${ENGINE_DIR}/Plugins/Engine/Core/Paths/Paths.cmake
+	${ENGINE_DIR}/Plugins/Engine/Core/Paths/settings.json
 )
-set_source_files_properties(	${ENGINE_DIR}/Plugins/Engine/Paths/Paths.cplugin
-	${ENGINE_DIR}/Plugins/Engine/Paths/Paths.cmake
-	${ENGINE_DIR}/Plugins/Engine/Paths/settings.json PROPERTIES HEADER_FILE_ONLY ON)
+set_source_files_properties(	${ENGINE_DIR}/Plugins/Engine/Core/Paths/Paths.cplugin
+	${ENGINE_DIR}/Plugins/Engine/Core/Paths/Paths.cmake
+	${ENGINE_DIR}/Plugins/Engine/Core/Paths/settings.json PROPERTIES HEADER_FILE_ONLY ON)
 target_include_directories(Paths PUBLIC
 	"${ENGINE_DIR}/Source/Public"
-	"${ENGINE_DIR}/Plugins/Engine/Paths/Public"
+	"${ENGINE_DIR}/Plugins/Engine/Core/Paths/Public"
 	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEngine/Public"
 )
 set_target_properties(Paths PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 target_compile_definitions(Paths PRIVATE MAHO_PATHS_MODULE_EXPORTS)
 target_link_libraries(Paths PUBLIC Maho)
 set_property(TARGET Paths PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>")
-set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Engine/Paths")
-include("${ENGINE_DIR}/Plugins/Engine/Paths/Paths.cmake")
+set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Engine/Core/Paths")
+include("${ENGINE_DIR}/Plugins/Engine/Core/Paths/Paths.cmake")
 unset(_MOD_PLUGIN_DIR)
 
-source_group(TREE "${ENGINE_DIR}/Plugins/Engine/Paths" FILES
-	"${ENGINE_DIR}/Plugins/Engine/Paths/Public/Paths.h"
-	"${ENGINE_DIR}/Plugins/Engine/Paths/Private/Paths.cpp"
+source_group(TREE "${ENGINE_DIR}/Plugins/Engine/Core/Paths" FILES
+	"${ENGINE_DIR}/Plugins/Engine/Core/Paths/Public/Paths.h"
+	"${ENGINE_DIR}/Plugins/Engine/Core/Paths/Private/Paths.cpp"
 )
 
 add_library(Asset SHARED
-	${ENGINE_DIR}/Plugins/Engine/Asset/Public/Asset.h
-	${ENGINE_DIR}/Plugins/Engine/Asset/Private/Asset.cpp
-	${ENGINE_DIR}/Plugins/Engine/Asset/Asset.cplugin
-	${ENGINE_DIR}/Plugins/Engine/Asset/Asset.cmake
-	${ENGINE_DIR}/Plugins/Engine/Asset/settings.json
+	${ENGINE_DIR}/Plugins/Engine/Core/Asset/Public/Asset.h
+	${ENGINE_DIR}/Plugins/Engine/Core/Asset/Private/Asset.cpp
+	${ENGINE_DIR}/Plugins/Engine/Core/Asset/Asset.cplugin
+	${ENGINE_DIR}/Plugins/Engine/Core/Asset/Asset.cmake
+	${ENGINE_DIR}/Plugins/Engine/Core/Asset/settings.json
 )
-set_source_files_properties(	${ENGINE_DIR}/Plugins/Engine/Asset/Asset.cplugin
-	${ENGINE_DIR}/Plugins/Engine/Asset/Asset.cmake
-	${ENGINE_DIR}/Plugins/Engine/Asset/settings.json PROPERTIES HEADER_FILE_ONLY ON)
+set_source_files_properties(	${ENGINE_DIR}/Plugins/Engine/Core/Asset/Asset.cplugin
+	${ENGINE_DIR}/Plugins/Engine/Core/Asset/Asset.cmake
+	${ENGINE_DIR}/Plugins/Engine/Core/Asset/settings.json PROPERTIES HEADER_FILE_ONLY ON)
 target_include_directories(Asset PUBLIC
 	"${ENGINE_DIR}/Source/Public"
-	"${ENGINE_DIR}/Plugins/Engine/Asset/Public"
+	"${ENGINE_DIR}/Plugins/Engine/Core/Asset/Public"
 	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEngine/Public"
-	"${ENGINE_DIR}/Plugins/Engine/Paths/Public"
+	"${ENGINE_DIR}/Plugins/Engine/Core/Paths/Public"
 )
 set_target_properties(Asset PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 target_compile_definitions(Asset PRIVATE MAHO_ASSET_MODULE_EXPORTS)
 target_link_libraries(Asset PUBLIC Maho)
 set_property(TARGET Asset PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>")
-set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Engine/Asset")
-include("${ENGINE_DIR}/Plugins/Engine/Asset/Asset.cmake")
+set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Engine/Core/Asset")
+include("${ENGINE_DIR}/Plugins/Engine/Core/Asset/Asset.cmake")
 unset(_MOD_PLUGIN_DIR)
 
 target_link_libraries(Asset PUBLIC Paths)
 
-source_group(TREE "${ENGINE_DIR}/Plugins/Engine/Asset" FILES
-	"${ENGINE_DIR}/Plugins/Engine/Asset/Public/Asset.h"
-	"${ENGINE_DIR}/Plugins/Engine/Asset/Private/Asset.cpp"
+source_group(TREE "${ENGINE_DIR}/Plugins/Engine/Core/Asset" FILES
+	"${ENGINE_DIR}/Plugins/Engine/Core/Asset/Public/Asset.h"
+	"${ENGINE_DIR}/Plugins/Engine/Core/Asset/Private/Asset.cpp"
 )
 
 add_library(Compress SHARED
@@ -173,18 +173,18 @@ source_group(TREE "${ENGINE_DIR}/Plugins/Common/ConsoleVariable" FILES
 )
 
 add_library(Config SHARED
-	${ENGINE_DIR}/Plugins/Engine/Config/Public/Config.h
-	${ENGINE_DIR}/Plugins/Engine/Config/Private/Config.cpp
-	${ENGINE_DIR}/Plugins/Engine/Config/Config.cplugin
-	${ENGINE_DIR}/Plugins/Engine/Config/Config.cmake
-	${ENGINE_DIR}/Plugins/Engine/Config/settings.json
+	${ENGINE_DIR}/Plugins/Engine/Core/Config/Public/Config.h
+	${ENGINE_DIR}/Plugins/Engine/Core/Config/Private/Config.cpp
+	${ENGINE_DIR}/Plugins/Engine/Core/Config/Config.cplugin
+	${ENGINE_DIR}/Plugins/Engine/Core/Config/Config.cmake
+	${ENGINE_DIR}/Plugins/Engine/Core/Config/settings.json
 )
-set_source_files_properties(	${ENGINE_DIR}/Plugins/Engine/Config/Config.cplugin
-	${ENGINE_DIR}/Plugins/Engine/Config/Config.cmake
-	${ENGINE_DIR}/Plugins/Engine/Config/settings.json PROPERTIES HEADER_FILE_ONLY ON)
+set_source_files_properties(	${ENGINE_DIR}/Plugins/Engine/Core/Config/Config.cplugin
+	${ENGINE_DIR}/Plugins/Engine/Core/Config/Config.cmake
+	${ENGINE_DIR}/Plugins/Engine/Core/Config/settings.json PROPERTIES HEADER_FILE_ONLY ON)
 target_include_directories(Config PUBLIC
 	"${ENGINE_DIR}/Source/Public"
-	"${ENGINE_DIR}/Plugins/Engine/Config/Public"
+	"${ENGINE_DIR}/Plugins/Engine/Core/Config/Public"
 	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEngine/Public"
 	"${ENGINE_DIR}/Plugins/Common/ConsoleVariable/Public"
 )
@@ -192,132 +192,134 @@ set_target_properties(Config PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 target_compile_definitions(Config PRIVATE MAHO_CONFIG_MODULE_EXPORTS)
 target_link_libraries(Config PUBLIC Maho)
 set_property(TARGET Config PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>")
-set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Engine/Config")
-include("${ENGINE_DIR}/Plugins/Engine/Config/Config.cmake")
+set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Engine/Core/Config")
+include("${ENGINE_DIR}/Plugins/Engine/Core/Config/Config.cmake")
 unset(_MOD_PLUGIN_DIR)
 
 target_link_libraries(Config PUBLIC ConsoleVariable)
 
-source_group(TREE "${ENGINE_DIR}/Plugins/Engine/Config" FILES
-	"${ENGINE_DIR}/Plugins/Engine/Config/Public/Config.h"
-	"${ENGINE_DIR}/Plugins/Engine/Config/Private/Config.cpp"
+source_group(TREE "${ENGINE_DIR}/Plugins/Engine/Core/Config" FILES
+	"${ENGINE_DIR}/Plugins/Engine/Core/Config/Public/Config.h"
+	"${ENGINE_DIR}/Plugins/Engine/Core/Config/Private/Config.cpp"
 )
 
 add_library(Exception SHARED
-	${ENGINE_DIR}/Plugins/Engine/Exception/Public/Exception.h
-	${ENGINE_DIR}/Plugins/Engine/Exception/Private/Exception.cpp
-	${ENGINE_DIR}/Plugins/Engine/Exception/Exception.cplugin
-	${ENGINE_DIR}/Plugins/Engine/Exception/Exception.cmake
-	${ENGINE_DIR}/Plugins/Engine/Exception/settings.json
+	${ENGINE_DIR}/Plugins/Engine/Core/Exception/Public/Exception.h
+	${ENGINE_DIR}/Plugins/Engine/Core/Exception/Private/Exception.cpp
+	${ENGINE_DIR}/Plugins/Engine/Core/Exception/Exception.cplugin
+	${ENGINE_DIR}/Plugins/Engine/Core/Exception/Exception.cmake
+	${ENGINE_DIR}/Plugins/Engine/Core/Exception/settings.json
 )
-set_source_files_properties(	${ENGINE_DIR}/Plugins/Engine/Exception/Exception.cplugin
-	${ENGINE_DIR}/Plugins/Engine/Exception/Exception.cmake
-	${ENGINE_DIR}/Plugins/Engine/Exception/settings.json PROPERTIES HEADER_FILE_ONLY ON)
+set_source_files_properties(	${ENGINE_DIR}/Plugins/Engine/Core/Exception/Exception.cplugin
+	${ENGINE_DIR}/Plugins/Engine/Core/Exception/Exception.cmake
+	${ENGINE_DIR}/Plugins/Engine/Core/Exception/settings.json PROPERTIES HEADER_FILE_ONLY ON)
 target_include_directories(Exception PUBLIC
 	"${ENGINE_DIR}/Source/Public"
-	"${ENGINE_DIR}/Plugins/Engine/Exception/Public"
+	"${ENGINE_DIR}/Plugins/Engine/Core/Exception/Public"
 	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEngine/Public"
 )
 set_target_properties(Exception PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 target_compile_definitions(Exception PRIVATE MAHO_EXCEPTION_MODULE_EXPORTS)
 target_link_libraries(Exception PUBLIC Maho)
 set_property(TARGET Exception PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>")
-set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Engine/Exception")
-include("${ENGINE_DIR}/Plugins/Engine/Exception/Exception.cmake")
+set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Engine/Core/Exception")
+include("${ENGINE_DIR}/Plugins/Engine/Core/Exception/Exception.cmake")
 unset(_MOD_PLUGIN_DIR)
 
-source_group(TREE "${ENGINE_DIR}/Plugins/Engine/Exception" FILES
-	"${ENGINE_DIR}/Plugins/Engine/Exception/Public/Exception.h"
-	"${ENGINE_DIR}/Plugins/Engine/Exception/Private/Exception.cpp"
+source_group(TREE "${ENGINE_DIR}/Plugins/Engine/Core/Exception" FILES
+	"${ENGINE_DIR}/Plugins/Engine/Core/Exception/Public/Exception.h"
+	"${ENGINE_DIR}/Plugins/Engine/Core/Exception/Private/Exception.cpp"
 )
 
 add_library(Log SHARED
-	${ENGINE_DIR}/Plugins/Engine/Log/Public/Log.h
-	${ENGINE_DIR}/Plugins/Engine/Log/Private/Log.cpp
-	${ENGINE_DIR}/Plugins/Engine/Log/Log.cplugin
-	${ENGINE_DIR}/Plugins/Engine/Log/Log.cmake
-	${ENGINE_DIR}/Plugins/Engine/Log/settings.json
+	${ENGINE_DIR}/Plugins/Engine/Core/Log/Public/Log.h
+	${ENGINE_DIR}/Plugins/Engine/Core/Log/Private/Log.cpp
+	${ENGINE_DIR}/Plugins/Engine/Core/Log/Log.cplugin
+	${ENGINE_DIR}/Plugins/Engine/Core/Log/Log.cmake
+	${ENGINE_DIR}/Plugins/Engine/Core/Log/settings.json
 )
-set_source_files_properties(	${ENGINE_DIR}/Plugins/Engine/Log/Log.cplugin
-	${ENGINE_DIR}/Plugins/Engine/Log/Log.cmake
-	${ENGINE_DIR}/Plugins/Engine/Log/settings.json PROPERTIES HEADER_FILE_ONLY ON)
+set_source_files_properties(	${ENGINE_DIR}/Plugins/Engine/Core/Log/Log.cplugin
+	${ENGINE_DIR}/Plugins/Engine/Core/Log/Log.cmake
+	${ENGINE_DIR}/Plugins/Engine/Core/Log/settings.json PROPERTIES HEADER_FILE_ONLY ON)
 target_include_directories(Log PUBLIC
 	"${ENGINE_DIR}/Source/Public"
-	"${ENGINE_DIR}/Plugins/Engine/Log/Public"
+	"${ENGINE_DIR}/Plugins/Engine/Core/Log/Public"
 	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEngine/Public"
 )
 set_target_properties(Log PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 target_compile_definitions(Log PRIVATE MAHO_LOG_MODULE_EXPORTS)
 target_link_libraries(Log PUBLIC Maho)
 set_property(TARGET Log PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>")
-set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Engine/Log")
-include("${ENGINE_DIR}/Plugins/Engine/Log/Log.cmake")
+set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Engine/Core/Log")
+include("${ENGINE_DIR}/Plugins/Engine/Core/Log/Log.cmake")
 unset(_MOD_PLUGIN_DIR)
 
-source_group(TREE "${ENGINE_DIR}/Plugins/Engine/Log" FILES
-	"${ENGINE_DIR}/Plugins/Engine/Log/Public/Log.h"
-	"${ENGINE_DIR}/Plugins/Engine/Log/Private/Log.cpp"
+source_group(TREE "${ENGINE_DIR}/Plugins/Engine/Core/Log" FILES
+	"${ENGINE_DIR}/Plugins/Engine/Core/Log/Public/Log.h"
+	"${ENGINE_DIR}/Plugins/Engine/Core/Log/Private/Log.cpp"
 )
 
 add_library(Name SHARED
-	${ENGINE_DIR}/Plugins/Engine/Name/Public/Name.h
-	${ENGINE_DIR}/Plugins/Engine/Name/Private/Name.cpp
-	${ENGINE_DIR}/Plugins/Engine/Name/Name.cplugin
-	${ENGINE_DIR}/Plugins/Engine/Name/Name.cmake
-	${ENGINE_DIR}/Plugins/Engine/Name/settings.json
+	${ENGINE_DIR}/Plugins/Engine/Core/Name/Public/Name.h
+	${ENGINE_DIR}/Plugins/Engine/Core/Name/Private/Name.cpp
+	${ENGINE_DIR}/Plugins/Engine/Core/Name/Name.cplugin
+	${ENGINE_DIR}/Plugins/Engine/Core/Name/Name.cmake
+	${ENGINE_DIR}/Plugins/Engine/Core/Name/settings.json
 )
-set_source_files_properties(	${ENGINE_DIR}/Plugins/Engine/Name/Name.cplugin
-	${ENGINE_DIR}/Plugins/Engine/Name/Name.cmake
-	${ENGINE_DIR}/Plugins/Engine/Name/settings.json PROPERTIES HEADER_FILE_ONLY ON)
+set_source_files_properties(	${ENGINE_DIR}/Plugins/Engine/Core/Name/Name.cplugin
+	${ENGINE_DIR}/Plugins/Engine/Core/Name/Name.cmake
+	${ENGINE_DIR}/Plugins/Engine/Core/Name/settings.json PROPERTIES HEADER_FILE_ONLY ON)
 target_include_directories(Name PUBLIC
 	"${ENGINE_DIR}/Source/Public"
-	"${ENGINE_DIR}/Plugins/Engine/Name/Public"
+	"${ENGINE_DIR}/Plugins/Engine/Core/Name/Public"
 	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEngine/Public"
 )
 set_target_properties(Name PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 target_compile_definitions(Name PRIVATE MAHO_NAME_MODULE_EXPORTS)
 target_link_libraries(Name PUBLIC Maho)
 set_property(TARGET Name PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>")
-set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Engine/Name")
-include("${ENGINE_DIR}/Plugins/Engine/Name/Name.cmake")
+set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Engine/Core/Name")
+include("${ENGINE_DIR}/Plugins/Engine/Core/Name/Name.cmake")
 unset(_MOD_PLUGIN_DIR)
 
-source_group(TREE "${ENGINE_DIR}/Plugins/Engine/Name" FILES
-	"${ENGINE_DIR}/Plugins/Engine/Name/Public/Name.h"
-	"${ENGINE_DIR}/Plugins/Engine/Name/Private/Name.cpp"
+source_group(TREE "${ENGINE_DIR}/Plugins/Engine/Core/Name" FILES
+	"${ENGINE_DIR}/Plugins/Engine/Core/Name/Public/Name.h"
+	"${ENGINE_DIR}/Plugins/Engine/Core/Name/Private/Name.cpp"
 )
 
 add_library(Platform SHARED
-	${ENGINE_DIR}/Plugins/Engine/Platform/Public/Platform.h
-	${ENGINE_DIR}/Plugins/Engine/Platform/Private/Platform.cpp
-	${ENGINE_DIR}/Plugins/Engine/Platform/Platform.cplugin
-	${ENGINE_DIR}/Plugins/Engine/Platform/Platform.cmake
-	${ENGINE_DIR}/Plugins/Engine/Platform/settings.json
+	${ENGINE_DIR}/Plugins/Engine/GameEngine/Platform/Public/Platform.h
+	${ENGINE_DIR}/Plugins/Engine/GameEngine/Platform/Private/Platform.cpp
+	${ENGINE_DIR}/Plugins/Engine/GameEngine/Platform/Platform.cplugin
+	${ENGINE_DIR}/Plugins/Engine/GameEngine/Platform/Platform.cmake
+	${ENGINE_DIR}/Plugins/Engine/GameEngine/Platform/settings.json
 )
-set_source_files_properties(	${ENGINE_DIR}/Plugins/Engine/Platform/Platform.cplugin
-	${ENGINE_DIR}/Plugins/Engine/Platform/Platform.cmake
-	${ENGINE_DIR}/Plugins/Engine/Platform/settings.json PROPERTIES HEADER_FILE_ONLY ON)
+set_source_files_properties(	${ENGINE_DIR}/Plugins/Engine/GameEngine/Platform/Platform.cplugin
+	${ENGINE_DIR}/Plugins/Engine/GameEngine/Platform/Platform.cmake
+	${ENGINE_DIR}/Plugins/Engine/GameEngine/Platform/settings.json PROPERTIES HEADER_FILE_ONLY ON)
 target_include_directories(Platform PUBLIC
 	"${ENGINE_DIR}/Source/Public"
-	"${ENGINE_DIR}/Plugins/Engine/Platform/Public"
+	"${ENGINE_DIR}/Plugins/Engine/GameEngine/Platform/Public"
 	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEngine/Public"
 	"${ENGINE_DIR}/Plugins/Common/ConsoleVariable/Public"
-	"${ENGINE_DIR}/Plugins/Engine/Config/Public"
-	"${ENGINE_DIR}/Plugins/Engine/Log/Public"
+	"${ENGINE_DIR}/Plugins/Engine/Core/Log/Public"
+)
+target_include_directories(Platform PRIVATE
+	"${ENGINE_DIR}/Plugins/Engine/Core/Config/Public"
 )
 set_target_properties(Platform PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 target_compile_definitions(Platform PRIVATE MAHO_PLATFORM_MODULE_EXPORTS)
 target_link_libraries(Platform PUBLIC Maho)
 set_property(TARGET Platform PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>")
-set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Engine/Platform")
-include("${ENGINE_DIR}/Plugins/Engine/Platform/Platform.cmake")
+set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Engine/GameEngine/Platform")
+include("${ENGINE_DIR}/Plugins/Engine/GameEngine/Platform/Platform.cmake")
 unset(_MOD_PLUGIN_DIR)
 
 target_link_libraries(Platform PUBLIC ConsoleVariable Log)
 
-source_group(TREE "${ENGINE_DIR}/Plugins/Engine/Platform" FILES
-	"${ENGINE_DIR}/Plugins/Engine/Platform/Public/Platform.h"
-	"${ENGINE_DIR}/Plugins/Engine/Platform/Private/Platform.cpp"
+source_group(TREE "${ENGINE_DIR}/Plugins/Engine/GameEngine/Platform" FILES
+	"${ENGINE_DIR}/Plugins/Engine/GameEngine/Platform/Public/Platform.h"
+	"${ENGINE_DIR}/Plugins/Engine/GameEngine/Platform/Private/Platform.cpp"
 )
 
 add_library(RHI SHARED
@@ -335,8 +337,8 @@ target_include_directories(RHI PUBLIC
 	"${ENGINE_DIR}/Plugins/Common/RHI/Public"
 	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEngine/Public"
 	"${ENGINE_DIR}/Plugins/Common/ConsoleVariable/Public"
-	"${ENGINE_DIR}/Plugins/Engine/Log/Public"
-	"${ENGINE_DIR}/Plugins/Engine/Platform/Public"
+	"${ENGINE_DIR}/Plugins/Engine/Core/Log/Public"
+	"${ENGINE_DIR}/Plugins/Engine/GameEngine/Platform/Public"
 )
 set_target_properties(RHI PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 target_compile_definitions(RHI PRIVATE MAHO_RHI_MODULE_EXPORTS)
@@ -382,126 +384,126 @@ source_group(TREE "${ENGINE_DIR}/Plugins/Common/Reflect" FILES
 )
 
 add_library(Resource SHARED
-	${ENGINE_DIR}/Plugins/Engine/Resource/Public/Resource.h
-	${ENGINE_DIR}/Plugins/Engine/Resource/Private/Resource.cpp
-	${ENGINE_DIR}/Plugins/Engine/Resource/Resource.cplugin
-	${ENGINE_DIR}/Plugins/Engine/Resource/Resource.cmake
-	${ENGINE_DIR}/Plugins/Engine/Resource/settings.json
+	${ENGINE_DIR}/Plugins/Engine/GameEngine/Resource/Public/Resource.h
+	${ENGINE_DIR}/Plugins/Engine/GameEngine/Resource/Private/Resource.cpp
+	${ENGINE_DIR}/Plugins/Engine/GameEngine/Resource/Resource.cplugin
+	${ENGINE_DIR}/Plugins/Engine/GameEngine/Resource/Resource.cmake
+	${ENGINE_DIR}/Plugins/Engine/GameEngine/Resource/settings.json
 )
-set_source_files_properties(	${ENGINE_DIR}/Plugins/Engine/Resource/Resource.cplugin
-	${ENGINE_DIR}/Plugins/Engine/Resource/Resource.cmake
-	${ENGINE_DIR}/Plugins/Engine/Resource/settings.json PROPERTIES HEADER_FILE_ONLY ON)
+set_source_files_properties(	${ENGINE_DIR}/Plugins/Engine/GameEngine/Resource/Resource.cplugin
+	${ENGINE_DIR}/Plugins/Engine/GameEngine/Resource/Resource.cmake
+	${ENGINE_DIR}/Plugins/Engine/GameEngine/Resource/settings.json PROPERTIES HEADER_FILE_ONLY ON)
 target_include_directories(Resource PUBLIC
 	"${ENGINE_DIR}/Source/Public"
-	"${ENGINE_DIR}/Plugins/Engine/Resource/Public"
+	"${ENGINE_DIR}/Plugins/Engine/GameEngine/Resource/Public"
 	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEngine/Public"
-	"${ENGINE_DIR}/Plugins/Engine/Name/Public"
-	"${ENGINE_DIR}/Plugins/Engine/Paths/Public"
+	"${ENGINE_DIR}/Plugins/Engine/Core/Name/Public"
+	"${ENGINE_DIR}/Plugins/Engine/Core/Paths/Public"
 )
 set_target_properties(Resource PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 target_compile_definitions(Resource PRIVATE MAHO_RESOURCE_MODULE_EXPORTS)
 target_link_libraries(Resource PUBLIC Maho)
 set_property(TARGET Resource PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>")
-set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Engine/Resource")
-include("${ENGINE_DIR}/Plugins/Engine/Resource/Resource.cmake")
+set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Engine/GameEngine/Resource")
+include("${ENGINE_DIR}/Plugins/Engine/GameEngine/Resource/Resource.cmake")
 unset(_MOD_PLUGIN_DIR)
 
 target_link_libraries(Resource PUBLIC Name Paths)
 
-source_group(TREE "${ENGINE_DIR}/Plugins/Engine/Resource" FILES
-	"${ENGINE_DIR}/Plugins/Engine/Resource/Public/Resource.h"
-	"${ENGINE_DIR}/Plugins/Engine/Resource/Private/Resource.cpp"
+source_group(TREE "${ENGINE_DIR}/Plugins/Engine/GameEngine/Resource" FILES
+	"${ENGINE_DIR}/Plugins/Engine/GameEngine/Resource/Public/Resource.h"
+	"${ENGINE_DIR}/Plugins/Engine/GameEngine/Resource/Private/Resource.cpp"
 )
 
 add_library(Script SHARED
-	${ENGINE_DIR}/Plugins/Engine/Script/Public/Script.h
-	${ENGINE_DIR}/Plugins/Engine/Script/Private/Script.cpp
-	${ENGINE_DIR}/Plugins/Engine/Script/Script.cplugin
-	${ENGINE_DIR}/Plugins/Engine/Script/Script.cmake
-	${ENGINE_DIR}/Plugins/Engine/Script/settings.json
+	${ENGINE_DIR}/Plugins/Engine/GameEngine/Script/Public/Script.h
+	${ENGINE_DIR}/Plugins/Engine/GameEngine/Script/Private/Script.cpp
+	${ENGINE_DIR}/Plugins/Engine/GameEngine/Script/Script.cplugin
+	${ENGINE_DIR}/Plugins/Engine/GameEngine/Script/Script.cmake
+	${ENGINE_DIR}/Plugins/Engine/GameEngine/Script/settings.json
 )
-set_source_files_properties(	${ENGINE_DIR}/Plugins/Engine/Script/Script.cplugin
-	${ENGINE_DIR}/Plugins/Engine/Script/Script.cmake
-	${ENGINE_DIR}/Plugins/Engine/Script/settings.json PROPERTIES HEADER_FILE_ONLY ON)
+set_source_files_properties(	${ENGINE_DIR}/Plugins/Engine/GameEngine/Script/Script.cplugin
+	${ENGINE_DIR}/Plugins/Engine/GameEngine/Script/Script.cmake
+	${ENGINE_DIR}/Plugins/Engine/GameEngine/Script/settings.json PROPERTIES HEADER_FILE_ONLY ON)
 target_include_directories(Script PUBLIC
 	"${ENGINE_DIR}/Source/Public"
-	"${ENGINE_DIR}/Plugins/Engine/Script/Public"
+	"${ENGINE_DIR}/Plugins/Engine/GameEngine/Script/Public"
 	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEngine/Public"
-	"${ENGINE_DIR}/Plugins/Engine/Resource/Public"
+	"${ENGINE_DIR}/Plugins/Engine/GameEngine/Resource/Public"
 	"${ENGINE_DIR}/Plugins/Common/ConsoleVariable/Public"
-	"${ENGINE_DIR}/Plugins/Engine/Log/Public"
-	"${ENGINE_DIR}/Plugins/Engine/Exception/Public"
+	"${ENGINE_DIR}/Plugins/Engine/Core/Log/Public"
+	"${ENGINE_DIR}/Plugins/Engine/Core/Exception/Public"
 	"${ENGINE_DIR}/Plugins/Common/Reflect/Public"
 )
 set_target_properties(Script PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 target_compile_definitions(Script PRIVATE MAHO_SCRIPT_MODULE_EXPORTS)
 target_link_libraries(Script PUBLIC Maho)
 set_property(TARGET Script PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>")
-set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Engine/Script")
-include("${ENGINE_DIR}/Plugins/Engine/Script/Script.cmake")
+set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Engine/GameEngine/Script")
+include("${ENGINE_DIR}/Plugins/Engine/GameEngine/Script/Script.cmake")
 unset(_MOD_PLUGIN_DIR)
 
 target_link_libraries(Script PUBLIC Resource ConsoleVariable Log Exception Reflect)
 
-source_group(TREE "${ENGINE_DIR}/Plugins/Engine/Script" FILES
-	"${ENGINE_DIR}/Plugins/Engine/Script/Public/Script.h"
-	"${ENGINE_DIR}/Plugins/Engine/Script/Private/Script.cpp"
+source_group(TREE "${ENGINE_DIR}/Plugins/Engine/GameEngine/Script" FILES
+	"${ENGINE_DIR}/Plugins/Engine/GameEngine/Script/Public/Script.h"
+	"${ENGINE_DIR}/Plugins/Engine/GameEngine/Script/Private/Script.cpp"
 )
 
 add_library(Text SHARED
-	${ENGINE_DIR}/Plugins/Engine/Text/Public/Text.h
-	${ENGINE_DIR}/Plugins/Engine/Text/Private/Text.cpp
-	${ENGINE_DIR}/Plugins/Engine/Text/Text.cplugin
-	${ENGINE_DIR}/Plugins/Engine/Text/Text.cmake
-	${ENGINE_DIR}/Plugins/Engine/Text/settings.json
+	${ENGINE_DIR}/Plugins/Engine/Core/Text/Public/Text.h
+	${ENGINE_DIR}/Plugins/Engine/Core/Text/Private/Text.cpp
+	${ENGINE_DIR}/Plugins/Engine/Core/Text/Text.cplugin
+	${ENGINE_DIR}/Plugins/Engine/Core/Text/Text.cmake
+	${ENGINE_DIR}/Plugins/Engine/Core/Text/settings.json
 )
-set_source_files_properties(	${ENGINE_DIR}/Plugins/Engine/Text/Text.cplugin
-	${ENGINE_DIR}/Plugins/Engine/Text/Text.cmake
-	${ENGINE_DIR}/Plugins/Engine/Text/settings.json PROPERTIES HEADER_FILE_ONLY ON)
+set_source_files_properties(	${ENGINE_DIR}/Plugins/Engine/Core/Text/Text.cplugin
+	${ENGINE_DIR}/Plugins/Engine/Core/Text/Text.cmake
+	${ENGINE_DIR}/Plugins/Engine/Core/Text/settings.json PROPERTIES HEADER_FILE_ONLY ON)
 target_include_directories(Text PUBLIC
 	"${ENGINE_DIR}/Source/Public"
-	"${ENGINE_DIR}/Plugins/Engine/Text/Public"
+	"${ENGINE_DIR}/Plugins/Engine/Core/Text/Public"
 	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEngine/Public"
 )
 set_target_properties(Text PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 target_compile_definitions(Text PRIVATE MAHO_TEXT_MODULE_EXPORTS)
 target_link_libraries(Text PUBLIC Maho)
 set_property(TARGET Text PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>")
-set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Engine/Text")
-include("${ENGINE_DIR}/Plugins/Engine/Text/Text.cmake")
+set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Engine/Core/Text")
+include("${ENGINE_DIR}/Plugins/Engine/Core/Text/Text.cmake")
 unset(_MOD_PLUGIN_DIR)
 
-source_group(TREE "${ENGINE_DIR}/Plugins/Engine/Text" FILES
-	"${ENGINE_DIR}/Plugins/Engine/Text/Public/Text.h"
-	"${ENGINE_DIR}/Plugins/Engine/Text/Private/Text.cpp"
+source_group(TREE "${ENGINE_DIR}/Plugins/Engine/Core/Text" FILES
+	"${ENGINE_DIR}/Plugins/Engine/Core/Text/Public/Text.h"
+	"${ENGINE_DIR}/Plugins/Engine/Core/Text/Private/Text.cpp"
 )
 
 add_library(Timer SHARED
-	${ENGINE_DIR}/Plugins/Engine/Timer/Public/Timer.h
-	${ENGINE_DIR}/Plugins/Engine/Timer/Private/Timer.cpp
-	${ENGINE_DIR}/Plugins/Engine/Timer/Timer.cplugin
-	${ENGINE_DIR}/Plugins/Engine/Timer/Timer.cmake
-	${ENGINE_DIR}/Plugins/Engine/Timer/settings.json
+	${ENGINE_DIR}/Plugins/Engine/Core/Timer/Public/Timer.h
+	${ENGINE_DIR}/Plugins/Engine/Core/Timer/Private/Timer.cpp
+	${ENGINE_DIR}/Plugins/Engine/Core/Timer/Timer.cplugin
+	${ENGINE_DIR}/Plugins/Engine/Core/Timer/Timer.cmake
+	${ENGINE_DIR}/Plugins/Engine/Core/Timer/settings.json
 )
-set_source_files_properties(	${ENGINE_DIR}/Plugins/Engine/Timer/Timer.cplugin
-	${ENGINE_DIR}/Plugins/Engine/Timer/Timer.cmake
-	${ENGINE_DIR}/Plugins/Engine/Timer/settings.json PROPERTIES HEADER_FILE_ONLY ON)
+set_source_files_properties(	${ENGINE_DIR}/Plugins/Engine/Core/Timer/Timer.cplugin
+	${ENGINE_DIR}/Plugins/Engine/Core/Timer/Timer.cmake
+	${ENGINE_DIR}/Plugins/Engine/Core/Timer/settings.json PROPERTIES HEADER_FILE_ONLY ON)
 target_include_directories(Timer PUBLIC
 	"${ENGINE_DIR}/Source/Public"
-	"${ENGINE_DIR}/Plugins/Engine/Timer/Public"
+	"${ENGINE_DIR}/Plugins/Engine/Core/Timer/Public"
 	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEngine/Public"
 )
 set_target_properties(Timer PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 target_compile_definitions(Timer PRIVATE MAHO_TIMER_MODULE_EXPORTS)
 target_link_libraries(Timer PUBLIC Maho)
 set_property(TARGET Timer PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>")
-set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Engine/Timer")
-include("${ENGINE_DIR}/Plugins/Engine/Timer/Timer.cmake")
+set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Engine/Core/Timer")
+include("${ENGINE_DIR}/Plugins/Engine/Core/Timer/Timer.cmake")
 unset(_MOD_PLUGIN_DIR)
 
-source_group(TREE "${ENGINE_DIR}/Plugins/Engine/Timer" FILES
-	"${ENGINE_DIR}/Plugins/Engine/Timer/Public/Timer.h"
-	"${ENGINE_DIR}/Plugins/Engine/Timer/Private/Timer.cpp"
+source_group(TREE "${ENGINE_DIR}/Plugins/Engine/Core/Timer" FILES
+	"${ENGINE_DIR}/Plugins/Engine/Core/Timer/Public/Timer.h"
+	"${ENGINE_DIR}/Plugins/Engine/Core/Timer/Private/Timer.cpp"
 )
 
 add_library(Unicode SHARED
@@ -533,171 +535,209 @@ source_group(TREE "${ENGINE_DIR}/Plugins/Common/Unicode" FILES
 )
 
 add_library(Render SHARED
-	${ENGINE_DIR}/Plugins/Engine/Render/Public/Render.h
-	${ENGINE_DIR}/Plugins/Engine/Render/Private/Render.cpp
-	${ENGINE_DIR}/Plugins/Engine/Render/Render.cplugin
-	${ENGINE_DIR}/Plugins/Engine/Render/Render.cmake
-	${ENGINE_DIR}/Plugins/Engine/Render/settings.json
+	${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/Render/Public/Render.h
+	${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/Render/Private/Render.cpp
+	${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/Render/Render.cplugin
+	${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/Render/Render.cmake
+	${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/Render/settings.json
 )
-set_source_files_properties(	${ENGINE_DIR}/Plugins/Engine/Render/Render.cplugin
-	${ENGINE_DIR}/Plugins/Engine/Render/Render.cmake
-	${ENGINE_DIR}/Plugins/Engine/Render/settings.json PROPERTIES HEADER_FILE_ONLY ON)
+set_source_files_properties(	${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/Render/Render.cplugin
+	${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/Render/Render.cmake
+	${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/Render/settings.json PROPERTIES HEADER_FILE_ONLY ON)
 target_include_directories(Render PUBLIC
 	"${ENGINE_DIR}/Source/Public"
-	"${ENGINE_DIR}/Plugins/Engine/Render/Public"
+	"${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/Render/Public"
 	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEngine/Public"
 	"${ENGINE_DIR}/Plugins/Common/RHI/Public"
-	"${ENGINE_DIR}/Plugins/Engine/Platform/Public"
-	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/Scene/Public"
-	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/DrawTriangleFeature/Public"
-	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/Frame/Public"
-	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/UIFeature/Public"
+	"${ENGINE_DIR}/Plugins/Engine/GameEngine/Platform/Public"
+)
+target_include_directories(Render PRIVATE
+	"${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/Scene/Public"
+	"${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/DrawTriangleFeature/Public"
+	"${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/Frame/Public"
+	"${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/UIFeature/Public"
 )
 set_target_properties(Render PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 target_compile_definitions(Render PRIVATE MAHO_RENDER_MODULE_EXPORTS)
 target_link_libraries(Render PUBLIC Maho)
 set_property(TARGET Render PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>")
-set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Engine/Render")
-include("${ENGINE_DIR}/Plugins/Engine/Render/Render.cmake")
+set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/Render")
+include("${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/Render/Render.cmake")
 unset(_MOD_PLUGIN_DIR)
 
 target_link_libraries(Render PUBLIC RHI Platform)
 
-source_group(TREE "${ENGINE_DIR}/Plugins/Engine/Render" FILES
-	"${ENGINE_DIR}/Plugins/Engine/Render/Public/Render.h"
-	"${ENGINE_DIR}/Plugins/Engine/Render/Private/Render.cpp"
+source_group(TREE "${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/Render" FILES
+	"${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/Render/Public/Render.h"
+	"${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/Render/Private/Render.cpp"
 )
 
 add_library(Scene SHARED
-	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/Scene/Public/Scene.h
-	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/Scene/Private/Scene.cpp
-	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/Scene/Scene.cplugin
-	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/Scene/Scene.cmake
+	${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/Scene/Public/Scene.h
+	${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/Scene/Private/Scene.cpp
+	${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/Scene/Scene.cplugin
+	${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/Scene/Scene.cmake
 )
-set_source_files_properties(	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/Scene/Scene.cplugin
-	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/Scene/Scene.cmake PROPERTIES HEADER_FILE_ONLY ON)
+set_source_files_properties(	${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/Scene/Scene.cplugin
+	${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/Scene/Scene.cmake PROPERTIES HEADER_FILE_ONLY ON)
 target_include_directories(Scene PUBLIC
 	"${ENGINE_DIR}/Source/Public"
-	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/Scene/Public"
+	"${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/Scene/Public"
 	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEngine/Public"
-	"${ENGINE_DIR}/Plugins/Engine/Render/Public"
-	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/Frame/Public"
+	"${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/Render/Public"
+)
+target_include_directories(Scene PRIVATE
+	"${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/Frame/Public"
 )
 set_target_properties(Scene PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 target_compile_definitions(Scene PRIVATE MAHO_SCENE_MODULE_EXPORTS)
 target_link_libraries(Scene PUBLIC Maho)
 set_property(TARGET Scene PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>")
-set(_MOD_PLUGIN_DIR "${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/Scene")
-include("${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/Scene/Scene.cmake")
+set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/Scene")
+include("${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/Scene/Scene.cmake")
 unset(_MOD_PLUGIN_DIR)
 
 target_link_libraries(Scene PUBLIC Render)
 
-source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/Scene" FILES
-	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/Scene/Public/Scene.h"
-	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/Scene/Private/Scene.cpp"
+source_group(TREE "${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/Scene" FILES
+	"${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/Scene/Public/Scene.h"
+	"${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/Scene/Private/Scene.cpp"
 )
 
 add_library(DrawTriangleFeature SHARED
-	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/DrawTriangleFeature/Public/DrawTriangleFeature.h
-	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/DrawTriangleFeature/Private/DrawTriangleFeature.cpp
-	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/DrawTriangleFeature/DrawTriangleFeature.cplugin
-	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/DrawTriangleFeature/DrawTriangleFeature.cmake
+	${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/DrawTriangleFeature/Public/DrawTriangleFeature.h
+	${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/DrawTriangleFeature/Private/DrawTriangleFeature.cpp
+	${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/DrawTriangleFeature/DrawTriangleFeature.cplugin
+	${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/DrawTriangleFeature/DrawTriangleFeature.cmake
 )
-set_source_files_properties(	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/DrawTriangleFeature/DrawTriangleFeature.cplugin
-	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/DrawTriangleFeature/DrawTriangleFeature.cmake PROPERTIES HEADER_FILE_ONLY ON)
+set_source_files_properties(	${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/DrawTriangleFeature/DrawTriangleFeature.cplugin
+	${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/DrawTriangleFeature/DrawTriangleFeature.cmake PROPERTIES HEADER_FILE_ONLY ON)
 target_include_directories(DrawTriangleFeature PUBLIC
 	"${ENGINE_DIR}/Source/Public"
-	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/DrawTriangleFeature/Public"
+	"${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/DrawTriangleFeature/Public"
 	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEngine/Public"
-	"${ENGINE_DIR}/Plugins/Engine/Render/Public"
-	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/Scene/Public"
-	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/Frame/Public"
+	"${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/Render/Public"
+	"${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/Scene/Public"
+)
+target_include_directories(DrawTriangleFeature PRIVATE
+	"${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/Frame/Public"
 )
 set_target_properties(DrawTriangleFeature PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 target_compile_definitions(DrawTriangleFeature PRIVATE MAHO_DRAWTRIANGLEFEATURE_MODULE_EXPORTS)
 target_link_libraries(DrawTriangleFeature PUBLIC Maho)
 set_property(TARGET DrawTriangleFeature PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>")
-set(_MOD_PLUGIN_DIR "${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/DrawTriangleFeature")
-include("${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/DrawTriangleFeature/DrawTriangleFeature.cmake")
+set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/DrawTriangleFeature")
+include("${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/DrawTriangleFeature/DrawTriangleFeature.cmake")
 unset(_MOD_PLUGIN_DIR)
 
 target_link_libraries(DrawTriangleFeature PUBLIC Render Scene)
 
-source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/DrawTriangleFeature" FILES
-	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/DrawTriangleFeature/Public/DrawTriangleFeature.h"
-	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/DrawTriangleFeature/Private/DrawTriangleFeature.cpp"
+source_group(TREE "${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/DrawTriangleFeature" FILES
+	"${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/DrawTriangleFeature/Public/DrawTriangleFeature.h"
+	"${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/DrawTriangleFeature/Private/DrawTriangleFeature.cpp"
 )
 
 add_library(Frame SHARED
-	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/Frame/Public/Frame.h
-	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/Frame/Private/Frame.cpp
-	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/Frame/Frame.cplugin
-	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/Frame/Frame.cmake
-	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/Frame/settings.json
+	${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/Frame/Public/Frame.h
+	${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/Frame/Private/Frame.cpp
+	${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/Frame/Frame.cplugin
+	${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/Frame/Frame.cmake
+	${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/Frame/settings.json
 )
-set_source_files_properties(	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/Frame/Frame.cplugin
-	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/Frame/Frame.cmake
-	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/Frame/settings.json PROPERTIES HEADER_FILE_ONLY ON)
+set_source_files_properties(	${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/Frame/Frame.cplugin
+	${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/Frame/Frame.cmake
+	${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/Frame/settings.json PROPERTIES HEADER_FILE_ONLY ON)
 target_include_directories(Frame PUBLIC
 	"${ENGINE_DIR}/Source/Public"
-	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/Frame/Public"
+	"${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/Frame/Public"
 	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEngine/Public"
-	"${ENGINE_DIR}/Plugins/Engine/Render/Public"
-	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/Scene/Public"
-	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/DrawTriangleFeature/Public"
-	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/UIFeature/Public"
+	"${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/Render/Public"
+	"${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/Scene/Public"
+)
+target_include_directories(Frame PRIVATE
+	"${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/DrawTriangleFeature/Public"
+	"${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/UIFeature/Public"
 )
 set_target_properties(Frame PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 target_compile_definitions(Frame PRIVATE MAHO_FRAME_MODULE_EXPORTS)
 target_link_libraries(Frame PUBLIC Maho)
 set_property(TARGET Frame PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>")
-set(_MOD_PLUGIN_DIR "${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/Frame")
-include("${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/Frame/Frame.cmake")
+set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/Frame")
+include("${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/Frame/Frame.cmake")
 unset(_MOD_PLUGIN_DIR)
 
 target_link_libraries(Frame PUBLIC Render Scene)
 
-source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/Frame" FILES
-	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/Frame/Public/Frame.h"
-	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/Frame/Private/Frame.cpp"
+source_group(TREE "${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/Frame" FILES
+	"${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/Frame/Public/Frame.h"
+	"${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/Frame/Private/Frame.cpp"
 )
 
-# -- UIFeature feature (records the ImGui draw data into SceneColor) -
 add_library(UIFeature SHARED
-	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/UIFeature/Public/UIFeature.h
-	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/UIFeature/Public/UIFeatureApi.h
-	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/UIFeature/Private/UIFeature.cpp
-	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/UIFeature/UIFeature.cplugin
-	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/UIFeature/UIFeature.cmake
-	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/UIFeature/settings.json
+	${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/UIFeature/Public/UIFeature.h
+	${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/UIFeature/Private/UIFeature.cpp
+	${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/UIFeature/UIFeature.cplugin
+	${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/UIFeature/UIFeature.cmake
+	${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/UIFeature/settings.json
 )
-set_source_files_properties(${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/UIFeature/UIFeature.cplugin
-	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/UIFeature/UIFeature.cmake
-	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/UIFeature/settings.json PROPERTIES HEADER_FILE_ONLY ON)
+set_source_files_properties(	${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/UIFeature/UIFeature.cplugin
+	${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/UIFeature/UIFeature.cmake
+	${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/UIFeature/settings.json PROPERTIES HEADER_FILE_ONLY ON)
 target_include_directories(UIFeature PUBLIC
 	"${ENGINE_DIR}/Source/Public"
-	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/UIFeature/Public"
+	"${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/UIFeature/Public"
 	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEngine/Public"
-	"${ENGINE_DIR}/Plugins/Engine/Render/Public"
-	"${ENGINE_DIR}/Plugins/Common/RHI/Public"
-	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/Scene/Public"
-	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/Frame/Public"
+	"${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/Render/Public"
+	"${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/Scene/Public"
+)
+target_include_directories(UIFeature PRIVATE
+	"${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/DrawTriangleFeature/Public"
+	"${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/Frame/Public"
 )
 set_target_properties(UIFeature PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 target_compile_definitions(UIFeature PRIVATE MAHO_UIFEATURE_MODULE_EXPORTS)
 target_link_libraries(UIFeature PUBLIC Maho)
 set_property(TARGET UIFeature PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>")
-set(_MOD_PLUGIN_DIR "${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/UIFeature")
-include("${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/UIFeature/UIFeature.cmake")
+set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/UIFeature")
+include("${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/UIFeature/UIFeature.cmake")
 unset(_MOD_PLUGIN_DIR)
 
 target_link_libraries(UIFeature PUBLIC Render Scene)
 
-source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/UIFeature" FILES
-	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/UIFeature/Public/UIFeature.h"
-	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/UIFeature/Public/UIFeatureApi.h"
-	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/RenderFeature/UIFeature/Private/UIFeature.cpp"
+source_group(TREE "${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/UIFeature" FILES
+	"${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/UIFeature/Public/UIFeature.h"
+	"${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/UIFeature/Private/UIFeature.cpp"
+)
+
+add_library(ExampleEditor SHARED
+	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEditor/ExampleEditor/Public/ExampleEditor.h
+	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEditor/ExampleEditor/Private/ExampleEditor.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEditor/ExampleEditor/ExampleEditor.cplugin
+	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEditor/ExampleEditor/ExampleEditor.cmake
+	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEditor/ExampleEditor/settings.json
+)
+set_source_files_properties(	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEditor/ExampleEditor/ExampleEditor.cplugin
+	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEditor/ExampleEditor/ExampleEditor.cmake
+	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEditor/ExampleEditor/settings.json PROPERTIES HEADER_FILE_ONLY ON)
+target_include_directories(ExampleEditor PUBLIC
+	"${ENGINE_DIR}/Source/Public"
+	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEditor/ExampleEditor/Public"
+	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEngine/Public"
+	"${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/Render/Public"
+)
+set_target_properties(ExampleEditor PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
+target_compile_definitions(ExampleEditor PRIVATE MAHO_EXAMPLEEDITOR_MODULE_EXPORTS)
+target_link_libraries(ExampleEditor PUBLIC Maho)
+set_property(TARGET ExampleEditor PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>")
+set(_MOD_PLUGIN_DIR "${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEditor/ExampleEditor")
+include("${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEditor/ExampleEditor/ExampleEditor.cmake")
+unset(_MOD_PLUGIN_DIR)
+
+target_link_libraries(ExampleEditor PUBLIC Render)
+
+source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEditor/ExampleEditor" FILES
+	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEditor/ExampleEditor/Public/ExampleEditor.h"
+	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEditor/ExampleEditor/Private/ExampleEditor.cpp"
 )
 
 # The project root — the entry plugin (under Plugins/, Public header + Private impl).
@@ -716,30 +756,34 @@ target_include_directories(ExampleEngine PUBLIC
 	"${ENGINE_DIR}/Source/Public"
 	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEngine/Public"
 	"${ENGINE_DIR}/Plugins/Common/Archive/Public"
-	"${ENGINE_DIR}/Plugins/Engine/Paths/Public"
-	"${ENGINE_DIR}/Plugins/Engine/Asset/Public"
+	"${ENGINE_DIR}/Plugins/Engine/Core/Paths/Public"
+	"${ENGINE_DIR}/Plugins/Engine/Core/Asset/Public"
 	"${ENGINE_DIR}/Plugins/Common/Compress/Public"
 	"${ENGINE_DIR}/Plugins/Common/ConsoleVariable/Public"
-	"${ENGINE_DIR}/Plugins/Engine/Config/Public"
-	"${ENGINE_DIR}/Plugins/Engine/Exception/Public"
-	"${ENGINE_DIR}/Plugins/Engine/Log/Public"
-	"${ENGINE_DIR}/Plugins/Engine/Name/Public"
-	"${ENGINE_DIR}/Plugins/Engine/Platform/Public"
+	"${ENGINE_DIR}/Plugins/Engine/Core/Config/Public"
+	"${ENGINE_DIR}/Plugins/Engine/Core/Exception/Public"
+	"${ENGINE_DIR}/Plugins/Engine/Core/Log/Public"
+	"${ENGINE_DIR}/Plugins/Engine/Core/Name/Public"
+	"${ENGINE_DIR}/Plugins/Engine/GameEngine/Platform/Public"
 	"${ENGINE_DIR}/Plugins/Common/RHI/Public"
 	"${ENGINE_DIR}/Plugins/Common/Reflect/Public"
-	"${ENGINE_DIR}/Plugins/Engine/Resource/Public"
-	"${ENGINE_DIR}/Plugins/Engine/Script/Public"
-	"${ENGINE_DIR}/Plugins/Engine/Text/Public"
-	"${ENGINE_DIR}/Plugins/Engine/Timer/Public"
+	"${ENGINE_DIR}/Plugins/Engine/GameEngine/Resource/Public"
+	"${ENGINE_DIR}/Plugins/Engine/GameEngine/Script/Public"
+	"${ENGINE_DIR}/Plugins/Engine/Core/Text/Public"
+	"${ENGINE_DIR}/Plugins/Engine/Core/Timer/Public"
 	"${ENGINE_DIR}/Plugins/Common/Unicode/Public"
-	"${ENGINE_DIR}/Plugins/Engine/Render/Public"
+	"${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/Render/Public"
+	"${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/Scene/Public"
+	"${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/DrawTriangleFeature/Public"
+	"${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/Frame/Public"
+	"${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/UIFeature/Public"
 )
 # Export the extern "C" CreateLayer() bridge — the host's single entry.
 set_target_properties(ExampleEngine PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 target_compile_definitions(ExampleEngine PRIVATE MAHO_EXAMPLEENGINE_MODULE_EXPORTS)
 target_link_libraries(ExampleEngine PUBLIC Maho)
-add_dependencies(ExampleEngine Archive Paths Asset Compress ConsoleVariable Config Exception Log Name Platform RHI Reflect Resource Script Text Timer Unicode Render)
-target_link_libraries(ExampleEngine PUBLIC Archive Paths Asset Compress ConsoleVariable Config Exception Log Name Platform RHI Reflect Resource Script Text Timer Unicode Render)
+add_dependencies(ExampleEngine Archive Paths Asset Compress ConsoleVariable Config Exception Log Name Platform RHI Reflect Resource Script Text Timer Unicode Render Scene DrawTriangleFeature Frame UIFeature)
+target_link_libraries(ExampleEngine PUBLIC Archive Paths Asset Compress ConsoleVariable Config Exception Log Name Platform RHI Reflect Resource Script Text Timer Unicode Render Scene DrawTriangleFeature Frame UIFeature)
 # Plugin DLLs co-locate with Maho.dll + EntryPoint so relative DLL deps resolve.
 set_property(TARGET ExampleEngine PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>")
 
@@ -814,7 +858,7 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/Config")
 	add_custom_command(TARGET EntryPoint POST_BUILD
 		COMMAND ${CMAKE_COMMAND} -E copy_directory
 			"${CMAKE_CURRENT_SOURCE_DIR}/Config"
-			"${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>"
+			"${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>/Config"
 		COMMENT "Copying Config/ to runtime dir"
 		VERBATIM
 	)
@@ -829,10 +873,17 @@ foreach(_Cfg Debug Release RelWithDebInfo MinSizeRel)
 	set_target_properties(Maho PROPERTIES "RUNTIME_OUTPUT_DIRECTORY_${_CfgUp}" "${_MAHO_BIN}/${_Cfg}")
 	set_target_properties(EntryPoint PROPERTIES "RUNTIME_OUTPUT_DIRECTORY_${_CfgUp}" "${_MAHO_BIN}/${_Cfg}")
 endforeach()
-set_property(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" PROPERTY VS_DEBUGGER_WORKING_DIRECTORY "${_MAHO_BIN}/$<CONFIG>")
+# A directory-level VS_DEBUGGER_WORKING_DIRECTORY is NOT propagated into the
+# generated *.vcxproj (observed with the pip-installed CMake this engine uses),
+# so F5 debugs with cwd = the vcxproj dir (Intermediate/) instead of
+# Binaries/<Config>. But Config/ is copied to Binaries/<Config>/Config at
+# post-build, so a relative "Config/..." load misses it. Apply the working
+# directory as a TARGET property on the exe host instead; CMake then emits
+# LocalDebuggerWorkingDirectory into EntryPoint.vcxproj.
+set_target_properties(EntryPoint PROPERTIES VS_DEBUGGER_WORKING_DIRECTORY "${_MAHO_BIN}/$<CONFIG>")
 # The sln startup project is EntryPoint (the app host), not ZERO_CHECK.
 set_property(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" PROPERTY VS_STARTUP_PROJECT EntryPoint)
-add_dependencies(EntryPoint ExampleEngine Archive Paths Asset Compress ConsoleVariable Config Exception Log Name Platform RHI Reflect Resource Script Text Timer Unicode Render Scene DrawTriangleFeature Frame UIFeature MahoCheckCycle)
+add_dependencies(EntryPoint ExampleEngine Archive Paths Asset Compress ConsoleVariable Config Exception Log Name Platform RHI Reflect Resource Script Text Timer Unicode Render Scene DrawTriangleFeature Frame UIFeature ExampleEditor MahoCheckCycle)
 
 # Solution folders: EntryPoint at the ROOT; Maho (engine), Project, ThirdParty.
 # The project root sits at Project/ itself; project plugin DLLs under
@@ -846,47 +897,47 @@ source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEngine" FILES
 # EntryPoint stays at the root (no FOLDER property).
 set_target_properties(Archive PROPERTIES FOLDER "Maho/Plugins/Common")
 
-set_target_properties(Paths PROPERTIES FOLDER "Maho/Plugins/Engine")
+set_target_properties(Paths PROPERTIES FOLDER "Maho/Plugins/Engine/Core")
 
-set_target_properties(Asset PROPERTIES FOLDER "Maho/Plugins/Engine")
+set_target_properties(Asset PROPERTIES FOLDER "Maho/Plugins/Engine/Core")
 
 set_target_properties(Compress PROPERTIES FOLDER "Maho/Plugins/Common")
 
 set_target_properties(ConsoleVariable PROPERTIES FOLDER "Maho/Plugins/Common")
 
-set_target_properties(Config PROPERTIES FOLDER "Maho/Plugins/Engine")
+set_target_properties(Config PROPERTIES FOLDER "Maho/Plugins/Engine/Core")
 
-set_target_properties(Exception PROPERTIES FOLDER "Maho/Plugins/Engine")
+set_target_properties(Exception PROPERTIES FOLDER "Maho/Plugins/Engine/Core")
 
-set_target_properties(Log PROPERTIES FOLDER "Maho/Plugins/Engine")
+set_target_properties(Log PROPERTIES FOLDER "Maho/Plugins/Engine/Core")
 
-set_target_properties(Name PROPERTIES FOLDER "Maho/Plugins/Engine")
+set_target_properties(Name PROPERTIES FOLDER "Maho/Plugins/Engine/Core")
 
-set_target_properties(Platform PROPERTIES FOLDER "Maho/Plugins/Engine")
+set_target_properties(Platform PROPERTIES FOLDER "Maho/Plugins/Engine/GameEngine")
 
 set_target_properties(RHI PROPERTIES FOLDER "Maho/Plugins/Common")
 
 set_target_properties(Reflect PROPERTIES FOLDER "Maho/Plugins/Common")
 
-set_target_properties(Resource PROPERTIES FOLDER "Maho/Plugins/Engine")
+set_target_properties(Resource PROPERTIES FOLDER "Maho/Plugins/Engine/GameEngine")
 
-set_target_properties(Script PROPERTIES FOLDER "Maho/Plugins/Engine")
+set_target_properties(Script PROPERTIES FOLDER "Maho/Plugins/Engine/GameEngine")
 
-set_target_properties(Text PROPERTIES FOLDER "Maho/Plugins/Engine")
+set_target_properties(Text PROPERTIES FOLDER "Maho/Plugins/Engine/Core")
 
-set_target_properties(Timer PROPERTIES FOLDER "Maho/Plugins/Engine")
+set_target_properties(Timer PROPERTIES FOLDER "Maho/Plugins/Engine/Core")
 
 set_target_properties(Unicode PROPERTIES FOLDER "Maho/Plugins/Common")
 
-set_target_properties(Render PROPERTIES FOLDER "Maho/Plugins/Engine")
+set_target_properties(Render PROPERTIES FOLDER "Maho/Plugins/Engine/GameEngine/RenderCore")
 
-set_target_properties(Scene PROPERTIES FOLDER "Project/Plugins/RenderFeature")
+set_target_properties(Scene PROPERTIES FOLDER "Maho/Plugins/Engine/GameEngine/RenderCore/RenderFeature")
 
-set_target_properties(DrawTriangleFeature PROPERTIES FOLDER "Project/Plugins/RenderFeature")
+set_target_properties(DrawTriangleFeature PROPERTIES FOLDER "Maho/Plugins/Engine/GameEngine/RenderCore/RenderFeature")
 
-set_target_properties(Frame PROPERTIES FOLDER "Project/Plugins/RenderFeature")
+set_target_properties(Frame PROPERTIES FOLDER "Maho/Plugins/Engine/GameEngine/RenderCore/RenderFeature")
 
-set_target_properties(UIFeature PROPERTIES FOLDER "Project/Plugins/RenderFeature")
+set_target_properties(UIFeature PROPERTIES FOLDER "Maho/Plugins/Engine/GameEngine/RenderCore/RenderFeature")
 
+set_target_properties(ExampleEditor PROPERTIES FOLDER "Project/Plugins/ExampleEditor")
 
-set_target_properties(Scene PROPERTIES OUTPUT_NAME "RenderScene")

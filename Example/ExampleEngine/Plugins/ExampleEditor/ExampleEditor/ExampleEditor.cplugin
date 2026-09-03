@@ -1,0 +1,8 @@
+{
+  "FileVersion": 1,
+  "Name": "ExampleEditor",
+  "Description": "",
+  "Dependencies": [
+	"Render"
+  ]
+}

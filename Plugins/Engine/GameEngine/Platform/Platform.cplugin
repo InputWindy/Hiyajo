@@ -2,5 +2,6 @@
   "FileVersion": 1,
   "Name": "Platform",
   "Description": "OS window + input (GLFW) / headless (EGL) native surface for the RHI",
-  "Dependencies": ["ConsoleVariable", "Log"]
+  "Dependencies": ["ConsoleVariable", "Log"],
+  "PrivateIncludes": ["Config"]
 }

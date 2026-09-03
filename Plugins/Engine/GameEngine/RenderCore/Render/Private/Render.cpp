@@ -81,11 +81,13 @@ void FRender::Initialize(FEngineBase& Engine)
 	// Persistent render graph: Flush at frame start, Execute at frame end.
 	RenderGraph = std::make_unique<FLayerTaskGraph<FRenderStages, FRender>>(Pool, *this);
 
-	// Install the global scene feature + the triangle render feature into OUR
-	// layer collection (not the host engine's) so the render graph drives them.
-	// All are project plugins (Scene.dll / DrawTriangleFeature.dll / Frame.dll);
-	// Frame drives the swapchain begin/end as a scheduled stage and must load last
-	// (its IPresent depends on the other features' IEndRender).
+	// Install the global scene feature + the render features into OUR layer
+	// collection (not the host engine's) so the render graph drives them.
+	// All are engine plugins beside this one (same layer, Plugins/Engine/).
+	// They are loaded by DLL name at runtime (Install<T> → FAssembly), so this
+	// DLL only includes their headers and never links them -- see Render.cplugin
+	// PrivateIncludes. Frame drives the swapchain begin/end as a scheduled stage
+	// and must load last (its IPresent depends on the other features' IEndRender).
 	Install<Scene::FScene>();
 	Install<FDrawTriangleFeature>();
 	Install<FFrame>();
@@ -297,14 +299,16 @@ void FRender::Tick(FEngineBase&)
 	// collected here, so Init never races with in-flight Render() calls.
 	RenderGraph->Flush();
 
-	// Build the ImGui frame (CPU side) between NewFrame and Render. The ImGui
-	// API is called directly (no wrapper layer); ShowDemoWindow() is a placeholder
-	// -- replace with the editor shell (menu bar + DockSpace + panels) or register
-	// a UI-building callback here. The draw data feeds the UIFeature render
-	// backend (reads R.UIData) inside the render graph below.
+	// Build the ImGui frame (CPU side) between NewFrame (BeginFrame) and the
+	// render-graph Execute below. UI construction is done by plugins directly on
+	// the ImGui API (no wrapper layer): each plugin declares
+	//   MyStage<ITick>().IsBlocking<Maho::FRender>().OnStage<ITick>();
+	// so its ITick runs BEFORE this one -- it calls ImGui::Begin/Text/... and this
+	// layer only closes the frame with a single ImGui::Render(). Plugins never call
+	// NewFrame/Render/GetDrawData themselves. The collected draw data feeds the
+	// UIFeature render backend (reads R.UIData) inside the graph below.
 	if (bUIInitialized)
 	{
-		ImGui::ShowDemoWindow();
 		ImGui::Render();
 		UIData = ImGui::GetDrawData();
 	}

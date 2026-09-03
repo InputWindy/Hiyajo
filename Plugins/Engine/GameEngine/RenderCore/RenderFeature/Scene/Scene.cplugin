@@ -4,5 +4,8 @@
   "Description": "global render resource feature (SceneColor/SceneDepth, present)",
   "Dependencies": [
     "Render"
+  ],
+  "PrivateIncludes": [
+    "Frame"
   ]
 }

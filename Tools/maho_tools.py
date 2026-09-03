@@ -538,7 +538,14 @@ foreach(_Cfg Debug Release RelWithDebInfo MinSizeRel)
 	set_target_properties(Maho PROPERTIES "RUNTIME_OUTPUT_DIRECTORY_${{_CfgUp}}" "${{_MAHO_BIN}}/${{_Cfg}}")
 	set_target_properties(EntryPoint PROPERTIES "RUNTIME_OUTPUT_DIRECTORY_${{_CfgUp}}" "${{_MAHO_BIN}}/${{_Cfg}}")
 endforeach()
-set_property(DIRECTORY "${{CMAKE_CURRENT_SOURCE_DIR}}" PROPERTY VS_DEBUGGER_WORKING_DIRECTORY "${{_MAHO_BIN}}/$<CONFIG>")
+# A directory-level VS_DEBUGGER_WORKING_DIRECTORY is NOT propagated into the
+# generated *.vcxproj (observed with the pip-installed CMake this engine uses),
+# so F5 debugs with cwd = the vcxproj dir (Intermediate/) instead of
+# Binaries/<Config>. But Config/ is copied to Binaries/<Config>/Config at
+# post-build, so a relative "Config/..." load misses it. Apply the working
+# directory as a TARGET property on the exe host instead; CMake then emits
+# LocalDebuggerWorkingDirectory into EntryPoint.vcxproj.
+set_target_properties(EntryPoint PROPERTIES VS_DEBUGGER_WORKING_DIRECTORY "${{_MAHO_BIN}}/$<CONFIG>")
 # The sln startup project is EntryPoint (the app host), not ZERO_CHECK.
 set_property(DIRECTORY "${{CMAKE_CURRENT_SOURCE_DIR}}" PROPERTY VS_STARTUP_PROJECT EntryPoint)
 add_dependencies(EntryPoint {name} {plugin_all_names} MahoCheckCycle)
@@ -622,6 +629,16 @@ def _all_plugin_infos(
 			if dep not in deps:
 				deps.append(dep)
 
+		def _unique_names(key: str) -> list[str]:
+			vals: list[str] = []
+			for v in data.get(key, []) or []:
+				if isinstance(v, str) and v not in vals:
+					vals.append(v)
+			return vals
+
+		pub_includes = _unique_names("PublicIncludes")
+		priv_includes = _unique_names("PrivateIncludes")
+
 		# The plugin's own directory basename is the stable prefix for its
 		# .cmake/.cplugin/settings.json; a plugin whose implementation file
 		# differs from the directory name (e.g. ImGui → ImGuiSystem.cpp) overrides
@@ -641,6 +658,8 @@ def _all_plugin_infos(
 				aux.append(f"{prefix}/{cmake_dir}/{fn}")
 		infos[name] = {
 			"Dependencies": deps,
+			"PublicIncludes": pub_includes,
+			"PrivateIncludes": priv_includes,
 			"public_dir": f"{prefix}/{cmake_dir}/Public",
 			"private_dir": f"{prefix}/{cmake_dir}/Private",
 			"cmake_file": f"{prefix}/{cmake_dir}/{dir_name}.cmake",
@@ -773,6 +792,23 @@ def _plugin_targets(
 			for d in info.get("Dependencies", [])
 			if d in infos and d != name
 		)
+		# Compile-only include dirs (no link): PublicIncludes propagate to
+		# dependents (PUBLIC), PrivateIncludes are used here only (PRIVATE).
+		pub_include_dirs = "".join(
+			f'\t"{infos[d]["public_dir"]}"\n'
+			for d in info.get("PublicIncludes", [])
+			if d in infos and d != name
+		)
+		priv_include_dirs = "".join(
+			f'\t"{infos[d]["public_dir"]}"\n'
+			for d in info.get("PrivateIncludes", [])
+			if d in infos and d != name
+		)
+		priv_inc_block = (
+			f"target_include_directories({name} PRIVATE\n"
+			f"{priv_include_dirs}"
+			f")\n"
+		) if priv_include_dirs else ""
 		cmake_include = (
 			f'set(_MOD_PLUGIN_DIR "{info["public_dir"].rsplit("/", 1)[0]}")\n'
 			f'include("{info["cmake_file"]}")\n'
@@ -790,7 +826,9 @@ def _plugin_targets(
 			f'\t"{info["public_dir"]}"\n'
 			f"\t{entry_public}\n"
 			f"{dep_public_dirs}"
+			f"{pub_include_dirs}"
 			f")\n"
+			f"{priv_inc_block}"
 			f"set_target_properties({name} PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)\n"
 			f"target_compile_definitions({name} PRIVATE MAHO_{name.upper()}_MODULE_EXPORTS)\n"
 			f"target_link_libraries({name} PUBLIC Maho)\n"
@@ -1472,13 +1510,13 @@ def generate_from_cproject(
 	gen_h = codegen_plugin_extensions(cproject_path)
 	log(f"[Maho] Gen     : {gen_h.relative_to(project_dir)}")
 
-	# Regenerate CMakeLists so project-side create-plugin targets reach the sln --
-	# but only when the project has none yet. An existing CMakeLists.txt is
-	# hand-maintained here (the generator's dependency inference is incomplete and
-	# would overwrite manual include/link fixes), so double-click regeneration
-	# keeps it and just re-runs CMake on it.
-	if not (project_dir / "CMakeLists.txt").is_file():
-		_write_cmake_lists(project_dir, project_name, engine_root, data)
+	# Regenerate CMakeLists on every generate. The .cproject/.cplugin is the
+	# single source of truth: include-vs-link is now explicit (Dependencies =
+	# link, PublicIncludes/PrivateIncludes = compile-only include), so the
+	# generator's dependency inference is complete and no manual CMakeLists
+	# include/link fixes are needed. Per-plugin customization (e.g. output name)
+	# lives in the plugin's .cmake, included below — never in the top-level file.
+	_write_cmake_lists(project_dir, project_name, engine_root, data)
 
 	lock = _GenerateLock(intermediate)
 	lock.acquire()
@@ -1986,6 +2024,15 @@ def read_cplugin(path: Path) -> dict[str, Any]:
 		data["Dependencies"] = []
 	elif not isinstance(deps, list):
 		raise ValueError(f"Invalid .cplugin (Dependencies must be an array): {path}")
+	# Compile-only include sets: PublicIncludes/PrivateIncludes add the dep's
+	# Public/ include dir (PUBLIC / PRIVATE) WITHOUT linking the module — for
+	# type-only header use where no exported symbol is referenced.
+	for key in ("PublicIncludes", "PrivateIncludes"):
+		val = data.get(key)
+		if val is None:
+			data[key] = []
+		elif not isinstance(val, list):
+			raise ValueError(f"Invalid .cplugin ({key} must be an array): {path}")
 	return data
 
 
