@@ -41,6 +41,3 @@ if(NOT TARGET reflcpp::reflcpp)
 endif()
 
 target_link_libraries(Reflect PUBLIC reflcpp::reflcpp)
-
-
-

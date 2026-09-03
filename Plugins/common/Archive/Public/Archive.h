@@ -5,6 +5,7 @@
 // self-serializing types. Zero third-party; pure std.
 #include <cstddef>
 #include <cstdint>
+#include <span>
 #include <string>
 #include <type_traits>
 #include <vector>
@@ -97,14 +98,14 @@ public:
 class FMemoryReader : public FArchive
 {
 public:
-	explicit FMemoryReader(const std::vector<std::uint8_t>& InData);
+	explicit FMemoryReader(std::span<const std::uint8_t> InData);
 
 	void Serialize(void* Data, std::size_t Size) override;
 	void Seek(std::size_t Pos) override;
 	[[nodiscard]] std::size_t Tell() const override;
 
 private:
-	const std::vector<std::uint8_t>& Data;
+	std::span<const std::uint8_t> Data;
 	std::size_t Pos = 0;
 };
 

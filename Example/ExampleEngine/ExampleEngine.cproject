@@ -8,10 +8,6 @@
       "Enabled": true
     },
     {
-      "Name": "Asset",
-      "Enabled": true
-    },
-    {
       "Name": "Compress",
       "Enabled": true
     },
@@ -53,6 +49,10 @@
     },
     {
       "Name": "Resource",
+      "Enabled": true
+    },
+    {
+      "Name": "Asset",
       "Enabled": true
     },
     {

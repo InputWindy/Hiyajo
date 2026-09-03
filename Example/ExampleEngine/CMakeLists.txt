@@ -33,14 +33,6 @@ set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Common/Archive")
 include("${ENGINE_DIR}/Plugins/Common/Archive/Archive.cmake")
 unset(_MOD_PLUGIN_DIR)
 
-set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Engine/Core/Paths")
-include("${ENGINE_DIR}/Plugins/Engine/Core/Paths/Paths.cmake")
-unset(_MOD_PLUGIN_DIR)
-
-set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Engine/Core/Asset")
-include("${ENGINE_DIR}/Plugins/Engine/Core/Asset/Asset.cmake")
-unset(_MOD_PLUGIN_DIR)
-
 set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Common/Compress")
 include("${ENGINE_DIR}/Plugins/Common/Compress/Compress.cmake")
 unset(_MOD_PLUGIN_DIR)
@@ -65,6 +57,10 @@ set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Engine/Core/Name")
 include("${ENGINE_DIR}/Plugins/Engine/Core/Name/Name.cmake")
 unset(_MOD_PLUGIN_DIR)
 
+set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Engine/Core/Paths")
+include("${ENGINE_DIR}/Plugins/Engine/Core/Paths/Paths.cmake")
+unset(_MOD_PLUGIN_DIR)
+
 set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Engine/GameEngine/Platform")
 include("${ENGINE_DIR}/Plugins/Engine/GameEngine/Platform/Platform.cmake")
 unset(_MOD_PLUGIN_DIR)
@@ -79,6 +75,10 @@ unset(_MOD_PLUGIN_DIR)
 
 set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Engine/GameEngine/Resource")
 include("${ENGINE_DIR}/Plugins/Engine/GameEngine/Resource/Resource.cmake")
+unset(_MOD_PLUGIN_DIR)
+
+set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Engine/GameEngine/Asset")
+include("${ENGINE_DIR}/Plugins/Engine/GameEngine/Asset/Asset.cmake")
 unset(_MOD_PLUGIN_DIR)
 
 set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Engine/GameEngine/Script")
@@ -146,18 +146,18 @@ target_include_directories(ExampleEngine PUBLIC
 	"${ENGINE_DIR}/Source/Public"
 	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEngine/Public"
 	"${ENGINE_DIR}/Plugins/Common/Archive/Public"
-	"${ENGINE_DIR}/Plugins/Engine/Core/Paths/Public"
-	"${ENGINE_DIR}/Plugins/Engine/Core/Asset/Public"
 	"${ENGINE_DIR}/Plugins/Common/Compress/Public"
 	"${ENGINE_DIR}/Plugins/Common/ConsoleVariable/Public"
 	"${ENGINE_DIR}/Plugins/Engine/Core/Config/Public"
 	"${ENGINE_DIR}/Plugins/Engine/Core/Exception/Public"
 	"${ENGINE_DIR}/Plugins/Engine/Core/Log/Public"
 	"${ENGINE_DIR}/Plugins/Engine/Core/Name/Public"
+	"${ENGINE_DIR}/Plugins/Engine/Core/Paths/Public"
 	"${ENGINE_DIR}/Plugins/Engine/GameEngine/Platform/Public"
 	"${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RHI/Public"
 	"${ENGINE_DIR}/Plugins/Common/Reflect/Public"
 	"${ENGINE_DIR}/Plugins/Engine/GameEngine/Resource/Public"
+	"${ENGINE_DIR}/Plugins/Engine/GameEngine/Asset/Public"
 	"${ENGINE_DIR}/Plugins/Engine/GameEngine/Script/Public"
 	"${ENGINE_DIR}/Plugins/Engine/Core/Text/Public"
 	"${ENGINE_DIR}/Plugins/Engine/Core/Timer/Public"
@@ -172,8 +172,8 @@ target_include_directories(ExampleEngine PUBLIC
 set_target_properties(ExampleEngine PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 target_compile_definitions(ExampleEngine PRIVATE MAHO_EXAMPLEENGINE_MODULE_EXPORTS)
 target_link_libraries(ExampleEngine PUBLIC Maho)
-add_dependencies(ExampleEngine Archive Paths Asset Compress ConsoleVariable Config Exception Log Name Platform RHI Reflect Resource Script Text Timer Unicode Render Scene DrawTriangleFeature Frame UIFeature)
-target_link_libraries(ExampleEngine PUBLIC Archive Paths Asset Compress ConsoleVariable Config Exception Log Name Platform RHI Reflect Resource Script Text Timer Unicode Render Scene DrawTriangleFeature Frame UIFeature)
+add_dependencies(ExampleEngine Archive Compress ConsoleVariable Config Exception Log Name Paths Platform RHI Reflect Resource Asset Script Text Timer Unicode Render Scene DrawTriangleFeature Frame UIFeature)
+target_link_libraries(ExampleEngine PUBLIC Archive Compress ConsoleVariable Config Exception Log Name Paths Platform RHI Reflect Resource Asset Script Text Timer Unicode Render Scene DrawTriangleFeature Frame UIFeature)
 # Plugin DLLs co-locate with Maho.dll + EntryPoint so relative DLL deps resolve.
 set_property(TARGET ExampleEngine PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>")
 
@@ -258,7 +258,7 @@ endforeach()
 set_target_properties(EntryPoint PROPERTIES VS_DEBUGGER_WORKING_DIRECTORY "${_MAHO_BIN}/$<CONFIG>")
 # The sln startup project is EntryPoint (the app host), not ZERO_CHECK.
 set_property(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" PROPERTY VS_STARTUP_PROJECT EntryPoint)
-add_dependencies(EntryPoint ExampleEngine Archive Paths Asset Compress ConsoleVariable Config Exception Log Name Platform RHI Reflect Resource Script Text Timer Unicode Render Scene DrawTriangleFeature Frame UIFeature ExampleEditor MahoCheckCycle)
+add_dependencies(EntryPoint ExampleEngine Archive Compress ConsoleVariable Config Exception Log Name Paths Platform RHI Reflect Resource Asset Script Text Timer Unicode Render Scene DrawTriangleFeature Frame UIFeature ExampleEditor MahoCheckCycle)
 
 # Solution folders: EntryPoint at the ROOT; Maho (engine), Project, ThirdParty.
 # The project root sits at Project/ itself; project plugin DLLs under

@@ -100,6 +100,3 @@ set(MAHO_SOL2_INCLUDE_DIR "${_SCRIPT_SOL2_INCLUDE_DIR}" CACHE INTERNAL "sol2 inc
 # sol2 include is PUBLIC (consumers reflect Lua types).
 target_link_libraries(Script PUBLIC lua)
 target_include_directories(Script PUBLIC "${_SCRIPT_SOL2_INCLUDE_DIR}")
-
-
-

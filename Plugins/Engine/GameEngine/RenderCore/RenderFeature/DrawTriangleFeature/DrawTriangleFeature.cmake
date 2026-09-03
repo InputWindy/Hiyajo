@@ -32,6 +32,3 @@ source_group(TREE "${CMAKE_CURRENT_LIST_DIR}" FILES ${DrawTriangleFeature_PUBLIC
 # -- /MAHOGEN DrawTriangleFeature --
 
 # DrawTriangleFeature plugin: no third-party dependencies.
-
-
-

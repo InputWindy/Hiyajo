@@ -31,6 +31,3 @@ source_group(TREE "${CMAKE_CURRENT_LIST_DIR}" FILES ${Unicode_PUBLIC_HEADERS} ${
 # None - pure std + WinAPI on Windows (string/string_view/cstdint/Windows.h).
 # The plugin DLL's target is built by codegen; this file exists so a
 # self-contained plugin keeps an empty deps file.
-
-
-

@@ -35,6 +35,3 @@ source_group(TREE "${CMAKE_CURRENT_LIST_DIR}" FILES ${Frame_PUBLIC_HEADERS} ${Fr
 # -- /MAHOGEN Frame --
 
 # Frame plugin: no third-party dependencies.
-
-
-

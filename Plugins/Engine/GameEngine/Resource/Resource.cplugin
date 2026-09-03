@@ -2,5 +2,5 @@
   "FileVersion": 1,
   "Name": "Resource",
   "Description": "typed async resource system (FThreadedServer IO thread, FName catalog, Paths resolution)",
-  "Dependencies": ["Name", "Paths", "Log"]
+  "Dependencies": ["Name", "Paths", "Log", "Archive"]
 }

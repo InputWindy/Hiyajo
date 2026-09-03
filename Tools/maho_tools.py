@@ -887,8 +887,10 @@ def _plugin_targets(
 		content = gen
 		if hand.strip():
 			content += "\n\n" + hand
-		content += "\n"
-		cmake_path.write_text(content, encoding="utf-8", newline="\n")
+		# rstrip the trailing newlines (hand keeps its prior EOF \n each regen, and
+		# gen is a \n-join with no trailing newline) so the file ends with exactly
+		# one "\n" — otherwise every .cproject re-gen appends a blank line.
+		cmake_path.write_text(content.rstrip("\n") + "\n", encoding="utf-8", newline="\n")
 
 		includes.append(
 			f'set(_MOD_PLUGIN_DIR "{plugin_root}")\n'

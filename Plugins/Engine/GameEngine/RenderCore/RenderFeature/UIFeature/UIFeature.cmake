@@ -36,6 +36,3 @@ source_group(TREE "${CMAKE_CURRENT_LIST_DIR}" FILES ${UIFeature_PUBLIC_HEADERS} 
 
 # UIFeature: no third-party deps. The ImGui symbols come from Render.dll (which
 # compiles Dear ImGui into it); Vulkan/glfw propagate via Render.
-
-
-

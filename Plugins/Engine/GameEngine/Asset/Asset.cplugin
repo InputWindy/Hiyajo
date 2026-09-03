@@ -1,0 +1,6 @@
+{
+  "FileVersion": 1,
+  "Name": "Asset",
+  "Description": "concrete game asset types (casset container + texture/staticmesh/skeleton/animation/animgraph/material/prefab codecs)",
+  "Dependencies": ["Resource"]
+}

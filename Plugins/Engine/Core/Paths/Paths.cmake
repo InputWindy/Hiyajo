@@ -30,6 +30,3 @@ source_group(TREE "${CMAKE_CURRENT_LIST_DIR}" FILES ${Paths_PUBLIC_HEADERS} ${Pa
 # Paths plugin: third-party dependencies.
 # None - pure std (filesystem/map/string). The plugin DLL's target is built by
 # codegen; this file exists so a self-contained plugin keeps an empty deps file.
-
-
-

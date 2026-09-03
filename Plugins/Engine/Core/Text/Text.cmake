@@ -32,6 +32,3 @@ source_group(TREE "${CMAKE_CURRENT_LIST_DIR}" FILES ${Text_PUBLIC_HEADERS} ${Tex
 # Build/CMake/MahoDependencies.cmake and linked PUBLIC into Maho
 # (nlohmann_json::nlohmann_json), so this plugin gets <nlohmann/json.hpp>
 # transitively via Maho. No fetch here; the DLL target is built by codegen.
-
-
-

@@ -32,6 +32,3 @@ source_group(TREE "${CMAKE_CURRENT_LIST_DIR}" FILES ${Compress_PUBLIC_HEADERS} $
 # and linked PUBLIC into Maho (libzstd_static), so this plugin gets <zstd.h> +
 # the static lib transitively via Maho. No fetch here; the DLL target is built by
 # codegen.
-
-
-

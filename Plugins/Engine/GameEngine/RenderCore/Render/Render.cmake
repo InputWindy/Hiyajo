@@ -167,6 +167,3 @@ if(_RENDER_HAS_GLSLANG)
 		"${glslang_BINARY_DIR}"
 	)
 endif()
-
-
-

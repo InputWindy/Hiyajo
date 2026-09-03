@@ -49,6 +49,3 @@ endif()
 
 # Link spdlog into the Log DLL (its own target exists by the time this runs).
 target_link_libraries(Log PUBLIC spdlog::spdlog)
-
-
-

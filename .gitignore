@@ -9,3 +9,8 @@ Packaged/
 # Local test projects.
 /Mini/
 /MyGame/
+
+# Generated CMake build tree (separate from Example/ExampleEngine/Intermediate).
+# Build/CMake/MahoDependencies.cmake above is real source; only the out/ output
+# tree is regenerated at build time.
+/Build/CMake/out/

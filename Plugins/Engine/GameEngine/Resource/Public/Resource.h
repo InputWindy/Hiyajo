@@ -69,6 +69,8 @@ public:
 	virtual ~FResource() = default;
 
 	explicit FResource(std::string InPath) : Path(std::move(InPath)) {}
+	FResource(FResource&&) = default;
+	FResource& operator=(FResource&&) = default;
 
 	[[nodiscard]] std::string_view GetPath() const { return Path; }
 

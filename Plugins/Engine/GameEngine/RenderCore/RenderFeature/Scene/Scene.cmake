@@ -36,6 +36,3 @@ source_group(TREE "${CMAKE_CURRENT_LIST_DIR}" FILES ${Scene_PUBLIC_HEADERS} ${Sc
 # (FLayerCollector::Install resolves that exact DLL name), so the target's
 # output must be RenderScene.dll even though the plugin target is `Scene`.
 set_target_properties(Scene PROPERTIES OUTPUT_NAME "RenderScene")
-
-
-

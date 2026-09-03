@@ -39,6 +39,3 @@ source_group(TREE "${CMAKE_CURRENT_LIST_DIR}" FILES ${ExampleEditor_PUBLIC_HEADE
 #   maho_fetchcontent_populate_or_reuse(repo ${_URL} v1.0 path/to/marker)
 #   maho_add_thirdparty_subdirectory(${repo_SOURCE_DIR} ${repo_BINARY_DIR})
 #   target_link_libraries(ExampleEditor PUBLIC repo::repo)
-
-
-

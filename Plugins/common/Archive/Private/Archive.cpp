@@ -66,7 +66,7 @@ FArchive& FArchive::operator<<(std::string& V)
 
 // -- FMemoryReader --
 
-FMemoryReader::FMemoryReader(const std::vector<std::uint8_t>& InData)
+FMemoryReader::FMemoryReader(std::span<const std::uint8_t> InData)
 	: FArchive(EArchiveMode::Read)
 	, Data(InData)
 {

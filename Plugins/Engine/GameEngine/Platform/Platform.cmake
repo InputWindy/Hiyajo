@@ -66,6 +66,3 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
 	find_package(EGL REQUIRED)
 	target_link_libraries(Platform PUBLIC EGL::EGL)
 endif()
-
-
-

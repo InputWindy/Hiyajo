@@ -31,6 +31,3 @@ source_group(TREE "${CMAKE_CURRENT_LIST_DIR}" FILES ${Archive_PUBLIC_HEADERS} ${
 # None - pure std (cstddef/cstdint/string/type_traits/vector/cstring). The plugin
 # DLL's target is built by codegen; this file exists so a self-contained plugin
 # keeps an empty deps file.
-
-
-
