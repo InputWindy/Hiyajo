@@ -29,9 +29,10 @@ file(GLOB MAHO_HEADERS CONFIGURE_DEPENDS "${ENGINE_DIR}/Source/Public/**/*.h")
 # FAssembly + Fatal); the plugin DLL only uses the header-only core.
 file(GLOB MAHO_PRIVATE CONFIGURE_DEPENDS "${ENGINE_DIR}/Source/Private/**/*.cpp")
 
+file(GLOB Archive_PRIVATE_SOURCES CONFIGURE_DEPENDS "${ENGINE_DIR}/Plugins/Common/Archive/Private/*.cpp")
 add_library(Archive SHARED
 	${ENGINE_DIR}/Plugins/Common/Archive/Public/Archive.h
-	${ENGINE_DIR}/Plugins/Common/Archive/Private/Archive.cpp
+${Archive_PRIVATE_SOURCES}
 	${ENGINE_DIR}/Plugins/Common/Archive/Archive.cplugin
 	${ENGINE_DIR}/Plugins/Common/Archive/Archive.cmake
 	${ENGINE_DIR}/Plugins/Common/Archive/settings.json
@@ -54,12 +55,13 @@ unset(_MOD_PLUGIN_DIR)
 
 source_group(TREE "${ENGINE_DIR}/Plugins/Common/Archive" FILES
 	"${ENGINE_DIR}/Plugins/Common/Archive/Public/Archive.h"
-	"${ENGINE_DIR}/Plugins/Common/Archive/Private/Archive.cpp"
+${Archive_PRIVATE_SOURCES}
 )
 
+file(GLOB Paths_PRIVATE_SOURCES CONFIGURE_DEPENDS "${ENGINE_DIR}/Plugins/Engine/Core/Paths/Private/*.cpp")
 add_library(Paths SHARED
 	${ENGINE_DIR}/Plugins/Engine/Core/Paths/Public/Paths.h
-	${ENGINE_DIR}/Plugins/Engine/Core/Paths/Private/Paths.cpp
+${Paths_PRIVATE_SOURCES}
 	${ENGINE_DIR}/Plugins/Engine/Core/Paths/Paths.cplugin
 	${ENGINE_DIR}/Plugins/Engine/Core/Paths/Paths.cmake
 	${ENGINE_DIR}/Plugins/Engine/Core/Paths/settings.json
@@ -82,12 +84,13 @@ unset(_MOD_PLUGIN_DIR)
 
 source_group(TREE "${ENGINE_DIR}/Plugins/Engine/Core/Paths" FILES
 	"${ENGINE_DIR}/Plugins/Engine/Core/Paths/Public/Paths.h"
-	"${ENGINE_DIR}/Plugins/Engine/Core/Paths/Private/Paths.cpp"
+${Paths_PRIVATE_SOURCES}
 )
 
+file(GLOB Asset_PRIVATE_SOURCES CONFIGURE_DEPENDS "${ENGINE_DIR}/Plugins/Engine/Core/Asset/Private/*.cpp")
 add_library(Asset SHARED
 	${ENGINE_DIR}/Plugins/Engine/Core/Asset/Public/Asset.h
-	${ENGINE_DIR}/Plugins/Engine/Core/Asset/Private/Asset.cpp
+${Asset_PRIVATE_SOURCES}
 	${ENGINE_DIR}/Plugins/Engine/Core/Asset/Asset.cplugin
 	${ENGINE_DIR}/Plugins/Engine/Core/Asset/Asset.cmake
 	${ENGINE_DIR}/Plugins/Engine/Core/Asset/settings.json
@@ -113,12 +116,13 @@ target_link_libraries(Asset PUBLIC Paths)
 
 source_group(TREE "${ENGINE_DIR}/Plugins/Engine/Core/Asset" FILES
 	"${ENGINE_DIR}/Plugins/Engine/Core/Asset/Public/Asset.h"
-	"${ENGINE_DIR}/Plugins/Engine/Core/Asset/Private/Asset.cpp"
+${Asset_PRIVATE_SOURCES}
 )
 
+file(GLOB Compress_PRIVATE_SOURCES CONFIGURE_DEPENDS "${ENGINE_DIR}/Plugins/Common/Compress/Private/*.cpp")
 add_library(Compress SHARED
 	${ENGINE_DIR}/Plugins/Common/Compress/Public/Compress.h
-	${ENGINE_DIR}/Plugins/Common/Compress/Private/Compress.cpp
+${Compress_PRIVATE_SOURCES}
 	${ENGINE_DIR}/Plugins/Common/Compress/Compress.cplugin
 	${ENGINE_DIR}/Plugins/Common/Compress/Compress.cmake
 	${ENGINE_DIR}/Plugins/Common/Compress/settings.json
@@ -141,12 +145,13 @@ unset(_MOD_PLUGIN_DIR)
 
 source_group(TREE "${ENGINE_DIR}/Plugins/Common/Compress" FILES
 	"${ENGINE_DIR}/Plugins/Common/Compress/Public/Compress.h"
-	"${ENGINE_DIR}/Plugins/Common/Compress/Private/Compress.cpp"
+${Compress_PRIVATE_SOURCES}
 )
 
+file(GLOB ConsoleVariable_PRIVATE_SOURCES CONFIGURE_DEPENDS "${ENGINE_DIR}/Plugins/Common/ConsoleVariable/Private/*.cpp")
 add_library(ConsoleVariable SHARED
 	${ENGINE_DIR}/Plugins/Common/ConsoleVariable/Public/ConsoleVariable.h
-	${ENGINE_DIR}/Plugins/Common/ConsoleVariable/Private/ConsoleVariable.cpp
+${ConsoleVariable_PRIVATE_SOURCES}
 	${ENGINE_DIR}/Plugins/Common/ConsoleVariable/ConsoleVariable.cplugin
 	${ENGINE_DIR}/Plugins/Common/ConsoleVariable/ConsoleVariable.cmake
 	${ENGINE_DIR}/Plugins/Common/ConsoleVariable/settings.json
@@ -169,12 +174,13 @@ unset(_MOD_PLUGIN_DIR)
 
 source_group(TREE "${ENGINE_DIR}/Plugins/Common/ConsoleVariable" FILES
 	"${ENGINE_DIR}/Plugins/Common/ConsoleVariable/Public/ConsoleVariable.h"
-	"${ENGINE_DIR}/Plugins/Common/ConsoleVariable/Private/ConsoleVariable.cpp"
+${ConsoleVariable_PRIVATE_SOURCES}
 )
 
+file(GLOB Config_PRIVATE_SOURCES CONFIGURE_DEPENDS "${ENGINE_DIR}/Plugins/Engine/Core/Config/Private/*.cpp")
 add_library(Config SHARED
 	${ENGINE_DIR}/Plugins/Engine/Core/Config/Public/Config.h
-	${ENGINE_DIR}/Plugins/Engine/Core/Config/Private/Config.cpp
+${Config_PRIVATE_SOURCES}
 	${ENGINE_DIR}/Plugins/Engine/Core/Config/Config.cplugin
 	${ENGINE_DIR}/Plugins/Engine/Core/Config/Config.cmake
 	${ENGINE_DIR}/Plugins/Engine/Core/Config/settings.json
@@ -200,12 +206,13 @@ target_link_libraries(Config PUBLIC ConsoleVariable)
 
 source_group(TREE "${ENGINE_DIR}/Plugins/Engine/Core/Config" FILES
 	"${ENGINE_DIR}/Plugins/Engine/Core/Config/Public/Config.h"
-	"${ENGINE_DIR}/Plugins/Engine/Core/Config/Private/Config.cpp"
+${Config_PRIVATE_SOURCES}
 )
 
+file(GLOB Exception_PRIVATE_SOURCES CONFIGURE_DEPENDS "${ENGINE_DIR}/Plugins/Engine/Core/Exception/Private/*.cpp")
 add_library(Exception SHARED
 	${ENGINE_DIR}/Plugins/Engine/Core/Exception/Public/Exception.h
-	${ENGINE_DIR}/Plugins/Engine/Core/Exception/Private/Exception.cpp
+${Exception_PRIVATE_SOURCES}
 	${ENGINE_DIR}/Plugins/Engine/Core/Exception/Exception.cplugin
 	${ENGINE_DIR}/Plugins/Engine/Core/Exception/Exception.cmake
 	${ENGINE_DIR}/Plugins/Engine/Core/Exception/settings.json
@@ -228,12 +235,13 @@ unset(_MOD_PLUGIN_DIR)
 
 source_group(TREE "${ENGINE_DIR}/Plugins/Engine/Core/Exception" FILES
 	"${ENGINE_DIR}/Plugins/Engine/Core/Exception/Public/Exception.h"
-	"${ENGINE_DIR}/Plugins/Engine/Core/Exception/Private/Exception.cpp"
+${Exception_PRIVATE_SOURCES}
 )
 
+file(GLOB Log_PRIVATE_SOURCES CONFIGURE_DEPENDS "${ENGINE_DIR}/Plugins/Engine/Core/Log/Private/*.cpp")
 add_library(Log SHARED
 	${ENGINE_DIR}/Plugins/Engine/Core/Log/Public/Log.h
-	${ENGINE_DIR}/Plugins/Engine/Core/Log/Private/Log.cpp
+${Log_PRIVATE_SOURCES}
 	${ENGINE_DIR}/Plugins/Engine/Core/Log/Log.cplugin
 	${ENGINE_DIR}/Plugins/Engine/Core/Log/Log.cmake
 	${ENGINE_DIR}/Plugins/Engine/Core/Log/settings.json
@@ -256,12 +264,13 @@ unset(_MOD_PLUGIN_DIR)
 
 source_group(TREE "${ENGINE_DIR}/Plugins/Engine/Core/Log" FILES
 	"${ENGINE_DIR}/Plugins/Engine/Core/Log/Public/Log.h"
-	"${ENGINE_DIR}/Plugins/Engine/Core/Log/Private/Log.cpp"
+${Log_PRIVATE_SOURCES}
 )
 
+file(GLOB Name_PRIVATE_SOURCES CONFIGURE_DEPENDS "${ENGINE_DIR}/Plugins/Engine/Core/Name/Private/*.cpp")
 add_library(Name SHARED
 	${ENGINE_DIR}/Plugins/Engine/Core/Name/Public/Name.h
-	${ENGINE_DIR}/Plugins/Engine/Core/Name/Private/Name.cpp
+${Name_PRIVATE_SOURCES}
 	${ENGINE_DIR}/Plugins/Engine/Core/Name/Name.cplugin
 	${ENGINE_DIR}/Plugins/Engine/Core/Name/Name.cmake
 	${ENGINE_DIR}/Plugins/Engine/Core/Name/settings.json
@@ -284,12 +293,13 @@ unset(_MOD_PLUGIN_DIR)
 
 source_group(TREE "${ENGINE_DIR}/Plugins/Engine/Core/Name" FILES
 	"${ENGINE_DIR}/Plugins/Engine/Core/Name/Public/Name.h"
-	"${ENGINE_DIR}/Plugins/Engine/Core/Name/Private/Name.cpp"
+${Name_PRIVATE_SOURCES}
 )
 
+file(GLOB Platform_PRIVATE_SOURCES CONFIGURE_DEPENDS "${ENGINE_DIR}/Plugins/Engine/GameEngine/Platform/Private/*.cpp")
 add_library(Platform SHARED
 	${ENGINE_DIR}/Plugins/Engine/GameEngine/Platform/Public/Platform.h
-	${ENGINE_DIR}/Plugins/Engine/GameEngine/Platform/Private/Platform.cpp
+${Platform_PRIVATE_SOURCES}
 	${ENGINE_DIR}/Plugins/Engine/GameEngine/Platform/Platform.cplugin
 	${ENGINE_DIR}/Plugins/Engine/GameEngine/Platform/Platform.cmake
 	${ENGINE_DIR}/Plugins/Engine/GameEngine/Platform/settings.json
@@ -319,12 +329,13 @@ target_link_libraries(Platform PUBLIC ConsoleVariable Log)
 
 source_group(TREE "${ENGINE_DIR}/Plugins/Engine/GameEngine/Platform" FILES
 	"${ENGINE_DIR}/Plugins/Engine/GameEngine/Platform/Public/Platform.h"
-	"${ENGINE_DIR}/Plugins/Engine/GameEngine/Platform/Private/Platform.cpp"
+${Platform_PRIVATE_SOURCES}
 )
 
+file(GLOB RHI_PRIVATE_SOURCES CONFIGURE_DEPENDS "${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RHI/Private/*.cpp")
 add_library(RHI SHARED
 	${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RHI/Public/RHI/RHIServer.h
-	${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RHI/Private/RHI.cpp
+${RHI_PRIVATE_SOURCES}
 	${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RHI/RHI.cplugin
 	${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RHI/RHI.cmake
 	${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RHI/settings.json
@@ -352,12 +363,13 @@ target_link_libraries(RHI PUBLIC ConsoleVariable Log Platform)
 
 source_group(TREE "${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RHI" FILES
 	"${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RHI/Public/RHI/RHIServer.h"
-	"${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RHI/Private/RHI.cpp"
+${RHI_PRIVATE_SOURCES}
 )
 
+file(GLOB Reflect_PRIVATE_SOURCES CONFIGURE_DEPENDS "${ENGINE_DIR}/Plugins/Common/Reflect/Private/*.cpp")
 add_library(Reflect SHARED
 	${ENGINE_DIR}/Plugins/Common/Reflect/Public/Reflect.h
-	${ENGINE_DIR}/Plugins/Common/Reflect/Private/Reflect.cpp
+${Reflect_PRIVATE_SOURCES}
 	${ENGINE_DIR}/Plugins/Common/Reflect/Reflect.cplugin
 	${ENGINE_DIR}/Plugins/Common/Reflect/Reflect.cmake
 	${ENGINE_DIR}/Plugins/Common/Reflect/settings.json
@@ -380,12 +392,13 @@ unset(_MOD_PLUGIN_DIR)
 
 source_group(TREE "${ENGINE_DIR}/Plugins/Common/Reflect" FILES
 	"${ENGINE_DIR}/Plugins/Common/Reflect/Public/Reflect.h"
-	"${ENGINE_DIR}/Plugins/Common/Reflect/Private/Reflect.cpp"
+${Reflect_PRIVATE_SOURCES}
 )
 
+file(GLOB Resource_PRIVATE_SOURCES CONFIGURE_DEPENDS "${ENGINE_DIR}/Plugins/Engine/GameEngine/Resource/Private/*.cpp")
 add_library(Resource SHARED
 	${ENGINE_DIR}/Plugins/Engine/GameEngine/Resource/Public/Resource.h
-	${ENGINE_DIR}/Plugins/Engine/GameEngine/Resource/Private/Resource.cpp
+${Resource_PRIVATE_SOURCES}
 	${ENGINE_DIR}/Plugins/Engine/GameEngine/Resource/Resource.cplugin
 	${ENGINE_DIR}/Plugins/Engine/GameEngine/Resource/Resource.cmake
 	${ENGINE_DIR}/Plugins/Engine/GameEngine/Resource/settings.json
@@ -399,6 +412,7 @@ target_include_directories(Resource PUBLIC
 	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEngine/Public"
 	"${ENGINE_DIR}/Plugins/Engine/Core/Name/Public"
 	"${ENGINE_DIR}/Plugins/Engine/Core/Paths/Public"
+	"${ENGINE_DIR}/Plugins/Engine/Core/Log/Public"
 )
 set_target_properties(Resource PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 target_compile_definitions(Resource PRIVATE MAHO_RESOURCE_MODULE_EXPORTS)
@@ -408,16 +422,17 @@ set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Engine/GameEngine/Resource")
 include("${ENGINE_DIR}/Plugins/Engine/GameEngine/Resource/Resource.cmake")
 unset(_MOD_PLUGIN_DIR)
 
-target_link_libraries(Resource PUBLIC Name Paths)
+target_link_libraries(Resource PUBLIC Name Paths Log)
 
 source_group(TREE "${ENGINE_DIR}/Plugins/Engine/GameEngine/Resource" FILES
 	"${ENGINE_DIR}/Plugins/Engine/GameEngine/Resource/Public/Resource.h"
-	"${ENGINE_DIR}/Plugins/Engine/GameEngine/Resource/Private/Resource.cpp"
+${Resource_PRIVATE_SOURCES}
 )
 
+file(GLOB Script_PRIVATE_SOURCES CONFIGURE_DEPENDS "${ENGINE_DIR}/Plugins/Engine/GameEngine/Script/Private/*.cpp")
 add_library(Script SHARED
 	${ENGINE_DIR}/Plugins/Engine/GameEngine/Script/Public/Script.h
-	${ENGINE_DIR}/Plugins/Engine/GameEngine/Script/Private/Script.cpp
+${Script_PRIVATE_SOURCES}
 	${ENGINE_DIR}/Plugins/Engine/GameEngine/Script/Script.cplugin
 	${ENGINE_DIR}/Plugins/Engine/GameEngine/Script/Script.cmake
 	${ENGINE_DIR}/Plugins/Engine/GameEngine/Script/settings.json
@@ -447,12 +462,13 @@ target_link_libraries(Script PUBLIC Resource ConsoleVariable Log Exception Refle
 
 source_group(TREE "${ENGINE_DIR}/Plugins/Engine/GameEngine/Script" FILES
 	"${ENGINE_DIR}/Plugins/Engine/GameEngine/Script/Public/Script.h"
-	"${ENGINE_DIR}/Plugins/Engine/GameEngine/Script/Private/Script.cpp"
+${Script_PRIVATE_SOURCES}
 )
 
+file(GLOB Text_PRIVATE_SOURCES CONFIGURE_DEPENDS "${ENGINE_DIR}/Plugins/Engine/Core/Text/Private/*.cpp")
 add_library(Text SHARED
 	${ENGINE_DIR}/Plugins/Engine/Core/Text/Public/Text.h
-	${ENGINE_DIR}/Plugins/Engine/Core/Text/Private/Text.cpp
+${Text_PRIVATE_SOURCES}
 	${ENGINE_DIR}/Plugins/Engine/Core/Text/Text.cplugin
 	${ENGINE_DIR}/Plugins/Engine/Core/Text/Text.cmake
 	${ENGINE_DIR}/Plugins/Engine/Core/Text/settings.json
@@ -475,12 +491,13 @@ unset(_MOD_PLUGIN_DIR)
 
 source_group(TREE "${ENGINE_DIR}/Plugins/Engine/Core/Text" FILES
 	"${ENGINE_DIR}/Plugins/Engine/Core/Text/Public/Text.h"
-	"${ENGINE_DIR}/Plugins/Engine/Core/Text/Private/Text.cpp"
+${Text_PRIVATE_SOURCES}
 )
 
+file(GLOB Timer_PRIVATE_SOURCES CONFIGURE_DEPENDS "${ENGINE_DIR}/Plugins/Engine/Core/Timer/Private/*.cpp")
 add_library(Timer SHARED
 	${ENGINE_DIR}/Plugins/Engine/Core/Timer/Public/Timer.h
-	${ENGINE_DIR}/Plugins/Engine/Core/Timer/Private/Timer.cpp
+${Timer_PRIVATE_SOURCES}
 	${ENGINE_DIR}/Plugins/Engine/Core/Timer/Timer.cplugin
 	${ENGINE_DIR}/Plugins/Engine/Core/Timer/Timer.cmake
 	${ENGINE_DIR}/Plugins/Engine/Core/Timer/settings.json
@@ -503,12 +520,13 @@ unset(_MOD_PLUGIN_DIR)
 
 source_group(TREE "${ENGINE_DIR}/Plugins/Engine/Core/Timer" FILES
 	"${ENGINE_DIR}/Plugins/Engine/Core/Timer/Public/Timer.h"
-	"${ENGINE_DIR}/Plugins/Engine/Core/Timer/Private/Timer.cpp"
+${Timer_PRIVATE_SOURCES}
 )
 
+file(GLOB Unicode_PRIVATE_SOURCES CONFIGURE_DEPENDS "${ENGINE_DIR}/Plugins/Common/Unicode/Private/*.cpp")
 add_library(Unicode SHARED
 	${ENGINE_DIR}/Plugins/Common/Unicode/Public/Unicode.h
-	${ENGINE_DIR}/Plugins/Common/Unicode/Private/Unicode.cpp
+${Unicode_PRIVATE_SOURCES}
 	${ENGINE_DIR}/Plugins/Common/Unicode/Unicode.cplugin
 	${ENGINE_DIR}/Plugins/Common/Unicode/Unicode.cmake
 	${ENGINE_DIR}/Plugins/Common/Unicode/settings.json
@@ -531,12 +549,13 @@ unset(_MOD_PLUGIN_DIR)
 
 source_group(TREE "${ENGINE_DIR}/Plugins/Common/Unicode" FILES
 	"${ENGINE_DIR}/Plugins/Common/Unicode/Public/Unicode.h"
-	"${ENGINE_DIR}/Plugins/Common/Unicode/Private/Unicode.cpp"
+${Unicode_PRIVATE_SOURCES}
 )
 
+file(GLOB Render_PRIVATE_SOURCES CONFIGURE_DEPENDS "${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/Render/Private/*.cpp")
 add_library(Render SHARED
 	${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/Render/Public/Render.h
-	${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/Render/Private/Render.cpp
+${Render_PRIVATE_SOURCES}
 	${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/Render/Render.cplugin
 	${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/Render/Render.cmake
 	${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/Render/settings.json
@@ -569,12 +588,13 @@ target_link_libraries(Render PUBLIC RHI Platform)
 
 source_group(TREE "${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/Render" FILES
 	"${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/Render/Public/Render.h"
-	"${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/Render/Private/Render.cpp"
+${Render_PRIVATE_SOURCES}
 )
 
+file(GLOB Scene_PRIVATE_SOURCES CONFIGURE_DEPENDS "${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/Scene/Private/*.cpp")
 add_library(Scene SHARED
 	${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/Scene/Public/Scene.h
-	${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/Scene/Private/Scene.cpp
+${Scene_PRIVATE_SOURCES}
 	${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/Scene/Scene.cplugin
 	${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/Scene/Scene.cmake
 )
@@ -601,12 +621,13 @@ target_link_libraries(Scene PUBLIC Render)
 
 source_group(TREE "${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/Scene" FILES
 	"${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/Scene/Public/Scene.h"
-	"${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/Scene/Private/Scene.cpp"
+${Scene_PRIVATE_SOURCES}
 )
 
+file(GLOB DrawTriangleFeature_PRIVATE_SOURCES CONFIGURE_DEPENDS "${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/DrawTriangleFeature/Private/*.cpp")
 add_library(DrawTriangleFeature SHARED
 	${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/DrawTriangleFeature/Public/DrawTriangleFeature.h
-	${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/DrawTriangleFeature/Private/DrawTriangleFeature.cpp
+${DrawTriangleFeature_PRIVATE_SOURCES}
 	${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/DrawTriangleFeature/DrawTriangleFeature.cplugin
 	${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/DrawTriangleFeature/DrawTriangleFeature.cmake
 )
@@ -634,12 +655,13 @@ target_link_libraries(DrawTriangleFeature PUBLIC Render Scene)
 
 source_group(TREE "${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/DrawTriangleFeature" FILES
 	"${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/DrawTriangleFeature/Public/DrawTriangleFeature.h"
-	"${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/DrawTriangleFeature/Private/DrawTriangleFeature.cpp"
+${DrawTriangleFeature_PRIVATE_SOURCES}
 )
 
+file(GLOB Frame_PRIVATE_SOURCES CONFIGURE_DEPENDS "${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/Frame/Private/*.cpp")
 add_library(Frame SHARED
 	${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/Frame/Public/Frame.h
-	${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/Frame/Private/Frame.cpp
+${Frame_PRIVATE_SOURCES}
 	${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/Frame/Frame.cplugin
 	${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/Frame/Frame.cmake
 	${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/Frame/settings.json
@@ -670,12 +692,13 @@ target_link_libraries(Frame PUBLIC Render Scene)
 
 source_group(TREE "${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/Frame" FILES
 	"${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/Frame/Public/Frame.h"
-	"${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/Frame/Private/Frame.cpp"
+${Frame_PRIVATE_SOURCES}
 )
 
+file(GLOB UIFeature_PRIVATE_SOURCES CONFIGURE_DEPENDS "${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/UIFeature/Private/*.cpp")
 add_library(UIFeature SHARED
 	${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/UIFeature/Public/UIFeature.h
-	${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/UIFeature/Private/UIFeature.cpp
+${UIFeature_PRIVATE_SOURCES}
 	${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/UIFeature/UIFeature.cplugin
 	${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/UIFeature/UIFeature.cmake
 	${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/UIFeature/settings.json
@@ -706,12 +729,13 @@ target_link_libraries(UIFeature PUBLIC Render Scene)
 
 source_group(TREE "${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/UIFeature" FILES
 	"${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/UIFeature/Public/UIFeature.h"
-	"${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/UIFeature/Private/UIFeature.cpp"
+${UIFeature_PRIVATE_SOURCES}
 )
 
+file(GLOB ExampleEditor_PRIVATE_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEditor/ExampleEditor/Private/*.cpp")
 add_library(ExampleEditor SHARED
 	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEditor/ExampleEditor/Public/ExampleEditor.h
-	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEditor/ExampleEditor/Private/ExampleEditor.cpp
+${ExampleEditor_PRIVATE_SOURCES}
 	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEditor/ExampleEditor/ExampleEditor.cplugin
 	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEditor/ExampleEditor/ExampleEditor.cmake
 	${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEditor/ExampleEditor/settings.json
@@ -737,13 +761,14 @@ target_link_libraries(ExampleEditor PUBLIC Render)
 
 source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEditor/ExampleEditor" FILES
 	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEditor/ExampleEditor/Public/ExampleEditor.h"
-	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEditor/ExampleEditor/Private/ExampleEditor.cpp"
+${ExampleEditor_PRIVATE_SOURCES}
 )
 
 # The project root — the entry plugin (under Plugins/, Public header + Private impl).
+file(GLOB ExampleEngine_PRIVATE_SOURCES CONFIGURE_DEPENDS "Plugins/ExampleEngine/Private/*.cpp")
 add_library(ExampleEngine SHARED
 	Plugins/ExampleEngine/Public/ExampleEngine.h
-	Plugins/ExampleEngine/Private/ExampleEngine.cpp
+	${ExampleEngine_PRIVATE_SOURCES}
 	Plugins/ExampleEngine/ExampleEngine.cplugin
 	Plugins/ExampleEngine/ExampleEngine.cmake
 	Plugins/ExampleEngine/settings.json

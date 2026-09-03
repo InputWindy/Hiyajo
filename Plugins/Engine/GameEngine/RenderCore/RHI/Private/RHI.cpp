@@ -1,10 +1,5 @@
-﻿// RHI plugin - single codegen TU. The engine builds one Private/<Name>.cpp per
-// plugin; the RHI's other translation units are folded in here (unity build).
-//
-// VMA_IMPLEMENTATION must be set BEFORE any include: VulkanMemory.h pulls
-// vk_mem_alloc.h and is #pragma-once'd, so the second include (from
-// VulkanMemory.cpp) would be skipped and the VMA bodies never compiled.
-#define VMA_IMPLEMENTATION
+﻿// RHI plugin. Each Private/*.cpp is its own TU (codegen globs them); VMA's
+// implementation is owned solely by VulkanMemory.cpp (its own VMA_IMPLEMENTATION).
 
 #include <RHI/RHIServer.h>
 
@@ -16,10 +11,6 @@
 #include <vector>
 
 #include "RHI.h"
-#include "VulkanCommandList.cpp"
-#include "VulkanMemory.cpp"
-#include "VulkanResources.cpp"
-#include "VulkanRHI.cpp"
 
 namespace Maho
 {

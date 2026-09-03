@@ -198,27 +198,58 @@ const FResource* FResourceSystem::RegisterResource(std::string AssetPath, std::u
 	return Raw;
 }
 
+const FResource* FResourceSystem::RegisterChildResource(std::string AssetPath, std::unique_ptr<FResource> Resource)
+{
+	return RegisterResource(std::move(AssetPath), std::move(Resource));
+}
+
 void FResourceSystem::ProcessReadyIO()
 {
-		// Hold the impl lock for the WHOLE poll: producers (EnqueueImport/Export on the
-		// IO thread) write PendingIO/PendingExports concurrently - iterating/erasing
-	// them without the lock is a data race. The decode/OnDone callbacks run under
-	// the lock (they touch the same maps via RegisterResource / Shutdown).
-	std::lock_guard Lock(Impl->Mutex);
-
-	std::size_t Applied = 0;
-	for (auto It = Impl->PendingIO.begin(); It != Impl->PendingIO.end() && Applied < kMaxAppliesPerTick;)
+	std::vector<FPendingImport> ReadyImports;
+	std::vector<FPendingExport> ReadyExports;
 	{
-		FPendingImport& Pending = It->second;
-		if (!Pending.Handle.HasSucceeded() && !Pending.Handle.HasFailed())
+		// Hold the impl lock only to SPLIT OUT the completed transfers; producers
+		// (EnqueueImport/Export on the IO thread) write PendingIO/PendingExports
+		// concurrently, so the iteration/erase needs the lock. The decode callbacks
+		// run BELOW, outside it.
+		std::lock_guard Lock(Impl->Mutex);
+
+		std::size_t Applied = 0;
+		for (auto It = Impl->PendingIO.begin(); It != Impl->PendingIO.end() && Applied < kMaxAppliesPerTick;)
 		{
-			++It;
-			continue;
+			FPendingImport& Pending = It->second;
+			if (!Pending.Handle.HasSucceeded() && !Pending.Handle.HasFailed())
+			{
+				++It;
+				continue;
+			}
+
+			FPendingImport Ready = std::move(Pending);
+			It = Impl->PendingIO.erase(It);
+			ReadyImports.push_back(std::move(Ready));
+			++Applied;
 		}
 
-		FPendingImport Ready = std::move(Pending);
-		It = Impl->PendingIO.erase(It);
+		for (auto It = Impl->PendingExports.begin(); It != Impl->PendingExports.end();)
+		{
+			FPendingExport& Pending = It->second;
+			if (!Pending.Handle.HasSucceeded() && !Pending.Handle.HasFailed())
+			{
+				++It;
+				continue;
+			}
+			FPendingExport Ready = std::move(Pending);
+			It = Impl->PendingExports.erase(It);
+			ReadyExports.push_back(std::move(Ready));
+		}
+	}
 
+	// Apply OUTSIDE the impl lock. Importers may register the resource (and, for a
+	// prefab split, several child resources) via RegisterResource /
+	// RegisterChildResource, which lock Impl->Mutex themselves — invoking them under
+	// the impl lock would deadlock the non-recursive mutex.
+	for (FPendingImport& Ready : ReadyImports)
+	{
 		if (Ready.Handle.HasSucceeded())
 		{
 			std::lock_guard Lock(Ready.Handle.State->Mutex);
@@ -228,21 +259,10 @@ void FResourceSystem::ProcessReadyIO()
 		{
 			Ready.OnBulkReady({});   // failed - empty span
 		}
-
-		++Applied;
 	}
 
-	// apply ready exports (OnDone(bool) on the game thread)
-	for (auto It = Impl->PendingExports.begin(); It != Impl->PendingExports.end();)
+	for (FPendingExport& Ready : ReadyExports)
 	{
-		FPendingExport& Pending = It->second;
-		if (!Pending.Handle.HasSucceeded() && !Pending.Handle.HasFailed())
-		{
-			++It;
-			continue;
-		}
-		FPendingExport Ready = std::move(Pending);
-		It = Impl->PendingExports.erase(It);
 		if (Ready.OnDone)
 		{
 			Ready.OnDone(Ready.Handle.HasSucceeded());

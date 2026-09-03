@@ -122,6 +122,14 @@ public:
 	/** Try to load: Find; nullptr when not loaded yet. */
 	[[nodiscard]] const FResource* TryLoad(std::string_view AssetPath);
 
+	/**
+	 * Register a child resource produced by an import (e.g. a prefab split: meshes,
+	 * materials, skeleton, animations, plus the prefab document). AssetPath is a
+	 * package-style path; a colliding key overwrites the prior entry. Intended to be
+	 * called from inside a TResourceImporter<T>::Import body (game thread).
+	 */
+	[[nodiscard]] MAHO_RESOURCE_API const FResource* RegisterChildResource(std::string AssetPath, std::unique_ptr<FResource> Resource);
+
 private:
 	// -- engine pipeline stages (scheduler-only) --
 	void PreInitialize(FEngineBase&) override {}
@@ -189,7 +197,7 @@ bool FResourceSystem::Import(typename TResourceImporter<TResource>::FConfig Conf
 			// Decode on the game thread once the bulk data is ready.
 			const FResource* Raw = nullptr;
 			auto Resource = std::make_unique<TResource>(AssetPath);
-			if (TResourceImporter<TResource>::Import(Config, Bytes, *Resource))
+			if (TResourceImporter<TResource>::Import(Config, Bytes, *Resource, *this))
 			{
 				Raw = RegisterResource(AssetPath, std::move(Resource));
 			}

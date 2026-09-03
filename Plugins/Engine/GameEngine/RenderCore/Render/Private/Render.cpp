@@ -7,6 +7,7 @@
 #include <Platform.h>
 #include <Scene.h>
 #include "RenderResourcePool.h"
+#include "ShaderCompiler.h"
 
 // Dear ImGui — compiled INTO this DLL (Render.cmake); the UI's CPU-side context
 // is created/driven here, the render backend lives in UIFeature.
@@ -15,11 +16,6 @@
 #if defined(_WIN32)
 #	include <windows.h>
 #endif
-
-// Unity build: fold the shader compiler + resource pool TUs in (the codegen
-// target only compiles Render.cpp; the RHI plugin uses the same pattern).
-#include "ShaderCompiler.cpp"
-#include "RenderResourcePool.cpp"
 
 namespace Maho
 {

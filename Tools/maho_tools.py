@@ -432,9 +432,10 @@ file(GLOB MAHO_PRIVATE CONFIGURE_DEPENDS "${{ENGINE_DIR}}/Source/Private/**/*.cp
 
 {plugin_targets}
 # The project root — the entry plugin (under Plugins/, Public header + Private impl).
+file(GLOB {name}_PRIVATE_SOURCES CONFIGURE_DEPENDS "Plugins/{name}/Private/*.cpp")
 add_library({name} SHARED
 	Plugins/{name}/Public/{name}.h
-	Plugins/{name}/Private/{name}.cpp
+	${{{name}_PRIVATE_SOURCES}}
 {host_aux}
 )
 {host_aux_props}
@@ -814,10 +815,15 @@ def _plugin_targets(
 			f'include("{info["cmake_file"]}")\n'
 			f'unset(_MOD_PLUGIN_DIR)\n'
 		)
+		# Every Private/*.cpp is its own TU (mirrors the core library's GLOB), so
+		# codegen no longer hard-lists a single mod file. CONFIGURE_DEPENDS makes
+		# CMake re-glob when files change → new .cpp auto-enters the sln.
+		plugin_root = info["public_dir"].rsplit("/", 1)[0]
 		targets.append(
+			f'file(GLOB {name}_PRIVATE_SOURCES CONFIGURE_DEPENDS "{plugin_root}/Private/*.cpp")\n'
 			f"add_library({name} SHARED\n"
 			f'\t{info["public_dir"]}/{info.get("header", name)}.h\n'
-			f'\t{info["private_dir"]}/{info["mod_file"]}.cpp\n'
+			f"${{{name}_PRIVATE_SOURCES}}\n"
 			f"{aux_sources}\n"
 			f")\n"
 			f"{aux_props}"
@@ -854,14 +860,12 @@ def _plugin_targets(
 		folders.append(
 			f"set_target_properties({name} PROPERTIES FOLDER \"{folder}\")\n"
 		)
-		# show the plugin's files as the on-disk tree (Public/Private, ...)
-		plugin_root = info["public_dir"].rsplit("/", 1)[0]
+		# Show the plugin's files as the on-disk tree (Public/Private, ...).
 		plugin_h = f'{info["public_dir"]}/{info.get("header", name)}.h'
-		plugin_cpp = f'{info["private_dir"]}/{info["mod_file"]}.cpp'
 		targets.append(
 			f'source_group(TREE "{plugin_root}" FILES\n'
 			f'\t"{plugin_h}"\n'
-			f'\t"{plugin_cpp}"\n'
+			f"${{{name}_PRIVATE_SOURCES}}\n"
 			f")\n"
 		)
 	return "\n".join(targets), link_names, all_names, "\n".join(folders)
