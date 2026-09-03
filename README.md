@@ -56,7 +56,6 @@ Opens the UI, enter a project name / parent folder / engine root / author. Creat
 
 Double-click `<Project>.cproject` (or `Tools/generateProject.bat <Project>.cproject`):
 
-- codegen generates `Intermediate/Generated/<Project>.gen.h` (per-plugin forward declarations + a guarded full-include block)
 - scans engine `Plugins/`, project `Plugins/`, project `Extension/`, rewrites CMakeLists (one DLL target per plugin)
 - detects the local Visual Studio (vswhere) to pick a CMake generator
 - produces `<Project>.sln`
@@ -214,7 +213,6 @@ ExampleEngine/
         Public/Scene.h                <- FScene : FLayer<IBeginRender, IRender, IEndRender, IPresent>
       DrawTriangleFeature/            <- triangle feature: compiles shaders + draws
         Public/DrawTriangleFeature.h  <- FDrawTriangleFeature : FLayer<IRender>
-  Intermediate/Generated/ExampleEngine.gen.h  <- codegen output (forward decls + include block)
   CMakeLists.txt / package.bat / CreatePlugin.bat
 ```
 

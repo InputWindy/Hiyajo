@@ -431,12 +431,20 @@ file(GLOB MAHO_HEADERS CONFIGURE_DEPENDS "${{ENGINE_DIR}}/Source/Public/**/*.h")
 file(GLOB MAHO_PRIVATE CONFIGURE_DEPENDS "${{ENGINE_DIR}}/Source/Private/**/*.cpp")
 
 {plugin_targets}
-# The project root — the entry plugin (under Plugins/, Public header + Private impl).
+# The project root — the entry plugin (under Plugins/, Public headers + Private impl).
+file(GLOB {name}_PUBLIC_HEADERS CONFIGURE_DEPENDS "Plugins/{name}/Public/*.h")
+file(GLOB {name}_PRIVATE_HEADERS CONFIGURE_DEPENDS "Plugins/{name}/Private/*.h")
 file(GLOB {name}_PRIVATE_SOURCES CONFIGURE_DEPENDS "Plugins/{name}/Private/*.cpp")
 add_library({name} SHARED
-	Plugins/{name}/Public/{name}.h
+	${{{name}_PUBLIC_HEADERS}}
+	${{{name}_PRIVATE_HEADERS}}
 	${{{name}_PRIVATE_SOURCES}}
 {host_aux}
+)
+source_group(TREE "${{CMAKE_CURRENT_SOURCE_DIR}}/Plugins/{name}" FILES
+	${{{name}_PUBLIC_HEADERS}}
+	${{{name}_PRIVATE_HEADERS}}
+	${{{name}_PRIVATE_SOURCES}}
 )
 {host_aux_props}
 target_include_directories({name} PUBLIC
@@ -473,22 +481,7 @@ else()
 	)
 		set_target_properties(MahoCheckCycle PROPERTIES FOLDER "ThirdParty")
 		add_dependencies({name} MahoCheckCycle)
-
-	# Scan MAHO_EXTEND_DEPS globally and (re)generate each class's dependency
-	# macros into its declaring file's sibling .gen.h BEFORE any source that
-	# includes them compiles.
-	add_custom_target(MahoScanDeps
-		COMMAND "${{MAHO_PYTHON_EXECUTABLE}}" "${{ENGINE_DIR}}/Tools/scan_deps.py"
-			--src "${{ENGINE_DIR}}/Source"
-			--src "${{ENGINE_DIR}}/Plugins"
-			--src "${{CMAKE_CURRENT_SOURCE_DIR}}/Plugins"
-			--out "${{CMAKE_CURRENT_SOURCE_DIR}}/Intermediate/Generated/_deps.json"
-		BYPRODUCTS "${{CMAKE_CURRENT_SOURCE_DIR}}/Intermediate/Generated/_deps.json"
-		VERBATIM
-	)
-		set_target_properties(MahoScanDeps PROPERTIES FOLDER "ThirdParty")
-		add_dependencies({name} MahoScanDeps)
-	endif()
+		endif()
 
 # The entry — code-gen boilerplate (never edited), loads {name}.dll.
 # The engine source lives in the Maho library (sln folder Maho/); the exe
@@ -561,7 +554,6 @@ source_group(TREE "${{CMAKE_CURRENT_SOURCE_DIR}}/Plugins/{name}" FILES
 	Plugins/{name}/Private/{name}.cpp
 )
 # EntryPoint stays at the root (no FOLDER property).
-{plugin_folders}
 """
 
 PACKAGE_BAT = """@echo off
@@ -670,6 +662,10 @@ def _all_plugin_infos(
 			# Kind → class-name suffix (F{Name}Tool / F{Name}Layer / F{Name}Engine).
 			"kind": group.split("/")[0].lower() if group else "tool",
 			"aux_files": aux,
+			# On-disk location (plugin dir + cmake basename) — lets codegen write
+			# the plugin's own self-contained .cmake build block.
+			"disk_dir": str(plugin_dir),
+			"dir_name": dir_name,
 		}
 
 	# Engine plugins: Plugins/<group>/<name>/.
@@ -751,24 +747,28 @@ def _plugin_include_dirs(
 
 def _plugin_targets(
 	engine_root: Path, names: list[str], project_name: str, project_dir: Path | None = None
-) -> tuple[str, list[str], list[str], str]:
-	"""CMake add_library blocks for each dependency plugin (a loadable DLL target).
+) -> tuple[str, list[str], list[str]]:
+	"""Write each dependency plugin's own self-contained .cmake build block and
+	return the top-level CMakeLists lines to include them.
 
-	Returns (targets_block, link_names, all_names, folders_block):
+	Every plugin now owns its target: file(GLOB)+add_library+source_group+
+	include_dirs+link deps live INSIDE <Name>.cmake, alongside the user's own
+	hand-written third-party deps (preserved below a marker). The top-level
+	CMakeLists only #include()s them, in dependency order — codegen no longer
+	writes plugin build content inline.
+
+	Returns (includes_block, link_names, all_names):
 	  - link_names: engine plugins ONLY — link into the host/entry DLL (their
 	    headers are compile-time-included by the host).
 	  - all_names: every plugin — build targets + EntryPoint add_dependencies
-	    (project feature plugins are loaded at RUNTIME via FAssembly, so the
-	    host does NOT link them).
-	  - folders_block groups each dep target under the project's solution folder.
+	    (project feature plugins are loaded at RUNTIME via FAssembly).
 	"""
 	infos = _all_plugin_infos(engine_root, project_dir)
 	name_set = set(names)
 
-	targets: list[str] = []
+	includes: list[str] = []
 	link_names: list[str] = []
 	all_names: list[str] = []
-	folders: list[str] = []
 	for name in names:
 		info = infos.get(name)
 		if not info:
@@ -777,8 +777,14 @@ def _plugin_targets(
 		is_engine = info["public_dir"].startswith("${ENGINE_DIR}")
 		if is_engine:
 			link_names.append(name)
+		dir_name = info["dir_name"]
+		cmake_path = Path(info["disk_dir"]) / f"{dir_name}.cmake"
+		plugin_root = info["public_dir"].rsplit("/", 1)[0]
+
 		aux_files = info.get("aux_files", [])
-		aux_sources = "\n".join(f"\t{af}" for af in aux_files)
+		aux_sources = "\n".join(
+			f'\t"${{CMAKE_CURRENT_LIST_DIR}}/{Path(af).name}"' for af in aux_files
+		)
 		aux_props = (
 			f"set_source_files_properties({aux_sources} PROPERTIES HEADER_FILE_ONLY ON)\n"
 			if aux_files
@@ -810,128 +816,86 @@ def _plugin_targets(
 			f"{priv_include_dirs}"
 			f")\n"
 		) if priv_include_dirs else ""
-		cmake_include = (
-			f'set(_MOD_PLUGIN_DIR "{info["public_dir"].rsplit("/", 1)[0]}")\n'
-			f'include("{info["cmake_file"]}")\n'
-			f'unset(_MOD_PLUGIN_DIR)\n'
-		)
-		# Every Private/*.cpp is its own TU (mirrors the core library's GLOB), so
-		# codegen no longer hard-lists a single mod file. CONFIGURE_DEPENDS makes
-		# CMake re-glob when files change → new .cpp auto-enters the sln.
-		plugin_root = info["public_dir"].rsplit("/", 1)[0]
-		targets.append(
-			f'file(GLOB {name}_PRIVATE_SOURCES CONFIGURE_DEPENDS "{plugin_root}/Private/*.cpp")\n'
-			f"add_library({name} SHARED\n"
-			f'\t{info["public_dir"]}/{info.get("header", name)}.h\n'
-			f"${{{name}_PRIVATE_SOURCES}}\n"
-			f"{aux_sources}\n"
-			f")\n"
-			f"{aux_props}"
-			f"target_include_directories({name} PUBLIC\n"
-			f'\t"${{ENGINE_DIR}}/Source/Public"\n'
-			f'\t"{info["public_dir"]}"\n'
-			f"\t{entry_public}\n"
-			f"{dep_public_dirs}"
-			f"{pub_include_dirs}"
-			f")\n"
-			f"{priv_inc_block}"
-			f"set_target_properties({name} PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)\n"
-			f"target_compile_definitions({name} PRIVATE MAHO_{name.upper()}_MODULE_EXPORTS)\n"
-			f"target_link_libraries({name} PUBLIC Maho)\n"
-			f"set_property(TARGET {name} PROPERTY RUNTIME_OUTPUT_DIRECTORY \"${{CMAKE_BINARY_DIR}}/Binaries/$<CONFIG>\")\n"
-			f"{cmake_include}"
-		)
 		# Plugin → its in-chain deps (host + disabled plugins excluded). Link,
 		# not just add_dependencies — PUBLIC include dirs + third-party targets
 		# (nlohmann_json, glm, …) must propagate to dependents.
 		deps_in_chain = [
 			d for d in info.get("Dependencies", []) if d in name_set and d != name
 		]
-		if deps_in_chain:
-			targets.append(
-				f"target_link_libraries({name} PUBLIC {' '.join(deps_in_chain)})\n"
-			)
 		group = info["group"]
 		# sln folder tree: EntryPoint at root, then Maho / Project / ThirdParty.
 		# Engine plugins → Maho/Plugins/..., project plugins → Project/Plugins/...
 		# (grouped by the filesystem hierarchy under each Plugins root).
 		base = "Maho/Plugins" if is_engine else "Project/Plugins"
 		folder = f"{base}/{group}" if group else base
-		folders.append(
-			f"set_target_properties({name} PROPERTIES FOLDER \"{folder}\")\n"
+
+		# -- generated build block (self-contained; paths relative to this .cmake). --
+		gen_lines: list[str] = [
+			f"# -- MAHOGEN {name} -- auto-generated build block, do not edit --",
+			f'file(GLOB {name}_PUBLIC_HEADERS CONFIGURE_DEPENDS "${{CMAKE_CURRENT_LIST_DIR}}/Public/*.h")',
+			f'file(GLOB {name}_PRIVATE_HEADERS CONFIGURE_DEPENDS "${{CMAKE_CURRENT_LIST_DIR}}/Private/*.h")',
+			f'file(GLOB {name}_PRIVATE_SOURCES CONFIGURE_DEPENDS "${{CMAKE_CURRENT_LIST_DIR}}/Private/*.cpp")',
+			f"add_library({name} SHARED",
+			f"${{{name}_PUBLIC_HEADERS}}",
+			f"${{{name}_PRIVATE_HEADERS}}",
+			f"${{{name}_PRIVATE_SOURCES}}",
+		]
+		if aux_sources:
+			gen_lines.append(aux_sources)
+		gen_lines.append(")")
+		if aux_props:
+			gen_lines.append(aux_props)
+		gen_lines += [
+			f"target_include_directories({name} PUBLIC",
+			f'\t"${{ENGINE_DIR}}/Source/Public"',
+			f'\t"${{CMAKE_CURRENT_LIST_DIR}}/Public"',
+			f"\t{entry_public}",
+		]
+		if dep_public_dirs:
+			gen_lines.append(dep_public_dirs.rstrip())
+		if pub_include_dirs:
+			gen_lines.append(pub_include_dirs.rstrip())
+		gen_lines.append(")")
+		if priv_inc_block:
+			gen_lines.append(priv_inc_block.rstrip())
+		gen_lines += [
+			f"set_target_properties({name} PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)",
+			f"target_compile_definitions({name} PRIVATE MAHO_{name.upper()}_MODULE_EXPORTS)",
+			f"target_link_libraries({name} PUBLIC Maho)",
+			f'set_property(TARGET {name} PROPERTY RUNTIME_OUTPUT_DIRECTORY "${{CMAKE_BINARY_DIR}}/Binaries/$<CONFIG>")',
+		]
+		if deps_in_chain:
+			gen_lines.append(f"target_link_libraries({name} PUBLIC {' '.join(deps_in_chain)})")
+		gen_lines += [
+			f'set_target_properties({name} PROPERTIES FOLDER "{folder}")',
+			f'source_group(TREE "${{CMAKE_CURRENT_LIST_DIR}}" FILES '
+			f"${{{name}_PUBLIC_HEADERS}} ${{{name}_PRIVATE_HEADERS}} ${{{name}_PRIVATE_SOURCES}})",
+			f"# -- /MAHOGEN {name} --",
+		]
+		gen = "\n".join(gen_lines)
+
+		# Preserve the user's hand-written third-party deps below the marker. On
+		# first write (no marker yet) the whole existing file becomes the tail.
+		marker_open = f"# -- MAHOGEN {name} --"
+		marker_close = f"# -- /MAHOGEN {name} --"
+		existing = cmake_path.read_text(encoding="utf-8") if cmake_path.is_file() else ""
+		if existing and marker_open in existing and marker_close in existing:
+			hand = existing.split(marker_close, 1)[1]
+		else:
+			hand = existing
+		hand = hand.lstrip("\n")
+		content = gen
+		if hand.strip():
+			content += "\n\n" + hand
+		content += "\n"
+		cmake_path.write_text(content, encoding="utf-8", newline="\n")
+
+		includes.append(
+			f'set(_MOD_PLUGIN_DIR "{plugin_root}")\n'
+			f'include("{info["cmake_file"]}")\n'
+			f"unset(_MOD_PLUGIN_DIR)\n"
 		)
-		# Show the plugin's files as the on-disk tree (Public/Private, ...).
-		plugin_h = f'{info["public_dir"]}/{info.get("header", name)}.h'
-		targets.append(
-			f'source_group(TREE "{plugin_root}" FILES\n'
-			f'\t"{plugin_h}"\n'
-			f"${{{name}_PRIVATE_SOURCES}}\n"
-			f")\n"
-		)
-	return "\n".join(targets), link_names, all_names, "\n".join(folders)
-
-
-def codegen_plugin_extensions(cproject_path: Path) -> Path:
-	"""Generate <Name>.gen.h in Intermediate/Generated/ — the plugin includes +
-	the extension macro (injected into the host's TExtensionList).
-
-	Code injection: the generated header lives in Intermediate/, the user's
-	workspace files are never rewritten by code-gen.
-	"""
-	cproject_path = cproject_path.resolve()
-	data = read_cproject(cproject_path)
-	name = str(data["ProjectName"])
-	project_dir = cproject_path.parent
-
-	# The dependency plugins = .cproject Plugins minus the default plugin (the
-	# project itself, named the same as the project).
-	plugins = [p["Name"] for p in data.get("Plugins", []) if p.get("Enabled", True)]
-	plugins = [p for p in plugins if p != name]
-
-	# Class-name suffix from each plugin's kind directory (Tool/Layer/Engine).
-	# Class = F{Name}{Suffix}; the project's own root is a Layer: F{Name}Layer.
-	infos = _all_plugin_infos(resolve_engine_directory(cproject_path, data), project_dir)
-	_suffix = {"tool": "Tool", "layer": "Layer", "engine": "Engine"}
-
-	def _class_of(p: str) -> str:
-		if p == name:
-			return f"{name}::F{name}Layer"
-		kind = infos[p]["kind"] if p in infos else "tool"
-		return f"{p}::F{p}{_suffix.get(kind, 'Tool')}"
-
-	# Forward-declare every dependency plugin (their full headers would drag the
-	# project header back in → include cycle). The host cpp includes the real
-	# headers when it actually drives them.
-	fwd_decls = "\n".join(
-		f"namespace Maho {{ namespace {p} {{ class {_class_of(p).split('::')[1]}; }} }}"
-		for p in plugins
-	)
-	# Full includes — guarded so the host cpp can pull them in deliberately.
-	# Use each plugin's Header (Math → MathTool.h) unless it collides with a
-	# system header of the same name.
-	full_includes = "\n".join(
-		f"#include <{infos[p]['header']}.h>" if p in infos else f"#include <{p}.h>"
-		for p in plugins
-	)
-	text = (
-		"// Generated by Maho code-gen — the project's plugin extensions.\n"
-		"// Do not edit — regenerated from the .cproject before every build.\n"
-		"#pragma once\n\n"
-		f"{fwd_decls}\n\n"
-	)
-	if full_includes:
-		text += (
-			"\n// Full plugin headers — the host cpp defines "
-			f"{name.upper()}_INCLUDE_PLUGINS to pull them in.\n"
-			f"#ifdef {name.upper()}_INCLUDE_PLUGINS\n"
-			f"{full_includes}\n"
-			f"#endif\n"
-		)
-	out_dir = project_dir / "Intermediate" / "Generated"
-	out_dir.mkdir(parents=True, exist_ok=True)
-	gen_h = out_dir / f"{name}.gen.h"
-	gen_h.write_text(text, encoding="utf-8", newline="\n")
-	return gen_h
+	return "\n".join(includes), link_names, all_names
 
 
 def _write_cmake_lists(
@@ -959,7 +923,7 @@ def _write_cmake_lists(
 		if _all_plugin_infos(engine_root, project_dir).get(p, {}).get("public_dir", "").startswith("${ENGINE_DIR}")
 	]
 	plugin_dirs = _plugin_include_dirs(engine_root, engine_chain, project_dir)
-	plugin_targets, plugin_link_names, plugin_all_names, plugin_folders = _plugin_targets(
+	plugin_targets, plugin_link_names, plugin_all_names = _plugin_targets(
 		engine_root, chain, project_name, project_dir
 	)
 
@@ -991,7 +955,6 @@ def _write_cmake_lists(
 			plugin_targets=plugin_targets,
 			plugin_link_names=" ".join(plugin_link_names),
 			plugin_all_names=" ".join(plugin_all_names),
-			plugin_folders=plugin_folders,
 			host_aux=host_aux_block,
 			host_aux_props=host_aux_props,
 		),
@@ -1510,10 +1473,6 @@ def generate_from_cproject(
 	log(f"[Maho] Dir     : {project_dir}")
 	log(f"[Maho] Engine  : {engine_root}")
 
-	# Code injection — regenerate the .gen.h (plugin extensions) from .cproject.
-	gen_h = codegen_plugin_extensions(cproject_path)
-	log(f"[Maho] Gen     : {gen_h.relative_to(project_dir)}")
-
 	# Regenerate CMakeLists on every generate. The .cproject/.cplugin is the
 	# single source of truth: include-vs-link is now explicit (Dependencies =
 	# link, PublicIncludes/PrivateIncludes = compile-only include), so the
@@ -1730,21 +1689,8 @@ def install_windows_cproject_association(*, log: Any = print) -> None:
 	) as key:
 		winreg.SetValueEx(key, None, 0, winreg.REG_SZ, switch_command)
 
-	# Sub-command 2: Update docs.
-	update_docs_vbs = ENGINE_ROOT / "Tools" / "launch_update_docs.vbs"
-	if update_docs_vbs.is_file():
-		update_command = f"\"{wscript}\" //nologo \"{update_docs_vbs}\" \"%1\""
-		updocs_dir = rf"Software\Classes\{prog_id}\shell\MahoTools\shell\UpdateDocs"
-		with winreg.CreateKeyEx(winreg.HKEY_CURRENT_USER, updocs_dir) as key:
-			winreg.SetValueEx(key, None, 0, winreg.REG_SZ, "更新项目文档(&D)")
-			winreg.SetValueEx(key, "MUIVerb", 0, winreg.REG_SZ, "更新项目文档(&D)")
-		with winreg.CreateKeyEx(
-			winreg.HKEY_CURRENT_USER, rf"{updocs_dir}\command"
-		) as key:
-			winreg.SetValueEx(key, None, 0, winreg.REG_SZ, update_command)
-
 	log("[Maho] Associated .cproject → launch_generate_project.vbs (current user)")
-	log("[Maho] Context menu: Maho → 选择链接引擎 / 更新项目文档")
+	log("[Maho] Context menu: Maho → 选择链接引擎")
 	log(f"[Maho] Open: {open_command}")
 	log("[Maho] Removed legacy Catty.CProject association if present.")
 
@@ -2384,133 +2330,6 @@ def resolve_plugin_roots_for_cproject(cproject_path: Path) -> list[Path]:
 			roots.append(candidate)
 			break
 	return roots
-
-
-# ───────────────────────────────────────────────────────────────────────
-# Doc structure generator — <Name>Doc.md + <Name>API.html.
-# ───────────────────────────────────────────────────────────────────────
-
-_GENERATED_MARK = "mahogen"
-_DOC_SKIP_DIRS = {
-	"Content", "Binaries", "Intermediate", "Cached", "Saved",
-	"ThirdParty", "Resources", ".git", ".vs",
-}
-_CODE_SUFFIXES = {".h", ".hpp", ".cpp", ".cxx", ".inl"}
-
-
-def _merge_md(existing: str, generated: str) -> str:
-	"""Keep hand-written prose below the generated block.
-
-	The generated header carries `<!-- mahogen -->` on its first line. Any
-	hand-written prose appended AFTER the generated body (a `<!-- mahogen -->
-	`-separated "手写区") survives a refresh; the generated block above is
-	replaced wholesale.
-	"""
-	marker = f"<!-- {_GENERATED_MARK} -->"
-	sep = f"<!-- {_GENERATED_MARK} end -->"
-	if sep in existing:
-		hand_written = existing[existing.index(sep) + len(sep):]
-		return generated + sep + hand_written
-	# Legacy: single marker, everything after the first line is generated.
-	return generated
-
-
-def update_docs(root: Path) -> None:
-	"""Generate <Name>Doc.md + <Name>API.html at every dir that has code files.
-
-	- Only dirs containing code files (own or transitively) get docs.
-	- A doc lists the dir's OWN code files; sub-levels are jump links.
-	- Private-side .cpp files are documented the same way.
-	- Never overwrites hand-written docs (no `mahogen` marker).
-	"""
-
-	def _skip(d: Path) -> bool:
-		return d.name in _DOC_SKIP_DIRS or d.name.startswith(".")
-
-	def _own_files(d: Path) -> list[Path]:
-		return sorted(
-			(p for p in d.iterdir() if p.is_file() and p.suffix.lower() in _CODE_SUFFIXES),
-			key=lambda p: p.name.lower(),
-		)
-
-	def _has_code(d: Path) -> bool:
-		if _own_files(d):
-			return True
-		return any(_has_code(c) for c in d.iterdir() if c.is_dir() and not _skip(c))
-
-	def _render_md(d: Path, own: list[Path], subs: list[Path]) -> str:
-		lines = [f"<!-- {_GENERATED_MARK} -->", f"# {d.name}", ""]
-		if own:
-			lines += ["## 代码文件", ""]
-			for f in own:
-				lines.append(f"- [{f.name}]({f.name})")
-			lines.append("")
-		if subs:
-			lines += ["## 子层级", ""]
-			for c in subs:
-				lines.append(f"- [{c.name}]({c.name}/{c.name}Doc.md)")
-			lines.append("")
-		return "\n".join(lines)
-
-	def _render_api(d: Path, own: list[Path], subs: list[Path]) -> str:
-		file_items = "\n".join(f'\t<li><a href="{f.name}">{f.name}</a></li>' for f in own)
-		sub_items = "\n".join(
-			f'\t<li><a href="{c.name}/{c.name}API.html">{c.name}</a></li>' for c in subs
-		)
-		body = f"<h1>{d.name} — API</h1>\n"
-		if own:
-			body += f"<h2>代码文件</h2>\n<ul>\n{file_items}\n</ul>\n"
-		if subs:
-			body += f"<h2>子层级</h2>\n<ul>\n{sub_items}\n</ul>\n"
-		return (
-			f"<!DOCTYPE html>\n<!-- {_GENERATED_MARK} -->\n"
-			'<html lang="zh">\n<head>\n<meta charset="UTF-8">\n'
-			f"<title>{d.name} — API</title>\n"
-			"<style>"
-			":root{--bg:#14181f;--panel:#1b2130;--text:#d8e1f0;--muted:#8b96a8;--accent:#5b8dd9;--border:#2c3444;}"
-			"body{margin:0;padding:32px 40px;background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;max-width:1040px;line-height:1.7;}"
-			"h1{font-size:26px;border-bottom:2px solid var(--border);padding-bottom:12px;}"
-			"h2{font-size:22px;margin-top:32px;color:var(--accent);}"
-			"a{color:var(--accent);text-decoration:none;}"
-			"</style>\n</head>\n<body>\n"
-			+ body
-			+ "</body>\n</html>\n"
-		)
-
-	created = refreshed = skipped = 0
-	dirs = [root] + sorted(
-		(p for p in root.rglob("*") if p.is_dir() and not _skip(p)),
-		key=lambda p: str(p).lower(),
-	)
-	for d in dirs:
-		own = _own_files(d)
-		subs = sorted(
-			(c for c in d.iterdir() if c.is_dir() and not _skip(c) and _has_code(c)),
-			key=lambda p: p.name.lower(),
-		)
-		if not own and not subs:
-			continue  # empty dir — no doc
-
-		doc_md = d / f"{d.name}Doc.md"
-		api_html = d / f"{d.name}API.html"
-		for target, render in (
-			(doc_md, lambda: _render_md(d, own, subs)),
-			(api_html, lambda: _render_api(d, own, subs)),
-		):
-			if target.exists():
-				existing = target.read_text(encoding="utf-8")
-				if _GENERATED_MARK not in existing:
-					skipped += 1
-					continue
-				if target == doc_md:
-					target.write_text(_merge_md(existing, render()), encoding="utf-8", newline="\n")
-				else:
-					target.write_text(render(), encoding="utf-8", newline="\n")
-				refreshed += 1
-			else:
-				target.write_text(render(), encoding="utf-8", newline="\n")
-				created += 1
-	print(f"[Maho] Docs: {created} created, {refreshed} refreshed, {skipped} skipped.")
 
 
 # ───────────────────────────────────────────────────────────────────────

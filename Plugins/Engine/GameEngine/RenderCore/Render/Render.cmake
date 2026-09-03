@@ -1,3 +1,41 @@
+# -- MAHOGEN Render -- auto-generated build block, do not edit --
+file(GLOB Render_PUBLIC_HEADERS CONFIGURE_DEPENDS "${CMAKE_CURRENT_LIST_DIR}/Public/*.h")
+file(GLOB Render_PRIVATE_HEADERS CONFIGURE_DEPENDS "${CMAKE_CURRENT_LIST_DIR}/Private/*.h")
+file(GLOB Render_PRIVATE_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_LIST_DIR}/Private/*.cpp")
+add_library(Render SHARED
+${Render_PUBLIC_HEADERS}
+${Render_PRIVATE_HEADERS}
+${Render_PRIVATE_SOURCES}
+	"${CMAKE_CURRENT_LIST_DIR}/Render.cplugin"
+	"${CMAKE_CURRENT_LIST_DIR}/Render.cmake"
+	"${CMAKE_CURRENT_LIST_DIR}/settings.json"
+)
+set_source_files_properties(	"${CMAKE_CURRENT_LIST_DIR}/Render.cplugin"
+	"${CMAKE_CURRENT_LIST_DIR}/Render.cmake"
+	"${CMAKE_CURRENT_LIST_DIR}/settings.json" PROPERTIES HEADER_FILE_ONLY ON)
+
+target_include_directories(Render PUBLIC
+	"${ENGINE_DIR}/Source/Public"
+	"${CMAKE_CURRENT_LIST_DIR}/Public"
+	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEngine/Public"
+	"${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RHI/Public"
+	"${ENGINE_DIR}/Plugins/Engine/GameEngine/Platform/Public"
+)
+target_include_directories(Render PRIVATE
+	"${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/Scene/Public"
+	"${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/DrawTriangleFeature/Public"
+	"${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/Frame/Public"
+	"${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/UIFeature/Public"
+)
+set_target_properties(Render PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
+target_compile_definitions(Render PRIVATE MAHO_RENDER_MODULE_EXPORTS)
+target_link_libraries(Render PUBLIC Maho)
+set_property(TARGET Render PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>")
+target_link_libraries(Render PUBLIC RHI Platform)
+set_target_properties(Render PROPERTIES FOLDER "Maho/Plugins/Engine/GameEngine/RenderCore")
+source_group(TREE "${CMAKE_CURRENT_LIST_DIR}" FILES ${Render_PUBLIC_HEADERS} ${Render_PRIVATE_HEADERS} ${Render_PRIVATE_SOURCES})
+# -- /MAHOGEN Render --
+
 # Render plugin: third-party dependencies.
 # The DLL target is built by codegen; this file only pulls FetchContent
 # deps and links them into the Render target.
@@ -129,3 +167,5 @@ if(_RENDER_HAS_GLSLANG)
 		"${glslang_BINARY_DIR}"
 	)
 endif()
+
+

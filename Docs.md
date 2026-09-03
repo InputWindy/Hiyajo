@@ -1,6 +1,6 @@
 # Maho — 文档索引
 
-全仓文档导航。所有文档均为 Markdown；公开 API 页 ↔ 实现字典页经 `#fn-...` 稳定锚点互跳。改完文档后跑 `Tools\check_docs.bat` 校验链接。
+全仓文档导航。所有文档均为 Markdown；公开 API 页 ↔ 实现字典页经 `#fn-...` 稳定锚点互跳。
 
 ## 引擎总览
 
@@ -57,17 +57,3 @@
 | [入口插件 API](Example/ExampleEngine/Plugins/ExampleEngine/API.md) | FExampleEngine（PreMain 安装服务层） |
 | [Scene API](Example/ExampleEngine/Plugins/RenderFeature/Scene/API.md) | 场景目标（SceneColor/SceneDepth） |
 | [DrawTriangleFeature API](Example/ExampleEngine/Plugins/RenderFeature/DrawTriangleFeature/API.md) | 全屏三角形绘制 |
-
-## 工具
-
-| 工具 | 说明 |
-|------|------|
-| `Tools/check_md_links.py` | 遍历仓库内全部 .md，校验相对链接目标存在（跳过代码块/行内代码中的假链接与 AGENTS.md） |
-| `Tools/check_docs.bat` / `check_docs.sh` | 包装器：用引擎本地 Python（`maho_python`）跑链接检查；改完文档后运行 |
-
-```bat
-:: 校验全仓文档链接（从引擎根目录）
-Tools\check_docs.bat
-:: 或直接
-python Tools\check_md_links.py
-```
