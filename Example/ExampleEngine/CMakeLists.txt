@@ -323,18 +323,18 @@ source_group(TREE "${ENGINE_DIR}/Plugins/Engine/GameEngine/Platform" FILES
 )
 
 add_library(RHI SHARED
-	${ENGINE_DIR}/Plugins/Common/RHI/Public/RHI/RHIServer.h
-	${ENGINE_DIR}/Plugins/Common/RHI/Private/RHI.cpp
-	${ENGINE_DIR}/Plugins/Common/RHI/RHI.cplugin
-	${ENGINE_DIR}/Plugins/Common/RHI/RHI.cmake
-	${ENGINE_DIR}/Plugins/Common/RHI/settings.json
+	${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RHI/Public/RHI/RHIServer.h
+	${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RHI/Private/RHI.cpp
+	${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RHI/RHI.cplugin
+	${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RHI/RHI.cmake
+	${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RHI/settings.json
 )
-set_source_files_properties(	${ENGINE_DIR}/Plugins/Common/RHI/RHI.cplugin
-	${ENGINE_DIR}/Plugins/Common/RHI/RHI.cmake
-	${ENGINE_DIR}/Plugins/Common/RHI/settings.json PROPERTIES HEADER_FILE_ONLY ON)
+set_source_files_properties(	${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RHI/RHI.cplugin
+	${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RHI/RHI.cmake
+	${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RHI/settings.json PROPERTIES HEADER_FILE_ONLY ON)
 target_include_directories(RHI PUBLIC
 	"${ENGINE_DIR}/Source/Public"
-	"${ENGINE_DIR}/Plugins/Common/RHI/Public"
+	"${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RHI/Public"
 	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEngine/Public"
 	"${ENGINE_DIR}/Plugins/Common/ConsoleVariable/Public"
 	"${ENGINE_DIR}/Plugins/Engine/Core/Log/Public"
@@ -344,15 +344,15 @@ set_target_properties(RHI PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 target_compile_definitions(RHI PRIVATE MAHO_RHI_MODULE_EXPORTS)
 target_link_libraries(RHI PUBLIC Maho)
 set_property(TARGET RHI PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>")
-set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Common/RHI")
-include("${ENGINE_DIR}/Plugins/Common/RHI/RHI.cmake")
+set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RHI")
+include("${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RHI/RHI.cmake")
 unset(_MOD_PLUGIN_DIR)
 
 target_link_libraries(RHI PUBLIC ConsoleVariable Log Platform)
 
-source_group(TREE "${ENGINE_DIR}/Plugins/Common/RHI" FILES
-	"${ENGINE_DIR}/Plugins/Common/RHI/Public/RHI/RHIServer.h"
-	"${ENGINE_DIR}/Plugins/Common/RHI/Private/RHI.cpp"
+source_group(TREE "${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RHI" FILES
+	"${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RHI/Public/RHI/RHIServer.h"
+	"${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RHI/Private/RHI.cpp"
 )
 
 add_library(Reflect SHARED
@@ -548,7 +548,7 @@ target_include_directories(Render PUBLIC
 	"${ENGINE_DIR}/Source/Public"
 	"${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/Render/Public"
 	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEngine/Public"
-	"${ENGINE_DIR}/Plugins/Common/RHI/Public"
+	"${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RHI/Public"
 	"${ENGINE_DIR}/Plugins/Engine/GameEngine/Platform/Public"
 )
 target_include_directories(Render PRIVATE
@@ -765,7 +765,7 @@ target_include_directories(ExampleEngine PUBLIC
 	"${ENGINE_DIR}/Plugins/Engine/Core/Log/Public"
 	"${ENGINE_DIR}/Plugins/Engine/Core/Name/Public"
 	"${ENGINE_DIR}/Plugins/Engine/GameEngine/Platform/Public"
-	"${ENGINE_DIR}/Plugins/Common/RHI/Public"
+	"${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RHI/Public"
 	"${ENGINE_DIR}/Plugins/Common/Reflect/Public"
 	"${ENGINE_DIR}/Plugins/Engine/GameEngine/Resource/Public"
 	"${ENGINE_DIR}/Plugins/Engine/GameEngine/Script/Public"
@@ -915,7 +915,7 @@ set_target_properties(Name PROPERTIES FOLDER "Maho/Plugins/Engine/Core")
 
 set_target_properties(Platform PROPERTIES FOLDER "Maho/Plugins/Engine/GameEngine")
 
-set_target_properties(RHI PROPERTIES FOLDER "Maho/Plugins/Common")
+set_target_properties(RHI PROPERTIES FOLDER "Maho/Plugins/Engine/GameEngine/RenderCore")
 
 set_target_properties(Reflect PROPERTIES FOLDER "Maho/Plugins/Common")
 
