@@ -2,6 +2,8 @@
 
 #include <Config.h>
 #include <Log.h>
+#include <Name.h>
+#include <Paths.h>
 #include <Platform.h>
 #include <Render.h>
 #include <Resource.h>
@@ -15,6 +17,8 @@ void FExampleEngine::PreMain()
 	// loop and FPlatform requests exit when the window is closed.
 	Install<FLog>();
 	Install<Config::FConfig>();
+	Install<Name::FNamePool>();
+	Install<Paths::FPaths>();
 	Install<Platform::FPlatform>();
 	Install<Resource::FResourceSystem>();
 	Install<Script::FScriptSystem>();

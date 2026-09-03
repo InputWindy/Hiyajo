@@ -4,7 +4,9 @@
 #include <Frame.h>
 #include <UIFeature.h>
 #include <Log.h>
+#include <Name.h>
 #include <Platform.h>
+#include <Paths.h>
 #include <Scene.h>
 #include "RenderResourcePool.h"
 #include "ShaderCompiler.h"
@@ -12,6 +14,8 @@
 // Dear ImGui — compiled INTO this DLL (Render.cmake); the UI's CPU-side context
 // is created/driven here, the render backend lives in UIFeature.
 #include "imgui.h"
+
+#include <algorithm>
 
 #if defined(_WIN32)
 #	include <windows.h>
@@ -32,6 +36,10 @@ FRender::FRender()
 	// (Log must be up first) -- both declared by ME, the consumer.
 	MyStage<IInit>().IsWaiting<Platform::FPlatform>().ForStage<IPostInit>();
 	MyStage<IInit>().IsWaiting<FLog>().ForStage<IInit>();
+	// My PostInit imports assets (FPaths::Resolve) and interns names (FNamePool)
+	// on the same stage - both must be post-init before I read them.
+	MyStage<IPostInit>().IsWaiting<Paths::FPaths>().ForStage<IPostInit>();
+	MyStage<IPostInit>().IsWaiting<Name::FNamePool>().ForStage<IPostInit>();
 
 	// Shutdown: my teardown drains render tasks that may log, and I hold the RHI
 	// surface created from Platform's window -- so Log and Platform must run
@@ -42,6 +50,10 @@ FRender::FRender()
 	// Input: Platform's Tick polls GLFW first, then the ImGui host feeds io and
 	// builds the UI (same frame). FRender owns the ImGui context directly.
 	MyStage<ITick>().IsWaiting<Platform::FPlatform>().ForStage<ITick>();
+
+	// Asset mirror: the render mirror consumes imported assets (upload to GPU), so
+	// the resource system must run its IInit (start the IO thread) before mine.
+	MyStage<IInit>().IsWaiting<Resource::FResourceSystem>().ForStage<IInit>();
 }
 
 FRender::~FRender() = default;
@@ -107,10 +119,53 @@ void FRender::Initialize(FEngineBase& Engine)
 		bUIInitialized = true;
 		MAHO_LOG_CORE_INFO("FRender: ImGui context created (CPU side; render backend in UIFeature)");
 	}
+
+	// CPU asset -> GPU mirror: listen for imported assets (create the GPU mirror +
+	// upload its bulk), for unloaded assets (release the mirror), and provide the
+	// GPU fill-back for export. Bound here so the asset system (IInit before mine)
+	// is up; unbind in Shutdown.
+	if (Resource::FResourceSystem* RS = Resource::GetResourceSystem())
+	{
+		RS->OnAssetImported.Bind([this](const Name::FName& N, Resource::FOnTransferDone D)
+		{
+			OnAssetMirrorImported(N, std::move(D));
+		});
+		RS->OnAssetUnloaded.Bind([this](const Name::FName& N, Resource::FOnTransferDone D)
+		{
+			OnAssetMirrorUnloaded(N, std::move(D));
+		});
+		RS->SetReadback([this](const Name::FName& N, Resource::FResource& R)
+		{
+			return ReadbackMirror(N, R);
+		});
+	}
+	else
+	{
+		MAHO_LOG_CORE_WARN("FRender: resource system unavailable; asset mirror disabled");
+	}
 }
 
 void FRender::PostInitialize(FEngineBase&)
 {
+	// Test harness: import a CPU texture asset right after Resource's IInit, so the
+	// async mirror OnAssetImported fires and the GPU mirror is built, then shown by
+	// the ImGui image below (DisplayMirrorImGui in Tick). Absolute path is passed
+	// through by FPaths::Resolve (no virtual-root alias).
+	if (Resource::FResourceSystem* RS = Resource::GetResourceSystem())
+	{
+		if (RS->Import<Resource::FTexture2D>({ "D:/TestPackage/test.png" }))
+		{
+			MAHO_LOG_CORE_INFO("FRender: queued texture import D:/TestPackage/test.png");
+		}
+		else
+		{
+			MAHO_LOG_CORE_WARN("FRender: import D:/TestPackage/test.png failed to queue");
+		}
+	}
+	else
+	{
+		MAHO_LOG_CORE_WARN("FRender: no resource system; test import skipped");
+	}
 }
 
 void FRender::WaitShaderCompiles()
@@ -137,6 +192,19 @@ void FRender::Shutdown(FEngineBase&)
 	// feature graph pool first (a task still in flight holds the graph pointer),
 	// then the two threaded servers (shader-compile thread + RHI render-server
 	GRender = nullptr;
+
+	// Unbind the asset-mirror delegates. The resource system may be shutting down
+	// concurrently; GetResourceSystem() returns null then (Resource's own Shutdown
+	// clears it), so the delegates are dropped only while the system is alive. The
+	// mirror table entries are Persistent RDG refs owned by the resource pool,
+	// released by ResourcePool->Shutdown below -- just drop the refs.
+	if (Resource::FResourceSystem* RS = Resource::GetResourceSystem())
+	{
+		RS->OnAssetImported.RemoveAll();
+		RS->OnAssetUnloaded.RemoveAll();
+	}
+	GpuMirrors.clear();
+	MirrorUISets.clear();   // descriptor sets are pool-owned; just drop the handles
 	// thread). All of them drain their queues and join here.
 	//
 	// The leftover render tasks drained below (e.g. the last frame's EndFrame)
@@ -305,6 +373,7 @@ void FRender::Tick(FEngineBase&)
 	// UIFeature render backend (reads R.UIData) inside the graph below.
 	if (bUIInitialized)
 	{
+		DisplayMirrorImGui();   // test harness: show the imported texture mirror
 		ImGui::Render();
 		UIData = ImGui::GetDrawData();
 	}
@@ -446,6 +515,264 @@ void FRender::PresentTexture(const FRDGTextureRef& Texture)
 	{
 		RHI->PresentTexture(ResourcePool->GetTexture(Texture));
 	}
+}
+
+// -- CPU asset -> GPU mirror --
+
+ERHIFormat FRender::FormatMirror(Resource::ETexturePixelFormat Fmt, bool bSRGB)
+{
+	switch (Fmt)
+	{
+		case Resource::ETexturePixelFormat::RGBA8:
+			return bSRGB ? ERHIFormat::R8G8B8A8_SRGB : ERHIFormat::R8G8B8A8_UNORM;
+		case Resource::ETexturePixelFormat::RGBA16F:
+			return ERHIFormat::R16G16B16A16_SFLOAT;
+		case Resource::ETexturePixelFormat::RGBA32F:
+			return ERHIFormat::R32G32B32A32_SFLOAT;
+		case Resource::ETexturePixelFormat::R8:
+			return ERHIFormat::R8_UNORM;
+		case Resource::ETexturePixelFormat::RG8:
+			return ERHIFormat::R8G8_UNORM;
+		case Resource::ETexturePixelFormat::RGB8:
+			return ERHIFormat::R8G8B8_UNORM;
+		case Resource::ETexturePixelFormat::R16F:
+			return ERHIFormat::R16_SFLOAT;
+		// Block-compressed (BlockCompressed/DXT1/DXT5/BC7) and Unknown: no dedicated
+		// RHI format yet, and a BC upload needs block-aligned rows. Returns Unknown
+		// so UploadTextureMirror fails cleanly. TODO: map once the RHI grows the
+		// BC1/BC3/BC7 formats (and the upload path handles block alignment).
+		default:
+			return ERHIFormat::Unknown;
+	}
+}
+
+ERHITextureDimension FRender::DimensionMirror(Resource::ETextureDimension Dim)
+{
+	switch (Dim)
+	{
+		case Resource::ETextureDimension::Tex2D:
+			return ERHITextureDimension::Tex2D;
+		case Resource::ETextureDimension::Tex3D:
+			return ERHITextureDimension::Tex3D;
+		case Resource::ETextureDimension::TexCube:
+			return ERHITextureDimension::Cube;
+		case Resource::ETextureDimension::Tex2DArray:
+		case Resource::ETextureDimension::TexCubeArray:
+			return ERHITextureDimension::Tex2DArray;
+		// 1D has no RHI dimension; fall back to 2D with height 1.
+		default:
+			return ERHITextureDimension::Tex2D;
+	}
+}
+
+bool FRender::UploadTextureMirror(const Name::FName& AssetName, Resource::FTexture& Tex)
+{
+	const ERHIFormat Fmt = FormatMirror(Tex.GetPixelFormat(), Tex.IsSRGB());
+	if (Fmt == ERHIFormat::Unknown)
+	{
+		MAHO_LOG_CORE_ERROR("FRender: unsupported texture pixel format for mirror");
+		return false;
+	}
+	const std::vector<std::uint8_t>& Pixels = Tex.GetPixels();
+	if (Pixels.empty())
+	{
+		return false;
+	}
+
+	FRHITextureDesc Desc;
+	Desc.Format = Fmt;
+	Desc.Dimension = DimensionMirror(Tex.GetDimension());
+	Desc.Extent.Width = Tex.GetWidth();
+	Desc.Extent.Height = Tex.GetHeight();
+	Desc.Extent.Depth = Tex.GetDepth();
+	Desc.MipLevels = Tex.GetMipCount();
+	Desc.ArrayLayers = Tex.GetArrayLayers();
+	Desc.Usage = ERHITextureUsage::Sampled | ERHITextureUsage::TransferDst;
+	Desc.MemoryUsage = ERHIMemoryUsage::GPUOnly;
+
+	FRDGTextureRef TexRef = CreateTexture(Desc, ERDGResourceLifetime::Persistent);
+	if (!TexRef.IsValid() || TexRef.GetRHI() == nullptr)
+	{
+		MAHO_LOG_CORE_ERROR("FRender: mirror texture allocation failed");
+		return false;
+	}
+
+	FRHIBufferDesc Staging;
+	Staging.Size = static_cast<std::uint64_t>(Pixels.size());
+	Staging.Usage = ERHIBufferUsage::TransferSrc;
+	Staging.MemoryUsage = ERHIMemoryUsage::CPUToGPU;
+	FRDGBufferRef StagingRef = CreateBuffer(Staging, ERDGResourceLifetime::Transient);
+	if (!StagingRef.IsValid() || StagingRef.GetRHI() == nullptr)
+	{
+		ReleaseTexture(TexRef);
+		MAHO_LOG_CORE_ERROR("FRender: mirror staging buffer allocation failed");
+		return false;
+	}
+
+	// Commit the mirror (Persistent texture) before the transfer submit so a later
+	// unload / export sees it.
+	GpuMirrors[AssetName] = TexRef;
+
+	// Build the UI image handle (a set-0 CombinedImageSampler descriptor set shared
+	// with the UI font layout) so ImGui::Image can display this mirror. Sampler is
+	// pool-cached by descriptor (ClampToEdge, matching the UI font).
+	FRHIDescriptorSet* UISet = CreateMirrorUIImage(AssetName, TexRef);
+	FRHISamplerDesc MirrorSamplerDesc;
+	MirrorSamplerDesc.AddressU = ERHIAddressMode::ClampToEdge;
+	MirrorSamplerDesc.AddressV = ERHIAddressMode::ClampToEdge;
+	MirrorSamplerDesc.AddressW = ERHIAddressMode::ClampToEdge;
+	FRHISampler* MirrorSampler = CreateSampler(MirrorSamplerDesc);
+
+	// One transfer submit outside a render pass: copy the CPU pixels into a staging
+	// buffer then CopyBufferToTexture. UIFeature::UploadFont follows the same
+	// pattern. Pixels are copied synchronously during record (still valid here --
+	// Done() below is what drops the CPU bulk).
+	FRHITexture* RHITex = TexRef.GetRHI();
+	FRHIBuffer* RHIStaging = StagingRef.GetRHI();
+	const std::uint8_t* PixelsData = Pixels.data();
+	const std::uint64_t PixelBytes = static_cast<std::uint64_t>(Pixels.size());
+	AddPass(ERHICommandListType::Graphics, [=](FRHICommandList& Cmd)
+	{
+		Cmd.UpdateBuffer(RHIStaging, 0, PixelBytes, PixelsData);
+		Cmd.TransitionTexture(RHITex, ERHIResourceState::Common, ERHIResourceState::CopyDst);
+		Cmd.CopyBufferToTexture(RHIStaging, RHITex, 0);
+		Cmd.TransitionTexture(RHITex, ERHIResourceState::CopyDst, ERHIResourceState::ShaderResource);
+		if (UISet != nullptr && MirrorSampler != nullptr)
+		{
+			FRHIDescriptorWrite MirrorWrite;
+			MirrorWrite.Set = UISet;
+			MirrorWrite.Binding = 0;
+			MirrorWrite.Type = ERHIDescriptorType::CombinedImageSampler;
+			MirrorWrite.TextureView = TexRef.GetView();
+			MirrorWrite.Sampler = MirrorSampler;
+			Cmd.UpdateDescriptorSets(&MirrorWrite, 1);
+		}
+	});
+	return true;
+}
+
+FRHIDescriptorSet* FRender::CreateMirrorUIImage(const Name::FName& AssetName, const FRDGTextureRef& Tex)
+{
+	(void)Tex;
+	// Same set-0 CombinedImageSampler + Fragment desc as the UI font layout, so the
+	// get-or-create returns the shared layout and the bound set is accepted by the
+	// UI pipeline's set-0 binding.
+	FRHIDescriptorBinding B;
+	B.Binding = 0;
+	B.Type = ERHIDescriptorType::CombinedImageSampler;
+	B.Count = 1;
+	B.Stages = ERHIShaderStage::Fragment;
+	FRHIDescriptorSetLayoutDesc Desc;
+	Desc.Bindings.push_back(B);
+	FRHIDescriptorSetLayout* Layout = GetOrCreateDescriptorSetLayout(Desc);
+	if (Layout == nullptr)
+	{
+		return nullptr;
+	}
+	FRHIDescriptorSet* Set = CreateDescriptorSet(Layout, Desc);
+	if (Set != nullptr)
+	{
+		MirrorUISets[AssetName] = Set;
+	}
+	return Set;
+}
+
+void FRender::DisplayMirrorImGui()
+{
+	for (const auto& [AssetName, UI] : MirrorUISets)
+	{
+		if (UI == nullptr)
+		{
+			continue;
+		}
+		const auto It = GpuMirrors.find(AssetName);
+		if (It == GpuMirrors.end())
+		{
+			continue;
+		}
+		const FRDGTextureRef* Tex = std::get_if<FRDGTextureRef>(&It->second);
+		if (Tex == nullptr)
+		{
+			continue;
+		}
+
+		const std::string Title = "texture mirror: " + std::string(AssetName.ToString());
+		// The mirror window tracks the application frame size every frame, so it
+		// grows/shrinks with the OS window. NoResize: its size is driven by the app
+		// window, not a manual drag handle.
+		const ImVec2& Disp = ImGui::GetIO().DisplaySize;
+		ImGui::SetNextWindowSize(
+			ImVec2(Disp.x * 0.9f, Disp.y * 0.9f),
+			ImGuiCond_Always);
+		if (ImGui::Begin(Title.c_str(), nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse))
+		{
+			// Fit the image into the window content region, preserving aspect ratio, so
+			// it scales up/down with the window (and thus the OS window). Reserve a
+			// line below for the caption text.
+			const ImVec2 Avail = ImGui::GetContentRegionAvail();
+			const float IW = static_cast<float>(Tex->GetWidth());
+			const float IH = static_cast<float>(Tex->GetHeight());
+			constexpr float CaptionH = 20.0f;
+			const float Scale = (std::min)(Avail.x / IW, (Avail.y - CaptionH) / IH);
+			ImGui::Image(reinterpret_cast<ImTextureID>(UI), ImVec2(IW * Scale, IH * Scale));
+			ImGui::Text("asset=%s  %ux%u", AssetName.ToString().data(), Tex->GetWidth(), Tex->GetHeight());
+		}
+		ImGui::End();
+	}
+}
+
+void FRender::OnAssetMirrorImported(const Name::FName& AssetName, Resource::FOnTransferDone Done)
+{
+	bool bSuccess = false;
+	if (Resource::FResourceSystem* RS = Resource::GetResourceSystem())
+	{
+		Resource::FResource* R = RS->FindMutable(AssetName.ToString());
+		if (Resource::FTexture* Tex = dynamic_cast<Resource::FTexture*>(R))
+		{
+			bSuccess = UploadTextureMirror(AssetName, *Tex);
+			MAHO_LOG_CORE_INFO("FRender: mirror imported asset={} ({}x{}, {}) => {}",
+				AssetName.ToString(),
+				Tex->GetWidth(), Tex->GetHeight(),
+				Tex->IsSRGB() ? "sRGB" : "linear",
+				bSuccess ? "OK" : "FAILED");
+		}
+		else
+		{
+			MAHO_LOG_CORE_WARN("FRender: mirror import asset={} (non-texture, skipped)",
+				AssetName.ToString());
+		}
+	}
+	if (Done)
+	{
+		Done(bSuccess, bSuccess ? std::string_view() : std::string_view("render mirror failed"));
+	}
+}
+
+void FRender::OnAssetMirrorUnloaded(const Name::FName& AssetName, Resource::FOnTransferDone Done)
+{
+	const auto It = GpuMirrors.find(AssetName);
+	if (It != GpuMirrors.end())
+	{
+		if (FRDGTextureRef* Tex = std::get_if<FRDGTextureRef>(&It->second))
+		{
+			ReleaseTexture(*Tex);
+		}
+		GpuMirrors.erase(It);
+	}
+	if (Done)
+	{
+		Done(true, std::string_view());
+	}
+}
+
+bool FRender::ReadbackMirror(const Name::FName& /*AssetName*/, Resource::FResource& /*OutResource*/)
+{
+	// GPU -> CPU fill-back before an export. The RHI currently exposes no CPU
+	// readback path to FRender (only CopyTextureToBuffer into a GPU buffer +
+	// a private allocator Map), so this returns false: the mirror keeps the CPU
+	// bulk dropped, and a pending export of a dropped resource is a known gap.
+	// TODO: add an RHI readback API and decode the mirror here.
+	return false;
 }
 
 } // namespace Maho

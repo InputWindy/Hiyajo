@@ -4,7 +4,9 @@
   "Description": "",
   "Dependencies": [
     "RHI",
-    "Platform"
+    "Platform",
+    "Resource",
+    "Asset"
   ],
   "PrivateIncludes": [
     "Scene",

@@ -145,15 +145,38 @@ public:
 		return Filter([](TBase* P) { return ((dynamic_cast<TFilter*>(P) != nullptr) && ...); });
 	}
 
-	/** Drop instances whose dynamic type derives ANY of TFilter... (NOR). */
-	template <typename... TFilter>
-	FQueryResult<TBase> Not() const
-	{
-		return Filter([](TBase* P) { return !((dynamic_cast<TFilter*>(P) != nullptr) || ...); });
-	}
+        /** Drop instances whose dynamic type derives ANY of TFilter... (NOR). */
+        template <typename... TFilter>
+        FQueryResult<TBase> Not() const
+        {
+            return Filter([](TBase* P) { return !((dynamic_cast<TFilter*>(P) != nullptr) || ...); });
+        }
+
+        /** Cast the current result set to a concrete interface type (dynamic_cast),
+         *  returning only the non-null survivors as std::vector<T*>. Lets a caller
+         *  drive the survivors directly (e.g. call interface methods) without
+         *  arranging a TaskGraph. */
+        template <typename T>
+        [[nodiscard]] std::vector<T*> Cast() const
+        {
+            std::vector<T*> Out;
+            Out.reserve(Data.size());
+            for (TBase* P : Data)
+            {
+                if (P == nullptr)
+                {
+                    continue;
+                }
+                if (auto* Tp = dynamic_cast<T*>(P))
+                {
+                    Out.push_back(Tp);
+                }
+            }
+            return Out;
+        }
 
 private:
-	FQueryResult<TBase> Filter(std::function<bool(TBase*)> Pred) const
+        FQueryResult<TBase> Filter(std::function<bool(TBase*)> Pred) const
 	{
 		FQueryResult<TBase> Result;
 		Result.Data.reserve(Data.size());
@@ -203,12 +226,20 @@ public:
 		return AsResult().template With<TFilter...>();
 	}
 
-	/** Drop instances whose dynamic type derives ANY of TFilter... (NOR). */
-	template <typename... TFilter>
-	FQueryResult<TBase> Not() const
-	{
-		return AsResult().template Not<TFilter...>();
-	}
+        /** Drop instances whose dynamic type derives ANY of TFilter... (NOR). */
+        template <typename... TFilter>
+        FQueryResult<TBase> Not() const
+        {
+            return AsResult().template Not<TFilter...>();
+        }
+
+        /** Cast the query source to a concrete interface type (dynamic_cast) and
+         *  return only the non-null survivors as std::vector<T*>. */
+        template <typename T>
+        [[nodiscard]] std::vector<T*> Cast() const
+        {
+            return AsResult().template Cast<T>();
+        }
 
 private:
 	FQueryResult<TBase> AsResult() const

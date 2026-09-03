@@ -128,6 +128,11 @@ public:
 	[[nodiscard]] const std::vector<std::uint8_t>& GetPixels() const { return Pixels; }
 	[[nodiscard]] std::vector<std::uint8_t>& GetPixelsMutable() { return Pixels; }
 
+	// Once the render mirror has taken the pixels, drop the CPU bulk to reclaim memory.
+	void ReleaseBulk() override { Pixels.clear(); Pixels.shrink_to_fit(); }
+
+	[[nodiscard]] bool HasBulk() const override { return !Pixels.empty(); }
+
 protected:
 	// 像素 payload 构造：各维度子类以自身参数转发，字段布局只在
 	// FTexture::Serialize 声明一次（构造+持久化共用）。

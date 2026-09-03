@@ -213,7 +213,7 @@ Graphics / Compute / Transfer 三个逻辑端点**总是存在**。Transfer/Comp
 | `ERHIQueueType` | Graphics, Compute, Transfer |
 | `ERHICommandListType` | Graphics, Compute, Transfer |
 | `ERHIResourceType` | Unknown, Buffer, StructuredBuffer, BufferView, Texture, TextureView, Sampler, ShaderModule, DescriptorSetLayout, PipelineLayout, GraphicsPipeline, ComputePipeline, RayTracingPipeline, DescriptorPool, DescriptorSet, Framebuffer, RenderPass, CommandPool, Fence, Semaphore, QueryPool, AccelerationStructure |
-| `ERHIFormat` | Unknown, R8G8B8A8_UNORM, B8G8R8A8_UNORM, B8G8R8A8_SRGB, R32_SFLOAT, R32G32_SFLOAT, R32G32B32_SFLOAT, R16G16_SFLOAT, D24_UNORM_S8_UINT, D32_SFLOAT |
+| `ERHIFormat` | Unknown, R8G8B8A8_UNORM, B8G8R8A8_UNORM, B8G8R8A8_SRGB, R32_SFLOAT, R32G32_SFLOAT, R32G32B32_SFLOAT, R16G16_SFLOAT, D24_UNORM_S8_UINT, D32_SFLOAT, R8G8B8A8_SRGB, R16G16B16A16_SFLOAT, R32G32B32A32_SFLOAT, R8_UNORM, R8G8_UNORM, R8G8B8_UNORM, R16_SFLOAT |
 | `ERHITextureDimension` | Tex2D, Tex2DArray, Cube, Tex3D |
 | `ERHIBufferUsage`（位掩码） | None, Vertex, Index, Uniform, Storage, TransferSrc, TransferDst, Indirect, DeviceAddress（shader 寻址）, AccelerationStructure（BLAS/TLAS 存储） |
 | `ERHITextureUsage`（位掩码） | None, Sampled, ColorAttachment, DepthStencil, Storage, TransferSrc, TransferDst, Transient |

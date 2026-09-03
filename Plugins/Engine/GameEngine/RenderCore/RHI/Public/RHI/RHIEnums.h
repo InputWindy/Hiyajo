@@ -63,6 +63,14 @@ enum class ERHIFormat : std::uint16_t
 	R16G16_SFLOAT,
 	D24_UNORM_S8_UINT,
 	D32_SFLOAT,
+	// -- texture-mirror formats (asset-side ETexturePixelFormat coverage) --
+	R8G8B8A8_SRGB,
+	R16G16B16A16_SFLOAT,
+	R32G32B32A32_SFLOAT,
+	R8_UNORM,
+	R8G8_UNORM,
+	R8G8B8_UNORM,
+	R16_SFLOAT,
 };
 
 enum class ERHITextureDimension : std::uint8_t

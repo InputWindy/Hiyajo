@@ -16,12 +16,16 @@ struct ImDrawData;
 #include "RDG.h"
 #include "RenderDrawList.h"
 #include "ShaderCompiler.h"
+#include <Resource.h>
+#include <AssetTypes.h>
 
 #include <cstdint>
 #include <functional>
 #include <memory>
 #include <mutex>
 #include <string>
+#include <unordered_map>
+#include <variant>
 #include <vector>
 
 namespace Maho
@@ -29,6 +33,11 @@ namespace Maho
 
 class FRender;
 class FRenderResourcePool;
+
+/** Render-side GPU mirror of a CPU asset: an RDG texture (texture asset) or an
+ *  RDG buffer (mesh asset). A single mirror table maps asset FName -> this ref,
+ *  so the mirror is type-agnostic; the asset type decides which variant holds. */
+using FRDGResourceRef = std::variant<FRDGTextureRef, FRDGBufferRef>;
 
 template <typename T> class TShaderHandle;
 
@@ -399,6 +408,47 @@ private:
 	// TaskGraph orders everything. FRender itself does no frame work.
 	using FRenderStages = TTypeList<IInitViews, IBeginRender, IRender, IEndRender, IPostProcess, IRenderUI, IPresent>;
 	std::unique_ptr<FLayerTaskGraph<FRenderStages, FRender>> RenderGraph;
+
+	// -- CPU asset -> GPU mirror --
+	/** Asset FName -> RDG mirror resource (texture or buffer). Owned by the render
+	 *  resource pool; a Persistent texture/buffer stays alive until pool shutdown.
+	 *  Built in OnAssetMirrorImported (mirror imported asset), released in
+	 *  OnAssetMirrorUnloaded. */
+	std::unordered_map<Name::FName, FRDGResourceRef> GpuMirrors;
+
+	/** Texture-mirror UI handle: the CombinedImageSampler descriptor set bound at
+	 *  set 0, used as ImTextureID for ImGui::Image. Built so its layout matches the
+	 *  UI font layout (get-or-create by the same desc), so the UI pipeline's set-0
+	 *  binding accepts it; pool-owned, released at pool Shutdown. */
+	std::unordered_map<Name::FName, FRHIDescriptorSet*> MirrorUISets;
+
+	/** Build a descriptor set for a mirror texture and store it as its ImTextureID.
+	 *  Called once per mirror upload. May return null (no UI needs it yet). */
+	[[nodiscard]] FRHIDescriptorSet* CreateMirrorUIImage(const Name::FName& AssetName, const FRDGTextureRef& Tex);
+
+	/** Test harness: show every texture mirror in an ImGui window (before Render).
+	 *  Reads MirrorUISets as ImTextureID, sizes the image from the mirror RDG. */
+	void DisplayMirrorImGui();
+
+	/** OnAssetImported listener: mirror the imported CPU asset to GPU (upload its
+	 *  pixels), then report completion via Done so the resource system can drop the
+	 *  CPU bulk. */
+	void OnAssetMirrorImported(const Name::FName& AssetName, Resource::FOnTransferDone Done);
+
+	/** OnAssetUnloaded listener: release the GPU mirror + erase the table entry. */
+	void OnAssetMirrorUnloaded(const Name::FName& AssetName, Resource::FOnTransferDone Done);
+
+	/** GPU fill-back (SetReadback provider): decode the GPU mirror back into the
+	 *  resource's CPU fields before an export. Returns false when the resource has
+	 *  no mirror or the current RHI lacks a CPU readback path. */
+	[[nodiscard]] bool ReadbackMirror(const Name::FName& AssetName, Resource::FResource& OutResource);
+
+	[[nodiscard]] static ERHIFormat FormatMirror(Resource::ETexturePixelFormat Fmt, bool bSRGB);
+	[[nodiscard]] static ERHITextureDimension DimensionMirror(Resource::ETextureDimension Dim);
+
+	/** Create a Persistent RDG texture from the asset's CPU pixels + upload it via a
+	 *  transient staging buffer (one transfer submit). Stores the mirror in the table. */
+	bool UploadTextureMirror(const Name::FName& AssetName, Resource::FTexture& Tex);
 };
 
 /**

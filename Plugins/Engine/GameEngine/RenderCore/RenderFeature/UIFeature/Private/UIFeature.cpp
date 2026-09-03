@@ -376,13 +376,24 @@ void FUIFeature::RenderUI(FRender& R)
 			std::size_t VtxBase = 0, IdxBase = 0;
 			const float DisplayW = DrawData->DisplaySize.x;
 			const float DisplayH = DrawData->DisplaySize.y;
-			for (int I = 0; I < DrawData->CmdListsCount; ++I)
-			{
-				const ImDrawList* List = DrawData->CmdLists[I];
-				for (const ImDrawCmd& DrawCmd : List->CmdBuffer)
+				for (int I = 0; I < DrawData->CmdListsCount; ++I)
 				{
-					// Scissor = clip rect clamped to the framebuffer (DisplaySize == it).
-					const ImVec4 Clip = DrawCmd.ClipRect;
+					const ImDrawList* List = DrawData->CmdLists[I];
+					for (const ImDrawCmd& DrawCmd : List->CmdBuffer)
+					{
+						// Bind the per-draw texture. ImGui uses the font set (Fonts->TexID)
+						// for text and a user-provided ImTextureID for Image() calls; the
+						// texture id IS the descriptor set handle. All sets share the same
+						// set-0 CombinedImageSampler layout (the font layout), so the bound
+						// set is accepted by the pipeline. Fall back to the font set when
+						// a cmd carries no texture (drawing with the default font atlas).
+						FRHIDescriptorSet* CmdSet = (DrawCmd.TextureId != 0)
+							? reinterpret_cast<FRHIDescriptorSet*>(static_cast<std::uintptr_t>(DrawCmd.TextureId))
+							: FontDescriptorSet;
+						Cmd.BindDescriptorSets(0, &CmdSet, 1);
+
+						// Scissor = clip rect clamped to the framebuffer (DisplaySize == it).
+						const ImVec4 Clip = DrawCmd.ClipRect;
 					const std::int32_t Sx = static_cast<std::int32_t>(Clip.x < 0.0f ? 0.0f : Clip.x);
 					const std::int32_t Sy = static_cast<std::int32_t>(Clip.y < 0.0f ? 0.0f : Clip.y);
 					const std::int32_t Sw = static_cast<std::int32_t>(Clip.z > DisplayW ? DisplayW : Clip.z) - Sx;

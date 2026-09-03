@@ -70,11 +70,11 @@ struct FPendingImport
 	std::function<void(std::span<const std::uint8_t>)> OnBulkReady;
 };
 
-/** A queued async export: encoded+written on the IO thread, OnDone on the game thread. */
+/** A queued async export: encoded+written on the IO thread, completion broadcast on the game thread. */
 struct FPendingExport
 {
 	FTransferHandle Handle;
-	std::function<void(bool)> OnDone;
+	Name::FName AssetName;
 };
 
 class FResourceSystem::FImpl
@@ -95,6 +95,27 @@ FResourceSystem::~FResourceSystem() = default;
 FResourceSystem::FResourceSystem()
 	: Impl(std::make_unique<FImpl>())
 {
+}
+
+FOnTransferDone FResourceSystem::MakeTransferDone(std::string AssetPath)
+{
+	// On success the consuming handler signals it has taken the payload; drop the CPU
+	// bulk data so the parsed resource no longer holds the decoded pixels. The catalog
+	// entry stays (Find() still resolves the resource) - only its payload is freed.
+	// ReleaseBulk runs under the catalog lock; the callback is invoked on the game thread.
+	return [this, AssetPath = std::move(AssetPath)](bool bSuccess, std::string_view /*Error*/)
+	{
+		if (!bSuccess)
+		{
+			return;
+		}
+		std::lock_guard Lock(Impl->Mutex);
+		auto It = Impl->Catalog.find(Name::FName(AssetPath));
+		if (It != Impl->Catalog.end())
+		{
+			It->second->ReleaseBulk();
+		}
+	};
 }
 
 void FResourceSystem::Initialize(FEngineBase& Engine)
@@ -167,7 +188,7 @@ bool FResourceSystem::EnqueueImport(
 bool FResourceSystem::EnqueueExport(
 	std::vector<std::uint8_t> Bytes,
 	std::string DestinationPath,
-	std::function<void(bool)> OnDone)
+	Name::FName AssetName)
 {
 	auto State = std::make_shared<FTransferState>();
 	const std::string Dest = std::move(DestinationPath);
@@ -186,7 +207,7 @@ bool FResourceSystem::EnqueueExport(
 
 	std::lock_guard Lock(Impl->Mutex);
 	Impl->PendingExports[Name::FName(Dest)] = FPendingExport{
-		FTransferHandle{ std::move(State) }, std::move(OnDone) };
+		FTransferHandle{ std::move(State) }, std::move(AssetName) };
 	return true;
 }
 
@@ -196,11 +217,6 @@ const FResource* FResourceSystem::RegisterResource(std::string AssetPath, std::u
 	std::lock_guard Lock(Impl->Mutex);
 	Impl->Catalog[Name::FName(AssetPath)] = std::move(Resource);
 	return Raw;
-}
-
-const FResource* FResourceSystem::RegisterChildResource(std::string AssetPath, std::unique_ptr<FResource> Resource)
-{
-	return RegisterResource(std::move(AssetPath), std::move(Resource));
 }
 
 void FResourceSystem::ProcessReadyIO()
@@ -263,10 +279,7 @@ void FResourceSystem::ProcessReadyIO()
 
 	for (FPendingExport& Ready : ReadyExports)
 	{
-		if (Ready.OnDone)
-		{
-			Ready.OnDone(Ready.Handle.HasSucceeded());
-		}
+		OnAssetExported.Broadcast(Ready.AssetName, Ready.Handle.HasSucceeded());
 	}
 }
 
@@ -284,6 +297,13 @@ bool FResourceSystem::WriteBytes(std::string_view PhysicalPath, std::span<const 
 }
 
 const FResource* FResourceSystem::Find(std::string_view AssetPath) const
+{
+	std::lock_guard Lock(Impl->Mutex);
+	const auto It = Impl->Catalog.find(Name::FName(AssetPath));
+	return It != Impl->Catalog.end() ? It->second.get() : nullptr;
+}
+
+FResource* FResourceSystem::FindMutable(std::string_view AssetPath)
 {
 	std::lock_guard Lock(Impl->Mutex);
 	const auto It = Impl->Catalog.find(Name::FName(AssetPath));

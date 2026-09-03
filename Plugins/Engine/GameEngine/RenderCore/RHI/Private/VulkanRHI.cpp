@@ -1910,6 +1910,20 @@ VkFormat FVulkanRHI::ToVkFormat(ERHIFormat Format)
 		return VK_FORMAT_D24_UNORM_S8_UINT;
 	case ERHIFormat::D32_SFLOAT:
 		return VK_FORMAT_D32_SFLOAT;
+	case ERHIFormat::R8G8B8A8_SRGB:
+		return VK_FORMAT_R8G8B8A8_SRGB;
+	case ERHIFormat::R16G16B16A16_SFLOAT:
+		return VK_FORMAT_R16G16B16A16_SFLOAT;
+	case ERHIFormat::R32G32B32A32_SFLOAT:
+		return VK_FORMAT_R32G32B32A32_SFLOAT;
+	case ERHIFormat::R8_UNORM:
+		return VK_FORMAT_R8_UNORM;
+	case ERHIFormat::R8G8_UNORM:
+		return VK_FORMAT_R8G8_UNORM;
+	case ERHIFormat::R8G8B8_UNORM:
+		return VK_FORMAT_R8G8B8_UNORM;
+	case ERHIFormat::R16_SFLOAT:
+		return VK_FORMAT_R16_SFLOAT;
 	default:
 		return VK_FORMAT_UNDEFINED;
 	}
@@ -3121,6 +3135,9 @@ FRHIDescriptorPool* FVulkanRHI::CreateDescriptorPool(const FRHIDescriptorPoolDes
 	{
 		Info.flags |= VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT;
 	}
+	// FreeDescriptorSet() frees individual sets from a pool, so every pool must be
+	// created with the free bit; otherwise vkFreeDescriptorSets is a validation error.
+	Info.flags |= VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
 
 	VkDescriptorPool Pool = VK_NULL_HANDLE;
 	if (!CheckVkResult(vkCreateDescriptorPool(Device, &Info, nullptr, &Pool),

@@ -70,6 +70,21 @@ namespace
 			if (glfwInit())
 			{
 				Window = glfwCreateWindow(Width, Height, std::string(Title).c_str(), nullptr, nullptr);
+				if (Window != nullptr)
+				{
+					// Push live framebuffer (pixel) size to the owner on every resize, so
+					// the ImGui DisplaySize / window layout track the OS window. GLFW
+					// callbacks fire during glfwPollEvents (the engine's Tick thread).
+					glfwSetWindowUserPointer(Window, this);
+					glfwSetFramebufferSizeCallback(Window, [](GLFWwindow* W, int FW, int FH)
+					{
+						auto* Self = static_cast<FGlfwWindow*>(glfwGetWindowUserPointer(W));
+						if (Self != nullptr && Self->OnFramebufferSize)
+						{
+							Self->OnFramebufferSize(FW, FH);
+						}
+					});
+				}
 			}
 		}
 
@@ -97,6 +112,9 @@ namespace
 
 		/** Raw GLFW window handle -- for ImGui's glfw backend (input callbacks). */
 		[[nodiscard]] GLFWwindow* GetGlfwWindow() const { return Window; }
+
+		/** Framebuffer-resize listener, invoked by the GLFW callback (owner wires it). */
+		std::function<void(int, int)> OnFramebufferSize;
 
 	private:
 		GLFWwindow* Window = nullptr;
@@ -180,6 +198,7 @@ namespace
 		std::function<void()> PollEvents;
 		std::function<bool()> ShouldClose;
 		std::function<GLFWwindow*()> GetGlfwWindow;
+		std::function<void(std::function<void(int, int)>)> SetFramebufferSizeListener;
 	};
 
 	FPlatformBackend CreateWindowBackend(int Width, int Height, std::string_view Title)
@@ -192,6 +211,7 @@ namespace
 			[Raw]() { Raw->PollEvents(); },
 			[Raw]() { return Raw->ShouldClose(); },
 			[Raw]() { return Raw->GetGlfwWindow(); },
+			[Raw](std::function<void(int, int)> Listener) { Raw->OnFramebufferSize = std::move(Listener); },
 		};
 #else
 		return {};
@@ -238,6 +258,18 @@ bool FPlatform::CreateWindow(int Width, int Height, std::string_view Title)
 	PollEventsFn = std::move(Backend.PollEvents);
 	QueryShouldClose = std::move(Backend.ShouldClose);
 	GlfwWindowFn = std::move(Backend.GetGlfwWindow);
+	if (Backend.SetFramebufferSizeListener)
+	{
+		// GLFW fires this on-frame (during PollEvents, the engine's Tick thread) so
+		// the live framebuffer size stays current. The RHI re-creates the swapchain
+		// via VK_ERROR_OUT_OF_DATE on acquire; here we keep the ImGui DisplaySize /
+		// window-layout size in sync with the OS window.
+		Backend.SetFramebufferSizeListener([this](int Width, int Height)
+		{
+			WindowWidth = static_cast<std::uint32_t>(Width);
+			WindowHeight = static_cast<std::uint32_t>(Height);
+		});
+	}
 	return Surface != nullptr && Surface->GetNativeWindow() != nullptr;
 }
 
