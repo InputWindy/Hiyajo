@@ -43,25 +43,10 @@ source_group(TREE "${CMAKE_CURRENT_LIST_DIR}" FILES ${Render_PUBLIC_HEADERS} ${R
 # deps and links them into the Render target.
 
 # ---------------------------------------------------------------------------
-# Dear ImGui (docking branch) — compiled INTO Render.dll. The UI's CPU-side
-# context is created here and the draw data is produced here; the render
-# backend (UIFeature) links Render to import the ImGui symbols. NO
-# imgui_impl_* backend — rendering is the project's custom FRHI backend.
+# Dear ImGui (docking branch) is now compiled into UIFeature.dll only -- see
+# UIFeature.cmake. FRender is UI-agnostic and no longer references ImGui.
 # ---------------------------------------------------------------------------
-maho_git_repository_url(_IMGUI_URL https://github.com/ocornut/imgui.git)
-maho_fetchcontent_populate_or_reuse(imgui ${_IMGUI_URL} v1.91.9-docking imgui.h)
-unset(_IMGUI_URL)
 
-target_sources(Render PRIVATE
-	"${imgui_SOURCE_DIR}/imgui.cpp"
-	"${imgui_SOURCE_DIR}/imgui_demo.cpp"
-	"${imgui_SOURCE_DIR}/imgui_draw.cpp"
-	"${imgui_SOURCE_DIR}/imgui_tables.cpp"
-	"${imgui_SOURCE_DIR}/imgui_widgets.cpp"
-)
-target_include_directories(Render PUBLIC
-	"${imgui_SOURCE_DIR}"
-)
 
 # ---------------------------------------------------------------------------
 # glslang — Khronos GLSL -> SPIR-V compiler (runtime shader compilation).

@@ -34,5 +34,22 @@ set_target_properties(UIFeature PROPERTIES FOLDER "Maho/Plugins/Engine/GameEngin
 source_group(TREE "${CMAKE_CURRENT_LIST_DIR}" FILES ${UIFeature_PUBLIC_HEADERS} ${UIFeature_PRIVATE_HEADERS} ${UIFeature_PRIVATE_SOURCES})
 # -- /MAHOGEN UIFeature --
 
-# UIFeature: no third-party deps. The ImGui symbols come from Render.dll (which
-# compiles Dear ImGui into it); Vulkan/glfw propagate via Render.
+# UIFeature: third-party dependencies.
+# Dear ImGui (docking branch) is compiled INTO UIFeature.dll -- the feature is the
+# SOLE owner of the ImGui context (created/destroyed in OnInstalled/PreUnInstall)
+# and translates ImDrawData into an FDrawList for FRender::AddPass. NO
+# imgui_impl_* backend -- rendering is the project's custom FRHI backend.
+maho_git_repository_url(_IMGUI_URL https://github.com/ocornut/imgui.git)
+maho_fetchcontent_populate_or_reuse(imgui ${_IMGUI_URL} v1.91.9-docking imgui.h)
+unset(_IMGUI_URL)
+
+target_sources(UIFeature PRIVATE
+	"${imgui_SOURCE_DIR}/imgui.cpp"
+	"${imgui_SOURCE_DIR}/imgui_demo.cpp"
+	"${imgui_SOURCE_DIR}/imgui_draw.cpp"
+	"${imgui_SOURCE_DIR}/imgui_tables.cpp"
+	"${imgui_SOURCE_DIR}/imgui_widgets.cpp"
+)
+target_include_directories(UIFeature PUBLIC
+	"${imgui_SOURCE_DIR}"
+)

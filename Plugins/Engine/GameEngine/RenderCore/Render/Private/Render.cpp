@@ -11,10 +11,6 @@
 #include "RenderResourcePool.h"
 #include "ShaderCompiler.h"
 
-// Dear ImGui — compiled INTO this DLL (Render.cmake); the UI's CPU-side context
-// is created/driven here, the render backend lives in UIFeature.
-#include "imgui.h"
-
 #include <algorithm>
 
 #if defined(_WIN32)
@@ -46,10 +42,6 @@ FRender::FRender()
 	// their Shutdown AFTER mine. Declared here (I know them), not by them.
 	MyStage<IShutdown>().IsBlocking<FLog>().OnStage<IShutdown>();
 	MyStage<IShutdown>().IsBlocking<Platform::FPlatform>().OnStage<IShutdown>();
-
-	// Input: Platform's Tick polls GLFW first, then the ImGui host feeds io and
-	// builds the UI (same frame). FRender owns the ImGui context directly.
-	MyStage<ITick>().IsWaiting<Platform::FPlatform>().ForStage<ITick>();
 
 	// Asset mirror: the render mirror consumes imported assets (upload to GPU), so
 	// the resource system must run its IInit (start the IO thread) before mine.
@@ -101,26 +93,8 @@ void FRender::Initialize(FEngineBase& Engine)
 	Install<FFrame>();
 	Install<FUIFeature>();
 
-	// ImGui context (CPU side) — created from the Platform layer's window; the
-	// render backend (UIFeature) consumes the draw data this context produces each
-	// frame. MUST be created BEFORE the Install-InitGraph below: UIFeature::OnInstalled
-	// touches ImGui::GetIO().Fonts in EnsureUIBackend/UploadFont, and GetIO() before
-	// CreateContext() asserts "No current context".
-	Platform::FPlatform* UI_P = Platform::GetPlatform();
-	if (UI_P == nullptr || UI_P->GetWindowWidth() == 0 || UI_P->GetToolkitWindowHandle() == nullptr)
-	{
-		MAHO_LOG_CORE_ERROR("FRender::Initialize: no window; UI disabled");
-	}
-	else
-	{
-		IMGUI_CHECKVERSION();
-		ImGui::CreateContext();
-		ImGuiIO& IO = ImGui::GetIO();
-		IO.ConfigFlags |= ImGuiConfigFlags_DockingEnable;   // the editor shell docks later
-		ImGui::StyleColorsDark();
-		bUIInitialized = true;
-		MAHO_LOG_CORE_INFO("FRender: ImGui context created (CPU side; render backend in UIFeature)");
-	}
+	// (The UI's CPU-side ImGui context is owned by FUIFeature now; FRender is
+	// UI-agnostic and sets nothing up here.)
 
 	// CPU asset -> GPU mirror: listen for imported assets (create the GPU mirror +
 	// upload its bulk), for unloaded assets (release the mirror), and provide the
@@ -151,7 +125,7 @@ void FRender::PostInitialize(FEngineBase&)
 {
 	// Test harness: import a CPU texture asset right after Resource's IInit, so the
 	// async mirror OnAssetImported fires and the GPU mirror is built, then shown by
-	// the ImGui image below (DisplayMirrorImGui in Tick). Absolute path is passed
+	// the ImGui image below (DisplayMirrorImGui in InitViews). Absolute path is passed
 	// through by FPaths::Resolve (no virtual-root alias).
 	if (Resource::FResourceSystem* RS = Resource::GetResourceSystem())
 	{
@@ -206,7 +180,6 @@ void FRender::Shutdown(FEngineBase&)
 		RS->OnAssetUnloaded.RemoveAll();
 	}
 	GpuMirrors.clear();
-	UIBuilders.clear();   // drop feature-held UI builders before the features die
 	// The UI mirror descriptor sets are owned by FUIFeature; it is destroyed by
 	// Features.clear() below (its destructor drops the borrowed pool handles).
 	// thread). All of them drain their queues and join here.
@@ -265,13 +238,8 @@ void FRender::Shutdown(FEngineBase&)
 		RHI.reset();
 	}
 
-	// ImGui context (CPU-side; independent of the RHI device). Destroy after all
-	// render teardown so no in-flight draw path touches it.
-	if (bUIInitialized)
-	{
-		ImGui::DestroyContext();
-		bUIInitialized = false;
-	}
+	// (The UI's CPU-side ImGui context is owned by FUIFeature and is destroyed in
+	// its PreUnInstall, ordered here by the collect/shutdown graph.)
 }
 
 void FRender::PostShutdown(FEngineBase&)
@@ -291,60 +259,8 @@ void FRender::BeginFrame(FEngineBase&)
 	}
 	BeginResourcePool();
 
-	// ImGui frame feed -- display size + Win32 input + the (lazy) font-atlas build,
-	// then NewFrame. CPU side only; the render backend uploads the atlas lazily.
-	if (bUIInitialized)
-	{
-		ImGuiIO& IO = ImGui::GetIO();
-		Platform::FPlatform* P = Platform::GetPlatform();
-		if (P != nullptr)
-		{
-			// Display size must match the render target (SceneColor = swapchain
-			// extent), not the window's logical size -- ImGui lays out in DisplaySize
-			// coordinates and the render feature clips against it.
-			IO.DisplaySize = ImVec2(
-				static_cast<float>(P->GetWindowWidth()),
-				static_cast<float>(P->GetWindowHeight()));
-#if defined(_WIN32)
-			// Input bypasses GLFW's message-driven cursor state (the window is created
-			// on a pool worker and polled on another, so WM_MOUSEMOVE never reaches
-			// glfwGetCursorPos). Win32 global state works from any thread.
-			if (HWND Hwnd = static_cast<HWND>(P->GetNativeWindow()))
-			{
-				POINT Pt{};
-				if (::GetCursorPos(&Pt) && ::ScreenToClient(Hwnd, &Pt))
-				{
-					RECT Client{};
-					::GetClientRect(Hwnd, &Client);
-					const float ScaleX = Client.right > 0 ? IO.DisplaySize.x / static_cast<float>(Client.right) : 1.f;
-					const float ScaleY = Client.bottom > 0 ? IO.DisplaySize.y / static_cast<float>(Client.bottom) : 1.f;
-					IO.AddMousePosEvent(static_cast<float>(Pt.x) * ScaleX, static_cast<float>(Pt.y) * ScaleY);
-				}
-				IO.AddMouseButtonEvent(0, (::GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0);
-				IO.AddMouseButtonEvent(1, (::GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0);
-				IO.AddMouseButtonEvent(2, (::GetAsyncKeyState(VK_MBUTTON) & 0x8000) != 0);
-			}
-#endif
-		}
-
-		// Renderer-backend NewFrame duty (mirrors the imgui_impl_* backends, which
-		// must be called before ImGui::NewFrame()): the font atlas is built lazily by
-		// ImFontAtlas::Build() and ImGui::NewFrame() asserts IsBuilt(). Calling
-		// GetTexDataAsRGBA32() triggers that build on the first frame and returns the
-		// existing pixels afterwards; the GPU upload happens later, in the UIFeature
-		// backend's EnsureUIBackend, which calls it again and gets the same pixels.
-		unsigned char* FontPixels = nullptr;
-		int FontW = 0, FontH = 0, FontBpp = 0;
-		IO.Fonts->GetTexDataAsRGBA32(&FontPixels, &FontW, &FontH, &FontBpp);
-		if (FontPixels == nullptr || FontW <= 0 || FontH <= 0)
-		{
-			MAHO_LOG_CORE_ERROR("FRender: font atlas not built");
-		}
-		else
-		{
-			ImGui::NewFrame();
-		}
-	}
+	// (The UI frame feed + NewFrame moved into FUIFeature::InitViews; FRender holds
+	// no ImGui state and feeds nothing here.)
 }
 
 void FRender::BeginResourcePool()
@@ -367,30 +283,9 @@ void FRender::Tick(FEngineBase&)
 	// collected here, so Init never races with in-flight Render() calls.
 	RenderGraph->Flush();
 
-	// Build the ImGui frame (CPU side) between NewFrame (BeginFrame) and the
-	// render-graph Execute below. UI construction is done by plugins directly on
-	// the ImGui API (no wrapper layer): each plugin declares
-	//   MyStage<ITick>().IsBlocking<Maho::FRender>().OnStage<ITick>();
-	// so its ITick runs BEFORE this one -- it calls ImGui::Begin/Text/... and this
-	// layer only closes the frame with a single ImGui::Render(). Plugins never call
-	// NewFrame/Render/GetDrawData themselves. The collected draw data feeds the
-	// UIFeature render backend (reads R.UIData) inside the graph below.
-	if (bUIInitialized)
-	{
-		// Run the frame-UI builders registered by UI features (e.g. the UIFeature's
-		// mirror preview window). They emit their windows in the ImGui frame built
-		// during the host ITick stage; FRender itself owns only the frame lifecycle
-		// (Render/GetDrawData) and keeps zero render-specific UI logic.
-		for (const FUIBuildFn& Fn : UIBuilders)
-		{
-			if (Fn)
-			{
-				Fn(*this);
-			}
-		}
-		ImGui::Render();
-		UIData = ImGui::GetDrawData();
-	}
+	// (The whole ImGui frame lifecycle -- feed / NewFrame / build / Render /
+	// GetDrawData -- moved into FUIFeature::InitViews inside the render graph below.
+	// FRender holds no ImGui state and only schedules.)
 
 	// Rebuild + drive the render feature graph. All frame work (swapchain begin,
 	// feature acquire/record/submit, present, swapchain end) is a scheduled stage --
@@ -616,7 +511,7 @@ void FRender::AddPass(
 		}
 	}
 
-	SubmitPass(PassType, [=](FRHICommandList& List)
+	AddPass(PassType, [=](FRHICommandList& List)
 	{
 		// Write the mutable set contents (host op at record time, before the draws
 		// that bind them) so every frequency -- Static / PerFrame / PerPass -- picks
@@ -808,27 +703,23 @@ void FRender::AddPass(
 
 void FRender::AddPass(ERHICommandListType PassType, std::function<void(FRHICommandList&)> PassFn)
 {
-	SubmitPass(PassType, std::move(PassFn));
-}
-
-void* FRender::AllocParameterBytes(std::size_t Size, std::size_t Align)
-{
-	return ResourcePool ? ResourcePool->AllocateFrameTransient(Size, Align) : nullptr;
-}
-
-void FRender::SubmitPass(ERHICommandListType PassType, std::function<void(FRHICommandList&)> Record){
 	FRHICommandList* List = ResourcePool ? ResourcePool->AcquireRenderList() : nullptr;
 	if (List == nullptr)
 	{
 		return;
 	}
 	List->Begin();
-	Record(*List);
+	PassFn(*List);
 	List->End();
 	if (IRHI* P = RHI.get())
 	{
 		P->Submit(List, PassType);
 	}
+}
+
+void* FRender::AllocParameterBytes(std::size_t Size, std::size_t Align)
+{
+	return ResourcePool ? ResourcePool->AllocateFrameTransient(Size, Align) : nullptr;
 }
 
 FRHIShaderModule* FRender::GetOrCreateShaderModule(const FRHIShaderModuleDesc& Desc)

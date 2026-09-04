@@ -3,6 +3,7 @@
 #include "RenderApi.h"
 #include "RDG.h"
 
+#include <cstddef>
 #include <cstdint>
 #include <vector>
 
@@ -70,21 +71,21 @@ public:
 
 	/** Clear every field back to empty/zero (primitive data, push constants,
 	 *  batches), KEEPING the vectors' capacity. Used when the list is a reused
-	 *  FRender member filled per frame, so a re-filled list does not accumulate
-	 *  the previous frame's batches. */
+	 *  member filled per frame, so a re-filled list does not accumulate the
+	 *  previous frame's batches. The internal primitive buffers keep capacity. */
 	void Reset()
 	{
-		VertexData = nullptr;
 		VertexBytes = 0;
 		VertexStride = 0;
 		VertexCount = 0;
-		IndexData = nullptr;
 		IndexBytes = 0;
 		bIndex32 = true;
 		IndexCount = 0;
 		PushStages = ERHIShaderStage::Vertex;
 		PushSize = 0;
 		PushData.clear();
+		VertexData.clear();
+		IndexData.clear();
 		Batches.clear();
 	}
 
@@ -112,40 +113,58 @@ public:
 	[[nodiscard]] std::uint32_t GetPushConstantSize() const { return PushSize; }
 	[[nodiscard]] const void* GetPushConstantData() const { return PushData.data(); }
 
-	/** Optional pass-level CPU primitive buffer: a single merged vertex/indices block
-	 *  uploaded ONCE by AddPass, sliced per-batch by VertexOffset/IndexOffset. When
-	 *  set, batches must leave their own VertexBuffer/IndexBuffer empty (geometry
-	 *  source priority 1). */
+	/** Optional pass-level CPU primitive buffer: a single merged vertex/indices
+	 *  block uploaded ONCE by AddPass, sliced per-batch by VertexOffset/IndexOffset.
+	 *  When set, batches must leave their own VertexBuffer/IndexBuffer empty
+	 *  (geometry source priority 1). The data is COPIED here, so the producer's
+	 *  arrays (e.g. ImGui's draw data) need no lifetime beyond this call -- the
+	 *  list owns the buffer and AddPass reads the owned copy. */
 	void SetPrimitiveData(
 		const void* InVertexData, std::uint64_t InVertexBytes, std::uint32_t InVertexStride, std::uint32_t InVertexCount,
 		const void* InIndexData, std::uint64_t InIndexBytes, bool InIndex32, std::uint32_t InIndexCount)
 	{
-		VertexData = InVertexData;
+		if (InVertexData != nullptr && InVertexBytes > 0)
+		{
+			const auto* const Bytes = static_cast<const std::uint8_t*>(InVertexData);
+			VertexData.assign(Bytes, Bytes + InVertexBytes);
+		}
+		else
+		{
+			VertexData.clear();
+		}
 		VertexBytes = InVertexBytes;
 		VertexStride = InVertexStride;
 		VertexCount = InVertexCount;
-		IndexData = InIndexData;
+		if (InIndexData != nullptr && InIndexBytes > 0)
+		{
+			const auto* const Bytes = static_cast<const std::uint8_t*>(InIndexData);
+			IndexData.assign(Bytes, Bytes + InIndexBytes);
+		}
+		else
+		{
+			IndexData.clear();
+		}
 		IndexBytes = InIndexBytes;
 		bIndex32 = InIndex32;
 		IndexCount = InIndexCount;
 	}
 
-	[[nodiscard]] bool HasPrimitiveData() const { return VertexBytes > 0; }
-	[[nodiscard]] const void* GetVertexData() const { return VertexData; }
+	[[nodiscard]] bool HasPrimitiveData() const { return VertexBytes > 0 && !VertexData.empty(); }
+	[[nodiscard]] const void* GetVertexData() const { return VertexData.empty() ? nullptr : VertexData.data(); }
 	[[nodiscard]] std::uint64_t GetVertexBytes() const { return VertexBytes; }
 	[[nodiscard]] std::uint32_t GetVertexStride() const { return VertexStride; }
 	[[nodiscard]] std::uint32_t GetVertexCount() const { return VertexCount; }
-	[[nodiscard]] const void* GetIndexData() const { return IndexData; }
+	[[nodiscard]] const void* GetIndexData() const { return IndexData.empty() ? nullptr : IndexData.data(); }
 	[[nodiscard]] std::uint64_t GetIndexBytes() const { return IndexBytes; }
 	[[nodiscard]] bool GetIndex32() const { return bIndex32; }
 	[[nodiscard]] std::uint32_t GetIndexCount() const { return IndexCount; }
 
 private:
-	const void* VertexData = nullptr;
+	std::vector<std::uint8_t> VertexData;
 	std::uint64_t VertexBytes = 0;
 	std::uint32_t VertexStride = 0;
 	std::uint32_t VertexCount = 0;
-	const void* IndexData = nullptr;
+	std::vector<std::uint8_t> IndexData;
 	std::uint64_t IndexBytes = 0;
 	bool bIndex32 = true;
 	std::uint32_t IndexCount = 0;

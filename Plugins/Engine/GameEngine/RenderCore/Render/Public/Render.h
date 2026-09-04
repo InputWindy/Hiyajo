@@ -1,11 +1,5 @@
 #pragma once
 
-// Forward declaration of Dear ImGui's draw-data (global namespace). The RHI
-// backend consumes ImDrawData*; only the pointer is stored here, so an
-// incomplete type suffices. The UI feature (which includes imgui.h) provides
-// the full definition.
-struct ImDrawData;
-
 #include "RenderApi.h"
 #include <Maho.h>
 #include <Engine/Layer.h>
@@ -171,20 +165,6 @@ MAHO_DECLARE_LAYER(FRender, "Render.dll");
 	FRender();
 	~FRender() override;
 public:
-	/** The UI's CPU-side ImGui context is owned by FRender (created in Initialize,
-	 *  driven across BeginFrame/Tick/Shutdown). ImGui::GetDrawData() is stored here
-	 *  each Tick and consumed by the UIFeature render backend. */
-	ImDrawData* UIData = nullptr;
-
-	/** The UIFeature's translated UI draw list for the CURRENT frame. The UI feature
-	 *  fills it each RenderUI (mirror of ImDrawData -> FDrawList protocol) and hands it
-	 *  to AddPass. Kept as a FRender member rather than a per-call local so the
-	 *  batch/primitive buffer vectors reuse their capacity across frames; the feature
-	 *  calls Reset() at the start of each fill to clear the previous frame's content. */
-	FDrawList UIDrawList;
-	/** Whether the ImGui context has been created (guards BeginFrame/Tick/Shutdown). */
-	bool bUIInitialized = false;
-
 	/** CPU-asset->GPU mirror map access for UI features: the UIFeature draws each
 	 *  texture mirror as an ImGui::Image, re-resolving its set-0 CombinedImageSampler
 	 *  descriptor set from the resource pool on demand (content-addressable get-or-create)
@@ -195,15 +175,6 @@ public:
 		const auto It = GpuMirrors.find(AssetName);
 		return It != GpuMirrors.end() ? &It->second : nullptr;
 	}
-
-	/** A frame-UI builder: runs after the host ITick stage builds the ImGui frame
-	 *  and BEFORE ImGui::Render() closes it, so a builder can emit extra UI (e.g. a
-	 *  mirror preview window) that composites over the plugin UI. FRender owns only
-	 *  the ImGui context + final draw data; UI emission is pushed here so FRender
-	 *  keeps zero render-specific UI logic. */
-	using FUIBuildFn = std::function<void(FRender&)>;
-	void AddUIBuilder(FUIBuildFn Fn) { UIBuilders.push_back(std::move(Fn)); }
-	void ClearUIBuilders() { UIBuilders.clear(); }
 public:
 	// -- render surface / canvas info + present. FRender owns the RHI; features
 	// never reach the raw IRHI* (no GetRHI()). The canvas is the swapchain geometry
@@ -466,12 +437,6 @@ private:
 	 *  TryGetShader<T> only; they never touch the compiler server directly. */
 	FShaderCompilerServer* GetShaderCompiler() const { return ShaderCompiler.get(); }
 
-	/** Acquire a render list, run Record mid-pass, End + Submit. Internal: shared by
-	 *  the plain AddPass and the PSO-resolving AddPass (which records
-	 *  BeginRendering/Bind/End around the feature's draw lambda). Keeping this
-	 *  non-template keeps FRHIResourcePool complete only in Render.cpp. */
-	void SubmitPass(ERHICommandListType PassType, std::function<void(FRHICommandList&)> Record);
-
 	/** Non-template bridge for AllocParameters<T>(): bump-allocates frame-transient
 	 *  bytes from the (complete, .cpp-only) resource pool. Keeping this non-template
 	 *  means the public header instantiates no member template on the forward-declared
@@ -517,13 +482,6 @@ private:
 	 *  is owned by FUIFeature (see UIFeature::MirrorUISets); FRender only owns the
 	 *  GPU mirror resource itself. */
 	std::unordered_map<Name::FName, FRDGResourceRef> GpuMirrors;
-
-	/** Pre-Render UI builders, registered by UI features (e.g. UIFeature) and run
-	 *  each UI frame after the host ITick stage, before ImGui::Render(). This keeps
-	 *  FRender free of render-specific UI logic -- it only owns the ImGui context +
-	 *  the final ImDrawData. Cleared at Shutdown before the features are destroyed. */
-	std::vector<FUIBuildFn> UIBuilders;
-
 
 	/** OnAssetImported listener: mirror the imported CPU asset to GPU (upload its
 	 *  pixels), then report completion via Done so the resource system can drop the

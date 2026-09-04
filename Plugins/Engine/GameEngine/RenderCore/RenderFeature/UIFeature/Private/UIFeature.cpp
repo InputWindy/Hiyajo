@@ -9,6 +9,7 @@
 #include <DrawTriangleFeature.h>
 #include <Frame.h>
 #include <Log.h>
+#include <Platform.h>
 #include <Scene.h>
 #include <RHI/RHICommandList.h>
 #include <RHI/RHIEnums.h>
@@ -16,6 +17,10 @@
 #include <ShaderParameterStruct.h>
 
 #include "imgui.h"
+
+#if defined(_WIN32)
+#	include <windows.h>
+#endif
 
 namespace
 {
@@ -267,6 +272,27 @@ FUIFeature::FUIFeature()
 
 void FUIFeature::OnInstalled(FRender& R)
 {
+	// THIS feature owns the UI's CPU-side ImGui context (FRender is now completely
+	// UI-agnostic). Create it here, on install, BEFORE anything touches ImGui::GetIO()
+	// (EnsureUIBackend below reads GetIO().Fonts). The window gate mirrors the old
+	// FRender::Initialize check: no window -> UI disabled, context not created, and
+	// InitViews bails each frame.
+	if (!bContextCreated)
+	{
+		Platform::FPlatform* P = Platform::GetPlatform();
+		if (P == nullptr || P->GetWindowWidth() == 0 || P->GetToolkitWindowHandle() == nullptr)
+		{
+			MAHO_LOG_CORE_ERROR("FUIFeature::OnInstalled: no window; UI disabled");
+			return;
+		}
+		IMGUI_CHECKVERSION();
+		ImGui::CreateContext();
+		ImGuiIO& IO = ImGui::GetIO();
+		IO.ConfigFlags |= ImGuiConfigFlags_DockingEnable;   // the editor shell docks later
+		ImGui::StyleColorsDark();
+		bContextCreated = true;
+		MAHO_LOG_CORE_INFO("FUIFeature: ImGui context created (CPU side; FRender untouched)");
+	}
 
 	// The UI SHADER is fetched via the shared FRender::TryGetShader<FUIShader> path
 	// below (no bytecode cache here). The FONT backend resources (font texture /
@@ -289,123 +315,84 @@ void FUIFeature::OnInstalled(FRender& R)
 
 void FUIFeature::InitViews(FRender& R)
 {
-	// Register the mirror test-harness window as a pre-Render UI builder. FRender
-	// owns the ImGui frame lifecycle (NewFrame/Render) and keeps only the final
-	// ImDrawData; UI emission is pushed here (AddUIBuilder) so FRender never
-	// hardcodes the mirror window -- it just runs the registered builders before
-	// ImGui::Render() each frame. The flag guards against re-registration.
-	if (!bMirrorBuilderRegistered)
+	if (!bContextCreated || !bUIInit)
 	{
-		R.AddUIBuilder([this](FRender& RIn) { DisplayMirrorImGui(RIn); });
-		bMirrorBuilderRegistered = true;
+		return;   // ImGui context or font backend not ready
 	}
-}
 
-void FUIFeature::RenderUI(FRender& R)
-{
-	Scene::FScene* Scene = Scene::GetScene();
-	if (Scene == nullptr || !Scene->GetSceneColor().IsValid())
+	// -- Frame feed (Platform window + Win32 input + lazy font-atlas build), then
+	//    NewFrame. The WHOLE ImGui frame lifecycle is driven here on this worker
+	//    thread: feed -> NewFrame -> build UI -> Render -> GetDrawData -> translate.
+	//    No other thread touches ImGui in a frame, so the single-thread contract holds.
+	ImGuiIO& IO = ImGui::GetIO();
+	Platform::FPlatform* P = Platform::GetPlatform();
+	if (P == nullptr)
 	{
 		return;
 	}
-	// The UI composites over SceneColor; its color format + size come FROM THE
-	// TARGET (never the swapchain / RHI), matching the off-screen target's desc.
-	const FRDGTextureRef SceneColor = Scene->GetSceneColor();
-	const std::uint32_t TargetW = SceneColor.GetWidth();
-	const std::uint32_t TargetH = SceneColor.GetHeight();
-	const ERHIFormat ColorFormat = SceneColor.GetFormat();
+	// Display size must match the render target (SceneColor = swapchain extent), not
+	// the window's logical size -- ImGui lays out in DisplaySize coordinates and the
+	// render feature clips against it.
+	IO.DisplaySize = ImVec2(
+		static_cast<float>(P->GetWindowWidth()),
+		static_cast<float>(P->GetWindowHeight()));
+#if defined(_WIN32)
+	// Input bypasses GLFW's message-driven cursor state (the window is created on a
+	// pool worker and polled on another, so WM_MOUSEMOVE never reaches
+	// glfwGetCursorPos). Win32 global state works from any thread.
+	if (HWND Hwnd = static_cast<HWND>(P->GetNativeWindow()))
+	{
+		POINT Pt{};
+		if (::GetCursorPos(&Pt) && ::ScreenToClient(Hwnd, &Pt))
+		{
+			RECT Client{};
+			::GetClientRect(Hwnd, &Client);
+			const float ScaleX = Client.right > 0 ? IO.DisplaySize.x / static_cast<float>(Client.right) : 1.f;
+			const float ScaleY = Client.bottom > 0 ? IO.DisplaySize.y / static_cast<float>(Client.bottom) : 1.f;
+			IO.AddMousePosEvent(static_cast<float>(Pt.x) * ScaleX, static_cast<float>(Pt.y) * ScaleY);
+		}
+		IO.AddMouseButtonEvent(0, (::GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0);
+		IO.AddMouseButtonEvent(1, (::GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0);
+		IO.AddMouseButtonEvent(2, (::GetAsyncKeyState(VK_MBUTTON) & 0x8000) != 0);
+	}
+#endif
 
-	ImDrawData* DrawData = R.UIData;
+	// Renderer-backend NewFrame duty (mirrors the imgui_impl_* backends, which must
+	// be called before ImGui::NewFrame()): the font atlas is built lazily by
+	// ImFontAtlas::Build() and ImGui::NewFrame() asserts IsBuilt(). Calling
+	// GetTexDataAsRGBA32() triggers that build on the first frame and returns the
+	// existing pixels afterwards (the GPU upload already happened in OnInstalled).
+	unsigned char* FontPixels = nullptr;
+	int FontW = 0, FontH = 0, FontBpp = 0;
+	IO.Fonts->GetTexDataAsRGBA32(&FontPixels, &FontW, &FontH, &FontBpp);
+	if (FontPixels == nullptr || FontW <= 0 || FontH <= 0)
+	{
+		MAHO_LOG_CORE_ERROR("FUIFeature: font atlas not built");
+		return;
+	}
+	ImGui::NewFrame();
+
+	// Build the frame UI: the feature's own test-harness windows (texture mirrors).
+	DisplayMirrorImGui(R);
+
+	// Close the frame + take the draw data. The data is valid until the NEXT
+	// NewFrame; we translate + copy it below (SetPrimitiveData owns the copy).
+	ImGui::Render();
+	ImDrawData* DrawData = ImGui::GetDrawData();
 	if (DrawData == nullptr || !DrawData->Valid || DrawData->CmdListsCount <= 0)
 	{
-		MAHO_LOG_CORE_INFO("FUIFeature: no draw data (dd={} valid={} lists={})",
-			DrawData != nullptr, DrawData != nullptr && DrawData->Valid,
+		MAHO_LOG_CORE_INFO("FUIFeature: no draw data (valid={} lists={})",
+			DrawData != nullptr && DrawData->Valid,
 			DrawData != nullptr ? DrawData->CmdListsCount : -1);
 		return;
 	}
 
-	// -- Draw pass -- one subpass via the TYPED AddPass. AddPass resolves the PSO from
-	//    the pass input layout + the target, starts dynamic rendering, BINDS the
-	//    pipeline implicitly, and only then runs this lambda -- so the lambda records
-	//    ONLY the draws (viewport / binds / push constant / draw calls). The feature
-	//    never queries a pipeline or calls BeginRendering/BindGraphicsPipeline itself.
-	FRenderTarget Target;
-	FRenderTarget::FAttachment Color;
-	Color.View = SceneColor;
-	Color.LoadOp = ERHILoadOp::Load;
-	Color.StoreOp = ERHIStoreOp::Store;
-	Target.AddColor(Color);
-	Target.SetSize(TargetW, TargetH);
-
-	// Input binding (FUIParameters, macro-declared): the font descriptor set (set 0:
-	// font texture + sampler) + the vertex-stage push-constant range (mat4). AddPass
-	// translates the macro metadata (ShaderParameterBuild) into the pass layout, fills
-	// PipelineDesc.Layout from it and resolves the PSO; the font set is materialised +
-	// bound by AddPass (hidden from the feature). The font sampler + texture come from
-	// the registry -- no RHI op, no held descriptor set.
-	const FUIFeature::FUIRegistryEntry* FontEntry = FindTexture(FontId);
-	if (FontEntry == nullptr)
-	{
-		MAHO_LOG_CORE_ERROR("FUIFeature: font registry entry missing");
-		return;
-	}
-	FUIParameters* Params = R.AllocParameters<FUIParameters>();
-	Params->FontTexture = FontEntry->Texture;
-	Params->FontSampler = FontEntry->Sampler;
-
-	// Fetch the UI shader modules through the shared per-type async path (compile +
-	// sync up front), so the resolved modules, bytecode hashes and entry points can
-	// be written straight into the pipeline config. Each frame returns the cached
-	// handle; Wait() is the sync-before-use -- identical to the triangle feature.
-	TShaderHandle<FUIShader> Shader = R.TryGetShader<FUIShader>();
-	FRHIShaderModule* VS = nullptr;
-	FRHIShaderModule* FS = nullptr;
-	if (Shader.Wait())
-	{
-		VS = Shader.GetVertex();
-		FS = Shader.GetFragment();
-	}
-	if (VS == nullptr || FS == nullptr)
-	{
-		MAHO_LOG_CORE_ERROR("FUIFeature: shader not ready");
-		return;
-	}
-
-	FRHIGraphicsPipelineDesc PipelineDesc;
-	PipelineDesc.VertexShader = VS;
-	PipelineDesc.FragmentShader = FS;
-	PipelineDesc.VertexShaderHash = Shader.GetVertexHash();
-	PipelineDesc.FragmentShaderHash = Shader.GetFragmentHash();
-	PipelineDesc.VertexEntryPoint = Detail::GetVertexEntryPoint<FUIShader>();
-	PipelineDesc.FragmentEntryPoint = Detail::GetFragmentEntryPoint<FUIShader>();
-	// NOTE: PipelineDesc.Layout is left unset -- AddPass fills it from Pass.Layout.
-	PipelineDesc.RenderPass = nullptr;   // dynamic rendering
-	PipelineDesc.Topology = ERHIPrimitiveTopology::TriangleList;
-	PipelineDesc.VertexStride = sizeof(ImDrawVert);
-	PipelineDesc.Attributes = {
-		{ 0, ERHIFormat::R32G32_SFLOAT,  offsetof(ImDrawVert, pos) },   // aPos
-		{ 1, ERHIFormat::R32G32_SFLOAT,  offsetof(ImDrawVert, uv) },    // aUV
-		{ 2, ERHIFormat::R8G8B8A8_UNORM, offsetof(ImDrawVert, col) },   // aColor
-	};
-	PipelineDesc.CullMode = ERHICullMode::None;
-	PipelineDesc.FillMode = ERHIFillMode::Solid;
-	PipelineDesc.ColorFormat = ColorFormat;
-	PipelineDesc.DepthFormat = ERHIFormat::Unknown;
-	FRHIAttachmentBlend Blend;
-	Blend.bBlend = true;
-	Blend.SrcColorFactor = ERHIBlendFactor::SrcAlpha;
-	Blend.DstColorFactor = ERHIBlendFactor::OneMinusSrcAlpha;
-	Blend.SrcAlphaFactor = ERHIBlendFactor::One;
-	Blend.DstAlphaFactor = ERHIBlendFactor::OneMinusSrcAlpha;
-	PipelineDesc.AttachmentBlends = { Blend };
-
-	// -- Build the declarative draw list into FRender's reused member. The pass-level
-	//    CPU primitive data is the merged ImDrawData (one vertex/index array, uploaded
-	//    once by AddPass), each ImDrawCmd becomes a batch that slices it; a draw command
-	//    carrying a different texture (Image()) gets a per-batch set-0 (its RDG texture +
-	//    sampler) resolved by content inside AddPass. The feature holds NO buffer, NO
-	//    descriptor set. Reset() clears the previous frame's content (capacity kept).
-	FDrawList& DrawList = R.UIDrawList;
+	// -- Translate ImDrawData -> FDrawList (a feature member so the merged buffer +
+	//    batch vectors reuse capacity across frames). The pass-level CPU primitive
+	//    data is the merged ImDrawData (one vertex/index array); SetPrimitiveData
+	//    COPIES it, so ImGui's buffers need no lifetime beyond here. RenderUI (later,
+	//    same graph) draws from the owned copy via AddPass.
+	FDrawList& DrawList = this->DrawList;
 	DrawList.Reset();
 
 	std::size_t TotalVerts = 0, TotalIndices = 0;
@@ -502,6 +489,105 @@ void FUIFeature::RenderUI(FRender& R)
 		VtxBase += List->VtxBuffer.Size;
 		IdxBase += List->IdxBuffer.Size;
 	}
+}
+
+void FUIFeature::RenderUI(FRender& R)
+{
+	Scene::FScene* Scene = Scene::GetScene();
+	if (Scene == nullptr || !Scene->GetSceneColor().IsValid())
+	{
+		return;
+	}
+	// The UI composites over SceneColor; its color format + size come FROM THE
+	// TARGET (never the swapchain / RHI), matching the off-screen target's desc.
+	const FRDGTextureRef SceneColor = Scene->GetSceneColor();
+	const std::uint32_t TargetW = SceneColor.GetWidth();
+	const std::uint32_t TargetH = SceneColor.GetHeight();
+	const ERHIFormat ColorFormat = SceneColor.GetFormat();
+
+	// Already translated from ImDrawData in InitViews (the whole ImGui frame
+	// lifecycle lives there, including the owned-copy SetPrimitiveData). Draw from
+	// THAT list -- FRender holds no ImGui state, so the list lives here in the feature.
+	FDrawList& DrawList = this->DrawList;
+	if (!DrawList.HasPrimitiveData())
+	{
+		return;
+	}
+
+	// -- Draw pass -- one subpass via the TYPED AddPass. AddPass resolves the PSO from
+	//    the pass input layout + the target, starts dynamic rendering, BINDS the
+	//    pipeline implicitly, and only then runs this lambda -- so the lambda records
+	//    ONLY the draws (viewport / binds / push constant / draw calls). The feature
+	//    never queries a pipeline or calls BeginRendering/BindGraphicsPipeline itself.
+	FRenderTarget Target;
+	FRenderTarget::FAttachment Color;
+	Color.View = SceneColor;
+	Color.LoadOp = ERHILoadOp::Load;
+	Color.StoreOp = ERHIStoreOp::Store;
+	Target.AddColor(Color);
+	Target.SetSize(TargetW, TargetH);
+
+	// Input binding (FUIParameters, macro-declared): the font descriptor set (set 0:
+	// font texture + sampler) + the vertex-stage push-constant range (mat4). AddPass
+	// translates the macro metadata (ShaderParameterBuild) into the pass layout, fills
+	// PipelineDesc.Layout from it and resolves the PSO; the font set is materialised +
+	// bound by AddPass (hidden from the feature). The font sampler + texture come from
+	// the registry -- no RHI op, no held descriptor set.
+	const FUIFeature::FUIRegistryEntry* FontEntry = FindTexture(FontId);
+	if (FontEntry == nullptr)
+	{
+		MAHO_LOG_CORE_ERROR("FUIFeature: font registry entry missing");
+		return;
+	}
+	FUIParameters* Params = R.AllocParameters<FUIParameters>();
+	Params->FontTexture = FontEntry->Texture;
+	Params->FontSampler = FontEntry->Sampler;
+
+	// Fetch the UI shader modules through the shared per-type async path (compile +
+	// sync up front), so the resolved modules, bytecode hashes and entry points can
+	// be written straight into the pipeline config. Each frame returns the cached
+	// handle; Wait() is the sync-before-use -- identical to the triangle feature.
+	TShaderHandle<FUIShader> Shader = R.TryGetShader<FUIShader>();
+	FRHIShaderModule* VS = nullptr;
+	FRHIShaderModule* FS = nullptr;
+	if (Shader.Wait())
+	{
+		VS = Shader.GetVertex();
+		FS = Shader.GetFragment();
+	}
+	if (VS == nullptr || FS == nullptr)
+	{
+		MAHO_LOG_CORE_ERROR("FUIFeature: shader not ready");
+		return;
+	}
+
+	FRHIGraphicsPipelineDesc PipelineDesc;
+	PipelineDesc.VertexShader = VS;
+	PipelineDesc.FragmentShader = FS;
+	PipelineDesc.VertexShaderHash = Shader.GetVertexHash();
+	PipelineDesc.FragmentShaderHash = Shader.GetFragmentHash();
+	PipelineDesc.VertexEntryPoint = Detail::GetVertexEntryPoint<FUIShader>();
+	PipelineDesc.FragmentEntryPoint = Detail::GetFragmentEntryPoint<FUIShader>();
+	// NOTE: PipelineDesc.Layout is left unset -- AddPass fills it from Pass.Layout.
+	PipelineDesc.RenderPass = nullptr;   // dynamic rendering
+	PipelineDesc.Topology = ERHIPrimitiveTopology::TriangleList;
+	PipelineDesc.VertexStride = sizeof(ImDrawVert);
+	PipelineDesc.Attributes = {
+		{ 0, ERHIFormat::R32G32_SFLOAT,  offsetof(ImDrawVert, pos) },   // aPos
+		{ 1, ERHIFormat::R32G32_SFLOAT,  offsetof(ImDrawVert, uv) },    // aUV
+		{ 2, ERHIFormat::R8G8B8A8_UNORM, offsetof(ImDrawVert, col) },   // aColor
+	};
+	PipelineDesc.CullMode = ERHICullMode::None;
+	PipelineDesc.FillMode = ERHIFillMode::Solid;
+	PipelineDesc.ColorFormat = ColorFormat;
+	PipelineDesc.DepthFormat = ERHIFormat::Unknown;
+	FRHIAttachmentBlend Blend;
+	Blend.bBlend = true;
+	Blend.SrcColorFactor = ERHIBlendFactor::SrcAlpha;
+	Blend.DstColorFactor = ERHIBlendFactor::OneMinusSrcAlpha;
+	Blend.SrcAlphaFactor = ERHIBlendFactor::One;
+	Blend.DstAlphaFactor = ERHIBlendFactor::OneMinusSrcAlpha;
+	PipelineDesc.AttachmentBlends = { Blend };
 
 	// One AddPass == one subpass. AddPass uploads the CPU primitive data once, resolves
 	// the pass-level font set + each per-batch set by content, binds the pipeline, and
@@ -511,6 +597,14 @@ void FUIFeature::RenderUI(FRender& R)
 
 void FUIFeature::PreUnInstall(FRender& R)
 {
+	(void)R;
+	// THIS feature owns the ImGui context, so it tears it down here. Ordered after
+	// every render feature teardown that may log / touch UI, and before the DLL unload.
+	if (bContextCreated)
+	{
+		ImGui::DestroyContext();
+		bContextCreated = false;
+	}
 }
 
 } // namespace Maho

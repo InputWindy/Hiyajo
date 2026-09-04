@@ -5,6 +5,7 @@
 #include <Render.h>
 #include <RDG.h>
 #include <RHI/RHIResources.h>
+#include <RenderDrawList.h>
 
 #include <cstdint>
 #include <map>
@@ -28,20 +29,23 @@ struct FUIShader
 };
 
 /**
- * ImGui render feature - the render-side half of the UI integration. The CPU
- * side (FRender's ImGui context) builds the ImGui frame and stores the draw data
- * in FRender::UIData; this feature draws that data in IRenderUI over
- * the shared SceneColor (LoadOp Load, after the scene), submitted before the
- * frame feature's present blit.
+ * ImGui render feature - the OWNER of the UI's CPU-side ImGui context and the
+ * whole frame lifecycle. This feature creates/destroys the ImGui context
+ * (OnInstalled / PreUnInstall) and drives the frame inside InitViews: frame feed ->
+ * NewFrame -> build UI (DisplayMirrorImGui) -> Render -> GetDrawData -> translate the
+ * draw data into an owned FDrawList (SetPrimitiveData copies). RenderUI draws that
+ * list over the shared SceneColor (LoadOp Load, after the scene), submitted before
+ * the frame feature's present blit. FRender is completely UI-agnostic -- it holds
+ * no ImGui state and never links or references ImGui.
  *
  * Stateless draw feature: the UI shader goes through FRender::TryGetShader<FUIShader>
- * (async compile + per-type cache, above). The font backend holds ONLY the RDG
+ * (async compile + per-type cache, above). The FONT backend holds ONLY the RDG
  * font texture handle. NO raw RHI pointer lives here: the descriptor set layout, the
  * descriptor set and the sampler are each re-resolved from the resource pool
  * (content-addressable get-or-create, keyed by the PassParameter binding value that
  * produced them) on demand. The pool owns every native lifetime, so this feature
- * neither owns nor tears down a resource. Only the draw data (ImDrawData*) lives in
- * FScene.
+ * neither owns nor tears down a resource. Only the translated FDrawList is held
+ * (a member, reused across frames).
  */
 class MAHO_UIFEATURE_API FUIFeature : public FLayer<IOnInstalled, IInitViews, IRenderUI, IPreUnInstall>
 {
@@ -55,13 +59,9 @@ public:
 	void RenderUI(FRender& R) override;
 	void PreUnInstall(FRender& R) override;
 
-	/** Test harness (called by FRender::Tick each UI frame): show every imported
-	 *  texture mirror in an ImGui window, sized from its RDG mirror. Mirrors are
-	 *  drawn between ImGui::NewFrame and ImGui::Render.
-	 *
-	 *  Virtual on purpose: FRender calls it through the UIFeature vtable (the UI
-	 *  feature is loaded as a separate DLL that FRender never links), so a virtual
-	 *  call generates no unresolved-symbol dependency across the DLL boundary. */
+	/** Test harness (called by this feature's own InitViews each frame): show every
+	 *  imported texture mirror in an ImGui window, sized from its RDG mirror. Mirrors
+	 *  are drawn between ImGui::NewFrame and ImGui::Render. */
 	virtual void DisplayMirrorImGui(FRender& R);
 
 private:
@@ -98,12 +98,19 @@ private:
 	// created locally inside the upload pass, never held.
 	bool bUIInit = false;
 	bool bFontUploaded = false;
+	/** Whether ImGui::CreateContext() has run (this feature owns the CPU-side ImGui
+	 *  context; created at OnInstalled, destroyed at PreUnInstall). Guards every
+	 *  frame-feed / InitViews entry. */
+	bool bContextCreated = false;
 	FRDGTextureRef FontTexture;
 	FUIRegistryId FontId = 0;
 	std::map<FUIRegistryId, FUIRegistryEntry> TextureRegistry;
 	FUIRegistryId NextTextureId = 1;
-	/** Guards the one-time AddUIBuilder registration in InitViews. */
-	bool bMirrorBuilderRegistered = false;
+	/** The translated ImDrawData->FDrawList for the CURRENT frame. Filled at InitViews
+	 *  (the whole ImGui frame lifecycle lives there; SetPrimitiveData owns the copy),
+	 *  drawn at RenderUI (same graph, self-progression). A member so the merged
+	 *  primitive + batch vectors reuse their capacity across frames. */
+	FDrawList DrawList;
 };
 
 } // namespace Maho
