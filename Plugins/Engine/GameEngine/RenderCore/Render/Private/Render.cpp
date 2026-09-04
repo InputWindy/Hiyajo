@@ -102,8 +102,10 @@ void FRender::Initialize(FEngineBase& Engine)
 	Install<FUIFeature>();
 
 	// ImGui context (CPU side) — created from the Platform layer's window; the
-	// render backend (UIFeature, installed above) consumes the draw data this
-	// context produces each frame. FRender owns the context lifetime.
+	// render backend (UIFeature) consumes the draw data this context produces each
+	// frame. MUST be created BEFORE the Install-InitGraph below: UIFeature::OnInstalled
+	// touches ImGui::GetIO().Fonts in EnsureUIBackend/UploadFont, and GetIO() before
+	// CreateContext() asserts "No current context".
 	Platform::FPlatform* UI_P = Platform::GetPlatform();
 	if (UI_P == nullptr || UI_P->GetWindowWidth() == 0 || UI_P->GetToolkitWindowHandle() == nullptr)
 	{
@@ -204,7 +206,9 @@ void FRender::Shutdown(FEngineBase&)
 		RS->OnAssetUnloaded.RemoveAll();
 	}
 	GpuMirrors.clear();
-	MirrorUISets.clear();   // descriptor sets are pool-owned; just drop the handles
+	UIBuilders.clear();   // drop feature-held UI builders before the features die
+	// The UI mirror descriptor sets are owned by FUIFeature; it is destroyed by
+	// Features.clear() below (its destructor drops the borrowed pool handles).
 	// thread). All of them drain their queues and join here.
 	//
 	// The leftover render tasks drained below (e.g. the last frame's EndFrame)
@@ -373,7 +377,17 @@ void FRender::Tick(FEngineBase&)
 	// UIFeature render backend (reads R.UIData) inside the graph below.
 	if (bUIInitialized)
 	{
-		DisplayMirrorImGui();   // test harness: show the imported texture mirror
+		// Run the frame-UI builders registered by UI features (e.g. the UIFeature's
+		// mirror preview window). They emit their windows in the ImGui frame built
+		// during the host ITick stage; FRender itself owns only the frame lifecycle
+		// (Render/GetDrawData) and keeps zero render-specific UI logic.
+		for (const FUIBuildFn& Fn : UIBuilders)
+		{
+			if (Fn)
+			{
+				Fn(*this);
+			}
+		}
 		ImGui::Render();
 		UIData = ImGui::GetDrawData();
 	}
@@ -381,7 +395,7 @@ void FRender::Tick(FEngineBase&)
 	// Rebuild + drive the render feature graph. All frame work (swapchain begin,
 	// feature acquire/record/submit, present, swapchain end) is a scheduled stage --
 	// FRender only schedules; the frame feature + per-feature deps order it all.
-	FlushPendingUpdatePipelines<IInitViews, IBeginRender, IRender, IEndRender, IPostProcess, IRenderUI, IPresent>();
+	FlushPendingUpdatePipelines<TTypeList<IOnInstalled>, TTypeList<IPreUnInstall>>();
 	RenderGraph->Init(Select<IInitViews, IBeginRender, IRender, IEndRender, IPostProcess, IRenderUI, IPresent>());
 	if (!RenderGraph->Compile())
 	{
@@ -443,6 +457,355 @@ void FRender::ReleaseBuffer(FRDGBufferRef& Ref)
 	}
 }
 
+void FRender::AddPass(
+	ERHICommandListType PassType,
+	FRHIGraphicsPipelineDesc PipelineDesc,
+	const FRenderPassDesc& Pass,
+	std::function<void(FRHICommandList&)> PassFn)
+{
+	// Feature-key to ONE pool descriptor-set layout + pipeline layout. The
+	// FPassParameter declares the input sets/push-constants; the pool
+	// get-or-creates the matching natives. This is the feature value -> pool
+	// descriptor layout mapping: the same input binds share one layout.
+	std::vector<FRHIDescriptorSetLayout*> SetLayouts;
+	std::vector<FRHIDescriptorSetLayoutDesc> SetLayoutDescs;
+	SetLayouts.reserve(Pass.Layout.Sets.size());
+	SetLayoutDescs.reserve(Pass.Layout.Sets.size());
+	for (const FRDGDescriptorSet& SetDesc : Pass.Layout.Sets)
+	{
+		FRHIDescriptorSetLayoutDesc DSLDesc;
+		for (const auto& [Binding, B] : SetDesc.Bindings)
+		{
+			FRHIDescriptorBinding DB;
+			DB.Binding = Binding;
+			DB.Type = B.Type;
+			DB.Count = 1;
+			DB.Stages = B.Stages;
+			DSLDesc.Bindings.push_back(DB);
+		}
+		SetLayoutDescs.push_back(std::move(DSLDesc));
+		SetLayouts.push_back(GetOrCreateDescriptorSetLayout(SetLayoutDescs.back()));
+	}
+
+	FRHIPipelineLayoutDesc LayoutDesc;
+	LayoutDesc.SetLayouts = SetLayouts;
+	LayoutDesc.PushConstants = Pass.Layout.PushConstants;
+	PipelineDesc.Layout = GetOrCreatePipelineLayout(LayoutDesc);
+	FRHIGraphicsPipeline* Pipeline = nullptr;
+	if (PipelineDesc.Layout != nullptr)
+	{
+		Pipeline = GetOrCreateGraphicsPipeline(PipelineDesc);
+	}
+
+	// Resolve the declared RDG target into concrete rendering attachments.
+	std::vector<FRHIRenderingAttachmentInfo> Colors;
+	Colors.reserve(Pass.Target.Color.size());
+	for (const auto& A : Pass.Target.Color)
+	{
+		FRHIRenderingAttachmentInfo Info;
+		Info.View = A.View.GetView();
+		Info.LoadOp = A.LoadOp;
+		Info.StoreOp = A.StoreOp;
+		for (std::uint32_t i = 0; i < 4; ++i) { Info.ClearColor[i] = A.ClearColor[i]; }
+		Colors.push_back(Info);
+	}
+	FRHIRenderingAttachmentInfo Depth;
+	const FRHIRenderingAttachmentInfo* PDepth = nullptr;
+	if (Pass.Target.bHasDepth)
+	{
+		Depth.View = Pass.Target.Depth.View.GetView();
+		Depth.LoadOp = Pass.Target.Depth.LoadOp;
+		Depth.StoreOp = Pass.Target.Depth.StoreOp;
+		for (std::uint32_t i = 0; i < 4; ++i) { Depth.ClearColor[i] = Pass.Target.Depth.ClearColor[i]; }
+		PDepth = &Depth;
+	}
+
+	// Snapshot the attachment pointers/extent into locals so the record lambda
+	// does not copy the (vector-owning) Colors by value. Width/Height default to
+	// the first color attachment's extent when the target did not set them.
+	const FRHIRenderingAttachmentInfo* ColorsPtr = Colors.empty() ? nullptr : Colors.data();
+	const std::uint32_t ColorCount = static_cast<std::uint32_t>(Colors.size());
+	std::uint32_t Width = Pass.Target.Width;
+	std::uint32_t Height = Pass.Target.Height;
+	if (Width == 0 && Height == 0 && !Pass.Target.Color.empty())
+	{
+		Width = Pass.Target.Color[0].View.GetWidth();
+		Height = Pass.Target.Color[0].View.GetHeight();
+	}
+
+	// Materialise the descriptor sets: resolve each FRDGBinding's ref to a native
+	// view/buffer and get-or-create the pool's mutable set. ALL non-per-instance
+	// frequencies (Static / PerFrame / PerPass) share ONE implementation path: a
+	// persistent mutable set keyed by layout, written at record time via
+	// Cmd.UpdateDescriptorSet, before the draws that bind it. The frequency is
+	// only a semantic hint about how OFTEN content changes -- every pass parameter
+	// is allowed to change, so a Static set is still mutable, just updated far
+	// less often than PerFrame / PerPass:
+	//   - Static  : per-scene, rarely changes ("变化最小"), but still a mutable set.
+	//   - PerFrame: every frame (per-frame GPU scene).
+	//   - PerPass : per pass (basepass vs postprocess).
+	//   - PerInstance: per mesh batch, and a DIFFERENT path -- a single mutable set
+	//     holds one content, so every batch would read the last update. Per-batch
+	//     content needs push-descriptor / dynamic-offset UBO, deferred to the
+	//     bindless/per-instance change (errors here so it is never mis-baked).
+	FRHIGraphicsPipeline* Bound = Pipeline;
+	std::uint32_t FirstSet = ~0u;
+	for (const FRDGDescriptorSet& SetDesc : Pass.Layout.Sets)
+	{
+		if (SetDesc.SetIndex < FirstSet) { FirstSet = SetDesc.SetIndex; }
+	}
+	if (FirstSet == ~0u) { FirstSet = 0; }
+	std::uint32_t SetCount = 0;
+	for (const FRDGDescriptorSet& SetDesc : Pass.Layout.Sets)
+	{
+		const std::uint32_t SetSpan = SetDesc.SetIndex - FirstSet + 1;
+		if (SetSpan > SetCount) { SetCount = SetSpan; }
+	}
+	std::vector<FRHIDescriptorSet*> BoundSets(SetCount, nullptr);
+	std::vector<FRHIDescriptorSet*> DynamicSets;
+	std::vector<std::vector<FRHIDescriptorWrite>> DynamicWrites;
+	for (std::size_t I = 0; I < Pass.Layout.Sets.size(); ++I)
+	{
+		const FRDGDescriptorSet& SetDesc = Pass.Layout.Sets[I];
+		std::vector<FRHIDescriptorWrite> Writes;
+		for (const auto& [Binding, B] : SetDesc.Bindings)
+		{
+			FRHIDescriptorWrite W;
+			W.Binding = Binding;
+			W.Type = B.Type;
+				if (const FRDGTextureRef* Tex = std::get_if<FRDGTextureRef>(&B.Resource))
+				{
+					W.TextureView = Tex->GetView();
+					if (B.SamplerIndex >= 0 && static_cast<std::uint32_t>(B.SamplerIndex) < SetDesc.Samplers.size())
+					{
+						W.Sampler = SetDesc.Samplers[static_cast<std::size_t>(B.SamplerIndex)];
+					}
+				}
+			else if (const FRDGBufferRef* Buf = std::get_if<FRDGBufferRef>(&B.Resource))
+			{
+				W.Buffer = Buf->GetRHI();
+				W.Offset = B.Offset;
+				W.Range = B.Range;
+			}
+			Writes.push_back(W);
+		}
+
+		FRHIDescriptorSet* Set = nullptr;
+		if (SetDesc.Frequency == EDescriptorSetFrequency::PerInstance)
+		{
+			MAHO_LOG_CORE_ERROR("FRender::AddPass: PerInstance descriptor set {} -- per-batch content needs push-descriptor / dynamic-offset UBO (deferred to the bindless change)", SetDesc.SetIndex);
+		}
+		else
+		{
+			// Static / PerFrame / PerPass all share one mechanism: a persistent
+			// mutable set keyed by layout, written at record time.
+			Set = GetOrCreateMutableDescriptorSet(SetLayouts[I], SetLayoutDescs[I]);
+			if (Set != nullptr)
+			{
+				for (FRHIDescriptorWrite& W : Writes)
+				{
+					W.Set = Set;
+				}
+				DynamicSets.push_back(Set);
+				DynamicWrites.push_back(std::move(Writes));
+			}
+		}
+		if (Set != nullptr)
+		{
+			BoundSets[SetDesc.SetIndex - FirstSet] = Set;
+		}
+	}
+
+	SubmitPass(PassType, [=](FRHICommandList& List)
+	{
+		// Write the mutable set contents (host op at record time, before the draws
+		// that bind them) so every frequency -- Static / PerFrame / PerPass -- picks
+		// up its current content this frame/pass.
+		for (std::size_t D = 0; D < DynamicSets.size(); ++D)
+		{
+			const std::vector<FRHIDescriptorWrite>& DW = DynamicWrites[D];
+			List.UpdateDescriptorSet(DynamicSets[D], DW.data(), static_cast<std::uint32_t>(DW.size()));
+		}
+
+		// Dynamic rendering: start the feature's render pass, bind the pipeline
+		// and its descriptor sets (implicit -- the feature never queries them),
+		// then run the draws.
+		List.BeginRendering(ColorsPtr, ColorCount, PDepth, Width, Height);
+		if (Bound != nullptr)
+		{
+			List.BindGraphicsPipeline(Bound);
+		}
+		FRHIDescriptorSet* const* Sets = BoundSets.empty() ? nullptr : BoundSets.data();
+		if (Sets != nullptr)
+		{
+			List.BindDescriptorSets(FirstSet, Sets, static_cast<std::uint32_t>(BoundSets.size()));
+		}
+		PassFn(List);
+		List.EndRendering();
+	});
+}
+
+void FRender::AddPass(
+	ERHICommandListType PassType,
+	FRHIGraphicsPipelineDesc PipelineDesc,
+	const FRenderPassDesc& Pass,
+	const FDrawList& DrawList)
+{
+	// Declarative draw list -> record lambda, delegated to the typed overload. The
+	// typed AddPass does all the resolution once (set layouts/pipeline/sets/target);
+	// this wrapper only renders the list's batches. A feature fills the FDrawList
+	// (pass-level CPU primitive data + per-batch sets + scissor + push constant) and
+	// never touches a vertex/index buffer, a descriptor set or a draw command -- the
+	// RHI objects are resolved here, inside AddPass.
+	std::uint32_t TargetW = Pass.Target.Width;
+	std::uint32_t TargetH = Pass.Target.Height;
+	if (TargetW == 0 && TargetH == 0 && !Pass.Target.Color.empty())
+	{
+		TargetW = Pass.Target.Color[0].View.GetWidth();
+		TargetH = Pass.Target.Color[0].View.GetHeight();
+	}
+
+	AddPass(PassType, std::move(PipelineDesc), Pass,
+		[this, &DrawList, TargetW, TargetH](FRHICommandList& List)
+		{
+			// Pass-level CPU primitive data: upload ONCE into transient buffers; every
+			// batch slices it via its (byte) bind offset. The producer's arrays need no
+			// lifetime beyond this call.
+			FRDGBufferRef VB, IB;
+			if (DrawList.HasPrimitiveData())
+			{
+				FRHIBufferDesc VDesc;
+				VDesc.Size = DrawList.GetVertexBytes();
+				VDesc.Usage = ERHIBufferUsage::Vertex;
+				VDesc.MemoryUsage = ERHIMemoryUsage::CPUToGPU;
+				VB = CreateBuffer(VDesc, ERDGResourceLifetime::Transient);
+				if (VB.IsValid() && VB.GetRHI() != nullptr)
+				{
+					List.UpdateBuffer(VB.GetRHI(), 0, VDesc.Size, DrawList.GetVertexData());
+				}
+				if (DrawList.GetIndexData() != nullptr && DrawList.GetIndexBytes() > 0)
+				{
+					FRHIBufferDesc IDesc;
+					IDesc.Size = DrawList.GetIndexBytes();
+					IDesc.Usage = ERHIBufferUsage::Index;
+					IDesc.MemoryUsage = ERHIMemoryUsage::CPUToGPU;
+					IB = CreateBuffer(IDesc, ERDGResourceLifetime::Transient);
+					if (IB.IsValid() && IB.GetRHI() != nullptr)
+					{
+						List.UpdateBuffer(IB.GetRHI(), 0, IDesc.Size, DrawList.GetIndexData());
+					}
+				}
+			}
+
+			if (DrawList.HasPushConstants())
+			{
+				List.PushConstants(DrawList.GetPushConstantStages(), 0, DrawList.GetPushConstantSize(), DrawList.GetPushConstantData());
+			}
+			List.SetViewport(0.0f, 0.0f, static_cast<float>(TargetW), static_cast<float>(TargetH));
+
+			for (const FDrawBatch& B : DrawList.GetBatches())
+			{
+				// Per-batch descriptor sets: resolve each by CONTENT (content-addressable
+				// get-or-create) and bind it in place of the pass-level default for this
+				// draw only. An ImDrawCmd that switches texture => a distinct per-batch set.
+				for (const FRDGDescriptorSet& BS : B.Sets)
+				{
+					FRHIDescriptorSetLayoutDesc DSLDesc;
+					for (const auto& [Binding, Bnd] : BS.Bindings)
+					{
+						FRHIDescriptorBinding DB;
+						DB.Binding = Binding;
+						DB.Type = Bnd.Type;
+						DB.Count = 1;
+						DB.Stages = Bnd.Stages;
+						DSLDesc.Bindings.push_back(DB);
+					}
+					FRHIDescriptorSetLayout* PerLayout = GetOrCreateDescriptorSetLayout(DSLDesc);
+					if (PerLayout == nullptr)
+					{
+						continue;
+					}
+					std::vector<FRHIDescriptorWrite> BWrites;
+					for (const auto& [Binding, Bnd] : BS.Bindings)
+					{
+						FRHIDescriptorWrite W;
+						W.Binding = Binding;
+						W.Type = Bnd.Type;
+						if (const FRDGTextureRef* Tex = std::get_if<FRDGTextureRef>(&Bnd.Resource))
+						{
+							W.TextureView = Tex->GetView();
+							if (Bnd.SamplerIndex >= 0 && static_cast<std::uint32_t>(Bnd.SamplerIndex) < BS.Samplers.size())
+							{
+								W.Sampler = BS.Samplers[static_cast<std::size_t>(Bnd.SamplerIndex)];
+							}
+						}
+						else if (const FRDGBufferRef* Buf = std::get_if<FRDGBufferRef>(&Bnd.Resource))
+						{
+							W.Buffer = Buf->GetRHI();
+							W.Offset = Bnd.Offset;
+							W.Range = Bnd.Range;
+						}
+						BWrites.push_back(W);
+					}
+					FRHIDescriptorSet* PerSet = GetOrCreateDescriptorSet(PerLayout, DSLDesc, BWrites.data(), static_cast<std::uint32_t>(BWrites.size()));
+					if (PerSet != nullptr)
+					{
+						List.BindDescriptorSets(BS.SetIndex, &PerSet, 1);
+					}
+				}
+
+				// Geometry source: pass-level CPU buffer (slice) > batch-owned buffer.
+				FRHIBuffer* VxBuf = nullptr;
+				FRHIBuffer* IxBuf = nullptr;
+				if (VB.IsValid())
+				{
+					VxBuf = VB.GetRHI();
+					if (IB.IsValid())
+					{
+						IxBuf = IB.GetRHI();
+					}
+				}
+				else if (B.VertexBuffer.IsValid())
+				{
+					VxBuf = B.VertexBuffer.GetRHI();
+					if (B.IndexBuffer.IsValid())
+					{
+						IxBuf = B.IndexBuffer.GetRHI();
+					}
+				}
+
+				if (B.bHasScissor)
+				{
+					List.SetScissor(B.ScissorX, B.ScissorY, B.ScissorW, B.ScissorH);
+				}
+				else
+				{
+					List.SetScissor(0, 0, TargetW, TargetH);
+				}
+
+				if (IxBuf != nullptr && B.IndexCount > 0)
+				{
+					if (VxBuf != nullptr)
+					{
+						List.BindVertexBuffer(0, VxBuf, B.VertexOffset);
+					}
+					List.BindIndexBuffer(IxBuf, B.IndexOffset, B.bIndex32);
+					List.DrawIndexed(B.IndexCount, B.InstanceCount, 0, 0, 0);
+				}
+				else if (VxBuf != nullptr)
+				{
+					List.BindVertexBuffer(0, VxBuf, B.VertexOffset);
+					List.Draw(B.VertexCount, B.InstanceCount, 0, 0);
+				}
+				else if (B.VertexCount > 0)
+				{
+					// No vertex buffer: primitive generated in-shader (gl_VertexIndex).
+					List.Draw(B.VertexCount, B.InstanceCount, B.VertexOffset, 0);
+				}
+			}
+		});
+}
+
 void FRender::AddPass(ERHICommandListType PassType, std::function<void(FRHICommandList&)> PassFn)
 {
 	SubmitPass(PassType, std::move(PassFn));
@@ -496,6 +859,13 @@ FRHIDescriptorSet* FRender::GetOrCreateDescriptorSet(
 	std::uint32_t WriteCount)
 {
 	return ResourcePool ? ResourcePool->GetOrCreateDescriptorSet(Layout, LayoutDesc, Writes, WriteCount) : nullptr;
+}
+
+FRHIDescriptorSet* FRender::GetOrCreateMutableDescriptorSet(
+	FRHIDescriptorSetLayout* Layout,
+	const FRHIDescriptorSetLayoutDesc& LayoutDesc)
+{
+	return ResourcePool ? ResourcePool->GetOrCreateMutableDescriptorSet(Layout, LayoutDesc) : nullptr;
 }
 
 std::uint32_t FRender::GetCanvasWidth() const
@@ -617,15 +987,10 @@ bool FRender::UploadTextureMirror(const Name::FName& AssetName, Resource::FTextu
 	// unload / export sees it.
 	GpuMirrors[AssetName] = TexRef;
 
-	FRHISamplerDesc MirrorSamplerDesc;
-	MirrorSamplerDesc.AddressU = ERHIAddressMode::ClampToEdge;
-	MirrorSamplerDesc.AddressV = ERHIAddressMode::ClampToEdge;
-	MirrorSamplerDesc.AddressW = ERHIAddressMode::ClampToEdge;
-	FRHISampler* MirrorSampler = CreateSampler(MirrorSamplerDesc);
-	// Build the UI image handle (a set-0 CombinedImageSampler descriptor set shared
-	// with the UI font layout) so ImGui::Image can display this mirror. The pool
-	// writes the descriptor content (texture view + sampler) at allocation time.
-	FRHIDescriptorSet* UISet = CreateMirrorUIImage(AssetName, TexRef, MirrorSampler);
+	// The UI image handle is built ON DEMAND by FUIFeature (which owns the mirror
+	// set map): it get-or-creates a set-0 CombinedImageSampler descriptor set and
+	// uses the handle as ImTextureID for ImGui::Image. FRender only commits the GPU
+	// mirror; the descriptor-set half lives in the UI feature.
 
 	// One transfer submit outside a render pass: copy the CPU pixels into a staging
 	// buffer then CopyBufferToTexture. UIFeature::UploadFont follows the same
@@ -643,80 +1008,6 @@ bool FRender::UploadTextureMirror(const Name::FName& AssetName, Resource::FTextu
 		Cmd.TransitionTexture(RHITex, ERHIResourceState::CopyDst, ERHIResourceState::ShaderResource);
 	});
 	return true;
-}
-
-FRHIDescriptorSet* FRender::CreateMirrorUIImage(const Name::FName& AssetName, const FRDGTextureRef& Tex, FRHISampler* Sampler)
-{
-	// Same set-0 CombinedImageSampler + Fragment desc as the UI font layout, so the
-	// get-or-create returns the shared layout and the bound set is accepted by the
-	// UI pipeline's set-0 binding.
-	FRHIDescriptorBinding B;
-	B.Binding = 0;
-	B.Type = ERHIDescriptorType::CombinedImageSampler;
-	B.Count = 1;
-	B.Stages = ERHIShaderStage::Fragment;
-	FRHIDescriptorSetLayoutDesc Desc;
-	Desc.Bindings.push_back(B);
-	FRHIDescriptorSetLayout* Layout = GetOrCreateDescriptorSetLayout(Desc);
-	if (Layout == nullptr)
-	{
-		return nullptr;
-	}
-	FRHIDescriptorWrite Write;
-	Write.Binding = 0;
-	Write.Type = ERHIDescriptorType::CombinedImageSampler;
-	Write.TextureView = Tex.GetView();
-	Write.Sampler = Sampler;
-	FRHIDescriptorSet* Set = GetOrCreateDescriptorSet(Layout, Desc, &Write, 1);
-	if (Set != nullptr)
-	{
-		MirrorUISets[AssetName] = Set;
-	}
-	return Set;
-}
-
-void FRender::DisplayMirrorImGui()
-{
-	for (const auto& [AssetName, UI] : MirrorUISets)
-	{
-		if (UI == nullptr)
-		{
-			continue;
-		}
-		const auto It = GpuMirrors.find(AssetName);
-		if (It == GpuMirrors.end())
-		{
-			continue;
-		}
-		const FRDGTextureRef* Tex = std::get_if<FRDGTextureRef>(&It->second);
-		if (Tex == nullptr)
-		{
-			continue;
-		}
-
-		const std::string Title = "texture mirror: " + std::string(AssetName.ToString());
-		// The mirror window tracks the application frame size every frame, so it
-		// grows/shrinks with the OS window. NoResize: its size is driven by the app
-		// window, not a manual drag handle.
-		const ImVec2& Disp = ImGui::GetIO().DisplaySize;
-		ImGui::SetNextWindowSize(
-			ImVec2(Disp.x * 0.9f, Disp.y * 0.9f),
-			ImGuiCond_Always);
-		if (ImGui::Begin(Title.c_str(), nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse))
-		{
-			// Fit the image into the window content region, preserving aspect ratio, so
-			// it scales up/down with the window (and thus the OS window). Reserve a
-			// line below for the caption text.
-			const ImVec2 Avail = ImGui::GetContentRegionAvail();
-			const float IW = static_cast<float>(Tex->GetWidth());
-			const float IH = static_cast<float>(Tex->GetHeight());
-			constexpr float CaptionH = 20.0f;
-			const float Scale = (std::min)(Avail.x / IW, (Avail.y - CaptionH) / IH);
-			ImGui::Image(reinterpret_cast<ImTextureID>(UI), ImVec2(IW * Scale, IH * Scale));
-			ImGui::Text("asset=%s  %ux%u", AssetName.ToString().data(), Tex->GetWidth(), Tex->GetHeight());
-		}
-		ImGui::End();
-	}
 }
 
 void FRender::OnAssetMirrorImported(const Name::FName& AssetName, Resource::FOnTransferDone Done)

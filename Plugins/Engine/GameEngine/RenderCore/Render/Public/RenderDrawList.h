@@ -12,13 +12,28 @@ namespace Maho
 /**
  * Mesh batch (draw protocol unit). Describes one draw call in the form AddPass
  * consumes; AddPass never knows who produced it (today FScene's hardcoded
- * triangle, later a real scene renderer). Either VertexBuffer (positions read by
- * the vertex shader) or a primitive generated purely from gl_VertexIndex (both
- * buffers empty => recorded as Draw(VertexCount)).
+ * triangle, later a real scene renderer).
+ *
+ * Geometry source priority (first non-empty wins):
+ *   1. pass-level CPU primitive data (FDrawList::SetPrimitiveData) -- the batch
+ *      is a SLICE of that one uploaded buffer, addressed by VertexOffset /
+ *      IndexOffset. This is the ImGui path: one merged vertex/index array per
+ *      frame, every draw command slices it.
+ *   2. batch-owned FRDGBufferRef (VertexBuffer / IndexBuffer) -- a GPU buffer
+ *      the producer already holds. The scene-triangle path.
+ *   3. both empty => primitive generated in-shader from gl_VertexIndex
+ *      (recorded as Draw(VertexCount), no vertex buffer).
+ *
+ * Per-batch descriptor bindings: Sets override the Pass-level default sets for
+ * this draw ONLY. Each entry's bindings reference RDG resources (FRDGTextureRef /
+ * FRDGBufferRef); AddPass resolves each per-batch set by CONTENT
+ * (content-addressable get-or-create) and binds it in place of the default. This
+ * is how an ImGui draw command that draws with a different texture (every
+ * ImDrawCmd has its own ImTextureID) picks a different set-0 CombinedImageSampler.
  */
 struct MAHO_RENDER_API FDrawBatch
 {
-	FRDGBufferRef VertexBuffer;   // empty => vertex positions generated in-shader
+	FRDGBufferRef VertexBuffer;   // empty => pass-level data or in-shader generated
 	std::uint32_t VertexOffset = 0;
 	std::uint32_t VertexCount = 3;
 	std::uint32_t InstanceCount = 1;
@@ -26,13 +41,27 @@ struct MAHO_RENDER_API FDrawBatch
 	std::uint32_t IndexOffset = 0;
 	std::uint32_t IndexCount = 0;
 	bool bIndex32 = true;
+
+	/** Scissor for this draw (per-cmd clip). bHasScissor=false uses the pass's full
+	 *  target rect. ImGui carries a ClipRect per ImDrawCmd -- this is the slice. */
+	bool bHasScissor = false;
+	std::int32_t ScissorX = 0;
+	std::int32_t ScissorY = 0;
+	std::uint32_t ScissorW = 0;
+	std::uint32_t ScissorH = 0;
+
+	/** Per-batch descriptor-set values (set index -> bindings). Empty => use the
+	 *  pass-level sets. Each set's resource bindings are resolved by content, so a
+	 *  repeated (same view/sampler) batch reuses one pooled set. */
+	std::vector<FRDGDescriptorSet> Sets;
 };
 
 /**
- * Draw list (protocol): the mesh batches of ONE subpass. One AddPass corresponds
- * to one subpass, so a single DrawList is that subpass's draw set -- no subpass
- * grouping key. AddPass consumes it and records the draws; producers (FScene's
- * hardcoded triangle today, later a scene renderer) fill it.
+ * Draw list (protocol): the mesh batches of ONE subpass, plus an optional
+ * pass-level CPU primitive buffer. One AddPass corresponds to one subpass, so a
+ * single DrawList is that subpass's draw set -- no subpass grouping key. AddPass
+ * consumes it: uploads the CPU primitive data once (if any), resolves + binds the
+ * per-batch descriptor sets, and records the draws. Producers (FScene, FUIEH) fill it.
  */
 class MAHO_RENDER_API FDrawList
 {
@@ -41,7 +70,70 @@ public:
 
 	[[nodiscard]] const std::vector<FDrawBatch>& GetBatches() const { return Batches; }
 
+	/** Optional pass-level push constant (e.g. the ImGui ortho projection mat4).
+	 *  The data is copied here so the producer's buffer needs no lifetime; AddPass
+	 *  records PushConstants(stages, 0, size, data) before the batches. */
+	void SetPushConstants(ERHIShaderStage InStages, std::uint32_t InSize, const void* InData)
+	{
+		PushStages = InStages;
+		PushSize = InSize;
+		if (InData != nullptr && InSize > 0)
+		{
+			const auto* const Bytes = static_cast<const std::uint8_t*>(InData);
+			PushData.assign(Bytes, Bytes + InSize);
+		}
+		else
+		{
+			PushData.clear();
+		}
+	}
+	[[nodiscard]] bool HasPushConstants() const { return !PushData.empty(); }
+	[[nodiscard]] ERHIShaderStage GetPushConstantStages() const { return PushStages; }
+	[[nodiscard]] std::uint32_t GetPushConstantSize() const { return PushSize; }
+	[[nodiscard]] const void* GetPushConstantData() const { return PushData.data(); }
+
+	/** Optional pass-level CPU primitive buffer: a single merged vertex/indices block
+	 *  uploaded ONCE by AddPass, sliced per-batch by VertexOffset/IndexOffset. When
+	 *  set, batches must leave their own VertexBuffer/IndexBuffer empty (geometry
+	 *  source priority 1). */
+	void SetPrimitiveData(
+		const void* InVertexData, std::uint64_t InVertexBytes, std::uint32_t InVertexStride, std::uint32_t InVertexCount,
+		const void* InIndexData, std::uint64_t InIndexBytes, bool InIndex32, std::uint32_t InIndexCount)
+	{
+		VertexData = InVertexData;
+		VertexBytes = InVertexBytes;
+		VertexStride = InVertexStride;
+		VertexCount = InVertexCount;
+		IndexData = InIndexData;
+		IndexBytes = InIndexBytes;
+		bIndex32 = InIndex32;
+		IndexCount = InIndexCount;
+	}
+
+	[[nodiscard]] bool HasPrimitiveData() const { return VertexBytes > 0; }
+	[[nodiscard]] const void* GetVertexData() const { return VertexData; }
+	[[nodiscard]] std::uint64_t GetVertexBytes() const { return VertexBytes; }
+	[[nodiscard]] std::uint32_t GetVertexStride() const { return VertexStride; }
+	[[nodiscard]] std::uint32_t GetVertexCount() const { return VertexCount; }
+	[[nodiscard]] const void* GetIndexData() const { return IndexData; }
+	[[nodiscard]] std::uint64_t GetIndexBytes() const { return IndexBytes; }
+	[[nodiscard]] bool GetIndex32() const { return bIndex32; }
+	[[nodiscard]] std::uint32_t GetIndexCount() const { return IndexCount; }
+
 private:
+	const void* VertexData = nullptr;
+	std::uint64_t VertexBytes = 0;
+	std::uint32_t VertexStride = 0;
+	std::uint32_t VertexCount = 0;
+	const void* IndexData = nullptr;
+	std::uint64_t IndexBytes = 0;
+	bool bIndex32 = true;
+	std::uint32_t IndexCount = 0;
+
+	ERHIShaderStage PushStages = ERHIShaderStage::Vertex;
+	std::uint32_t PushSize = 0;
+	std::vector<std::uint8_t> PushData;
+
 	std::vector<FDrawBatch> Batches;
 };
 

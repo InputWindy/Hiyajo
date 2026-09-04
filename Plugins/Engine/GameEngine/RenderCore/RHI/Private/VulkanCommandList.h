@@ -173,7 +173,8 @@ public:
 		FRHIBuffer* ArgsBuffer,
 		std::uint64_t ArgsOffset) override;
 
-	virtual void BindDescriptorSets(std::uint32_t FirstSet, FRHIDescriptorSet* const* Sets, std::uint32_t Count) override;
+	virtual void BindDescriptorSets(std::uint32_t FirstSet, FRHIDescriptorSet* const* Sets, std::uint32_t Count, const std::uint32_t* DynamicOffsets, std::uint32_t DynamicOffsetCount) override;
+	virtual void UpdateDescriptorSet(FRHIDescriptorSet* Set, const FRHIDescriptorWrite* Writes, std::uint32_t WriteCount) override;
 	virtual void PushConstants(ERHIShaderStage Stages, std::uint32_t Offset, std::uint32_t Size, const void* Data) override;
 
 	virtual void BeginQuery(FRHIQueryPool* Pool, std::uint32_t QueryIndex) override;

@@ -94,6 +94,21 @@ public:
 		const FRHIDescriptorWrite* Writes,
 		std::uint32_t WriteCount);
 
+	/** Create (get-or-create by layout) a MUTABLE descriptor set the pool OWNS.
+	 *  This is the SINGLE implementation path for Static / PerFrame / PerPass
+	 *  pass-parameter sets: the set is allocated ONCE per layout and re-written at
+	 *  record time by the pass (FRHICommandList::UpdateDescriptorSet) whenever its
+	 *  content changes. The pool allocates the pool+set but does NOT write content
+	 *  at creation; the pass owns the write. The frequency only governs how often
+	 *  content changes -- never the mechanism. The caller must not read the set
+	 *  from an in-flight submit when it updates it (the frame's BeginFrame fence
+	 *  wait guards the single-frame graph this engine runs today; a frames-in-flight
+	 *  ring is the later upgrade). Returns a borrowed handle; pool destroys
+	 *  pool+set at Shutdown. */
+	[[nodiscard]] FRHIDescriptorSet* GetOrCreateMutableDescriptorSet(
+		FRHIDescriptorSetLayout* Layout,
+		const FRHIDescriptorSetLayoutDesc& LayoutDesc);
+
 	[[nodiscard]] FRHITexture* GetTexture(const FRDGTextureRef& Ref) const;
 	[[nodiscard]] FRHITextureView* GetTextureView(const FRDGTextureRef& Ref);
 	/** The descriptor the texture was created from (format/extent metadata for a
@@ -208,7 +223,8 @@ private:
 	std::vector<FShaderModuleEntry> ShaderModules;           // PSO cache: shader module keyed by bytecode content
 	std::vector<FGraphicsPipelineEntry> GraphicsPipelines;   // PSO cache: graphics pipeline keyed by its desc
 	std::vector<FSamplerEntry> Samplers;                // pool-owned samplers (get-or-create by desc)
-	std::vector<FDescriptorSetEntry> DescriptorSets;    // pool-owned descriptor pools + sets
+	std::vector<FDescriptorSetEntry> DescriptorSets;    // pool-owned descriptor pools + sets (content-addressable)
+	std::vector<FDescriptorSetEntry> MutableDescriptorSets; // pool-owned mutable sets keyed by layout (written at record time)
 };
 
 } // namespace Maho

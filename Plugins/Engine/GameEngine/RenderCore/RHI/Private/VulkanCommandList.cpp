@@ -73,6 +73,32 @@ namespace
 	}
 }
 
+[[nodiscard]] VkDescriptorType ToVkDescriptorType(ERHIDescriptorType Type)
+{
+	// ERHIDescriptorType is dense and skips Vulkan texel-buffer enums - never static_cast.
+	switch (Type)
+	{
+	case ERHIDescriptorType::Sampler:
+		return VK_DESCRIPTOR_TYPE_SAMPLER;
+	case ERHIDescriptorType::CombinedImageSampler:
+		return VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+	case ERHIDescriptorType::SampledImage:
+		return VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+	case ERHIDescriptorType::StorageImage:
+		return VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+	case ERHIDescriptorType::UniformBuffer:
+		return VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+	case ERHIDescriptorType::StorageBuffer:
+		return VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+	case ERHIDescriptorType::DynamicUniform:
+		return VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
+	case ERHIDescriptorType::DynamicStorage:
+		return VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC;
+	default:
+		return VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+	}
+}
+
 } // namespace
 
 void FVulkanQueue::Submit(
@@ -724,7 +750,7 @@ void FVulkanCommandList::DispatchIndirect(
 	vkCmdDispatchIndirect(Buffer, Buf->GetVkBuffer(), ArgsOffset);
 }
 
-void FVulkanCommandList::BindDescriptorSets(std::uint32_t FirstSet, FRHIDescriptorSet* const* Sets, std::uint32_t Count)
+void FVulkanCommandList::BindDescriptorSets(std::uint32_t FirstSet, FRHIDescriptorSet* const* Sets, std::uint32_t Count, const std::uint32_t* DynamicOffsets, std::uint32_t DynamicOffsetCount)
 {
 	AssertNotTransfer();
 
@@ -785,8 +811,85 @@ void FVulkanCommandList::BindDescriptorSets(std::uint32_t FirstSet, FRHIDescript
 		FirstSet,
 		Count,
 		VkSets.data(),
-		0,
-		nullptr);
+		DynamicOffsetCount,
+		DynamicOffsets);
+}
+
+void FVulkanCommandList::UpdateDescriptorSet(FRHIDescriptorSet* Set, const FRHIDescriptorWrite* Writes, std::uint32_t WriteCount)
+{
+	if (Set == nullptr || Writes == nullptr || WriteCount == 0 || Device == VK_NULL_HANDLE)
+	{
+		return;
+	}
+
+	auto* VkDstSet = static_cast<FVulkanDescriptorSet*>(Set);
+	if (VkDstSet->GetVkSet() == VK_NULL_HANDLE)
+	{
+		return;
+	}
+
+	std::vector<VkWriteDescriptorSet> VkWrites;
+	VkWrites.reserve(WriteCount);
+
+	// Temporary storage for descriptor info structs (must live until vkUpdateDescriptorSets call).
+	std::vector<VkDescriptorBufferInfo> BufferInfos;
+	BufferInfos.reserve(WriteCount);
+	std::vector<VkDescriptorImageInfo> ImageInfos;
+	ImageInfos.reserve(WriteCount);
+
+	for (std::uint32_t i = 0; i < WriteCount; ++i)
+	{
+		const FRHIDescriptorWrite& W = Writes[i];
+		if (W.Set != nullptr && W.Set != Set)
+		{
+			continue;
+		}
+
+		VkWriteDescriptorSet VkWrite{};
+		VkWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		VkWrite.dstSet = VkDstSet->GetVkSet();
+		VkWrite.dstBinding = W.Binding;
+		VkWrite.dstArrayElement = W.ArrayIndex;
+		VkWrite.descriptorCount = 1;
+		VkWrite.descriptorType = ToVkDescriptorType(W.Type);
+
+		bool bHasInfo = false;
+		if (W.Type == ERHIDescriptorType::UniformBuffer && W.Buffer != nullptr)
+		{
+			auto* VkBuf = static_cast<FVulkanBuffer*>(W.Buffer);
+			VkDescriptorBufferInfo& Info = BufferInfos.emplace_back();
+			Info.buffer = VkBuf->GetVkBuffer();
+			Info.offset = W.Offset;
+			Info.range = W.Range > 0 ? W.Range : VK_WHOLE_SIZE;
+
+			VkWrite.pBufferInfo = &BufferInfos.back();
+			bHasInfo = (Info.buffer != VK_NULL_HANDLE);
+		}
+		else if (W.Type == ERHIDescriptorType::CombinedImageSampler && W.TextureView != nullptr)
+		{
+			auto* VkView = static_cast<FVulkanTextureView*>(W.TextureView);
+			auto* VkSampler = (W.Sampler != nullptr) ? static_cast<FVulkanSampler*>(W.Sampler) : nullptr;
+
+			VkDescriptorImageInfo& Info = ImageInfos.emplace_back();
+			Info.imageView = VkView->GetVkImageView();
+			Info.sampler = VkSampler ? VkSampler->GetVkSampler() : VK_NULL_HANDLE;
+			Info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+			VkWrite.pImageInfo = &ImageInfos.back();
+			bHasInfo = (Info.imageView != VK_NULL_HANDLE);
+		}
+
+		if (bHasInfo)
+		{
+			VkWrites.push_back(VkWrite);
+		}
+	}
+
+	if (!VkWrites.empty())
+	{
+		vkUpdateDescriptorSets(Device, static_cast<std::uint32_t>(VkWrites.size()),
+			VkWrites.data(), 0, nullptr);
+	}
 }
 
 void FVulkanCommandList::PushConstants(ERHIShaderStage Stages, std::uint32_t Offset, std::uint32_t Size, const void* Data)

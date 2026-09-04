@@ -145,15 +145,37 @@ public:
 		std::uint64_t ArgsOffset) = 0;
 
 	// Graphics + Compute
+	/**
+	 * Bind descriptor sets at the given absolute set index. DynamicOffsets /
+	 * DynamicOffsetCount feed the per-instance dynamic-offset UBO path: for a
+	 * descriptor written against a dynamic uniform buffer, each offset here selects
+	 * a slice of the bound buffer for that bind point. Callers that bind a set
+	 * whose layout has no dynamic descriptors pass nullptr / 0.
+	 */
 	virtual void BindDescriptorSets(
 		std::uint32_t FirstSet,
 		FRHIDescriptorSet* const* Sets,
-		std::uint32_t Count) = 0;
+		std::uint32_t Count,
+		const std::uint32_t* DynamicOffsets = nullptr,
+		std::uint32_t DynamicOffsetCount = 0) = 0;
 	virtual void PushConstants(
 		ERHIShaderStage Stages,
 		std::uint32_t Offset,
 		std::uint32_t Size,
 		const void* Data) = 0;
+
+	/**
+	 * Write descriptor set contents from the host at RECORD time (device-level
+	 * vkUpdateDescriptorSets, NOT a recorded vkCmd). Exposed on the command list
+	 * so it is orchestrated with the pass's other commands -- the same pattern as
+	 * UpdateBuffer. A dynamic set (PerFrame / PerPass) is updated here, once per
+	 * frame/pass, before the draws that bind it; the caller owns the ring/slot
+	 * safety (the set must not be read by an in-flight submit when this runs).
+	 */
+	virtual void UpdateDescriptorSet(
+		FRHIDescriptorSet* Set,
+		const FRHIDescriptorWrite* Writes,
+		std::uint32_t WriteCount) = 0;
 
 	// GPU queries (occlusion / timestamp)
 	virtual void BeginQuery(FRHIQueryPool* Pool, std::uint32_t QueryIndex) = 0;

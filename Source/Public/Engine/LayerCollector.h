@@ -38,11 +38,6 @@ template <typename TContext>
 class FLayerCollector : public virtual FQuery<FLayerBase>
 {
 public:
-	/** Active layer instances (read-only). */
-	const std::vector<std::unique_ptr<FLayerBase>>& GetLayers() const
-	{
-		return Features;
-	}
 
 	/** Broadcast whenever the active layer set changes at a safe point. The host
 	 *  binds this to re-expand its cached task graph (push, not poll). */
@@ -153,15 +148,6 @@ public:
 		ReportError((std::string("Reload: no active layer named ") + std::string(LayerName)).c_str());
 	}
 
-	/** Request a layer unload (unconditionally recorded, no immediate validation). */
-	void RequestUninstall(FLayerBase* Pipeline)
-	{
-		if (Pipeline != nullptr)
-		{
-			PendingRemoveRequests.insert(Pipeline);
-		}
-	}
-
 	/** Anonymous unload by layer name (GetName()); ignored when absent. */
 	void TryUninstall(std::string_view LayerName)
 	{
@@ -183,7 +169,11 @@ protected:
 	/** Apply pending installs (driving Init stages) + pending uninstalls (driving
 	 *  Shutdown stages). Broadcasts OnLayersChanged when anything changed so the
 	 *  host knows to re-expand its cached graph. */
-	template <typename... TInitStages>
+	// TInitStages / TShutdownStages are TTypeList<> stage lists: the first drives
+	// the install-init graph, the second the unload-shutdown graph. A layer's
+	// install and teardown stages are DIFFERENT interfaces, so passing one pack to
+	// both would re-run init methods during unload.
+	template <typename TInitStages, typename TShutdownStages>
 	void FlushPendingUpdatePipelines()
 	{
 		bool bChanged = false;
@@ -199,8 +189,7 @@ protected:
 			}
 			PendingAdded.clear();
 
-			using FInitStages = TTypeList<TInitStages...>;
-			FLayerTaskGraph<FInitStages, TContext> InitGraph(Pool, GetContext());
+			FLayerTaskGraph<TInitStages, TContext> InitGraph(Pool, GetContext());
 			InitGraph.Init(std::move(NewLayers));
 			if (!InitGraph.Compile())
 			{
@@ -217,7 +206,7 @@ protected:
 			}
 		}
 
-		if (FlushUnload<TInitStages...>())
+		if (FlushUnload<TShutdownStages>())
 		{
 			bChanged = true;
 		}
@@ -225,27 +214,6 @@ protected:
 		if (bChanged)
 		{
 			OnLayersChanged.Broadcast();
-		}
-	}
-
-	/** The engine owns feature instances + DLLs; on unload it deletes + FreeLibrary them together. */
-	void DeleteUnloaded(FLayerBase* Layer)
-	{
-		for (std::size_t I = 0; I < Features.size(); ++I)
-		{
-			if (Features[I].get() == Layer)
-			{
-				Features[I].reset();
-				if (I < Modules.size())
-				{
-					Modules[I].reset();
-				}
-				if (I < ModulePaths.size())
-				{
-					ModulePaths[I].clear();
-				}
-				return;
-			}
 		}
 	}
 
@@ -310,8 +278,9 @@ private:
 	}
 
 	/** Min-heap greedy unload, then drive the Shutdown stages before delete.
-	 *  Returns true when any layer was actually unloaded. */
-	template <typename... TShutdownStages>
+	 *  Returns true when any layer was actually unloaded. TShutdownStages is a
+	 *  TTypeList<> of teardown stage interfaces -- NOT the init stages. */
+	template <typename TShutdownStages>
 	bool FlushUnload()
 	{
 		if (PendingRemoveRequests.empty())
@@ -382,8 +351,7 @@ private:
 			return false;
 		}
 
-		using FShutdownStages = TTypeList<TShutdownStages...>;
-		FLayerTaskGraph<FShutdownStages, TContext> ShutdownGraph(Pool, GetContext());
+		FLayerTaskGraph<TShutdownStages, TContext> ShutdownGraph(Pool, GetContext());
 		ShutdownGraph.Init(std::move(ToUnload));
 		if (!ShutdownGraph.Compile())
 		{
@@ -426,6 +394,36 @@ private:
 		}
 
 		return true;
+	}
+
+	/** Request a layer unload (unconditionally recorded, no immediate validation). */
+	void RequestUninstall(FLayerBase* Pipeline)
+	{
+		if (Pipeline != nullptr)
+		{
+			PendingRemoveRequests.insert(Pipeline);
+		}
+	}
+
+	/** The engine owns feature instances + DLLs; on unload it deletes + FreeLibrary them together. */
+	void DeleteUnloaded(FLayerBase* Layer)
+	{
+		for (std::size_t I = 0; I < Features.size(); ++I)
+		{
+			if (Features[I].get() == Layer)
+			{
+				Features[I].reset();
+				if (I < Modules.size())
+				{
+					Modules[I].reset();
+				}
+				if (I < ModulePaths.size())
+				{
+					ModulePaths[I].clear();
+				}
+				return;
+			}
+		}
 	}
 
 protected:

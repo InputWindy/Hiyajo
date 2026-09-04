@@ -19,6 +19,7 @@ struct ImDrawData;
 #include <Resource.h>
 #include <AssetTypes.h>
 
+#include <algorithm>
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -33,11 +34,6 @@ namespace Maho
 
 class FRender;
 class FRHIResourcePool;
-
-/** Render-side GPU mirror of a CPU asset: an RDG texture (texture asset) or an
- *  RDG buffer (mesh asset). A single mirror table maps asset FName -> this ref,
- *  so the mirror is type-agnostic; the asset type decides which variant holds. */
-using FRDGResourceRef = std::variant<FRDGTextureRef, FRDGBufferRef>;
 
 template <typename T> class TShaderHandle;
 
@@ -75,6 +71,13 @@ namespace Detail
  *  export) -- set when the Render layer initializes. Other layers (e.g. the
  *  ImGui layer) use it to reach the RHI. */
 MAHO_RENDER_API FRender* GetRender();
+
+class MAHO_RENDER_API IOnInstalled
+{
+public:
+	virtual ~IOnInstalled() = default;
+	virtual void OnInstalled(FRender&) = 0;
+};
 
 class MAHO_RENDER_API IInitViews
 {
@@ -125,13 +128,22 @@ public:
 	virtual void Present(FRender&) = 0;
 };
 
-MAHO_DECLARE_STAGE_DISPATCH(FRender, IInitViews,   IInitViews,   InitViews)
+class MAHO_RENDER_API IPreUnInstall
+{
+public:
+	virtual ~IPreUnInstall() = default;
+	virtual void PreUnInstall(FRender&) = 0;
+};
+
+MAHO_DECLARE_STAGE_DISPATCH(FRender, IOnInstalled, IOnInstalled, OnInstalled)
+MAHO_DECLARE_STAGE_DISPATCH(FRender, IInitViews, IInitViews, InitViews)
 MAHO_DECLARE_STAGE_DISPATCH(FRender, IBeginRender, IBeginRender, BeginRender)
 MAHO_DECLARE_STAGE_DISPATCH(FRender, IRender,      IRender,      Render)
 MAHO_DECLARE_STAGE_DISPATCH(FRender, IEndRender,   IEndRender,   EndRender)
 MAHO_DECLARE_STAGE_DISPATCH(FRender, IPostProcess, IPostProcess, PostProcess)
 MAHO_DECLARE_STAGE_DISPATCH(FRender, IRenderUI,    IRenderUI,    RenderUI)
-MAHO_DECLARE_STAGE_DISPATCH(FRender, IPresent,     IPresent,     Present)
+MAHO_DECLARE_STAGE_DISPATCH(FRender, IPresent, IPresent, Present)
+MAHO_DECLARE_STAGE_DISPATCH(FRender, IPreUnInstall, IPreUnInstall, PreUnInstall)
 
 /**
  * Render subsystem - a layer in the host engine (mounted as IInit/ITick/...),
@@ -163,10 +175,27 @@ public:
 	ImDrawData* UIData = nullptr;
 	/** Whether the ImGui context has been created (guards BeginFrame/Tick/Shutdown). */
 	bool bUIInitialized = false;
-public:
-	/** The async shader compiler (render features submit compile requests). */
-	FShaderCompilerServer* GetShaderCompiler() const { return ShaderCompiler.get(); }
 
+	/** CPU-asset->GPU mirror map access for UI features: the UIFeature draws each
+	 *  texture mirror as an ImGui::Image, re-resolving its set-0 CombinedImageSampler
+	 *  descriptor set from the resource pool on demand (content-addressable get-or-create)
+	 *  and sizing the image from this mirror's RDG texture. */
+	[[nodiscard]] const std::unordered_map<Name::FName, FRDGResourceRef>& GetMirrors() const { return GpuMirrors; }
+	[[nodiscard]] const FRDGResourceRef* GetMirror(const Name::FName& AssetName) const
+	{
+		const auto It = GpuMirrors.find(AssetName);
+		return It != GpuMirrors.end() ? &It->second : nullptr;
+	}
+
+	/** A frame-UI builder: runs after the host ITick stage builds the ImGui frame
+	 *  and BEFORE ImGui::Render() closes it, so a builder can emit extra UI (e.g. a
+	 *  mirror preview window) that composites over the plugin UI. FRender owns only
+	 *  the ImGui context + final draw data; UI emission is pushed here so FRender
+	 *  keeps zero render-specific UI logic. */
+	using FUIBuildFn = std::function<void(FRender&)>;
+	void AddUIBuilder(FUIBuildFn Fn) { UIBuilders.push_back(std::move(Fn)); }
+	void ClearUIBuilders() { UIBuilders.clear(); }
+public:
 	// -- render surface / canvas info + present. FRender owns the RHI; features
 	// never reach the raw IRHI* (no GetRHI()). The canvas is the swapchain geometry
 	// the scene color target is sized to, and the swapchain format it is created in.
@@ -182,11 +211,6 @@ public:
 	void ReleaseTexture(FRDGTextureRef& Ref);
 	void ReleaseBuffer(FRDGBufferRef& Ref);
 
-	/** Advance the RDG resource pool (expire transients + recycle the frame's
-	 *  command lists) -- called by the frame host BeginFrame AFTER the swapchain
-	 *  fence wait (their submits are done, no in-flight GPU references). */
-	void BeginResourcePool();
-
 	/** Record + submit a render-feature pass in one call (syntactic sugar over
 	 *  AcquireRenderList + Begin/End + Submit). The lambda receives the command list
 	 *  mid-pass: record draw commands, do NOT call Begin/End/Submit yourself. The
@@ -194,12 +218,6 @@ public:
 	 *  stage). Order between passes is the order features call AddPass -- guarantee
 	 *  it with stage deps against the feature(s) that must submit first. */
 	void AddPass(ERHICommandListType PassType, std::function<void(FRHICommandList&)> PassFn);
-
-	/** Acquire a render list, run Record mid-pass, End + Submit. Shared by the
-	 *  plain AddPass and the PSO-resolving AddPass (which records
-	 *  BeginRendering/Bind/End around the feature's draw lambda). Keeping this
-	 *  non-template keeps FRHIResourcePool complete only in Render.cpp. */
-	void SubmitPass(ERHICommandListType PassType, std::function<void(FRHICommandList&)> Record);
 
 	/**
 	 * Typed pass: the feature describes the pipeline config (with the VS/FS shader
@@ -219,75 +237,32 @@ public:
 		ERHICommandListType PassType,
 		FRHIGraphicsPipelineDesc PipelineDesc,
 		const FRenderPassDesc& Pass,
-		std::function<void(FRHICommandList&)> PassFn)
-	{
-		PipelineDesc.Layout = GetOrCreatePipelineLayout(Pass.Layout);
-		FRHIGraphicsPipeline* Pipeline = nullptr;
-		if (PipelineDesc.Layout != nullptr)
-		{
-			Pipeline = GetOrCreateGraphicsPipeline(PipelineDesc);
-		}
+		std::function<void(FRHICommandList&)> PassFn);
 
-		// Resolve the declared RDG target into concrete rendering attachments.
-		std::vector<FRHIRenderingAttachmentInfo> Colors;
-		Colors.reserve(Pass.Target.Color.size());
-		for (const auto& A : Pass.Target.Color)
-		{
-			FRHIRenderingAttachmentInfo Info;
-			Info.View = A.View.GetView();
-			Info.LoadOp = A.LoadOp;
-			Info.StoreOp = A.StoreOp;
-			for (std::uint32_t i = 0; i < 4; ++i) { Info.ClearColor[i] = A.ClearColor[i]; }
-			Colors.push_back(Info);
-		}
-		FRHIRenderingAttachmentInfo Depth;
-		const FRHIRenderingAttachmentInfo* PDepth = nullptr;
-		if (Pass.Target.bHasDepth)
-		{
-			Depth.View = Pass.Target.Depth.View.GetView();
-			Depth.LoadOp = Pass.Target.Depth.LoadOp;
-			Depth.StoreOp = Pass.Target.Depth.StoreOp;
-			for (std::uint32_t i = 0; i < 4; ++i) { Depth.ClearColor[i] = Pass.Target.Depth.ClearColor[i]; }
-			PDepth = &Depth;
-		}
+	/**
+	 * Declarative draw-list pass: consumes a FDrawList INSTEAD of a record lambda.
+	 * AddPass uploads the pass-level CPU primitive data (FDrawList::SetPrimitiveData)
+	 * ONCE, materialises the pass-level sets, then for each batch records: bind its
+	 * per-batch descriptor sets (content-addressable -- a repeated same-resource batch
+	 * reuses one pooled set), bind geometry, set its scissor, PushConstants and draw.
+	 *
+	 * This hides every RHI object from the feature: it never holds a vertex/index
+	 * buffer, a descriptor set, a scissor or a draw command -- it only fills the
+	 * FDrawList (geometry slices + per-batch sets + scissor + push constant). ImGui is
+	 * the canonical consumer (each ImDrawCmd's texture switch => a per-batch set).
+	 */
+	void AddPass(
+		ERHICommandListType PassType,
+		FRHIGraphicsPipelineDesc PipelineDesc,
+		const FRenderPassDesc& Pass,
+		const FDrawList& DrawList);
 
-		// Snapshot the attachment pointers/extent into locals so the record lambda
-		// does not copy the (vector-owning) Colors by value. Width/Height default to
-		// the first color attachment's extent when the target did not set them.
-		const FRHIRenderingAttachmentInfo* ColorsPtr = Colors.empty() ? nullptr : Colors.data();
-		const std::uint32_t ColorCount = static_cast<std::uint32_t>(Colors.size());
-		std::uint32_t Width = Pass.Target.Width;
-		std::uint32_t Height = Pass.Target.Height;
-		if (Width == 0 && Height == 0 && !Pass.Target.Color.empty())
-		{
-			Width = Pass.Target.Color[0].View.GetWidth();
-			Height = Pass.Target.Color[0].View.GetHeight();
-		}
-
-		FRHIGraphicsPipeline* Bound = Pipeline;
-		SubmitPass(PassType, [=](FRHICommandList& List)
-		{
-			// Dynamic rendering: start the feature's render pass, bind the pipeline
-			// (implicit -- the feature never queries it), then run the draws.
-			List.BeginRendering(ColorsPtr, ColorCount, PDepth, Width, Height);
-			if (Bound != nullptr)
-			{
-				List.BindGraphicsPipeline(Bound);
-			}
-		PassFn(List);
-		List.EndRendering();
-	});
-}
-
-	/** PSO cache: get-or-create a shader module / pipeline layout / graphics
-	 *  pipeline by descriptor. The pool owns the native lifetime (destroyed at
-	 *  Shutdown); a feature holds only the handle. Shader identity is matched by
-	 *  bytecode content, so a pass can share one compiled module across frames
-	 *  instead of rebuilding a transient one each time. */
-	[[nodiscard]] FRHIShaderModule* GetOrCreateShaderModule(const FRHIShaderModuleDesc& Desc);
-	[[nodiscard]] FRHIPipelineLayout* GetOrCreatePipelineLayout(const FRHIPipelineLayoutDesc& Desc);
+	/** Pool-owned descriptor set layout: content-addressable get-or-create keyed by
+	 *  the descriptor-set binding structure. A feature resolves the set layout its
+	 *  pass binds either implicitly (the typed AddPass) or directly (e.g.
+	 *  UIFeature's mirror font/set layouts). The pool owns the native lifetime
+	 *  (destroyed at Shutdown); a feature holds only the handle. */
 	[[nodiscard]] FRHIDescriptorSetLayout* GetOrCreateDescriptorSetLayout(const FRHIDescriptorSetLayoutDesc& Desc);
-	[[nodiscard]] FRHIGraphicsPipeline* GetOrCreateGraphicsPipeline(const FRHIGraphicsPipelineDesc& Desc);
 
 	/** Pool-owned sampler: get-or-create by descriptor. The pool owns the native
 	 *  (destroyed at Shutdown); a feature holds only the handle. */
@@ -303,6 +278,17 @@ public:
 		const FRHIDescriptorSetLayoutDesc& LayoutDesc,
 		const FRHIDescriptorWrite* Writes,
 		std::uint32_t WriteCount);
+
+	/** Pool-owned MUTABLE descriptor set: get-or-create by LAYOUT only, allocated
+	 *  ONCE per layout (no content written at allocation). This is the single
+	 *  implementation path for Static / PerFrame / PerPass pass-parameter sets --
+	 *  the pass re-writes its content at record time via
+	 *  FRHICommandList::UpdateDescriptorSet, so a Static set is still mutable, just
+	 *  updated far less often than PerFrame / PerPass. The pool owns set+pool
+	 *  (destroyed at Shutdown); a feature holds only the handle. */
+	[[nodiscard]] FRHIDescriptorSet* GetOrCreateMutableDescriptorSet(
+		FRHIDescriptorSetLayout* Layout,
+		const FRHIDescriptorSetLayoutDesc& LayoutDesc);
 
 	/**
 	 * Shader resource: async compile + explicit-sync handle. The first call per T
@@ -382,13 +368,6 @@ public:
 		return TShaderHandle<T>(this);
 	}
 
-	/**
-	 * Block until every async shader compile submitted so far completes (the shader
-	 * server's quiescence barrier). A feature calls this (through the handle's Wait)
-	 * before using the shader it TryGetShader'd -- the "sync before use" point.
-	 */
-	void WaitShaderCompiles();
-
 	// -- host engine stages (FEngineBase context) --
 	void PreInitialize(FEngineBase&) override;
 	void Initialize(FEngineBase& Engine) override;
@@ -402,6 +381,39 @@ public:
 	void RequestExit(FEngineBase& Engine) override;
 
 private:
+	/** TShaderHandle drives the shader compile through the pool's PSO cache; it
+	 *  reaches the private GetOrCreateShaderModule / WaitShaderCompiles. */
+	template <typename T> friend class TShaderHandle;
+
+	/** The async shader compiler. Internal: features reach shaders through
+	 *  TryGetShader<T> only; they never touch the compiler server directly. */
+	FShaderCompilerServer* GetShaderCompiler() const { return ShaderCompiler.get(); }
+
+	/** Acquire a render list, run Record mid-pass, End + Submit. Internal: shared by
+	 *  the plain AddPass and the PSO-resolving AddPass (which records
+	 *  BeginRendering/Bind/End around the feature's draw lambda). Keeping this
+	 *  non-template keeps FRHIResourcePool complete only in Render.cpp. */
+	void SubmitPass(ERHICommandListType PassType, std::function<void(FRHICommandList&)> Record);
+
+	/** Advance the RDG resource pool (expire transients + recycle the frame's
+	 *  command lists) -- called by the frame host BeginFrame AFTER the swapchain
+	 *  fence wait (their submits are done, no in-flight GPU references). */
+	void BeginResourcePool();
+
+	/** Block until every async shader compile submitted so far completes (the shader
+	 *  server's quiescence barrier). Internal: a feature reaches this through the
+	 *  TShaderHandle::Wait() -- the "sync before use" point. */
+	void WaitShaderCompiles();
+
+	/** PSO cache: get-or-create a shader module / pipeline layout / graphics
+	 *  pipeline by descriptor. Internal: the typed AddPass and TShaderHandle use
+	 *  these; a feature never queries a pipeline/layout directly. The pool owns the
+	 *  native lifetime (destroyed at Shutdown). Shader identity is matched by
+	 *  bytecode content, so a pass shares one compiled module across frames. */
+	[[nodiscard]] FRHIShaderModule* GetOrCreateShaderModule(const FRHIShaderModuleDesc& Desc);
+	[[nodiscard]] FRHIPipelineLayout* GetOrCreatePipelineLayout(const FRHIPipelineLayoutDesc& Desc);
+	[[nodiscard]] FRHIGraphicsPipeline* GetOrCreateGraphicsPipeline(const FRHIGraphicsPipelineDesc& Desc);
+
 	std::unique_ptr<FRHI> RHI;   // the render server (not a scheduled layer)
 	std::unique_ptr<FShaderCompilerServer> ShaderCompiler;   // async GLSL -> SPIR-V
 	std::unique_ptr<FRHIResourcePool> ResourcePool;   // RDG resource pool
@@ -418,22 +430,17 @@ private:
 	/** Asset FName -> RDG mirror resource (texture or buffer). Owned by the render
 	 *  resource pool; a Persistent texture/buffer stays alive until pool shutdown.
 	 *  Built in OnAssetMirrorImported (mirror imported asset), released in
-	 *  OnAssetMirrorUnloaded. */
+	 *  OnAssetMirrorUnloaded. The DESCRIPTOR-SET UI handle for each texture mirror
+	 *  is owned by FUIFeature (see UIFeature::MirrorUISets); FRender only owns the
+	 *  GPU mirror resource itself. */
 	std::unordered_map<Name::FName, FRDGResourceRef> GpuMirrors;
 
-	/** Texture-mirror UI handle: the CombinedImageSampler descriptor set bound at
-	 *  set 0, used as ImTextureID for ImGui::Image. Built so its layout matches the
-	 *  UI font layout (get-or-create by the same desc), so the UI pipeline's set-0
-	 *  binding accepts it; pool-owned, released at pool Shutdown. */
-	std::unordered_map<Name::FName, FRHIDescriptorSet*> MirrorUISets;
+	/** Pre-Render UI builders, registered by UI features (e.g. UIFeature) and run
+	 *  each UI frame after the host ITick stage, before ImGui::Render(). This keeps
+	 *  FRender free of render-specific UI logic -- it only owns the ImGui context +
+	 *  the final ImDrawData. Cleared at Shutdown before the features are destroyed. */
+	std::vector<FUIBuildFn> UIBuilders;
 
-	/** Build a descriptor set for a mirror texture and store it as its ImTextureID.
-	 *  Called once per mirror upload. May return null (no UI needs it yet). */
-	[[nodiscard]] FRHIDescriptorSet* CreateMirrorUIImage(const Name::FName& AssetName, const FRDGTextureRef& Tex, FRHISampler* Sampler);
-
-	/** Test harness: show every texture mirror in an ImGui window (before Render).
-	 *  Reads MirrorUISets as ImTextureID, sizes the image from the mirror RDG. */
-	void DisplayMirrorImGui();
 
 	/** OnAssetImported listener: mirror the imported CPU asset to GPU (upload its
 	 *  pixels), then report completion via Done so the resource system can drop the

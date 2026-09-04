@@ -143,7 +143,7 @@ int FEngineBase::Main()
 	while (true)
 	{
 		EngineGraph.Flush();   // drain the previous frame's foreground tasks
-		FlushPendingUpdatePipelines<IPreInit, IInit, IPostInit>();
+		FlushPendingUpdatePipelines<TTypeList<IPreInit, IInit, IPostInit>, TTypeList<IPreShutdown, IShutdown, IPostShutdown>>();
 
 		if (bLayersDirty)
 		{

@@ -549,6 +549,57 @@ FRHIDescriptorSet* FRHIResourcePool::GetOrCreateDescriptorSet(
 	return Set;
 }
 
+FRHIDescriptorSet* FRHIResourcePool::GetOrCreateMutableDescriptorSet(
+	FRHIDescriptorSetLayout* Layout,
+	const FRHIDescriptorSetLayoutDesc& LayoutDesc)
+{
+	if (Layout == nullptr)
+	{
+		return nullptr;
+	}
+
+	for (const FDescriptorSetEntry& E : MutableDescriptorSets)
+	{
+		if (E.Set != nullptr && E.Layout == Layout)
+		{
+			return E.Set;
+		}
+	}
+
+	FRHIDescriptorPoolDesc PoolDesc;
+	PoolDesc.MaxSets = 1;
+	for (const FRHIDescriptorBinding& B : LayoutDesc.Bindings)
+	{
+		FRHIDescriptorPoolSize Size;
+		Size.Type = B.Type;
+		Size.Count = B.Count;
+		PoolDesc.PoolSizes.push_back(Size);
+	}
+	FRHIDescriptorPool* Pool = RHI ? RHI->CreateDescriptorPool(PoolDesc) : nullptr;
+	if (Pool == nullptr)
+	{
+		return nullptr;
+	}
+	FRHIDescriptorSet* Set = RHI ? RHI->AllocateDescriptorSet(Pool, Layout) : nullptr;
+	if (Set == nullptr)
+	{
+		if (RHI)
+		{
+			RHI->DestroyDescriptorPool(Pool);
+		}
+		return nullptr;
+	}
+
+	// No content is written here: the set is re-written at record time by the pass
+	// (FRHICommandList::UpdateDescriptorSet) for PerFrame / PerPass dynamic data.
+	FDescriptorSetEntry Entry;
+	Entry.Pool = Pool;
+	Entry.Set = Set;
+	Entry.Layout = Layout;
+	MutableDescriptorSets.push_back(std::move(Entry));
+	return Set;
+}
+
 // -- release -------------------------------------------------------------------
 
 void FRHIResourcePool::ReleaseTexture(FRDGTextureRef& Ref)
@@ -748,6 +799,20 @@ void FRHIResourcePool::Shutdown()
 		}
 	}
 	DescriptorSets.clear();
+	for (FDescriptorSetEntry& E : MutableDescriptorSets)
+	{
+		if (E.Pool && RHI)
+		{
+			if (E.Set)
+			{
+				RHI->FreeDescriptorSet(E.Pool, E.Set);
+				E.Set = nullptr;
+			}
+			RHI->DestroyDescriptorPool(E.Pool);
+			E.Pool = nullptr;
+		}
+	}
+	MutableDescriptorSets.clear();
 	for (FSamplerEntry& E : Samplers)
 	{
 		if (E.Native && RHI)
