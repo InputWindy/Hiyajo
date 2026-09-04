@@ -4,7 +4,9 @@
 
 #include <RHI/RHIServer.h>
 
+#include <cstddef>
 #include <mutex>
+#include <new>
 #include <string>
 #include <vector>
 
@@ -124,6 +126,30 @@ public:
 	/** Destroy all native resources (shutdown). */
 	void Shutdown();
 
+	/**
+	 * Allocate a compile-time FParameters struct (macro-declared TParameters) from
+	 * the pool's frame-transient allocator and placement-new it. Returns a pointer
+	 * valid for the CURRENT frame only: the bump allocator is reset at the next
+	 * BeginFrame, so a feature must consume the parameter (fill it + hand it to
+	 * AddPass) within the frame that allocated it. This is Maho's analogue of UE's
+	 * GraphBuilder.AllocateParameters<T>() -- the caller never manages the memory,
+	 * and the frame boundary is the lifetime.
+	 */
+	template <typename TParameters>
+	[[nodiscard]] TParameters* AllocParameters()
+	{
+		void* Storage = AllocateFrameTransient(sizeof(TParameters), alignof(TParameters));
+		return ::new (Storage) TParameters();
+	}
+
+	/** Bump-allocate Size bytes aligned to Align from the frame-transient pool.
+	 *  Grows the pool (never frees) when the current chunk cannot fit the request;
+	 *  every chunk is recycled (its used-high-water reset) at the next BeginFrame.
+	 *  FRender::AllocParameters<T>() forwards here through a non-template bridge so
+	 *  the public render header (which only forward-declares the pool) never sees a
+	 *  member template on an incomplete type. */
+	[[nodiscard]] void* AllocateFrameTransient(std::size_t Size, std::size_t Align);
+
 private:
 	struct FTextureEntry
 	{
@@ -225,6 +251,21 @@ private:
 	std::vector<FSamplerEntry> Samplers;                // pool-owned samplers (get-or-create by desc)
 	std::vector<FDescriptorSetEntry> DescriptorSets;    // pool-owned descriptor pools + sets (content-addressable)
 	std::vector<FDescriptorSetEntry> MutableDescriptorSets; // pool-owned mutable sets keyed by layout (written at record time)
+
+	// Frame-transient parameter pool (bump allocator). Parameter structs are
+	// SmallPoD-size (a handful of descriptors + push-constant scalars), allocated in
+	// fixed chunks that are REUSED across frames (never freed, never realloc'd so an
+	// outstanding pointer stays valid for its frame). BeginFrame resets the used
+	// high-water of every chunk, recycling the whole pool for the next frame --
+	// this is the frame boundary that bounds a parameter's lifetime.
+	struct FFrameChunk
+	{
+		std::vector<std::byte> Data;
+		std::size_t Used = 0;   // bump offset within Data
+	};
+	std::vector<FFrameChunk> FrameChunks;
+	std::size_t FrameChunkCursor = 0;   // last chunk served (allocation scans forward from here)
+	std::mutex FrameAllocMutex;         // guards bump allocation (features allocate from pool workers)
 };
 
 } // namespace Maho

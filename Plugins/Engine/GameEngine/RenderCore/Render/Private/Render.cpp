@@ -811,8 +811,12 @@ void FRender::AddPass(ERHICommandListType PassType, std::function<void(FRHIComma
 	SubmitPass(PassType, std::move(PassFn));
 }
 
-void FRender::SubmitPass(ERHICommandListType PassType, std::function<void(FRHICommandList&)> Record)
+void* FRender::AllocParameterBytes(std::size_t Size, std::size_t Align)
 {
+	return ResourcePool ? ResourcePool->AllocateFrameTransient(Size, Align) : nullptr;
+}
+
+void FRender::SubmitPass(ERHICommandListType PassType, std::function<void(FRHICommandList&)> Record){
 	FRHICommandList* List = ResourcePool ? ResourcePool->AcquireRenderList() : nullptr;
 	if (List == nullptr)
 	{

@@ -677,6 +677,49 @@ FRHIBuffer* FRHIResourcePool::GetBuffer(const FRDGBufferRef& Ref) const
 
 // -- frame recycle -------------------------------------------------------------
 
+// -- frame-transient parameter allocation --------------------------------------
+void* FRHIResourcePool::AllocateFrameTransient(std::size_t Size, std::size_t Align)
+{
+	// Round Align up to at least sizeof(void*) (16 would be ideal; single
+	// placement-news of PoD structs only need pointer alignment, and 16 is the
+	// SHADER_PARAMETER_STRUCT_ALIGNMENT -- keep the larger to be safe).
+	if (Align < alignof(void*))
+	{
+		Align = alignof(void*);
+	}
+
+	std::lock_guard<std::mutex> Lock(FrameAllocMutex);
+
+	const std::size_t NumChunks = FrameChunks.size();
+	std::size_t I = FrameChunkCursor;
+	for (; I < NumChunks; ++I)
+	{
+		FFrameChunk& C = FrameChunks[I];
+		const std::size_t Aligned = (C.Used + Align - 1) & ~(Align - 1);
+		if (Aligned + Size <= C.Data.size())
+		{
+			void* P = C.Data.data() + Aligned;
+			C.Used = Aligned + Size;
+			FrameChunkCursor = I;
+			return P;
+		}
+	}
+
+	// No existing chunk fits: append a new one sized to the request (the common
+	// parameter struct is small, so this growth is rare and bounded).
+	constexpr std::size_t kChunkBase = 16 * 1024;   // 16 KiB per chunk
+	FrameChunks.push_back({});
+	FFrameChunk& C = FrameChunks.back();
+	C.Data.resize((Size + kChunkBase - 1) & ~(kChunkBase - 1));
+	C.Used = 0;
+	FrameChunkCursor = FrameChunks.size() - 1;
+
+	const std::size_t Aligned = (C.Used + Align - 1) & ~(Align - 1);
+	void* P = C.Data.data() + Aligned;
+	C.Used = Aligned + Size;
+	return P;
+}
+
 void FRHIResourcePool::BeginFrame()
 {
 	// Destroy the previous frame's submitted command lists first. They were
@@ -726,6 +769,20 @@ void FRHIResourcePool::BeginFrame()
 			E.RefCount = 0;
 			FreeBufferSlots.push_back(static_cast<std::uint32_t>(I));
 		}
+	}
+
+	// Recycle the frame-transient parameter pool: reset every chunk's used
+	// high-water and rewind the cursor, so the whole pool is reused next frame.
+	// Never frees (an outstanding AllocParameters<T>() pointer from the frame that
+	// just ran is stale by contract -- the fence wait above guarantees no in-flight
+	// GPU reads of it, and AddPass consumed it within the allocating frame).
+	{
+		std::lock_guard<std::mutex> Lock(FrameAllocMutex);
+		for (FFrameChunk& C : FrameChunks)
+		{
+			C.Used = 0;
+		}
+		FrameChunkCursor = 0;
 	}
 }
 
@@ -836,6 +893,13 @@ void FRHIResourcePool::Shutdown()
 	}
 	Buffers.clear();
 	FreeBufferSlots.clear();
+
+	// Frame-transient parameter chunks are plain CPU memory; drop them whole.
+	{
+		std::lock_guard<std::mutex> Lock(FrameAllocMutex);
+		FrameChunks.clear();
+		FrameChunkCursor = 0;
+	}
 }
 
 } // namespace Maho

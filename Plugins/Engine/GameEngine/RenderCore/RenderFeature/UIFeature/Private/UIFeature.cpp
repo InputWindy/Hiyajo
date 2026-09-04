@@ -349,9 +349,9 @@ void FUIFeature::RenderUI(FRender& R)
 		MAHO_LOG_CORE_ERROR("FUIFeature: font registry entry missing");
 		return;
 	}
-	FUIParameters Params;
-	Params.FontTexture = FontEntry->Texture;
-	Params.FontSampler = FontEntry->Sampler;
+	FUIParameters* Params = R.AllocParameters<FUIParameters>();
+	Params->FontTexture = FontEntry->Texture;
+	Params->FontSampler = FontEntry->Sampler;
 
 	// Fetch the UI shader modules through the shared per-type async path (compile +
 	// sync up front), so the resolved modules, bytecode hashes and entry points can

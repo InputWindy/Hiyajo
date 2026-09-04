@@ -25,6 +25,7 @@ struct ImDrawData;
 #include <functional>
 #include <memory>
 #include <mutex>
+#include <new>
 #include <string>
 #include <unordered_map>
 #include <variant>
@@ -259,21 +260,23 @@ public:
 		const FDrawList& DrawList);
 
 	// -- compile-time FParameters (macro-declared) passes ------------------------
-	// The feature declares a TParameters struct via BEGIN/SHADER_PARAMETER/END.
-	// AddPass translates the compile-time metadata (ShaderParameterBuild) into a
-	// runtime FPassParameter (descriptor sets + push-constant range), builds the
-	// pipeline, and binds the push-constant block (built from the struct members'
-	// values) right before the draw lambda runs. For the draw-list path the layout
-	// is built the same way, but push-constant data comes from FDrawList::SetPushConstants.
+	// The feature declares a TParameters struct via BEGIN/SHADER_PARAMETER/END,
+	// allocates it with FRender::AllocParameters<T>() (pool frame-transient) and
+	// passes a POINTER to AddPass. AddPass translates the compile-time metadata
+	// (ShaderParameterBuild) into a runtime FPassParameter (descriptor sets +
+	// push-constant range), builds the pipeline, and binds the push-constant block
+	// (built from the struct members' values) right before the draw lambda runs.
+	// For the draw-list path the layout is built the same way, but push-constant
+	// data comes from FDrawList::SetPushConstants.
 	template <typename TParameters>
 	void AddPass(
 		ERHICommandListType PassType,
 		FRHIGraphicsPipelineDesc PipelineDesc,
 		const FRenderTarget& Target,
-		const TParameters& Parameters,
+		const TParameters* Parameters,
 		std::function<void(FRHICommandList&)> PassFn)
 	{
-		FShaderParameterBuildResult Built = ShaderParameterBuild(Parameters);
+		FShaderParameterBuildResult Built = ShaderParameterBuild(*Parameters);
 		FRenderPassDesc Pass;
 		Pass.Layout = std::move(Built.Layout);
 		Pass.Target = Target;
@@ -296,14 +299,33 @@ public:
 		ERHICommandListType PassType,
 		FRHIGraphicsPipelineDesc PipelineDesc,
 		const FRenderTarget& Target,
-		const TParameters& Parameters,
+		const TParameters* Parameters,
 		const FDrawList& DrawList)
 	{
-		FShaderParameterBuildResult Built = ShaderParameterBuild(Parameters);
+		FShaderParameterBuildResult Built = ShaderParameterBuild(*Parameters);
 		FRenderPassDesc Pass;
 		Pass.Layout = std::move(Built.Layout);
 		Pass.Target = Target;
 		AddPass(PassType, std::move(PipelineDesc), Pass, DrawList);
+	}
+
+	/**
+	 * Allocate a compile-time FParameters struct (macro-declared TParameters) from
+	 * FRender's resource pool and placement-new it. Maho's analogue of UE's
+	 * GraphBuilder.AllocateParameters<T>(): the feature writes the returned pointer's
+	 * members then hands it to AddPass. The memory is frame-transient (recycled at
+	 * the next BeginFrame), so the parameter must be consumed within the allocating
+	 * frame; the caller never frees it.
+	 *
+	 * The template only forwards to a non-template bridge (AllocParameterBytes) so
+	 * this header -- which forward-declares FRHIResourcePool -- never instantiates a
+	 * member template on an incomplete type (that trips an MSVC internal error).
+	 */
+	template <typename TParameters>
+	[[nodiscard]] TParameters* AllocParameters()
+	{
+		void* Storage = AllocParameterBytes(sizeof(TParameters), alignof(TParameters));
+		return Storage ? ::new (Storage) TParameters() : nullptr;
 	}
 
 	/** Pool-owned descriptor set layout: content-addressable get-or-create keyed by
@@ -443,6 +465,12 @@ private:
 	 *  BeginRendering/Bind/End around the feature's draw lambda). Keeping this
 	 *  non-template keeps FRHIResourcePool complete only in Render.cpp. */
 	void SubmitPass(ERHICommandListType PassType, std::function<void(FRHICommandList&)> Record);
+
+	/** Non-template bridge for AllocParameters<T>(): bump-allocates frame-transient
+	 *  bytes from the (complete, .cpp-only) resource pool. Keeping this non-template
+	 *  means the public header instantiates no member template on the forward-declared
+	 *  FRHIResourcePool. */
+	[[nodiscard]] void* AllocParameterBytes(std::size_t Size, std::size_t Align);
 
 	/** Advance the RDG resource pool (expire transients + recycle the frame's
 	 *  command lists) -- called by the frame host BeginFrame AFTER the swapchain

@@ -129,7 +129,7 @@ void FDrawTriangleFeature::Render(FRender& R)
 	// the list is already that subpass's batch set. The feature never knows who
 	// produced the list.
 	const FDrawList& Draws = Scene->GetTriangleDrawList();
-	const FTriangleParameters Params;
+	FTriangleParameters* Params = R.AllocParameters<FTriangleParameters>();
 	R.AddPass(ERHICommandListType::Graphics, PipelineDesc, Target, Params,
 		[&Draws, TargetW, TargetH](FRHICommandList& Cmd)
 		{
