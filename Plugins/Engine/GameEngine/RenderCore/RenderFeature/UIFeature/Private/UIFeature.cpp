@@ -399,12 +399,14 @@ void FUIFeature::RenderUI(FRender& R)
 	Blend.DstAlphaFactor = ERHIBlendFactor::OneMinusSrcAlpha;
 	PipelineDesc.AttachmentBlends = { Blend };
 
-	// -- Build the declarative draw list. The pass-level CPU primitive data is the
-	//    merged ImDrawData (one vertex/index array, uploaded once by AddPass), each
-	//    ImDrawCmd becomes a batch that slices it; a draw command carrying a different
-	//    texture (Image()) gets a per-batch set-0 (its RDG texture + sampler) resolved
-	//    by content inside AddPass. The feature holds NO buffer, NO descriptor set.
-	FDrawList DrawList;
+	// -- Build the declarative draw list into FRender's reused member. The pass-level
+	//    CPU primitive data is the merged ImDrawData (one vertex/index array, uploaded
+	//    once by AddPass), each ImDrawCmd becomes a batch that slices it; a draw command
+	//    carrying a different texture (Image()) gets a per-batch set-0 (its RDG texture +
+	//    sampler) resolved by content inside AddPass. The feature holds NO buffer, NO
+	//    descriptor set. Reset() clears the previous frame's content (capacity kept).
+	FDrawList& DrawList = R.UIDrawList;
+	DrawList.Reset();
 
 	std::size_t TotalVerts = 0, TotalIndices = 0;
 	for (int I = 0; I < DrawData->CmdListsCount; ++I)

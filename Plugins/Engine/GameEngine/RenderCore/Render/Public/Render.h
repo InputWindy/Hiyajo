@@ -175,6 +175,13 @@ public:
 	 *  driven across BeginFrame/Tick/Shutdown). ImGui::GetDrawData() is stored here
 	 *  each Tick and consumed by the UIFeature render backend. */
 	ImDrawData* UIData = nullptr;
+
+	/** The UIFeature's translated UI draw list for the CURRENT frame. The UI feature
+	 *  fills it each RenderUI (mirror of ImDrawData -> FDrawList protocol) and hands it
+	 *  to AddPass. Kept as a FRender member rather than a per-call local so the
+	 *  batch/primitive buffer vectors reuse their capacity across frames; the feature
+	 *  calls Reset() at the start of each fill to clear the previous frame's content. */
+	FDrawList UIDrawList;
 	/** Whether the ImGui context has been created (guards BeginFrame/Tick/Shutdown). */
 	bool bUIInitialized = false;
 
@@ -220,26 +227,6 @@ public:
 	 *  stage). Order between passes is the order features call AddPass -- guarantee
 	 *  it with stage deps against the feature(s) that must submit first. */
 	void AddPass(ERHICommandListType PassType, std::function<void(FRHICommandList&)> PassFn);
-
-	/**
-	 * Typed pass: the feature describes the pipeline config (with the VS/FS shader
-	 * MODULES already resolved + filled in), the render target and the layout, and
-	 * AddPass resolves the PSO (via the pool's PSO cache), starts the dynamic render
-	 * pass, BINDS the graphics pipeline implicitly, then runs the draw lambda.
-	 * The feature never queries a pipeline/layout and never calls BindGraphicsPipeline
-	 * itself -- it only records the draws (viewport/scissor/draw).
-	 *
-	 * The feature fetches the modules itself (TryGetShader<T> + Wait + GetVertex/
-	 * GetFragment) and stores them in PipelineDesc.VertexShader/FragmentShader (plus
-	 * the bytecode hashes + entry points); GetOrCreateGraphicsPipeline keys on those
-	 * hashes, so repeated calls return the pool-owned pipeline without rebuilding.
-	 * PipelineDesc is copied, so the caller may keep a state table once.
-	 */
-	void AddPass(
-		ERHICommandListType PassType,
-		FRHIGraphicsPipelineDesc PipelineDesc,
-		const FRenderPassDesc& Pass,
-		std::function<void(FRHICommandList&)> PassFn);
 
 	/**
 	 * Declarative draw-list pass: consumes a FDrawList INSTEAD of a record lambda.
@@ -455,6 +442,25 @@ private:
 	/** TShaderHandle drives the shader compile through the pool's PSO cache; it
 	 *  reaches the private GetOrCreateShaderModule / WaitShaderCompiles. */
 	template <typename T> friend class TShaderHandle;
+
+	/**
+	 * PSO-resolving pass: the feature describes the pipeline config (with the VS/FS
+	 * shader MODULES already resolved + filled in), the render target and the layout,
+	 * and AddPass resolves the PSO (via the pool's PSO cache), starts the dynamic
+	 * render pass, BINDS the graphics pipeline implicitly, then runs the draw lambda.
+	 * The feature never queries a pipeline/layout and never calls BindGraphicsPipeline
+	 * itself -- it only records the draws (viewport/scissor/draw).
+	 *
+	 * This is the PUBLIC typed FParameters template's implementation point: the
+	 * compile-time path builds the FRenderPassDesc + push-constant block, then
+	 * forwards here to actually record the pass. Internal: features use the
+	 * macro-declared TParameters AllocParameters< > / AddPass path, never this form.
+	 */
+	void AddPass(
+		ERHICommandListType PassType,
+		FRHIGraphicsPipelineDesc PipelineDesc,
+		const FRenderPassDesc& Pass,
+		std::function<void(FRHICommandList&)> PassFn);
 
 	/** The async shader compiler. Internal: features reach shaders through
 	 *  TryGetShader<T> only; they never touch the compiler server directly. */

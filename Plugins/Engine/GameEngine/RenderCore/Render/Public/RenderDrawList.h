@@ -68,6 +68,26 @@ class MAHO_RENDER_API FDrawList
 public:
 	void Add(const FDrawBatch& Batch) { Batches.push_back(Batch); }
 
+	/** Clear every field back to empty/zero (primitive data, push constants,
+	 *  batches), KEEPING the vectors' capacity. Used when the list is a reused
+	 *  FRender member filled per frame, so a re-filled list does not accumulate
+	 *  the previous frame's batches. */
+	void Reset()
+	{
+		VertexData = nullptr;
+		VertexBytes = 0;
+		VertexStride = 0;
+		VertexCount = 0;
+		IndexData = nullptr;
+		IndexBytes = 0;
+		bIndex32 = true;
+		IndexCount = 0;
+		PushStages = ERHIShaderStage::Vertex;
+		PushSize = 0;
+		PushData.clear();
+		Batches.clear();
+	}
+
 	[[nodiscard]] const std::vector<FDrawBatch>& GetBatches() const { return Batches; }
 
 	/** Optional pass-level push constant (e.g. the ImGui ortho projection mat4).
