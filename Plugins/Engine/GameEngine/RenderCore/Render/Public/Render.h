@@ -16,6 +16,7 @@ struct ImDrawData;
 #include "RDG.h"
 #include "RenderDrawList.h"
 #include "ShaderCompiler.h"
+#include "ShaderParameterStruct.h"
 #include <Resource.h>
 #include <AssetTypes.h>
 
@@ -256,6 +257,54 @@ public:
 		FRHIGraphicsPipelineDesc PipelineDesc,
 		const FRenderPassDesc& Pass,
 		const FDrawList& DrawList);
+
+	// -- compile-time FParameters (macro-declared) passes ------------------------
+	// The feature declares a TParameters struct via BEGIN/SHADER_PARAMETER/END.
+	// AddPass translates the compile-time metadata (ShaderParameterBuild) into a
+	// runtime FPassParameter (descriptor sets + push-constant range), builds the
+	// pipeline, and binds the push-constant block (built from the struct members'
+	// values) right before the draw lambda runs. For the draw-list path the layout
+	// is built the same way, but push-constant data comes from FDrawList::SetPushConstants.
+	template <typename TParameters>
+	void AddPass(
+		ERHICommandListType PassType,
+		FRHIGraphicsPipelineDesc PipelineDesc,
+		const FRenderTarget& Target,
+		const TParameters& Parameters,
+		std::function<void(FRHICommandList&)> PassFn)
+	{
+		FShaderParameterBuildResult Built = ShaderParameterBuild(Parameters);
+		FRenderPassDesc Pass;
+		Pass.Layout = std::move(Built.Layout);
+		Pass.Target = Target;
+		std::vector<std::byte> PushData = std::move(Built.PushConstantData);
+		const bool bHasPush = Built.bHasPushConstant;
+		const ERHIShaderStage PushStages = Built.PushConstantStages;
+		AddPass(PassType, std::move(PipelineDesc), Pass,
+			[PushData = std::move(PushData), bHasPush, PushStages, PassFn = std::move(PassFn)](FRHICommandList& Cmd)
+			{
+				if (bHasPush && !PushData.empty())
+				{
+					Cmd.PushConstants(PushStages, 0, static_cast<std::uint32_t>(PushData.size()), PushData.data());
+				}
+				PassFn(Cmd);
+			});
+	}
+
+	template <typename TParameters>
+	void AddPass(
+		ERHICommandListType PassType,
+		FRHIGraphicsPipelineDesc PipelineDesc,
+		const FRenderTarget& Target,
+		const TParameters& Parameters,
+		const FDrawList& DrawList)
+	{
+		FShaderParameterBuildResult Built = ShaderParameterBuild(Parameters);
+		FRenderPassDesc Pass;
+		Pass.Layout = std::move(Built.Layout);
+		Pass.Target = Target;
+		AddPass(PassType, std::move(PipelineDesc), Pass, DrawList);
+	}
 
 	/** Pool-owned descriptor set layout: content-addressable get-or-create keyed by
 	 *  the descriptor-set binding structure. A feature resolves the set layout its

@@ -13,6 +13,7 @@
 #include <RHI/RHICommandList.h>
 #include <RHI/RHIEnums.h>
 #include <RHI/RHIResources.h>
+#include <ShaderParameterStruct.h>
 
 #include "imgui.h"
 
@@ -67,6 +68,17 @@ namespace Maho
 
 namespace Maho
 {
+
+// Compile-time FParameters for the UI draw pass, mirroring the shader's push
+// constant block (mat4 Proj, vertex stage) + set0/binding0 font descriptor. The
+// pass input layout (descriptor binding + push-constant range) is baked here by
+// the macro engine -- the same source of truth the RHI pipeline layout is built
+// from. The ortho push DATA is carried by the FDrawList; the macro declares only
+// the range for pipeline layout.
+BEGIN_SHADER_PARAMETER_STRUCT(FUIParameters)
+	SHADER_PARAMETER_TEXTURE_SAMPLER(Texture2D, FontTexture, FontSampler, 0, 0, ERHIShaderStage::Fragment)
+	SHADER_PARAMETER_ARRAY(float, OrthoMatrix, 16)
+END_SHADER_PARAMETER_STRUCT()
 
 // Statics of FUIShader: expose the feature-private GLSL to the shader type.
 const char* FUIShader::GetVertexSource()       { return kImGuiVertShader; }
@@ -317,8 +329,7 @@ void FUIFeature::RenderUI(FRender& R)
 	//    pipeline implicitly, and only then runs this lambda -- so the lambda records
 	//    ONLY the draws (viewport / binds / push constant / draw calls). The feature
 	//    never queries a pipeline or calls BeginRendering/BindGraphicsPipeline itself.
-	FRenderPassDesc Pass;
-	FRenderTarget& Target = Pass.Target;
+	FRenderTarget Target;
 	FRenderTarget::FAttachment Color;
 	Color.View = SceneColor;
 	Color.LoadOp = ERHILoadOp::Load;
@@ -326,27 +337,21 @@ void FUIFeature::RenderUI(FRender& R)
 	Target.AddColor(Color);
 	Target.SetSize(TargetW, TargetH);
 
-	// Input binding (Pass.Layout): the font descriptor set (set 0: font texture +
-	// sampler) + the vertex-stage push constant. AddPass fills PipelineDesc.Layout
-	// from this feature key and resolves the PSO; the font set is materialised +
-	// bound by AddPass (hidden from the feature). The font sampler + texture come
-	// from the registry -- no RHI op, no held descriptor set.
+	// Input binding (FUIParameters, macro-declared): the font descriptor set (set 0:
+	// font texture + sampler) + the vertex-stage push-constant range (mat4). AddPass
+	// translates the macro metadata (ShaderParameterBuild) into the pass layout, fills
+	// PipelineDesc.Layout from it and resolves the PSO; the font set is materialised +
+	// bound by AddPass (hidden from the feature). The font sampler + texture come from
+	// the registry -- no RHI op, no held descriptor set.
 	const FUIFeature::FUIRegistryEntry* FontEntry = FindTexture(FontId);
 	if (FontEntry == nullptr)
 	{
 		MAHO_LOG_CORE_ERROR("FUIFeature: font registry entry missing");
 		return;
 	}
-	const FRDGTextureRef FontTexRef = FontEntry->Texture;
-	FRHISampler* FontSamplerPtr = FontEntry->Sampler;
-	FRDGBinding& FontBinding = Pass.Layout.Bind(0, 0, ERHIDescriptorType::CombinedImageSampler, FontSamplerPtr);
-	FontBinding.Stages = ERHIShaderStage::Fragment;
-	FontBinding.Resource = FontTexRef;
-	FRHIPushConstantRange PushRange;
-	PushRange.Stages = ERHIShaderStage::Vertex;
-	PushRange.Offset = 0;
-	PushRange.Size = 64;   // mat4
-	Pass.Layout.AddPushConstants(PushRange);
+	FUIParameters Params;
+	Params.FontTexture = FontEntry->Texture;
+	Params.FontSampler = FontEntry->Sampler;
 
 	// Fetch the UI shader modules through the shared per-type async path (compile +
 	// sync up front), so the resolved modules, bytecode hashes and entry points can
@@ -499,7 +504,7 @@ void FUIFeature::RenderUI(FRender& R)
 	// One AddPass == one subpass. AddPass uploads the CPU primitive data once, resolves
 	// the pass-level font set + each per-batch set by content, binds the pipeline, and
 	// records every batch's draw. Nothing below is a raw RHI operation.
-	R.AddPass(ERHICommandListType::Graphics, PipelineDesc, Pass, DrawList);
+	R.AddPass(ERHICommandListType::Graphics, PipelineDesc, Target, Params, DrawList);
 }
 
 void FUIFeature::PreUnInstall(FRender& R)

@@ -3,6 +3,7 @@
 #include <Frame.h>
 #include <Log.h>
 #include <Scene.h>
+#include <ShaderParameterStruct.h>
 
 namespace Maho
 {
@@ -34,6 +35,12 @@ const char* FTriangleShader::GetVertexSource()       { return kVertexShader; }
 const char* FTriangleShader::GetFragmentSource()     { return kFragmentShader; }
 const char* FTriangleShader::GetVertexEntryPoint()   { return "main"; }
 const char* FTriangleShader::GetFragmentEntryPoint() { return "main"; }
+
+// Compile-time FParameters for the triangle pass. The fullscreen triangle binds
+// no descriptors and pushes no constants, so the param struct is empty; the macro
+// engine still yields a valid (empty) layout AddPass consumes.
+BEGIN_SHADER_PARAMETER_STRUCT(FTriangleParameters)
+END_SHADER_PARAMETER_STRUCT()
 
 FDrawTriangleFeature::FDrawTriangleFeature()
 {
@@ -79,9 +86,9 @@ void FDrawTriangleFeature::Render(FRender& R)
 	}
 
 	// Pass declaration: the input binding (layout) + the output target, as one
-	// unit given to AddPass. The descriptor layout is empty (no bindings).
-	FRenderPassDesc Pass;
-	FRenderTarget& Target = Pass.Target;
+	// unit given to AddPass. The descriptor layout is empty (no bindings); AddPass
+	// builds it from the compile-time FTriangleParameters metadata.
+	FRenderTarget Target;
 	FRenderTarget::FAttachment Color;
 	Color.View = Scene->GetSceneColor();
 	Color.LoadOp = ERHILoadOp::Load;
@@ -122,7 +129,8 @@ void FDrawTriangleFeature::Render(FRender& R)
 	// the list is already that subpass's batch set. The feature never knows who
 	// produced the list.
 	const FDrawList& Draws = Scene->GetTriangleDrawList();
-	R.AddPass(ERHICommandListType::Graphics, PipelineDesc, Pass,
+	const FTriangleParameters Params;
+	R.AddPass(ERHICommandListType::Graphics, PipelineDesc, Target, Params,
 		[&Draws, TargetW, TargetH](FRHICommandList& Cmd)
 		{
 			Cmd.SetViewport(0.0f, 0.0f, static_cast<float>(TargetW), static_cast<float>(TargetH));
