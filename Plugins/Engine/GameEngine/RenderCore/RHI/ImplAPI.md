@@ -323,20 +323,20 @@ UpdateBuffer(Buffer, Offset, Size, Data):
 8. 销毁 staging
 ```
 
-<a id="fn-cmd-updatedesc"></a>
-### FVulkanCommandList::UpdateDescriptorSets(const FRHIDescriptorWrite* Writes, uint32_t Count)
+<a id="fn-rhi-updatedesc"></a>
+### FVulkanRHI::UpdateDescriptorSets(const FRHIDescriptorWrite* Writes, uint32_t Count)
 
 ← [公开 API](API.md) · `void`
 
-把 RHI 描述符写转为 VkWriteDescriptorSet（UBO → buffer info；combined image sampler → image info），一次性 vkUpdateDescriptorSets。记录式但实际立即 CPU 执行。
+设备级（→ vkUpdateDescriptorSets，立即 CPU 操作），非 vkCmd：无需命令缓冲。用途是让资源池在**创建描述符集时**一次性写内容，而不是把写延迟进某个 pass。
 
 ```text
 UpdateDescriptorSets(Writes, Count):
-1. if 无效: return
+1. if Writes == nullptr || Count == 0: return
 2. for W in Writes:
-     跳过 Set 为空的
-     按 W.Type 填 buffer/image info（Info 临时 vector，存活到调用结束）
-3. vkUpdateDescriptorSets(全部 VkWrites)
+     skip W.Buffer/TextureView/Sampler 均为空（无效写）
+     按 W.Type 填 buffer/image info（Info 临时 vector，存活到 vkUpdateDescriptorSets 返回）
+3. vkUpdateDescriptorSets(Device, 全部 VkWrites)
 ```
 
 <a id="fn-cmd-beginrendering"></a>

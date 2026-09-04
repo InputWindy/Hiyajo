@@ -37,10 +37,10 @@ namespace Maho
  * reference-graph, and will split native creation from memory binding - neither
  * is exposed here yet.
  */
-class FRenderResourcePool
+class FRHIResourcePool
 {
 public:
-	explicit FRenderResourcePool(IRHI* InRHI)
+	explicit FRHIResourcePool(IRHI* InRHI)
 		: RHI(InRHI)
 	{
 	}
@@ -81,11 +81,18 @@ public:
 	 *  pool's (destroyed at Shutdown), and identical descriptors share one native. */
 	[[nodiscard]] FRHISampler* CreateSampler(const FRHISamplerDesc& Desc);
 
-	/** Allocate one descriptor set from a pool the pool OWNS, sized from the set
-	 *  layout's bindings. Returns a borrowed handle to the set; the pool destroys
-	 *  pool+set at Shutdown. Not keyed by descriptor (each call is a fresh set,
-	 *  like a Persistent texture) -- the caller creates it once and keeps the handle. */
-	[[nodiscard]] FRHIDescriptorSet* CreateDescriptorSet(FRHIDescriptorSetLayout* Layout, const FRHIDescriptorSetLayoutDesc& LayoutDesc);
+	/** Create (get-or-create by layout + referenced resources) a descriptor set the
+	 *  pool OWNS. On a miss the pool allocates a pool sized from the layout's
+	 *  bindings, allocates a set, writes its contents via IRHI::UpdateDescriptorSets
+	 *  (device-level, not a recorded vkCmd), and records the referenced resources
+	 *  for dependency tracking. Returns a borrowed handle; the pool destroys
+	 *  pool+set at Shutdown. Content-addressable: identical (layout, writes) share
+	 *  one set. */
+	[[nodiscard]] FRHIDescriptorSet* GetOrCreateDescriptorSet(
+		FRHIDescriptorSetLayout* Layout,
+		const FRHIDescriptorSetLayoutDesc& LayoutDesc,
+		const FRHIDescriptorWrite* Writes,
+		std::uint32_t WriteCount);
 
 	[[nodiscard]] FRHITexture* GetTexture(const FRDGTextureRef& Ref) const;
 	[[nodiscard]] FRHITextureView* GetTextureView(const FRDGTextureRef& Ref);
@@ -173,6 +180,8 @@ private:
 	{
 		FRHIDescriptorPool* Pool = nullptr;
 		FRHIDescriptorSet* Set = nullptr;
+		FRHIDescriptorSetLayout* Layout = nullptr;
+		std::vector<FRHIDescriptorWrite> Writes;   // content-address key + referenced-resource record
 	};
 
 	/** Reuse an inactive slot with a matching descriptor + lifetime class, else -1. */

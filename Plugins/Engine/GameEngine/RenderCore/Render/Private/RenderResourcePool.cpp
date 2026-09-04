@@ -92,6 +92,28 @@ bool SamplerDescEqual(const FRHISamplerDesc& A, const FRHISamplerDesc& B)
 		&& A.LodBias == B.LodBias && A.MinLod == B.MinLod && A.MaxLod == B.MaxLod;
 }
 
+bool DescriptorWritesEqual(const std::vector<FRHIDescriptorWrite>& A, const std::vector<FRHIDescriptorWrite>& B)
+{
+	if (A.size() != B.size())
+	{
+		return false;
+	}
+	for (std::size_t I = 0; I < A.size(); ++I)
+	{
+		// Ignore .Set: it is filled by the pool at create time. A content-address
+		// key matches on the referenced resources + binding, not the target set.
+		const FRHIDescriptorWrite& X = A[I];
+		const FRHIDescriptorWrite& Y = B[I];
+		if (X.Binding != Y.Binding || X.ArrayIndex != Y.ArrayIndex || X.Type != Y.Type
+			|| X.Buffer != Y.Buffer || X.Offset != Y.Offset || X.Range != Y.Range
+			|| X.TextureView != Y.TextureView || X.Sampler != Y.Sampler)
+		{
+			return false;
+		}
+	}
+	return true;
+}
+
 bool GraphicsPipelineDescEqual(const FRHIGraphicsPipelineDesc& A, const FRHIGraphicsPipelineDesc& B)
 	{
 		if (A.VertexShaderHash != B.VertexShaderHash || A.FragmentShaderHash != B.FragmentShaderHash)
@@ -180,7 +202,7 @@ FRHIBuffer* FRDGBufferRef::GetRHI() const
 
 // -- slot allocation -----------------------------------------------------------
 
-std::uint32_t FRenderResourcePool::AllocTextureSlot()
+std::uint32_t FRHIResourcePool::AllocTextureSlot()
 {
 	if (!FreeTextureSlots.empty())
 	{
@@ -192,7 +214,7 @@ std::uint32_t FRenderResourcePool::AllocTextureSlot()
 	return static_cast<std::uint32_t>(Textures.size() - 1);
 }
 
-std::uint32_t FRenderResourcePool::AllocBufferSlot()
+std::uint32_t FRHIResourcePool::AllocBufferSlot()
 {
 	if (!FreeBufferSlots.empty())
 	{
@@ -206,7 +228,7 @@ std::uint32_t FRenderResourcePool::AllocBufferSlot()
 
 // -- reuse lookup --------------------------------------------------------------
 
-std::int32_t FRenderResourcePool::FindReusableTexture(
+std::int32_t FRHIResourcePool::FindReusableTexture(
 	const FRHITextureDesc& Desc, ERDGResourceLifetime Lifetime) const
 {
 	const bool bTransient = (Lifetime == ERDGResourceLifetime::Transient);
@@ -223,7 +245,7 @@ std::int32_t FRenderResourcePool::FindReusableTexture(
 	return -1;
 }
 
-std::int32_t FRenderResourcePool::FindReusableBuffer(
+std::int32_t FRHIResourcePool::FindReusableBuffer(
 	const FRHIBufferDesc& Desc, ERDGResourceLifetime Lifetime) const
 {
 	const bool bTransient = (Lifetime == ERDGResourceLifetime::Transient);
@@ -240,7 +262,7 @@ std::int32_t FRenderResourcePool::FindReusableBuffer(
 
 // -- native destroy helpers ----------------------------------------------------
 
-void FRenderResourcePool::DestroyTextureEntry(FTextureEntry& Entry)
+void FRHIResourcePool::DestroyTextureEntry(FTextureEntry& Entry)
 {
 	if (Entry.View)
 	{
@@ -254,7 +276,7 @@ void FRenderResourcePool::DestroyTextureEntry(FTextureEntry& Entry)
 	}
 }
 
-void FRenderResourcePool::DestroyBufferEntry(FBufferEntry& Entry)
+void FRHIResourcePool::DestroyBufferEntry(FBufferEntry& Entry)
 {
 	if (Entry.Native)
 	{
@@ -265,7 +287,7 @@ void FRenderResourcePool::DestroyBufferEntry(FBufferEntry& Entry)
 
 // -- create --------------------------------------------------------------------
 
-FRDGTextureRef FRenderResourcePool::CreateTexture(const FRHITextureDesc& Desc, ERDGResourceLifetime Lifetime)
+FRDGTextureRef FRHIResourcePool::CreateTexture(const FRHITextureDesc& Desc, ERDGResourceLifetime Lifetime)
 {
 	// Reuse first: an inactive slot with the same descriptor + lifetime class.
 	// For a transient this is how we avoid per-frame vkCreate/vkAllocate (the
@@ -308,7 +330,7 @@ FRDGTextureRef FRenderResourcePool::CreateTexture(const FRHITextureDesc& Desc, E
 	return FRDGTextureRef(this, Slot);
 }
 
-FRDGBufferRef FRenderResourcePool::CreateBuffer(const FRHIBufferDesc& Desc, ERDGResourceLifetime Lifetime)
+FRDGBufferRef FRHIResourcePool::CreateBuffer(const FRHIBufferDesc& Desc, ERDGResourceLifetime Lifetime)
 {
 	const std::int32_t Reuse = FindReusableBuffer(Desc, Lifetime);
 	if (Reuse >= 0)
@@ -336,7 +358,7 @@ FRDGBufferRef FRenderResourcePool::CreateBuffer(const FRHIBufferDesc& Desc, ERDG
 
 // -- command list --------------------------------------------------------------
 
-FRHICommandList* FRenderResourcePool::AcquireRenderList()
+FRHICommandList* FRHIResourcePool::AcquireRenderList()
 {
 	if (RHI == nullptr)
 	{
@@ -353,7 +375,7 @@ FRHICommandList* FRenderResourcePool::AcquireRenderList()
 
 // -- PSO cache -----------------------------------------------------------------
 
-FRHIShaderModule* FRenderResourcePool::GetOrCreateShaderModule(const FRHIShaderModuleDesc& Desc)
+FRHIShaderModule* FRHIResourcePool::GetOrCreateShaderModule(const FRHIShaderModuleDesc& Desc)
 {
 	// Shader module identity is the CONTENT (bytecode copy + stage + entry point),
 	// not the pointer: modules are rebuilt from identical bytes across passes and
@@ -393,7 +415,7 @@ FRHIShaderModule* FRenderResourcePool::GetOrCreateShaderModule(const FRHIShaderM
 	return Native;
 }
 
-FRHIPipelineLayout* FRenderResourcePool::GetOrCreatePipelineLayout(const FRHIPipelineLayoutDesc& Desc)
+FRHIPipelineLayout* FRHIResourcePool::GetOrCreatePipelineLayout(const FRHIPipelineLayoutDesc& Desc)
 {
 	for (const FPipelineLayoutEntry& E : PipelineLayouts)
 	{
@@ -410,7 +432,7 @@ FRHIPipelineLayout* FRenderResourcePool::GetOrCreatePipelineLayout(const FRHIPip
 	return Native;
 }
 
-FRHIDescriptorSetLayout* FRenderResourcePool::GetOrCreateDescriptorSetLayout(const FRHIDescriptorSetLayoutDesc& Desc)
+FRHIDescriptorSetLayout* FRHIResourcePool::GetOrCreateDescriptorSetLayout(const FRHIDescriptorSetLayoutDesc& Desc)
 {
 	for (const FDescriptorSetLayoutEntry& E : DescriptorSetLayouts)
 	{
@@ -427,7 +449,7 @@ FRHIDescriptorSetLayout* FRenderResourcePool::GetOrCreateDescriptorSetLayout(con
 	return Native;
 }
 
-FRHIGraphicsPipeline* FRenderResourcePool::GetOrCreateGraphicsPipeline(const FRHIGraphicsPipelineDesc& Desc)
+FRHIGraphicsPipeline* FRHIResourcePool::GetOrCreateGraphicsPipeline(const FRHIGraphicsPipelineDesc& Desc)
 {
 	for (const FGraphicsPipelineEntry& E : GraphicsPipelines)
 	{
@@ -446,7 +468,7 @@ FRHIGraphicsPipeline* FRenderResourcePool::GetOrCreateGraphicsPipeline(const FRH
 
 // -- pool-owned sampler / descriptor set ----------------------------------------
 
-FRHISampler* FRenderResourcePool::CreateSampler(const FRHISamplerDesc& Desc)
+FRHISampler* FRHIResourcePool::CreateSampler(const FRHISamplerDesc& Desc)
 {
 	for (const FSamplerEntry& E : Samplers)
 	{
@@ -466,13 +488,26 @@ FRHISampler* FRenderResourcePool::CreateSampler(const FRHISamplerDesc& Desc)
 	return Native;
 }
 
-FRHIDescriptorSet* FRenderResourcePool::CreateDescriptorSet(
-	FRHIDescriptorSetLayout* Layout, const FRHIDescriptorSetLayoutDesc& LayoutDesc)
+FRHIDescriptorSet* FRHIResourcePool::GetOrCreateDescriptorSet(
+	FRHIDescriptorSetLayout* Layout,
+	const FRHIDescriptorSetLayoutDesc& LayoutDesc,
+	const FRHIDescriptorWrite* Writes,
+	std::uint32_t WriteCount)
 {
 	if (Layout == nullptr)
 	{
 		return nullptr;
 	}
+
+	std::vector<FRHIDescriptorWrite> KeyWrites(Writes, Writes + WriteCount);
+	for (const FDescriptorSetEntry& E : DescriptorSets)
+	{
+		if (E.Set != nullptr && E.Layout == Layout && DescriptorWritesEqual(E.Writes, KeyWrites))
+		{
+			return E.Set;
+		}
+	}
+
 	FRHIDescriptorPoolDesc PoolDesc;
 	PoolDesc.MaxSets = 1;
 	for (const FRHIDescriptorBinding& B : LayoutDesc.Bindings)
@@ -493,16 +528,30 @@ FRHIDescriptorSet* FRenderResourcePool::CreateDescriptorSet(
 		RHI->DestroyDescriptorPool(Pool);
 		return nullptr;
 	}
+	// Write the set contents at allocation time (device-level immediate op, NOT a
+	// recorded vkCmd -- no command buffer needed). The pool is the single owner of
+	// set content, so it also sees which resources the set references.
+	for (std::uint32_t I = 0; I < WriteCount; ++I)
+	{
+		KeyWrites[I].Set = Set;
+	}
+	if (RHI && WriteCount > 0)
+	{
+		RHI->UpdateDescriptorSets(KeyWrites.data(), WriteCount);
+	}
+
 	FDescriptorSetEntry Entry;
 	Entry.Pool = Pool;
 	Entry.Set = Set;
-	DescriptorSets.push_back(Entry);
+	Entry.Layout = Layout;
+	Entry.Writes = std::move(KeyWrites);
+	DescriptorSets.push_back(std::move(Entry));
 	return Set;
 }
 
 // -- release -------------------------------------------------------------------
 
-void FRenderResourcePool::ReleaseTexture(FRDGTextureRef& Ref)
+void FRHIResourcePool::ReleaseTexture(FRDGTextureRef& Ref)
 {
 	if (!Ref.IsValid())
 	{
@@ -522,7 +571,7 @@ void FRenderResourcePool::ReleaseTexture(FRDGTextureRef& Ref)
 	Ref.Reset();
 }
 
-void FRenderResourcePool::ReleaseBuffer(FRDGBufferRef& Ref)
+void FRHIResourcePool::ReleaseBuffer(FRDGBufferRef& Ref)
 {
 	if (!Ref.IsValid())
 	{
@@ -542,7 +591,7 @@ void FRenderResourcePool::ReleaseBuffer(FRDGBufferRef& Ref)
 
 // -- resolve -------------------------------------------------------------------
 
-FRHITexture* FRenderResourcePool::GetTexture(const FRDGTextureRef& Ref) const
+FRHITexture* FRHIResourcePool::GetTexture(const FRDGTextureRef& Ref) const
 {
 	if (!Ref.IsValid() || Ref.Id >= Textures.size())
 	{
@@ -551,7 +600,7 @@ FRHITexture* FRenderResourcePool::GetTexture(const FRDGTextureRef& Ref) const
 	return Textures[Ref.Id].Native;
 }
 
-FRHITextureView* FRenderResourcePool::GetTextureView(const FRDGTextureRef& Ref)
+FRHITextureView* FRHIResourcePool::GetTextureView(const FRDGTextureRef& Ref)
 {
 	if (!Ref.IsValid() || Ref.Id >= Textures.size())
 	{
@@ -560,13 +609,13 @@ FRHITextureView* FRenderResourcePool::GetTextureView(const FRDGTextureRef& Ref)
 	return Textures[Ref.Id].View;
 }
 
-const FRHITextureDesc& FRenderResourcePool::GetTextureDesc(const FRDGTextureRef& Ref) const
+const FRHITextureDesc& FRHIResourcePool::GetTextureDesc(const FRDGTextureRef& Ref) const
 {
 	static const FRHITextureDesc Empty{};
 	return (!Ref.IsValid() || Ref.Id >= Textures.size()) ? Empty : Textures[Ref.Id].Desc;
 }
 
-FRHIBuffer* FRenderResourcePool::GetBuffer(const FRDGBufferRef& Ref) const
+FRHIBuffer* FRHIResourcePool::GetBuffer(const FRDGBufferRef& Ref) const
 {
 	if (!Ref.IsValid() || Ref.Id >= Buffers.size())
 	{
@@ -577,7 +626,7 @@ FRHIBuffer* FRenderResourcePool::GetBuffer(const FRDGBufferRef& Ref) const
 
 // -- frame recycle -------------------------------------------------------------
 
-void FRenderResourcePool::BeginFrame()
+void FRHIResourcePool::BeginFrame()
 {
 	// Destroy the previous frame's submitted command lists first. They were
 	// submitted in their IEndRender stages; the host BeginFrame already waited the
@@ -631,7 +680,7 @@ void FRenderResourcePool::BeginFrame()
 
 // -- shutdown ------------------------------------------------------------------
 
-void FRenderResourcePool::Shutdown()
+void FRHIResourcePool::Shutdown()
 {
 	for (FRHICommandList* List : PendingRenderLists)
 	{

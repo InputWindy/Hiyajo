@@ -11,7 +11,7 @@ namespace Maho
 {
 
 class FRender;
-class FRenderResourcePool;
+class FRHIResourcePool;
 
 /**
  * Resource lifetime class for RDG allocations. This is the atomic allocation
@@ -67,15 +67,15 @@ public:
 	[[nodiscard]] std::uint32_t GetHeight() const;
 
 private:
-	friend class FRenderResourcePool;
+	friend class FRHIResourcePool;
 
-	FRDGTextureRef(FRenderResourcePool* InPool, std::uint32_t InId)
+	FRDGTextureRef(FRHIResourcePool* InPool, std::uint32_t InId)
 		: Pool(InPool)
 		, Id(InId)
 	{
 	}
 
-	FRenderResourcePool* Pool = nullptr;
+	FRHIResourcePool* Pool = nullptr;
 	std::uint32_t Id = ~0u;
 };
 
@@ -102,15 +102,15 @@ public:
 	[[nodiscard]] FRHIBuffer* GetRHI() const;
 
 private:
-	friend class FRenderResourcePool;
+	friend class FRHIResourcePool;
 
-	FRDGBufferRef(FRenderResourcePool* InPool, std::uint32_t InId)
+	FRDGBufferRef(FRHIResourcePool* InPool, std::uint32_t InId)
 		: Pool(InPool)
 		, Id(InId)
 	{
 	}
 
-	FRenderResourcePool* Pool = nullptr;
+	FRHIResourcePool* Pool = nullptr;
 	std::uint32_t Id = ~0u;
 };
 

@@ -3188,6 +3188,79 @@ void FVulkanRHI::FreeDescriptorSet(FRHIDescriptorPool* Pool, FRHIDescriptorSet* 
 	delete Set;
 }
 
+void FVulkanRHI::UpdateDescriptorSets(const FRHIDescriptorWrite* Writes, std::uint32_t Count)
+{
+	if (Writes == nullptr || Count == 0 || Device == VK_NULL_HANDLE)
+	{
+		return;
+	}
+
+	std::vector<VkWriteDescriptorSet> VkWrites;
+	VkWrites.reserve(Count);
+
+	// Temporary storage for descriptor info structs (must live until vkUpdateDescriptorSets call).
+	std::vector<VkDescriptorBufferInfo> BufferInfos;
+	BufferInfos.reserve(Count);
+	std::vector<VkDescriptorImageInfo> ImageInfos;
+	ImageInfos.reserve(Count);
+
+	for (std::uint32_t i = 0; i < Count; ++i)
+	{
+		const FRHIDescriptorWrite& W = Writes[i];
+		if (W.Set == nullptr)
+		{
+			continue;
+		}
+
+		auto* VkSet = static_cast<FVulkanDescriptorSet*>(W.Set);
+
+		VkWriteDescriptorSet VkWrite{};
+		VkWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		VkWrite.dstSet = VkSet->GetVkSet();
+		VkWrite.dstBinding = W.Binding;
+		VkWrite.dstArrayElement = W.ArrayIndex;
+		VkWrite.descriptorCount = 1;
+		VkWrite.descriptorType = ToVkDescriptorType(W.Type);
+
+		bool bHasInfo = false;
+		if (W.Type == ERHIDescriptorType::UniformBuffer && W.Buffer != nullptr)
+		{
+			auto* VkBuf = static_cast<FVulkanBuffer*>(W.Buffer);
+			VkDescriptorBufferInfo& Info = BufferInfos.emplace_back();
+			Info.buffer = VkBuf->GetVkBuffer();
+			Info.offset = W.Offset;
+			Info.range = W.Range > 0 ? W.Range : VK_WHOLE_SIZE;
+
+			VkWrite.pBufferInfo = &BufferInfos.back();
+			bHasInfo = (Info.buffer != VK_NULL_HANDLE);
+		}
+		else if (W.Type == ERHIDescriptorType::CombinedImageSampler && W.TextureView != nullptr)
+		{
+			auto* VkView = static_cast<FVulkanTextureView*>(W.TextureView);
+			auto* VkSampler = (W.Sampler != nullptr) ? static_cast<FVulkanSampler*>(W.Sampler) : nullptr;
+
+			VkDescriptorImageInfo& Info = ImageInfos.emplace_back();
+			Info.imageView = VkView->GetVkImageView();
+			Info.sampler = VkSampler ? VkSampler->GetVkSampler() : VK_NULL_HANDLE;
+			Info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+			VkWrite.pImageInfo = &ImageInfos.back();
+			bHasInfo = (Info.imageView != VK_NULL_HANDLE);
+		}
+
+		if (bHasInfo)
+		{
+			VkWrites.push_back(VkWrite);
+		}
+	}
+
+	if (!VkWrites.empty())
+	{
+		vkUpdateDescriptorSets(Device, static_cast<std::uint32_t>(VkWrites.size()),
+			VkWrites.data(), 0, nullptr);
+	}
+}
+
 FRHIRenderPass* FVulkanRHI::CreateRenderPass(const FRHIRenderPassDesc& Desc)
 {
 	std::vector<VkAttachmentDescription> Attachments;

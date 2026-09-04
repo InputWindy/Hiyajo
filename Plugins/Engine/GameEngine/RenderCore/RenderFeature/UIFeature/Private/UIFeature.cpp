@@ -113,10 +113,16 @@ bool FUIFeature::EnsureUIBackend(FRender& R)
 		MAHO_LOG_CORE_ERROR("FUIFeature: UI sampler failed");
 		return false;
 	}
-	// Pool-owned descriptor set: the pool creates a pool sized from the layout's
-	// bindings and allocates the set from it (returns the set handle). The set WRITE
-	// (UpdateDescriptorSets) is recorded in the one-time font-upload submit below.
-	FontDescriptorSet = R.CreateDescriptorSet(FontSetLayout, FontSetDesc);
+	// Pool-owned descriptor set: content-addressable get-or-create keyed by the set
+	// layout + referenced resources. The pool writes the descriptor content (font
+	// view + sampler) at allocation time -- a device-level op (vkUpdateDescriptorSets),
+	// not a recorded vkCmd -- so no write is deferred into a pass.
+	FRHIDescriptorWrite FontWrite;
+	FontWrite.Binding = 0;
+	FontWrite.Type = ERHIDescriptorType::CombinedImageSampler;
+	FontWrite.TextureView = FontTexture.GetView();
+	FontWrite.Sampler = FontSampler;
+	FontDescriptorSet = R.GetOrCreateDescriptorSet(FontSetLayout, FontSetDesc, &FontWrite, 1);
 	if (FontDescriptorSet == nullptr)
 	{
 		MAHO_LOG_CORE_ERROR("FUIFeature: UI descriptor set failed");
@@ -168,13 +174,6 @@ void FUIFeature::UploadFont(FRender& R)
 			Cmd.CopyBufferToTexture(FontStaging.GetRHI(), FontTexture.GetRHI(), 0);
 			Cmd.TransitionTexture(FontTexture.GetRHI(), ERHIResourceState::CopyDst, ERHIResourceState::ShaderResource);
 		}
-		FRHIDescriptorWrite FontWrite;
-		FontWrite.Set = FontDescriptorSet;
-		FontWrite.Binding = 0;
-		FontWrite.Type = ERHIDescriptorType::CombinedImageSampler;
-		FontWrite.TextureView = FontTexture.GetView();
-		FontWrite.Sampler = FontSampler;
-		Cmd.UpdateDescriptorSets(&FontWrite, 1);
 		bFontUploaded = true;
 	});
 }

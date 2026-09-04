@@ -107,6 +107,12 @@ public:
 	virtual void DestroyDescriptorPool(FRHIDescriptorPool* Pool) = 0;
 	[[nodiscard]] virtual FRHIDescriptorSet* AllocateDescriptorSet(FRHIDescriptorPool* Pool, FRHIDescriptorSetLayout* Layout) = 0;
 	virtual void FreeDescriptorSet(FRHIDescriptorPool* Pool, FRHIDescriptorSet* Set) = 0;
+	/**
+	 * Write descriptor set contents (device-level -- maps to vkUpdateDescriptorSets,
+	 * an immediate CPU op, and is NOT a recorded vkCmd). No command buffer needed;
+	 * callable whenever the set + referenced resources are valid.
+	 */
+	virtual void UpdateDescriptorSets(const FRHIDescriptorWrite* Writes, std::uint32_t Count) = 0;
 	[[nodiscard]] virtual FRHIRenderPass* CreateRenderPass(const FRHIRenderPassDesc& Desc) = 0;
 	virtual void DestroyRenderPass(FRHIRenderPass* Pass) = 0;
 	[[nodiscard]] virtual FRHIFramebuffer* CreateFramebuffer(const FRHIFramebufferDesc& Desc) = 0;

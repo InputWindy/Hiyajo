@@ -19,7 +19,7 @@ Initialize(Engine):
        if !RHI->Initialize(P->GetNativeWindow(), P->GetWindowWidth(), P->GetWindowHeight()):
            MAHO_LOG_CORE_ERROR("FRender::Initialize: RHI initialization failed")
            RHI.reset()
-3. ResourcePool = make_unique<FRenderResourcePool>(RHI.get())
+3. ResourcePool = make_unique<FRHIResourcePool>(RHI.get())
 4. ShaderCompiler = make_unique<FShaderCompilerServer>(); ShaderCompiler->Initialize()
 5. RenderGraph = make_unique<FLayerTaskGraph<FRenderStages, FRender>>(Pool, *this)
 6. Install("Scene.dll"); Install("DrawTriangleFeature.dll")   // 项目插件进我们的 collector
@@ -92,7 +92,7 @@ Present(Src):
 ## RenderResourcePool.cpp
 
 <a id="fn-pool-createtex"></a>
-### FRenderResourcePool::CreateTexture(const FRHITextureDesc& Desc, bool bTransient)
+### FRHIResourcePool::CreateTexture(const FRHITextureDesc& Desc, bool bTransient)
 
 ← [公开 API](API.md) · `FRDGTextureRef`
 
@@ -116,7 +116,7 @@ CreateTexture(Desc, bTransient):
 ```
 
 <a id="fn-pool-createbuf"></a>
-### FRenderResourcePool::CreateBuffer(const FRHIBufferDesc& Desc, bool bTransient)
+### FRHIResourcePool::CreateBuffer(const FRHIBufferDesc& Desc, bool bTransient)
 
 ← [公开 API](API.md) · `FRDGBufferRef`
 
@@ -137,7 +137,7 @@ CreateBuffer(Desc, bTransient):
 ```
 
 <a id="fn-pool-release"></a>
-### FRenderResourcePool::ReleaseTexture / ReleaseBuffer
+### FRHIResourcePool::ReleaseTexture / ReleaseBuffer
 
 ← [公开 API](API.md) · `void`
 
@@ -157,7 +157,7 @@ ReleaseTexture(Ref):
 ```
 
 <a id="fn-pool-beginframe"></a>
-### FRenderResourcePool::BeginFrame()
+### FRHIResourcePool::BeginFrame()
 
 ← [公开 API](API.md) · `void`
 
@@ -177,7 +177,7 @@ BeginFrame():
 ```
 
 <a id="fn-pool-shutdown"></a>
-### FRenderResourcePool::Shutdown()
+### FRHIResourcePool::Shutdown()
 
 ← [公开 API](API.md) · `void`
 

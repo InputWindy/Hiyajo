@@ -459,6 +459,14 @@ void FRHI::FreeDescriptorSet(FRHIDescriptorPool* Pool, FRHIDescriptorSet* Set)
 	}
 }
 
+void FRHI::UpdateDescriptorSets(const FRHIDescriptorWrite* Writes, std::uint32_t Count)
+{
+	if (RHI)
+	{
+		RHI->UpdateDescriptorSets(Writes, Count);
+	}
+}
+
 FRHIRenderPass* FRHI::CreateRenderPass(const FRHIRenderPassDesc& Desc)
 {
 	return RHI ? RHI->CreateRenderPass(Desc) : nullptr;

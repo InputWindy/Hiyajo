@@ -80,7 +80,7 @@ void FRender::Initialize(FEngineBase& Engine)
 	}
 
 	// RDG resource pool (off-screen textures/buffers, cross-frame reuse).
-	ResourcePool = std::make_unique<FRenderResourcePool>(RHI.get());
+	ResourcePool = std::make_unique<FRHIResourcePool>(RHI.get());
 
 	// Async shader compiler (dedicated compile thread).
 	ShaderCompiler = std::make_unique<FShaderCompilerServer>();
@@ -489,9 +489,13 @@ FRHISampler* FRender::CreateSampler(const FRHISamplerDesc& Desc)
 	return ResourcePool ? ResourcePool->CreateSampler(Desc) : nullptr;
 }
 
-FRHIDescriptorSet* FRender::CreateDescriptorSet(FRHIDescriptorSetLayout* Layout, const FRHIDescriptorSetLayoutDesc& LayoutDesc)
+FRHIDescriptorSet* FRender::GetOrCreateDescriptorSet(
+	FRHIDescriptorSetLayout* Layout,
+	const FRHIDescriptorSetLayoutDesc& LayoutDesc,
+	const FRHIDescriptorWrite* Writes,
+	std::uint32_t WriteCount)
 {
-	return ResourcePool ? ResourcePool->CreateDescriptorSet(Layout, LayoutDesc) : nullptr;
+	return ResourcePool ? ResourcePool->GetOrCreateDescriptorSet(Layout, LayoutDesc, Writes, WriteCount) : nullptr;
 }
 
 std::uint32_t FRender::GetCanvasWidth() const
@@ -613,15 +617,15 @@ bool FRender::UploadTextureMirror(const Name::FName& AssetName, Resource::FTextu
 	// unload / export sees it.
 	GpuMirrors[AssetName] = TexRef;
 
-	// Build the UI image handle (a set-0 CombinedImageSampler descriptor set shared
-	// with the UI font layout) so ImGui::Image can display this mirror. Sampler is
-	// pool-cached by descriptor (ClampToEdge, matching the UI font).
-	FRHIDescriptorSet* UISet = CreateMirrorUIImage(AssetName, TexRef);
 	FRHISamplerDesc MirrorSamplerDesc;
 	MirrorSamplerDesc.AddressU = ERHIAddressMode::ClampToEdge;
 	MirrorSamplerDesc.AddressV = ERHIAddressMode::ClampToEdge;
 	MirrorSamplerDesc.AddressW = ERHIAddressMode::ClampToEdge;
 	FRHISampler* MirrorSampler = CreateSampler(MirrorSamplerDesc);
+	// Build the UI image handle (a set-0 CombinedImageSampler descriptor set shared
+	// with the UI font layout) so ImGui::Image can display this mirror. The pool
+	// writes the descriptor content (texture view + sampler) at allocation time.
+	FRHIDescriptorSet* UISet = CreateMirrorUIImage(AssetName, TexRef, MirrorSampler);
 
 	// One transfer submit outside a render pass: copy the CPU pixels into a staging
 	// buffer then CopyBufferToTexture. UIFeature::UploadFont follows the same
@@ -637,23 +641,12 @@ bool FRender::UploadTextureMirror(const Name::FName& AssetName, Resource::FTextu
 		Cmd.TransitionTexture(RHITex, ERHIResourceState::Common, ERHIResourceState::CopyDst);
 		Cmd.CopyBufferToTexture(RHIStaging, RHITex, 0);
 		Cmd.TransitionTexture(RHITex, ERHIResourceState::CopyDst, ERHIResourceState::ShaderResource);
-		if (UISet != nullptr && MirrorSampler != nullptr)
-		{
-			FRHIDescriptorWrite MirrorWrite;
-			MirrorWrite.Set = UISet;
-			MirrorWrite.Binding = 0;
-			MirrorWrite.Type = ERHIDescriptorType::CombinedImageSampler;
-			MirrorWrite.TextureView = TexRef.GetView();
-			MirrorWrite.Sampler = MirrorSampler;
-			Cmd.UpdateDescriptorSets(&MirrorWrite, 1);
-		}
 	});
 	return true;
 }
 
-FRHIDescriptorSet* FRender::CreateMirrorUIImage(const Name::FName& AssetName, const FRDGTextureRef& Tex)
+FRHIDescriptorSet* FRender::CreateMirrorUIImage(const Name::FName& AssetName, const FRDGTextureRef& Tex, FRHISampler* Sampler)
 {
-	(void)Tex;
 	// Same set-0 CombinedImageSampler + Fragment desc as the UI font layout, so the
 	// get-or-create returns the shared layout and the bound set is accepted by the
 	// UI pipeline's set-0 binding.
@@ -669,7 +662,12 @@ FRHIDescriptorSet* FRender::CreateMirrorUIImage(const Name::FName& AssetName, co
 	{
 		return nullptr;
 	}
-	FRHIDescriptorSet* Set = CreateDescriptorSet(Layout, Desc);
+	FRHIDescriptorWrite Write;
+	Write.Binding = 0;
+	Write.Type = ERHIDescriptorType::CombinedImageSampler;
+	Write.TextureView = Tex.GetView();
+	Write.Sampler = Sampler;
+	FRHIDescriptorSet* Set = GetOrCreateDescriptorSet(Layout, Desc, &Write, 1);
 	if (Set != nullptr)
 	{
 		MirrorUISets[AssetName] = Set;

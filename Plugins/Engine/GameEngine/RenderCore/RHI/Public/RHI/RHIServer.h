@@ -133,6 +133,13 @@ struct IRHI
 	virtual void DestroyDescriptorPool(FRHIDescriptorPool* Pool) = 0;
 	[[nodiscard]] virtual FRHIDescriptorSet* AllocateDescriptorSet(FRHIDescriptorPool* Pool, FRHIDescriptorSetLayout* Layout) = 0;
 	virtual void FreeDescriptorSet(FRHIDescriptorPool* Pool, FRHIDescriptorSet* Set) = 0;
+	/**
+	 * Write descriptor set contents (device-level -> vkUpdateDescriptorSets, an
+	 * immediate CPU op, NOT a recorded vkCmd). No command buffer needed; the pool
+	 * owner calls it once when it creates a descriptor set, so set content is
+	 * written at allocation time instead of being deferred into a pass.
+	 */
+	virtual void UpdateDescriptorSets(const FRHIDescriptorWrite* Writes, std::uint32_t Count) = 0;
 	[[nodiscard]] virtual FRHIRenderPass* CreateRenderPass(const FRHIRenderPassDesc& Desc) = 0;
 	virtual void DestroyRenderPass(FRHIRenderPass* Pass) = 0;
 	[[nodiscard]] virtual FRHIFramebuffer* CreateFramebuffer(const FRHIFramebufferDesc& Desc) = 0;
@@ -295,6 +302,7 @@ public:
 	void DestroyDescriptorPool(FRHIDescriptorPool* Pool) override;
 	[[nodiscard]] FRHIDescriptorSet* AllocateDescriptorSet(FRHIDescriptorPool* Pool, FRHIDescriptorSetLayout* Layout) override;
 	void FreeDescriptorSet(FRHIDescriptorPool* Pool, FRHIDescriptorSet* Set) override;
+	void UpdateDescriptorSets(const FRHIDescriptorWrite* Writes, std::uint32_t Count) override;
 	[[nodiscard]] FRHIRenderPass* CreateRenderPass(const FRHIRenderPassDesc& Desc) override;
 	void DestroyRenderPass(FRHIRenderPass* Pass) override;
 	[[nodiscard]] FRHIFramebuffer* CreateFramebuffer(const FRHIFramebufferDesc& Desc) override;

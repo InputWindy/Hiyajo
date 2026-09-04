@@ -33,7 +33,7 @@ Tick:
 
 ### 3. RDG 资源池
 
-`FRDGTextureRef` / `FRDGBufferRef` 是非 RHI 句柄，原生 `FRHITexture` / `FRHIBuffer` 活在 `FRenderResourcePool` 里。**持久资源**按描述符复用（refcount）；**transient 资源**每帧过期（BeginFrame 销毁原生对象），下一次同描述符创建拿到新对象。`Present(Ref)` 是唯一接触交换链后缓冲的入口。
+`FRDGTextureRef` / `FRDGBufferRef` 是非 RHI 句柄，原生 `FRHITexture` / `FRHIBuffer` 活在 `FRHIResourcePool` 里。**持久资源**按描述符复用（refcount）；**transient 资源**每帧过期（BeginFrame 销毁原生对象），下一次同描述符创建拿到新对象。`Present(Ref)` 是唯一接触交换链后缓冲的入口。
 
 ```cpp
 FRDGTextureRef Scene = Render.CreateTexture(SceneDesc, /*bTransient=*/false);
@@ -47,7 +47,7 @@ Render.ReleaseTexture(Scene);
 ```text
 Initialize:
   1. RHI = make_unique<FRHI>(); RHI->Initialize(Platform->GetNativeWindow(), W, H)
-  2. ResourcePool = make_unique<FRenderResourcePool>(RHI.get())
+  2. ResourcePool = make_unique<FRHIResourcePool>(RHI.get())
   3. ShaderCompiler = make_unique<FShaderCompilerServer>(); ShaderCompiler->Initialize()
   4. RenderGraph = make_unique<FLayerTaskGraph<FRenderStages, FRender>>(Pool, *this)
   5. Install("Scene.dll"); Install("DrawTriangleFeature.dll")

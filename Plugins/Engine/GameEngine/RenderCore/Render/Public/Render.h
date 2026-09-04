@@ -32,7 +32,7 @@ namespace Maho
 {
 
 class FRender;
-class FRenderResourcePool;
+class FRHIResourcePool;
 
 /** Render-side GPU mirror of a CPU asset: an RDG texture (texture asset) or an
  *  RDG buffer (mesh asset). A single mirror table maps asset FName -> this ref,
@@ -198,7 +198,7 @@ public:
 	/** Acquire a render list, run Record mid-pass, End + Submit. Shared by the
 	 *  plain AddPass and the PSO-resolving AddPass (which records
 	 *  BeginRendering/Bind/End around the feature's draw lambda). Keeping this
-	 *  non-template keeps FRenderResourcePool complete only in Render.cpp. */
+	 *  non-template keeps FRHIResourcePool complete only in Render.cpp. */
 	void SubmitPass(ERHICommandListType PassType, std::function<void(FRHICommandList&)> Record);
 
 	/**
@@ -293,11 +293,16 @@ public:
 	 *  (destroyed at Shutdown); a feature holds only the handle. */
 	[[nodiscard]] FRHISampler* CreateSampler(const FRHISamplerDesc& Desc);
 
-	/** Pool-owned descriptor set: allocates one set from a pool the pool owns (sized
-	 *  from the set layout's bindings) and returns the set handle. Each call is a
-	 *  fresh set -- a feature creates it once (backend setup) and keeps the handle;
+	/** Pool-owned descriptor set: content-addressable get-or-create keyed by the set
+	 *  layout + referenced resources (a feature builds the FRHIDescriptorWrite array
+	 *  and the pool writes it at allocation time via IRHI::UpdateDescriptorSets -- a
+	 *  device-level op, not a recorded vkCmd). A feature holds only the set handle;
 	 *  the pool destroys pool+set at Shutdown. */
-	[[nodiscard]] FRHIDescriptorSet* CreateDescriptorSet(FRHIDescriptorSetLayout* Layout, const FRHIDescriptorSetLayoutDesc& LayoutDesc);
+	[[nodiscard]] FRHIDescriptorSet* GetOrCreateDescriptorSet(
+		FRHIDescriptorSetLayout* Layout,
+		const FRHIDescriptorSetLayoutDesc& LayoutDesc,
+		const FRHIDescriptorWrite* Writes,
+		std::uint32_t WriteCount);
 
 	/**
 	 * Shader resource: async compile + explicit-sync handle. The first call per T
@@ -399,7 +404,7 @@ public:
 private:
 	std::unique_ptr<FRHI> RHI;   // the render server (not a scheduled layer)
 	std::unique_ptr<FShaderCompilerServer> ShaderCompiler;   // async GLSL -> SPIR-V
-	std::unique_ptr<FRenderResourcePool> ResourcePool;   // RDG resource pool
+	std::unique_ptr<FRHIResourcePool> ResourcePool;   // RDG resource pool
 
 	// Render graph stages. The swapchain frame lifecycle (acquire / end + present)
 	// lives on the host FRender::BeginFrame/EndFrame (engine stages); the graph
@@ -424,7 +429,7 @@ private:
 
 	/** Build a descriptor set for a mirror texture and store it as its ImTextureID.
 	 *  Called once per mirror upload. May return null (no UI needs it yet). */
-	[[nodiscard]] FRHIDescriptorSet* CreateMirrorUIImage(const Name::FName& AssetName, const FRDGTextureRef& Tex);
+	[[nodiscard]] FRHIDescriptorSet* CreateMirrorUIImage(const Name::FName& AssetName, const FRDGTextureRef& Tex, FRHISampler* Sampler);
 
 	/** Test harness: show every texture mirror in an ImGui window (before Render).
 	 *  Reads MirrorUISets as ImTextureID, sizes the image from the mirror RDG. */

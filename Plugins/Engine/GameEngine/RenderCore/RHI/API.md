@@ -47,6 +47,7 @@ RHI 插件 = 后端无关的 GPU 设备面，形态是**渲染服务器**（`FRH
 | `CreateBuffer / CreateTexture / CreateSampler / CreateShaderModule / CreateGraphicsPipeline / CreateComputePipeline / CreateStructuredBuffer / CreateBufferView / CreateTextureView / CreateDescriptorSetLayout / CreatePipelineLayout / CreateDescriptorPool / CreateRenderPass / CreateFramebuffer`（各带 `const <Desc>&`）+ 对应 `Destroy*` | 内部资源工厂——Create/Destroy 一一配对，见下表 |
 | `[[nodiscard]] FRHIDescriptorSet* AllocateDescriptorSet(FRHIDescriptorPool* Pool, FRHIDescriptorSetLayout* Layout)` | 从池分配描述符集 |
 | `void FreeDescriptorSet(FRHIDescriptorPool* Pool, FRHIDescriptorSet* Set)` | 释放描述符集回池 |
+| `void UpdateDescriptorSets(const FRHIDescriptorWrite* Writes, uint32_t Count)` | 写描述符集内容——设备级（→ vkUpdateDescriptorSets，立即 CPU 操作），**非记录式 vkCmd，无需命令缓冲**：池所有者在创建描述符集时一次性写入 |
 
 #### 接口（swapchain 尺寸）
 
@@ -126,7 +127,7 @@ Graphics / Compute / Transfer 三个逻辑端点**总是存在**。Transfer/Comp
 
 ### FRHICommandList <class（命令录制面）>
 
-命令录制面（≈ VkCommandBuffer）。能力取决于 `GetType()`，非法调用 Debug 下断言。**记录式**：`Begin` 后录制、`End` 提交；`UpdateBuffer` / `UpdateDescriptorSets` 也是录制语义（在 `EnqueueTask` 内执行）。
+命令录制面（≈ VkCommandBuffer）。能力取决于 `GetType()`，非法调用 Debug 下断言。**记录式**：`Begin` 后录制、`End` 提交；`UpdateBuffer` 也是录制语义（在 `EnqueueTask` 内执行）。描述符集内容写入不在本面——它是设备级操作（见 `IRHI::UpdateDescriptorSets`）。
 
 #### 接口（录制控制 / 类型）
 
@@ -145,7 +146,6 @@ Graphics / Compute / Transfer 三个逻辑端点**总是存在**。Transfer/Comp
 | `void CopyTextureToBuffer(FRHITexture* Src, FRHIBuffer* Dst, uint64_t DstOffset)` | texture → buffer 拷贝 |
 | `void FillBuffer(FRHIBuffer* Buffer, uint64_t Offset, uint64_t Size, uint32_t Data)` | 填充缓冲 |
 | `void UpdateBuffer(FRHIBuffer* Buffer, uint64_t Offset, uint64_t Size, const void* Data)` | 上传 CPU 数据：host-visible 缓冲直接写；device-local 走 staging 拷贝 |
-| `void UpdateDescriptorSets(const FRHIDescriptorWrite* Writes, uint32_t Count)` | 更新描述符（记录式——实际 vkUpdateDescriptorSets，立即 CPU 操作） |
 | `void TransitionBuffer(FRHIBuffer* Buffer, ERHIResourceState OldState, ERHIResourceState NewState)` | 缓冲状态 / 屏障转换 |
 | `void TransitionTexture(FRHITexture* Texture, ERHIResourceState OldState, ERHIResourceState NewState)` | 纹理状态 / 屏障转换 |
 

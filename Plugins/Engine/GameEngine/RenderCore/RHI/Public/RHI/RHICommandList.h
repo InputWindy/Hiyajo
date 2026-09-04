@@ -76,8 +76,6 @@ public:
 	 * through a staging copy.
 	 */
 	virtual void UpdateBuffer(FRHIBuffer* Buffer, std::uint64_t Offset, std::uint64_t Size, const void* Data) = 0;
-	/** Update descriptor sets (recorded - vkUpdateDescriptorSets, immediate CPU op). */
-	virtual void UpdateDescriptorSets(const FRHIDescriptorWrite* Writes, std::uint32_t Count) = 0;
 	virtual void TransitionBuffer(FRHIBuffer* Buffer, ERHIResourceState OldState, ERHIResourceState NewState) = 0;
 	virtual void TransitionTexture(FRHITexture* Texture, ERHIResourceState OldState, ERHIResourceState NewState) = 0;
 
