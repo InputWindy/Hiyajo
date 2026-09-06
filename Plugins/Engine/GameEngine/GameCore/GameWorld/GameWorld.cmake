@@ -18,6 +18,8 @@ target_include_directories(GameWorld PUBLIC
 	"${ENGINE_DIR}/Source/Public"
 	"${CMAKE_CURRENT_LIST_DIR}/Public"
 	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEngine/Public"
+	"${ENGINE_DIR}/Plugins/Engine/GameEngine/EngineCore/Resource/Public"
+	"${ENGINE_DIR}/Plugins/Engine/GameEngine/EngineCore/Asset/Public"
 )
 target_include_directories(GameWorld PRIVATE
 	"${ENGINE_DIR}/Plugins/Engine/GameEngine/GameCore/SystemGroup/UISystem/Public"
@@ -26,6 +28,7 @@ set_target_properties(GameWorld PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 target_compile_definitions(GameWorld PRIVATE MAHO_GAMEWORLD_MODULE_EXPORTS)
 target_link_libraries(GameWorld PUBLIC Maho)
 set_property(TARGET GameWorld PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>")
+target_link_libraries(GameWorld PUBLIC Resource Asset)
 set_target_properties(GameWorld PROPERTIES FOLDER "Maho/Plugins/Engine/GameEngine/GameCore")
 source_group(TREE "${CMAKE_CURRENT_LIST_DIR}" FILES ${GameWorld_PUBLIC_HEADERS} ${GameWorld_PRIVATE_HEADERS} ${GameWorld_PRIVATE_SOURCES})
 # -- /MAHOGEN GameWorld --

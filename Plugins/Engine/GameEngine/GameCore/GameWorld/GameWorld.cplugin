@@ -2,7 +2,10 @@
   "FileVersion": 1,
   "Name": "GameWorld",
   "Description": "ECS game world (entities/components/systems)",
-  "Dependencies": [],
+  "Dependencies": [
+    "Resource",
+    "Asset"
+  ],
   "PrivateIncludes": [
     "UISystem"
   ]

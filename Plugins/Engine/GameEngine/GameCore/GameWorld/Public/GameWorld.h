@@ -135,6 +135,26 @@ public:
 		}
 	}
 
+	/** Collect every alive entity that has a component of type C (any owner --
+	 *  world or a system). Used by renderers/visualizers to iterate the full set
+	 *  of, e.g., FUIWidget entities regardless of who created them. */
+	template <typename C>
+	std::vector<FEntity> GetAllWithComponent()
+	{
+		std::vector<FEntity> Out;
+		if (TComponentPool<C>* Pool = GetPool<C>())
+		{
+			for (std::uint32_t I = 0; I < Pool->Capacity(); ++I)
+			{
+				if (Pool->Get(I) != nullptr)
+				{
+					Out.push_back(FEntity{ I, 0u });
+				}
+			}
+		}
+		return Out;
+	}
+
 	// -- frame loop driver -------------------------------------------------------
 	void SetFixedStep(float Seconds) { FixedStepSeconds = Seconds; }
 	[[nodiscard]] float GetFixedStep() const { return FixedStepSeconds; }
@@ -195,6 +215,8 @@ private:
 
 	FEntityRegistry Registry;
 	std::vector<std::unique_ptr<IComponentPool>> ComponentPools;   // one TComponentPool<T> per component type
+
+	FEntity DefaultUIEntity;   // default UI widget host (owned by the world; destroyed in Shutdown)
 
 	std::chrono::steady_clock::time_point LastFrame = std::chrono::steady_clock::now();
 	float DeltaSeconds = 0.f;

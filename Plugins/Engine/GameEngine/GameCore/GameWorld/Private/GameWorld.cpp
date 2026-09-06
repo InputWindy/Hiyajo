@@ -4,6 +4,12 @@
 // the private cpp so GameWorld.h stays free of world-system types.
 #include <UISystem.h>
 
+// Resource texture enumeration for the default UI widget (FUIWidget::Image controls).
+#include <Resource.h>
+#include <AssetTypes.h>
+
+#include <vector>
+
 namespace Maho
 {
 namespace GameWorld
@@ -65,6 +71,40 @@ void FGameWorld::Initialize(FEngineBase&)
 		// Component attached + read back correctly.
 	}
 
+	// Default UI entity: bind the ECS UI component (FUIWidget) to a default entity and
+	// enumerate every texture the FResourceSystem has loaded into FUIControl::Image
+	// controls. UISystem's Update renders ALL FUIWidget entities (see
+	// GetAllWithComponent), so this widget is drawn with ImGui::Image exactly like any
+	// other -- the world defines WHAT (data), the UI system defines HOW (ImGui).
+	DefaultUIEntity = CreateEntity();
+	AddComponent<FTransform>(DefaultUIEntity, FTransform{ 60.f, 60.f, 0.f });
+
+	FUIWidget W;
+	W.X = 60.f;
+	W.Y = 60.f;
+	W.Width = 520.f;
+	W.Height = 440.f;
+	W.bVisible = true;
+	W.Controls.push_back(FUIControl{ EUIControlType::Label, "default texture browser" });
+	W.Controls.push_back(FUIControl{ EUIControlType::Separator });
+	if (Resource::FResourceSystem* RS = Resource::GetResourceSystem())
+	{
+		RS->ForEachResource([&](const Name::FName& AssetName, const Resource::FResource& Res)
+		{
+			const Resource::FTexture* Tex = dynamic_cast<const Resource::FTexture*>(&Res);
+			if (Tex == nullptr || Tex->GetWidth() == 0 || Tex->GetHeight() == 0)
+			{
+				return;
+			}
+			const std::uint32_t TexId = AssetName.GetId();
+			// FUIControl::Image renders at (V0, V1) -- use a fixed thumbnail size so a
+			// full-resolution texture does not blow out the widget window.
+			W.Controls.push_back(FUIControl{ EUIControlType::Image, "", TexId, 0u,
+				128.f, 128.f });
+		});
+	}
+	AddComponent<FUIWidget>(DefaultUIEntity, W);
+
 	// Install the world systems (peer layers). Applied at the next Tick's
 	// FlushPendingUpdatePipelines safe point (IOnInstalled).
 	Install<GameWorld::FUISystem>();
@@ -118,6 +158,11 @@ void FGameWorld::Tick(FEngineBase&)
 
 void FGameWorld::Shutdown(FEngineBase&)
 {
+	if (DefaultUIEntity.IsValid())
+	{
+		DestroyEntity(DefaultUIEntity);
+		DefaultUIEntity = {};
+	}
 	if (WorldGraph)
 	{
 		WorldGraph->Flush();   // drain any leftover world-system tasks
