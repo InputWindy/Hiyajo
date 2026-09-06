@@ -20,6 +20,8 @@ target_include_directories(UIFeature PUBLIC
 	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEngine/Public"
 	"${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/Render/Public"
 	"${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/Scene/Public"
+	"${ENGINE_DIR}/Plugins/Engine/GameEngine/GameCore/GameWorld/Public"
+	"${ENGINE_DIR}/Plugins/Engine/GameEngine/GameCore/SystemGroup/UISystem/Public"
 )
 target_include_directories(UIFeature PRIVATE
 	"${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/DrawTriangleFeature/Public"
@@ -29,27 +31,50 @@ set_target_properties(UIFeature PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 target_compile_definitions(UIFeature PRIVATE MAHO_UIFEATURE_MODULE_EXPORTS)
 target_link_libraries(UIFeature PUBLIC Maho)
 set_property(TARGET UIFeature PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>")
-target_link_libraries(UIFeature PUBLIC Render Scene)
+target_link_libraries(UIFeature PUBLIC Render Scene GameWorld UISystem)
 set_target_properties(UIFeature PROPERTIES FOLDER "Maho/Plugins/Engine/GameEngine/RenderCore/RenderFeature")
 source_group(TREE "${CMAKE_CURRENT_LIST_DIR}" FILES ${UIFeature_PUBLIC_HEADERS} ${UIFeature_PRIVATE_HEADERS} ${UIFeature_PRIVATE_SOURCES})
 # -- /MAHOGEN UIFeature --
 
 # UIFeature: third-party dependencies.
-# Dear ImGui (docking branch) is compiled INTO UIFeature.dll -- the feature is the
-# SOLE owner of the ImGui context (created/destroyed in OnInstalled/PreUnInstall)
-# and translates ImDrawData into an FDrawList for FRender::AddPass. NO
-# imgui_impl_* backend -- rendering is the project's custom FRHI backend.
+# Dear ImGui (docking branch) is compiled into a SHARED "maho_imgui" library so
+# BOTH the UI render feature (owns the context + drives the frame) and the game-side
+# UISystem (submits the UI draw closures to the UIBuilder) link ONE
+# process-wide ImGui instance -- a single GImGui shared across the two DLLs. A shared
+# lib is REQUIRED: two plugin DLLs each statically linking their own imgui.cpp would
+# get separate ImGui state, and the context would crash. The feature still owns the
+# ImGui context (created/destroyed in OnInstalled/PreUnInstall) and translates
+# ImDrawData into an FDrawList for FRender::AddPass. NO imgui_impl_* backend --
+# rendering is the project's custom FRHI backend.
 maho_git_repository_url(_IMGUI_URL https://github.com/ocornut/imgui.git)
 maho_fetchcontent_populate_or_reuse(imgui ${_IMGUI_URL} v1.91.9-docking imgui.h)
 unset(_IMGUI_URL)
 
-target_sources(UIFeature PRIVATE
-	"${imgui_SOURCE_DIR}/imgui.cpp"
-	"${imgui_SOURCE_DIR}/imgui_demo.cpp"
-	"${imgui_SOURCE_DIR}/imgui_draw.cpp"
-	"${imgui_SOURCE_DIR}/imgui_tables.cpp"
-	"${imgui_SOURCE_DIR}/imgui_widgets.cpp"
-)
+if(NOT TARGET maho_imgui)
+	add_library(maho_imgui SHARED
+		"${imgui_SOURCE_DIR}/imgui.cpp"
+		"${imgui_SOURCE_DIR}/imgui_demo.cpp"
+		"${imgui_SOURCE_DIR}/imgui_draw.cpp"
+		"${imgui_SOURCE_DIR}/imgui_tables.cpp"
+		"${imgui_SOURCE_DIR}/imgui_widgets.cpp"
+	)
+	target_include_directories(maho_imgui PUBLIC "${imgui_SOURCE_DIR}")
+	set_target_properties(maho_imgui PROPERTIES
+		WINDOWS_EXPORT_ALL_SYMBOLS ON
+		FOLDER "ThirdParty"
+	)
+	set_property(TARGET maho_imgui PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>")
+endif()
+
+# The feature links the ImGui symbols (NewFrame/Render/GetDrawData) and the UI system
+# (GetUISystem + GetUIBuilder) that it pulls every frame.
+target_link_libraries(UIFeature PUBLIC maho_imgui)
+
+# The feature pulls the game-side UI commands from the UIBuilder: it includes
+# <UISystem.h> (which pulls <GameWorld.h>) and links the UISystem + its GameWorld
+# dependency.
 target_include_directories(UIFeature PUBLIC
-	"${imgui_SOURCE_DIR}"
+	"${ENGINE_DIR}/Plugins/Engine/GameEngine/GameCore/GameWorld/Public"
+	"${ENGINE_DIR}/Plugins/Engine/GameEngine/GameCore/SystemGroup/UISystem/Public"
 )
+target_link_libraries(UIFeature PUBLIC UISystem GameWorld)

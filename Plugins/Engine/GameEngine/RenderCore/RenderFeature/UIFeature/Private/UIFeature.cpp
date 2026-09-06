@@ -4,6 +4,9 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <exception>
+#include <functional>
+#include <string>
 #include <utility>
 #include <vector>
 #include <DrawTriangleFeature.h>
@@ -11,6 +14,7 @@
 #include <Log.h>
 #include <Platform.h>
 #include <Scene.h>
+#include <UISystem.h>
 #include <RHI/RHICommandList.h>
 #include <RHI/RHIEnums.h>
 #include <RHI/RHIResources.h>
@@ -123,16 +127,10 @@ bool FUIFeature::EnsureUIBackend(FRender& R)
 		MAHO_LOG_CORE_ERROR("FUIFeature: UI font texture failed");
 		return false;
 	}
-	// Register the font texture with its shared sampler; ImGui's TexID is this id. The
-	// draw path resolves the per-batch descriptor set from the RDG texture + sampler
-	// inside AddPass (content-addressable) -- no FRHIDescriptorSet* is produced here.
-	FontId = RegisterTexture(R, FontTexture);
-	if (FontId == 0)
-	{
-		MAHO_LOG_CORE_ERROR("FUIFeature: UI font texture registration failed");
-		return false;
-	}
-	Fonts->TexID = (ImTextureID)FontId;
+	// The font atlas is the PASS-LEVEL set (bound via FUIParameters every RenderUI):
+	// TexID 0 means "no per-batch texture, use the pass-level font set". A NON-zero
+	// ImTextureID holds a mirror FName id (FName::GetId()), resolved per-batch below.
+	Fonts->TexID = 0;
 
 	bUIInit = true;
 	MAHO_LOG_CORE_INFO("FUIFeature: UI font backend ready (font; pipeline fetched per-frame from cache)");
@@ -179,87 +177,11 @@ void FUIFeature::UploadFont(FRender& R)
 	});
 }
 
-FUIFeature::FUIRegistryId FUIFeature::RegisterTexture(FRender& R, const FRDGTextureRef& Tex)
-{
-	if (!Tex.IsValid())
-	{
-		return 0;
-	}
-	// Reuse the existing id for the same GPU texture (content-addressable by RHI
-	// handle) so repeated registration across frames does not grow the registry.
-	for (const auto& [Id, Entry] : TextureRegistry)
-	{
-		if (Entry.Texture.GetRHI() == Tex.GetRHI())
-		{
-			return Id;
-		}
-	}
-	// Pool-owned shared sampler: content-addressable get-or-create by desc, so every
-	// call returns the same sampler (never held as a member).
-	FRHISampler* Sampler = R.CreateSampler(BuildClampSamplerDesc());
-	if (Sampler == nullptr)
-	{
-		MAHO_LOG_CORE_ERROR("FUIFeature: texture sampler failed");
-		return 0;
-	}
-	const FUIRegistryId Id = NextTextureId++;
-	TextureRegistry[Id] = { Tex, Sampler };
-	return Id;
-}
-
-const FUIFeature::FUIRegistryEntry* FUIFeature::FindTexture(FUIRegistryId Id) const
-{
-	const auto It = TextureRegistry.find(Id);
-	return It == TextureRegistry.end() ? nullptr : &It->second;
-}
-
-void FUIFeature::DisplayMirrorImGui(FRender& R)
-{
-	const auto& Mirrors = R.GetMirrors();
-	if (Mirrors.empty())
-	{
-		return;
-	}
-	for (const auto& [AssetName, MirrorRef] : Mirrors)
-	{
-		const FRDGTextureRef* Tex = std::get_if<FRDGTextureRef>(&MirrorRef);
-		if (Tex == nullptr)
-		{
-			continue;
-		}
-		// Register (or re-resolve) the mirror texture + shared sampler; ImGui's texture
-		// id maps to an RDG texture + sampler, resolved by content inside AddPass. No
-		// FRHIDescriptorSet* is created or held here.
-		const FUIRegistryId Id = RegisterTexture(R, *Tex);
-		if (Id == 0)
-		{
-			continue;
-		}
-
-		const std::string Title = "texture mirror: " + std::string(AssetName.ToString());
-		// The mirror window tracks the application frame size every frame, so it
-		// grows/shrinks with the OS window. NoResize: its size is driven by the app
-		// window, not a manual drag handle.
-		const ImVec2& Disp = ImGui::GetIO().DisplaySize;
-		ImGui::SetNextWindowSize(
-			ImVec2(Disp.x * 0.9f, Disp.y * 0.9f),
-			ImGuiCond_Always);
-		if (ImGui::Begin(Title.c_str(), nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse))
-		{
-			// Fit the image into the window content region, preserving aspect ratio, so
-			// it scales up/down with the window (and thus the OS window). Reserve a
-			// line below for the caption text.
-			const ImVec2 Avail = ImGui::GetContentRegionAvail();
-			const float IW = static_cast<float>(Tex->GetWidth());
-			const float IH = static_cast<float>(Tex->GetHeight());
-			constexpr float CaptionH = 20.0f;
-			const float Scale = (std::min)(Avail.x / IW, (Avail.y - CaptionH) / IH);
-			ImGui::Image((ImTextureID)Id, ImVec2(IW * Scale, IH * Scale));
-			ImGui::Text("asset=%s  %ux%u", AssetName.ToString().data(), Tex->GetWidth(), Tex->GetHeight());
-		}
-		ImGui::End();
-	}
-}
+// (The frame's UI orchestration -- the game draws whatever it wants -- now lives in
+// the game-side UISystem's UIBuilder: game UI components Submit draw closures there,
+// and this feature pulls + runs them (FUIBuilder::Execute) between NewFrame and
+// Render below. The feature no longer builds any UI: it only owns the ImGui context
+// + the FName->RDG mirror resolution during draw.)
 
 FUIFeature::FUIFeature()
 {
@@ -268,6 +190,33 @@ FUIFeature::FUIFeature()
 	MyStage<IRenderUI>().IsWaiting<Scene::FScene>().ForStage<IEndRender>();
 	MyStage<IRenderUI>().IsWaiting<FDrawTriangleFeature>().ForStage<IEndRender>();
 	// (FFrame additionally declares IPresent waits for my IRenderUI.)
+}
+
+void FUIFeature::TrySubscribeUI()
+{
+	if (bSubscribedUI)
+	{
+		return;
+	}
+	GameWorld::FUISystem* UI = GameWorld::GetUISystem();
+	if (UI == nullptr)
+	{
+		return;   // world system not installed yet; retry on a later frame
+	}
+	// Handler runs ON THE GAME BROADCAST THREAD, right after the game finished
+	// building this frame's closures (Submit done), and receives the UIBuilder by
+	// reference (no GetUISystem() re-lookup). Copy the batch to THIS feature's snapshot.
+	// The snapshot is replaced, never cleared -- so InitViews always has a complete
+	// frame, even if it runs before the next broadcast.
+	// Keep the returned subscription id so PreUnInstall unsubscribes ONLY this
+	// handler (a subscriber owns its own subscription -- never RemoveAll).
+	m_UISubscription = UI->SubscribeUIHandler([this](const GameWorld::FUIBuilder& Builder)
+	{
+		std::vector<std::function<void()>> Batch = Builder.CopyFrame();
+		std::lock_guard Lock(m_UISnapshotMutex);
+		m_UICommands = std::move(Batch);
+	});
+	bSubscribedUI = true;
 }
 
 void FUIFeature::OnInstalled(FRender& R)
@@ -320,10 +269,16 @@ void FUIFeature::InitViews(FRender& R)
 		return;   // ImGui context or font backend not ready
 	}
 
+	// Serialize the WHOLE ImGui frame behind one mutex: InitViews may run on any
+	// render-pool worker, and different frames can land on different workers. ImGui's
+	// GImGui is a non-thread-safe state machine, so one thread at a time must own
+	// "current frame" (feed -> NewFrame -> build -> Render -> GetDrawData -> translate).
+	// Lock here (before the IO feed) so every ImGui access below is mutually excluded.
+	std::lock_guard<std::mutex> FrameLock(ImGuiFrameMutex);
+
 	// -- Frame feed (Platform window + Win32 input + lazy font-atlas build), then
-	//    NewFrame. The WHOLE ImGui frame lifecycle is driven here on this worker
-	//    thread: feed -> NewFrame -> build UI -> Render -> GetDrawData -> translate.
-	//    No other thread touches ImGui in a frame, so the single-thread contract holds.
+	//    NewFrame. The WHOLE ImGui frame lifecycle is driven here: feed -> NewFrame ->
+	//    build UI -> Render -> GetDrawData -> translate.
 	ImGuiIO& IO = ImGui::GetIO();
 	Platform::FPlatform* P = Platform::GetPlatform();
 	if (P == nullptr)
@@ -372,11 +327,46 @@ void FUIFeature::InitViews(FRender& R)
 	}
 	ImGui::NewFrame();
 
-	// Build the frame UI: the feature's own test-harness windows (texture mirrors).
-	DisplayMirrorImGui(R);
+	// Pull the game-side UI commands from the UISystem's UIBuilder and run them. The
+	// game UI components Submit draw closures (FUIBuilder::Submit) during their Update;
+	// this render worker runs them between NewFrame and Render -- every ImGui call the
+	// game makes stays on this single owner thread. The game defines what to draw;
+	// this feature only owns the ImGui context and the draw-data translation.
+	//
+	// EVENT-DRIVEN SNAPSHOT (NOT a racy Execute): the game update is dispatched
+	// un-flushed (cross-frame pipelined), so calling Execute() here would race the
+	// Submit and sometimes see an EMPTY/partial batch -- ImGui hides windows that were
+	// not Begin()'d that frame, which flickered the widgets. Instead this feature
+	// subscribes to the UI-built event (TrySubscribeUI): on the GAME thread, right
+	// after Submit finished building the frame, the handler copies the UIBuilder batch
+	// into m_UICommands. The snapshot is only REPLACED, never cleared, so every frame
+	// runs a complete set -- no empty-batch flicker.
+	TrySubscribeUI();
+	std::vector<std::function<void()>> Commands;
+	{
+		std::lock_guard Lock(m_UISnapshotMutex);
+		Commands = m_UICommands;   // copy of the last complete frame snapshot
+	}
+	for (auto& Fn : Commands)
+	{
+		try
+		{
+			Fn();
+		}
+		catch (const std::exception& E)
+		{
+			MAHO_LOG_CORE_ERROR("FUIFeature: game UI command threw: {}", E.what());
+		}
+		catch (...)
+		{
+			MAHO_LOG_CORE_ERROR("FUIFeature: game UI command threw an unknown exception");
+		}
+	}
 
-	// Close the frame + take the draw data. The data is valid until the NEXT
-	// NewFrame; we translate + copy it below (SetPrimitiveData owns the copy).
+	// Close the frame + take the draw data. ALWAYS runs -- even if a closure threw
+	// above, the frame is still ended so g.FrameCountEnded stays synchronized. The
+	// data is valid until the NEXT NewFrame; we translate it below and upload it to
+	// a transient GPU buffer.
 	ImGui::Render();
 	ImDrawData* DrawData = ImGui::GetDrawData();
 	if (DrawData == nullptr || !DrawData->Valid || DrawData->CmdListsCount <= 0)
@@ -388,10 +378,10 @@ void FUIFeature::InitViews(FRender& R)
 	}
 
 	// -- Translate ImDrawData -> FDrawList (a feature member so the merged buffer +
-	//    batch vectors reuse capacity across frames). The pass-level CPU primitive
-	//    data is the merged ImDrawData (one vertex/index array); SetPrimitiveData
-	//    COPIES it, so ImGui's buffers need no lifetime beyond here. RenderUI (later,
-	//    same graph) draws from the owned copy via AddPass.
+	//    batch vectors reuse capacity across frames). The pass-level vertex/index GPU
+	//    buffers are the merged ImDrawData (one vertex/index array), created + uploaded
+	//    HERE (InitViews); only the FRDGBufferRefs are stored. RenderUI (later, same
+	//    graph) draws them via AddPass.
 	FDrawList& DrawList = this->DrawList;
 	DrawList.Reset();
 
@@ -418,11 +408,42 @@ void FUIFeature::InitViews(FRender& R)
 			OffI += List->IdxBuffer.Size;
 		}
 	}
-	DrawList.SetPrimitiveData(
-		Verts.data(), static_cast<std::uint64_t>(TotalVerts) * sizeof(ImDrawVert),
-		static_cast<std::uint32_t>(sizeof(ImDrawVert)), static_cast<std::uint32_t>(TotalVerts),
-		Idx.data(), static_cast<std::uint64_t>(TotalIndices) * sizeof(ImDrawIdx),
-		sizeof(ImDrawIdx) == 4, static_cast<std::uint32_t>(TotalIndices));
+	// Upload the merged ImDrawData vertex/index arrays to GPU NOW (this frame's
+	// InitViews), NOT at RenderUI. The target buffers are device-local (GPUOnly), so
+	// UpdateBuffer records an async vkCmdCopyBuffer via a host-visible staging --
+	// the CPU returns immediately; the copy runs on the GPU, and the staging is
+	// deferred-freed at the NEXT frame boundary (after this frame's fence). The
+	// draw (RenderUI) submits later on the same queue, so it reads after the copy.
+	// Transient buffers are recycled at the next BeginFrame, so RenderUI (same
+	// frame, later graph stage) still reads them.
+	const std::uint64_t VtxBytes = static_cast<std::uint64_t>(TotalVerts) * sizeof(ImDrawVert);
+	const std::uint64_t IdxBytes = static_cast<std::uint64_t>(TotalIndices) * sizeof(ImDrawIdx);
+
+	FRHIBufferDesc VDesc;
+	VDesc.Size = VtxBytes;
+	VDesc.Usage = ERHIBufferUsage::Vertex;
+	VDesc.MemoryUsage = ERHIMemoryUsage::GPUOnly;
+	FRDGBufferRef VB = R.CreateBuffer(VDesc, ERDGResourceLifetime::Transient);
+
+	FRHIBufferDesc IDesc;
+	IDesc.Size = IdxBytes;
+	IDesc.Usage = ERHIBufferUsage::Index;
+	IDesc.MemoryUsage = ERHIMemoryUsage::GPUOnly;
+	FRDGBufferRef IB = R.CreateBuffer(IDesc, ERDGResourceLifetime::Transient);
+
+	if (!VB.IsValid() || !IB.IsValid())
+	{
+		MAHO_LOG_CORE_ERROR("FUIFeature: UI vertex/index buffer create failed");
+		return;
+	}
+	R.AddPass(ERHICommandListType::Graphics,
+		[&VB, &IB, &Verts, &Idx, VtxBytes, IdxBytes](FRHICommandList& Cmd)
+		{
+			Cmd.UpdateBuffer(VB.GetRHI(), 0, VtxBytes, Verts.data());
+			Cmd.UpdateBuffer(IB.GetRHI(), 0, IdxBytes, Idx.data());
+		});
+	DrawList.SetVertexBuffer(VB);
+	DrawList.SetIndexBuffer(IB);
 
 	// Ortho projection (DisplaySize coords -> NDC), column-major. Vulkan NDC y is
 	// DOWN (top = -1): the y row uses (B-T), so ImGui's top maps to the screen top;
@@ -468,8 +489,14 @@ void FUIFeature::InitViews(FRender& R)
 			// sampler, resolved by content inside AddPass.
 			if (DrawCmd.TextureId != 0)
 			{
-				const FUIRegistryEntry* Entry = FindTexture((FUIRegistryId)DrawCmd.TextureId);
-				if (Entry != nullptr)
+				// Non-zero ImTextureID = a mirror FName id. Reconstruct the name and
+				// re-resolve the RDG texture from the mirror pool (GpuMirrors, keyed by
+				// FName); only a texture mirror (not a buffer) is drawable. The clamp
+				// sampler is pooled content-addressable by desc -- no native is held.
+				const Name::FName TexName = Name::FName::FromId(static_cast<std::uint32_t>(DrawCmd.TextureId));
+				const FRDGResourceRef* Mirror = R.GetMirror(TexName);
+				const FRDGTextureRef* Tex = Mirror != nullptr ? std::get_if<FRDGTextureRef>(Mirror) : nullptr;
+				if (Tex != nullptr)
 				{
 					FRDGDescriptorSet DescriptorSet;
 					DescriptorSet.SetIndex = 0;
@@ -477,8 +504,8 @@ void FUIFeature::InitViews(FRender& R)
 					FRDGBinding Binding;
 					Binding.Type = ERHIDescriptorType::CombinedImageSampler;
 					Binding.Stages = ERHIShaderStage::Fragment;
-					Binding.Resource = Entry->Texture;
-					Binding.SamplerIndex = DescriptorSet.AddSampler(Entry->Sampler);
+					Binding.Resource = *Tex;
+					Binding.SamplerIndex = DescriptorSet.AddSampler(R.CreateSampler(BuildClampSamplerDesc()));
 					DescriptorSet.Bindings.push_back({ 0, Binding });
 					Batch.Sets.push_back(std::move(DescriptorSet));
 				}
@@ -501,13 +528,11 @@ void FUIFeature::RenderUI(FRender& R)
 	// The UI composites over SceneColor; its color format + size come FROM THE
 	// TARGET (never the swapchain / RHI), matching the off-screen target's desc.
 	const FRDGTextureRef SceneColor = Scene->GetSceneColor();
-	const std::uint32_t TargetW = SceneColor.GetWidth();
-	const std::uint32_t TargetH = SceneColor.GetHeight();
 	const ERHIFormat ColorFormat = SceneColor.GetFormat();
 
 	// Already translated from ImDrawData in InitViews (the whole ImGui frame
-	// lifecycle lives there, including the owned-copy SetPrimitiveData). Draw from
-	// THAT list -- FRender holds no ImGui state, so the list lives here in the feature.
+	// lifecycle lives there, including the GPU-buffer upload). Draw from THAT list --
+	// FRender holds no ImGui state, so the list lives here in the feature.
 	FDrawList& DrawList = this->DrawList;
 	if (!DrawList.HasPrimitiveData())
 	{
@@ -525,7 +550,6 @@ void FUIFeature::RenderUI(FRender& R)
 	Color.LoadOp = ERHILoadOp::Load;
 	Color.StoreOp = ERHIStoreOp::Store;
 	Target.AddColor(Color);
-	Target.SetSize(TargetW, TargetH);
 
 	// Input binding (FUIParameters, macro-declared): the font descriptor set (set 0:
 	// font texture + sampler) + the vertex-stage push-constant range (mat4). AddPass
@@ -533,15 +557,14 @@ void FUIFeature::RenderUI(FRender& R)
 	// PipelineDesc.Layout from it and resolves the PSO; the font set is materialised +
 	// bound by AddPass (hidden from the feature). The font sampler + texture come from
 	// the registry -- no RHI op, no held descriptor set.
-	const FUIFeature::FUIRegistryEntry* FontEntry = FindTexture(FontId);
-	if (FontEntry == nullptr)
+	if (!FontTexture.IsValid())
 	{
-		MAHO_LOG_CORE_ERROR("FUIFeature: font registry entry missing");
+		MAHO_LOG_CORE_ERROR("FUIFeature: font texture missing");
 		return;
 	}
 	FUIParameters* Params = R.AllocParameters<FUIParameters>();
-	Params->FontTexture = FontEntry->Texture;
-	Params->FontSampler = FontEntry->Sampler;
+	Params->FontTexture = FontTexture;
+	Params->FontSampler = R.CreateSampler(BuildClampSamplerDesc());
 
 	// Fetch the UI shader modules through the shared per-type async path (compile +
 	// sync up front), so the resolved modules, bytecode hashes and entry points can
@@ -598,8 +621,20 @@ void FUIFeature::RenderUI(FRender& R)
 void FUIFeature::PreUnInstall(FRender& R)
 {
 	(void)R;
-	// THIS feature owns the ImGui context, so it tears it down here. Ordered after
-	// every render feature teardown that may log / touch UI, and before the DLL unload.
+	// This feature owns the ImGui context, so it tears it down here. This feature is
+	// uninstalled BEFORE UISystem (it depends on UISystem), so the game side is still
+	// alive: drop our UI-built subscription so the (still-live) game event no longer
+	// captures a dead `this`, then clear the snapshot.
+	if (GameWorld::FUISystem* UI = GameWorld::GetUISystem())
+	{
+		UI->UnsubscribeUIHandler(m_UISubscription);
+	}
+	m_UISubscription = 0;
+	{
+		std::lock_guard Lock(m_UISnapshotMutex);
+		m_UICommands.clear();
+	}
+	bSubscribedUI = false;
 	if (bContextCreated)
 	{
 		ImGui::DestroyContext();

@@ -170,6 +170,11 @@ public:
 	/** Try to load: Find; nullptr when not loaded yet. */
 	[[nodiscard]] const FResource* TryLoad(std::string_view AssetPath);
 
+	/** Invoke Fn for every loaded resource (asset FName + resource), in catalog order.
+	 *  Called from any thread; the catalog lock is held for the whole traversal, so Fn
+	 *  must NOT re-enter the resource system (no Find/Import within Fn). */
+	void ForEachResource(const std::function<void(const Name::FName&, const FResource&)>& Fn) const;
+
 private:
 	// -- engine pipeline stages (scheduler-only) --
 	void PreInitialize(FEngineBase&) override {}

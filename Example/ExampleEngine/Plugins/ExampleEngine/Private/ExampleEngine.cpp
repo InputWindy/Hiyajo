@@ -8,6 +8,7 @@
 #include <Render.h>
 #include <Resource.h>
 #include <Script.h>
+#include <GameWorld.h>
 
 namespace Maho
 {
@@ -23,6 +24,7 @@ void FExampleEngine::PreMain()
 	Install<Resource::FResourceSystem>();
 	Install<Script::FScriptSystem>();
 	Install<FRender>();
+	Install<GameWorld::FGameWorld>();
 }
 
 void FExampleEngine::PostMain()

@@ -8,7 +8,9 @@
 #include <RenderDrawList.h>
 
 #include <cstdint>
-#include <map>
+#include <functional>
+#include <mutex>
+#include <vector>
 
 namespace Maho
 {
@@ -32,11 +34,13 @@ struct FUIShader
  * ImGui render feature - the OWNER of the UI's CPU-side ImGui context and the
  * whole frame lifecycle. This feature creates/destroys the ImGui context
  * (OnInstalled / PreUnInstall) and drives the frame inside InitViews: frame feed ->
- * NewFrame -> build UI (DisplayMirrorImGui) -> Render -> GetDrawData -> translate the
- * draw data into an owned FDrawList (SetPrimitiveData copies). RenderUI draws that
- * list over the shared SceneColor (LoadOp Load, after the scene), submitted before
- * the frame feature's present blit. FRender is completely UI-agnostic -- it holds
- * no ImGui state and never links or references ImGui.
+ * NewFrame -> pull the game-side UI commands from the UISystem's UIBuilder and run
+ * them (FUIBuilder::Execute -- the game submits draw closures defining the UI; this
+ * worker executes every ImGui call) -> Render -> GetDrawData -> translate the draw
+ * data into GPU buffers (uploaded in InitViews) + an FDrawList holding the refs.
+ * RenderUI draws that list over the shared SceneColor (LoadOp Load, after the scene),
+ * submitted before the frame feature's present blit. FRender is completely UI-agnostic --
+ * it holds no ImGui state, never links or references ImGui.
  *
  * Stateless draw feature: the UI shader goes through FRender::TryGetShader<FUIShader>
  * (async compile + per-type cache, above). The FONT backend holds ONLY the RDG
@@ -59,55 +63,58 @@ public:
 	void RenderUI(FRender& R) override;
 	void PreUnInstall(FRender& R) override;
 
-	/** Test harness (called by this feature's own InitViews each frame): show every
-	 *  imported texture mirror in an ImGui window, sized from its RDG mirror. Mirrors
-	 *  are drawn between ImGui::NewFrame and ImGui::Render. */
-	virtual void DisplayMirrorImGui(FRender& R);
-
 private:
-	/** Lazily create the font backend (font texture, sampler, descriptor set+layout,
-	 *  staging). Returns whether it is ready. Idempotent. */
+	/** Lazily create the font backend (font texture + staging). Returns whether it is
+	 *  ready. Idempotent. */
 	bool EnsureUIBackend(FRender& R);
 	/** One-time font-atlas upload (a transfer submit, illegal inside a render pass).
 	 *  No-op after the first call. */
 	void UploadFont(FRender& R);
 
-	/** Texture id -> UI texture registry. Every texture ImGui draws (the font atlas,
-	 *  each mirror) is registered here with its RDG texture + shared sampler; ImGui's
-	 *  ImTextureID is this integer id. The render path resolves a draw command's id to
-	 *  its per-batch descriptor set (content-addressable) INSIDE AddPass -- so no
-	 *  FRHIDescriptorSet* is ever produced or held here. */
-	using FUIRegistryId = std::uintptr_t;
-	struct FUIRegistryEntry
-	{
-		FRDGTextureRef Texture;
-		FRHISampler* Sampler;   // pool-owned, content-addressable by desc
-	};
+	/** Subscribe to the UISystem's "UI built" event (thread-safe, idempotent). The
+	 *  handler runs on the GAME broadcast thread AFTER Submit finished, so it copies
+	 *  the UIBuilder batch into m_UICommands -- a COMPLETE frame snapshot, never a
+	 *  partial/empty one. Called lazily from InitViews: the world system installs
+	 *  after this render feature, so the subscription is registered on first frame. */
+	void TrySubscribeUI();
 
-	/** Register (or re-resolve) a texture for ImGui drawing; returns its id. The
-	 *  sampler is created once per call (pool-cached) and never held. */
-	[[nodiscard]] FUIRegistryId RegisterTexture(FRender& R, const FRDGTextureRef& Tex);
-	/** Find a registered texture by its ImGui id; nullptr if unknown. */
-	[[nodiscard]] const FUIRegistryEntry* FindTexture(FUIRegistryId Id) const;
-
-	// UI font + texture registry. The UI backend holds ONLY RDG resources (the font
-	// texture ref) and the id registry; every native RHI object (descriptor set
-	// layout, descriptor set, sampler) is resolved in AddPass from the pass parameter
-	// (content-addressable get-or-create in the pool), so this feature never owns or
-	// tears down a native. The font-upload staging buffer is a one-shot transient
-	// created locally inside the upload pass, never held.
+	// ImGui texture-id semantics: ImTextureID == 0 selects the PASS-LEVEL font set
+	// (FontTexture + a pooled clamp sampler, bound via FUIParameters). A NON-zero
+	// ImTextureID holds a mirror FName id (FName::GetId()) -- the per-batch set is
+	// resolved by FName::FromId(id) -> FRender::GetMirror -> FRDGTextureRef (a pooled
+	// clamp sampler is re-resolved by desc). No descriptor set or sampler is ever held
+	// here; the pool owns every native lifetime.
+	//
+	// THREAD SAFETY: ImGui's GImGui is a process-wide NON-thread-safe state machine
+	// (CurrentWindow stack, FrameCount/FrameCountEnded, DrawData...). InitViews runs on
+	// an arbitrary render-pool worker, and different frames may land on different
+	// workers -- so the WHOLE frame (feed -> NewFrame -> build -> Render -> GetDrawData
+	// -> translate) is serialized behind ImGuiFrameMutex. One thread at a time owns
+	// "current frame", which satisfies ImGui's single-owner contract without forcing a
+	// dedicated thread (other render features stay parallel).
+	std::mutex ImGuiFrameMutex;
 	bool bUIInit = false;
 	bool bFontUploaded = false;
 	/** Whether ImGui::CreateContext() has run (this feature owns the CPU-side ImGui
 	 *  context; created at OnInstalled, destroyed at PreUnInstall). Guards every
 	 *  frame-feed / InitViews entry. */
 	bool bContextCreated = false;
+	/** Whether this feature has subscribed to the UISystem's UI-built event. */
+	bool bSubscribedUI = false;
+	/** The UI-built subscription id (0 = not subscribed). Retained so PreUnInstall
+	 *  unsubscribes ONLY this feature's handler -- not any other subscriber's. */
+	uint64_t m_UISubscription = 0;
+	/** Render-side snapshot of the game's UI closures. REPLACED (never cleared) by
+	 *  the UI-built event handler on the game thread, so InitViews always has a
+	 *  complete frame to run -- no empty/partial batch, no flicker. Guarded by
+	 *  m_UISnapshotMutex (game handler writes it, render InitViews reads + runs a copy). */
+	std::mutex m_UISnapshotMutex;
+	std::vector<std::function<void()>> m_UICommands;
+	/** The pass-level font texture (pool-owned persistent). Bound via FUIParameters
+	 *  every RenderUI; the sampler is a pooled clamp sampler (content-addressable). */
 	FRDGTextureRef FontTexture;
-	FUIRegistryId FontId = 0;
-	std::map<FUIRegistryId, FUIRegistryEntry> TextureRegistry;
-	FUIRegistryId NextTextureId = 1;
 	/** The translated ImDrawData->FDrawList for the CURRENT frame. Filled at InitViews
-	 *  (the whole ImGui frame lifecycle lives there; SetPrimitiveData owns the copy),
+	 *  (the whole ImGui frame lifecycle lives there; GPU buffers are uploaded here),
 	 *  drawn at RenderUI (same graph, self-progression). A member so the merged
 	 *  primitive + batch vectors reuse their capacity across frames. */
 	FDrawList DrawList;

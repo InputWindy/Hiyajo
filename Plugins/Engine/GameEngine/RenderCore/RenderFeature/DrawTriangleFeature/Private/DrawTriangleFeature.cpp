@@ -102,7 +102,6 @@ void FDrawTriangleFeature::Render(FRender& R)
 		Depth.StoreOp = ERHIStoreOp::DontCare;
 		Target.SetDepth(Depth);
 	}
-	Target.SetSize(TargetW, TargetH);
 
 	// Pipeline config table: the state this feature chooses to configure PLUS the
 	// shader modules it resolved above. AddPass fills the layout from Pass.Layout,

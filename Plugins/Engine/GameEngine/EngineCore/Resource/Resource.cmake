@@ -28,7 +28,7 @@ target_compile_definitions(Resource PRIVATE MAHO_RESOURCE_MODULE_EXPORTS)
 target_link_libraries(Resource PUBLIC Maho)
 set_property(TARGET Resource PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>")
 target_link_libraries(Resource PUBLIC Name Paths Log Archive)
-set_target_properties(Resource PROPERTIES FOLDER "Maho/Plugins/Engine/GameEngine")
+set_target_properties(Resource PROPERTIES FOLDER "Maho/Plugins/Engine/GameEngine/EngineCore")
 source_group(TREE "${CMAKE_CURRENT_LIST_DIR}" FILES ${Resource_PUBLIC_HEADERS} ${Resource_PRIVATE_HEADERS} ${Resource_PRIVATE_SOURCES})
 # -- /MAHOGEN Resource --
 

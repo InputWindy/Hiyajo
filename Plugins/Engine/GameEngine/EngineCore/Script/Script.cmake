@@ -18,7 +18,7 @@ target_include_directories(Script PUBLIC
 	"${ENGINE_DIR}/Source/Public"
 	"${CMAKE_CURRENT_LIST_DIR}/Public"
 	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEngine/Public"
-	"${ENGINE_DIR}/Plugins/Engine/GameEngine/Resource/Public"
+	"${ENGINE_DIR}/Plugins/Engine/GameEngine/EngineCore/Resource/Public"
 	"${ENGINE_DIR}/Plugins/Common/ConsoleVariable/Public"
 	"${ENGINE_DIR}/Plugins/Engine/Core/Log/Public"
 	"${ENGINE_DIR}/Plugins/Engine/Core/Exception/Public"
@@ -29,7 +29,7 @@ target_compile_definitions(Script PRIVATE MAHO_SCRIPT_MODULE_EXPORTS)
 target_link_libraries(Script PUBLIC Maho)
 set_property(TARGET Script PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>")
 target_link_libraries(Script PUBLIC Resource ConsoleVariable Log Exception Reflect)
-set_target_properties(Script PROPERTIES FOLDER "Maho/Plugins/Engine/GameEngine")
+set_target_properties(Script PROPERTIES FOLDER "Maho/Plugins/Engine/GameEngine/EngineCore")
 source_group(TREE "${CMAKE_CURRENT_LIST_DIR}" FILES ${Script_PUBLIC_HEADERS} ${Script_PRIVATE_HEADERS} ${Script_PRIVATE_SOURCES})
 # -- /MAHOGEN Script --
 

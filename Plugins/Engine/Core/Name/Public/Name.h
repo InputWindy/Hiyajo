@@ -36,6 +36,11 @@ public:
 	[[nodiscard]] bool IsNone() const { return Id == 0; }
 	[[nodiscard]] std::uint32_t GetId() const { return Id; }
 
+	/** Reconstruct a FName from its interned id (O(1); the id MUST come from this same
+	 *  global pool, i.e. GetId()). No interning / no pool lookup -- an id is the
+	 *  canonical entry. Only meaningful for ids produced by GetId() (id 0 == None). */
+	[[nodiscard]] static FName FromId(std::uint32_t InId) { return FName(InId); }
+
 	[[nodiscard]] bool operator==(const FName& O) const { return Id == O.Id; }
 	[[nodiscard]] bool operator!=(const FName& O) const { return Id != O.Id; }
 	[[nodiscard]] bool operator<(const FName& O) const { return Id < O.Id; }

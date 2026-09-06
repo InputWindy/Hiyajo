@@ -315,6 +315,19 @@ const FResource* FResourceSystem::TryLoad(std::string_view AssetPath)
 	return Find(AssetPath);
 }
 
+void FResourceSystem::ForEachResource(const std::function<void(const Name::FName&, const FResource&)>& Fn) const
+{
+	if (!Fn)
+	{
+		return;
+	}
+	std::lock_guard Lock(Impl->Mutex);
+	for (const auto& [AssetName, Resource] : Impl->Catalog)
+	{
+		Fn(AssetName, *Resource);
+	}
+}
+
 } // namespace Maho::Resource
 
 // The C export the host looks up BY SYMBOL NAME for dynamic install.

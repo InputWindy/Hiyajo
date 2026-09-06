@@ -18,14 +18,14 @@ target_include_directories(Asset PUBLIC
 	"${ENGINE_DIR}/Source/Public"
 	"${CMAKE_CURRENT_LIST_DIR}/Public"
 	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEngine/Public"
-	"${ENGINE_DIR}/Plugins/Engine/GameEngine/Resource/Public"
+	"${ENGINE_DIR}/Plugins/Engine/GameEngine/EngineCore/Resource/Public"
 )
 set_target_properties(Asset PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 target_compile_definitions(Asset PRIVATE MAHO_ASSET_MODULE_EXPORTS)
 target_link_libraries(Asset PUBLIC Maho)
 set_property(TARGET Asset PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>")
 target_link_libraries(Asset PUBLIC Resource)
-set_target_properties(Asset PROPERTIES FOLDER "Maho/Plugins/Engine/GameEngine")
+set_target_properties(Asset PROPERTIES FOLDER "Maho/Plugins/Engine/GameEngine/EngineCore")
 source_group(TREE "${CMAKE_CURRENT_LIST_DIR}" FILES ${Asset_PUBLIC_HEADERS} ${Asset_PRIVATE_HEADERS} ${Asset_PRIVATE_SOURCES})
 # -- /MAHOGEN Asset --
 

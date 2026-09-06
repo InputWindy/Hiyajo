@@ -16,10 +16,10 @@ namespace Maho
  * triangle, later a real scene renderer).
  *
  * Geometry source priority (first non-empty wins):
- *   1. pass-level CPU primitive data (FDrawList::SetPrimitiveData) -- the batch
- *      is a SLICE of that one uploaded buffer, addressed by VertexOffset /
- *      IndexOffset. This is the ImGui path: one merged vertex/index array per
- *      frame, every draw command slices it.
+ *   1. pass-level GPU vertex buffer (FDrawList::SetVertexBuffer, a FRDGBufferRef)
+ *      -- the batch is a SLICE of that one uploaded buffer, addressed by
+ *      VertexOffset / IndexOffset. This is the ImGui path: one merged vertex/index
+ *      array per frame, uploaded in InitViews; every draw command slices it.
  *   2. batch-owned FRDGBufferRef (VertexBuffer / IndexBuffer) -- a GPU buffer
  *      the producer already holds. The scene-triangle path.
  *   3. both empty => primitive generated in-shader from gl_VertexIndex
@@ -69,23 +69,18 @@ class MAHO_RENDER_API FDrawList
 public:
 	void Add(const FDrawBatch& Batch) { Batches.push_back(Batch); }
 
-	/** Clear every field back to empty/zero (primitive data, push constants,
-	 *  batches), KEEPING the vectors' capacity. Used when the list is a reused
+	/** Clear every field back to empty/zero (GPU buffer refs, push constants,
+	 *  batches), KEEPING the batch vectors' capacity. Used when the list is a reused
 	 *  member filled per frame, so a re-filled list does not accumulate the
-	 *  previous frame's batches. The internal primitive buffers keep capacity. */
+	 *  previous frame's batches. The GPU buffers are transient pool resources --
+	 *  Reset only drops the refs, it never frees them. */
 	void Reset()
 	{
-		VertexBytes = 0;
-		VertexStride = 0;
-		VertexCount = 0;
-		IndexBytes = 0;
-		bIndex32 = true;
-		IndexCount = 0;
+		VertexBuffer = FRDGBufferRef{};
+		IndexBuffer = FRDGBufferRef{};
 		PushStages = ERHIShaderStage::Vertex;
 		PushSize = 0;
 		PushData.clear();
-		VertexData.clear();
-		IndexData.clear();
 		Batches.clear();
 	}
 
@@ -113,61 +108,22 @@ public:
 	[[nodiscard]] std::uint32_t GetPushConstantSize() const { return PushSize; }
 	[[nodiscard]] const void* GetPushConstantData() const { return PushData.data(); }
 
-	/** Optional pass-level CPU primitive buffer: a single merged vertex/indices
-	 *  block uploaded ONCE by AddPass, sliced per-batch by VertexOffset/IndexOffset.
-	 *  When set, batches must leave their own VertexBuffer/IndexBuffer empty
-	 *  (geometry source priority 1). The data is COPIED here, so the producer's
-	 *  arrays (e.g. ImGui's draw data) need no lifetime beyond this call -- the
-	 *  list owns the buffer and AddPass reads the owned copy. */
-	void SetPrimitiveData(
-		const void* InVertexData, std::uint64_t InVertexBytes, std::uint32_t InVertexStride, std::uint32_t InVertexCount,
-		const void* InIndexData, std::uint64_t InIndexBytes, bool InIndex32, std::uint32_t InIndexCount)
-	{
-		if (InVertexData != nullptr && InVertexBytes > 0)
-		{
-			const auto* const Bytes = static_cast<const std::uint8_t*>(InVertexData);
-			VertexData.assign(Bytes, Bytes + InVertexBytes);
-		}
-		else
-		{
-			VertexData.clear();
-		}
-		VertexBytes = InVertexBytes;
-		VertexStride = InVertexStride;
-		VertexCount = InVertexCount;
-		if (InIndexData != nullptr && InIndexBytes > 0)
-		{
-			const auto* const Bytes = static_cast<const std::uint8_t*>(InIndexData);
-			IndexData.assign(Bytes, Bytes + InIndexBytes);
-		}
-		else
-		{
-			IndexData.clear();
-		}
-		IndexBytes = InIndexBytes;
-		bIndex32 = InIndex32;
-		IndexCount = InIndexCount;
-	}
+	/** Pass-level GPU primitive buffer refs: a single merged vertex/indices block
+	 *  uploaded in InitViews (not at AddPass), sliced per-batch by
+	 *  VertexOffset/IndexOffset. When set, batches must leave their own
+	 *  VertexBuffer/IndexBuffer empty (geometry source priority 1). The producer
+	 *  uploads the arrays to these transient GPU buffers and hands only the refs --
+	 *  the list holds NO CPU copy. */
+	void SetVertexBuffer(const FRDGBufferRef& InVertexBuffer) { VertexBuffer = InVertexBuffer; }
+	void SetIndexBuffer(const FRDGBufferRef& InIndexBuffer) { IndexBuffer = InIndexBuffer; }
 
-	[[nodiscard]] bool HasPrimitiveData() const { return VertexBytes > 0 && !VertexData.empty(); }
-	[[nodiscard]] const void* GetVertexData() const { return VertexData.empty() ? nullptr : VertexData.data(); }
-	[[nodiscard]] std::uint64_t GetVertexBytes() const { return VertexBytes; }
-	[[nodiscard]] std::uint32_t GetVertexStride() const { return VertexStride; }
-	[[nodiscard]] std::uint32_t GetVertexCount() const { return VertexCount; }
-	[[nodiscard]] const void* GetIndexData() const { return IndexData.empty() ? nullptr : IndexData.data(); }
-	[[nodiscard]] std::uint64_t GetIndexBytes() const { return IndexBytes; }
-	[[nodiscard]] bool GetIndex32() const { return bIndex32; }
-	[[nodiscard]] std::uint32_t GetIndexCount() const { return IndexCount; }
+	[[nodiscard]] bool HasPrimitiveData() const { return VertexBuffer.IsValid(); }
+	[[nodiscard]] const FRDGBufferRef& GetVertexBuffer() const { return VertexBuffer; }
+	[[nodiscard]] const FRDGBufferRef& GetIndexBuffer() const { return IndexBuffer; }
 
 private:
-	std::vector<std::uint8_t> VertexData;
-	std::uint64_t VertexBytes = 0;
-	std::uint32_t VertexStride = 0;
-	std::uint32_t VertexCount = 0;
-	std::vector<std::uint8_t> IndexData;
-	std::uint64_t IndexBytes = 0;
-	bool bIndex32 = true;
-	std::uint32_t IndexCount = 0;
+	FRDGBufferRef VertexBuffer;   // pass-level merged vertex buffer (transient, uploaded in InitViews)
+	FRDGBufferRef IndexBuffer;    // pass-level merged index buffer (transient)
 
 	ERHIShaderStage PushStages = ERHIShaderStage::Vertex;
 	std::uint32_t PushSize = 0;

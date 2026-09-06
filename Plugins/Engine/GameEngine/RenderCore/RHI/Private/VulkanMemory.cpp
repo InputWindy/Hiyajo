@@ -158,6 +158,31 @@ void FVulkanMemoryAllocator::DestroyImage(VkImage Image, VmaAllocation Allocatio
 	}
 }
 
+void FVulkanMemoryAllocator::DestroyBufferDeferred(VkBuffer Buffer, VmaAllocation Allocation)
+{
+	if (Allocator == nullptr || Buffer == VK_NULL_HANDLE)
+	{
+		return;
+	}
+	std::lock_guard<std::mutex> Lock(DeferredMutex);
+	DeferredBuffers.push_back({ Buffer, Allocation });
+}
+
+void FVulkanMemoryAllocator::FlushDeferredFrees()
+{
+	// Swap out the batch being retired, so a concurrent recording thread keeps
+	// queueing into a fresh list while we free the finished one.
+	std::vector<FDeferredBuffer> Pending;
+	{
+		std::lock_guard<std::mutex> Lock(DeferredMutex);
+		Pending.swap(DeferredBuffers);
+	}
+	for (const FDeferredBuffer& D : Pending)
+	{
+		DestroyBuffer(D.Buffer, D.Allocation);
+	}
+}
+
 void FVulkanMemoryAllocator::Free(FRHIMemoryAllocation& Alloc)
 {
 	Alloc.Native = nullptr;

@@ -346,7 +346,10 @@ void FVulkanCommandList::UpdateBuffer(FRHIBuffer* InBuffer, std::uint64_t Offset
 	vkCmdPipelineBarrier(Buffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
 		0, 0, nullptr, 1, &SrcBarrier, 0, nullptr);
 
-	Allocator->DestroyBuffer(Staging, StagingAllocation);
+	// Deferred-destroy the staging: the recorded vkCmdCopyBuffer above is still
+	// queued on the GPU, so this staging must not be freed until the frame's fence
+	// is signaled (the RHI's next BeginFrame calls FlushDeferredFrees).
+	Allocator->DestroyBufferDeferred(Staging, StagingAllocation);
 }
 
 void FVulkanCommandList::TransitionBuffer(FRHIBuffer* InBuffer, ERHIResourceState OldState, ERHIResourceState NewState)

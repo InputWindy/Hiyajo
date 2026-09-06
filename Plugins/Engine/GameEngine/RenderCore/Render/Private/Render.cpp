@@ -420,12 +420,23 @@ void FRender::AddPass(
 	// the first color attachment's extent when the target did not set them.
 	const FRHIRenderingAttachmentInfo* ColorsPtr = Colors.empty() ? nullptr : Colors.data();
 	const std::uint32_t ColorCount = static_cast<std::uint32_t>(Colors.size());
-	std::uint32_t Width = Pass.Target.Width;
-	std::uint32_t Height = Pass.Target.Height;
-	if (Width == 0 && Height == 0 && !Pass.Target.Color.empty())
+	// All attachments share one resolution; infer the render-area extent from the
+	// first valid color (falling back to the depth) -- never declared separately.
+	std::uint32_t Width = 0;
+	std::uint32_t Height = 0;
+	for (const auto& A : Pass.Target.Color)
 	{
-		Width = Pass.Target.Color[0].View.GetWidth();
-		Height = Pass.Target.Color[0].View.GetHeight();
+		if (A.View.IsValid())
+		{
+			Width = A.View.GetWidth();
+			Height = A.View.GetHeight();
+			break;
+		}
+	}
+	if (Width == 0 && Height == 0 && Pass.Target.bHasDepth && Pass.Target.Depth.View.IsValid())
+	{
+		Width = Pass.Target.Depth.View.GetWidth();
+		Height = Pass.Target.Depth.View.GetHeight();
 	}
 
 	// Materialise the descriptor sets: resolve each FRDGBinding's ref to a native
@@ -552,44 +563,31 @@ void FRender::AddPass(
 	// (pass-level CPU primitive data + per-batch sets + scissor + push constant) and
 	// never touches a vertex/index buffer, a descriptor set or a draw command -- the
 	// RHI objects are resolved here, inside AddPass.
-	std::uint32_t TargetW = Pass.Target.Width;
-	std::uint32_t TargetH = Pass.Target.Height;
-	if (TargetW == 0 && TargetH == 0 && !Pass.Target.Color.empty())
+	std::uint32_t TargetW = 0;
+	std::uint32_t TargetH = 0;
+	for (const auto& A : Pass.Target.Color)
 	{
-		TargetW = Pass.Target.Color[0].View.GetWidth();
-		TargetH = Pass.Target.Color[0].View.GetHeight();
+		if (A.View.IsValid())
+		{
+			TargetW = A.View.GetWidth();
+			TargetH = A.View.GetHeight();
+			break;
+		}
+	}
+	if (TargetW == 0 && TargetH == 0 && Pass.Target.bHasDepth && Pass.Target.Depth.View.IsValid())
+	{
+		TargetW = Pass.Target.Depth.View.GetWidth();
+		TargetH = Pass.Target.Depth.View.GetHeight();
 	}
 
 	AddPass(PassType, std::move(PipelineDesc), Pass,
 		[this, &DrawList, TargetW, TargetH](FRHICommandList& List)
 		{
-			// Pass-level CPU primitive data: upload ONCE into transient buffers; every
-			// batch slices it via its (byte) bind offset. The producer's arrays need no
-			// lifetime beyond this call.
-			FRDGBufferRef VB, IB;
-			if (DrawList.HasPrimitiveData())
+			// The pass-level merged vertex/index buffers were already created + uploaded
+			// by the producer (InitViews). AddPass only binds + draws; nothing uploads here.
+			if (!DrawList.HasPrimitiveData())
 			{
-				FRHIBufferDesc VDesc;
-				VDesc.Size = DrawList.GetVertexBytes();
-				VDesc.Usage = ERHIBufferUsage::Vertex;
-				VDesc.MemoryUsage = ERHIMemoryUsage::CPUToGPU;
-				VB = CreateBuffer(VDesc, ERDGResourceLifetime::Transient);
-				if (VB.IsValid() && VB.GetRHI() != nullptr)
-				{
-					List.UpdateBuffer(VB.GetRHI(), 0, VDesc.Size, DrawList.GetVertexData());
-				}
-				if (DrawList.GetIndexData() != nullptr && DrawList.GetIndexBytes() > 0)
-				{
-					FRHIBufferDesc IDesc;
-					IDesc.Size = DrawList.GetIndexBytes();
-					IDesc.Usage = ERHIBufferUsage::Index;
-					IDesc.MemoryUsage = ERHIMemoryUsage::CPUToGPU;
-					IB = CreateBuffer(IDesc, ERDGResourceLifetime::Transient);
-					if (IB.IsValid() && IB.GetRHI() != nullptr)
-					{
-						List.UpdateBuffer(IB.GetRHI(), 0, IDesc.Size, DrawList.GetIndexData());
-					}
-				}
+				return;
 			}
 
 			if (DrawList.HasPushConstants())
@@ -649,15 +647,15 @@ void FRender::AddPass(
 					}
 				}
 
-				// Geometry source: pass-level CPU buffer (slice) > batch-owned buffer.
+				// Geometry source: pass-level GPU buffer (slice) > batch-owned buffer.
 				FRHIBuffer* VxBuf = nullptr;
 				FRHIBuffer* IxBuf = nullptr;
-				if (VB.IsValid())
+				if (DrawList.GetVertexBuffer().IsValid())
 				{
-					VxBuf = VB.GetRHI();
-					if (IB.IsValid())
+					VxBuf = DrawList.GetVertexBuffer().GetRHI();
+					if (DrawList.GetIndexBuffer().IsValid())
 					{
-						IxBuf = IB.GetRHI();
+						IxBuf = DrawList.GetIndexBuffer().GetRHI();
 					}
 				}
 				else if (B.VertexBuffer.IsValid())

@@ -29,7 +29,7 @@ target_compile_definitions(Platform PRIVATE MAHO_PLATFORM_MODULE_EXPORTS)
 target_link_libraries(Platform PUBLIC Maho)
 set_property(TARGET Platform PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>")
 target_link_libraries(Platform PUBLIC ConsoleVariable Log)
-set_target_properties(Platform PROPERTIES FOLDER "Maho/Plugins/Engine/GameEngine")
+set_target_properties(Platform PROPERTIES FOLDER "Maho/Plugins/Engine/GameEngine/EngineCore")
 source_group(TREE "${CMAKE_CURRENT_LIST_DIR}" FILES ${Platform_PUBLIC_HEADERS} ${Platform_PRIVATE_HEADERS} ${Platform_PRIVATE_SOURCES})
 # -- /MAHOGEN Platform --
 

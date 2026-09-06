@@ -96,6 +96,14 @@
       "Enabled": true
     },
     {
+      "Name": "GameWorld",
+      "Enabled": true
+    },
+    {
+      "Name": "UISystem",
+      "Enabled": true
+    },
+    {
       "Name": "ExampleEditor",
       "Enabled": true
     }

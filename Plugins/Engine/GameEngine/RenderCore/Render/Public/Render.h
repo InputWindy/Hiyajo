@@ -201,8 +201,9 @@ public:
 
 	/**
 	 * Declarative draw-list pass: consumes a FDrawList INSTEAD of a record lambda.
-	 * AddPass uploads the pass-level CPU primitive data (FDrawList::SetPrimitiveData)
-	 * ONCE, materialises the pass-level sets, then for each batch records: bind its
+	 * The pass-level GPU vertex/index buffers are already created + uploaded by the
+	 * producer (InitViews, stored as FRDGBufferRefs); AddPass binds the pass-level
+	 * sets, then for each batch records: bind its
 	 * per-batch descriptor sets (content-addressable -- a repeated same-resource batch
 	 * reuses one pooled set), bind geometry, set its scissor, PushConstants and draw.
 	 *

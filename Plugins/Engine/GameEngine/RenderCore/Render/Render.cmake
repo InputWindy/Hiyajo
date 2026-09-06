@@ -19,9 +19,9 @@ target_include_directories(Render PUBLIC
 	"${CMAKE_CURRENT_LIST_DIR}/Public"
 	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEngine/Public"
 	"${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RHI/Public"
-	"${ENGINE_DIR}/Plugins/Engine/GameEngine/Platform/Public"
-	"${ENGINE_DIR}/Plugins/Engine/GameEngine/Resource/Public"
-	"${ENGINE_DIR}/Plugins/Engine/GameEngine/Asset/Public"
+	"${ENGINE_DIR}/Plugins/Engine/GameEngine/EngineCore/Platform/Public"
+	"${ENGINE_DIR}/Plugins/Engine/GameEngine/EngineCore/Resource/Public"
+	"${ENGINE_DIR}/Plugins/Engine/GameEngine/EngineCore/Asset/Public"
 )
 target_include_directories(Render PRIVATE
 	"${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/Scene/Public"

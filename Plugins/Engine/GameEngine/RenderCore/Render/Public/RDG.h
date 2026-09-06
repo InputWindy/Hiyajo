@@ -121,7 +121,9 @@ private:
  * described with FRDGTextureRef (off-screen) so the feature never sees a native
  * framebuffer / swapchain. FRender resolves the declaration into a concrete
  * render pass + framebuffer (cached) at BeginRenderPass time. A feature fills it
- * (AddColor/SetDepth/SetSize) and hands it to FRender::AddPass as one unit.
+ * (AddColor/SetDepth) and hands it to FRender::AddPass as one unit. Every attach
+ * (all colors + depth) MUST share one resolution; the size is read back from the
+ * attachment views, never declared separately.
  */
 struct MAHO_RENDER_API FRenderTarget
 {
@@ -137,12 +139,61 @@ struct MAHO_RENDER_API FRenderTarget
 	FAttachment Depth;
 	bool bHasDepth = false;
 	std::uint32_t SampleCount = 1;
-	std::uint32_t Width = 0;
-	std::uint32_t Height = 0;
 
 	void AddColor(const FAttachment& Attach) { Color.push_back(Attach); }
 	void SetDepth(const FAttachment& Attach) { Depth = Attach; bHasDepth = true; }
-	void SetSize(std::uint32_t InWidth, std::uint32_t InHeight) { Width = InWidth; Height = InHeight; }
+
+	/** Valid iff no attachment contradicts another. An EMPTY target (no color, no
+	 *  depth) is a valid "unconfigured" state -- there is no extent to be
+	 *  inconsistent about. Once an attachment exists, every attachment (all colors +
+	 *  the depth, when set) must resolve to a valid, same nonzero extent; disagreeing
+	 *  resolutions (or an invalid/failed view) make the declaration invalid before
+	 *  the pass is recorded -- the RHI needs one uniform render-area extent). */
+	[[nodiscard]] bool IsValid() const
+	{
+		if (Color.empty() && !bHasDepth)
+		{
+			return true;
+		}
+
+		std::uint32_t RefW = 0;
+		std::uint32_t RefH = 0;
+		bool bRef = false;
+		auto Check = [&](const FAttachment& A) -> bool
+		{
+			if (!A.View.IsValid())
+			{
+				return false;
+			}
+			const std::uint32_t W = A.View.GetWidth();
+			const std::uint32_t H = A.View.GetHeight();
+			if (W == 0 || H == 0)
+			{
+				return false;
+			}
+			if (!bRef)
+			{
+				RefW = W;
+				RefH = H;
+				bRef = true;
+				return true;
+			}
+			return W == RefW && H == RefH;
+		};
+
+		for (const FAttachment& C : Color)
+		{
+			if (!Check(C))
+			{
+				return false;
+			}
+		}
+		if (bHasDepth && !Check(Depth))
+		{
+			return false;
+		}
+		return bRef;
+	}
 };
 
 /** Render-side GPU mirror / pass INPUT resource reference: a pooled texture OR

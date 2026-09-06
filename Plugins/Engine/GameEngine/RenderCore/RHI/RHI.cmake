@@ -20,7 +20,7 @@ target_include_directories(RHI PUBLIC
 	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEngine/Public"
 	"${ENGINE_DIR}/Plugins/Common/ConsoleVariable/Public"
 	"${ENGINE_DIR}/Plugins/Engine/Core/Log/Public"
-	"${ENGINE_DIR}/Plugins/Engine/GameEngine/Platform/Public"
+	"${ENGINE_DIR}/Plugins/Engine/GameEngine/EngineCore/Platform/Public"
 )
 set_target_properties(RHI PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 target_compile_definitions(RHI PRIVATE MAHO_RHI_MODULE_EXPORTS)

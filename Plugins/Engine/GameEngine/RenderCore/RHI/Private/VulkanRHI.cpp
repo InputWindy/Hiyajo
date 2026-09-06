@@ -260,6 +260,13 @@ void FVulkanRHI::Shutdown()
 
 	if (MemoryAllocator)
 	{
+		// Drain the deferred staging-buffer frees (queued by UpdateBuffer's GPU-only
+		// upload path) BEFORE the allocator is destroyed. The flush normally runs at
+		// the NEXT BeginFrame; at shutdown there is no next frame, so free them here
+		// while the device is idle (vkDeviceWaitIdle above guarantees no in-flight
+		// GPU reads). Without this vmaDestroyAllocator asserts VMA_ASSERT_LEAK on
+		// the leftover device-memory block.
+		MemoryAllocator->FlushDeferredFrees();
 		MemoryAllocator->Shutdown();
 		MemoryAllocator.reset();
 	}
@@ -398,6 +405,15 @@ void FVulkanRHI::BeginFrame()
 	if (!CheckVkResult(vkResetFences(Device, 1, &InFlightFence), "vkResetFences"))
 	{
 		return;
+	}
+
+	// Now that the previous frame's fence is signaled, every async-upload staging
+	// buffer whose copy was recorded into that frame is done being read by the GPU.
+	// Retire them here (free the VkBuffer + its memory) before we allocate/record
+	// this frame's uploads -- keeps the deferred list length bounded to one frame.
+	if (MemoryAllocator)
+	{
+		MemoryAllocator->FlushDeferredFrees();
 	}
 
 	VkResult AcquireResult = vkAcquireNextImageKHR(
