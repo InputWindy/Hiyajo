@@ -2002,7 +2002,12 @@ FRHIBuffer* FVulkanRHI::CreateBuffer(const FRHIBufferDesc& Desc)
 	VkBufferCreateInfo BufferInfo{};
 	BufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
 	BufferInfo.size = Desc.Size;
-	BufferInfo.usage = ToVkBufferUsage(Desc.Usage);
+	// Always allow the buffer to be a copy destination: UpdateBuffer uploads into
+	// device-local (GPUOnly) vertex/index buffers via vkCmdCopyBuffer from a staging
+	// buffer, which VUID-vkCmdCopyBuffer-dstBuffer-00120 requires dstBuffer to declare
+	// TRANSFER_DST. A usage bit is a capability declaration, so enabling it here is
+	// harmless for every buffer and fixes the upload path.
+	BufferInfo.usage = ToVkBufferUsage(Desc.Usage) | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
 	BufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
 	VmaAllocationCreateInfo AllocInfo = FVulkanMemoryAllocator::MakeAllocationInfo(Desc.MemoryUsage);

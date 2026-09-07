@@ -458,7 +458,12 @@ void FUIFeature::InitViews(FRender& R)
 		0.0f, 0.0f, -1.0f, 0.0f,
 		-(OrthoRt + OrthoL) / (OrthoRt - OrthoL), -(OrthoT + OrthoB) / (OrthoB - OrthoT), 0.0f, 1.0f,
 	};
-	DrawList.SetPushConstants(ERHIShaderStage::Vertex, static_cast<std::uint32_t>(sizeof(Ortho)), Ortho);
+	// The shader-parameter range for the ortho mat4 is declared Vertex|Fragment (the
+	// SHADER_PARAMETER_ARRAY macro does not pin a stage), so the push constant must be
+	// recorded with the same stage set -- vkCmdPushConstants requires the call's
+	// stageFlags to include the layout range's stageFlags (VUID-offset-01796). Vertex
+	// alone would under-declare it.
+	DrawList.SetPushConstants(ERHIShaderStage::Vertex | ERHIShaderStage::Fragment, static_cast<std::uint32_t>(sizeof(Ortho)), Ortho);
 
 	const float DisplayW = DrawData->DisplaySize.x;
 	const float DisplayH = DrawData->DisplaySize.y;

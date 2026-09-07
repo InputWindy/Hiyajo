@@ -201,6 +201,23 @@ void* FVulkanMemoryAllocator::Map(FRHIMemoryAllocation& Alloc)
 		return Alloc.Mapped;
 	}
 
+	// Only map HOST_VISIBLE memory. GPUOnly (device-local) allocations are not
+	// host-accessible; vmaMapMemory on them violates VUID-vkMapMemory-memory-00682.
+	// Return nullptr so the caller (UpdateBuffer's host path) falls back to the
+	// staging-buffer upload instead of trying to write device-local memory directly.
+	VmaAllocationInfo Info{};
+	vmaGetAllocationInfo(Allocator, static_cast<VmaAllocation>(Alloc.Native), &Info);
+	const VkPhysicalDeviceMemoryProperties* Props = nullptr;
+	vmaGetMemoryProperties(Allocator, &Props);
+	if (Props == nullptr || Info.memoryType >= Props->memoryTypeCount)
+	{
+		return nullptr;
+	}
+	if ((Props->memoryTypes[Info.memoryType].propertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) == 0)
+	{
+		return nullptr;
+	}
+
 	void* Mapped = nullptr;
 	if (vmaMapMemory(Allocator, static_cast<VmaAllocation>(Alloc.Native), &Mapped) != VK_SUCCESS)
 	{
