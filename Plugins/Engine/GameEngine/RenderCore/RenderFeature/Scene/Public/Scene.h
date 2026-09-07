@@ -25,7 +25,7 @@ MAHO_SCENE_API FScene* GetScene();
  * record stages; cross-frame owns the shared scene targets (SceneColor /
  * SceneDepth). Other features read them through Scene::GetScene() - no named
  * slots in FRender. Targets are rebuilt when the swapchain extent changes.
- * (The present/blit lives in the Frame feature, not here.)
+ * (The present/blit lives in the UI feature's IPresent, not here.)
  */
 class MAHO_SCENE_API FScene : public FLayer<IBeginRender, IRender, IEndRender>
 {

@@ -38,8 +38,10 @@ struct FUIShader
  * them (FUIBuilder::Execute -- the game submits draw closures defining the UI; this
  * worker executes every ImGui call) -> Render -> GetDrawData -> translate the draw
  * data into GPU buffers (uploaded in InitViews) + an FDrawList holding the refs.
- * RenderUI draws that list over the shared SceneColor (LoadOp Load, after the scene),
- * submitted before the frame feature's present blit. FRender is completely UI-agnostic --
+ * RenderUI draws that list into this feature's OWN off-screen composite target
+ * (UIRenderTarget, sized to the swapchain canvas + format), and IPresent blits it to the
+ * swapchain backbuffer -- the UI is the final on-screen surface; the scene is sampled INto
+ * it via the game's imgui::image SceneColor control. FRender is completely UI-agnostic --
  * it holds no ImGui state, never links or references ImGui.
  *
  * Stateless draw feature: the UI shader goes through FRender::TryGetShader<FUIShader>
@@ -51,7 +53,7 @@ struct FUIShader
  * neither owns nor tears down a resource. Only the translated FDrawList is held
  * (a member, reused across frames).
  */
-class MAHO_UIFEATURE_API FUIFeature : public FLayer<IOnInstalled, IInitViews, IRenderUI, IPreUnInstall>
+class MAHO_UIFEATURE_API FUIFeature : public FLayer<IOnInstalled, IInitViews, IRenderUI, IPresent, IPreUnInstall>
 {
 MAHO_DECLARE_LAYER(FUIFeature, "UIFeature.dll");
 
@@ -61,6 +63,7 @@ public:
 	void OnInstalled(FRender& R) override;
 	void InitViews(FRender& R) override;
 	void RenderUI(FRender& R) override;
+	void Present(FRender& R) override;
 	void PreUnInstall(FRender& R) override;
 
 private:
@@ -113,6 +116,13 @@ private:
 	/** The pass-level font texture (pool-owned persistent). Bound via FUIParameters
 	 *  every RenderUI; the sampler is a pooled clamp sampler (content-addressable). */
 	FRDGTextureRef FontTexture;
+	/** This feature's own final on-screen composite target. Sized to the swapchain canvas
+	 *  + format (rebuilt on resize) and created from the canvas geometry, so the IPresent
+	 *  blit to the backbuffer is format/geometry-consistent. RenderUI draws the ImGui list
+	 *  (incl. the game's imgui::image SceneColor sample) into it (LoadOp Clear -- this
+	 *  surface is fully redrawn each frame); Present() blits it to the swapchain. Pool-owned
+	 *  persistent, released at PreUnInstall. */
+	FRDGTextureRef UIRenderTarget;
 	/** The translated ImDrawData->FDrawList for the CURRENT frame. Filled at InitViews
 	 *  (the whole ImGui frame lifecycle lives there; GPU buffers are uploaded here),
 	 *  drawn at RenderUI (same graph, self-progression). A member so the merged

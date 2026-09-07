@@ -1,6 +1,5 @@
 #include "DrawTriangleFeature.h"
 
-#include <Frame.h>
 #include <Log.h>
 #include <Scene.h>
 #include <ShaderParameterStruct.h>

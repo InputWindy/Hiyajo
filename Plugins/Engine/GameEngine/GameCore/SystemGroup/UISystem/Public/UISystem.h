@@ -61,12 +61,6 @@ struct MAHO_UISYSTEM_API FUIWidget
 	float Width = 100.f;
 	float Height = 50.f;
 	bool  bVisible = true;
-	/** Auto texture browser: every Update the UISystem rebuilds this widget's Image
-	 *  controls from the CURRENT resource-space texture set (the non-Image controls are
-	 *  preserved, then one 128x128 Image control is appended per texture, in catalog
-	 *  order). Textures import asynchronously, so a one-time enumeration at widget
-	 *  creation would see an empty set; this live refresh tracks imports. */
-	bool  bPreviewAllTextures = false;
 	std::vector<FUIControl> Controls;   // ordered control orchestration
 };
 

@@ -10,7 +10,6 @@
 #include <utility>
 #include <vector>
 #include <DrawTriangleFeature.h>
-#include <Frame.h>
 #include <Log.h>
 #include <Platform.h>
 #include <Scene.h>
@@ -189,7 +188,9 @@ FUIFeature::FUIFeature()
 	// (their submits reach the queue first), so the UI composites over the scene.
 	MyStage<IRenderUI>().IsWaiting<Scene::FScene>().ForStage<IEndRender>();
 	MyStage<IRenderUI>().IsWaiting<FDrawTriangleFeature>().ForStage<IEndRender>();
-	// (FFrame additionally declares IPresent waits for my IRenderUI.)
+	// This feature now owns the present: IPresent blits the final composite RT
+	// (UIRenderTarget) to the swapchain backbuffer. It self-advances after
+	// IRenderUI (same layer), so it always runs after the UI was drawn.
 }
 
 void FUIFeature::TrySubscribeUI()
@@ -275,6 +276,46 @@ void FUIFeature::InitViews(FRender& R)
 	// "current frame" (feed -> NewFrame -> build -> Render -> GetDrawData -> translate).
 	// Lock here (before the IO feed) so every ImGui access below is mutually excluded.
 	std::lock_guard<std::mutex> FrameLock(ImGuiFrameMutex);
+
+	// -- Final on-screen composite target. This feature owns its own off-screen RT per
+	//    the design (the UI is the last surface; the scene is sampled INto it via the
+	//    game's imgui::image SceneColor control). Sized to the swapchain canvas + format
+	//    so the IPresent blit to the backbuffer is geometry/format-consistent, rebuilt
+	//    on resize. LoadOp Clear (fully redrawn each frame) in RenderUI.
+	{
+		const std::uint32_t CanvasW = R.GetCanvasWidth();
+		const std::uint32_t CanvasH = R.GetCanvasHeight();
+		if (CanvasW == 0 || CanvasH == 0)
+		{
+			return;
+		}
+		if (!UIRenderTarget.IsValid()
+			|| UIRenderTarget.GetWidth() != CanvasW
+			|| UIRenderTarget.GetHeight() != CanvasH)
+		{
+			if (UIRenderTarget.IsValid())
+			{
+				R.ReleaseTexture(UIRenderTarget);
+				UIRenderTarget.Reset();
+			}
+			FRHITextureDesc Desc;
+			Desc.Format = R.GetSwapchainFormat();
+			Desc.Dimension = ERHITextureDimension::Tex2D;
+			Desc.Extent = { CanvasW, CanvasH, 1 };
+			Desc.MipLevels = 1;
+			Desc.ArrayLayers = 1;
+			Desc.Usage = ERHITextureUsage::ColorAttachment
+				| ERHITextureUsage::Sampled
+				| ERHITextureUsage::TransferSrc;
+			Desc.MemoryUsage = ERHIMemoryUsage::GPUOnly;
+			UIRenderTarget = R.CreateTexture(Desc, ERDGResourceLifetime::Persistent);
+			if (!UIRenderTarget.IsValid())
+			{
+				MAHO_LOG_CORE_ERROR("FUIFeature: UI composite target creation failed");
+				return;
+			}
+		}
+	}
 
 	// -- Frame feed (Platform window + Win32 input + lazy font-atlas build), then
 	//    NewFrame. The WHOLE ImGui frame lifecycle is driven here: feed -> NewFrame ->
@@ -525,15 +566,15 @@ void FUIFeature::InitViews(FRender& R)
 
 void FUIFeature::RenderUI(FRender& R)
 {
-	Scene::FScene* Scene = Scene::GetScene();
-	if (Scene == nullptr || !Scene->GetSceneColor().IsValid())
+	// Draw into THIS feature's composite target -- NOT SceneColor. The UI is the final
+	// on-screen surface: the scene is sampled INto it (game imgui::image of the SceneColor
+	// mirror), then the UI controls draw over it. The target format/size come from the
+	// target's own desc (the off-screen canvas geometry), never the swapchain/RHI.
+	if (!UIRenderTarget.IsValid())
 	{
 		return;
 	}
-	// The UI composites over SceneColor; its color format + size come FROM THE
-	// TARGET (never the swapchain / RHI), matching the off-screen target's desc.
-	const FRDGTextureRef SceneColor = Scene->GetSceneColor();
-	const ERHIFormat ColorFormat = SceneColor.GetFormat();
+	const ERHIFormat ColorFormat = UIRenderTarget.GetFormat();
 
 	// Already translated from ImDrawData in InitViews (the whole ImGui frame
 	// lifecycle lives there, including the GPU-buffer upload). Draw from THAT list --
@@ -551,8 +592,8 @@ void FUIFeature::RenderUI(FRender& R)
 	//    never queries a pipeline or calls BeginRendering/BindGraphicsPipeline itself.
 	FRenderTarget Target;
 	FRenderTarget::FAttachment Color;
-	Color.View = SceneColor;
-	Color.LoadOp = ERHILoadOp::Load;
+	Color.View = UIRenderTarget;
+	Color.LoadOp = ERHILoadOp::Clear;
 	Color.StoreOp = ERHIStoreOp::Store;
 	Target.AddColor(Color);
 
@@ -623,9 +664,27 @@ void FUIFeature::RenderUI(FRender& R)
 	R.AddPass(ERHICommandListType::Graphics, PipelineDesc, Target, Params, DrawList);
 }
 
+void FUIFeature::Present(FRender& R)
+{
+	// This feature owns the final present point: blit the composite target to the
+	// swapchain backbuffer. Runs after IRenderUI (self-advancing), so the UI
+	// (incl. its SceneColor sample) is fully drawn first.
+	if (UIRenderTarget.IsValid())
+	{
+		R.PresentTexture(UIRenderTarget);
+	}
+}
+
 void FUIFeature::PreUnInstall(FRender& R)
 {
 	(void)R;
+	// Release this feature's composite target before shutdown (the pool owns the native
+	// lifetime, but the ref must be dropped here, like the font texture).
+	if (UIRenderTarget.IsValid())
+	{
+		R.ReleaseTexture(UIRenderTarget);
+		UIRenderTarget.Reset();
+	}
 	// This feature owns the ImGui context, so it tears it down here. This feature is
 	// uninstalled BEFORE UISystem (it depends on UISystem), so the game side is still
 	// alive: drop our UI-built subscription so the (still-live) game event no longer

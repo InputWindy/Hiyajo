@@ -57,6 +57,7 @@ enum class ETexturePixelFormat : std::uint8_t
 	DXT1,
 	DXT5,
 	BC7,
+	D32Sfloat,
 	Count,
 };
 
@@ -72,6 +73,35 @@ enum class ETextureDimension : std::uint8_t
 	Tex2DArray,
 	CubeArray = TexCubeArray,
 	Count,
+};
+
+/** Mirror usage of a programmatically created texture resource (CreateResource path):
+ *  how FRender populates the Persistent GPU mirror's RHI usage so it can serve as a
+ *  render attachment (ColorTarget/DepthTarget) vs a plain sampled texture. An
+ *  asset-layer abstraction - Render maps it to ERHITextureUsage. */
+enum class ETextureMirrorUsage : std::uint8_t
+{
+	Sampled = 0,
+	ColorTarget,
+	DepthTarget,
+};
+
+/** Filtering mode for image sampling (GPU sampler state). An asset-layer abstraction -
+ *  FRender maps it to ERHIFilter when creating the mirror's sampler. */
+enum class ETextureSamplerMode : std::uint8_t
+{
+	Nearest = 0,
+	Linear,
+};
+
+/** Per-axis address / wrap mode for image sampling (GPU sampler state). Asset-layer
+ *  abstraction - FRender maps it to ERHIAddressMode when creating the mirror's sampler. */
+enum class ETextureAddressMode : std::uint8_t
+{
+	Repeat = 0,
+	MirroredRepeat,
+	ClampToEdge,
+	ClampToBorder,
 };
 
 // ── AssetsResource: casset 容器资源 ─────────────────────────────
@@ -128,6 +158,26 @@ public:
 	[[nodiscard]] const std::vector<std::uint8_t>& GetPixels() const { return Pixels; }
 	[[nodiscard]] std::vector<std::uint8_t>& GetPixelsMutable() { return Pixels; }
 
+	/** Mirror usage the GPU mirror is built with (CreateResource path). Default: Sampled.
+	 *  Set by TResourceCreateDesc::Make so FRender's OnAssetMirrorCreated creates a
+	 *  Persistent attachment with the matching RHI usage. */
+	[[nodiscard]] ETextureMirrorUsage GetMirrorUsage() const { return MirrorUsage; }
+	void SetMirrorUsage(ETextureMirrorUsage Usage) { MirrorUsage = Usage; }
+
+	// GPU sampling config the mirror's sampler is built with (OnAssetMirrorCreated).
+	// Set by TResourceCreateDesc::Make, or left at the asset defaults for imported
+	// textures. FRender maps these to ERHIFilter / ERHIAddressMode / LodBias.
+	[[nodiscard]] ETextureSamplerMode GetFilterMode() const { return FilterMode; }
+	void SetFilterMode(ETextureSamplerMode Mode) { FilterMode = Mode; }
+	[[nodiscard]] ETextureAddressMode GetAddressU() const { return AddressU; }
+	void SetAddressU(ETextureAddressMode Mode) { AddressU = Mode; }
+	[[nodiscard]] ETextureAddressMode GetAddressV() const { return AddressV; }
+	void SetAddressV(ETextureAddressMode Mode) { AddressV = Mode; }
+	[[nodiscard]] ETextureAddressMode GetAddressW() const { return AddressW; }
+	void SetAddressW(ETextureAddressMode Mode) { AddressW = Mode; }
+	[[nodiscard]] float GetLodBias() const { return LodBias; }
+	void SetLodBias(float Bias) { LodBias = Bias; }
+
 	// Once the render mirror has taken the pixels, drop the CPU bulk to reclaim memory.
 	void ReleaseBulk() override { Pixels.clear(); Pixels.shrink_to_fit(); }
 
@@ -156,6 +206,12 @@ protected:
 	std::uint32_t MipCount = 1;
 	bool bSRGB = true;
 	std::vector<std::uint8_t> Pixels;
+	ETextureMirrorUsage MirrorUsage = ETextureMirrorUsage::Sampled;
+	ETextureSamplerMode FilterMode = ETextureSamplerMode::Linear;
+	ETextureAddressMode AddressU = ETextureAddressMode::Repeat;
+	ETextureAddressMode AddressV = ETextureAddressMode::Repeat;
+	ETextureAddressMode AddressW = ETextureAddressMode::Repeat;
+	float LodBias = 0.0f;
 };
 
 // One concrete asset type per texture dimension (typed Import<T> / Export<T>);
@@ -230,6 +286,46 @@ public:
 		std::vector<std::uint8_t> InPixels)
 		: FTexture(std::move(InPath), ETextureDimension::TexCubeArray, InFormat, InSize, InSize, 1, InArrayLayers, InMipCount, bInSRGB, std::move(InPixels))
 	{
+	}
+};
+
+// -- TResourceCreateDesc<T>: descriptor -> filled resource (runtime persistent GPU resource
+// creation via FResourceSystem::CreateResource). The descriptor carries the fields needed to
+// build a GPU resource; Make fills them into a resource instance. Empty Pixels means
+// "create the mirror only" (no content to upload) - the mirror is built by FRender's
+// OnAssetCreated listener. --
+
+template <>
+struct TResourceCreateDesc<FTexture2D>
+{
+	struct FConfig
+	{
+		ETexturePixelFormat Format = ETexturePixelFormat::RGBA8;
+		std::uint32_t Width = 0;
+		std::uint32_t Height = 0;
+		std::uint32_t ArrayLayers = 1;
+		std::uint32_t MipCount = 1;
+		bool bSRGB = true;
+		ETextureMirrorUsage Usage = ETextureMirrorUsage::Sampled;   // RHI usage the mirror is built with
+		ETextureSamplerMode FilterMode = ETextureSamplerMode::Linear;   // mirror sampler filtering
+		ETextureAddressMode AddressU = ETextureAddressMode::Repeat;     // mirror sampler wrap (U)
+		ETextureAddressMode AddressV = ETextureAddressMode::Repeat;     // mirror sampler wrap (V)
+		ETextureAddressMode AddressW = ETextureAddressMode::Repeat;     // mirror sampler wrap (W)
+		float LodBias = 0.0f;                                          // mirror sampler lod bias
+		std::vector<std::uint8_t> Pixels;   // empty = mirror only (no content upload)
+	};
+
+	[[nodiscard]] static FTexture2D Make(std::string_view Path, const FConfig& Config)
+	{
+		FTexture2D Tex(std::string(Path), Config.Format, Config.Width, Config.Height,
+			Config.MipCount, Config.bSRGB, Config.Pixels);
+		Tex.SetMirrorUsage(Config.Usage);
+		Tex.SetFilterMode(Config.FilterMode);
+		Tex.SetAddressU(Config.AddressU);
+		Tex.SetAddressV(Config.AddressV);
+		Tex.SetAddressW(Config.AddressW);
+		Tex.SetLodBias(Config.LodBias);
+		return Tex;
 	}
 };
 

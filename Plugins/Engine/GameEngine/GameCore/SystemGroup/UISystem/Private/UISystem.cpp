@@ -81,24 +81,6 @@ void FUISystem::OnInstalled(FGameWorld& World)
 	// frame and runs them between NewFrame and Render -- so every ImGui call the game
 	// makes stays on the ImGui context's single owner thread.
 
-	// Find a loaded texture id for the Image demo (0 = none available).
-	std::uint32_t TexId = 0;
-	if (Resource::FResourceSystem* RS = Resource::GetResourceSystem())
-	{
-		RS->ForEachResource([&](const Name::FName& AssetName, const Resource::FResource& Res)
-		{
-			if (TexId != 0)
-			{
-				return;
-			}
-			const Resource::FTexture* Tex = dynamic_cast<const Resource::FTexture*>(&Res);
-			if (Tex != nullptr && Tex->GetWidth() != 0 && Tex->GetHeight() != 0)
-			{
-				TexId = AssetName.GetId();
-			}
-		});
-	}
-
 	// Spawn a few widget entities: each gets an FTransform (screen anchor) plus an
 	// FUIWidget (widget state) -- the world's SoA component pools store them by
 	// entity Index. Each widget OWNS its own control orchestration, so "the same
@@ -139,11 +121,9 @@ void FUISystem::OnInstalled(FGameWorld& World)
 			};
 			break;
 		case 2:
-			W.bPreviewAllTextures = true;
 			W.Controls = {
 				{ EUIControlType::Label,    "widget 2" },
 				{ EUIControlType::Separator },
-				{ EUIControlType::Image,    "", TexId, 0u, 96.f, 96.f },
 				{ EUIControlType::Slider,   "volume", 0u, 0u, 0.5f, 1.f },
 			};
 			break;
@@ -207,56 +187,6 @@ void FUISystem::Update(FGameWorld& World)
 
 	// Widget positions stay static (anchored in screen space). Moving them every frame
 	// makes the just-repositioned ImGui windows jitter/flicker in immediate mode.
-
-	// Live texture browser: textures import ASYNCHRONOUSLY (queued at Render's
-	// PostInitialize, completed on the IO thread later), so a widget's Image controls
-	// cannot be enumerated once at creation -- that sees an empty set and the thumbnails
-	// never appear. Every frame, for each bPreviewAllTextures widget, rebuild the Image
-	// sublist from the CURRENT resource-space texture set, preserving the non-Image
-	// controls. This tracks async imports (and drops stale ids on unload).
-	if (Resource::FResourceSystem* RS = Resource::GetResourceSystem())
-	{
-		std::vector<std::uint32_t> TexIds;
-		RS->ForEachResource([&](const Name::FName& AssetName, const Resource::FResource& Res)
-		{
-			const Resource::FTexture* Tex = dynamic_cast<const Resource::FTexture*>(&Res);
-			if (Tex != nullptr && Tex->GetWidth() != 0 && Tex->GetHeight() != 0)
-			{
-				TexIds.push_back(AssetName.GetId());
-			}
-		});
-		if (!TexIds.empty())
-		{
-			for (const FEntity E : World.GetAllWithComponent<FUIWidget>())
-			{
-				FUIWidget* W = World.GetComponent<FUIWidget>(E);
-				if (W == nullptr || !W->bPreviewAllTextures)
-				{
-					continue;
-				}
-				std::vector<FUIControl> NonImage;
-				NonImage.reserve(W->Controls.size());
-				for (const FUIControl& C : W->Controls)
-				{
-					if (C.Type != EUIControlType::Image)
-					{
-						NonImage.push_back(C);
-					}
-				}
-				W->Controls = std::move(NonImage);
-				for (const std::uint32_t Id : TexIds)
-				{
-					FUIControl Img;
-					Img.Type = EUIControlType::Image;
-					Img.ResourceId = Id;
-					Img.Id = NextControlId++;
-					Img.V0 = 128.f;
-					Img.V1 = 128.f;
-					W->Controls.push_back(std::move(Img));
-				}
-			}
-		}
-	}
 
 	// UI components arrange what to draw by submitting draw CLOSURES to the UIBuilder.
 	// Each closure captures only DATA (values, no ImGui state); it runs on the render

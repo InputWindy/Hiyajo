@@ -1,13 +1,13 @@
 #include "Render.h"
 
 #include <DrawTriangleFeature.h>
-#include <Frame.h>
 #include <UIFeature.h>
 #include <Log.h>
 #include <Name.h>
 #include <Platform.h>
 #include <Paths.h>
 #include <Scene.h>
+#include <RHI/RHIEnums.h>
 #include "RenderResourcePool.h"
 #include "ShaderCompiler.h"
 
@@ -86,11 +86,10 @@ void FRender::Initialize(FEngineBase& Engine)
 	// All are engine plugins beside this one (same layer, Plugins/Engine/).
 	// They are loaded by DLL name at runtime (Install<T> → FAssembly), so this
 	// DLL only includes their headers and never links them -- see Render.cplugin
-	// PrivateIncludes. Frame drives the swapchain begin/end as a scheduled stage
-	// and must load last (its IPresent depends on the other features' IEndRender).
+	// PrivateIncludes. UIFeature owns the present now and must load last (its
+	// IPresent depends on the other features' IEndRender).
 	Install<Scene::FScene>();
 	Install<FDrawTriangleFeature>();
-	Install<FFrame>();
 	Install<FUIFeature>();
 
 	// (The UI's CPU-side ImGui context is owned by FUIFeature now; FRender is
@@ -109,6 +108,10 @@ void FRender::Initialize(FEngineBase& Engine)
 		RS->OnAssetUnloaded.Bind([this](const Name::FName& N, Resource::FOnTransferDone D)
 		{
 			OnAssetMirrorUnloaded(N, std::move(D));
+		});
+		RS->OnAssetCreated.Bind([this](const Name::FName& N, const Resource::FResource& R)
+		{
+			OnAssetMirrorCreated(N, R);
 		});
 		RS->SetReadback([this](const Name::FName& N, Resource::FResource& R)
 		{
@@ -164,6 +167,7 @@ void FRender::Shutdown(FEngineBase&)
 	{
 		RS->OnAssetImported.RemoveAll();
 		RS->OnAssetUnloaded.RemoveAll();
+		RS->OnAssetCreated.RemoveAll();
 	}
 	GpuMirrors.clear();
 	// The UI mirror descriptor sets are owned by FUIFeature; it is destroyed by
@@ -830,6 +834,25 @@ void FRender::PresentTexture(const FRDGTextureRef& Texture)
 
 // -- CPU asset -> GPU mirror --
 
+namespace
+{
+ERHIFilter SamplerFilterMirror(Resource::ETextureSamplerMode Mode)
+{
+	return Mode == Resource::ETextureSamplerMode::Nearest ? ERHIFilter::Nearest : ERHIFilter::Linear;
+}
+
+ERHIAddressMode SamplerAddressMirror(Resource::ETextureAddressMode Mode)
+{
+	switch (Mode)
+	{
+		case Resource::ETextureAddressMode::MirroredRepeat: return ERHIAddressMode::MirroredRepeat;
+		case Resource::ETextureAddressMode::ClampToEdge:    return ERHIAddressMode::ClampToEdge;
+		case Resource::ETextureAddressMode::ClampToBorder: return ERHIAddressMode::ClampToBorder;
+		default:                                            return ERHIAddressMode::Repeat;
+	}
+}
+} // namespace
+
 ERHIFormat FRender::FormatMirror(Resource::ETexturePixelFormat Fmt, bool bSRGB)
 {
 	switch (Fmt)
@@ -848,6 +871,8 @@ ERHIFormat FRender::FormatMirror(Resource::ETexturePixelFormat Fmt, bool bSRGB)
 			return ERHIFormat::R8G8B8_UNORM;
 		case Resource::ETexturePixelFormat::R16F:
 			return ERHIFormat::R16_SFLOAT;
+		case Resource::ETexturePixelFormat::D32Sfloat:
+			return ERHIFormat::D32_SFLOAT;
 		// Block-compressed (BlockCompressed/DXT1/DXT5/BC7) and Unknown: no dedicated
 		// RHI format yet, and a BC upload needs block-aligned rows. Returns Unknown
 		// so UploadTextureMirror fails cleanly. TODO: map once the RHI grows the
@@ -985,10 +1010,93 @@ void FRender::OnAssetMirrorUnloaded(const Name::FName& AssetName, Resource::FOnT
 		}
 		GpuMirrors.erase(It);
 	}
+	GpuSamplers.erase(AssetName);
 	if (Done)
 	{
 		Done(true, std::string_view());
 	}
+}
+
+void FRender::OnAssetMirrorCreated(const Name::FName& AssetName, const Resource::FResource& Resource)
+{
+	// A same-named mirror already exists (re-create). Keep the existing one - the
+	// caller must DestroyResource first to rebuild a mirror with new fields.
+	if (GpuMirrors.find(AssetName) != GpuMirrors.end())
+	{
+		return;
+	}
+
+	// Only textures are creatable resources today (FTexture2D desc). Build a
+	// Persistent GPU mirror from the descriptor fields; empty Pixels = no staged
+	// upload, the mirror is a runtime placeholder render features sample.
+	const Resource::FTexture* Tex = dynamic_cast<const Resource::FTexture*>(&Resource);
+	if (Tex == nullptr)
+	{
+		MAHO_LOG_CORE_WARN("FRender: mirror create asset={} (non-texture, skipped)", AssetName.ToString());
+		return;
+	}
+	if (Tex->GetWidth() == 0 || Tex->GetHeight() == 0)
+	{
+		MAHO_LOG_CORE_WARN("FRender: mirror create asset={} (zero extent, skipped)", AssetName.ToString());
+		return;
+	}
+
+	const ERHIFormat Fmt = FormatMirror(Tex->GetPixelFormat(), Tex->IsSRGB());
+	if (Fmt == ERHIFormat::Unknown)
+	{
+		MAHO_LOG_CORE_WARN("FRender: mirror create asset={} (unsupported format, skipped)", AssetName.ToString());
+		return;
+	}
+
+	FRHITextureDesc Desc;
+	Desc.Format = Fmt;
+	Desc.Dimension = DimensionMirror(Tex->GetDimension());
+	Desc.Extent.Width = Tex->GetWidth();
+	Desc.Extent.Height = Tex->GetHeight();
+	Desc.Extent.Depth = Tex->GetDepth();
+	Desc.MipLevels = Tex->GetMipCount();
+	Desc.ArrayLayers = Tex->GetArrayLayers();
+	switch (Tex->GetMirrorUsage())
+	{
+		case Resource::ETextureMirrorUsage::ColorTarget:
+			Desc.Usage = ERHITextureUsage::ColorAttachment | ERHITextureUsage::Sampled | ERHITextureUsage::TransferSrc;
+			break;
+		case Resource::ETextureMirrorUsage::DepthTarget:
+			Desc.Usage = ERHITextureUsage::DepthStencil | ERHITextureUsage::Sampled;
+			break;
+		default:
+			Desc.Usage = ERHITextureUsage::Sampled | ERHITextureUsage::TransferDst;
+			break;
+	}
+	Desc.MemoryUsage = ERHIMemoryUsage::GPUOnly;
+
+	FRDGTextureRef TexRef = CreateTexture(Desc, ERDGResourceLifetime::Persistent);
+	if (!TexRef.IsValid() || TexRef.GetRHI() == nullptr)
+	{
+		MAHO_LOG_CORE_ERROR("FRender: mirror create texture allocation failed asset={}", AssetName.ToString());
+		return;
+	}
+	GpuMirrors[AssetName] = TexRef;
+
+	// Mirror sampler from the asset's GPU sampling config (filter + wrap + lod bias),
+	// created through the pool (get-or-create, pool-shared). Resolved by features via
+	// GetMirrorSampler(FName) alongside the texture mirror.
+	{
+		FRHISamplerDesc SDesc;
+		SDesc.MinFilter = SamplerFilterMirror(Tex->GetFilterMode());
+		SDesc.MagFilter = SamplerFilterMirror(Tex->GetFilterMode());
+		SDesc.AddressU = SamplerAddressMirror(Tex->GetAddressU());
+		SDesc.AddressV = SamplerAddressMirror(Tex->GetAddressV());
+		SDesc.AddressW = SamplerAddressMirror(Tex->GetAddressW());
+		SDesc.LodBias = Tex->GetLodBias();
+		if (FRHISampler* Sampler = CreateSampler(SDesc))
+		{
+			GpuSamplers[AssetName] = Sampler;
+		}
+	}
+
+	MAHO_LOG_CORE_INFO("FRender: mirror created asset={} ({}x{}, {})", AssetName.ToString(),
+		Tex->GetWidth(), Tex->GetHeight(), Tex->IsSRGB() ? "sRGB" : "linear");
 }
 
 bool FRender::ReadbackMirror(const Name::FName& /*AssetName*/, Resource::FResource& /*OutResource*/)

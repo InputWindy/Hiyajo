@@ -53,18 +53,6 @@ void FGameWorld::PreInitialize(FEngineBase&) {}
 void FGameWorld::PostInitialize(FEngineBase&) 
 {
 	WorldGraph = std::make_unique<FLayerTaskGraph<FWorldStages, FGameWorld>>(Pool, *this);
-
-	// Startup test texture: SYNCHRONOUS (blocking) import on THIS thread so the resource
-	// is resident + mirrored BEFORE the UI texture browser rebuilds its Image controls
-	// (see FUISystem::Update). Async Import would poll on Tick, which does not run during
-	// a stage -- the browser would see an empty set on the first frame. ImportBlocking
-	// reads / decodes / registers / broadcasts here, so OnAssetImported fires the render
-	// mirror upload immediately.
-	if (Resource::FResourceSystem* RS = Resource::GetResourceSystem())
-	{
-		RS->Import<Resource::FTexture2D>({ "D:/TestPackage/test.png" });
-		RS->Flush();
-	}
 }
 void FGameWorld::BeginFrame(FEngineBase&) {}
 void FGameWorld::EndFrame(FEngineBase&) {}
@@ -101,14 +89,12 @@ void FGameWorld::Initialize(FEngineBase&)
 	W.Width = 520.f;
 	W.Height = 440.f;
 	W.bVisible = true;
-	// Live texture browser: texture imports are asynchronous, so a one-time
-	// enumeration here (IInit) would see an empty set and no thumbnails. Instead the
-	// UISystem rebuilds this widget's Image controls from the CURRENT resource texture
-	// set every frame (see FUISystem::Update / bPreviewAllTextures), so async imports
-	// appear without re-running this Initialize.
-	W.bPreviewAllTextures = true;
-	W.Controls.push_back(FUIControl{ EUIControlType::Label, "default texture browser" });
+	// SceneColor pass preview: draw the scene color mirror (built by FScene via
+	// CreateResource, keyed "SceneColor") as an ImGui::Image. ResourceId = the
+	// mirror's FName id; the render feature resolves Id -> mirror texture on draw.
+	W.Controls.push_back(FUIControl{ EUIControlType::Label, "SceneColor" });
 	W.Controls.push_back(FUIControl{ EUIControlType::Separator });
+	W.Controls.push_back(FUIControl{ EUIControlType::Image, "", Name::FName("SceneColor").GetId(), 0u, 480.f, 400.f });
 	AddComponent<FUIWidget>(DefaultUIEntity, W);
 
 	// Install the world systems (peer layers). Applied at the next Tick's

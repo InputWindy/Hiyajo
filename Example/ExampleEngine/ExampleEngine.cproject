@@ -88,10 +88,6 @@
       "Enabled": true
     },
     {
-      "Name": "Frame",
-      "Enabled": true
-    },
-    {
       "Name": "UIFeature",
       "Enabled": true
     },

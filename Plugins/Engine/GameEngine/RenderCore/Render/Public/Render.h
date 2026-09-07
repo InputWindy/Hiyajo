@@ -175,6 +175,15 @@ public:
 		const auto It = GpuMirrors.find(AssetName);
 		return It != GpuMirrors.end() ? &It->second : nullptr;
 	}
+
+	/** Sampler mirror for an asset texture (built from its GPU sampling config in
+	 *  OnAssetMirrorCreated). Feature draws resolve this to bind the sampled texture.
+	 *  Returns nullptr when the asset has no texture mirror or no sampler was created. */
+	[[nodiscard]] FRHISampler* GetMirrorSampler(const Name::FName& AssetName) const
+	{
+		const auto It = GpuSamplers.find(AssetName);
+		return It != GpuSamplers.end() ? It->second : nullptr;
+	}
 public:
 	// -- render surface / canvas info + present. FRender owns the RHI; features
 	// never reach the raw IRHI* (no GetRHI()). The canvas is the swapchain geometry
@@ -484,6 +493,11 @@ private:
 	 *  GPU mirror resource itself. */
 	std::unordered_map<Name::FName, FRDGResourceRef> GpuMirrors;
 
+	/** Asset FName -> GPU sampler mirror, built from the texture's GPU sampling config
+	 *  in OnAssetMirrorCreated, resolved via GetMirrorSampler. The sampler is created
+	 *  through the pool (get-or-create, pool-shared); erased on OnAssetMirrorUnloaded. */
+	std::unordered_map<Name::FName, FRHISampler*> GpuSamplers;
+
 	/** OnAssetImported listener: mirror the imported CPU asset to GPU (upload its
 	 *  pixels), then report completion via Done so the resource system can drop the
 	 *  CPU bulk. */
@@ -491,6 +505,12 @@ private:
 
 	/** OnAssetUnloaded listener: release the GPU mirror + erase the table entry. */
 	void OnAssetMirrorUnloaded(const Name::FName& AssetName, Resource::FOnTransferDone Done);
+
+	/** OnAssetCreated listener (resource system CreateResource): build a Persistent GPU
+	 *  mirror from the resource's descriptor fields (no pixel upload - the resource is a
+	 *  runtime placeholder) and key it by the asset FName. Render features resolve the
+	 *  mirror via GetMirror(FName). Transient (per-frame) GPU resources skip this path. */
+	void OnAssetMirrorCreated(const Name::FName& AssetName, const Resource::FResource& Resource);
 
 	/** GPU fill-back (SetReadback provider): decode the GPU mirror back into the
 	 *  resource's CPU fields before an export. Returns false when the resource has

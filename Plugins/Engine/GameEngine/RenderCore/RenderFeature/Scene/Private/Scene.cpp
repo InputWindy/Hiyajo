@@ -1,7 +1,9 @@
 #include "Scene.h"
 
-#include <Frame.h>
+#include "AssetTypes.h"
 #include <Log.h>
+#include <Name.h>
+#include <Resource.h>
 #include <RHI/RHICommandList.h>
 #include <RHI/RHIEnums.h>
 #include <RHI/RHIResources.h>
@@ -16,6 +18,15 @@ static FScene* GScene = nullptr;
 FScene* GetScene()
 {
 	return GScene;
+}
+
+// SceneColor/SceneDepth: two hardcoded persistent render targets. Created through the
+// resource system (CreateResource) so they flow into GpuMirrors; FScene keeps the
+// FRDGTextureRef resolved from the mirror (FRender built it with the matching RHI usage).
+namespace
+{
+	constexpr std::string_view kSceneColorName = "SceneColor";
+	constexpr std::string_view kSceneDepthName = "SceneDepth";
 }
 
 FScene::FScene()
@@ -54,35 +65,63 @@ void FScene::EnsureTargets(FRender& R)
 		return;
 	}
 
-	// Resize or first creation: drop old targets and recreate.
-	if (SceneColor.IsValid())
+	// Resize or first creation: drop the old resource-system entries (each DestroyResource
+	// broadcasts OnAssetUnloaded -> the render mirror releases + erases the old target).
+	Resource::FResourceSystem* RS = Resource::GetResourceSystem();
+	if (RS != nullptr && (SceneColor.IsValid() || SceneDepth.IsValid()))
 	{
-		R.ReleaseTexture(SceneColor);
-	}
-	if (SceneDepth.IsValid())
-	{
-		R.ReleaseTexture(SceneDepth);
+		RS->DestroyResource(kSceneColorName);
+		RS->DestroyResource(kSceneDepthName);
 	}
 
-	FRHITextureDesc ColorDesc;
-	ColorDesc.Format = R.GetSwapchainFormat();
-	ColorDesc.Dimension = ERHITextureDimension::Tex2D;
-	ColorDesc.Extent = { W, H, 1 };
-	ColorDesc.MipLevels = 1;
-	ColorDesc.ArrayLayers = 1;
-	ColorDesc.Usage = ERHITextureUsage::ColorAttachment | ERHITextureUsage::Sampled | ERHITextureUsage::TransferSrc;
-	ColorDesc.MemoryUsage = ERHIMemoryUsage::GPUOnly;
-	SceneColor = R.CreateTexture(ColorDesc, ERDGResourceLifetime::Persistent);
+	if (RS != nullptr)
+	{
+		// SceneColor: mirror the swapchain's backbuffer format so the present blit is
+		// consistent with the backbuffer (an offscreen RT may differ, but keep it simple).
+		const ERHIFormat SwFmt = R.GetSwapchainFormat();
+		Resource::ETexturePixelFormat ColorFmt = Resource::ETexturePixelFormat::RGBA8;
+		bool bSRGB = false;
+		switch (SwFmt)
+		{
+			case ERHIFormat::R8G8B8A8_SRGB:  ColorFmt = Resource::ETexturePixelFormat::RGBA8; bSRGB = true; break;
+			case ERHIFormat::R8G8B8A8_UNORM: ColorFmt = Resource::ETexturePixelFormat::RGBA8; bSRGB = false; break;
+			default:
+				MAHO_LOG_CORE_WARN("FScene: unsupported swapchain format for scene color; using RGBA8_UNORM");
+				ColorFmt = Resource::ETexturePixelFormat::RGBA8;
+				bSRGB = false;
+				break;
+		}
 
-	FRHITextureDesc DepthDesc;
-	DepthDesc.Format = ERHIFormat::D32_SFLOAT;
-	DepthDesc.Dimension = ERHITextureDimension::Tex2D;
-	DepthDesc.Extent = { W, H, 1 };
-	DepthDesc.MipLevels = 1;
-	DepthDesc.ArrayLayers = 1;
-	DepthDesc.Usage = ERHITextureUsage::DepthStencil;
-	DepthDesc.MemoryUsage = ERHIMemoryUsage::GPUOnly;
-	SceneDepth = R.CreateTexture(DepthDesc, ERDGResourceLifetime::Persistent);
+		Resource::TResourceCreateDesc<Resource::FTexture2D>::FConfig ColorCfg;
+		ColorCfg.Format = ColorFmt;
+		ColorCfg.Width = W;
+		ColorCfg.Height = H;
+		ColorCfg.ArrayLayers = 1;
+		ColorCfg.MipCount = 1;
+		ColorCfg.bSRGB = bSRGB;
+		ColorCfg.Usage = Resource::ETextureMirrorUsage::ColorTarget;
+		RS->CreateResource<Resource::FTexture2D>(kSceneColorName, ColorCfg);
+
+		Resource::TResourceCreateDesc<Resource::FTexture2D>::FConfig DepthCfg;
+		DepthCfg.Format = Resource::ETexturePixelFormat::D32Sfloat;
+		DepthCfg.Width = W;
+		DepthCfg.Height = H;
+		DepthCfg.ArrayLayers = 1;
+		DepthCfg.MipCount = 1;
+		DepthCfg.Usage = Resource::ETextureMirrorUsage::DepthTarget;
+		RS->CreateResource<Resource::FTexture2D>(kSceneDepthName, DepthCfg);
+
+		// Resolve the Persistent mirrors FRender committed (CreateResource broadcasts
+		// OnAssetCreated synchronously, so the mirrors are resident by now).
+		if (const FRDGResourceRef* C = R.GetMirror(Name::FName(kSceneColorName)))
+		{
+			if (const FRDGTextureRef* T = std::get_if<FRDGTextureRef>(C)) { SceneColor = *T; }
+		}
+		if (const FRDGResourceRef* D = R.GetMirror(Name::FName(kSceneDepthName)))
+		{
+			if (const FRDGTextureRef* T = std::get_if<FRDGTextureRef>(D)) { SceneDepth = *T; }
+		}
+	}
 
 	// Dynamic rendering needs the attachments in the correct layout before the
 	// first BeginRendering. The transition is recorded at the START of this

@@ -232,6 +232,25 @@ const FResource* FResourceSystem::RegisterResource(std::string AssetPath, std::u
 	return Raw;
 }
 
+bool FResourceSystem::DestroyResource(std::string_view AssetPath)
+{
+	const Name::FName AssetName(AssetPath);
+	{
+		std::lock_guard Lock(Impl->Mutex);
+		const auto It = Impl->Catalog.find(AssetName);
+		if (It == Impl->Catalog.end())
+		{
+			return false;
+		}
+		Impl->Catalog.erase(It);   // destroy the resource object
+	}
+	// Notify listeners (e.g. the render mirror) to release any GPU resource held for
+	// this asset. The resource is already out of the catalog here, so MakeTransferDone's
+	// ReleaseBulk finds no entry and no-ops - harmless.
+	OnAssetUnloaded.Broadcast(AssetName, MakeTransferDone(std::string(AssetPath)));
+	return true;
+}
+
 void FResourceSystem::ProcessReadyIO()
 {
 	std::vector<FPendingImport> ReadyImports;

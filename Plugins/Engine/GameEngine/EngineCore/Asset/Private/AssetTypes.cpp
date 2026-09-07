@@ -14,7 +14,7 @@ namespace Resource
 namespace
 {
 constexpr std::uint32_t CassetMagic = 0x53534143u;
-constexpr std::uint32_t CassetVersion = 1;
+constexpr std::uint32_t CassetVersion = 2;   // 2: FTexture gained GPU sampling (filter/address/lod)
 }
 
 using namespace detail;
@@ -152,6 +152,10 @@ void SerializeVector(Archive::FArchive& Ar, std::vector<T>& V)
 
 void FTexture::Serialize(Archive::FArchive& Ar)
 {
+	if (!Ar.IsReading())
+	{
+		Version = CassetVersion;
+	}
 	FAssetsResource::Serialize(Ar);
 	std::uint32_t Dim = static_cast<std::uint32_t>(Dimension);
 	std::uint32_t Fmt = static_cast<std::uint32_t>(PixelFormat);
@@ -178,6 +182,26 @@ void FTexture::Serialize(Archive::FArchive& Ar)
 			Pixels.push_back(Byte);
 		}
 	}
+
+	// GPU sampling config (tail): written at casset v2; read back only when the
+	// container version >= 2 so v1 cassets stay readable with the field defaults.
+	std::uint8_t FM = static_cast<std::uint8_t>(FilterMode);
+	std::uint8_t AU = static_cast<std::uint8_t>(AddressU);
+	std::uint8_t AV = static_cast<std::uint8_t>(AddressV);
+	std::uint8_t AW = static_cast<std::uint8_t>(AddressW);
+	float LB = LodBias;
+	if (Ar.IsReading())
+	{
+		if (Version >= 2)
+		{
+			Ar << FM << AU << AV << AW << LB;
+		}
+	}
+	else
+	{
+		Ar << FM << AU << AV << AW << LB;
+	}
+
 	if (Ar.IsReading())
 	{
 		Dimension = static_cast<ETextureDimension>(Dim);
@@ -188,6 +212,14 @@ void FTexture::Serialize(Archive::FArchive& Ar)
 		ArrayLayers = L;
 		MipCount = M;
 		bSRGB = bInSRGB;
+		if (Version >= 2)
+		{
+			FilterMode = static_cast<ETextureSamplerMode>(FM);
+			AddressU = static_cast<ETextureAddressMode>(AU);
+			AddressV = static_cast<ETextureAddressMode>(AV);
+			AddressW = static_cast<ETextureAddressMode>(AW);
+			LodBias = LB;
+		}
 	}
 }
 

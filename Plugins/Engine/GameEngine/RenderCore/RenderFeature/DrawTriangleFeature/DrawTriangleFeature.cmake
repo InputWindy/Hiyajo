@@ -19,9 +19,6 @@ target_include_directories(DrawTriangleFeature PUBLIC
 	"${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/Render/Public"
 	"${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/Scene/Public"
 )
-target_include_directories(DrawTriangleFeature PRIVATE
-	"${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/Frame/Public"
-)
 set_target_properties(DrawTriangleFeature PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 target_compile_definitions(DrawTriangleFeature PRIVATE MAHO_DRAWTRIANGLEFEATURE_MODULE_EXPORTS)
 target_link_libraries(DrawTriangleFeature PUBLIC Maho)

@@ -6,7 +6,5 @@
     "Render",
     "Scene"
   ],
-  "PrivateIncludes": [
-    "Frame"
-  ]
+  "PrivateIncludes": []
 }

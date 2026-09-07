@@ -53,6 +53,9 @@ struct TResourceImporter;   // undefined - specialize per resource type
 template <typename TResource>
 struct TResourceExporter;   // undefined - specialize per resource type
 
+template <typename TResource>
+struct TResourceCreateDesc;   // undefined - specialize per resource type
+
 /** Transfer completion callback - the upstream (FResourceSystem) builds this and
  *  hands it to a listener when broadcasting an imported/loaded resource; the listener
  *  invokes it after it has finished consuming (e.g. uploaded + mirrored) to report
@@ -140,6 +143,13 @@ public:
 	/** Broadcast when a resource is unloaded / invalidated (game thread). */
 	TMulticastEvent<void(const Name::FName&, FOnTransferDone)> OnAssetUnloaded;
 
+	/** Broadcast when a resource is CREATED via CreateResource<T> (game thread), after it is
+	 *  registered in the catalog. The listener (e.g. FRender) receives the resource by
+	 *  reference (it is already resident) and builds a persistent GPU mirror keyed by the
+	 *  asset FName; render features then resolve that mirror via FRender::GetMirror. The
+	 *  resource stays alive - the listener must not take ownership. */
+	TMulticastEvent<void(const Name::FName&, const FResource&)> OnAssetCreated;
+
 	/** Broadcast when a resource finishes exporting (game thread): (asset FName, success). */
 	TMulticastEvent<void(const Name::FName&, bool)> OnAssetExported;
 
@@ -160,6 +170,29 @@ public:
 	 */
 	template <typename TResource>
 	bool Export(typename TResourceExporter<TResource>::FConfig Config, std::string_view AssetPath);
+
+	/** Create a typed resource from a descriptor and register it in the catalog, returning
+	 *  the mutable instance. This is the runtime/dynamic path (persistent render resources
+	 *  made on the spot, not decoded from a file). `Config` (the create descriptor) is passed
+	 *  to `TResource(AssetPath, Config)` so the resource carries the fields needed to build a
+	 *  GPU resource (dimensions/format/usage...).
+	 *
+	 *  Broadcasts OnAssetCreated on the game thread after registration so a listener
+	 *  (e.g. FRender) builds a persistent GPU mirror keyed by the asset FName; render
+	 *  features then resolve it via FRender::GetMirror. Transient (per-frame) GPU resources
+	 *  should NOT go through here - they are created/discarded within a frame.
+	 *
+	 *  An existing entry with the same AssetPath is overwritten (the old resource is
+	 *  destroyed without broadcast). Empty AssetPath returns nullptr.
+	 */
+	template <typename TResource>
+	TResource* CreateResource(std::string_view AssetPath, typename TResourceCreateDesc<TResource>::FConfig Config);
+
+	/** Destroy a registered resource: remove it from the catalog and destroy the object.
+	 *  Broadcasts OnAssetUnloaded (asset FName + done callback) so listeners (e.g. the
+	 *  render mirror) release any GPU resource they hold for that asset. Returns false when
+	 *  no resource is registered under AssetPath. */
+	bool DestroyResource(std::string_view AssetPath);
 
 	/** Find a loaded resource; nullptr when absent. */
 	[[nodiscard]] const FResource* Find(std::string_view AssetPath) const;
@@ -258,6 +291,28 @@ bool FResourceSystem::Import(typename TResourceImporter<TResource>::FConfig Conf
 			}
 			});
 	}
+
+template <typename TResource>
+TResource* FResourceSystem::CreateResource(std::string_view AssetPath, typename TResourceCreateDesc<TResource>::FConfig Config)
+{
+	if (AssetPath.empty())
+	{
+		return nullptr;
+	}
+	const std::string Path(AssetPath);
+	// TResourceCreateDesc<T>::Make(Path, Config) - the descriptor fills the creation fields
+	// so a listener (OnAssetCreated) can build a persistent GPU mirror from those fields.
+	auto Resource = std::make_unique<TResource>(TResourceCreateDesc<TResource>::Make(Path, Config));
+	TResource* Raw = Resource.get();
+	// Delegate to the .cpp-defined RegisterResource so the template never dereferences
+	// the private (header-incomplete) FImpl. Register BEFORE broadcasting so a listener that
+	// resolves the resource (Find/FindMutable) sees it already resident.
+	RegisterResource(Path, std::move(Resource));
+	// Sync broadcast (game thread): resource is resident + keyed by FName. Passed by
+	// reference (not a pointer) so the listener needs no lifetime guarantee beyond the call.
+	OnAssetCreated.Broadcast(Name::FName(Path), *Raw);
+	return Raw;
+}
 
 template <typename TResource>
 bool FResourceSystem::Export(typename TResourceExporter<TResource>::FConfig Config, std::string_view AssetPath)
