@@ -62,7 +62,8 @@ void FGameWorld::PostInitialize(FEngineBase&)
 	// mirror upload immediately.
 	if (Resource::FResourceSystem* RS = Resource::GetResourceSystem())
 	{
-		RS->ImportBlocking<Resource::FTexture2D>({ "D:/TestPackage/test.png" });
+		RS->Import<Resource::FTexture2D>({ "D:/TestPackage/test.png" });
+		RS->Flush();
 	}
 }
 void FGameWorld::BeginFrame(FEngineBase&) {}
