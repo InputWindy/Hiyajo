@@ -123,25 +123,11 @@ void FRender::Initialize(FEngineBase& Engine)
 
 void FRender::PostInitialize(FEngineBase&)
 {
-	// Test harness: import a CPU texture asset right after Resource's IInit, so the
-	// async mirror OnAssetImported fires and the GPU mirror is built, then shown by
-	// the ImGui image below (DisplayMirrorImGui in InitViews). Absolute path is passed
-	// through by FPaths::Resolve (no virtual-root alias).
-	if (Resource::FResourceSystem* RS = Resource::GetResourceSystem())
-	{
-		if (RS->Import<Resource::FTexture2D>({ "D:/TestPackage/test.png" }))
-		{
-			MAHO_LOG_CORE_INFO("FRender: queued texture import D:/TestPackage/test.png");
-		}
-		else
-		{
-			MAHO_LOG_CORE_WARN("FRender: import D:/TestPackage/test.png failed to queue");
-		}
-	}
-	else
-	{
-		MAHO_LOG_CORE_WARN("FRender: no resource system; test import skipped");
-	}
+	// The startup test texture import moved to FGameWorld::PostInitialize (it now
+	// blocks until the texture is resident + mirrored, so the UI texture browser shows
+	// it on the first frame). FRender's asset-mirror delegates are already bound in
+	// Initialize; when the world system imports it, OnAssetImported -> OnAssetMirrorImported
+	// uploads it. Nothing to do here.
 }
 
 void FRender::WaitShaderCompiles()
@@ -581,7 +567,7 @@ void FRender::AddPass(
 	}
 
 	AddPass(PassType, std::move(PipelineDesc), Pass,
-		[this, &DrawList, TargetW, TargetH](FRHICommandList& List)
+		[this, &DrawList, &Pass, TargetW, TargetH](FRHICommandList& List)
 		{
 			// The pass-level merged vertex/index buffers were already created + uploaded
 			// by the producer (InitViews). AddPass only binds + draws; nothing uploads here.
@@ -596,11 +582,62 @@ void FRender::AddPass(
 			}
 			List.SetViewport(0.0f, 0.0f, static_cast<float>(TargetW), static_cast<float>(TargetH));
 
+			// Pass-level DEFAULT descriptor sets. The typed AddPass binds them once before
+			// this lambda, but a per-batch set below REPLACES set N for ONE draw and the
+			// binding stays until re-bound -- so a text/icon batch after an Image would
+			// sample the Image's texture. Resolve the defaults here so a batch with no
+			// per-batch set can restore them, keeping every draw on the correct set.
+			std::uint32_t DefaultFirstSet = 0;
+			std::uint32_t DefaultSetCount = 0;
+			for (const FRDGDescriptorSet& SetDesc : Pass.Layout.Sets)
+			{
+				if (SetDesc.SetIndex < DefaultFirstSet) { DefaultFirstSet = SetDesc.SetIndex; }
+				const std::uint32_t Span = SetDesc.SetIndex - DefaultFirstSet + 1;
+				if (Span > DefaultSetCount) { DefaultSetCount = Span; }
+			}
+			std::vector<FRHIDescriptorSet*> DefaultSets;
+			if (DefaultSetCount > 0)
+			{
+				DefaultSets.resize(DefaultSetCount, nullptr);
+				for (const FRDGDescriptorSet& SetDesc : Pass.Layout.Sets)
+				{
+					FRHIDescriptorSetLayoutDesc DSLDesc;
+					for (const auto& [Binding, Bnd] : SetDesc.Bindings)
+					{
+						FRHIDescriptorBinding DB;
+						DB.Binding = Binding;
+						DB.Type = Bnd.Type;
+						DB.Count = 1;
+						DB.Stages = Bnd.Stages;
+						DSLDesc.Bindings.push_back(DB);
+					}
+					FRHIDescriptorSetLayout* Layout = GetOrCreateDescriptorSetLayout(DSLDesc);
+					if (Layout != nullptr)
+					{
+						DefaultSets[SetDesc.SetIndex - DefaultFirstSet] = GetOrCreateMutableDescriptorSet(Layout, DSLDesc);
+					}
+				}
+			}
+			// A per-batch set is displaced by a following text/icon batch; re-bind the
+			// defaults for every set index when a batch carries no per-batch set.
+			const auto BindDefaultSets = [&](FRHICommandList& L)
+			{
+				for (std::uint32_t I = 0; I < DefaultSets.size(); ++I)
+				{
+					FRHIDescriptorSet* S = DefaultSets[I];
+					if (S != nullptr)
+					{
+						L.BindDescriptorSets(DefaultFirstSet + I, &S, 1);
+					}
+				}
+			};
+
 			for (const FDrawBatch& B : DrawList.GetBatches())
 			{
 				// Per-batch descriptor sets: resolve each by CONTENT (content-addressable
 				// get-or-create) and bind it in place of the pass-level default for this
 				// draw only. An ImDrawCmd that switches texture => a distinct per-batch set.
+				bool bBoundPerBatch = false;
 				for (const FRDGDescriptorSet& BS : B.Sets)
 				{
 					FRHIDescriptorSetLayoutDesc DSLDesc;
@@ -644,7 +681,14 @@ void FRender::AddPass(
 					if (PerSet != nullptr)
 					{
 						List.BindDescriptorSets(BS.SetIndex, &PerSet, 1);
+						bBoundPerBatch = true;
 					}
+				}
+				if (!bBoundPerBatch)
+				{
+					// No per-batch set (text/icon/button): restore the pass-level default so
+					// the previous Image's texture does not leak into this draw.
+					BindDefaultSets(List);
 				}
 
 				// Geometry source: pass-level GPU buffer (slice) > batch-owned buffer.

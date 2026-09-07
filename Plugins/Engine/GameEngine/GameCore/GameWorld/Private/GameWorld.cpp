@@ -24,7 +24,8 @@ FGameWorld* GetGameWorld()
 
 FGameWorld::FGameWorld()
 {
-	WorldGraph = std::make_unique<FLayerTaskGraph<FWorldStages, FGameWorld>>(Pool, *this);
+	MyStage<IInit>().IsWaiting<Resource::FResourceSystem>().ForStage<IInit>();
+
 }
 
 FGameWorld::~FGameWorld()
@@ -49,7 +50,21 @@ bool FGameWorld::ExecuteGraph()
 // the real work; the remaining stages are empty -- FGameWorld only hosts the world
 // and schedules its systems, the per-stage ECS frame runs in Tick.
 void FGameWorld::PreInitialize(FEngineBase&) {}
-void FGameWorld::PostInitialize(FEngineBase&) {}
+void FGameWorld::PostInitialize(FEngineBase&) 
+{
+	WorldGraph = std::make_unique<FLayerTaskGraph<FWorldStages, FGameWorld>>(Pool, *this);
+
+	// Startup test texture: SYNCHRONOUS (blocking) import on THIS thread so the resource
+	// is resident + mirrored BEFORE the UI texture browser rebuilds its Image controls
+	// (see FUISystem::Update). Async Import would poll on Tick, which does not run during
+	// a stage -- the browser would see an empty set on the first frame. ImportBlocking
+	// reads / decodes / registers / broadcasts here, so OnAssetImported fires the render
+	// mirror upload immediately.
+	if (Resource::FResourceSystem* RS = Resource::GetResourceSystem())
+	{
+		RS->ImportBlocking<Resource::FTexture2D>({ "D:/TestPackage/test.png" });
+	}
+}
 void FGameWorld::BeginFrame(FEngineBase&) {}
 void FGameWorld::EndFrame(FEngineBase&) {}
 void FGameWorld::RequestExit(FEngineBase&) {}
@@ -85,24 +100,14 @@ void FGameWorld::Initialize(FEngineBase&)
 	W.Width = 520.f;
 	W.Height = 440.f;
 	W.bVisible = true;
+	// Live texture browser: texture imports are asynchronous, so a one-time
+	// enumeration here (IInit) would see an empty set and no thumbnails. Instead the
+	// UISystem rebuilds this widget's Image controls from the CURRENT resource texture
+	// set every frame (see FUISystem::Update / bPreviewAllTextures), so async imports
+	// appear without re-running this Initialize.
+	W.bPreviewAllTextures = true;
 	W.Controls.push_back(FUIControl{ EUIControlType::Label, "default texture browser" });
 	W.Controls.push_back(FUIControl{ EUIControlType::Separator });
-	if (Resource::FResourceSystem* RS = Resource::GetResourceSystem())
-	{
-		RS->ForEachResource([&](const Name::FName& AssetName, const Resource::FResource& Res)
-		{
-			const Resource::FTexture* Tex = dynamic_cast<const Resource::FTexture*>(&Res);
-			if (Tex == nullptr || Tex->GetWidth() == 0 || Tex->GetHeight() == 0)
-			{
-				return;
-			}
-			const std::uint32_t TexId = AssetName.GetId();
-			// FUIControl::Image renders at (V0, V1) -- use a fixed thumbnail size so a
-			// full-resolution texture does not blow out the widget window.
-			W.Controls.push_back(FUIControl{ EUIControlType::Image, "", TexId, 0u,
-				128.f, 128.f });
-		});
-	}
 	AddComponent<FUIWidget>(DefaultUIEntity, W);
 
 	// Install the world systems (peer layers). Applied at the next Tick's

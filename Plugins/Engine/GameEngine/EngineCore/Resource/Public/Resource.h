@@ -153,6 +153,11 @@ public:
 	template <typename TResource>
 	bool Import(typename TResourceImporter<TResource>::FConfig Config);
 
+	/** Synchronous (blocking) import - reads + decodes + registers on the calling
+	 *  thread, then broadcasts OnAssetImported. Template definition below. */
+	template <typename TResource>
+	bool ImportBlocking(typename TResourceImporter<TResource>::FConfig Config);
+
 	/**
 	 * Async export; the exporter encodes + writes on the IO thread. Completion is
 	 * reported by OnAssetExported.Broadcast on the game thread (after Tick applies it).
@@ -194,6 +199,9 @@ private:
 		std::string SourcePath,
 		std::string AssetPath,
 		std::function<void(std::span<const std::uint8_t>)> OnBulkReady);
+	/** Synchronous full-file read (Resolve + ifstream) for ImportBlocking. Empty on
+	 *  failure. Implemented in the .cpp so the header stays free of <fstream>/<Paths>. */
+	std::vector<std::uint8_t> ReadAssetFile(std::string_view SourcePath);
 	/** Encode on the CALLER thread (safe: reads catalog resources synchronously),
 	 *  then hand the bytes to the IO thread for WriteBytes; OnDone on game thread. */
 	bool EnqueueExport(
@@ -253,7 +261,46 @@ bool FResourceSystem::Import(typename TResourceImporter<TResource>::FConfig Conf
 				RegisterResource(AssetPath, std::move(Resource));
 				OnAssetImported.Broadcast(Name::FName(AssetPath), MakeTransferDone(AssetPath));
 			}
-		});
+			});
+	}
+
+/**
+ * SYNCHRONOUS (blocking) import: reads + decodes + registers the resource ON THE
+ * CALLING THREAD, then broadcasts OnAssetImported so listeners (e.g. the render
+ * mirror) upload the payload immediately. Returns false on any failure. Use this when
+ * the caller must have the resource resident (and mirrored) BEFORE proceeding -- e.g.
+ * a startup texture the UI browser shows on the first frame -- and cannot wait for the
+ * async poll in Tick (which runs only during frame update, not during a stage like
+ * PostInitialize).
+ */
+template <typename TResource>
+bool FResourceSystem::ImportBlocking(typename TResourceImporter<TResource>::FConfig Config)
+{
+	if (Config.SourcePath.empty())
+	{
+		return false;
+	}
+	const std::size_t Dot = detail::FindLastDot(Config.SourcePath);
+	const std::string AssetPath = (Dot == std::string::npos)
+		? Config.SourcePath
+		: Config.SourcePath.substr(0, Dot);
+	const std::string SourcePath = Config.SourcePath;
+
+	// Copy the source path first (same argument-evaluation caveat as Import above).
+	std::vector<std::uint8_t> Bytes = ReadAssetFile(SourcePath);
+	if (Bytes.empty())
+	{
+		return false;
+	}
+
+	auto Resource = std::make_unique<TResource>(AssetPath);
+	if (TResourceImporter<TResource>::Import(Config, Bytes, *Resource, *this))
+	{
+		RegisterResource(AssetPath, std::move(Resource));
+		OnAssetImported.Broadcast(Name::FName(AssetPath), MakeTransferDone(AssetPath));
+		return true;
+	}
+	return false;
 }
 
 template <typename TResource>

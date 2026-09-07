@@ -139,6 +139,7 @@ void FUISystem::OnInstalled(FGameWorld& World)
 			};
 			break;
 		case 2:
+			W.bPreviewAllTextures = true;
 			W.Controls = {
 				{ EUIControlType::Label,    "widget 2" },
 				{ EUIControlType::Separator },
@@ -207,6 +208,56 @@ void FUISystem::Update(FGameWorld& World)
 	// Widget positions stay static (anchored in screen space). Moving them every frame
 	// makes the just-repositioned ImGui windows jitter/flicker in immediate mode.
 
+	// Live texture browser: textures import ASYNCHRONOUSLY (queued at Render's
+	// PostInitialize, completed on the IO thread later), so a widget's Image controls
+	// cannot be enumerated once at creation -- that sees an empty set and the thumbnails
+	// never appear. Every frame, for each bPreviewAllTextures widget, rebuild the Image
+	// sublist from the CURRENT resource-space texture set, preserving the non-Image
+	// controls. This tracks async imports (and drops stale ids on unload).
+	if (Resource::FResourceSystem* RS = Resource::GetResourceSystem())
+	{
+		std::vector<std::uint32_t> TexIds;
+		RS->ForEachResource([&](const Name::FName& AssetName, const Resource::FResource& Res)
+		{
+			const Resource::FTexture* Tex = dynamic_cast<const Resource::FTexture*>(&Res);
+			if (Tex != nullptr && Tex->GetWidth() != 0 && Tex->GetHeight() != 0)
+			{
+				TexIds.push_back(AssetName.GetId());
+			}
+		});
+		if (!TexIds.empty())
+		{
+			for (const FEntity E : World.GetAllWithComponent<FUIWidget>())
+			{
+				FUIWidget* W = World.GetComponent<FUIWidget>(E);
+				if (W == nullptr || !W->bPreviewAllTextures)
+				{
+					continue;
+				}
+				std::vector<FUIControl> NonImage;
+				NonImage.reserve(W->Controls.size());
+				for (const FUIControl& C : W->Controls)
+				{
+					if (C.Type != EUIControlType::Image)
+					{
+						NonImage.push_back(C);
+					}
+				}
+				W->Controls = std::move(NonImage);
+				for (const std::uint32_t Id : TexIds)
+				{
+					FUIControl Img;
+					Img.Type = EUIControlType::Image;
+					Img.ResourceId = Id;
+					Img.Id = NextControlId++;
+					Img.V0 = 128.f;
+					Img.V1 = 128.f;
+					W->Controls.push_back(std::move(Img));
+				}
+			}
+		}
+	}
+
 	// UI components arrange what to draw by submitting draw CLOSURES to the UIBuilder.
 	// Each closure captures only DATA (values, no ImGui state); it runs on the render
 	// worker inside the ImGui frame (between NewFrame and Render). ImGui is
@@ -233,13 +284,17 @@ void FUISystem::Update(FGameWorld& World)
 			}
 			const float X = W->X, Y = W->Y, Wd = W->Width, Ht = W->Height;
 			const std::vector<FUIControl> Controls = W->Controls;
-			UIBuilder.Submit([I, X, Y, Wd, Ht, Controls, this]()
-			{
-				ImGui::SetNextWindowPos(ImVec2(X, Y), ImGuiCond_Always);
-				ImGui::SetNextWindowSize(ImVec2(Wd, Ht), ImGuiCond_Always);
-				const std::string Title = "widget " + std::to_string(I);
-				if (ImGui::Begin(Title.c_str(), nullptr,
-						ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove))
+				UIBuilder.Submit([I, X, Y, Wd, Ht, Controls, this]()
+				{
+					// Position only on the FIRST frame (Cond_Once); afterwards the window
+					// owns its position, so the user can drag it. NoMove would pin it back.
+					// NoTitleBar keeps the layout clean while the implicit title-bar strip
+					// (still present) is the drag handle. NoResize keeps the size fixed.
+					ImGui::SetNextWindowPos(ImVec2(X, Y), ImGuiCond_Once);
+					ImGui::SetNextWindowSize(ImVec2(Wd, Ht), ImGuiCond_Always);
+					const std::string Title = "widget " + std::to_string(I);
+					if (ImGui::Begin(Title.c_str(), nullptr,
+							ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize))
 				{
 					for (const FUIControl& C : Controls)
 					{

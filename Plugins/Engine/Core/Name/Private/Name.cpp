@@ -51,6 +51,15 @@ FName FNamePool::Intern(std::string_view Str)
 	}
 
 	std::lock_guard<std::mutex> Lock(Mutex);
+
+	// Id 0 is reserved for None (default-constructed FName). Real strings MUST never
+	// take id 0, or they collide with None and with ImTextureID's 0=font sentinel.
+	// Reserve slot 0 (empty string) so the pool index always equals the interned id.
+	if (Pool.empty())
+	{
+		Pool.emplace_back();
+	}
+
 	const auto It = Lookup.find(std::string(Str));
 	if (It != Lookup.end())
 	{

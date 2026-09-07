@@ -172,6 +172,19 @@ FTransferHandle FResourceSystem::RequestLoad(std::string Path)
 	return FTransferHandle{ std::move(State) };
 }
 
+std::vector<std::uint8_t> FResourceSystem::ReadAssetFile(std::string_view SourcePath)
+{
+	const std::string PhysicalPath = Paths::GetPaths()->Resolve(SourcePath).string();
+	std::ifstream Stream(PhysicalPath, std::ios::binary);
+	if (!Stream)
+	{
+		return {};
+	}
+	return std::vector<std::uint8_t>(
+		(std::istreambuf_iterator<char>(Stream)),
+		std::istreambuf_iterator<char>());
+}
+
 bool FResourceSystem::EnqueueImport(
 	std::string SourcePath,
 	std::string AssetPath,
