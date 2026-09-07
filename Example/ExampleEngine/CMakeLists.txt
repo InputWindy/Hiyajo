@@ -42,92 +42,108 @@ set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Common/ConsoleVariable")
 include("${ENGINE_DIR}/Plugins/Common/ConsoleVariable/ConsoleVariable.cmake")
 unset(_MOD_PLUGIN_DIR)
 
-set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Engine/Core/Config")
-include("${ENGINE_DIR}/Plugins/Engine/Core/Config/Config.cmake")
+set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Common/Config")
+include("${ENGINE_DIR}/Plugins/Common/Config/Config.cmake")
 unset(_MOD_PLUGIN_DIR)
 
-set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Engine/Core/Exception")
-include("${ENGINE_DIR}/Plugins/Engine/Core/Exception/Exception.cmake")
+set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Common/Exception")
+include("${ENGINE_DIR}/Plugins/Common/Exception/Exception.cmake")
 unset(_MOD_PLUGIN_DIR)
 
-set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Engine/Core/Log")
-include("${ENGINE_DIR}/Plugins/Engine/Core/Log/Log.cmake")
+set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Common/Log")
+include("${ENGINE_DIR}/Plugins/Common/Log/Log.cmake")
 unset(_MOD_PLUGIN_DIR)
 
-set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Engine/Core/Name")
-include("${ENGINE_DIR}/Plugins/Engine/Core/Name/Name.cmake")
+set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Common/Name")
+include("${ENGINE_DIR}/Plugins/Common/Name/Name.cmake")
 unset(_MOD_PLUGIN_DIR)
 
-set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Engine/Core/Paths")
-include("${ENGINE_DIR}/Plugins/Engine/Core/Paths/Paths.cmake")
+set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Common/Paths")
+include("${ENGINE_DIR}/Plugins/Common/Paths/Paths.cmake")
 unset(_MOD_PLUGIN_DIR)
 
-set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Engine/GameEngine/EngineCore/Platform")
-include("${ENGINE_DIR}/Plugins/Engine/GameEngine/EngineCore/Platform/Platform.cmake")
+set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/GameEngine/EngineCore/Platform")
+include("${ENGINE_DIR}/Plugins/GameEngine/EngineCore/Platform/Platform.cmake")
 unset(_MOD_PLUGIN_DIR)
 
-set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RHI")
-include("${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RHI/RHI.cmake")
+set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/GameEngine/RenderCore/RHI")
+include("${ENGINE_DIR}/Plugins/GameEngine/RenderCore/RHI/RHI.cmake")
 unset(_MOD_PLUGIN_DIR)
 
 set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Common/Reflect")
 include("${ENGINE_DIR}/Plugins/Common/Reflect/Reflect.cmake")
 unset(_MOD_PLUGIN_DIR)
 
-set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Engine/GameEngine/EngineCore/Resource")
-include("${ENGINE_DIR}/Plugins/Engine/GameEngine/EngineCore/Resource/Resource.cmake")
+set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/GameEngine/EngineCore/Resource")
+include("${ENGINE_DIR}/Plugins/GameEngine/EngineCore/Resource/Resource.cmake")
 unset(_MOD_PLUGIN_DIR)
 
-set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Engine/GameEngine/EngineCore/Asset")
-include("${ENGINE_DIR}/Plugins/Engine/GameEngine/EngineCore/Asset/Asset.cmake")
+set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/GameEngine/EngineCore/Asset")
+include("${ENGINE_DIR}/Plugins/GameEngine/EngineCore/Asset/Asset.cmake")
 unset(_MOD_PLUGIN_DIR)
 
-set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Engine/GameEngine/EngineCore/Script")
-include("${ENGINE_DIR}/Plugins/Engine/GameEngine/EngineCore/Script/Script.cmake")
+set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/GameEngine/EngineCore/Script")
+include("${ENGINE_DIR}/Plugins/GameEngine/EngineCore/Script/Script.cmake")
 unset(_MOD_PLUGIN_DIR)
 
-set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Engine/Core/Text")
-include("${ENGINE_DIR}/Plugins/Engine/Core/Text/Text.cmake")
+set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Common/Text")
+include("${ENGINE_DIR}/Plugins/Common/Text/Text.cmake")
 unset(_MOD_PLUGIN_DIR)
 
-set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Engine/Core/Timer")
-include("${ENGINE_DIR}/Plugins/Engine/Core/Timer/Timer.cmake")
+set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Common/Timer")
+include("${ENGINE_DIR}/Plugins/Common/Timer/Timer.cmake")
 unset(_MOD_PLUGIN_DIR)
 
 set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Common/Unicode")
 include("${ENGINE_DIR}/Plugins/Common/Unicode/Unicode.cmake")
 unset(_MOD_PLUGIN_DIR)
 
-set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/Render")
-include("${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/Render/Render.cmake")
+set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/GameEngine/RenderCore/Render")
+include("${ENGINE_DIR}/Plugins/GameEngine/RenderCore/Render/Render.cmake")
 unset(_MOD_PLUGIN_DIR)
 
-set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/Scene")
-include("${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/Scene/Scene.cmake")
+set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/GameEngine/RenderCore/RenderFeature/Scene")
+include("${ENGINE_DIR}/Plugins/GameEngine/RenderCore/RenderFeature/Scene/Scene.cmake")
 unset(_MOD_PLUGIN_DIR)
 
-set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/DrawTriangleFeature")
-include("${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/DrawTriangleFeature/DrawTriangleFeature.cmake")
+set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/GameEngine/RenderCore/RenderFeature/DrawTriangleFeature")
+include("${ENGINE_DIR}/Plugins/GameEngine/RenderCore/RenderFeature/DrawTriangleFeature/DrawTriangleFeature.cmake")
 unset(_MOD_PLUGIN_DIR)
 
-set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Engine/GameEngine/GameCore/GameWorld")
-include("${ENGINE_DIR}/Plugins/Engine/GameEngine/GameCore/GameWorld/GameWorld.cmake")
+set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/GameEngine/GameCore/GameWorld")
+include("${ENGINE_DIR}/Plugins/GameEngine/GameCore/GameWorld/GameWorld.cmake")
 unset(_MOD_PLUGIN_DIR)
 
-set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Engine/GameEngine/GameCore/SystemGroup/UISystem")
-include("${ENGINE_DIR}/Plugins/Engine/GameEngine/GameCore/SystemGroup/UISystem/UISystem.cmake")
+set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/GameEngine/GameCore/SystemGroup/UISystem")
+include("${ENGINE_DIR}/Plugins/GameEngine/GameCore/SystemGroup/UISystem/UISystem.cmake")
 unset(_MOD_PLUGIN_DIR)
 
-set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/UIFeature")
-include("${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/UIFeature/UIFeature.cmake")
+set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/GameEngine/RenderCore/RenderFeature/UIFeature")
+include("${ENGINE_DIR}/Plugins/GameEngine/RenderCore/RenderFeature/UIFeature/UIFeature.cmake")
 unset(_MOD_PLUGIN_DIR)
 
-set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/FrameRenderFeature")
-include("${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/FrameRenderFeature/FrameRenderFeature.cmake")
+set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/GameEngine/RenderCore/RenderFeature/FrameRenderFeature")
+include("${ENGINE_DIR}/Plugins/GameEngine/RenderCore/RenderFeature/FrameRenderFeature/FrameRenderFeature.cmake")
 unset(_MOD_PLUGIN_DIR)
 
-set(_MOD_PLUGIN_DIR "${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEditor/ExampleEditor")
-include("${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEditor/ExampleEditor/ExampleEditor.cmake")
+set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/GameEngine/EditorCore/ExampleEditor")
+include("${ENGINE_DIR}/Plugins/GameEngine/EditorCore/ExampleEditor/ExampleEditor.cmake")
+unset(_MOD_PLUGIN_DIR)
+
+set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/GameEngine/EditorCore/EditorUI/EditorViewport")
+include("${ENGINE_DIR}/Plugins/GameEngine/EditorCore/EditorUI/EditorViewport/EditorViewport.cmake")
+unset(_MOD_PLUGIN_DIR)
+
+set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/GameEngine/EditorCore/EditorUI/EditorOutliner")
+include("${ENGINE_DIR}/Plugins/GameEngine/EditorCore/EditorUI/EditorOutliner/EditorOutliner.cmake")
+unset(_MOD_PLUGIN_DIR)
+
+set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/GameEngine/EditorCore/EditorUI/EditorInspector")
+include("${ENGINE_DIR}/Plugins/GameEngine/EditorCore/EditorUI/EditorInspector/EditorInspector.cmake")
+unset(_MOD_PLUGIN_DIR)
+
+set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/GameEngine/EditorCore/EditorUI/EditorControls")
+include("${ENGINE_DIR}/Plugins/GameEngine/EditorCore/EditorUI/EditorControls/EditorControls.cmake")
 unset(_MOD_PLUGIN_DIR)
 
 # The project root — the entry plugin (under Plugins/, Public headers + Private impl).
@@ -157,34 +173,39 @@ target_include_directories(ExampleEngine PUBLIC
 	"${ENGINE_DIR}/Plugins/Common/Archive/Public"
 	"${ENGINE_DIR}/Plugins/Common/Compress/Public"
 	"${ENGINE_DIR}/Plugins/Common/ConsoleVariable/Public"
-	"${ENGINE_DIR}/Plugins/Engine/Core/Config/Public"
-	"${ENGINE_DIR}/Plugins/Engine/Core/Exception/Public"
-	"${ENGINE_DIR}/Plugins/Engine/Core/Log/Public"
-	"${ENGINE_DIR}/Plugins/Engine/Core/Name/Public"
-	"${ENGINE_DIR}/Plugins/Engine/Core/Paths/Public"
-	"${ENGINE_DIR}/Plugins/Engine/GameEngine/EngineCore/Platform/Public"
-	"${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RHI/Public"
+	"${ENGINE_DIR}/Plugins/Common/Config/Public"
+	"${ENGINE_DIR}/Plugins/Common/Exception/Public"
+	"${ENGINE_DIR}/Plugins/Common/Log/Public"
+	"${ENGINE_DIR}/Plugins/Common/Name/Public"
+	"${ENGINE_DIR}/Plugins/Common/Paths/Public"
+	"${ENGINE_DIR}/Plugins/GameEngine/EngineCore/Platform/Public"
+	"${ENGINE_DIR}/Plugins/GameEngine/RenderCore/RHI/Public"
 	"${ENGINE_DIR}/Plugins/Common/Reflect/Public"
-	"${ENGINE_DIR}/Plugins/Engine/GameEngine/EngineCore/Resource/Public"
-	"${ENGINE_DIR}/Plugins/Engine/GameEngine/EngineCore/Asset/Public"
-	"${ENGINE_DIR}/Plugins/Engine/GameEngine/EngineCore/Script/Public"
-	"${ENGINE_DIR}/Plugins/Engine/Core/Text/Public"
-	"${ENGINE_DIR}/Plugins/Engine/Core/Timer/Public"
+	"${ENGINE_DIR}/Plugins/GameEngine/EngineCore/Resource/Public"
+	"${ENGINE_DIR}/Plugins/GameEngine/EngineCore/Asset/Public"
+	"${ENGINE_DIR}/Plugins/GameEngine/EngineCore/Script/Public"
+	"${ENGINE_DIR}/Plugins/Common/Text/Public"
+	"${ENGINE_DIR}/Plugins/Common/Timer/Public"
 	"${ENGINE_DIR}/Plugins/Common/Unicode/Public"
-	"${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/Render/Public"
-	"${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/Scene/Public"
-	"${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/DrawTriangleFeature/Public"
-	"${ENGINE_DIR}/Plugins/Engine/GameEngine/GameCore/GameWorld/Public"
-	"${ENGINE_DIR}/Plugins/Engine/GameEngine/GameCore/SystemGroup/UISystem/Public"
-	"${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/UIFeature/Public"
-	"${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/FrameRenderFeature/Public"
+	"${ENGINE_DIR}/Plugins/GameEngine/RenderCore/Render/Public"
+	"${ENGINE_DIR}/Plugins/GameEngine/RenderCore/RenderFeature/Scene/Public"
+	"${ENGINE_DIR}/Plugins/GameEngine/RenderCore/RenderFeature/DrawTriangleFeature/Public"
+	"${ENGINE_DIR}/Plugins/GameEngine/GameCore/GameWorld/Public"
+	"${ENGINE_DIR}/Plugins/GameEngine/GameCore/SystemGroup/UISystem/Public"
+	"${ENGINE_DIR}/Plugins/GameEngine/RenderCore/RenderFeature/UIFeature/Public"
+	"${ENGINE_DIR}/Plugins/GameEngine/RenderCore/RenderFeature/FrameRenderFeature/Public"
+	"${ENGINE_DIR}/Plugins/GameEngine/EditorCore/ExampleEditor/Public"
+	"${ENGINE_DIR}/Plugins/GameEngine/EditorCore/EditorUI/EditorViewport/Public"
+	"${ENGINE_DIR}/Plugins/GameEngine/EditorCore/EditorUI/EditorOutliner/Public"
+	"${ENGINE_DIR}/Plugins/GameEngine/EditorCore/EditorUI/EditorInspector/Public"
+	"${ENGINE_DIR}/Plugins/GameEngine/EditorCore/EditorUI/EditorControls/Public"
 )
 # Export the extern "C" CreateLayer() bridge — the host's single entry.
 set_target_properties(ExampleEngine PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 target_compile_definitions(ExampleEngine PRIVATE MAHO_EXAMPLEENGINE_MODULE_EXPORTS)
 target_link_libraries(ExampleEngine PUBLIC Maho)
-add_dependencies(ExampleEngine Archive Compress ConsoleVariable Config Exception Log Name Paths Platform RHI Reflect Resource Asset Script Text Timer Unicode Render Scene DrawTriangleFeature GameWorld UISystem UIFeature FrameRenderFeature)
-target_link_libraries(ExampleEngine PUBLIC Archive Compress ConsoleVariable Config Exception Log Name Paths Platform RHI Reflect Resource Asset Script Text Timer Unicode Render Scene DrawTriangleFeature GameWorld UISystem UIFeature FrameRenderFeature)
+add_dependencies(ExampleEngine Archive Compress ConsoleVariable Config Exception Log Name Paths Platform RHI Reflect Resource Asset Script Text Timer Unicode Render Scene DrawTriangleFeature GameWorld UISystem UIFeature FrameRenderFeature ExampleEditor EditorViewport EditorOutliner EditorInspector EditorControls)
+target_link_libraries(ExampleEngine PUBLIC Archive Compress ConsoleVariable Config Exception Log Name Paths Platform RHI Reflect Resource Asset Script Text Timer Unicode Render Scene DrawTriangleFeature GameWorld UISystem UIFeature FrameRenderFeature ExampleEditor EditorViewport EditorOutliner EditorInspector EditorControls)
 # Plugin DLLs co-locate with Maho.dll + EntryPoint so relative DLL deps resolve.
 set_property(TARGET ExampleEngine PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>")
 
@@ -269,7 +290,7 @@ endforeach()
 set_target_properties(EntryPoint PROPERTIES VS_DEBUGGER_WORKING_DIRECTORY "${_MAHO_BIN}/$<CONFIG>")
 # The sln startup project is EntryPoint (the app host), not ZERO_CHECK.
 set_property(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" PROPERTY VS_STARTUP_PROJECT EntryPoint)
-add_dependencies(EntryPoint ExampleEngine Archive Compress ConsoleVariable Config Exception Log Name Paths Platform RHI Reflect Resource Asset Script Text Timer Unicode Render Scene DrawTriangleFeature GameWorld UISystem UIFeature FrameRenderFeature ExampleEditor MahoCheckCycle)
+add_dependencies(EntryPoint ExampleEngine Archive Compress ConsoleVariable Config Exception Log Name Paths Platform RHI Reflect Resource Asset Script Text Timer Unicode Render Scene DrawTriangleFeature GameWorld UISystem UIFeature FrameRenderFeature ExampleEditor EditorViewport EditorOutliner EditorInspector EditorControls MahoCheckCycle)
 
 # Solution folders: EntryPoint at the ROOT; Maho (engine), Project, ThirdParty.
 # The project root sits at Project/ itself; project plugin DLLs under

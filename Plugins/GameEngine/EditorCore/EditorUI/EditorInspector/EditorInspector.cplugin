@@ -1,0 +1,10 @@
+{
+  "FileVersion": 1,
+  "Name": "EditorInspector",
+  "Description": "Editor inspector panel - edits the selected entity.",
+  "Type": "Editor",
+  "Dependencies": [
+    "ExampleEditor",
+    "GameWorld"
+  ]
+}

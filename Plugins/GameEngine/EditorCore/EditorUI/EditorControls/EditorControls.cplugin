@@ -1,0 +1,10 @@
+{
+  "FileVersion": 1,
+  "Name": "EditorControls",
+  "Description": "Editor controls panel - game controls helper widgets.",
+  "Type": "Editor",
+  "Dependencies": [
+    "ExampleEditor",
+    "GameWorld"
+  ]
+}
