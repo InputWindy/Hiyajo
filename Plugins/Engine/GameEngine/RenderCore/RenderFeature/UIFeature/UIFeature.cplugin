@@ -9,6 +9,7 @@
     "UISystem"
   ],
   "PrivateIncludes": [
-    "DrawTriangleFeature"
+    "DrawTriangleFeature",
+    "FrameRenderFeature"
   ]
 }

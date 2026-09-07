@@ -1,8 +1,16 @@
 {
   "FileVersion": 1,
   "Name": "ExampleEditor",
-  "Description": "",
+  "Description": "Editor UI render feature -- independent ImGui context + EditorRT, owns the control set dispatch, editor build only.",
+  "Type": "Editor",
   "Dependencies": [
-	"Render"
+	"Render",
+	"Scene"
+  ],
+  "PrivateIncludes": [
+	"FrameRenderFeature",
+	"UIFeature",
+	"UISystem",
+	"GameWorld"
   ]
 }

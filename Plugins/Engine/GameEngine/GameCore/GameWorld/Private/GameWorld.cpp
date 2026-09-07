@@ -4,10 +4,6 @@
 // the private cpp so GameWorld.h stays free of world-system types.
 #include <UISystem.h>
 
-// Resource texture enumeration for the default UI widget (FUIWidget::Image controls).
-#include <Resource.h>
-#include <AssetTypes.h>
-
 #include <vector>
 
 namespace Maho
@@ -24,8 +20,10 @@ FGameWorld* GetGameWorld()
 
 FGameWorld::FGameWorld()
 {
-	MyStage<IInit>().IsWaiting<Resource::FResourceSystem>().ForStage<IInit>();
-
+	// No forward dependencies: the world's Initialize only creates a sample entity and
+	// installs the UISystem peer layer (which owns the UI broker). Any resource/type the
+	// world needs is reachable through the systems it installs, so it does not gate on
+	// other engine plugins (forward WaitFor on an absent plugin breaks graph Compile).
 }
 
 FGameWorld::~FGameWorld()
@@ -75,30 +73,10 @@ void FGameWorld::Initialize(FEngineBase&)
 		// Component attached + read back correctly.
 	}
 
-	// Default UI entity: bind the ECS UI component (FUIWidget) to a default entity and
-	// enumerate every texture the FResourceSystem has loaded into FUIControl::Image
-	// controls. UISystem's Update renders ALL FUIWidget entities (see
-	// GetAllWithComponent), so this widget is drawn with ImGui::Image exactly like any
-	// other -- the world defines WHAT (data), the UI system defines HOW (ImGui).
-	DefaultUIEntity = CreateEntity();
-	AddComponent<FTransform>(DefaultUIEntity, FTransform{ 60.f, 60.f, 0.f });
-
-	FUIWidget W;
-	W.X = 60.f;
-	W.Y = 60.f;
-	W.Width = 520.f;
-	W.Height = 440.f;
-	W.bVisible = true;
-	// SceneColor pass preview: draw the scene color mirror (built by FScene via
-	// CreateResource, keyed "SceneColor") as an ImGui::Image. ResourceId = the
-	// mirror's FName id; the render feature resolves Id -> mirror texture on draw.
-	W.Controls.push_back(FUIControl{ EUIControlType::Label, "SceneColor" });
-	W.Controls.push_back(FUIControl{ EUIControlType::Separator });
-	W.Controls.push_back(FUIControl{ EUIControlType::Image, "", Name::FName("SceneColor").GetId(), 0u, 480.f, 400.f });
-	AddComponent<FUIWidget>(DefaultUIEntity, W);
-
 	// Install the world systems (peer layers). Applied at the next Tick's
-	// FlushPendingUpdatePipelines safe point (IOnInstalled).
+	// FlushPendingUpdatePipelines safe point (IOnInstalled). UISystem owns the
+	// game->render UI broker (+ the draggable text-box placeholder); it submits its
+	// draw closure via the UIBuilder, which FUIFeature runs on the render worker.
 	Install<GameWorld::FUISystem>();
 }
 
@@ -150,11 +128,6 @@ void FGameWorld::Tick(FEngineBase&)
 
 void FGameWorld::Shutdown(FEngineBase&)
 {
-	if (DefaultUIEntity.IsValid())
-	{
-		DestroyEntity(DefaultUIEntity);
-		DefaultUIEntity = {};
-	}
 	if (WorldGraph)
 	{
 		WorldGraph->Flush();   // drain any leftover world-system tasks

@@ -16,7 +16,7 @@ namespace Maho
 namespace GameWorld
 {
 
-/** UI control kinds -- one branch per kind in the UISystem's DrawControl dispatcher. */
+/** UI control kinds -- one branch per kind in the editor's DrawControl dispatcher. */
 enum class EUIControlType : std::uint8_t
 {
 	Label, Text, Image, Button, Slider, Checkbox, Separator
@@ -49,26 +49,13 @@ struct FUIEvent
 };
 
 /**
- * ECS-side UI widget model. Pure game data -- the render layer (FUIFeature/ImGui)
- * consumes this upstream; this system only owns and animates it. Holds an ORDERED
- * control list: the UISystem widget pass renders each control (by EUIControlType)
- * inside the widget's ImGui window.
- */
-struct MAHO_UISYSTEM_API FUIWidget
-{
-		float X = 0.f;          // screen-space position (left)
-	float Y = 0.f;          // screen-space position (top)
-	float Width = 100.f;
-	float Height = 50.f;
-	bool  bVisible = true;
-	std::vector<FUIControl> Controls;   // ordered control orchestration
-};
-
-/**
  * GameWorld UI system -- a WORLD SYSTEM, installed into FGameWorld as a peer
- * layer (via the sub-landlord collector). It spawns a few widget entities on
- * install, animates them every update (demonstrating component read/write
- * through the world accessor), and tears them down on uninstall.
+ * layer (via the sub-landlord collector). It owns the FUIBuilder -- the
+ * game->render UI command broker -- and on each Update submits ONE draw closure
+ * that shows a single draggable text box (the game-side UI placeholder). The
+ * full data-driven control set (FUIControl/EUIControlType + its DrawControl
+ * dispatch) is owned by the EDITOR plugin; the game keeps only the broker + a
+ * minimal text-box closure.
  *
  * It also owns the FUIBuilder -- the game->render UI command broker. Game-side UI
  * components (this system included) Submit draw CLOSURES to it; FUIFeature pulls them
@@ -112,15 +99,12 @@ public:
 private:
 
 	FUIBuilder UIBuilder;   // game->render UI command broker (owned by this world system)
-	std::vector<FEntity> Widgets;   // spawned widget entities
-	float Time = 0.f;
 
 	mutable std::mutex EventMutex;   // guards OnUIBuilt (bind vs broadcast race)
 	TMulticastEvent<void(const FUIBuilder&)> OnUIBuilt;
 
 	mutable std::mutex UIEventMutex;   // guards PendingUIEvents (render push vs game drain)
 	std::vector<FUIEvent> PendingUIEvents;
-	std::uint32_t NextControlId = 1;   // assigns FUIControl::Id (routing ids, never reused)
 };
 
 /** Global accessor to the UI system (cross-DLL, mirrors Resource::GetResourceSystem()).

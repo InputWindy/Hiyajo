@@ -216,8 +216,6 @@ private:
 	FEntityRegistry Registry;
 	std::vector<std::unique_ptr<IComponentPool>> ComponentPools;   // one TComponentPool<T> per component type
 
-	FEntity DefaultUIEntity;   // default UI widget host (owned by the world; destroyed in Shutdown)
-
 	std::chrono::steady_clock::time_point LastFrame = std::chrono::steady_clock::now();
 	float DeltaSeconds = 0.f;
 	float FixedStepSeconds = 1.f / 60.f;

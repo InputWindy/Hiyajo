@@ -10,6 +10,7 @@
 #include <utility>
 #include <vector>
 #include <DrawTriangleFeature.h>
+#include <FrameRenderFeature.h>
 #include <Log.h>
 #include <Platform.h>
 #include <Scene.h>
@@ -188,9 +189,13 @@ FUIFeature::FUIFeature()
 	// (their submits reach the queue first), so the UI composites over the scene.
 	MyStage<IRenderUI>().IsWaiting<Scene::FScene>().ForStage<IEndRender>();
 	MyStage<IRenderUI>().IsWaiting<FDrawTriangleFeature>().ForStage<IEndRender>();
-	// This feature now owns the present: IPresent blits the final composite RT
-	// (UIRenderTarget) to the swapchain backbuffer. It self-advances after
-	// IRenderUI (same layer), so it always runs after the UI was drawn.
+	// This feature is OFF-SCREEN ONLY now: it draws the ImGui list into its own
+	// composite target and sets it as FRender's present target. It no longer owns
+	// the present blit -- the frame feature does. Declare the reverse edge so the
+	// frame feature's IPresent (the very last frame stage) runs AFTER this
+	// feature's IRenderUI, and consumes the target it set. FFrameRenderFeature is
+	// always installed, so this edges its IPresent behind us.
+	MyStage<IRenderUI>().IsBlocking<FFrameRenderFeature>().OnStage<IPresent>();
 }
 
 void FUIFeature::TrySubscribeUI()
@@ -236,7 +241,7 @@ void FUIFeature::OnInstalled(FRender& R)
 			return;
 		}
 		IMGUI_CHECKVERSION();
-		ImGui::CreateContext();
+		m_Context = ImGui::CreateContext();
 		ImGuiIO& IO = ImGui::GetIO();
 		IO.ConfigFlags |= ImGuiConfigFlags_DockingEnable;   // the editor shell docks later
 		ImGui::StyleColorsDark();
@@ -276,6 +281,11 @@ void FUIFeature::InitViews(FRender& R)
 	// "current frame" (feed -> NewFrame -> build -> Render -> GetDrawData -> translate).
 	// Lock here (before the IO feed) so every ImGui access below is mutually excluded.
 	std::lock_guard<std::mutex> FrameLock(ImGuiFrameMutex);
+
+	// Select THIS feature's own context. The editor feature (an editor build) owns a
+	// second ImGui context; without this the GImGui global could be left pointing at the
+	// editor's context and this frame would be built against the wrong one.
+	ImGui::SetCurrentContext(m_Context);
 
 	// -- Final on-screen composite target. This feature owns its own off-screen RT per
 	//    the design (the UI is the last surface; the scene is sampled INto it via the
@@ -662,17 +672,11 @@ void FUIFeature::RenderUI(FRender& R)
 	// the pass-level font set + each per-batch set by content, binds the pipeline, and
 	// records every batch's draw. Nothing below is a raw RHI operation.
 	R.AddPass(ERHICommandListType::Graphics, PipelineDesc, Target, Params, DrawList);
-}
 
-void FUIFeature::Present(FRender& R)
-{
-	// This feature owns the final present point: blit the composite target to the
-	// swapchain backbuffer. Runs after IRenderUI (self-advancing), so the UI
-	// (incl. its SceneColor sample) is fully drawn first.
-	if (UIRenderTarget.IsValid())
-	{
-		R.PresentTexture(UIRenderTarget);
-	}
+	// This feature is off-screen only: it composites into its own target then sets it
+	// as FRender's present target. The frame feature's IPresent (a later graph stage,
+	// blocked on this stage) blits it to the swapchain. No present happened here.
+	R.SetPresentTarget(UIRenderTarget);
 }
 
 void FUIFeature::PreUnInstall(FRender& R)
@@ -701,7 +705,9 @@ void FUIFeature::PreUnInstall(FRender& R)
 	bSubscribedUI = false;
 	if (bContextCreated)
 	{
-		ImGui::DestroyContext();
+		ImGui::SetCurrentContext(nullptr);
+		ImGui::DestroyContext(m_Context);
+		m_Context = nullptr;
 		bContextCreated = false;
 	}
 }

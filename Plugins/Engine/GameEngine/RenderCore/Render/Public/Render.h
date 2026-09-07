@@ -194,6 +194,17 @@ public:
 	/** Blit a scene-color RDG texture to the swapchain backbuffer (the frame feature's present point). */
 	void PresentTexture(const FRDGTextureRef& Texture);
 
+	/**
+	 * Set the FINAL on-screen present target for this frame. Any UI feature that
+	 * composes the last on-screen surface calls this after drawing (RenderUI), and the
+	 * frame feature's IPresent blits it to the swapchain. Last writer wins: in a
+	 * runtime build the game UI sets GameRT; in an editor build the editor UI sets
+	 * EditorRT after compositing, so the editor's surface is what gets presented.
+	 */
+	void SetPresentTarget(const FRDGTextureRef& Texture);
+	/** The current present target (set by a UI feature; default empty => no present). */
+	[[nodiscard]] FRDGTextureRef GetPresentTarget() const;
+
 	// -- RDG resource pool (off-screen resources) --
 	[[nodiscard]] FRDGTextureRef CreateTexture(const FRHITextureDesc& Desc, ERDGResourceLifetime Lifetime = ERDGResourceLifetime::Persistent);
 	[[nodiscard]] FRDGBufferRef CreateBuffer(const FRHIBufferDesc& Desc, ERDGResourceLifetime Lifetime = ERDGResourceLifetime::Persistent);
@@ -497,6 +508,11 @@ private:
 	 *  in OnAssetMirrorCreated, resolved via GetMirrorSampler. The sampler is created
 	 *  through the pool (get-or-create, pool-shared); erased on OnAssetMirrorUnloaded. */
 	std::unordered_map<Name::FName, FRHISampler*> GpuSamplers;
+
+	/** The final on-screen present target for the current frame, set by a UI feature
+	 *  (RenderUI) and consumed by the frame feature's IPresent. Cross-feature state --
+	 *  the frame feature reads it, the UI feature that composites last writes it. */
+	FRDGTextureRef PresentTarget;
 
 	/** OnAssetImported listener: mirror the imported CPU asset to GPU (upload its
 	 *  pixels), then report completion via Done so the resource system can drop the

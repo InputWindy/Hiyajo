@@ -1,6 +1,7 @@
 #include "Render.h"
 
 #include <DrawTriangleFeature.h>
+#include <FrameRenderFeature.h>
 #include <UIFeature.h>
 #include <Log.h>
 #include <Name.h>
@@ -86,11 +87,12 @@ void FRender::Initialize(FEngineBase& Engine)
 	// All are engine plugins beside this one (same layer, Plugins/Engine/).
 	// They are loaded by DLL name at runtime (Install<T> → FAssembly), so this
 	// DLL only includes their headers and never links them -- see Render.cplugin
-	// PrivateIncludes. UIFeature owns the present now and must load last (its
-	// IPresent depends on the other features' IEndRender).
+	// PrivateIncludes. The FRAME feature owns the single present point and must
+	// load last (its IPresent depends on the other features' final stages).
 	Install<Scene::FScene>();
 	Install<FDrawTriangleFeature>();
 	Install<FUIFeature>();
+	Install<FFrameRenderFeature>();
 
 	// (The UI's CPU-side ImGui context is owned by FUIFeature now; FRender is
 	// UI-agnostic and sets nothing up here.)
@@ -131,6 +133,17 @@ void FRender::PostInitialize(FEngineBase&)
 	// it on the first frame). FRender's asset-mirror delegates are already bound in
 	// Initialize; when the world system imports it, OnAssetImported -> OnAssetMirrorImported
 	// uploads it. Nothing to do here.
+#ifdef MAHO_EDITOR_BUILD
+	// Editor build: mount the editor render feature into OUR collection (not the
+	// host engine's) so the render graph drives it. The editor is a SEPARATE plugin
+	// DLL (Type=Editor) that owns its OWN ImGui context + EditorRT and takes over the
+	// present target; it must be installed AFTER the scene feature (it samples the
+	// SceneColor mirror) and AFTER this layer's Initialize (the render graph exists).
+	// It is loaded by DLL name (FAssembly) and never linked -- see its .cplugin
+	// PrivateIncludes. Runtime builds never define MAHO_EDITOR_BUILD (the editor
+	// plugin is filtered out at codegen), so this path is editor-only.
+	Install("ExampleEditor.dll");
+#endif
 }
 
 void FRender::WaitShaderCompiles()
@@ -830,6 +843,16 @@ void FRender::PresentTexture(const FRDGTextureRef& Texture)
 	{
 		RHI->PresentTexture(ResourcePool->GetTexture(Texture));
 	}
+}
+
+void FRender::SetPresentTarget(const FRDGTextureRef& Texture)
+{
+	PresentTarget = Texture;
+}
+
+FRDGTextureRef FRender::GetPresentTarget() const
+{
+	return PresentTarget;
 }
 
 // -- CPU asset -> GPU mirror --

@@ -12,6 +12,11 @@
 #include <mutex>
 #include <vector>
 
+// ImGui declares `struct ImGuiContext` in the global namespace; the header only
+// ever mentions it as a pointer member, so a forward declaration is enough and
+// keeps Render.cpp (and any consumer) from needing imgui.h just to include this.
+struct ImGuiContext;
+
 namespace Maho
 {
 
@@ -39,10 +44,12 @@ struct FUIShader
  * worker executes every ImGui call) -> Render -> GetDrawData -> translate the draw
  * data into GPU buffers (uploaded in InitViews) + an FDrawList holding the refs.
  * RenderUI draws that list into this feature's OWN off-screen composite target
- * (UIRenderTarget, sized to the swapchain canvas + format), and IPresent blits it to the
- * swapchain backbuffer -- the UI is the final on-screen surface; the scene is sampled INto
- * it via the game's imgui::image SceneColor control. FRender is completely UI-agnostic --
- * it holds no ImGui state, never links or references ImGui.
+ * (UIRenderTarget, sized to the swapchain canvas + format) and sets it as FRender's present
+ * target -- the frame feature's IPresent blits it to the swapchain. The UI is the final
+ * on-screen surface; the scene is sampled INto it via the game's imgui::image SceneColor
+ * control. This feature is OFF-SCREEN ONLY: it no longer owns the present point (the frame
+ * feature does). FRender is completely UI-agnostic -- it holds no ImGui state, never links
+ * or references ImGui.
  *
  * Stateless draw feature: the UI shader goes through FRender::TryGetShader<FUIShader>
  * (async compile + per-type cache, above). The FONT backend holds ONLY the RDG
@@ -53,7 +60,7 @@ struct FUIShader
  * neither owns nor tears down a resource. Only the translated FDrawList is held
  * (a member, reused across frames).
  */
-class MAHO_UIFEATURE_API FUIFeature : public FLayer<IOnInstalled, IInitViews, IRenderUI, IPresent, IPreUnInstall>
+class MAHO_UIFEATURE_API FUIFeature : public FLayer<IOnInstalled, IInitViews, IRenderUI, IPreUnInstall>
 {
 MAHO_DECLARE_LAYER(FUIFeature, "UIFeature.dll");
 
@@ -63,7 +70,6 @@ public:
 	void OnInstalled(FRender& R) override;
 	void InitViews(FRender& R) override;
 	void RenderUI(FRender& R) override;
-	void Present(FRender& R) override;
 	void PreUnInstall(FRender& R) override;
 
 private:
@@ -102,6 +108,10 @@ private:
 	 *  context; created at OnInstalled, destroyed at PreUnInstall). Guards every
 	 *  frame-feed / InitViews entry. */
 	bool bContextCreated = false;
+	/** This feature's OWN ImGui context. Two UI features (game + editor) share the
+	 *  process-wide imgui DLL but each owns a distinct context; InitViews selects this
+	 *  one (SetCurrentContext) so a frame is never built against the other context. */
+	ImGuiContext* m_Context = nullptr;
 	/** Whether this feature has subscribed to the UISystem's UI-built event. */
 	bool bSubscribedUI = false;
 	/** The UI-built subscription id (0 = not subscribed). Retained so PreUnInstall

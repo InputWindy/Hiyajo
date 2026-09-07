@@ -1,0 +1,9 @@
+{
+  "FileVersion": 1,
+  "Name": "FrameRenderFeature",
+  "Description": "frame present feature: blits the current present target to the swapchain",
+  "Dependencies": [
+    "Render"
+  ],
+  "PrivateIncludes": []
+}

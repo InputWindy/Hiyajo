@@ -2,6 +2,7 @@
   "FileVersion": 1,
   "ProjectName": "ExampleEngine",
   "EngineDirectory": "../..",
+  "BuildType": "Editor",
   "Plugins": [
     {
       "Name": "Archive",
@@ -89,6 +90,10 @@
     },
     {
       "Name": "UIFeature",
+      "Enabled": true
+    },
+    {
+      "Name": "FrameRenderFeature",
       "Enabled": true
     },
     {

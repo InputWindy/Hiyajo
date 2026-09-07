@@ -27,6 +27,7 @@ target_include_directories(Render PRIVATE
 	"${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/Scene/Public"
 	"${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/DrawTriangleFeature/Public"
 	"${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/UIFeature/Public"
+	"${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/FrameRenderFeature/Public"
 )
 set_target_properties(Render PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 target_compile_definitions(Render PRIVATE MAHO_RENDER_MODULE_EXPORTS)

@@ -11,6 +11,7 @@
   "PrivateIncludes": [
     "Scene",
     "DrawTriangleFeature",
-    "UIFeature"
+    "UIFeature",
+    "FrameRenderFeature"
   ]
 }
