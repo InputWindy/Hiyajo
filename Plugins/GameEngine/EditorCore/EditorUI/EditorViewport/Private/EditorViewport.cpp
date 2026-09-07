@@ -10,7 +10,15 @@ namespace Maho
 
 void FEditorViewport::Draw(FExampleEditor& Editor)
 {
-	if (ImGui::Begin("Viewport", nullptr, ImGuiWindowFlags_NoCollapse))
+	// Dock into the host's main docking space on first use (ImGui remembers the layout
+	// afterwards). NoMove locks it so it fills the node and can never be torn off, but
+	// other panels may still dock alongside and split the shared space.
+	const std::uint32_t DockId = Editor.GetEditorDockSpaceId();
+	if (DockId != 0)
+	{
+		ImGui::SetNextWindowDockID(static_cast<ImGuiID>(DockId), ImGuiCond_FirstUseEver);
+	}
+	if (ImGui::Begin("Viewport", nullptr, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoMove))
 	{
 		const ImVec2 Sz = ImGui::GetContentRegionAvail();
 		if (!Editor.GetEditorContext().bSceneReady)

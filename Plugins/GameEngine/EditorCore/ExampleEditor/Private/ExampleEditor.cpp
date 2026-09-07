@@ -24,6 +24,8 @@
 
 #include "imgui.h"
 
+#include "ImGuiTheme.h"
+
 #if defined(_WIN32)
 #	include <windows.h>
 #endif
@@ -196,7 +198,7 @@ void FExampleEditor::OnInstalled(FRender& R)
 		ImGui::SetCurrentContext(m_Context);
 		ImGuiIO& IO = ImGui::GetIO();
 		IO.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
-		ImGui::StyleColorsDark();
+		ApplyMahoNightTheme();
 		MAHO_LOG_CORE_INFO("ExampleEditor: ImGui context created (editor-own)");
 	}
 
@@ -210,17 +212,14 @@ void FExampleEditor::OnInstalled(FRender& R)
 		UploadFont(R);
 	}
 
-	// Install the editor component plugins (Viewport/Outliner/Inspector/Controls) into
-	// this sub-collector, then drive their Init graph at the safe point.
+	// Install the editor component plugin (EditorViewport) into this sub-collector,
+	// then drive its Init graph at the safe point.
 	InstallEditorComponents();
 }
 
 void FExampleEditor::InstallEditorComponents()
 {
 	Install("EditorViewport.dll");
-	Install("EditorOutliner.dll");
-	Install("EditorInspector.dll");
-	Install("EditorControls.dll");
 	FlushPendingUpdatePipelines<TTypeList<IEditorInit>, TTypeList<IEditorShutdown>>();
 }
 
@@ -448,7 +447,8 @@ void FExampleEditor::DrawEditorPanels()
 	ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
 	ImGui::Begin("EditorDock", nullptr, HostFlags);
 	ImGui::PopStyleVar(3);
-	ImGui::DockSpace(ImGui::GetID("EditorDockSpace"), ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_PassthruCentralNode);
+	EditorDockSpaceId = static_cast<std::uint32_t>(ImGui::GetID("EditorDockSpace"));
+	ImGui::DockSpace(EditorDockSpaceId, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_PassthruCentralNode);
 	ImGui::End();
 
 	for (IEditorPanel* P : Cast<IEditorPanel>())
@@ -565,9 +565,6 @@ void FExampleEditor::PreUnInstall(FRender& R)
 void FExampleEditor::ShutdownEditorComponents()
 {
 	TryUninstall("EditorViewport");
-	TryUninstall("EditorOutliner");
-	TryUninstall("EditorInspector");
-	TryUninstall("EditorControls");
 	FlushPendingUpdatePipelines<TTypeList<IEditorInit>, TTypeList<IEditorShutdown>>();
 }
 

@@ -111,18 +111,6 @@
     {
       "Name": "EditorViewport",
       "Enabled": true
-    },
-    {
-      "Name": "EditorOutliner",
-      "Enabled": true
-    },
-    {
-      "Name": "EditorInspector",
-      "Enabled": true
-    },
-    {
-      "Name": "EditorControls",
-      "Enabled": true
     }
   ]
 }

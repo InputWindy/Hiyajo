@@ -91,8 +91,8 @@ struct FEditorShader
  * editor's OWN ImGui context, the EditorRT composite target, the font upload and
  * the final present. It is the ONLY place the editor touches RHI.
  *
- * As a sub-collector it derives FLayerCollector<FExampleEditor> and installs the
- * editor COMPONENT plugins (Viewport / Outliner / Inspector / Controls) as DLLs.
+	 * As a sub-collector it derives FLayerCollector<FExampleEditor> and installs the
+	 * editor COMPONENT plugins (currently EditorViewport) as DLLs.
  * Each component is an anonymous FLayer mounting the IEditor* stage interfaces.
  * The host installs them at OnInstalled (next safe point runs their Init graph),
  * draws them every frame via Select<IEditorPanel>() -> for over Draw (single
@@ -124,9 +124,12 @@ public:
 	FEditorContext& GetEditorContext() { return EditorContext; }
 	/** The FRender the host frame is driven from (set each InitViews). */
 	FRender& GetRender() { return *RenderRef; }
+	/** The host's main docking-space node id (owner of the frame shell). A component
+	 *  calls DockBuilder/SetNextWindowDockID against it to land inside the shared space. */
+	std::uint32_t GetEditorDockSpaceId() const { return EditorDockSpaceId; }
 
 private:
-	/** Install the 4 editor component DLLs + run their Init graph (safe point). */
+	/** Install the editor component DLLs + run their Init graph (safe point). */
 	void InstallEditorComponents();
 	/** Uninstall the 4 editor components (run their Shutdown graph) before teardown. */
 	void ShutdownEditorComponents();
@@ -157,6 +160,7 @@ private:
 
 	FRender* RenderRef = nullptr;        // current frame render (for component use)
 	FEditorContext EditorContext;        // shared component state
+	std::uint32_t EditorDockSpaceId = 0; // host DockSpace node id, set each DrawEditorPanels
 };
 
 } // namespace Maho
