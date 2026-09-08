@@ -74,6 +74,70 @@ namespace Maho
 		S.AddressW = ERHIAddressMode::ClampToEdge;
 		return S;
 	}
+
+	// Map a GLFW key code (MInputContext::KeyDown index / MInputEvent::Key) to the ImGui
+	// named key. ImGui keys are a dense named enum, NOT the raw GLFW code; the named key IS
+	// the real input (arrows, letters, shortcuts). Virtual mods (ImGuiMod_*) are fed
+	// separately from the snapshot.
+	ImGuiKey MapGlfwKey(int Key)
+	{
+		switch (Key)
+		{
+		case 32:  return ImGuiKey_Space;
+		case 39:  return ImGuiKey_Apostrophe;
+		case 44:  return ImGuiKey_Comma;
+		case 45:  return ImGuiKey_Minus;
+		case 46:  return ImGuiKey_Period;
+		case 47:  return ImGuiKey_Slash;
+		case 59:  return ImGuiKey_Semicolon;
+		case 61:  return ImGuiKey_Equal;
+		case 91:  return ImGuiKey_LeftBracket;
+		case 92:  return ImGuiKey_Backslash;
+		case 93:  return ImGuiKey_RightBracket;
+		case 96:  return ImGuiKey_GraveAccent;
+		case 256: return ImGuiKey_Escape;
+		case 257: return ImGuiKey_Enter;
+		case 258: return ImGuiKey_Tab;
+		case 259: return ImGuiKey_Backspace;
+		case 260: return ImGuiKey_Insert;
+		case 261: return ImGuiKey_Delete;
+		case 262: return ImGuiKey_RightArrow;
+		case 263: return ImGuiKey_LeftArrow;
+		case 264: return ImGuiKey_DownArrow;
+		case 265: return ImGuiKey_UpArrow;
+		case 266: return ImGuiKey_PageUp;
+		case 267: return ImGuiKey_PageDown;
+		case 268: return ImGuiKey_Home;
+		case 269: return ImGuiKey_End;
+		case 280: return ImGuiKey_CapsLock;
+		case 281: return ImGuiKey_ScrollLock;
+		case 282: return ImGuiKey_NumLock;
+		case 283: return ImGuiKey_PrintScreen;
+		case 284: return ImGuiKey_Pause;
+		case 340: return ImGuiKey_LeftShift;
+		case 341: return ImGuiKey_LeftCtrl;
+		case 342: return ImGuiKey_LeftAlt;
+		case 343: return ImGuiKey_LeftSuper;
+		case 344: return ImGuiKey_RightShift;
+		case 345: return ImGuiKey_RightCtrl;
+		case 346: return ImGuiKey_RightAlt;
+		case 347: return ImGuiKey_RightSuper;
+		case 348: return ImGuiKey_Menu;
+		case 330: return ImGuiKey_KeypadDecimal;
+		case 331: return ImGuiKey_KeypadDivide;
+		case 332: return ImGuiKey_KeypadMultiply;
+		case 333: return ImGuiKey_KeypadSubtract;
+		case 334: return ImGuiKey_KeypadAdd;
+		case 335: return ImGuiKey_KeypadEnter;
+		case 336: return ImGuiKey_KeypadEqual;
+		default: break;
+		}
+		if (Key >= 48  && Key <= 57)  return (ImGuiKey)(ImGuiKey_0      + (Key - 48));
+		if (Key >= 65  && Key <= 90)  return (ImGuiKey)(ImGuiKey_A      + (Key - 65));
+		if (Key >= 290 && Key <= 301) return (ImGuiKey)(ImGuiKey_F1     + (Key - 290));
+		if (Key >= 320 && Key <= 329) return (ImGuiKey)(ImGuiKey_Keypad0 + (Key - 320));
+		return ImGuiKey_None;
+	}
 }
 
 namespace Maho
@@ -282,13 +346,18 @@ void FUIFeature::OnInstalled(FRender& R)
 	GUIFeature = this;
 }
 
-void FUIFeature::SetEditorInput(float X, float Y, bool B0, bool B1, bool B2)
+void FUIFeature::SetEditorInput(
+	float X, float Y, bool B0, bool B1, bool B2,
+	const Platform::MInputContext& Snap,
+	const std::vector<Platform::MInputEvent>& Events,
+	float WheelX, float WheelY)
 {
 	// Editor-build input takeover: the editor's pass0 IEditorInput stage feeds the game
 	// context's IO with the cursor already re-based to THIS context's whole-window DisplaySize
-	// coordinates (panel-local mapped back through the panel->window scale) + button state,
+	// coordinates (panel-local mapped back through the panel->window scale) + button state +
+	// the FULL keyboard/char/wheel input the editor harvested from the platform this frame.
 	// BEFORE this feature's InitViews runs. The DisplaySize is left to InitViews (whole-window);
-	// only the mouse/buttons are injected here. Serialized behind the SAME ImGuiFrameMutex
+	// only the input is injected here. Serialized behind the SAME ImGuiFrameMutex
 	// InitViews uses, so a frame is never fed while another thread is mid-ImGui-frame. No-op
 	// when the context isn't created yet.
 	if (!bContextCreated || m_Context == nullptr)
@@ -302,6 +371,38 @@ void FUIFeature::SetEditorInput(float X, float Y, bool B0, bool B1, bool B2)
 	IO.AddMouseButtonEvent(0, B0);
 	IO.AddMouseButtonEvent(1, B1);
 	IO.AddMouseButtonEvent(2, B2);
+
+	// Mods from the snapshot, fed explicitly as ImGuiMod_* (the ImGuiMod_Ctrl that
+	// Shortcut() checks is derived from ImGuiMod_Ctrl key data, not the named Ctrl keys).
+	IO.AddKeyEvent(ImGuiMod_Ctrl,   Snap.KeyDown[341] || Snap.KeyDown[345]);
+	IO.AddKeyEvent(ImGuiMod_Shift,  Snap.KeyDown[340] || Snap.KeyDown[344]);
+	IO.AddKeyEvent(ImGuiMod_Alt,    Snap.KeyDown[342] || Snap.KeyDown[346]);
+	IO.AddKeyEvent(ImGuiMod_Super,  Snap.KeyDown[343] || Snap.KeyDown[347]);
+
+	// Named keys + characters from the platform event batch the editor drained (the editor
+	// is the ONE consumer this frame; this context receives a COPY of that batch). Feed
+	// down=true on PRESS/REPEAT, down=false on RELEASE.
+	for (const auto& Ev : Events)
+	{
+		if (Ev.Type == Platform::MInputEventType::Key)
+		{
+			const ImGuiKey K = MapGlfwKey(Ev.Key);
+			if (K != ImGuiKey_None)
+			{
+				IO.AddKeyEvent(K, Ev.Action != 0);   // 0=RELEASE, 1=PRESS, 2=REPEAT
+			}
+		}
+		else if (Ev.Type == Platform::MInputEventType::Char && Ev.Codepoint != 0)
+		{
+			IO.AddInputCharacter(Ev.Codepoint);      // text input
+		}
+	}
+
+	// Mouse wheel (the editor already exchange-to-zero'd the platform accumulation).
+	if (WheelX != 0.f || WheelY != 0.f)
+	{
+		IO.AddMouseWheelEvent(WheelX, WheelY);
+	}
 	bEditorInputThisFrame = true;
 }
 
@@ -398,26 +499,54 @@ void FUIFeature::InitViews(FRender& R)
 	bEditorInputThisFrame = false;
 	if (!bEditorFed)
 	{
-	#if defined(_WIN32)
-		// Input bypasses GLFW's message-driven cursor state (the window is created on a
-		// pool worker and polled on another, so WM_MOUSEMOVE never reaches
-		// glfwGetCursorPos). Win32 global state works from any thread.
-		if (HWND Hwnd = static_cast<HWND>(P->GetNativeWindow()))
+		// Whole-window fallback poll (pure game build, or the panel not yet present).
+		// Read the canonical client-space input snapshot produced by FPlatform's GLFW
+		// callbacks (fired on the window-loop thread during PollEvents). The snapshot's
+		// cursor is already relative to the window content-area top-left -- the same
+		// space as IO.DisplaySize (whole window) -- so it feeds 1:1. No Win32 global
+		// state any more; the IOContext is the single source of truth.
+		Platform::MInputContext In;
+		P->ReadInput(In);
+		IO.AddMousePosEvent(In.MouseX, In.MouseY);
+		IO.AddMouseButtonEvent(0, In.MouseButtons[0]);
+		IO.AddMouseButtonEvent(1, In.MouseButtons[1]);
+		IO.AddMouseButtonEvent(2, In.MouseButtons[2]);
+
+		// Mods from the snapshot, fed explicitly as ImGuiMod_* (the ImGuiMod_Ctrl that
+		// Shortcut() checks is derived from ImGuiMod_Ctrl key data, not the named Ctrl keys).
+		IO.AddKeyEvent(ImGuiMod_Ctrl,   In.KeyDown[341] || In.KeyDown[345]);
+		IO.AddKeyEvent(ImGuiMod_Shift,  In.KeyDown[340] || In.KeyDown[344]);
+		IO.AddKeyEvent(ImGuiMod_Alt,    In.KeyDown[342] || In.KeyDown[346]);
+		IO.AddKeyEvent(ImGuiMod_Super,  In.KeyDown[343] || In.KeyDown[347]);
+
+		// Named keys + characters from the platform event stream (edges). A pure game
+		// build is the only consumer (the editor feature doesn't exist), so the whole
+		// batch is ours. Feed down=true on PRESS/REPEAT, down=false on RELEASE.
 		{
-			POINT Pt{};
-			if (::GetCursorPos(&Pt) && ::ScreenToClient(Hwnd, &Pt))
+			std::vector<Platform::MInputEvent> Events;
+			P->DrainInputEvents(Events);
+			for (const auto& Ev : Events)
 			{
-				RECT Client{};
-				::GetClientRect(Hwnd, &Client);
-				const float ScaleX = Client.right > 0 ? IO.DisplaySize.x / static_cast<float>(Client.right) : 1.f;
-				const float ScaleY = Client.bottom > 0 ? IO.DisplaySize.y / static_cast<float>(Client.bottom) : 1.f;
-				IO.AddMousePosEvent(static_cast<float>(Pt.x) * ScaleX, static_cast<float>(Pt.y) * ScaleY);
+				if (Ev.Type == Platform::MInputEventType::Key)
+				{
+					const ImGuiKey K = MapGlfwKey(Ev.Key);
+					if (K != ImGuiKey_None)
+					{
+						IO.AddKeyEvent(K, Ev.Action != 0);   // 0=RELEASE, 1=PRESS, 2=REPEAT
+					}
+				}
+				else if (Ev.Type == Platform::MInputEventType::Char && Ev.Codepoint != 0)
+				{
+					IO.AddInputCharacter(Ev.Codepoint);      // text input
+				}
 			}
-			IO.AddMouseButtonEvent(0, (::GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0);
-			IO.AddMouseButtonEvent(1, (::GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0);
-			IO.AddMouseButtonEvent(2, (::GetAsyncKeyState(VK_MBUTTON) & 0x8000) != 0);
 		}
-	#endif
+
+		// Mouse wheel: exchange-to-zero (single consumer here in a pure game build).
+		if (float Wx = 0.f, Wy = 0.f; (P->ConsumeMouseWheelXY(Wx, Wy), Wx != 0.f || Wy != 0.f))
+		{
+			IO.AddMouseWheelEvent(Wx, Wy);
+		}
 	}
 
 	// Renderer-backend NewFrame duty (mirrors the imgui_impl_* backends, which must

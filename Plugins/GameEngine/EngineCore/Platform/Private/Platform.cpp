@@ -84,6 +84,53 @@ namespace
 							Self->OnFramebufferSize(FW, FH);
 						}
 					});
+					// Mouse wheel is a discrete event GLFW consumes during PollEvents, so a
+					// no-backend ImGui context can't poll it via key state. Accumulate the
+					// scroll delta here and let the owner consume it (ConsumeMouseWheelY).
+					glfwSetScrollCallback(Window, [](GLFWwindow* W, double XOff, double YOff)
+					{
+						auto* Self = static_cast<FGlfwWindow*>(glfwGetWindowUserPointer(W));
+					if (Self != nullptr && Self->OnMouseWheel)
+					{
+						Self->OnMouseWheel(XOff, YOff);
+					}
+				});
+						// Cursor / button / key / char / cursor-enter / focus: the OS event
+						// source produces these in the window-loop thread (glfwPollEvents);
+						// forward them to the owner so it can fold them into the shared
+						// MInputContext state snapshot + the drainable MInputEvent stream,
+						// passing the FULL callback payload (scancode + mods, etc.) -- the
+						// consumer decides what it needs; nothing curated out here.
+						glfwSetCursorPosCallback(Window, [](GLFWwindow* W, double X, double Y)
+						{
+							auto* Self = static_cast<FGlfwWindow*>(glfwGetWindowUserPointer(W));
+							if (Self && Self->OnCursorPos) Self->OnCursorPos(X, Y);
+						});
+						glfwSetMouseButtonCallback(Window, [](GLFWwindow* W, int Button, int Action, int Mods)
+						{
+							auto* Self = static_cast<FGlfwWindow*>(glfwGetWindowUserPointer(W));
+							if (Self && Self->OnMouseButton) Self->OnMouseButton(Button, Action, Mods);
+						});
+						glfwSetKeyCallback(Window, [](GLFWwindow* W, int Key, int Scancode, int Action, int Mods)
+						{
+							auto* Self = static_cast<FGlfwWindow*>(glfwGetWindowUserPointer(W));
+							if (Self && Self->OnKey) Self->OnKey(Key, Scancode, Action, Mods);
+						});
+						glfwSetCharCallback(Window, [](GLFWwindow* W, unsigned int Codepoint)
+						{
+							auto* Self = static_cast<FGlfwWindow*>(glfwGetWindowUserPointer(W));
+							if (Self && Self->OnChar) Self->OnChar(static_cast<std::uint32_t>(Codepoint));
+						});
+						glfwSetCursorEnterCallback(Window, [](GLFWwindow* W, int Entered)
+						{
+							auto* Self = static_cast<FGlfwWindow*>(glfwGetWindowUserPointer(W));
+							if (Self && Self->OnCursorEnter) Self->OnCursorEnter(Entered != 0);
+						});
+						glfwSetWindowFocusCallback(Window, [](GLFWwindow* W, int Focused)
+						{
+							auto* Self = static_cast<FGlfwWindow*>(glfwGetWindowUserPointer(W));
+							if (Self && Self->OnWindowFocus) Self->OnWindowFocus(Focused != 0);
+						});
 				}
 			}
 		}
@@ -115,6 +162,28 @@ namespace
 
 		/** Framebuffer-resize listener, invoked by the GLFW callback (owner wires it). */
 		std::function<void(int, int)> OnFramebufferSize;
+
+		/** Mouse-wheel listener, invoked by the GLFW scroll callback (owner wires it).
+		 *  Args: (X delta, Y delta). */
+		std::function<void(double, double)> OnMouseWheel;
+
+		/** Cursor-position listener, invoked by the GLFW cursor callback (owner wires it). */
+		std::function<void(double, double)> OnCursorPos;
+		/** Mouse-button listener, invoked by the GLFW mouse-button callback (owner wires it).
+		 *  Args: (GLFW mouse button, GLFW action, GLFW mods). */
+		std::function<void(int, int, int)> OnMouseButton;
+		/** Key listener, invoked by the GLFW key callback (owner wires it). Args:
+		 *  (GLFW key code, GLFW scancode, GLFW action, GLFW mods). */
+		std::function<void(int, int, int, int)> OnKey;
+		/** Unicode character listener, invoked by the GLFW char callback (owner wires it).
+		 *  Args: (Unicode code point). */
+		std::function<void(std::uint32_t)> OnChar;
+		/** Cursor-enter listener, invoked by the GLFW cursor-enter callback (owner wires it).
+		 *  Args: (entered bool). */
+		std::function<void(bool)> OnCursorEnter;
+		/** Window-focus listener, invoked by the GLFW window-focus callback (owner wires it).
+		 *  Args: (focused bool). */
+		std::function<void(bool)> OnWindowFocus;
 
 	private:
 		GLFWwindow* Window = nullptr;
@@ -199,6 +268,13 @@ namespace
 		std::function<bool()> ShouldClose;
 		std::function<GLFWwindow*()> GetGlfwWindow;
 		std::function<void(std::function<void(int, int)>)> SetFramebufferSizeListener;
+		std::function<void(std::function<void(double, double)>)> SetMouseWheelListener;
+		std::function<void(std::function<void(double, double)>)> SetCursorPosListener;
+		std::function<void(std::function<void(int, int, int)>)> SetMouseButtonListener;
+		std::function<void(std::function<void(int, int, int, int)>)> SetKeyListener;
+		std::function<void(std::function<void(std::uint32_t)>)> SetCharListener;
+		std::function<void(std::function<void(bool)>)> SetCursorEnterListener;
+		std::function<void(std::function<void(bool)>)> SetWindowFocusListener;
 	};
 
 	FPlatformBackend CreateWindowBackend(int Width, int Height, std::string_view Title)
@@ -212,6 +288,13 @@ namespace
 			[Raw]() { return Raw->ShouldClose(); },
 			[Raw]() { return Raw->GetGlfwWindow(); },
 			[Raw](std::function<void(int, int)> Listener) { Raw->OnFramebufferSize = std::move(Listener); },
+			[Raw](std::function<void(double, double)> Listener) { Raw->OnMouseWheel = std::move(Listener); },
+			[Raw](std::function<void(double, double)> Listener) { Raw->OnCursorPos = std::move(Listener); },
+			[Raw](std::function<void(int, int, int)> Listener) { Raw->OnMouseButton = std::move(Listener); },
+			[Raw](std::function<void(int, int, int, int)> Listener) { Raw->OnKey = std::move(Listener); },
+			[Raw](std::function<void(std::uint32_t)> Listener) { Raw->OnChar = std::move(Listener); },
+			[Raw](std::function<void(bool)> Listener) { Raw->OnCursorEnter = std::move(Listener); },
+			[Raw](std::function<void(bool)> Listener) { Raw->OnWindowFocus = std::move(Listener); },
 		};
 #else
 		return {};
@@ -270,6 +353,111 @@ bool FPlatform::CreateWindow(int Width, int Height, std::string_view Title)
 			WindowHeight = static_cast<std::uint32_t>(Height);
 		});
 	}
+	if (Backend.SetMouseWheelListener)
+	{
+		// GLFW fires this on-frame (during PollEvents, the engine's Tick thread). The
+		// editor's ImGui context runs on the render thread; the delta is accumulated
+		// behind InputMutex and a reader exchanges it to zero (ConsumeMouseWheelXY).
+		Backend.SetMouseWheelListener([this](double XOff, double YOff)
+		{
+			std::lock_guard<std::mutex> L(InputMutex);
+			Input.MouseWheelX += static_cast<float>(XOff);
+			Input.MouseWheelY += static_cast<float>(YOff);
+			MInputEvent Ev;
+			Ev.Type = MInputEventType::Scroll;
+			Ev.X = static_cast<float>(XOff);
+			Ev.Y = static_cast<float>(YOff);
+			InputEvents.push_back(Ev);
+		});
+	}
+	if (Backend.SetCursorPosListener)
+	{
+		// Pull-current cursor snapshot + a MouseMove event; the reader copies it
+		// (ReadInput) without consuming, or drains the stream (DrainInputEvents).
+		Backend.SetCursorPosListener([this](double X, double Y)
+		{
+			std::lock_guard<std::mutex> L(InputMutex);
+			Input.MouseX = static_cast<float>(X);
+			Input.MouseY = static_cast<float>(Y);
+			MInputEvent Ev;
+			Ev.Type = MInputEventType::MouseMove;
+			Ev.X = static_cast<float>(X);
+			Ev.Y = static_cast<float>(Y);
+			InputEvents.push_back(Ev);
+		});
+	}
+	if (Backend.SetMouseButtonListener)
+	{
+		Backend.SetMouseButtonListener([this](int Button, int Action, int Mods)
+		{
+			std::lock_guard<std::mutex> L(InputMutex);
+			Input.Mods = static_cast<std::uint16_t>(Mods);
+			if (Button >= 0 && Button < 3)
+			{
+				Input.MouseButtons[Button] = (Action != GLFW_RELEASE);
+			}
+			MInputEvent Ev;
+			Ev.Type = MInputEventType::MouseButton;
+			Ev.Key = Button;
+			Ev.Action = static_cast<std::uint8_t>(Action);
+			Ev.Mods = static_cast<std::uint16_t>(Mods);
+			InputEvents.push_back(Ev);
+		});
+	}
+	if (Backend.SetKeyListener)
+	{
+		Backend.SetKeyListener([this](int Key, int Scancode, int Action, int Mods)
+		{
+			std::lock_guard<std::mutex> L(InputMutex);
+			Input.Mods = static_cast<std::uint16_t>(Mods);
+			if (Key >= 0 && Key < MInputContext::KeyCount)
+			{
+				Input.KeyDown[Key] = (Action != GLFW_RELEASE);
+			}
+			MInputEvent Ev;
+			Ev.Type = MInputEventType::Key;
+			Ev.Key = Key;
+			Ev.Scancode = Scancode;
+			Ev.Action = static_cast<std::uint8_t>(Action);
+			Ev.Mods = static_cast<std::uint16_t>(Mods);
+			InputEvents.push_back(Ev);
+		});
+	}
+	if (Backend.SetCharListener)
+	{
+		Backend.SetCharListener([this](std::uint32_t Codepoint)
+		{
+			std::lock_guard<std::mutex> L(InputMutex);
+			MInputEvent Ev;
+			Ev.Type = MInputEventType::Char;
+			Ev.Codepoint = Codepoint;
+			InputEvents.push_back(Ev);
+		});
+	}
+	if (Backend.SetCursorEnterListener)
+	{
+		Backend.SetCursorEnterListener([this](bool Entered)
+		{
+			std::lock_guard<std::mutex> L(InputMutex);
+			Input.MouseEntered = Entered;
+			MInputEvent Ev;
+			Ev.Type = MInputEventType::CursorEnter;
+			Ev.Bool = Entered;
+			InputEvents.push_back(Ev);
+		});
+	}
+	if (Backend.SetWindowFocusListener)
+	{
+		Backend.SetWindowFocusListener([this](bool Focused)
+		{
+			std::lock_guard<std::mutex> L(InputMutex);
+			Input.WindowFocused = Focused;
+			MInputEvent Ev;
+			Ev.Type = MInputEventType::WindowFocus;
+			Ev.Bool = Focused;
+			InputEvents.push_back(Ev);
+		});
+	}
 	return Surface != nullptr && Surface->GetNativeWindow() != nullptr;
 }
 
@@ -286,10 +474,15 @@ bool FPlatform::CreateHeadlessContext(int Width, int Height)
 
 void FPlatform::DestroyWindow()
 {
+	// Teardown the surface; the GLFW callbacks it owned are gone now, so drop any
+	// in-flight accumulated input (a stale event must not leak into a new window).
+	std::lock_guard<std::mutex> L(InputMutex);
 	Surface.reset();
 	PollEventsFn = {};
 	QueryShouldClose = {};
 	GlfwWindowFn = {};
+	Input = {};
+	InputEvents.clear();
 }
 
 void FPlatform::PollEvents()
@@ -332,6 +525,39 @@ FNativeSurface FPlatform::GetNativeWindow() const
 bool FPlatform::ShouldClose() const
 {
 	return QueryShouldClose && QueryShouldClose();
+}
+
+void FPlatform::ReadInput(MInputContext& Out) const
+{
+	std::lock_guard<std::mutex> L(InputMutex);
+	// Copy the whole snapshot (mouse pos/buttons + keyboard down-state + mods + cursor-in
+	// + focus). The wheel fields are stale accumulated values here -- consumers use
+	// ConsumeMouseWheelXY() for the delta.
+	Out = Input;
+}
+
+void FPlatform::DrainInputEvents(std::vector<MInputEvent>& Out) const
+{
+	std::lock_guard<std::mutex> L(InputMutex);
+	Out.insert(Out.end(), InputEvents.begin(), InputEvents.end());
+	InputEvents.clear();
+}
+
+void FPlatform::ConsumeMouseWheelXY(float& OutX, float& OutY)
+{
+	std::lock_guard<std::mutex> L(InputMutex);
+	OutX = Input.MouseWheelX;
+	OutY = Input.MouseWheelY;
+	Input.MouseWheelX = 0.0f;
+	Input.MouseWheelY = 0.0f;
+}
+
+float FPlatform::ConsumeMouseWheelY()
+{
+	std::lock_guard<std::mutex> L(InputMutex);
+	const float V = Input.MouseWheelY;
+	Input.MouseWheelY = 0.0f;
+	return V;
 }
 
 } // namespace Maho::Platform

@@ -12,6 +12,8 @@
 #include <string>
 #include <vector>
 
+#include <Platform.h>
+
 // The editor owns its own ImGui context; the header only holds a pointer member,
 // so a global forward declaration keeps the header compilable before imgui.h is
 // included by the .cpp.
@@ -171,6 +173,20 @@ private:
 	ImGuiContext* m_Context = nullptr;
 	bool bUIInit = false;
 	bool bFontUploaded = false;
+
+	// Single-frame input cache. EditorInput (pass0, runs FIRST this frame) is the ONE
+	// drain + wheel-consume consumer of the frame. It stores the drained event batch and
+	// the exchanged-to-zero wheel delta here so InitEditorViews (pass3, later in the SAME
+	// frame) can feed the editor context WITHOUT re-draining the platform -- a second
+	// drain/consume would return nothing, since these are single-consumer resources.
+	std::vector<Platform::MInputEvent> EditorInputEvents;
+	float EditorWheelX = 0.f;
+	float EditorWheelY = 0.f;
+	/** Whether EditorInput drained the platform THIS frame (the cache above is fresh). Set
+	 *  true when EditorInput gets past its guards and drains; InitEditorViews consumes the
+	 *  cache when true and otherwise leaves the stream alone (the game-UI context's own
+	 *  whole-window fallback is THE drainer that frame, and a second drain would be empty). */
+	bool bEditorInputCached = false;
 
 	std::mutex ImGuiFrameMutex;   // one thread at a time owns the editor's Id: NewFrame
 

@@ -12,6 +12,8 @@
 #include <mutex>
 #include <vector>
 
+#include <Platform.h>
+
 // ImGui declares `struct ImGuiContext` in the global namespace; the header only
 // ever mentions it as a pointer member, so a forward declaration is enough and
 // keeps Render.cpp (and any consumer) from needing imgui.h just to include this.
@@ -92,12 +94,18 @@ public:
 	/** Editor-build input takeover. Called by the editor's pass0 IEditorInput stage, BEFORE
 	 *  this feature's InitViews: feeds the cursor (already re-based by the editor into THIS
 	 *  context's whole-window DisplaySize coordinates -- the panel-local coords are mapped back
-	 *  through the panel->window scale) plus the mouse buttons into THIS context's IO. The
+	 *  through the panel->window scale) plus the mouse buttons into THIS context's IO, along with
+	 *  the FULL keyboard+character+wheel input the editor already harvested from the platform
+	 *  (the editor is the ONE drain/consume consumer this frame -- see FExampleEditor). The
 	 *  DisplaySize stays whole-window (game layout never re-scales to the panel). InitViews then
 	 *  skips its own OS poll (bEditorInputThisFrame), so the game UI only responds inside the
-	 *  viewport panel. Thread-safe (serialized with InitViews behind ImGuiFrameMutex). No-op
-	 *  when the context is not created. */
-	void SetEditorInput(float X, float Y, bool B0, bool B1, bool B2);
+	 *  viewport panel but still receives keys/chars/wheel. Thread-safe (serialized with InitViews
+	 *  behind ImGuiFrameMutex). No-op when the context is not created. */
+	void SetEditorInput(
+		float X, float Y, bool B0, bool B1, bool B2,
+		const Platform::MInputContext& Snap,
+		const std::vector<Platform::MInputEvent>& Events,
+		float WheelX, float WheelY);
 
 private:
 	/** Lazily create the font backend (font texture + staging). Returns whether it is

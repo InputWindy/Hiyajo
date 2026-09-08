@@ -37,6 +37,102 @@ constexpr const char* kPresentTargetTexName = "__EditorPresentTarget__";
 
 namespace
 {
+#if defined(_WIN32)
+	// No GLFW/OS clipboard backend: route ImGui's SetClipboardText straight into the
+	// system clipboard so Ctrl+C inside a readonly InputText copies to the OS.
+	void SetSystemClipboard(const char* Text)
+	{
+		if (Text == nullptr)
+		{
+			return;
+		}
+		if (!::OpenClipboard(nullptr))
+		{
+			return;
+		}
+		::EmptyClipboard();
+		const std::size_t Len = std::strlen(Text);
+		if (HGLOBAL Mem = ::GlobalAlloc(GMEM_MOVEABLE, Len + 1))
+		{
+			if (void* Ptr = ::GlobalLock(Mem))
+			{
+				std::memcpy(Ptr, Text, Len + 1);
+				::GlobalUnlock(Mem);
+				::SetClipboardData(CF_TEXT, Mem);
+			}
+			else
+			{
+				::GlobalFree(Mem);
+			}
+		}
+		::CloseClipboard();
+	}
+#endif // _WIN32
+
+	// Map a GLFW key code (the index used in MInputContext::KeyDown / MInputEvent::Key) to
+	// the ImGui named key. ImGui keys are a dense named enum (ImGuiKey_A..), NOT the raw
+	// GLFW code; the named key IS the real input (arrows, letters, shortcuts). ImGui's
+	// virtual mods (ImGuiMod_Ctrl...) are fed separately from the snapshot.
+	ImGuiKey MapGlfwKey(int Key)
+	{
+		switch (Key)
+		{
+		case 32:  return ImGuiKey_Space;
+		case 39:  return ImGuiKey_Apostrophe;
+		case 44:  return ImGuiKey_Comma;
+		case 45:  return ImGuiKey_Minus;
+		case 46:  return ImGuiKey_Period;
+		case 47:  return ImGuiKey_Slash;
+		case 59:  return ImGuiKey_Semicolon;
+		case 61:  return ImGuiKey_Equal;
+		case 91:  return ImGuiKey_LeftBracket;
+		case 92:  return ImGuiKey_Backslash;
+		case 93:  return ImGuiKey_RightBracket;
+		case 96:  return ImGuiKey_GraveAccent;
+		case 256: return ImGuiKey_Escape;
+		case 257: return ImGuiKey_Enter;
+		case 258: return ImGuiKey_Tab;
+		case 259: return ImGuiKey_Backspace;
+		case 260: return ImGuiKey_Insert;
+		case 261: return ImGuiKey_Delete;
+		case 262: return ImGuiKey_RightArrow;
+		case 263: return ImGuiKey_LeftArrow;
+		case 264: return ImGuiKey_DownArrow;
+		case 265: return ImGuiKey_UpArrow;
+		case 266: return ImGuiKey_PageUp;
+		case 267: return ImGuiKey_PageDown;
+		case 268: return ImGuiKey_Home;
+		case 269: return ImGuiKey_End;
+		case 280: return ImGuiKey_CapsLock;
+		case 281: return ImGuiKey_ScrollLock;
+		case 282: return ImGuiKey_NumLock;
+		case 283: return ImGuiKey_PrintScreen;
+		case 284: return ImGuiKey_Pause;
+		case 340: return ImGuiKey_LeftShift;
+		case 341: return ImGuiKey_LeftCtrl;
+		case 342: return ImGuiKey_LeftAlt;
+		case 343: return ImGuiKey_LeftSuper;
+		case 344: return ImGuiKey_RightShift;
+		case 345: return ImGuiKey_RightCtrl;
+		case 346: return ImGuiKey_RightAlt;
+		case 347: return ImGuiKey_RightSuper;
+		case 348: return ImGuiKey_Menu;
+		case 330: return ImGuiKey_KeypadDecimal;
+		case 331: return ImGuiKey_KeypadDivide;
+		case 332: return ImGuiKey_KeypadMultiply;
+		case 333: return ImGuiKey_KeypadSubtract;
+		case 334: return ImGuiKey_KeypadAdd;
+		case 335: return ImGuiKey_KeypadEnter;
+		case 336: return ImGuiKey_KeypadEqual;
+		default: break;
+		}
+		if (Key >= 48  && Key <= 57)  return (ImGuiKey)(ImGuiKey_0      + (Key - 48));
+		if (Key >= 65  && Key <= 90)  return (ImGuiKey)(ImGuiKey_A      + (Key - 65));
+		if (Key >= 290 && Key <= 301) return (ImGuiKey)(ImGuiKey_F1     + (Key - 290));
+		if (Key >= 320 && Key <= 329) return (ImGuiKey)(ImGuiKey_Keypad0 + (Key - 320));
+		return ImGuiKey_None;
+	}
+
 	// Editor ImGui vertex shader (identical to the game UI shader -- same GLSL).
 	constexpr const char* kEditorVertShader = R"(
 #version 460
@@ -151,37 +247,40 @@ void FExampleEditor::EditorInput(FRender& R)
 	}
 	const float WinW = static_cast<float>(P->GetWindowWidth());
 	const float WinH = static_cast<float>(P->GetWindowHeight());
-#if defined(_WIN32)
-	float Gx = 0.f, Gy = 0.f;
-	if (HWND Hwnd = static_cast<HWND>(P->GetNativeWindow()))
-	{
-		POINT Pt{};
-		if (::GetCursorPos(&Pt) && ::ScreenToClient(Hwnd, &Pt))
-		{
-			RECT Client{};
-			::GetClientRect(Hwnd, &Client);
-			// editor display-space cursor (client pixels mapped by the editor's scale).
-			const float EdScaleX = Client.right > 0 ? WinW / static_cast<float>(Client.right) : 1.f;
-			const float EdScaleY = Client.bottom > 0 ? WinH / static_cast<float>(Client.bottom) : 1.f;
-			const float Ex = static_cast<float>(Pt.x) * EdScaleX;
-			const float Ey = static_cast<float>(Pt.y) * EdScaleY;
-			// Clamp to the panel, then scale back to whole-window game-space.
-			const float Lx = std::clamp(Ex - VpX, 0.f, VpW);
-			const float Ly = std::clamp(Ey - VpY, 0.f, VpH);
-			Gx = VpW > 0.f ? Lx * (WinW / VpW) : 0.f;
-			Gy = VpH > 0.f ? Ly * (WinH / VpH) : 0.f;
-		}
-	}
-	const bool B0 = (::GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0;
-	const bool B1 = (::GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0;
-	const bool B2 = (::GetAsyncKeyState(VK_MBUTTON) & 0x8000) != 0;
+
+	// Read the canonical client-space input snapshot (FPlatform's GLFW callbacks on the
+	// window-loop thread). The cursor is already relative to the window content-area
+	// top-left -- the editor display space (whole window) maps to it 1:1.
+	Platform::MInputContext In;
+	P->ReadInput(In);
+
+	// The editor is the ONE drain + wheel-consume consumer of the frame (pass0 runs first).
+	// Cache the drained event batch + the exchanged-to-zero wheel delta here so
+	// InitEditorViews (pass3, later this frame) re-uses them WITHOUT draining the platform
+	// again (a second drain/consume returns nothing -- these are single-consumer resources).
+	EditorInputEvents.clear();
+	P->DrainInputEvents(EditorInputEvents);
+	P->ConsumeMouseWheelXY(EditorWheelX, EditorWheelY);
+	bEditorInputCached = true;   // InitEditorViews (pass3) may reuse the cache this frame
+
+	// Confine to the viewport panel: clamp panel-local, then scale back to whole-window
+	// game-space (panel_local / panel_size * window_size gives the game-space position --
+	// what makes a game widget respond only inside the panel at exactly its display spot).
+	const float Ex = In.MouseX;
+	const float Ey = In.MouseY;
+	const float Lx = std::clamp(Ex - VpX, 0.f, VpW);
+	const float Ly = std::clamp(Ey - VpY, 0.f, VpH);
+	const float Gx = VpW > 0.f ? Lx * (WinW / VpW) : 0.f;
+	const float Gy = VpH > 0.f ? Ly * (WinH / VpH) : 0.f;
 	if (FUIFeature* UI = GetUI())
 	{
-		UI->SetEditorInput(Gx, Gy, B0, B1, B2);
+		// Forward the FULL input to the game-UI context: re-based mouse + buttons + the
+		// snapshot (mods) + the drained event batch (named keys/chars) + wheel. The game UI
+		// now responds inside the panel AND receives keys/chars/wheel this frame -- the editor
+		// had been the only keyboard owner before the SetEditorInput contract was expanded.
+		UI->SetEditorInput(Gx, Gy, In.MouseButtons[0], In.MouseButtons[1], In.MouseButtons[2],
+			In, EditorInputEvents, EditorWheelX, EditorWheelY);
 	}
-#else
-	(void)R;
-#endif
 }
 
 bool FExampleEditor::EnsureUIBackend(FRender& R)
@@ -275,6 +374,13 @@ void FExampleEditor::OnInstalled(FRender& R)
 		ImGuiIO& IO = ImGui::GetIO();
 		IO.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 		IO.IniFilename = "EditorLayout.ini";
+#if defined(_WIN32)
+		// 1.91 InputText copy gates on g.PlatformIO.Platform_SetClipboardTextFn (not
+		// io.SetClipboardTextFn); set it so Ctrl+C in a readonly InputText writes the
+		// system clipboard instead of silently doing nothing.
+		ImGuiPlatformIO& PIO = ImGui::GetPlatformIO();
+		PIO.Platform_SetClipboardTextFn = [](ImGuiContext*, const char* Text) { SetSystemClipboard(Text); };
+#endif
 		ApplyMahoNightTheme();
 		MAHO_LOG_CORE_INFO("ExampleEditor: ImGui context created (editor-own, no GLFW backend)");
 	}
@@ -383,21 +489,57 @@ void FExampleEditor::InitEditorViews(FRender& R)
 		static_cast<float>(P->GetWindowWidth()),
 		static_cast<float>(P->GetWindowHeight()));
 #if defined(_WIN32)
-	if (HWND Hwnd = static_cast<HWND>(P->GetNativeWindow()))
+	// Read the canonical client-space input snapshot produced by FPlatform's GLFW
+	// callbacks. The editor context's DisplaySize is the whole window; the snapshot
+	// cursor is content-area relative (same space), so it feeds 1:1.
+	Platform::MInputContext In;
+	P->ReadInput(In);
+	IO.AddMousePosEvent(In.MouseX, In.MouseY);
+	IO.AddMouseButtonEvent(0, In.MouseButtons[0]);
+	IO.AddMouseButtonEvent(1, In.MouseButtons[1]);
+	IO.AddMouseButtonEvent(2, In.MouseButtons[2]);
+
+	// Mods from the snapshot, fed explicitly as ImGuiMod_* (the ImGuiMod_Ctrl that
+	// Shortcut() checks is derived from the ImGuiMod_Ctrl key data -- NOT from the
+	// LeftCtrl/RightCtrl named keys, per the Win32 backend).
+	IO.AddKeyEvent(ImGuiMod_Ctrl,   In.KeyDown[341] || In.KeyDown[345]);
+	IO.AddKeyEvent(ImGuiMod_Shift,  In.KeyDown[340] || In.KeyDown[344]);
+	IO.AddKeyEvent(ImGuiMod_Alt,    In.KeyDown[342] || In.KeyDown[346]);
+	IO.AddKeyEvent(ImGuiMod_Super,  In.KeyDown[343] || In.KeyDown[347]);
+
+	// Named keys + characters (edges). The editor's pass0 EditorInput stage ALREADY drained
+	// the platform this frame into EditorInputEvents (the editor is the ONE drain consumer);
+	// reuse that cache. When bEditorInputCached is false EditorInput early-returned (panel not
+	// valid / UI not up), so the game-UI context's own whole-window fallback is THE drainer
+	// that frame -- a second drain here would return nothing, so leave the stream alone. The
+	// feed covers the keys a snapshot position-table can't express as "pressed this frame"
+	// (down=true on PRESS/REPEAT, down=false on RELEASE). Mouse+buttons+mods above are always
+	// fed (snapshot reads are non-consuming, safe for multiple readers).
+	if (bEditorInputCached)
 	{
-		POINT Pt{};
-		if (::GetCursorPos(&Pt) && ::ScreenToClient(Hwnd, &Pt))
+		for (const auto& Ev : EditorInputEvents)
 		{
-			RECT Client{};
-			::GetClientRect(Hwnd, &Client);
-			const float ScaleX = Client.right > 0 ? IO.DisplaySize.x / static_cast<float>(Client.right) : 1.f;
-			const float ScaleY = Client.bottom > 0 ? IO.DisplaySize.y / static_cast<float>(Client.bottom) : 1.f;
-			IO.AddMousePosEvent(static_cast<float>(Pt.x) * ScaleX, static_cast<float>(Pt.y) * ScaleY);
+			if (Ev.Type == Platform::MInputEventType::Key)
+			{
+				const ImGuiKey K = MapGlfwKey(Ev.Key);
+				if (K != ImGuiKey_None)
+				{
+					IO.AddKeyEvent(K, Ev.Action != 0);   // 0=RELEASE, 1=PRESS, 2=REPEAT
+				}
+			}
+			else if (Ev.Type == Platform::MInputEventType::Char && Ev.Codepoint != 0)
+			{
+				IO.AddInputCharacter(Ev.Codepoint);      // text input (console / input boxes)
+			}
 		}
-		IO.AddMouseButtonEvent(0, (::GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0);
-		IO.AddMouseButtonEvent(1, (::GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0);
-		IO.AddMouseButtonEvent(2, (::GetAsyncKeyState(VK_MBUTTON) & 0x8000) != 0);
+
+		// Mouse wheel: reuse the delta EditorInput exchange-to-zero'd (single consumer).
+		if (EditorWheelX != 0.f || EditorWheelY != 0.f)
+		{
+			IO.AddMouseWheelEvent(EditorWheelX, EditorWheelY);
+		}
 	}
+	bEditorInputCached = false;   // consume this frame's cache flag
 #endif
 
 	unsigned char* FontPixels = nullptr;

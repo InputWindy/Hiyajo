@@ -21,9 +21,11 @@ namespace Maho
  * It mounts IEditorInit/IEditorPanel/IEditorShutdown. Init subscribes to the Log
  * layer's listener stream (producer thread pushes into a mutex-guarded deque, so
  * the panel is safe even though LogLine runs on any emitting thread); each frame
- * Draw drains the deque into a plain, selectable message body. Shutdown unsubscribes
- * before the Log layer goes away. Like every editor component it carries no
- * ImGui/RHI resource ownership -- the host owns the ImGui context.
+ * Draw drains the deque into level-colored Selectable lines (per-level color, like
+ * UE/Unity -- a line's severity is encoded by its color), click-to-select a line and
+ * Ctrl+C to copy it, with a Copy All button in the header. Shutdown unsubscribes before
+ * the Log layer goes away. Like every editor component it carries no ImGui/RHI
+ * resource ownership -- the host owns the ImGui context.
  */
 class FEditorConsole : public FLayer<IEditorInit, IEditorPanel, IEditorShutdown>
 {
@@ -50,10 +52,15 @@ private:
 	std::mutex                LinesMutex;   // guards Lines against producer (LogLine) races
 	std::deque<FLogEntry>     Lines;
 	FSubscriptionID           ListenerId = 0;
+	/** UE/Unity-style per-line selection: the line the user last clicked (index into the
+	 *  current Snapshot, -1 = none). Ctrl+C copies it; per-line color and click-to-select
+	 *  coexist because every line is its own Selectable, not one shared InputTextMultiline. */
+	int                       SelectedLogLine = -1;
 
-	// The accumulated log body shown by a READ-ONLY InputTextMultiline (selectable /
-	// copyable -- TextColored is not), rebuilt each frame from the line snapshot.
-	std::string         LogBody;
+	/** Live "Filter logs..." box text in the top menu bar. Case-insensitive substring
+	 *  match against the rendered line; empty shows everything. Fixed buffer so ImGui's
+	 *  InputText edits in place without std::string reallocation quirks. */
+	char                      FilterBuffer[256] = { 0 };
 };
 
 } // namespace Maho

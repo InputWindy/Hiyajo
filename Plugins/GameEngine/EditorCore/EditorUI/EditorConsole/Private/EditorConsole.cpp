@@ -1,6 +1,6 @@
 #include "EditorConsole.h"
 
-#include <algorithm>
+#include <cctype>
 #include <cstdint>
 #include <memory>
 #include <mutex>
@@ -27,6 +27,24 @@ const char* LevelName(ELogLevel Level)
 	case ELogLevel::Critical: return "Critical";
 	}
 	return "Info";
+}
+
+// Severity -> text color. Mirrors spdlog's default terminal palette (the `%^%l%$`
+// ANSI colors): trace=white, debug=cyan, info=green, warn=yellow, error=red,
+// critical=magenta -- so the ImGui panel reads the same way as the 黑框 stdout sink.
+// Values are softened toward the dark panel background for readability.
+ImVec4 LevelColor(ELogLevel Level)
+{
+	switch (Level)
+	{
+	case ELogLevel::Trace:    return ImVec4(0.85f, 0.85f, 0.85f, 1.0f); // white
+	case ELogLevel::Debug:    return ImVec4(0.35f, 0.85f, 0.90f, 1.0f); // cyan
+	case ELogLevel::Info:     return ImVec4(0.30f, 0.85f, 0.40f, 1.0f); // green
+	case ELogLevel::Warn:     return ImVec4(0.95f, 0.85f, 0.25f, 1.0f); // yellow
+	case ELogLevel::Error:    return ImVec4(0.90f, 0.35f, 0.35f, 1.0f); // red
+	case ELogLevel::Critical: return ImVec4(0.90f, 0.30f, 0.90f, 1.0f); // magenta
+	}
+	return ImVec4(0.85f, 0.85f, 0.85f, 1.0f);
 }
 
 } // namespace
@@ -67,60 +85,145 @@ void FEditorConsole::Draw(FExampleEditor& Editor)
 		return;
 	}
 
-	// -- Snapshot the buffer under the lock, render outside it ----------------
+	// Builds the full display line (category + level + message) for a log entry.
+	const auto BuildLine = [](const FLogEntry& E) -> std::string
+	{
+		std::string S;
+		if (!E.Category.empty())
+		{
+			S += E.Category;
+			S += ": ";
+		}
+		S += LevelName(E.Level);
+		S += ": ";
+		S += E.Message;
+		return S;
+	};
+
+	// Toolbar row: live string-match filter box + one-click Copy All / Clear. Drawn on
+	// the window's own (gray) background so it reads as part of the frame chrome rather
+	// than a separate dark strip (the ImGui MenuBar uses ImGuiCol_MenuBarBg, a near-black
+	// band) that visually shoves the log region down. That is the "菜单栏嵌入灰色边框而
+	// 不是把log框挤下去" fix.
+	bool DoCopyAll = false;
+	ImGui::SetNextItemWidth(220.0f);
+	ImGui::InputTextWithHint("##FilterLogs", "Filter logs...", FilterBuffer, IM_ARRAYSIZE(FilterBuffer));
+
+	ImGui::SameLine();
+	if (ImGui::Button("Copy All"))
+	{
+		DoCopyAll = true;
+	}
+	ImGui::SameLine();
+	if (ImGui::Button("Clear"))
+	{
+		std::lock_guard<std::mutex> Lock(LinesMutex);
+		Lines.clear();
+		SelectedLogLine = -1;
+	}
+
+	// Case-insensitive filter needle, computed once per frame from the box text.
+	std::string NeedleLower;
+	for (const char* p = FilterBuffer; *p; ++p)
+	{
+		NeedleLower += static_cast<char>(std::tolower(static_cast<unsigned char>(*p)));
+	}
+	const bool HasFilter = !NeedleLower.empty();
+
+	// -- Snapshot only the visible (filtered) lines under the lock ----------------
 	std::vector<FLogEntry> Snapshot;
 	{
 		std::lock_guard<std::mutex> Lock(LinesMutex);
-		Snapshot.assign(Lines.begin(), Lines.end());
-	}
-
-	// -- Build the selectable body (level-colored text labels are joined into one
-	//    plain-text buffer; InputTextMultiline gives drag-select + Ctrl+C, which a
-	//    per-line TextColored renderer cannot). Append one trailing NUL so a fully
-	//    empty body still points at a valid, writable char buffer.
-	LogBody.clear();
-	for (const FLogEntry& E : Snapshot)
-	{
-		if (!E.Category.empty())
+		if (!HasFilter)
 		{
-			LogBody += E.Category;
-			LogBody += ": ";
+			Snapshot.assign(Lines.begin(), Lines.end());
 		}
-		LogBody += LevelName(E.Level);
-		LogBody += ": ";
-		LogBody += E.Message;
-		LogBody += '\n';
+		else
+		{
+			for (const FLogEntry& E : Lines)
+			{
+				std::string T = BuildLine(E);
+				for (char& c : T)
+				{
+					c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+				}
+				if (T.find(NeedleLower) != std::string::npos)
+				{
+					Snapshot.push_back(E);
+				}
+			}
+		}
 	}
-	LogBody.push_back('\0');   // InputTextMultiline reads up to this NUL
 
-	// -- Message list: the live log as a READ-ONLY, SELECTABLE multiline ---------
 	ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.055f, 0.055f, 0.06f, 1.0f));
 	ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 3.0f);
 	ImGui::BeginChild("##ConsoleLines", ImVec2(0.0f, 0.0f), ImGuiChildFlags_Borders);
 	{
+
 		ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.0f, 0.0f));
-		ImGui::InputTextMultiline(
-			"##LogBody",
-			LogBody.data(),
-			std::max<std::size_t>(1, LogBody.size()),
-			ImVec2(-1.0f, -1.0f),
-			ImGuiInputTextFlags_ReadOnly);
+
+		// Auto-scroll to the newest line ONLY if the user is already at the bottom, so a
+		// manual scroll-up to read a long back-log is not fought every frame.
+		const bool NearBottom = ImGui::GetScrollY() >= ImGui::GetScrollMaxY() - 1.0f;
+
+		// UE/Unity per-row model: every log line is its OWN selectable, so per-level
+		// color (PushStyleColor on ImGuiCol_Text) coexists with click-to-select + Ctrl+C.
+		// A single InputTextMultiline (the "rich text box") cannot do per-line color.
+			// The per-line ID must be unique even when two lines render identical text
+			// (e.g. repeated "Info: ExampleEditor: EditorCompose (pass3)" rows). That is
+			// exactly why the write-up above warns about `PushID()/PopID()` in loops:
+			// same text -> same ImGui ID -> "conflicting ID" programmer error. Scope each
+			// Selectable under PushID(i)/PopID() so the index disambiguates duplicates.
+			for (std::size_t i = 0; i < Snapshot.size(); ++i)
+			{
+				const FLogEntry& E = Snapshot[i];
+				const std::string Text = BuildLine(E);
+				ImGui::PushID(static_cast<int>(i));
+				ImGui::PushStyleColor(ImGuiCol_Text, LevelColor(E.Level));
+				if (ImGui::Selectable(Text.c_str(), static_cast<int>(i) == SelectedLogLine))
+				{
+					SelectedLogLine = static_cast<int>(i);
+				}
+				ImGui::PopStyleColor();
+				ImGui::PopID();
+			}
 		ImGui::PopStyleVar();
 
-		// Right-click the log area => context menu with Clear.
-		if (ImGui::BeginPopupContextWindow("##LogContext"))
+		if (NearBottom && !Snapshot.empty())
 		{
-			if (ImGui::MenuItem("Clear"))
+			ImGui::SetScrollHereY(1.0f);
+		}
+
+		// Copy All (toolbar button) -- joins every currently-visible line.
+		if (DoCopyAll)
+		{
+			std::string All;
+			for (const FLogEntry& E : Snapshot)
 			{
-				std::lock_guard<std::mutex> Lock(LinesMutex);
-				Lines.clear();
+				All += BuildLine(E);
+				All += '\n';
 			}
-			ImGui::EndPopup();
+			ImGui::SetClipboardText(All.c_str());   // editor backend routes to the OS clipboard
 		}
 	}
 	ImGui::EndChild();
 	ImGui::PopStyleVar();
 	ImGui::PopStyleColor();
+
+	// UE/Unity-style copy: click a line to select it, Ctrl+C copies that line.
+	if (SelectedLogLine >= 0 && static_cast<std::size_t>(SelectedLogLine) < Snapshot.size())
+	{
+		// The editor context may surface Ctrl either as io.KeyCtrl, the ImGuiMod_Ctrl
+		// key, or the LeftCtrl/RightCtrl named keys -- accept any of them.
+		const bool CtrlDown = ImGui::GetIO().KeyCtrl
+			|| ImGui::IsKeyDown(ImGuiMod_Ctrl)
+			|| ImGui::IsKeyDown(ImGuiKey_LeftCtrl) || ImGui::IsKeyDown(ImGuiKey_RightCtrl);
+		if (ImGui::IsKeyPressed(ImGuiKey_C, false) && CtrlDown)
+		{
+			const std::string Sel = BuildLine(Snapshot[static_cast<std::size_t>(SelectedLogLine)]);
+			ImGui::SetClipboardText(Sel.c_str());
+		}
+	}
 
 	ImGui::End();
 }
