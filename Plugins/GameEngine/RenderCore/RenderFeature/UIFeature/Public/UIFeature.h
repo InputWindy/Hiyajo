@@ -72,6 +72,17 @@ public:
 	void RenderUI(FRender& R) override;
 	void PreUnInstall(FRender& R) override;
 
+	/** Pass2 composite target (game view). Read by the editor compose (pass3) to embed
+	 *  it as the viewport background via imgui::image. Null until InitViews creates it
+	 *  on the first frame with a valid canvas. */
+	[[nodiscard]] FRDGTextureRef GetUIRenderTarget() const { return UIRenderTarget; }
+	/** Editor-build handoff: flip UIRenderTarget from COLOR_ATTACHMENT (where the UI just
+	 *  wrote it) to SHADER_READ_ONLY so pass3 can imgui::image it as the viewport present
+	 *  target (the RHI never auto-transitions and descriptor writes hardcode SHADER_READ_ONLY).
+	 *  Called at the END of RenderUI when the present target is sampled downstream. No-op if
+	 *  it is not currently COLOR_ATTACHMENT. */
+	void TransitionUIRenderTargetForSampling(FRender& R);
+
 private:
 	/** Lazily create the font backend (font texture + staging). Returns whether it is
 	 *  ready. Idempotent. */
@@ -133,6 +144,14 @@ private:
 	 *  surface is fully redrawn each frame); Present() blits it to the swapchain. Pool-owned
 	 *  persistent, released at PreUnInstall. */
 	FRDGTextureRef UIRenderTarget;
+	/** Layout tracker for UIRenderTarget. It doubles as both a dynamic-rendering color
+	 *  attachment (RenderUI draws it) AND, in an editor build, a sampled mirror (pass3's
+	 *  viewport imgui::image of the present target). The two uses need opposite layouts and
+	 *  the RHI never auto-transitions, so the layout is flipped each frame: RenderUI leaves
+	 *  it in COLOR_ATTACHMENT, then TransitionUIRenderTargetForSampling() flips it to
+	 *  SHADER_READ_ONLY so pass3 can sample it; RenderUI's head flips it back before any
+	 *  write. A fresh target (never transitioned) is Common and is brought up once. */
+	bool bUIRenderTargetLayoutSR = false;
 	/** The translated ImDrawData->FDrawList for the CURRENT frame. Filled at InitViews
 	 *  (the whole ImGui frame lifecycle lives there; GPU buffers are uploaded here),
 	 *  drawn at RenderUI (same graph, self-progression). A member so the merged

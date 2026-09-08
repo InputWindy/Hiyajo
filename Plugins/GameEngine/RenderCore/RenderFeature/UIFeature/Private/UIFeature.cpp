@@ -651,6 +651,18 @@ void FUIFeature::RenderUI(FRender& R)
 	//    pipeline implicitly, and only then runs this lambda -- so the lambda records
 	//    ONLY the draws (viewport / binds / push constant / draw calls). The feature
 	//    never queries a pipeline or calls BeginRendering/BindGraphicsPipeline itself.
+	// UIRenderTarget doubles, in an editor build, as the viewport's sampled present target.
+	// If the previous frame's pass3 sampled it (flipped to SHADER_READ_ONLY), bring it back
+	// to COLOR_ATTACHMENT here before we clear+redraw -- the RHI never auto-transitions.
+	if (bUIRenderTargetLayoutSR)
+	{
+		FRHITexture* RT = UIRenderTarget.GetRHI();
+		R.AddPass(ERHICommandListType::Graphics, [RT](FRHICommandList& Cmd)
+		{
+			Cmd.TransitionTexture(RT, ERHIResourceState::ShaderResource, ERHIResourceState::RenderTarget);
+		});
+		bUIRenderTargetLayoutSR = false;
+	}
 	FRenderTarget Target;
 	FRenderTarget::FAttachment Color;
 	Color.View = UIRenderTarget;
@@ -738,7 +750,39 @@ void FUIFeature::RenderUI(FRender& R)
 	// This feature is off-screen only: it composites into its own target then sets it
 	// as FRender's present target. The frame feature's IPresent (a later graph stage,
 	// blocked on this stage) blits it to the swapchain. No present happened here.
+	//
+	// Editor build: pass3 (editor's IEditorCompose) takes over the final present. But the
+	// viewport window in pass3 samples "the current on-screen surface" via GetPresentTarget()
+	// -- the game composite UIRenderTarget is that surface (scene + game UI already
+	// composited). So pass2 MUST STILL set the present target here; pass3 reads it as its
+	// viewport background and only THEN replaces it with EditorRT at the very end. Without
+	// this, the viewport would sample a stale/empty present target.
 	R.SetPresentTarget(UIRenderTarget);
+#ifdef MAHO_EDITOR_BUILD
+	// Editor build: pass3 samples this present target as its viewport background (the
+	// present-target ImTextureID resolves to GetPresentTarget() == this composite). Flip it
+	// to SHADER_READ_ONLY so that sampled read is legal; pass3's RenderEditorUI flips it back
+	// to COLOR_ATTACHMENT afterwards, and RenderUI's head flips it back before the next write.
+	TransitionUIRenderTargetForSampling(R);
+#endif
+}
+
+void FUIFeature::TransitionUIRenderTargetForSampling(FRender& R)
+{
+	// Flip UIRenderTarget from COLOR_ATTACHMENT (where the composite just wrote it) to
+	// SHADER_READ_ONLY so a downstream sampled use (pass3's viewport imgui::image of the
+	// present target) can bind it legally. The RHI never auto-transitions and descriptor
+	// writes hardcode SHADER_READ_ONLY, so sampling a target still in COLOR_ATTACHMENT
+	// trips the validation layer. RenderUI's head flips it back before any write.
+	if (UIRenderTarget.IsValid() && !bUIRenderTargetLayoutSR)
+	{
+		FRHITexture* RT = UIRenderTarget.GetRHI();
+		R.AddPass(ERHICommandListType::Graphics, [RT](FRHICommandList& Cmd)
+		{
+			Cmd.TransitionTexture(RT, ERHIResourceState::RenderTarget, ERHIResourceState::ShaderResource);
+		});
+		bUIRenderTargetLayoutSR = true;
+	}
 }
 
 void FUIFeature::PreUnInstall(FRender& R)

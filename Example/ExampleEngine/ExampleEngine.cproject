@@ -106,15 +106,15 @@
     },
     {
       "Name": "ExampleEditor",
-      "Enabled": false
+      "Enabled": true
     },
     {
       "Name": "EditorViewport",
-      "Enabled": false
+      "Enabled": true
     },
     {
       "Name": "EditorConsole",
-      "Enabled": false
+      "Enabled": true
     }
   ]
 }

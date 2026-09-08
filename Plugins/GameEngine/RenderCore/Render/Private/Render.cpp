@@ -143,20 +143,15 @@ void FRender::PostInitialize(FEngineBase&)
 	// Initialize; when the world system imports it, OnAssetImported -> OnAssetMirrorImported
 	// uploads it. Nothing to do here.
 #ifdef MAHO_EDITOR_BUILD
-	// Editor build: mount the editor render feature into OUR collection (not the
-	// host engine's) so the render graph drives it. The editor is a SEPARATE plugin
-	// DLL (Type=Editor) that owns its OWN ImGui context + EditorRT and takes over the
-	// present target; it must be installed AFTER the scene feature (it samples the
-	// SceneColor mirror) and AFTER this layer's Initialize (the render graph exists).
-	// It is loaded by DLL name (FAssembly) and never linked -- see its .cplugin
-	// PrivateIncludes. Runtime builds never define MAHO_EDITOR_BUILD (the editor
-	// plugin is filtered out at codegen), so this path is editor-only.
-	//
-	// TEMP-DISABLED: the editor plugins (ExampleEditor + EditorViewport +
-	// EditorConsole) are shut off until FRender's pass1(scene)+pass2(game UI)+
-	// pass3(editor) pipeline is proven stable. Re-enable to re-fit the editor as
-	// pass3 on the SINGLE shared ImGui context (no separate editor context).
-	(void)0;   // was: Install("ExampleEditor.dll");
+	// Editor build: mount the editor feature (ExampleEditor, Type=Editor) into OUR
+	// collection so the render graph drives it at IEditorCompose -- sampling the game-UI
+	// composite (UIRenderTarget), drawing the editor overlay, and taking over the present
+	// target. Loads by DLL name (FAssembly), never linked. Runtime builds never define
+	// MAHO_EDITOR_BUILD, so this path is editor-only.
+	if (!Install("ExampleEditor.dll"))
+	{
+		MAHO_LOG_CORE_ERROR("ExampleEditor install FAILED (IEditorCompose will have no implementer -> black screen)");
+	}
 #endif
 }
 
@@ -322,7 +317,16 @@ void FRender::Tick(FEngineBase&)
 	// feature acquire/record/submit, present, swapchain end) is a scheduled stage --
 	// FRender only schedules; the frame feature + per-feature deps order it all.
 	FlushPendingUpdatePipelines<TTypeList<IOnInstalled>, TTypeList<IPreUnInstall>>();
+#ifdef MAHO_EDITOR_BUILD
+	// Editor build: pass3 (IEditorCompose) is a real graph stage inserted between the
+	// game-UI composite (IRenderUI) and the present blit (IPresent). With no editor
+	// feature installed it has no implementer and is skipped, so the game-UI target is
+	// still the present target -- runtime behaviour is unchanged. Installing an editor
+	// feature (Type=Editor) that implements IEditorCompose takes over the frame here.
+	RenderGraph->Init(Select<IInitViews, IBeginRender, IRender, IEndRender, IPostProcess, IRenderUI, IEditorCompose, IPresent>());
+#else
 	RenderGraph->Init(Select<IInitViews, IBeginRender, IRender, IEndRender, IPostProcess, IRenderUI, IPresent>());
+#endif
 	if (!RenderGraph->Compile())
 	{
 		ReportFatal("FRender::Tick: render pipeline Compile failed");

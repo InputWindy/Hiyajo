@@ -107,7 +107,7 @@ struct FEditorShader
  * from the host when the build is an editor build (MAHO_EDITOR_BUILD).
  */
 class MAHO_EXAMPLEEDITOR_API FExampleEditor
-	: public FLayer<IOnInstalled, IInitViews, IRenderUI, IPreUnInstall>
+	: public FLayer<IOnInstalled, IEditorCompose, IPreUnInstall>
 	, public FLayerCollector<FExampleEditor>
 {
 	MAHO_DECLARE_LAYER(FExampleEditor, "ExampleEditor.dll");
@@ -115,10 +115,12 @@ class MAHO_EXAMPLEEDITOR_API FExampleEditor
 	FExampleEditor();
 
 public:
-	void OnInstalled(FRender& R) override;
-	void InitViews(FRender& R) override;
-	void RenderUI(FRender& R) override;
-	void PreUnInstall(FRender& R) override;
+	void OnInstalled(FRender&) override;
+	/** Pass3: run the editor's OWN InitViews + Render in a single IEditorCompose stage
+	 *  (after the game-UI composite IRenderUI, before the frame's IPresent blit). It takes
+	 *  over the frame's present target with its EditorRT. */
+	void EditorCompose(FRender&) override;
+	void PreUnInstall(FRender&) override;
 
 	/** Shared component state (selected entity, scene-ready flag). */
 	FEditorContext& GetEditorContext() { return EditorContext; }
@@ -127,6 +129,12 @@ public:
 	/** The host's main docking-space node id (owner of the frame shell). A component
 	 *  calls DockBuilder/SetNextWindowDockID against it to land inside the shared space. */
 	std::uint32_t GetEditorDockSpaceId() const { return EditorDockSpaceId; }
+	/** ImTextureID for the live present target (the game composite UIRenderTarget in an
+	 *  editor build, resolved to EditorRT only at the very end of the frame). The host's
+	 *  translate step resolves THIS id to R.GetPresentTarget() instead of a name-keyed
+	 *  mirror (the target has no mirror/name entry), so a component can imgui::image the
+	 *  current on-screen surface with a single stable id. */
+	static std::uint32_t PresentTargetTextureId();
 
 private:
 	/** Install the editor component DLLs + run their Init graph (safe point). */
@@ -136,6 +144,12 @@ private:
 	/** Host-owned frame shell: own context, fullscreen DockSpace, then for over
 	 *  Cast<IEditorPanel>() drives each component's Draw (single thread, ImGui-safe). */
 	void DrawEditorPanels();
+	/** Formerly the IInitViews stage -- now the frame-build half of EditorCompose:
+	 *  feed + NewFrame + panels + Render + translate to an FDrawList. Runs first. */
+	void InitEditorViews(FRender& R);
+	/** Formerly the IRenderUI stage -- now the compose half of EditorCompose: draws the
+	 *  editor ImGui list into EditorRT and takes over the present target. Runs second. */
+	void RenderEditorUI(FRender& R);
 	/** Lazy font-backend init (editor-owned font texture + staging). Idempotent. */
 	bool EnsureUIBackend(FRender& R);
 	/** One-time editor font-atlas upload (transfer submit, illegal in a render pass). */

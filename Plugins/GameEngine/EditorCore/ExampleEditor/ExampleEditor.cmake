@@ -49,15 +49,11 @@ source_group(TREE "${CMAKE_CURRENT_LIST_DIR}" FILES ${ExampleEditor_PUBLIC_HEADE
 	maho_git_repository_url(_IMGUI_URL https://github.com/ocornut/imgui.git)
 	maho_fetchcontent_populate_or_reuse(imgui ${_IMGUI_URL} v1.91.9-docking imgui.h)
 
-	# The editor captures input via the ImGui GLFW backend (imgui_impl_glfw.cpp), compiled
-	# into THIS plugin: it installs glfw input callbacks on the shared toolkit window to feed
-	# the editor's own ImGui context and wires the OS clipboard through platform_io. With
-	# install_callbacks=true it chains any previously-installed GLFW callbacks (gameplay
-	# input), so both consume the window's events -- no Win32 low-level hook pump. glfw is a
-	# PUBLIC dep of Platform; link it here so the backend compiles + links glfwSet*Callback.
-	target_link_libraries(ExampleEditor PRIVATE glfw)
-	target_sources(ExampleEditor PRIVATE "${imgui_SOURCE_DIR}/backends/imgui_impl_glfw.cpp")
-unset(_IMGUI_URL)
+	# The editor drives ImGui with a hand-fed Win32 input + a self-drawn shader (same model
+	# as FUIFeature) -- it does NOT use the ImGui GLFW backend. There is therefore no
+	# process-wide ImGui_ImplGlfw single-instance and no clash with any GLFW callbacks, so
+	# no imgui_impl_glfw.cpp and no glfw link are needed here.
+	unset(_IMGUI_URL)
 
 if(NOT TARGET maho_imgui)
 	add_library(maho_imgui SHARED

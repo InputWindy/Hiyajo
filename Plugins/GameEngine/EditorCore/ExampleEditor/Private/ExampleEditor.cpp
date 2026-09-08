@@ -23,9 +23,17 @@
 #include <ShaderParameterStruct.h>
 
 #include "imgui.h"
-#include "backends/imgui_impl_glfw.h"
 
 #include "ImGuiTheme.h"
+
+// ImTextureID for the live present target (game composite UIRenderTarget). The name is
+// never a registered mirror (the target is CreateTexture'd directly, no mirror entry), so
+// the host's translate step special-cases this id -> R.GetPresentTarget().
+constexpr const char* kPresentTargetTexName = "__EditorPresentTarget__";
+
+#if defined(_WIN32)
+#	include <windows.h>
+#endif
 
 namespace
 {
@@ -69,6 +77,11 @@ namespace Maho
 		S.AddressW = ERHIAddressMode::ClampToEdge;
 		return S;
 	}
+
+	std::uint32_t FExampleEditor::PresentTargetTextureId()
+	{
+		return Name::FName(kPresentTargetTexName).GetId();
+	}
 }
 
 namespace Maho
@@ -96,16 +109,16 @@ FExampleEditor::FExampleEditor()
 	// IRenderUI so its SetPresentTarget(EditorRT) wins the present slot over the game
 	// composite. Without this edge the two UI features could run in any order and the
 	// editor surface could be overridden back to the game RT.
-	MyStage<IRenderUI>().IsWaiting<FUIFeature>().ForStage<IRenderUI>();
-	// Editor renders + submits LAST, after the scene's IEndRender (same as the game UI --
-	// the scene color mirror the viewport samples is written by then). The reverse edge
-	// declares that the frame feature's IPresent (the very last frame stage) runs AFTER
-	// this feature's IRenderUI and consumes the EditorRT it set as the present target.
+	MyStage<IEditorCompose>().IsWaiting<FUIFeature>().ForStage<IRenderUI>();
+	// Editor runs its compose + submits LAST, after the scene's IEndRender (the scene
+	// color mirror the viewport samples is written by then). The reverse edge declares
+	// that the frame feature's IPresent (the very last frame stage) runs AFTER this
+	// feature's IEditorCompose and consumes the EditorRT it set as the present target.
 	// FFrameRenderFeature is always installed, so the edge is satisfied; an absent editor
 	// (runtime build) never gets here. No forward WaitFor: FFrameRenderFeature is present
 	// in both build types, but this feature only exists in an editor build.
-	MyStage<IRenderUI>().IsWaiting<Scene::FScene>().ForStage<IEndRender>();
-	MyStage<IRenderUI>().IsBlocking<FFrameRenderFeature>().OnStage<IPresent>();
+	MyStage<IEditorCompose>().IsWaiting<Scene::FScene>().ForStage<IEndRender>();
+	MyStage<IEditorCompose>().IsBlocking<FFrameRenderFeature>().OnStage<IPresent>();
 }
 
 bool FExampleEditor::EnsureUIBackend(FRender& R)
@@ -182,6 +195,9 @@ void FExampleEditor::OnInstalled(FRender& R)
 	// UIFeature context. Created at install, before anything touches GetIO(); it becomes
 	// the current context for the rest of frame setup (the game feature switches back to
 	// its own context at its InitViews). Docking is enabled so the editor shell can dock.
+	// NO GLFW backend: input + display size are fed by hand in InitEditorViews (same model
+	// as FUIFeature), so there is no process-wide ImGui_ImplGlfw single-instance to clash
+	// with anything.
 	if (m_Context == nullptr)
 	{
 		Platform::FPlatform* P = Platform::GetPlatform();
@@ -195,16 +211,9 @@ void FExampleEditor::OnInstalled(FRender& R)
 		ImGui::SetCurrentContext(m_Context);
 		ImGuiIO& IO = ImGui::GetIO();
 		IO.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
-		// The ImGui GLFW backend takes over input + clipboard directly from the toolkit
-		// window handle: it installs glfw input callbacks (key/char/scroll/mouse) that feed
-		// THIS context's IO, and wires the OS clipboard through platform_io. With
-		// install_callbacks=true it also chains any previously-installed GLFW callbacks (e.g.
-		// a gameplay input system installed FIRST), so both consume the window's events -- the
-		// Win32 low-level hook pump is no longer needed. It must be initialized AFTER the
-		// game/input layer installs its own callbacks so those are chained, never shadowed.
-		ImGui_ImplGlfw_InitForVulkan(P->GetToolkitWindowHandle(), true);
+		IO.IniFilename = "EditorLayout.ini";
 		ApplyMahoNightTheme();
-		MAHO_LOG_CORE_INFO("ExampleEditor: ImGui context created (editor-own)");
+		MAHO_LOG_CORE_INFO("ExampleEditor: ImGui context created (editor-own, no GLFW backend)");
 	}
 
 	ImGui::SetCurrentContext(m_Context);
@@ -215,21 +224,27 @@ void FExampleEditor::OnInstalled(FRender& R)
 	if (!bFontUploaded)
 	{
 		UploadFont(R);
+		if (!bFontUploaded)
+		{
+			return;
+		}
 	}
-
-	// Install the editor component plugin (EditorViewport) into this sub-collector,
-	// then drive its Init graph at the safe point.
+	// Install the editor component plugins (viewport) + run their Init graph at the next
+	// safe point, now that this feature's own ImGui context + font backend are ready.
 	InstallEditorComponents();
 }
 
 void FExampleEditor::InstallEditorComponents()
 {
+	// Editor components are loaded as DLLs and installed into this host's collector
+	// (safe point: their IEditorInit graph runs on FlushPendingUpdatePipelines). The
+	// viewport is re-enabled; the console stays disabled for now (user is iterating on
+	// the 3-pass frame, not the console).
 	Install("EditorViewport.dll");
-	Install("EditorConsole.dll");
 	FlushPendingUpdatePipelines<TTypeList<IEditorInit>, TTypeList<IEditorShutdown>>();
 }
 
-void FExampleEditor::InitViews(FRender& R)
+void FExampleEditor::InitEditorViews(FRender& R)
 {
 	if (m_Context == nullptr || !bUIInit)
 	{
@@ -292,16 +307,39 @@ void FExampleEditor::InitViews(FRender& R)
 		}
 	}
 
-	// -- Frame feed (ImGui GLFW backend) -- then NewFrame.
-	// The backend accumulates window input (key/char/scroll/mouse) into THIS context's IO
-	// since the last NewFrame, and updates io.DisplaySize / framebuffer scale / mouse data
-	// from the toolkit window. No manual Win32 poll/hook drain is needed. The editor is the
-	// only input-consuming ImGui context in an editor build; the game UI feature stays cold.
-	ImGui_ImplGlfw_NewFrame();
+	// -- Frame feed (manual Win32 input, same model as FUIFeature) -- then NewFrame.
+	// No GLFW backend: we set the display size from the platform window and poll cursor
+	// + mouse-button state directly via Win32. The editor is the only input-consuming
+	// ImGui context in an editor build; the game UI feature stays cold.
+	ImGuiIO& IO = ImGui::GetIO();
+	Platform::FPlatform* P = Platform::GetPlatform();
+	if (P == nullptr)
+	{
+		return;
+	}
+	IO.DisplaySize = ImVec2(
+		static_cast<float>(P->GetWindowWidth()),
+		static_cast<float>(P->GetWindowHeight()));
+#if defined(_WIN32)
+	if (HWND Hwnd = static_cast<HWND>(P->GetNativeWindow()))
+	{
+		POINT Pt{};
+		if (::GetCursorPos(&Pt) && ::ScreenToClient(Hwnd, &Pt))
+		{
+			RECT Client{};
+			::GetClientRect(Hwnd, &Client);
+			const float ScaleX = Client.right > 0 ? IO.DisplaySize.x / static_cast<float>(Client.right) : 1.f;
+			const float ScaleY = Client.bottom > 0 ? IO.DisplaySize.y / static_cast<float>(Client.bottom) : 1.f;
+			IO.AddMousePosEvent(static_cast<float>(Pt.x) * ScaleX, static_cast<float>(Pt.y) * ScaleY);
+		}
+		IO.AddMouseButtonEvent(0, (::GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0);
+		IO.AddMouseButtonEvent(1, (::GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0);
+		IO.AddMouseButtonEvent(2, (::GetAsyncKeyState(VK_MBUTTON) & 0x8000) != 0);
+	}
+#endif
 
 	unsigned char* FontPixels = nullptr;
 	int FontW = 0, FontH = 0, FontBpp = 0;
-	ImGuiIO& IO = ImGui::GetIO();
 	IO.Fonts->GetTexDataAsRGBA32(&FontPixels, &FontW, &FontH, &FontBpp);
 	if (FontPixels == nullptr || FontW <= 0 || FontH <= 0)
 	{
@@ -406,21 +444,46 @@ void FExampleEditor::InitViews(FRender& R)
 			Batch.bHasScissor = true;
 			if (DrawCmd.TextureId != 0)
 			{
+				// Two resolution paths: a NON-zero ImTextureID is normally a mirror FName id
+				// (a registered texture, resolved via GetMirror). But the live present target
+				// (game composite UIRenderTarget) has NO mirror entry -- it is CreateTexture'd
+				// directly -- so the special present-target id is resolved straight from
+				// R.GetPresentTarget() instead. The target is y-down: flip V when displayed.
 				const Name::FName TexName = Name::FName::FromId(static_cast<std::uint32_t>(DrawCmd.TextureId));
-				const FRDGResourceRef* Mirror = R.GetMirror(TexName);
-				const FRDGTextureRef* Tex = Mirror != nullptr ? std::get_if<FRDGTextureRef>(Mirror) : nullptr;
-				if (Tex != nullptr)
+				if (TexName == Name::FName(kPresentTargetTexName))
 				{
-					FRDGDescriptorSet DescriptorSet;
-					DescriptorSet.SetIndex = 0;
-					DescriptorSet.Frequency = EDescriptorSetFrequency::Static;
-					FRDGBinding Binding;
-					Binding.Type = ERHIDescriptorType::CombinedImageSampler;
-					Binding.Stages = ERHIShaderStage::Fragment;
-					Binding.Resource = *Tex;
-					Binding.SamplerIndex = DescriptorSet.AddSampler(R.CreateSampler(EditorClampSamplerDesc()));
-					DescriptorSet.Bindings.push_back({ 0, Binding });
-					Batch.Sets.push_back(std::move(DescriptorSet));
+					const FRDGTextureRef Present = R.GetPresentTarget();
+					if (Present.IsValid())
+					{
+						FRDGDescriptorSet DescriptorSet;
+						DescriptorSet.SetIndex = 0;
+						DescriptorSet.Frequency = EDescriptorSetFrequency::Static;
+						FRDGBinding Binding;
+						Binding.Type = ERHIDescriptorType::CombinedImageSampler;
+						Binding.Stages = ERHIShaderStage::Fragment;
+						Binding.Resource = Present;
+						Binding.SamplerIndex = DescriptorSet.AddSampler(R.CreateSampler(EditorClampSamplerDesc()));
+						DescriptorSet.Bindings.push_back({ 0, Binding });
+						Batch.Sets.push_back(std::move(DescriptorSet));
+					}
+				}
+				else
+				{
+					const FRDGResourceRef* Mirror = R.GetMirror(TexName);
+					const FRDGTextureRef* Tex = Mirror != nullptr ? std::get_if<FRDGTextureRef>(Mirror) : nullptr;
+					if (Tex != nullptr)
+					{
+						FRDGDescriptorSet DescriptorSet;
+						DescriptorSet.SetIndex = 0;
+						DescriptorSet.Frequency = EDescriptorSetFrequency::Static;
+						FRDGBinding Binding;
+						Binding.Type = ERHIDescriptorType::CombinedImageSampler;
+						Binding.Stages = ERHIShaderStage::Fragment;
+						Binding.Resource = *Tex;
+						Binding.SamplerIndex = DescriptorSet.AddSampler(R.CreateSampler(EditorClampSamplerDesc()));
+						DescriptorSet.Bindings.push_back({ 0, Binding });
+						Batch.Sets.push_back(std::move(DescriptorSet));
+					}
 				}
 			}
 			Out.Add(std::move(Batch));
@@ -456,7 +519,7 @@ void FExampleEditor::DrawEditorPanels()
 	}
 }
 
-void FExampleEditor::RenderUI(FRender& R)
+void FExampleEditor::RenderEditorUI(FRender& R)
 {
 	if (!EditorRT.IsValid())
 	{
@@ -526,25 +589,31 @@ void FExampleEditor::RenderUI(FRender& R)
 	Blend.DstAlphaFactor = ERHIBlendFactor::OneMinusSrcAlpha;
 	PipelineDesc.AttachmentBlends = { Blend };
 
-	// The editor UI draws the scene-color mirror (viewport ImGui::Image) sampled as
-	// SHADER_READ_ONLY, but the scene left it as COLOR_ATTACHMENT. Flip it to SR before
-	// the compose pass that samples it (and back afterwards) -- the RHI never auto-
-	// transitions, and descriptor writes hardcode SHADER_READ_ONLY, so sampling a target
-	// still in COLOR_ATTACHMENT (or a fresh UNDEFINED one) trips the validation layer.
-	if (Scene::FScene* Scene = Scene::GetScene())
-	{
-		Scene->TransitionSceneColorForSampling(R);
-	}
+	// The editor draws only its own ImGui content into EditorRT, and its viewport window
+	// samples the live present target (the game composite UIRenderTarget, flipped to
+	// SHADER_READ_ONLY by pass2 for exactly this sampled read). Sample it here. No layout
+	// re-flip is needed: this frame presents EditorRT (below), so UIRenderTarget stays in
+	// SHADER_READ_ONLY until the game UI's next RenderUI head flips it back to
+	// COLOR_ATTACHMENT before it writes again -- the RHI never auto-transitions, so the
+	// editor must NOT try to reuse it as a render target itself.
 	R.AddPass(ERHICommandListType::Graphics, PipelineDesc, Target, Params, DrawList);
-	if (Scene::FScene* Scene = Scene::GetScene())
-	{
-		Scene->TransitionSceneColorForRendering(R);
-	}
 
 	// The editor owns the final on-screen surface in an editor build: set its EditorRT
 	// as the present target (last writer wins over the game UI, which may have set the
 	// game composite). The frame feature's IPresent blits it to the swapchain.
 	R.SetPresentTarget(EditorRT);
+}
+
+void FExampleEditor::EditorCompose(FRender& R)
+{
+	// Pass3 -- the editor's whole frame in a single graph stage (after the game-UI
+	// composite IRenderUI, before the frame's IPresent). Split into two private steps:
+	// InitViews builds the ImGui frame (feed + NewFrame + panels + Render + translate),
+	// RenderUI composes it into EditorRT and takes over the present target. Panels /
+	// component draws (DrawEditorPanels) are the content you fill.
+	MAHO_LOG_CORE_INFO("ExampleEditor::EditorCompose (pass3)");
+	InitEditorViews(R);
+	RenderEditorUI(R);
 }
 
 void FExampleEditor::PreUnInstall(FRender& R)
@@ -564,12 +633,9 @@ void FExampleEditor::PreUnInstall(FRender& R)
 		R.ReleaseTexture(FontTexture);
 		FontTexture.Reset();
 	}
-	// Shut down the ImGui GLFW backend (unregisters its callbacks + restores the previously
-	// chained wndproc/input callbacks) before the ImGui context is destroyed, so a late
-	// backend event never feeds a context that no longer drains it.
+	// Destroy the ImGui context (no GLFW backend to shut down -- input is hand-fed).
 	if (m_Context != nullptr)
 	{
-		ImGui_ImplGlfw_Shutdown();
 		ImGui::SetCurrentContext(nullptr);
 		ImGui::DestroyContext(m_Context);
 		m_Context = nullptr;

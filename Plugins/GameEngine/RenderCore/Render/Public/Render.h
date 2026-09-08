@@ -117,6 +117,25 @@ public:
 	virtual void RenderUI(FRender&) = 0;
 };
 
+#ifdef MAHO_EDITOR_BUILD
+/**
+ * Pass3: editor final-compose surface. Runs AFTER the game UI (IRenderUI)
+ * composites onto its off-screen target, and BEFORE IPresent blits to the
+ * swapchain. When an editor build is present, an editor feature implements this
+ * stage to sample the game-UI composite, draw the editor overlay on top, and set
+ * THAT target as the frame's present target. Originally an editor-only stage, so
+ * it is only selected into the render graph under MAHO_EDITOR_BUILD; with no
+ * editor feature installed the stage has no implementer and is silently skipped,
+ * so the game-UI target stays the present target (no regression).
+ */
+class MAHO_RENDER_API IEditorCompose
+{
+public:
+	virtual ~IEditorCompose() = default;
+	virtual void EditorCompose(FRender&) = 0;
+};
+#endif // MAHO_EDITOR_BUILD
+
 class MAHO_RENDER_API IPresent
 {
 public:
@@ -138,6 +157,9 @@ MAHO_DECLARE_STAGE_DISPATCH(FRender, IRender,      IRender,      Render)
 MAHO_DECLARE_STAGE_DISPATCH(FRender, IEndRender,   IEndRender,   EndRender)
 MAHO_DECLARE_STAGE_DISPATCH(FRender, IPostProcess, IPostProcess, PostProcess)
 MAHO_DECLARE_STAGE_DISPATCH(FRender, IRenderUI,    IRenderUI,    RenderUI)
+#ifdef MAHO_EDITOR_BUILD
+MAHO_DECLARE_STAGE_DISPATCH(FRender, IEditorCompose, IEditorCompose, EditorCompose)
+#endif // MAHO_EDITOR_BUILD
 MAHO_DECLARE_STAGE_DISPATCH(FRender, IPresent, IPresent, Present)
 MAHO_DECLARE_STAGE_DISPATCH(FRender, IPreUnInstall, IPreUnInstall, PreUnInstall)
 
@@ -492,7 +514,11 @@ private:
 	// runs the draw passes + the present blit, and FRender::EndFrame drains it
 	// (Flush) before RHI->EndFrame so the present waits every submit.
 	// TaskGraph orders everything. FRender itself does no frame work.
+#ifdef MAHO_EDITOR_BUILD
+	using FRenderStages = TTypeList<IInitViews, IBeginRender, IRender, IEndRender, IPostProcess, IRenderUI, IEditorCompose, IPresent>;
+#else
 	using FRenderStages = TTypeList<IInitViews, IBeginRender, IRender, IEndRender, IPostProcess, IRenderUI, IPresent>;
+#endif
 	std::unique_ptr<FLayerTaskGraph<FRenderStages, FRender>> RenderGraph;
 
 	// -- CPU asset -> GPU mirror --
