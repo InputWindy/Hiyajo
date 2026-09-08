@@ -6,7 +6,8 @@
     "RHI",
     "Platform",
     "Resource",
-    "Asset"
+    "Asset",
+    "GameWorld"
   ],
   "PrivateIncludes": [
     "Scene",

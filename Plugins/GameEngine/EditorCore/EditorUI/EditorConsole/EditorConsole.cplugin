@@ -1,0 +1,11 @@
+{
+  "FileVersion": 1,
+  "Name": "EditorConsole",
+  "Description": "Editor console panel - mirrors the live log stream into the host dock.",
+  "Type": "Editor",
+  "Dependencies": [
+    "ExampleEditor",
+    "Log",
+    "ConsoleVariable"
+  ]
+}

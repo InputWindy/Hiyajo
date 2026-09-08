@@ -148,14 +148,30 @@ public:
 		ReportError((std::string("Reload: no active layer named ") + std::string(LayerName)).c_str());
 	}
 
-	/** Anonymous unload by layer name (GetName()); ignored when absent. */
-	void TryUninstall(std::string_view LayerName)
+	/** Anonymous unload. Accepts a query identifying the layer, matching the FIRST
+	 *  layer whose GetName() equals it (e.g. "FScene") OR whose installed DLL path
+	 *  equals it (e.g. "EditorConsole.dll") -- the latter is symmetric with
+	 *  Install("...dll"). A pointer-installed layer has no DLL path, so it matches
+	 *  only by name. Ignored when absent (no error). */
+	void TryUninstall(std::string_view Query)
 	{
+		// 1) Exact layer name (GetName()) -- the pre-existing form; callers like
+		//    GameWorld/Render pass L->GetName() and must keep working.
 		for (FLayerBase* L : Pipelines)
 		{
-			if (L->GetName() == LayerName)
+			if (L->GetName() == Query)
 			{
 				RequestUninstall(L);
+				return;
+			}
+		}
+		// 2) DLL/module path (symmetry with Install("...dll")); ModulePaths is
+		//    parallel to Features and holds the exact string passed to Install.
+		for (std::size_t I = 0; I < Features.size(); ++I)
+		{
+			if (Features[I] && I < ModulePaths.size() && ModulePaths[I] == Query)
+			{
+				RequestUninstall(Features[I].get());
 				return;
 			}
 		}

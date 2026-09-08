@@ -22,6 +22,7 @@ target_include_directories(Render PUBLIC
 	"${ENGINE_DIR}/Plugins/GameEngine/EngineCore/Platform/Public"
 	"${ENGINE_DIR}/Plugins/GameEngine/EngineCore/Resource/Public"
 	"${ENGINE_DIR}/Plugins/GameEngine/EngineCore/Asset/Public"
+	"${ENGINE_DIR}/Plugins/GameEngine/GameCore/GameWorld/Public"
 )
 target_include_directories(Render PRIVATE
 	"${ENGINE_DIR}/Plugins/GameEngine/RenderCore/RenderFeature/Scene/Public"
@@ -33,7 +34,7 @@ set_target_properties(Render PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 target_compile_definitions(Render PRIVATE MAHO_RENDER_MODULE_EXPORTS)
 target_link_libraries(Render PUBLIC Maho)
 set_property(TARGET Render PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>")
-target_link_libraries(Render PUBLIC RHI Platform Resource Asset)
+target_link_libraries(Render PUBLIC RHI Platform Resource Asset GameWorld)
 set_target_properties(Render PROPERTIES FOLDER "Maho/Plugins/GameEngine/RenderCore")
 source_group(TREE "${CMAKE_CURRENT_LIST_DIR}" FILES ${Render_PUBLIC_HEADERS} ${Render_PRIVATE_HEADERS} ${Render_PRIVATE_SOURCES})
 # -- /MAHOGEN Render --

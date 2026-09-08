@@ -8,6 +8,7 @@
 #include <Platform.h>
 #include <Paths.h>
 #include <Scene.h>
+#include <GameWorld.h>
 #include <RHI/RHIEnums.h>
 #include "RenderResourcePool.h"
 #include "ShaderCompiler.h"
@@ -48,10 +49,11 @@ FRender::FRender()
 	// system's events (OnAsset* + SetReadback), and the UI feature subscribes to
 	// GameWorld's UISystem. Both producers must Shutdown AFTER me so my teardown
 	// RemoveAll/Unsubscribes against live objects -- never a nulled global accessor.
-	// Resource is typed (already included); GameWorld by anonymous name (render must
-	// not include the game-world header).
+	// Resource is typed (already included); GameWorld typed too (header included
+	// above) -- both producers must Shutdown AFTER me so my teardown runs against
+	// live objects.
 	MyStage<IShutdown>().IsBlocking<Resource::FResourceSystem>().OnStage<IShutdown>();
-	BlockOn("FGameWorld", std::type_index(typeid(IShutdown)), std::type_index(typeid(IShutdown)));
+	MyStage<IShutdown>().IsBlocking<GameWorld::FGameWorld>().OnStage<IShutdown>();
 
 	// Asset mirror: the render mirror consumes imported assets (upload to GPU), so
 	// the resource system must run its IInit (start the IO thread) before mine.

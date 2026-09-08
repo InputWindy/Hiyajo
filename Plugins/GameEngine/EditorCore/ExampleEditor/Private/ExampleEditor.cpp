@@ -237,10 +237,9 @@ void FExampleEditor::OnInstalled(FRender& R)
 void FExampleEditor::InstallEditorComponents()
 {
 	// Editor components are loaded as DLLs and installed into this host's collector
-	// (safe point: their IEditorInit graph runs on FlushPendingUpdatePipelines). The
-	// viewport is re-enabled; the console stays disabled for now (user is iterating on
-	// the 3-pass frame, not the console).
+	// (safe point: their IEditorInit graph runs on FlushPendingUpdatePipelines).
 	Install("EditorViewport.dll");
+	Install("EditorConsole.dll");
 	FlushPendingUpdatePipelines<TTypeList<IEditorInit>, TTypeList<IEditorShutdown>>();
 }
 
@@ -646,10 +645,10 @@ void FExampleEditor::PreUnInstall(FRender& R)
 
 void FExampleEditor::ShutdownEditorComponents()
 {
-	// Uninstall by the EXACT layer GetName() (the ".dll" suffix). A mismatch here
-	// silently skips the matching layer, so its IEditorShutdown never runs -- e.g.
-	// EditorConsole would leak its OnLog subscription into FLog and crash in ~FLog()
-	// once EditorConsole.dll unloads.
+	// Uninstall by DLL path -- symmetric with Install("EditorConsole.dll"). The layer's
+	// GetName() is "FEditorConsole", but TryUninstall resolves either form, so this
+	// guarantees the component's IEditorShutdown (EditorConsole unbinding its OnLog
+	// subscription) runs BEFORE FLog::Shutdown -- no name/module asymmetry to trip on.
 	TryUninstall("EditorConsole.dll");
 	TryUninstall("EditorViewport.dll");
 	FlushPendingUpdatePipelines<TTypeList<IEditorInit>, TTypeList<IEditorShutdown>>();

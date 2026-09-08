@@ -109,7 +109,7 @@ if (G.Compile()) { G.Execute(); G.Flush(); }
 | `bool Install(string_view DllPath, const char* FactorySymbol = "CreateLayer")` | **唯一的安装入口**（匿名加载，无指针 Install）。经 FAssembly 加载层 DLL 并安装（下帧安全点生效）；**拒绝重名层**（一名一实例）+ **拒绝依赖未装的层**（deps 先装，失败传播到依赖者）+ 加载/符号/工厂失败均报错 |
 | `void Reload(string_view LayerName)` | **热重载**：下个安全点卸旧层（依赖安全，被依赖则拒绝报错）、下一帧装回同 DLL 新副本 |
 | `void RequestUninstall(FLayerBase*)` | 卸载请求（无条件入 pending） |
-| `void TryUninstall(string_view LayerName)` | 匿名卸载（按 `GetName()` 查第一匹配） |
+| `void TryUninstall(string_view Query)` | 匿名卸载：`GetName()`（如 `"FScene"`）**或** DLL 路径（如 `"EditorConsole.dll"`，与 `Install("...dll")` 对称）第一匹配；无则忽略 |
 | `template<TInitStages...> void FlushPendingUpdatePipelines() protected` | 应用挂起安装（驱动 Init 阶段）+ 挂起卸载（驱动 Shutdown 阶段）；编译失败非致命（报告一次）；有变化则广播 `OnLayersChanged` |
 
 卸载算法：`RebuildReverseDeps` 重建反向依赖计数（层名 → 被依赖次数），`FlushUnload` 用**最小堆贪心**——被依赖的层拒绝卸载，依赖者先弹出并链式卸载。

@@ -98,6 +98,10 @@ set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/Common/Unicode")
 include("${ENGINE_DIR}/Plugins/Common/Unicode/Unicode.cmake")
 unset(_MOD_PLUGIN_DIR)
 
+set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/GameEngine/GameCore/GameWorld")
+include("${ENGINE_DIR}/Plugins/GameEngine/GameCore/GameWorld/GameWorld.cmake")
+unset(_MOD_PLUGIN_DIR)
+
 set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/GameEngine/RenderCore/Render")
 include("${ENGINE_DIR}/Plugins/GameEngine/RenderCore/Render/Render.cmake")
 unset(_MOD_PLUGIN_DIR)
@@ -108,10 +112,6 @@ unset(_MOD_PLUGIN_DIR)
 
 set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/GameEngine/RenderCore/RenderFeature/DrawTriangleFeature")
 include("${ENGINE_DIR}/Plugins/GameEngine/RenderCore/RenderFeature/DrawTriangleFeature/DrawTriangleFeature.cmake")
-unset(_MOD_PLUGIN_DIR)
-
-set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/GameEngine/GameCore/GameWorld")
-include("${ENGINE_DIR}/Plugins/GameEngine/GameCore/GameWorld/GameWorld.cmake")
 unset(_MOD_PLUGIN_DIR)
 
 set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/GameEngine/GameCore/SystemGroup/UISystem")
@@ -179,10 +179,10 @@ target_include_directories(ExampleEngine PUBLIC
 	"${ENGINE_DIR}/Plugins/Common/Text/Public"
 	"${ENGINE_DIR}/Plugins/Common/Timer/Public"
 	"${ENGINE_DIR}/Plugins/Common/Unicode/Public"
+	"${ENGINE_DIR}/Plugins/GameEngine/GameCore/GameWorld/Public"
 	"${ENGINE_DIR}/Plugins/GameEngine/RenderCore/Render/Public"
 	"${ENGINE_DIR}/Plugins/GameEngine/RenderCore/RenderFeature/Scene/Public"
 	"${ENGINE_DIR}/Plugins/GameEngine/RenderCore/RenderFeature/DrawTriangleFeature/Public"
-	"${ENGINE_DIR}/Plugins/GameEngine/GameCore/GameWorld/Public"
 	"${ENGINE_DIR}/Plugins/GameEngine/GameCore/SystemGroup/UISystem/Public"
 	"${ENGINE_DIR}/Plugins/GameEngine/RenderCore/RenderFeature/UIFeature/Public"
 	"${ENGINE_DIR}/Plugins/GameEngine/RenderCore/RenderFeature/FrameRenderFeature/Public"
@@ -194,8 +194,8 @@ target_include_directories(ExampleEngine PUBLIC
 set_target_properties(ExampleEngine PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 target_compile_definitions(ExampleEngine PRIVATE MAHO_EXAMPLEENGINE_MODULE_EXPORTS)
 target_link_libraries(ExampleEngine PUBLIC Maho)
-add_dependencies(ExampleEngine Archive Compress ConsoleVariable Config Exception Log Name Paths Platform RHI Reflect Resource Asset Script Text Timer Unicode Render Scene DrawTriangleFeature GameWorld UISystem UIFeature FrameRenderFeature ExampleEditor EditorViewport EditorConsole)
-target_link_libraries(ExampleEngine PUBLIC Archive Compress ConsoleVariable Config Exception Log Name Paths Platform RHI Reflect Resource Asset Script Text Timer Unicode Render Scene DrawTriangleFeature GameWorld UISystem UIFeature FrameRenderFeature ExampleEditor EditorViewport EditorConsole)
+add_dependencies(ExampleEngine Archive Compress ConsoleVariable Config Exception Log Name Paths Platform RHI Reflect Resource Asset Script Text Timer Unicode GameWorld Render Scene DrawTriangleFeature UISystem UIFeature FrameRenderFeature ExampleEditor EditorViewport EditorConsole)
+target_link_libraries(ExampleEngine PUBLIC Archive Compress ConsoleVariable Config Exception Log Name Paths Platform RHI Reflect Resource Asset Script Text Timer Unicode GameWorld Render Scene DrawTriangleFeature UISystem UIFeature FrameRenderFeature ExampleEditor EditorViewport EditorConsole)
 # Plugin DLLs co-locate with Maho.dll + EntryPoint so relative DLL deps resolve.
 set_property(TARGET ExampleEngine PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>")
 
@@ -280,7 +280,7 @@ endforeach()
 set_target_properties(EntryPoint PROPERTIES VS_DEBUGGER_WORKING_DIRECTORY "${_MAHO_BIN}/$<CONFIG>")
 # The sln startup project is EntryPoint (the app host), not ZERO_CHECK.
 set_property(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" PROPERTY VS_STARTUP_PROJECT EntryPoint)
-add_dependencies(EntryPoint ExampleEngine Archive Compress ConsoleVariable Config Exception Log Name Paths Platform RHI Reflect Resource Asset Script Text Timer Unicode Render Scene DrawTriangleFeature GameWorld UISystem UIFeature FrameRenderFeature ExampleEditor EditorViewport EditorConsole MahoCheckCycle)
+add_dependencies(EntryPoint ExampleEngine Archive Compress ConsoleVariable Config Exception Log Name Paths Platform RHI Reflect Resource Asset Script Text Timer Unicode GameWorld Render Scene DrawTriangleFeature UISystem UIFeature FrameRenderFeature ExampleEditor EditorViewport EditorConsole MahoCheckCycle)
 
 # Solution folders: EntryPoint at the ROOT; Maho (engine), Project, ThirdParty.
 # The project root sits at Project/ itself; project plugin DLLs under
