@@ -107,7 +107,7 @@ struct FEditorShader
  * from the host when the build is an editor build (MAHO_EDITOR_BUILD).
  */
 class MAHO_EXAMPLEEDITOR_API FExampleEditor
-	: public FLayer<IOnInstalled, IEditorCompose, IPreUnInstall>
+	: public FLayer<IOnInstalled, IEditorInput, IEditorCompose, IPreUnInstall>
 	, public FLayerCollector<FExampleEditor>
 {
 	MAHO_DECLARE_LAYER(FExampleEditor, "ExampleEditor.dll");
@@ -116,11 +116,21 @@ class MAHO_EXAMPLEEDITOR_API FExampleEditor
 
 public:
 	void OnInstalled(FRender&) override;
+	/** Pass0: editor input takeover. Runs FIRST, before the game-UI feature's IInitViews
+	 *  feeds + NewFrame()s its IO. Tastes the Win32 cursor, re-bases it to the viewport
+	 *  panel rect (clamped panel-local) and feeds the game context via FUIFeature::GetUI()
+	 *  -> SetEditorInput, so the game UI only responds inside the panel and its layout
+	 *  matches the displayed panel. Blocked before FUIFeature's IRenderUI (ctor). */
+	void EditorInput(FRender&) override;
 	/** Pass3: run the editor's OWN InitViews + Render in a single IEditorCompose stage
 	 *  (after the game-UI composite IRenderUI, before the frame's IPresent blit). It takes
 	 *  over the frame's present target with its EditorRT. */
 	void EditorCompose(FRender&) override;
 	void PreUnInstall(FRender&) override;
+
+	/** Called by a viewport component (Draw) to publish the on-screen panel rect (client
+	 *  pixels) the game UI is presented into. EditorInput re-bases the game cursor to it. */
+	void ReportViewportRect(float X, float Y, float W, float H) { VpX = X; VpY = Y; VpW = W; VpH = H; bVpValid = W > 0.f && H > 0.f; }
 
 	/** Shared component state (selected entity, scene-ready flag). */
 	FEditorContext& GetEditorContext() { return EditorContext; }
@@ -175,6 +185,11 @@ private:
 	FRender* RenderRef = nullptr;        // current frame render (for component use)
 	FEditorContext EditorContext;        // shared component state
 	std::uint32_t EditorDockSpaceId = 0; // host DockSpace node id, set each DrawEditorPanels
+	/** Viewport panel rect (client pixels) the game UI is displayed into, published by the
+	 *  viewport component via ReportViewportRect. EditorInput re-bases the game cursor to it.
+	 *  bVpValid = false until the panel has been drawn at least once (valid positive size). */
+	float VpX = 0.f, VpY = 0.f, VpW = 0.f, VpH = 0.f;
+	bool bVpValid = false;
 };
 
 } // namespace Maho

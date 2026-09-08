@@ -119,6 +119,23 @@ public:
 
 #ifdef MAHO_EDITOR_BUILD
 /**
+ * Pass0 (input takeover): runs FIRST in the editor frame, BEFORE the game-UI
+ * feature's IInitViews feeds + NewFrame's its IO. The editor feature implements
+ * this stage to taste the Win32 input, re-base it to the viewport panel rect and
+ * feed the GAME-UI context's IO (FUIFeature::SetEditorInput), so the game UI only
+ * responds inside the viewport panel and its layout matches the displayed
+ * (panel-scaled) on-screen surface instead of the whole window. Declared under
+ * MAHO_EDITOR_BUILD: with no editor feature installed the stage has no
+ * implementer and is silently skipped (no regression).
+ */
+class MAHO_RENDER_API IEditorInput
+{
+public:
+	virtual ~IEditorInput() = default;
+	virtual void EditorInput(FRender&) = 0;
+};
+
+/**
  * Pass3: editor final-compose surface. Runs AFTER the game UI (IRenderUI)
  * composites onto its off-screen target, and BEFORE IPresent blits to the
  * swapchain. When an editor build is present, an editor feature implements this
@@ -158,6 +175,7 @@ MAHO_DECLARE_STAGE_DISPATCH(FRender, IEndRender,   IEndRender,   EndRender)
 MAHO_DECLARE_STAGE_DISPATCH(FRender, IPostProcess, IPostProcess, PostProcess)
 MAHO_DECLARE_STAGE_DISPATCH(FRender, IRenderUI,    IRenderUI,    RenderUI)
 #ifdef MAHO_EDITOR_BUILD
+MAHO_DECLARE_STAGE_DISPATCH(FRender, IEditorInput, IEditorInput, EditorInput)
 MAHO_DECLARE_STAGE_DISPATCH(FRender, IEditorCompose, IEditorCompose, EditorCompose)
 #endif // MAHO_EDITOR_BUILD
 MAHO_DECLARE_STAGE_DISPATCH(FRender, IPresent, IPresent, Present)
@@ -515,7 +533,7 @@ private:
 	// (Flush) before RHI->EndFrame so the present waits every submit.
 	// TaskGraph orders everything. FRender itself does no frame work.
 #ifdef MAHO_EDITOR_BUILD
-	using FRenderStages = TTypeList<IInitViews, IBeginRender, IRender, IEndRender, IPostProcess, IRenderUI, IEditorCompose, IPresent>;
+	using FRenderStages = TTypeList<IEditorInput, IInitViews, IBeginRender, IRender, IEndRender, IPostProcess, IRenderUI, IEditorCompose, IPresent>;
 #else
 	using FRenderStages = TTypeList<IInitViews, IBeginRender, IRender, IEndRender, IPostProcess, IRenderUI, IPresent>;
 #endif

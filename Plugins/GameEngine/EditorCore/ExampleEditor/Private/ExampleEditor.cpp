@@ -105,6 +105,12 @@ namespace Maho
 
 FExampleEditor::FExampleEditor()
 {
+	// Pass0 INPUT takeover: the editor re-bases the Win32 cursor to the viewport panel and
+	// feeds the game-UI context (SetEditorInput) BEFORE the game feature's IInitViews feeds
+	// + NewFrame()s its IO. Without this edge the game UI could run its feed/NewFrame first
+	// and consume last frame's (or a whole-window) cursor, so the input lands one frame late
+	// or scaled to the whole window. BlockOn: FUIFeature::IInitViews runs AFTER my EditorInput.
+	MyStage<IEditorInput>().IsBlocking<FUIFeature>().OnStage<IInitViews>();
 	// The editor is the LAST UI writer: it must run AFTER the game UI feature's
 	// IRenderUI so its SetPresentTarget(EditorRT) wins the present slot over the game
 	// composite. Without this edge the two UI features could run in any order and the
@@ -119,6 +125,63 @@ FExampleEditor::FExampleEditor()
 	// in both build types, but this feature only exists in an editor build.
 	MyStage<IEditorCompose>().IsWaiting<Scene::FScene>().ForStage<IEndRender>();
 	MyStage<IEditorCompose>().IsBlocking<FFrameRenderFeature>().OnStage<IPresent>();
+}
+
+void FExampleEditor::EditorInput(FRender& R)
+{
+	// Editor-build input takeover: taste the Win32 cursor, confine it to the viewport panel
+	// (clamp panel-local) and map it BACK to the game UI's whole-window coordinate space, then
+	// feed the game-UI context BEFORE its InitViews NewFrame()s it (ordered via the ctor
+	// BlockOn<IEditorInput, FUIFeature, IInitViews>). The game UI keeps laying out in whole-
+	// window coordinates; the viewport merely displays the whole game surface scaled into the
+	// panel, so panel_local / panel_size * window_size gives the game-space position -- this is
+	// what makes a game widget respond only inside the panel at exactly its displayed location.
+	// The viewport component publishes the panel rect (editor display-space) via
+	// ReportViewportRect during its Draw; if the panel isn't present yet (or the context isn't
+	// created) leave the game UI to its whole-window fallback (no SetEditorInput call this frame).
+	(void)R;
+	if (m_Context == nullptr || !bVpValid)
+	{
+		return;
+	}
+	Platform::FPlatform* P = Platform::GetPlatform();
+	if (P == nullptr)
+	{
+		return;
+	}
+	const float WinW = static_cast<float>(P->GetWindowWidth());
+	const float WinH = static_cast<float>(P->GetWindowHeight());
+#if defined(_WIN32)
+	float Gx = 0.f, Gy = 0.f;
+	if (HWND Hwnd = static_cast<HWND>(P->GetNativeWindow()))
+	{
+		POINT Pt{};
+		if (::GetCursorPos(&Pt) && ::ScreenToClient(Hwnd, &Pt))
+		{
+			RECT Client{};
+			::GetClientRect(Hwnd, &Client);
+			// editor display-space cursor (client pixels mapped by the editor's scale).
+			const float EdScaleX = Client.right > 0 ? WinW / static_cast<float>(Client.right) : 1.f;
+			const float EdScaleY = Client.bottom > 0 ? WinH / static_cast<float>(Client.bottom) : 1.f;
+			const float Ex = static_cast<float>(Pt.x) * EdScaleX;
+			const float Ey = static_cast<float>(Pt.y) * EdScaleY;
+			// Clamp to the panel, then scale back to whole-window game-space.
+			const float Lx = std::clamp(Ex - VpX, 0.f, VpW);
+			const float Ly = std::clamp(Ey - VpY, 0.f, VpH);
+			Gx = VpW > 0.f ? Lx * (WinW / VpW) : 0.f;
+			Gy = VpH > 0.f ? Ly * (WinH / VpH) : 0.f;
+		}
+	}
+	const bool B0 = (::GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0;
+	const bool B1 = (::GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0;
+	const bool B2 = (::GetAsyncKeyState(VK_MBUTTON) & 0x8000) != 0;
+	if (FUIFeature* UI = GetUI())
+	{
+		UI->SetEditorInput(Gx, Gy, B0, B1, B2);
+	}
+#else
+	(void)R;
+#endif
 }
 
 bool FExampleEditor::EnsureUIBackend(FRender& R)
@@ -641,6 +704,7 @@ void FExampleEditor::PreUnInstall(FRender& R)
 	}
 	bUIInit = false;
 	bFontUploaded = false;
+	bVpValid = false;
 }
 
 void FExampleEditor::ShutdownEditorComponents()

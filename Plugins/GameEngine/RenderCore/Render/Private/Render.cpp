@@ -320,12 +320,13 @@ void FRender::Tick(FEngineBase&)
 	// FRender only schedules; the frame feature + per-feature deps order it all.
 	FlushPendingUpdatePipelines<TTypeList<IOnInstalled>, TTypeList<IPreUnInstall>>();
 #ifdef MAHO_EDITOR_BUILD
-	// Editor build: pass3 (IEditorCompose) is a real graph stage inserted between the
-	// game-UI composite (IRenderUI) and the present blit (IPresent). With no editor
-	// feature installed it has no implementer and is skipped, so the game-UI target is
-	// still the present target -- runtime behaviour is unchanged. Installing an editor
-	// feature (Type=Editor) that implements IEditorCompose takes over the frame here.
-	RenderGraph->Init(Select<IInitViews, IBeginRender, IRender, IEndRender, IPostProcess, IRenderUI, IEditorCompose, IPresent>());
+		// Editor build: pass0 (IEditorInput) feeds the game-UI context with re-based input
+		// BEFORE its IInitViews; pass3 (IEditorCompose) is a real graph stage inserted between
+		// the game-UI composite (IRenderUI) and the present blit (IPresent). With no editor
+		// feature installed either stage has no implementer and is skipped, so the game-UI
+		// target is still the present target -- runtime behaviour is unchanged. Installing an
+		// editor feature (Type=Editor) that implements these takes over the frame here.
+		RenderGraph->Init(Select<IEditorInput, IInitViews, IBeginRender, IRender, IEndRender, IPostProcess, IRenderUI, IEditorCompose, IPresent>());
 #else
 	RenderGraph->Init(Select<IInitViews, IBeginRender, IRender, IEndRender, IPostProcess, IRenderUI, IPresent>());
 #endif

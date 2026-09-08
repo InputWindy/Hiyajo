@@ -83,6 +83,22 @@ public:
 	 *  it is not currently COLOR_ATTACHMENT. */
 	void TransitionUIRenderTargetForSampling(FRender& R);
 
+	/** This feature's OWN ImGui context. In an editor build the editor feature (pass0
+	 *  IEditorInput) needs the GAME context's IO to feed re-based input into, so it fetches
+	 *  this via GetUI() + GetImGuiContext(). May be null before OnInstalled / after
+	 *  PreUnInstall. */
+	[[nodiscard]] ImGuiContext* GetImGuiContext() const { return m_Context; }
+
+	/** Editor-build input takeover. Called by the editor's pass0 IEditorInput stage, BEFORE
+	 *  this feature's InitViews: feeds the cursor (already re-based by the editor into THIS
+	 *  context's whole-window DisplaySize coordinates -- the panel-local coords are mapped back
+	 *  through the panel->window scale) plus the mouse buttons into THIS context's IO. The
+	 *  DisplaySize stays whole-window (game layout never re-scales to the panel). InitViews then
+	 *  skips its own OS poll (bEditorInputThisFrame), so the game UI only responds inside the
+	 *  viewport panel. Thread-safe (serialized with InitViews behind ImGuiFrameMutex). No-op
+	 *  when the context is not created. */
+	void SetEditorInput(float X, float Y, bool B0, bool B1, bool B2);
+
 private:
 	/** Lazily create the font backend (font texture + staging). Returns whether it is
 	 *  ready. Idempotent. */
@@ -125,6 +141,10 @@ private:
 	ImGuiContext* m_Context = nullptr;
 	/** Whether this feature has subscribed to the UISystem's UI-built event. */
 	bool bSubscribedUI = false;
+	/** Editor-build input takeover flag. Set by SetEditorInput (the editor's pass0 stage);
+	 *  InitViews reads it to decide whether to skip its own OS poll. Reset to false after
+	 *  InitViews consumes it each frame. */
+	bool bEditorInputThisFrame = false;
 	/** The UI-built subscription id (0 = not subscribed). Retained so PreUnInstall
 	 *  unsubscribes ONLY this feature's handler -- not any other subscriber's. */
 	uint64_t m_UISubscription = 0;
@@ -158,5 +178,11 @@ private:
 	 *  primitive + batch vectors reuse their capacity across frames. */
 	FDrawList DrawList;
 };
+
+/** Global accessor to the UI render feature (cross-DLL, mirrors Resource::GetResourceSystem()
+ *  and Log::GetLog()). nullptr until the feature is installed by FRender; set at
+ *  OnInstalled, cleared at PreUnInstall. The editor feature uses this (pass0) to reach the
+ *  game-UI context and feed re-based input into it. */
+MAHO_UIFEATURE_API FUIFeature* GetUI();
 
 } // namespace Maho

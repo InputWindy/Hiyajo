@@ -184,6 +184,16 @@ void FUIFeature::UploadFont(FRender& R)
 // Render below. The feature no longer builds any UI: it only owns the ImGui context
 // + the FName->RDG mirror resolution during draw.)
 
+// Cross-DLL global accessor state (mirrors Resource::GetResourceSystem() and
+// Log::GetLog()). Set at OnInstalled, cleared at PreUnInstall. The editor feature
+// reaches the game-UI context via GetUI()->GetImGuiContext() to feed re-based input.
+FUIFeature* GUIFeature = nullptr;
+
+FUIFeature* GetUI()
+{
+	return GUIFeature;
+}
+
 FUIFeature::FUIFeature()
 {
 	// UI draws + submits LAST -- after every scene render feature's IEndRender
@@ -267,6 +277,32 @@ void FUIFeature::OnInstalled(FRender& R)
 			return;   // font upload failed this frame
 		}
 	}
+
+	// Publish the cross-DLL accessor so the editor feature can reach this context.
+	GUIFeature = this;
+}
+
+void FUIFeature::SetEditorInput(float X, float Y, bool B0, bool B1, bool B2)
+{
+	// Editor-build input takeover: the editor's pass0 IEditorInput stage feeds the game
+	// context's IO with the cursor already re-based to THIS context's whole-window DisplaySize
+	// coordinates (panel-local mapped back through the panel->window scale) + button state,
+	// BEFORE this feature's InitViews runs. The DisplaySize is left to InitViews (whole-window);
+	// only the mouse/buttons are injected here. Serialized behind the SAME ImGuiFrameMutex
+	// InitViews uses, so a frame is never fed while another thread is mid-ImGui-frame. No-op
+	// when the context isn't created yet.
+	if (!bContextCreated || m_Context == nullptr)
+	{
+		return;
+	}
+	std::lock_guard<std::mutex> FrameLock(ImGuiFrameMutex);
+	ImGui::SetCurrentContext(m_Context);
+	ImGuiIO& IO = ImGui::GetIO();
+	IO.AddMousePosEvent(X, Y);
+	IO.AddMouseButtonEvent(0, B0);
+	IO.AddMouseButtonEvent(1, B1);
+	IO.AddMouseButtonEvent(2, B2);
+	bEditorInputThisFrame = true;
 }
 
 void FUIFeature::InitViews(FRender& R)
@@ -340,41 +376,49 @@ void FUIFeature::InitViews(FRender& R)
 		}
 	}
 
-	// -- Frame feed (Platform window + Win32 input + lazy font-atlas build), then
-	//    NewFrame. The WHOLE ImGui frame lifecycle is driven here: feed -> NewFrame ->
-	//    build UI -> Render -> GetDrawData -> translate.
+	// -- Frame feed. In an editor build the editor's pass0 IEditorInput stage has ALREADY fed
+	//    this context on the same frame (SetEditorInput: the panel-local cursor re-based back
+	//    to the WHOLE-window DisplaySize coordinates + buttons), so bEditorInputThisFrame is
+	//    set and we skip our own OS poll -- the game UI only responds inside the viewport panel
+	//    but its layout stays in whole-window coordinates (the panel just displays the whole
+	//    game surface scaled). Otherwise (pure game build, or the panel not yet present) fall
+	//    back to the whole-window poll below. The DisplaySize is ALWAYS the whole window (game
+	//    layout never re-scales to the panel). The WHOLE ImGui frame lifecycle is driven here:
+	//    feed -> NewFrame -> build UI -> Render -> GetDrawData -> translate.
 	ImGuiIO& IO = ImGui::GetIO();
 	Platform::FPlatform* P = Platform::GetPlatform();
 	if (P == nullptr)
 	{
 		return;
 	}
-	// Display size must match the render target (SceneColor = swapchain extent), not
-	// the window's logical size -- ImGui lays out in DisplaySize coordinates and the
-	// render feature clips against it.
 	IO.DisplaySize = ImVec2(
 		static_cast<float>(P->GetWindowWidth()),
 		static_cast<float>(P->GetWindowHeight()));
-#if defined(_WIN32)
-	// Input bypasses GLFW's message-driven cursor state (the window is created on a
-	// pool worker and polled on another, so WM_MOUSEMOVE never reaches
-	// glfwGetCursorPos). Win32 global state works from any thread.
-	if (HWND Hwnd = static_cast<HWND>(P->GetNativeWindow()))
+	bool bEditorFed = bEditorInputThisFrame;
+	bEditorInputThisFrame = false;
+	if (!bEditorFed)
 	{
-		POINT Pt{};
-		if (::GetCursorPos(&Pt) && ::ScreenToClient(Hwnd, &Pt))
+	#if defined(_WIN32)
+		// Input bypasses GLFW's message-driven cursor state (the window is created on a
+		// pool worker and polled on another, so WM_MOUSEMOVE never reaches
+		// glfwGetCursorPos). Win32 global state works from any thread.
+		if (HWND Hwnd = static_cast<HWND>(P->GetNativeWindow()))
 		{
-			RECT Client{};
-			::GetClientRect(Hwnd, &Client);
-			const float ScaleX = Client.right > 0 ? IO.DisplaySize.x / static_cast<float>(Client.right) : 1.f;
-			const float ScaleY = Client.bottom > 0 ? IO.DisplaySize.y / static_cast<float>(Client.bottom) : 1.f;
-			IO.AddMousePosEvent(static_cast<float>(Pt.x) * ScaleX, static_cast<float>(Pt.y) * ScaleY);
+			POINT Pt{};
+			if (::GetCursorPos(&Pt) && ::ScreenToClient(Hwnd, &Pt))
+			{
+				RECT Client{};
+				::GetClientRect(Hwnd, &Client);
+				const float ScaleX = Client.right > 0 ? IO.DisplaySize.x / static_cast<float>(Client.right) : 1.f;
+				const float ScaleY = Client.bottom > 0 ? IO.DisplaySize.y / static_cast<float>(Client.bottom) : 1.f;
+				IO.AddMousePosEvent(static_cast<float>(Pt.x) * ScaleX, static_cast<float>(Pt.y) * ScaleY);
+			}
+			IO.AddMouseButtonEvent(0, (::GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0);
+			IO.AddMouseButtonEvent(1, (::GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0);
+			IO.AddMouseButtonEvent(2, (::GetAsyncKeyState(VK_MBUTTON) & 0x8000) != 0);
 		}
-		IO.AddMouseButtonEvent(0, (::GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0);
-		IO.AddMouseButtonEvent(1, (::GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0);
-		IO.AddMouseButtonEvent(2, (::GetAsyncKeyState(VK_MBUTTON) & 0x8000) != 0);
+	#endif
 	}
-#endif
 
 	// Renderer-backend NewFrame duty (mirrors the imgui_impl_* backends, which must
 	// be called before ImGui::NewFrame()): the font atlas is built lazily by

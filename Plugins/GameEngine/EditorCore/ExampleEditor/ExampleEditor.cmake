@@ -20,6 +20,7 @@ target_include_directories(ExampleEditor PUBLIC
 	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEngine/Public"
 	"${ENGINE_DIR}/Plugins/GameEngine/RenderCore/Render/Public"
 	"${ENGINE_DIR}/Plugins/GameEngine/RenderCore/RenderFeature/Scene/Public"
+	"${ENGINE_DIR}/Plugins/GameEngine/RenderCore/RenderFeature/UIFeature/Public"
 )
 target_include_directories(ExampleEditor PRIVATE
 	"${ENGINE_DIR}/Plugins/GameEngine/RenderCore/RenderFeature/FrameRenderFeature/Public"
@@ -31,7 +32,7 @@ set_target_properties(ExampleEditor PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 target_compile_definitions(ExampleEditor PRIVATE MAHO_EXAMPLEEDITOR_MODULE_EXPORTS)
 target_link_libraries(ExampleEditor PUBLIC Maho)
 set_property(TARGET ExampleEditor PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>")
-target_link_libraries(ExampleEditor PUBLIC Render Scene)
+target_link_libraries(ExampleEditor PUBLIC Render Scene UIFeature)
 set_target_properties(ExampleEditor PROPERTIES FOLDER "Maho/Plugins/GameEngine/EditorCore")
 source_group(TREE "${CMAKE_CURRENT_LIST_DIR}" FILES ${ExampleEditor_PUBLIC_HEADERS} ${ExampleEditor_PRIVATE_HEADERS} ${ExampleEditor_PRIVATE_SOURCES})
 # -- /MAHOGEN ExampleEditor --

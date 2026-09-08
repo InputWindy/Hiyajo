@@ -25,6 +25,11 @@ void FEditorViewport::Draw(FExampleEditor& Editor)
 		// involved -- the viewport samples whatever would be presented this frame.
 		if (Sz.x > 0.0f && Sz.y > 0.0f)
 		{
+			// Publish the panel rect (editor display-space) so the host's pass0 IEditorInput
+			// can re-base the game cursor to it (clamp panel-local -> map back to game space).
+			// GetCursorScreenPos == the image's top-left; the image fills "Sz" from there.
+			const ImVec2 P0 = ImGui::GetCursorScreenPos();
+			Editor.ReportViewportRect(P0.x, P0.y, Sz.x, Sz.y);
 			ImGui::Image(
 				static_cast<ImTextureID>(FExampleEditor::PresentTargetTextureId()),
 				Sz,
