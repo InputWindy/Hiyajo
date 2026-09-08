@@ -24,7 +24,7 @@ Core 是一组类型无关的基础设施块，**零 app 假设、零第三方�
 
 ### 2. Delegate (Delegate)
 
-`TMulticastEvent<Signature>` 多播事件（bind + broadcast）。非线程安全——在拥有线程 broadcast，跨线程走队列。Header-only、无 DLL 边界，可作插件公共 API 的成员类型。
+`TMulticastEvent<Signature>` 多播事件（bind + broadcast）。线程安全——任意线程可 bind/broadcast/unbind，Broadcast 在锁外回调处理器（处理器可安全再入）。Header-only、无 DLL 边界，可作插件公共 API 的成员类型。
 
 ### 3. Capability Composition (Interface)
 

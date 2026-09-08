@@ -12,6 +12,7 @@
 #include <DrawTriangleFeature.h>
 #include <FrameRenderFeature.h>
 #include <Log.h>
+#include <Name.h>
 #include <Platform.h>
 #include <Scene.h>
 #include <UISystem.h>
@@ -324,6 +325,18 @@ void FUIFeature::InitViews(FRender& R)
 				MAHO_LOG_CORE_ERROR("FUIFeature: UI composite target creation failed");
 				return;
 			}
+			// The composite target leaves create as UNDEFINED but is used as a dynamic-
+			// rendering color attachment (BeginRendering declares COLOR_ATTACHMENT and
+			// never auto-transitions). Bring it to COLOR_ATTACHMENT_OPTIMAL once, now,
+			// so the first RenderUI's BeginRendering (and PresentTexture's "is a color
+			// attachment" barrier) find it legal.
+			{
+				FRHITexture* RT = UIRenderTarget.GetRHI();
+				R.AddPass(ERHICommandListType::Graphics, [RT](FRHICommandList& Cmd)
+				{
+					Cmd.TransitionTexture(RT, ERHIResourceState::Common, ERHIResourceState::RenderTarget);
+				});
+			}
 		}
 	}
 
@@ -377,6 +390,44 @@ void FUIFeature::InitViews(FRender& R)
 		return;
 	}
 	ImGui::NewFrame();
+
+	// Composite base: draw the scene (the SceneColor mirror) as a fullscreen background
+	// image underneath every UI control. The UI surface is the final on-screen layer;
+	// the scene is the base it composites over -- if nothing here samples SceneColor,
+	// the UI target's black clear is all you see (the scene pass ran, but was never
+	// read into the UI). The TextureId is the SceneColor mirror's FName id -- the same
+	// key the translate step below resolves through GetMirror, so the scene's offscreen
+	// target is sampled by the UI fragment shader. AddImage records on the background
+	// layer, so the Game UI window (foreground) draws on top.
+	if (Scene::FScene* Scene = Scene::GetScene())
+	{
+		if (Scene->GetSceneColor().IsValid())
+		{
+			// Draw the scene as a fixed, non-interactive FULLSCREEN background window so
+			// the Composit layer is stable: a window has its own clip rect + coordinates,
+			// so it cannot be distorted by another window being dragged (a global
+			// background list AddImage gets re-affected by the active window's transform,
+			// which made the scene stretch when the Game UI window moved). This window is
+			// Begin'd FIRST, so the Game UI window (Begin'd later in the game commands)
+			// draws on top of it.
+			ImGui::SetNextWindowPos(ImVec2(0.0f, 0.0f), ImGuiCond_Always);
+			ImGui::SetNextWindowSize(IO.DisplaySize, ImGuiCond_Always);
+			if (ImGui::Begin("##SceneBackground", nullptr,
+				ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize
+				| ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar
+				| ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoCollapse
+				| ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoInputs
+				| ImGuiWindowFlags_NoBringToFrontOnFocus))
+			{
+				const ImVec2 P0 = ImGui::GetWindowPos();
+				const ImVec2 P1 = ImVec2(P0.x + ImGui::GetWindowWidth(), P0.y + ImGui::GetWindowHeight());
+				ImGui::GetWindowDrawList()->AddImage(
+					static_cast<ImTextureID>(Name::FName("SceneColor").GetId()),
+					P0, P1, ImVec2(0.0f, 0.0f), ImVec2(1.0f, 1.0f), IM_COL32(255, 255, 255, 255));
+			}
+			ImGui::End();
+		}
+	}
 
 	// Pull the game-side UI commands from the UISystem's UIBuilder and run them. The
 	// game UI components Submit draw closures (FUIBuilder::Submit) during their Update;
@@ -671,7 +722,18 @@ void FUIFeature::RenderUI(FRender& R)
 	// One AddPass == one subpass. AddPass uploads the CPU primitive data once, resolves
 	// the pass-level font set + each per-batch set by content, binds the pipeline, and
 	// records every batch's draw. Nothing below is a raw RHI operation.
+	// The UI composites the scene-color mirror (game imgui::image of SceneColor) which
+	// the scene left as COLOR_ATTACHMENT, but descriptor writes hardcode SHADER_READ_ONLY.
+	// Flip SceneColor to SR before this compose pass samples it, and back afterwards.
+	if (Scene::FScene* Scene = Scene::GetScene())
+	{
+		Scene->TransitionSceneColorForSampling(R);
+	}
 	R.AddPass(ERHICommandListType::Graphics, PipelineDesc, Target, Params, DrawList);
+	if (Scene::FScene* Scene = Scene::GetScene())
+	{
+		Scene->TransitionSceneColorForRendering(R);
+	}
 
 	// This feature is off-screen only: it composites into its own target then sets it
 	// as FRender's present target. The frame feature's IPresent (a later graph stage,

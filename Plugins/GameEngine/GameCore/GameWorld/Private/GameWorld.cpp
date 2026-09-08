@@ -128,6 +128,17 @@ void FGameWorld::Tick(FEngineBase&)
 
 void FGameWorld::Shutdown(FEngineBase&)
 {
+	// Uninstall every world system through the collector teardown pipeline so each
+	// system's IPreUnInstall runs BEFORE its instance is destroyed. A bare member
+	// destruction (UISystem blowing away with this object) would skip the teardown
+	// stage and leak cross-module subscriptions (e.g. a system's std::function bound
+	// into another DLL's event, whose target manager lives in the unloaded DLL).
+	for (FLayerBase* L : Pipelines)
+	{
+		TryUninstall(L->GetName());
+	}
+	FlushPendingUpdatePipelines<TTypeList<IOnInstalled>, TTypeList<IPreUnInstall>>();
+
 	if (WorldGraph)
 	{
 		WorldGraph->Flush();   // drain any leftover world-system tasks

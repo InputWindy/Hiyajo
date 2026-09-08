@@ -4,11 +4,15 @@
 
 #include "LogApi.h"
 #include <Maho.h>
+#include <Core/Delegate.h>
 #include <Core/Fatal.h>
 #include <Engine/Engine.h>
 
+#include <cstdint>
+#include <functional>
 #include <memory>
 #include <string>
+#include <string_view>
 
 namespace spdlog
 {
@@ -35,6 +39,17 @@ enum class ELogLevel
 };
 
 /**
+ * A single captured log line. Listener callbacks receive this by const ref;
+ * it is a value snapshot (the string is copied), so a subscriber can retain it.
+ */
+struct FLogMessage
+{
+	ELogLevel  Level;
+	std::string Category;   // source category; empty = "None" (legacy callers)
+	std::string Message;
+};
+
+/**
  * Logging layer - an FEngineLayer (no singleton). Its Initialize stage brings
  * the logger up (stdout color + rotating file, honoring `--log-level`) and
  * publishes `this` via GetLog(); Shutdown flushes + drops it. The spdlog
@@ -43,7 +58,7 @@ enum class ELogLevel
  *
  *   Engine.Install("Log.dll");   // install early in PreMain
  */
-class FLog : public FLayer<IPreInit, IInit, IPostInit, IPreShutdown, IShutdown, IPostShutdown>
+class FLog : public FLayer<IInit, IShutdown>
 {
 public:
 	MAHO_DECLARE_LAYER(FLog, "Log.dll");
@@ -83,18 +98,30 @@ public:
 		LogLine(ELogLevel::Critical, fmt::format(Fmt, std::forward<Args>(A)...));
 	}
 
+	// -- category-aware logging (UE Output Log style) -------------------------
+	// The category rides on the message so listeners (e.g. the Editor Console
+	// category filter tree) can aggregate and filter. Legacy Trace/Debug/... use
+	// an empty category; use this when you want a named source tag.
+	template <typename... Args>
+	void Log(ELogLevel Level, std::string_view Category, fmt::format_string<Args...> Fmt, Args&&... A)
+	{
+		LogLine(Level, std::string(Category), fmt::format(Fmt, std::forward<Args>(A)...));
+	}
+
+	// Live log stream, delivered by Broadcast() on the emitting thread. Thread-safe
+	// (Core TMulticastEvent owns its lock); subscribers unsubscribe in their own
+	// Shutdown so this strand is empty before the Log layer tears down.
+	TMulticastEvent<void(const FLogMessage&)> OnLog;
 private:
 	// -- engine init/shutdown stages (scheduler-only) --
-	void PreInitialize(FEngineBase&) override {}
 	void Initialize(FEngineBase& Engine) override;
-	void PostInitialize(FEngineBase&) override {}
-	void PreShutdown(FEngineBase&) override {}
 	void Shutdown(FEngineBase& Engine) override;
-	void PostShutdown(FEngineBase&) override {}
 
 	void LogLine(ELogLevel Level, std::string Message);
+	void LogLine(ELogLevel Level, std::string Category, std::string Message);
 
 	std::shared_ptr<spdlog::logger> Logger;   // incomplete type; dtor in Log.cpp
+
 };
 
 } // namespace Maho
@@ -112,3 +139,6 @@ private:
 #define MAHO_LOG_CORE_WARN(...)     MAHO_ENSURE_NOT_NULL(::Maho::GetLog(), L) L->Warn(__VA_ARGS__);
 #define MAHO_LOG_CORE_ERROR(...)    MAHO_ENSURE_NOT_NULL(::Maho::GetLog(), L) L->Error(__VA_ARGS__);
 #define MAHO_LOG_CORE_CRITICAL(...) MAHO_ENSURE_NOT_NULL(::Maho::GetLog(), L) L->Critical(__VA_ARGS__);
+// Category-aware variant (UE Output Log style) - tag rides on the message:
+//   MAHO_LOG(ELogLevel::Info, "LogRender", "init {}", id);
+#define MAHO_LOG(Level, Category, ...) MAHO_ENSURE_NOT_NULL(::Maho::GetLog(), L) L->Log(Level, Category, __VA_ARGS__);

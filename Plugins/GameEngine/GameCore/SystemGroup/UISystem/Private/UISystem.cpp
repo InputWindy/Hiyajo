@@ -14,15 +14,69 @@ namespace GameWorld
 // the UI frame orchestration.
 FUISystem* GUISystem = nullptr;
 
-void FUISystem::OnInstalled(FGameWorld&)
+namespace
+{
+// Draw one data-driven control from a widget's component. Interaction (Button/Checkbox/
+// Slider) queues an FUIEvent (routed by ControlId); the game thread drains + writes the
+// new value back to the owning control in Update. No stored callbacks -- the widget's
+// component is the state.
+void DrawControl(const FUIControl& C)
+{
+	switch (C.Type)
+	{
+		case EUIControlType::Label:     ImGui::Text("%s", C.Text.c_str()); break;
+		case EUIControlType::Text:      ImGui::TextWrapped("%s", C.Text.c_str()); break;
+		case EUIControlType::Separator: ImGui::Separator(); break;
+		case EUIControlType::Image:
+			ImGui::Image(static_cast<ImTextureID>(C.ResourceId), ImVec2(C.V0, C.V1));
+			break;
+		case EUIControlType::Button:
+			if (ImGui::Button(C.Text.c_str()))
+			{
+				if (FUISystem* UI = GetUISystem()) { UI->PushUIEvent({ C.Id, C.Type, 1.f, 1.f }); }
+			}
+			break;
+		case EUIControlType::Checkbox:
+		{
+			bool b = C.V0 > 0.f;
+			if (ImGui::Checkbox(C.Text.c_str(), &b))
+			{
+				if (FUISystem* UI = GetUISystem()) { UI->PushUIEvent({ C.Id, C.Type, b ? 1.f : 0.f, 1.f }); }
+			}
+			break;
+		}
+		case EUIControlType::Slider:
+		{
+			float V = C.V0;
+			if (ImGui::SliderFloat("##slider", &V, 0.f, C.V1))
+			{
+				if (FUISystem* UI = GetUISystem()) { UI->PushUIEvent({ C.Id, C.Type, V, C.V1 }); }
+			}
+			break;
+		}
+		default: break;
+	}
+}
+} // namespace
+
+void FUISystem::OnInstalled(FGameWorld& World)
 {
 	GUISystem = this;
 
-	// UI orchestration: the game-side UI submits ONE draw closure per frame (the
-	// draggable text-box placeholder) to the UIBuilder. FUIFeature pulls it each
-	// frame and runs it between NewFrame and Render -- so every ImGui call stays on
-	// the single owner thread. The full data-driven control set (FUIControl +
-	// DrawControl) belongs to the editor plugin; the game keeps only this closure.
+	// UI is data-driven: spawn a demo FUIWidget as an ECS entity + component, written
+	// through the world accessor. Update renders every FUIWidget entity each frame, so
+	// the game defines UI by composing entities + FUIControls, not a hardcoded closure.
+	FEntity E = World.CreateEntity();
+	FUIWidget W;
+	W.Name = "Game UI";
+	W.AnchorX = 0.05f; W.AnchorY = 0.05f;
+	W.SizeX = 0.30f;   W.SizeY = 0.25f;
+	FUIControl Label;  Label.Type = EUIControlType::Label;  Label.Text = "Game UI placeholder";
+	FUIControl Hint;   Hint.Type  = EUIControlType::Text;   Hint.Text  = "Drag this window by its title bar.";
+	W.Controls.push_back(Label);
+	W.Controls.push_back(Hint);
+	World.AddComponent<FUIWidget>(E, W);
+	DemoWidget = E;
 }
 
 void FUISystem::ProcessInput(FGameWorld&)
@@ -31,25 +85,39 @@ void FUISystem::ProcessInput(FGameWorld&)
 	// left empty so the system demonstrates a stage it does not yet fill.
 }
 
-void FUISystem::Update(FGameWorld&)
+void FUISystem::Update(FGameWorld& World)
 {
-	// The game side submits ONE draw closure that shows a single draggable text box
-	// (the game UI placeholder). The closure captures only DATA; it runs on the render
-	// worker inside the ImGui frame (between NewFrame and Render). The title bar is
-	// NOT suppressed so it acts as the drag handle -- the window can be moved by the
-	// user (SetNextWindowPos is Cond_Once, so the position is only clamped the first
-	// frame; afterwards the window owns its position).
-	UIBuilder.Submit([]()
+	// Write back render-side interaction events (a button/checkbox/slider was activated
+	// on the render worker) into the owning widget control, so the component persists.
+	WriteBackEvents();
+
+	// UI is data-driven: render every FUIWidget entity as one ImGui window. Each closure
+	// captures a SNAPSHOT (copy) of the widget, so the render worker runs against stable
+	// data while the game thread may mutate the component the next frame. Position/size
+	// follow display fraction (Always for size, Once for pos so it stays draggable).
+	for (FEntity E : World.GetAllWithComponent<FUIWidget>())
 	{
-		ImGui::SetNextWindowPos(ImVec2(60.f, 60.f), ImGuiCond_Once);
-		ImGui::SetNextWindowSize(ImVec2(280.f, 110.f), ImGuiCond_Once);
-		if (ImGui::Begin("Game UI", nullptr, ImGuiWindowFlags_NoResize))
+		const FUIWidget* Widget = World.GetComponent<FUIWidget>(E);
+		if (!Widget)
 		{
-			ImGui::Text("Game UI placeholder");
-			ImGui::TextWrapped("Drag this window by its title bar.");
+			continue;
 		}
-		ImGui::End();
-	});
+		const FUIWidget Snap = *Widget;
+		UIBuilder.Submit([Snap]()
+		{
+			const ImVec2 DS = ImGui::GetIO().DisplaySize;
+			ImGui::SetNextWindowPos(ImVec2(Snap.AnchorX * DS.x, Snap.AnchorY * DS.y), ImGuiCond_Once);
+			ImGui::SetNextWindowSize(ImVec2(Snap.SizeX * DS.x, Snap.SizeY * DS.y), ImGuiCond_Always);
+			if (ImGui::Begin(Snap.Name.c_str(), nullptr, ImGuiWindowFlags_NoResize))
+			{
+				for (const FUIControl& C : Snap.Controls)
+				{
+					DrawControl(C);
+				}
+			}
+			ImGui::End();
+		});
+	}
 
 	// THIS frame's UI is fully built: broadcast so subscribers (FUIFeature) copy the
 	// UIBuilder batch to their OWN side. The broadcast + the copy run on the game
@@ -97,13 +165,50 @@ std::vector<FUIEvent> FUISystem::DrainUIEvents()
 	return Out;
 }
 
-void FUISystem::PreUnInstall(FGameWorld&)
+void FUISystem::WriteBackEvents()
 {
-	// The render feature (UIFeature) is uninstalled BEFORE this world system (it
-	// depends on UISystem), so it pulls no further closures after this point. The
-	// UIBuilder's leftover closures capture only values/globals (no UISystem state),
-	// and the builder is destroyed with this system -- nothing dangles. The event is
-	// going away with this system, so clear any residual subscriptions outright.
+	// Write each queued interaction event back to the owning control (matched by Id),
+	// so a button/checkbox/slider's state persists in the widget's component.
+	FGameWorld* World = GetGameWorld();
+	if (!World)
+	{
+		return;
+	}
+	for (const FUIEvent& Event : DrainUIEvents())
+	{
+		for (FEntity E : World->GetAllWithComponent<FUIWidget>())
+		{
+			FUIWidget* Widget = World->GetComponent<FUIWidget>(E);
+			if (!Widget)
+			{
+				continue;
+			}
+			for (FUIControl& C : Widget->Controls)
+			{
+				if (C.Id == Event.ControlId)
+				{
+					C.V0 = Event.A;
+					C.V1 = Event.B;
+					break;
+				}
+			}
+		}
+	}
+}
+
+void FUISystem::PreUnInstall(FGameWorld& World)
+{
+	// Destroy the ECS widget entity this system spawned (close our own state -- do
+	// not rely on collector ordering). The render feature (UIFeature) is uninstalled
+	// BEFORE this world system (it depends on UISystem), so it pulls no further
+	// closures after this point. Meanwhile the UIBuilder's leftover closures capture
+	// only values/globals -- nothing dangles. The event is going away with this
+	// system, so clear any residual subscriptions outright.
+	if (DemoWidget.IsValid())
+	{
+		World.DestroyEntity(DemoWidget);
+		DemoWidget = FEntity{};
+	}
 	OnUIBuilt.RemoveAll();
 	GUISystem = nullptr;
 }

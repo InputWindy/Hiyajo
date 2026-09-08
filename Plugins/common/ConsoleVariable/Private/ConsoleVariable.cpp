@@ -48,23 +48,30 @@ namespace
 
 		[[nodiscard]] int GetInt() const override
 		{
+			std::lock_guard<std::mutex> Lock(ValueMutex);
 			try { return std::stoi(Value); }
 			catch (...) { return 0; }
 		}
 
 		[[nodiscard]] float GetFloat() const override
 		{
+			std::lock_guard<std::mutex> Lock(ValueMutex);
 			try { return std::stof(Value); }
 			catch (...) { return 0.0f; }
 		}
 
 		[[nodiscard]] bool GetBool() const override
 		{
+			std::lock_guard<std::mutex> Lock(ValueMutex);
 			const std::string Lower = ToLower(Value);
 			return Lower == "true" || Lower == "1" || Lower == "yes" || Lower == "on";
 		}
 
-		[[nodiscard]] std::string GetString() const override { return Value; }
+		[[nodiscard]] std::string GetString() const override
+		{
+			std::lock_guard<std::mutex> Lock(ValueMutex);
+			return Value;
+		}
 
 		void Set(std::string_view InValue) override
 		{
@@ -72,6 +79,7 @@ namespace
 			{
 				return;
 			}
+			std::lock_guard<std::mutex> Lock(ValueMutex);
 			Value = std::string(InValue);
 		}
 
@@ -81,6 +89,7 @@ namespace
 		std::string Value;
 		std::string Description;
 		ECVarFlags Flags;
+		mutable std::mutex ValueMutex;   // guards Value against cross-thread read/write races
 	};
 }
 

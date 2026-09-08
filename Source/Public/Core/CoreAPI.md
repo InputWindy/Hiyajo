@@ -32,7 +32,7 @@ Core 模块 = 引擎的编译期 + 并发基础设施。零 app 假设、零第�
 
 ### TMulticastEvent<Signature> <class>
 
-多播事件（bind + broadcast）。**非线程安全**——在拥有线程上 Broadcast；跨线程请走队列。Header-only、无状态、无 DLL 边界：消费方直接 `#include <Core/Delegate.h>`，插件的公共 API 可以把它作为成员类型暴露。
+多播事件（bind + broadcast）。**线程安全**——任意线程可 Bind/Broadcast/Unbind/RemoveAll；Broadcast 在锁外调用处理器（处理器可安全 re-enter）。Header-only、无状态、无 DLL 边界：消费方直接 `#include <Core/Delegate.h>`，插件的公共 API 可以把它作为成员类型暴露。
 
 #### 接口
 

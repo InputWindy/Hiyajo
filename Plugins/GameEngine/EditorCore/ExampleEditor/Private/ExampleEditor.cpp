@@ -23,12 +23,9 @@
 #include <ShaderParameterStruct.h>
 
 #include "imgui.h"
+#include "backends/imgui_impl_glfw.h"
 
 #include "ImGuiTheme.h"
-
-#if defined(_WIN32)
-#	include <windows.h>
-#endif
 
 namespace
 {
@@ -198,6 +195,14 @@ void FExampleEditor::OnInstalled(FRender& R)
 		ImGui::SetCurrentContext(m_Context);
 		ImGuiIO& IO = ImGui::GetIO();
 		IO.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+		// The ImGui GLFW backend takes over input + clipboard directly from the toolkit
+		// window handle: it installs glfw input callbacks (key/char/scroll/mouse) that feed
+		// THIS context's IO, and wires the OS clipboard through platform_io. With
+		// install_callbacks=true it also chains any previously-installed GLFW callbacks (e.g.
+		// a gameplay input system installed FIRST), so both consume the window's events -- the
+		// Win32 low-level hook pump is no longer needed. It must be initialized AFTER the
+		// game/input layer installs its own callbacks so those are chained, never shadowed.
+		ImGui_ImplGlfw_InitForVulkan(P->GetToolkitWindowHandle(), true);
 		ApplyMahoNightTheme();
 		MAHO_LOG_CORE_INFO("ExampleEditor: ImGui context created (editor-own)");
 	}
@@ -220,6 +225,7 @@ void FExampleEditor::OnInstalled(FRender& R)
 void FExampleEditor::InstallEditorComponents()
 {
 	Install("EditorViewport.dll");
+	Install("EditorConsole.dll");
 	FlushPendingUpdatePipelines<TTypeList<IEditorInit>, TTypeList<IEditorShutdown>>();
 }
 
@@ -272,37 +278,30 @@ void FExampleEditor::InitViews(FRender& R)
 				MAHO_LOG_CORE_ERROR("ExampleEditor: EditorRT creation failed");
 				return;
 			}
+			// EditorRT leaves create as UNDEFINED but is used as a dynamic-rendering color
+			// attachment (BeginRendering declares COLOR_ATTACHMENT and never auto-transitions).
+			// Bring it to COLOR_ATTACHMENT_OPTIMAL once, now, so RenderUI's BeginRendering and
+			// PresentTexture's "is a color attachment" barrier find it legal.
+			{
+				FRHITexture* RT = EditorRT.GetRHI();
+				R.AddPass(ERHICommandListType::Graphics, [RT](FRHICommandList& Cmd)
+				{
+					Cmd.TransitionTexture(RT, ERHIResourceState::Common, ERHIResourceState::RenderTarget);
+				});
+			}
 		}
 	}
 
-	// -- Frame feed (same Win32 input path as the game UI) -- then NewFrame.
-	ImGuiIO& IO = ImGui::GetIO();
-	Platform::FPlatform* P = Platform::GetPlatform();
-	if (P == nullptr)
-	{
-		return;
-	}
-	IO.DisplaySize = ImVec2(static_cast<float>(P->GetWindowWidth()), static_cast<float>(P->GetWindowHeight()));
-#if defined(_WIN32)
-	if (HWND Hwnd = static_cast<HWND>(P->GetNativeWindow()))
-	{
-		POINT Pt{};
-		if (::GetCursorPos(&Pt) && ::ScreenToClient(Hwnd, &Pt))
-		{
-			RECT Client{};
-			::GetClientRect(Hwnd, &Client);
-			const float ScaleX = Client.right > 0 ? IO.DisplaySize.x / static_cast<float>(Client.right) : 1.f;
-			const float ScaleY = Client.bottom > 0 ? IO.DisplaySize.y / static_cast<float>(Client.bottom) : 1.f;
-			IO.AddMousePosEvent(static_cast<float>(Pt.x) * ScaleX, static_cast<float>(Pt.y) * ScaleY);
-		}
-		IO.AddMouseButtonEvent(0, (::GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0);
-		IO.AddMouseButtonEvent(1, (::GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0);
-		IO.AddMouseButtonEvent(2, (::GetAsyncKeyState(VK_MBUTTON) & 0x8000) != 0);
-	}
-#endif
+	// -- Frame feed (ImGui GLFW backend) -- then NewFrame.
+	// The backend accumulates window input (key/char/scroll/mouse) into THIS context's IO
+	// since the last NewFrame, and updates io.DisplaySize / framebuffer scale / mouse data
+	// from the toolkit window. No manual Win32 poll/hook drain is needed. The editor is the
+	// only input-consuming ImGui context in an editor build; the game UI feature stays cold.
+	ImGui_ImplGlfw_NewFrame();
 
 	unsigned char* FontPixels = nullptr;
 	int FontW = 0, FontH = 0, FontBpp = 0;
+	ImGuiIO& IO = ImGui::GetIO();
 	IO.Fonts->GetTexDataAsRGBA32(&FontPixels, &FontW, &FontH, &FontBpp);
 	if (FontPixels == nullptr || FontW <= 0 || FontH <= 0)
 	{
@@ -527,7 +526,20 @@ void FExampleEditor::RenderUI(FRender& R)
 	Blend.DstAlphaFactor = ERHIBlendFactor::OneMinusSrcAlpha;
 	PipelineDesc.AttachmentBlends = { Blend };
 
+	// The editor UI draws the scene-color mirror (viewport ImGui::Image) sampled as
+	// SHADER_READ_ONLY, but the scene left it as COLOR_ATTACHMENT. Flip it to SR before
+	// the compose pass that samples it (and back afterwards) -- the RHI never auto-
+	// transitions, and descriptor writes hardcode SHADER_READ_ONLY, so sampling a target
+	// still in COLOR_ATTACHMENT (or a fresh UNDEFINED one) trips the validation layer.
+	if (Scene::FScene* Scene = Scene::GetScene())
+	{
+		Scene->TransitionSceneColorForSampling(R);
+	}
 	R.AddPass(ERHICommandListType::Graphics, PipelineDesc, Target, Params, DrawList);
+	if (Scene::FScene* Scene = Scene::GetScene())
+	{
+		Scene->TransitionSceneColorForRendering(R);
+	}
 
 	// The editor owns the final on-screen surface in an editor build: set its EditorRT
 	// as the present target (last writer wins over the game UI, which may have set the
@@ -552,8 +564,12 @@ void FExampleEditor::PreUnInstall(FRender& R)
 		R.ReleaseTexture(FontTexture);
 		FontTexture.Reset();
 	}
+	// Shut down the ImGui GLFW backend (unregisters its callbacks + restores the previously
+	// chained wndproc/input callbacks) before the ImGui context is destroyed, so a late
+	// backend event never feeds a context that no longer drains it.
 	if (m_Context != nullptr)
 	{
+		ImGui_ImplGlfw_Shutdown();
 		ImGui::SetCurrentContext(nullptr);
 		ImGui::DestroyContext(m_Context);
 		m_Context = nullptr;
@@ -564,7 +580,12 @@ void FExampleEditor::PreUnInstall(FRender& R)
 
 void FExampleEditor::ShutdownEditorComponents()
 {
-	TryUninstall("EditorViewport");
+	// Uninstall by the EXACT layer GetName() (the ".dll" suffix). A mismatch here
+	// silently skips the matching layer, so its IEditorShutdown never runs -- e.g.
+	// EditorConsole would leak its OnLog subscription into FLog and crash in ~FLog()
+	// once EditorConsole.dll unloads.
+	TryUninstall("EditorConsole.dll");
+	TryUninstall("EditorViewport.dll");
 	FlushPendingUpdatePipelines<TTypeList<IEditorInit>, TTypeList<IEditorShutdown>>();
 }
 

@@ -13,6 +13,7 @@
 #include "ShaderCompiler.h"
 
 #include <algorithm>
+#include <typeindex>
 
 #if defined(_WIN32)
 #	include <windows.h>
@@ -43,6 +44,14 @@ FRender::FRender()
 	// their Shutdown AFTER mine. Declared here (I know them), not by them.
 	MyStage<IShutdown>().IsBlocking<FLog>().OnStage<IShutdown>();
 	MyStage<IShutdown>().IsBlocking<Platform::FPlatform>().OnStage<IShutdown>();
+	// The mirror binds std::function targets rooted in THIS DLL into the resource
+	// system's events (OnAsset* + SetReadback), and the UI feature subscribes to
+	// GameWorld's UISystem. Both producers must Shutdown AFTER me so my teardown
+	// RemoveAll/Unsubscribes against live objects -- never a nulled global accessor.
+	// Resource is typed (already included); GameWorld by anonymous name (render must
+	// not include the game-world header).
+	MyStage<IShutdown>().IsBlocking<Resource::FResourceSystem>().OnStage<IShutdown>();
+	BlockOn("FGameWorld", std::type_index(typeid(IShutdown)), std::type_index(typeid(IShutdown)));
 
 	// Asset mirror: the render mirror consumes imported assets (upload to GPU), so
 	// the resource system must run its IInit (start the IO thread) before mine.
@@ -142,7 +151,12 @@ void FRender::PostInitialize(FEngineBase&)
 	// It is loaded by DLL name (FAssembly) and never linked -- see its .cplugin
 	// PrivateIncludes. Runtime builds never define MAHO_EDITOR_BUILD (the editor
 	// plugin is filtered out at codegen), so this path is editor-only.
-	Install("ExampleEditor.dll");
+	//
+	// TEMP-DISABLED: the editor plugins (ExampleEditor + EditorViewport +
+	// EditorConsole) are shut off until FRender's pass1(scene)+pass2(game UI)+
+	// pass3(editor) pipeline is proven stable. Re-enable to re-fit the editor as
+	// pass3 on the SINGLE shared ImGui context (no separate editor context).
+	(void)0;   // was: Install("ExampleEditor.dll");
 #endif
 }
 
@@ -171,16 +185,18 @@ void FRender::Shutdown(FEngineBase&)
 	// then the two threaded servers (shader-compile thread + RHI render-server
 	GRender = nullptr;
 
-	// Unbind the asset-mirror delegates. The resource system may be shutting down
-	// concurrently; GetResourceSystem() returns null then (Resource's own Shutdown
-	// clears it), so the delegates are dropped only while the system is alive. The
-	// mirror table entries are Persistent RDG refs owned by the resource pool,
-	// released by ResourcePool->Shutdown below -- just drop the refs.
+	// Unbind the asset-mirror delegates. The resource system's Shutdown is ordered
+	// AFTER this one (declared in the ctor), so GetResourceSystem() is live here --
+	// every binding, including SetReadback, is dropped against the live system, never
+	// a nulled global accessor. The mirror table entries are Persistent RDG refs owned
+	// by the resource pool, released by ResourcePool->Shutdown below -- just drop the
+	// refs.
 	if (Resource::FResourceSystem* RS = Resource::GetResourceSystem())
 	{
 		RS->OnAssetImported.RemoveAll();
 		RS->OnAssetUnloaded.RemoveAll();
 		RS->OnAssetCreated.RemoveAll();
+		RS->SetReadback({});
 	}
 	GpuMirrors.clear();
 	// The UI mirror descriptor sets are owned by FUIFeature; it is destroyed by
@@ -216,6 +232,18 @@ void FRender::Shutdown(FEngineBase&)
 		// The last frame's feature command lists + pooled resources are destroyed
 		// below by ResourcePool->Shutdown() while the device is still alive (their
 		// VkCommandPools / VkBuffers must not be outstanding when the device dies).
+
+		// Uninstall every render feature through the collector teardown pipeline so
+		// each feature's IPreUnInstall stage runs BEFORE its instance is destroyed.
+		// FExampleEditor::PreUnInstall uninstalls its editor sub-panels (and the
+		// EditorConsole unregisters its live log listener); a bare Features.clear()
+		// would destroy the instances without driving those teardown stages and
+		// leak subscriptions (e.g. the console's FLog listener) into the Log layer.
+		for (FLayerBase* L : Pipelines)
+		{
+			TryUninstall(L->GetName());
+		}
+		FlushPendingUpdatePipelines<TTypeList<IOnInstalled>, TTypeList<IPreUnInstall>>();
 
 		// Destroy the render feature instances explicitly BEFORE the RHI goes
 		// away: their destructors free Vulkan objects (pipelines / shader

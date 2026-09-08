@@ -50,24 +50,40 @@ void FLog::Initialize(FEngineBase& Engine)
 void FLog::Shutdown(FEngineBase&)
 {
 	GLog = nullptr;
+	// Subscribers (e.g. the Editor Console) unbind themselves in their own Shutdown,
+	// so this strand should already be empty. RemoveAll is a safety net only; it drops
+	// any remaining subscriptions. This now relies on each module's self-consistent
+	// teardown (register → unregister pairing), not on leaking the storage to dodge a
+	// cross-DLL destructor.
+	OnLog.RemoveAll();
 	spdlog::shutdown();
 	Logger.reset();
 }
 
 void FLog::LogLine(ELogLevel Level, std::string Message)
 {
+	LogLine(Level, "", std::move(Message));
+}
+
+void FLog::LogLine(ELogLevel Level, std::string Category, std::string Message)
+{
+	// Deliver to live listeners unconditionally (independent of spdlog state),
+	// then forward to the sink if the logger is up.
+	const FLogMessage Msg{ Level, std::move(Category), std::move(Message) };
+	OnLog.Broadcast(Msg);
+
 	if (!Logger)
 	{
 		return;
 	}
 	switch (Level)
 	{
-	case ELogLevel::Trace:    Logger->trace(std::move(Message)); break;
-	case ELogLevel::Debug:    Logger->debug(std::move(Message)); break;
-	case ELogLevel::Info:     Logger->info(std::move(Message)); break;
-	case ELogLevel::Warn:     Logger->warn(std::move(Message)); break;
-	case ELogLevel::Error:    Logger->error(std::move(Message)); break;
-	case ELogLevel::Critical: Logger->critical(std::move(Message)); break;
+	case ELogLevel::Trace:    Logger->trace(Msg.Message); break;
+	case ELogLevel::Debug:    Logger->debug(Msg.Message); break;
+	case ELogLevel::Info:     Logger->info(Msg.Message); break;
+	case ELogLevel::Warn:     Logger->warn(Msg.Message); break;
+	case ELogLevel::Error:    Logger->error(Msg.Message); break;
+	case ELogLevel::Critical: Logger->critical(Msg.Message); break;
 	}
 }
 

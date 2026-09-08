@@ -49,6 +49,23 @@ struct FUIEvent
 };
 
 /**
+ * ECS-side UI widget: one ImGui window anchored by display fraction (X/Y position +
+ * W/H size). Pure game data, written through the world accessor; the UI system renders
+ * every FUIWidget entity (clamping to a data-driven control set) on the next frame. The
+ * widget is the data -- it replaces a hardcoded draw closure, so UI is composable from
+ * entities + FUIControl components instead of being baked into a std::function.
+ */
+struct FUIWidget
+{
+	std::string    Name;                    // window title
+	float          AnchorX = 0.05f;         // pos fraction of the display
+	float          AnchorY = 0.05f;
+	float          SizeX   = 0.30f;         // size fraction of the display
+	float          SizeY   = 0.25f;
+	std::vector<FUIControl> Controls;       // ordered controls (window content)
+};
+
+/**
  * GameWorld UI system -- a WORLD SYSTEM, installed into FGameWorld as a peer
  * layer (via the sub-landlord collector). It owns the FUIBuilder -- the
  * game->render UI command broker -- and on each Update submits ONE draw closure
@@ -99,6 +116,11 @@ public:
 private:
 
 	FUIBuilder UIBuilder;   // game->render UI command broker (owned by this world system)
+	FEntity DemoWidget;     // ECS entity hosting the demo FUIWidget (spawned on install)
+
+	/** Drain queued render-side interaction events and write the new value back to the
+	 *  owning widget control (identified by ControlId). Call from the game thread. */
+	void WriteBackEvents();
 
 	mutable std::mutex EventMutex;   // guards OnUIBuilt (bind vs broadcast race)
 	TMulticastEvent<void(const FUIBuilder&)> OnUIBuilt;

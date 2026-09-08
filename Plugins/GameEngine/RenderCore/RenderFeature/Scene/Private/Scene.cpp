@@ -52,6 +52,11 @@ void FScene::BeginRender(FRender& R)
 	EnsureTargets(R);
 }
 
+FScene::~FScene()
+{
+	GScene = nullptr;
+}
+
 void FScene::EnsureTargets(FRender& R)
 {
 	const std::uint32_t W = R.GetCanvasWidth();
@@ -147,10 +152,29 @@ void FScene::Render(FRender& R)
 	}
 	R.AddPass(ERHICommandListType::Graphics, [&](FRHICommandList& Cmd)
 	{
-		if (bTargetsNeedTransition)
+		// SceneColor is both a render target (this clear / downstream draws) and, in an
+		// editor build, a sampled mirror (the viewport reads it as SHADER_READ_ONLY). The
+		// two uses need opposite layouts, so the layout is toggled each frame: an editor
+		// UI compose pass flips it to SHADER_READ_ONLY (via TransitionSceneColorForSampling)
+		// and back; here we flip it back to COLOR_ATTACHMENT before any scene write. A
+		// fresh target (never transitioned) is Common/UNDEFINED and must be brought up once.
+		if (SceneColor.GetRHI() != nullptr)
+		{
+			if (SceneColorLayout == ESceneColorLayout::ShaderResource)
+			{
+				Cmd.TransitionTexture(SceneColor.GetRHI(), ERHIResourceState::ShaderResource, ERHIResourceState::RenderTarget);
+			}
+			else if (SceneColorLayout == ESceneColorLayout::Undefined)
+			{
+				Cmd.TransitionTexture(SceneColor.GetRHI(), ERHIResourceState::Common, ERHIResourceState::RenderTarget);
+			}
+			// RenderTarget: already there, no-op.
+			SceneColorLayout = ESceneColorLayout::RenderTarget;
+		}
+
+		if (bTargetsNeedTransition && SceneDepth.GetRHI() != nullptr)
 		{
 			bTargetsNeedTransition = false;
-			Cmd.TransitionTexture(SceneColor.GetRHI(), ERHIResourceState::Common, ERHIResourceState::RenderTarget);
 			Cmd.TransitionTexture(SceneDepth.GetRHI(), ERHIResourceState::Common, ERHIResourceState::DepthWrite);
 		}
 
@@ -186,6 +210,37 @@ void FScene::EndRender(FRender& R)
 	// features' `WaitFor ... Scene::IEndRender` deps keep the same ordering -- their
 	// IRender still runs after this stage, i.e. after the clear's submit above.
 	(void)R;
+}
+
+void FScene::TransitionSceneColorForSampling(FRender& R)
+{
+	// SceneColor leaves RenderTarget -> ShaderResource so a later sampled use (the
+	// editor viewport mirror) binds it legally. AddPass submits at this call site, so
+	// the transition is queued on the graphics queue BEFORE the UI compose pass that
+	// samples it -- same queue, ordered submit, validation-layer layout tracking agrees.
+	if (SceneColor.IsValid() && SceneColorLayout == ESceneColorLayout::RenderTarget)
+	{
+		FRHITexture* Tex = SceneColor.GetRHI();
+		R.AddPass(ERHICommandListType::Graphics, [Tex](FRHICommandList& Cmd)
+		{
+			Cmd.TransitionTexture(Tex, ERHIResourceState::RenderTarget, ERHIResourceState::ShaderResource);
+		});
+		SceneColorLayout = ESceneColorLayout::ShaderResource;
+	}
+}
+
+void FScene::TransitionSceneColorForRendering(FRender& R)
+{
+	// Undo the sampling flip so the next scene write can target COLOR_ATTACHMENT again.
+	if (SceneColor.IsValid() && SceneColorLayout == ESceneColorLayout::ShaderResource)
+	{
+		FRHITexture* Tex = SceneColor.GetRHI();
+		R.AddPass(ERHICommandListType::Graphics, [Tex](FRHICommandList& Cmd)
+		{
+			Cmd.TransitionTexture(Tex, ERHIResourceState::ShaderResource, ERHIResourceState::RenderTarget);
+		});
+		SceneColorLayout = ESceneColorLayout::RenderTarget;
+	}
 }
 
 } // namespace Scene

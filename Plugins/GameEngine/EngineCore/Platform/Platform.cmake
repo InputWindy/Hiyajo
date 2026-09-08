@@ -49,13 +49,29 @@ if(NOT MAHO_HEADLESS)
 	set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 	set(GLFW_INSTALL OFF CACHE BOOL "" FORCE)
 
+	# glfw MUST be a shared DLL, not a static lib. Two plugin DLLs (Platform + the
+	# editor that compiles imgui_impl_glfw.cpp) each statically linking the SAME
+	# static glfw get their OWN copy of `_glfw` (the global GLFW state). Platform's
+	# glfwInit() sets only ITS copy's `_glfw.initialized`; the editor's never-inited
+	# copy keeps `_glfw.initialized == false`, so its glfwGetWin32Window() returns
+	# NULL -> ImGui backend's WndProc subclassing reads PrevWndProc = null -> assert.
+	# One shared glfw.dll unifies `_glfw` across every consumer DLL.
+	set(GLFW_LIBRARY_TYPE SHARED CACHE STRING "" FORCE)
+
 	if(NOT TARGET glfw)
 		maho_git_repository_url(_GLFW_URL https://github.com/glfw/glfw.git)
 		maho_fetchcontent_populate_or_reuse(glfw ${_GLFW_URL} 3.4 include/GLFW/glfw3.h)
 		maho_add_thirdparty_subdirectory(${glfw_SOURCE_DIR} ${glfw_BINARY_DIR})
 	endif()
 
+	# Deploy glfw3.dll beside the plugin DLLs so the single shared instance is found
+	# at load time (default output dir is the glfw build tree, off the runtime path).
+	set_target_properties(glfw PROPERTIES
+		RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>")
+
 	# Dependents (e.g. a future Render ImGuiSystem) get glfw transitively.
+	# GLFW propagates GLFW_DLL to consumers when built shared (dllimport), so both
+	# Platform and the editor import the same glfw3.dll.
 	target_link_libraries(Platform PUBLIC glfw)
 else()
 	target_compile_definitions(Platform PRIVATE MAHO_HEADLESS=1)

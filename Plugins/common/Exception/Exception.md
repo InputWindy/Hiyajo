@@ -12,7 +12,7 @@ Exception 是一个**广播中枢**：引擎各处把"出错了但不必死"的�
 
 ### 1. 订阅（OnException）
 
-`OnException` 是 `TMulticastEvent<void(const std::string&)>`（`Core/Delegate`），在拥有线程上用 `Bind` 注册处理器；**非线程安全**——跨线程上报请走队列。
+`OnException` 是 `TMulticastEvent<void(const std::string&)>`（`Core/Delegate`），用 `Bind` 注册处理器；**线程安全**——任意线程可上报（Broadcast），处理器回调在锁外执行。
 
 ```cpp
 #include <Exception.h>
