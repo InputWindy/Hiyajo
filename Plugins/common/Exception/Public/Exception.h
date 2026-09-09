@@ -35,7 +35,7 @@ MAHO_EXCEPTION_API FException* GetExceptionCenter();
 class FException : public FLayer<IPreInit, IInit, IPostInit, IPreShutdown, IShutdown, IPostShutdown>
 {
 public:
-	MAHO_DECLARE_LAYER(FException, "Exception.dll");
+	MAHO_DECLARE_LAYER(FException);
 
 	/** Report a non-fatal exception (broadcasts to OnException). */
 	void ReportException(std::string_view Message);

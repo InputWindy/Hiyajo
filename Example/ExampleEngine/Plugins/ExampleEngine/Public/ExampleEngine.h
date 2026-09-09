@@ -13,7 +13,7 @@ namespace Maho
 // its own render thread, and FPlatform requests exit when the window closes.
 class FExampleEngine : public FEngineBase
 {
-MAHO_DECLARE_ENGINE(FExampleEngine, "ExampleEngine.dll");
+MAHO_DECLARE_ENGINE(FExampleEngine);
 
 public:
 	void PreMain() override;

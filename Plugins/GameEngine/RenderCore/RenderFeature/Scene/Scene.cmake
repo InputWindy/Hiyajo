@@ -26,14 +26,12 @@ set_target_properties(Scene PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 target_compile_definitions(Scene PRIVATE MAHO_SCENE_MODULE_EXPORTS)
 target_link_libraries(Scene PUBLIC Maho)
 set_property(TARGET Scene PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>")
+set_target_properties(Scene PROPERTIES OUTPUT_NAME "FScene" PREFIX "")
 target_link_libraries(Scene PUBLIC Render Resource)
 set_target_properties(Scene PROPERTIES FOLDER "Maho/Plugins/GameEngine/RenderCore/RenderFeature")
 source_group(TREE "${CMAKE_CURRENT_LIST_DIR}" FILES ${Scene_PUBLIC_HEADERS} ${Scene_PRIVATE_HEADERS} ${Scene_PRIVATE_SOURCES})
 # -- /MAHOGEN Scene --
 
 # Scene plugin: no third-party dependencies.
-
-# FScene loads via MAHO_DECLARE_LAYER(FScene, "RenderScene.dll") at runtime
-# (FLayerCollector::Install resolves that exact DLL name), so the target's
-# output must be RenderScene.dll even though the plugin target is `Scene`.
-set_target_properties(Scene PROPERTIES OUTPUT_NAME "RenderScene")
+# DLL output is set by codegen (MAHOGEN block) to the layer type "FScene" per the
+# module naming protocol: MAHO_DECLARE_LAYER(FScene) + platform suffix.

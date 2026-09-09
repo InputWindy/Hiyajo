@@ -19,7 +19,7 @@ namespace Maho
  */
 class FEditorTheme : public FLayer<IEditorInit, IEditorPanel>
 {
-	MAHO_DECLARE_LAYER(FEditorTheme, "EditorTheme.dll");
+	MAHO_DECLARE_LAYER(FEditorTheme);
 
 public:
 	void Init(FExampleEditor& Editor) override;

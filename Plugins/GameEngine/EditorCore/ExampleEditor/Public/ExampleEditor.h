@@ -105,14 +105,15 @@ struct FEditorShader
  * The frame shell (DockSpace) stays in the host; each component Begins/Ends its
  * own window name inside it. The plugin is Type=Editor: a Runtime build drops it
  * (and its components) at codegen, so editor DLLs/headers/ImGui compile only in
- * an Editor build. It is installed into FRender by name (Install("ExampleEditor.dll"))
- * from the host when the build is an editor build (MAHO_EDITOR_BUILD).
+ * an Editor build. It is installed into FRender by module base name
+ * (Install(ApplyModuleExtension("FExampleEditor"))) from the host when the build
+ * is an editor build (MAHO_EDITOR_BUILD).
  */
 class MAHO_EXAMPLEEDITOR_API FExampleEditor
 	: public FLayer<IOnInstalled, IEditorInput, IEditorCompose, IPreUnInstall>
 	, public FLayerCollector<FExampleEditor>
 {
-	MAHO_DECLARE_LAYER(FExampleEditor, "ExampleEditor.dll");
+	MAHO_DECLARE_LAYER(FExampleEditor);
 
 	FExampleEditor();
 

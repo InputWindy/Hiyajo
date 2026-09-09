@@ -83,7 +83,7 @@ struct FUIWidget
  */
 class MAHO_UISYSTEM_API FUISystem : public FLayer<IOnInstalled, IProcessInput, IUpdate, IPreUnInstall>
 {
-	MAHO_DECLARE_LAYER(FUISystem, "UISystem.dll");
+	MAHO_DECLARE_LAYER(FUISystem);
 
 public:
 	void OnInstalled(FGameWorld& World) override;

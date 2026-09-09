@@ -56,12 +56,12 @@ struct FLogMessage
  * logger is hidden behind Trace/Debug/Info/Warn/Error/Critical perfect-forward
  * templates - callers never see spdlog types.
  *
- *   Engine.Install("Log.dll");   // install early in PreMain
+ *   Engine.Install<FLog>();   // install early in PreMain   (or Install(ApplyModuleExtension("FLog")))
  */
 class FLog : public FLayer<IInit, IShutdown>
 {
 public:
-	MAHO_DECLARE_LAYER(FLog, "Log.dll");
+	MAHO_DECLARE_LAYER(FLog);
 
 	FLog();
 	~FLog() override;

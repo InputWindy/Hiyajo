@@ -29,7 +29,7 @@ MAHO_SCENE_API FScene* GetScene();
  */
 class MAHO_SCENE_API FScene : public FLayer<IBeginRender, IRender, IEndRender>
 {
-	MAHO_DECLARE_LAYER(FScene, "RenderScene.dll");
+	MAHO_DECLARE_LAYER(FScene);
 
 public:
 	FScene();

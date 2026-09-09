@@ -34,10 +34,13 @@ inline int Main(int Argc, char** Argv)
 	{
 
 #ifndef MAHO_ENGINE_NAME
-#	define MAHO_ENGINE_NAME "Engine.dll"
+#	define MAHO_ENGINE_NAME "Engine"
 #endif
-		// The engine path -- first command-line argument, else the project's DLL.
-		const char* EnginePath = (Argc > 1 && Argv[1] != nullptr) ? Argv[1] : MAHO_ENGINE_NAME;
+		// The engine path -- first command-line argument, else the project's DLL
+		// module base name + platform suffix (never a hardcoded .dll).
+		const std::string EnginePath = (Argc > 1 && Argv[1] != nullptr)
+			? std::string(Argv[1])
+			: Maho::ApplyModuleExtension(MAHO_ENGINE_NAME);
 
 		// Install (load) the engine.
 		FAssembly Engine(EnginePath);

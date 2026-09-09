@@ -26,7 +26,7 @@ namespace Maho
  */
 class MAHO_FRAMERENDERFEATURE_API FFrameRenderFeature : public FLayer<IPresent>
 {
-MAHO_DECLARE_LAYER(FFrameRenderFeature, "FrameRenderFeature.dll");
+MAHO_DECLARE_LAYER(FFrameRenderFeature);
 
 public:
 	FFrameRenderFeature();

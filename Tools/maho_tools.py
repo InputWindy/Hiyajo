@@ -461,6 +461,10 @@ add_dependencies({name} {plugin_link_names})
 target_link_libraries({name} PUBLIC {plugin_link_names})
 # Plugin DLLs co-locate with Maho.dll + EntryPoint so relative DLL deps resolve.
 set_property(TARGET {name} PROPERTY RUNTIME_OUTPUT_DIRECTORY "${{CMAKE_BINARY_DIR}}/Binaries/$<CONFIG>")
+# Module naming protocol: the host engine DLL output name = the engine layer
+# type (MAHO_DECLARE_ENGINE first arg), so EntryPoint's MAHO_ENGINE_NAME +
+# ApplyModuleExtension resolves. PREFIX "" stops CMake's `lib` prepend on Unix.
+set_target_properties({name} PROPERTIES OUTPUT_NAME "{engine_layer_type}" PREFIX "")
 
 # Cycle check — runs before every in-IDE build (host + entry depend on it).
 # Prefer the engine-local venv (Setup.bat); fall back to any system python.
@@ -507,7 +511,9 @@ target_link_libraries(Maho PUBLIC glm::glm nlohmann_json::nlohmann_json CLI11::C
 set_target_properties(Maho PROPERTIES FOLDER "Maho")
 
 add_executable(EntryPoint WIN32 Intermediate/Main.cpp)
-target_compile_definitions(EntryPoint PRIVATE MAHO_ENGINE_NAME="{name}.dll")
+# Engine module base name (no platform suffix — EntryPoint resolves it via
+# ApplyModuleExtension at runtime; never a hardcoded .dll).
+target_compile_definitions(EntryPoint PRIVATE MAHO_ENGINE_NAME="{engine_layer_type}")
 target_link_libraries(EntryPoint PRIVATE Maho)
 
 # Copy the project's Config/ directory next to the binary (DefaultEngine.ini etc.
@@ -603,6 +609,32 @@ exit /b 0
 """
 
 
+_MODULE_MACRO_RE = re.compile(
+	r"MAHO_DECLARE_(?:LAYER|ENGINE)\s*\(\s*([A-Za-z_]\w*)"
+)
+
+
+def _layer_type_from_plugin(plugin_dir: Path) -> str:
+	"""Scan a plugin's Public/*.h for the MAHO_DECLARE_LAYER/ENGINE macro's first
+	argument and return the layer type name (e.g. FScene, FNamePool) or empty.
+	This is the single source of truth for the module base name -- the DLL always
+	compiles to  <layer type> + platform suffix, so codegen sets OUTPUT_NAME from
+	it (a plugin whose directory name differs, e.g. Name -> FNamePool, is covered
+	automatically; no .cplugin field needed)."""
+	public_dir = plugin_dir / "Public"
+	if not public_dir.is_dir():
+		return ""
+	for h in sorted(public_dir.glob("*.h")):
+		try:
+			text = h.read_text(encoding="utf-8", errors="replace")
+		except OSError:
+			continue
+		m = _MODULE_MACRO_RE.search(text)
+		if m:
+			return m.group(1)
+	return ""
+
+
 def _all_plugin_infos(
 	engine_root: Path, project_dir: Path | None = None
 ) -> dict[str, dict[str, Any]]:
@@ -668,6 +700,10 @@ def _all_plugin_infos(
 			# the plugin's own self-contained .cmake build block.
 			"disk_dir": str(plugin_dir),
 			"dir_name": dir_name,
+			# Module base name = the layer type (MAHO_DECLARE_LAYER/ENGINE first arg),
+			# so the compiled DLL is <layer type> + platform suffix. Empty for
+			# pure-library plugins (no layer macro) — their output keeps dir_name.
+			"layer_type": _layer_type_from_plugin(plugin_dir),
 		}
 
 	# Engine plugins: Plugins/<group>/<name>/.
@@ -866,6 +902,16 @@ def _plugin_targets(
 			f"target_link_libraries({name} PUBLIC Maho)",
 			f'set_property(TARGET {name} PROPERTY RUNTIME_OUTPUT_DIRECTORY "${{CMAKE_BINARY_DIR}}/Binaries/$<CONFIG>")',
 		]
+		# Module naming protocol: the DLL output name = the layer type
+		# (MAHO_DECLARE_LAYER first arg), so GetModulePath()'s #LayerType +
+		# platform suffix resolves. Pure-library plugins (no layer macro) keep
+		# their directory-name output. PREFIX "" stops CMake's `lib` prepend
+		# on Unix — the module name is the exact base name.
+		layer_type = info.get("layer_type")
+		if layer_type:
+			gen_lines.append(
+				f'set_target_properties({name} PROPERTIES OUTPUT_NAME "{layer_type}" PREFIX "")'
+			)
 		if deps_in_chain:
 			gen_lines.append(f"target_link_libraries({name} PUBLIC {' '.join(deps_in_chain)})")
 		gen_lines += [
@@ -966,18 +1012,21 @@ def _write_cmake_lists(
 	)
 
 	global_defs = "add_compile_definitions(MAHO_EDITOR_BUILD)" if build_type == "Editor" else ""
+	# Engine layer type = the host plugin's MAHO_DECLARE_ENGINE first arg (a
+	# generated project is always F{project_name}); fall back to the plain name.
+	engine_layer_type = _layer_type_from_plugin(host_dir) or project_name
 	(project_dir / "CMakeLists.txt").write_text(
 		CMAKELISTS.format(
 			name=project_name,
 			NAME_UPPER=project_name.upper(),
 			engine_rel=engine_rel,
-			global_defs=global_defs,
-			plugin_dirs=plugin_dirs,
+			global_defs=global_defs,			plugin_dirs=plugin_dirs,
 			plugin_targets=plugin_targets,
 			plugin_link_names=" ".join(plugin_link_names),
 			plugin_all_names=" ".join(plugin_all_names),
 			host_aux=host_aux_block,
 			host_aux_props=host_aux_props,
+			engine_layer_type=engine_layer_type,
 		),
 		encoding="utf-8", newline="\n",
 	)
@@ -1043,7 +1092,7 @@ def create_project(
 		f"// Implement PreMain/PostMain to install layers; the engine drives the loop.\n"
 		f"class F{project_name} : public FEngineBase\n"
 		f"{{\n"
-		f"MAHO_DECLARE_ENGINE(F{project_name}, \"{project_name}.dll\");\n"
+		f"MAHO_DECLARE_ENGINE(F{project_name});\n"
 		f"\n"
 		f"public:\n"
 		f"\tvoid PreMain() override;\n"
@@ -1254,7 +1303,7 @@ def create_plugin(
 		f"// overridden in this class.\n"
 		f"class F{plugin_name} : public FLayer<>\n"
 		f"{{\n"
-		f"MAHO_DECLARE_LAYER(F{plugin_name}, \"{plugin_name}.dll\");\n"
+		f"MAHO_DECLARE_LAYER(F{plugin_name});\n"
 		f"}};\n\n"
 		f"}} // namespace Maho\n"
 	)

@@ -18,36 +18,28 @@
  * every FLayerBase-derived layer that can be dynamically loaded carries the
  * factory + module path. Usage:
  *
- *   class FWorld : public FLayer<...> { MAHO_DECLARE_LAYER(FWorld, "World.dll"); ... };
+ *   class FWorld : public FLayer<...> { MAHO_DECLARE_LAYER(FWorld); ... };
  *
  * The name comes from stringifying the type name (#LayerType); dependency
  * declarations use the same type deduction, so it is self-consistent.
  */
-// CMake injects MAHO_MODULE_DIR per plugin -- the plugin's sln-FOLDER relative
-// path with a trailing slash (e.g. "Project/Plugins/RenderFeature/"). Concat it
-// with the DLL name so the module resolves relative to the runtime dir without a
-// DLL-search-path hack. Default empty: a module built without it resolves its
-// bare DLL name (top-level) as before.
-#ifndef MAHO_MODULE_DIR
-#	define MAHO_MODULE_DIR ""
-#endif
-#define MAHO_DECLARE_LAYER(LayerType, DLL)               \
-public:                                                  \
-	static constexpr std::string_view StaticName()       \
-	{                                                    \
-		return #LayerType;                                \
-	}                                                    \
-	std::string_view GetName() const override            \
-	{                                                    \
-		return StaticName();                              \
-	}                                                    \
-	static Maho::FLayerBase* CreateLayer()               \
-	{                                                    \
-		return new LayerType();                            \
-	}                                                    \
-	static std::string_view GetModulePath()              \
-	{                                                    \
-		return DLL;                                       \
+#define MAHO_DECLARE_LAYER(LayerType)                       \
+public:                                                      \
+	static constexpr std::string_view StaticName()           \
+	{                                                        \
+		return #LayerType;                                    \
+	}                                                        \
+	std::string_view GetName() const override                \
+	{                                                        \
+		return StaticName();                                  \
+	}                                                        \
+	static Maho::FLayerBase* CreateLayer()                   \
+	{                                                        \
+		return new LayerType();                                \
+	}                                                        \
+	static std::string GetModulePath()                       \
+	{                                                        \
+		return Maho::ApplyModuleExtension(#LayerType);         \
 	}
 
 namespace Maho

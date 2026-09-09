@@ -17,7 +17,7 @@ namespace Maho
 // FLayerCollector install/uninstall graph) if it needs per-install setup; this one does not.
 class FEditorViewport : public FLayer<IEditorPanel>
 {
-	MAHO_DECLARE_LAYER(FEditorViewport, "EditorViewport.dll");
+	MAHO_DECLARE_LAYER(FEditorViewport);
 
 public:
 	void Draw(FExampleEditor& Editor) override;

@@ -37,7 +37,7 @@ class FTimer
 	: public FLayer<IPreInit, IInit, IPostInit, IPreShutdown, IShutdown, IPostShutdown>
 {
 public:
-	MAHO_DECLARE_LAYER(FTimer, "Timer.dll");
+	MAHO_DECLARE_LAYER(FTimer);
 
 	/** Push a scope (must be balanced with EndScope / FScopedTimer). */
 	void BeginScope(std::string_view Name);

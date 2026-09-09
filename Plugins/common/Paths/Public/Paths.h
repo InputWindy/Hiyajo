@@ -18,7 +18,7 @@ namespace Paths
 class FPaths
 	: public FLayer<IPreInit, IInit, IPostInit, IPreShutdown, IShutdown, IPostShutdown>
 {
-	MAHO_DECLARE_LAYER(FPaths, "Paths.dll");
+	MAHO_DECLARE_LAYER(FPaths);
 
 private:
 	// -- engine layer stages (scheduler-only) --

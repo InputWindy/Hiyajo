@@ -150,7 +150,8 @@ void FRender::PostInitialize(FEngineBase&)
 	// composite (UIRenderTarget), drawing the editor overlay, and taking over the present
 	// target. Loads by DLL name (FAssembly), never linked. Runtime builds never define
 	// MAHO_EDITOR_BUILD, so this path is editor-only.
-	if (!Install("ExampleEditor.dll"))
+	// Loads by module base name + platform suffix, never a hardcoded .dll.
+	if (!Install(Maho::ApplyModuleExtension("FExampleEditor")))
 	{
 		MAHO_LOG_CORE_ERROR("ExampleEditor install FAILED (IEditorCompose will have no implementer -> black screen)");
 	}

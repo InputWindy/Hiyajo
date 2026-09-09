@@ -22,6 +22,7 @@ set_target_properties(FrameRenderFeature PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS O
 target_compile_definitions(FrameRenderFeature PRIVATE MAHO_FRAMERENDERFEATURE_MODULE_EXPORTS)
 target_link_libraries(FrameRenderFeature PUBLIC Maho)
 set_property(TARGET FrameRenderFeature PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>")
+set_target_properties(FrameRenderFeature PROPERTIES OUTPUT_NAME "FFrameRenderFeature" PREFIX "")
 target_link_libraries(FrameRenderFeature PUBLIC Render)
 set_target_properties(FrameRenderFeature PROPERTIES FOLDER "Maho/Plugins/GameEngine/RenderCore/RenderFeature")
 source_group(TREE "${CMAKE_CURRENT_LIST_DIR}" FILES ${FrameRenderFeature_PUBLIC_HEADERS} ${FrameRenderFeature_PRIVATE_HEADERS} ${FrameRenderFeature_PRIVATE_SOURCES})

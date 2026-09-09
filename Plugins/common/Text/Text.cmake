@@ -23,6 +23,7 @@ set_target_properties(Text PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 target_compile_definitions(Text PRIVATE MAHO_TEXT_MODULE_EXPORTS)
 target_link_libraries(Text PUBLIC Maho)
 set_property(TARGET Text PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>")
+set_target_properties(Text PROPERTIES OUTPUT_NAME "FTextManager" PREFIX "")
 set_target_properties(Text PROPERTIES FOLDER "Maho/Plugins/Common")
 source_group(TREE "${CMAKE_CURRENT_LIST_DIR}" FILES ${Text_PUBLIC_HEADERS} ${Text_PRIVATE_HEADERS} ${Text_PRIVATE_SOURCES})
 # -- /MAHOGEN Text --

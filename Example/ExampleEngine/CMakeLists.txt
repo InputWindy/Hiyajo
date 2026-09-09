@@ -203,6 +203,10 @@ add_dependencies(ExampleEngine Archive Compress ConsoleVariable Config Exception
 target_link_libraries(ExampleEngine PUBLIC Archive Compress ConsoleVariable Config Exception Log Name Paths Platform RHI Reflect Resource Asset Script Text Timer Unicode GameWorld Render Scene DrawTriangleFeature UISystem UIFeature FrameRenderFeature ExampleEditor EditorViewport EditorConsole EditorTheme)
 # Plugin DLLs co-locate with Maho.dll + EntryPoint so relative DLL deps resolve.
 set_property(TARGET ExampleEngine PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>")
+# Module naming protocol: the host engine DLL output name = the engine layer
+# type (MAHO_DECLARE_ENGINE first arg), so EntryPoint's MAHO_ENGINE_NAME +
+# ApplyModuleExtension resolves. PREFIX "" stops CMake's `lib` prepend on Unix.
+set_target_properties(ExampleEngine PROPERTIES OUTPUT_NAME "FExampleEngine" PREFIX "")
 
 # Cycle check — runs before every in-IDE build (host + entry depend on it).
 # Prefer the engine-local venv (Setup.bat); fall back to any system python.
@@ -249,7 +253,9 @@ target_link_libraries(Maho PUBLIC glm::glm nlohmann_json::nlohmann_json CLI11::C
 set_target_properties(Maho PROPERTIES FOLDER "Maho")
 
 add_executable(EntryPoint WIN32 Intermediate/Main.cpp)
-target_compile_definitions(EntryPoint PRIVATE MAHO_ENGINE_NAME="ExampleEngine.dll")
+# Engine module base name (no platform suffix — EntryPoint resolves it via
+# ApplyModuleExtension at runtime; never a hardcoded .dll).
+target_compile_definitions(EntryPoint PRIVATE MAHO_ENGINE_NAME="FExampleEngine")
 target_link_libraries(EntryPoint PRIVATE Maho)
 
 # Copy the project's Config/ directory next to the binary (DefaultEngine.ini etc.

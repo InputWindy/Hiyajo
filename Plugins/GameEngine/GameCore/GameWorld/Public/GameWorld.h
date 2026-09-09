@@ -100,7 +100,7 @@ class MAHO_GAMEWORLD_API FGameWorld
 	: public FLayer<IPreInit, IInit, IPostInit, IBeginFrame, ITick, IEndFrame, IExit, IPreShutdown, IShutdown, IPostShutdown>
 	, public FLayerCollector<FGameWorld>
 {
-	MAHO_DECLARE_LAYER(FGameWorld, "GameWorld.dll");
+	MAHO_DECLARE_LAYER(FGameWorld);
 
 public:
 	FGameWorld();

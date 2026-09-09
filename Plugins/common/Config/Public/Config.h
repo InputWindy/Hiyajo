@@ -23,7 +23,7 @@ namespace Config
 class FConfig
 	: public FLayer<IPreInit, IInit, IPostInit, IPreShutdown, IShutdown, IPostShutdown>
 {
-	MAHO_DECLARE_LAYER(FConfig, "Config.dll");
+	MAHO_DECLARE_LAYER(FConfig);
 
 private:
 	// -- engine layer stages (scheduler-only) --

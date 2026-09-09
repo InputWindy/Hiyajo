@@ -200,7 +200,7 @@ class MAHO_RENDER_API FRender
 	: public FLayer<IPreInit, IInit, IPostInit, IBeginFrame, ITick, IEndFrame, IExit, IPreShutdown, IShutdown, IPostShutdown>
 	, public FLayerCollector<FRender>
 {
-MAHO_DECLARE_LAYER(FRender, "Render.dll");
+MAHO_DECLARE_LAYER(FRender);
 
 	FRender();
 	~FRender() override;

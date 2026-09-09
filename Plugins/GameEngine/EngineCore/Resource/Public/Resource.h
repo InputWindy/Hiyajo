@@ -129,7 +129,7 @@ class FResourceSystem
 	, public FThreadedServer
 {
 public:
-	MAHO_DECLARE_LAYER(FResourceSystem, "Resource.dll");
+	MAHO_DECLARE_LAYER(FResourceSystem);
 
 	~FResourceSystem() override;
 

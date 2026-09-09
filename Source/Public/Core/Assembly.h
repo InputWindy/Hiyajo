@@ -16,6 +16,30 @@ namespace Maho
 {
 
 /**
+ * Append the host platform's dynamic-library suffix to a module base name.
+ *
+ * Protocol: a module (layer / engine) always compiles to  <LayerType> + suffix
+ * (e.g. FScene.dll / FScene.so / FScene.dylib). Layer.h / Engine.h macros bake
+ * the base name as #LayerType; this resolves the platform suffix at runtime so
+ * no `.dll` is ever hardcoded. iOS has no dynamic library at runtime, so the
+ * base name passes through unchanged.
+ */
+inline std::string ApplyModuleExtension(std::string_view BaseName)
+{
+#if defined(_WIN32)
+	return std::string(BaseName) + ".dll";
+#elif defined(__APPLE__)
+	return std::string(BaseName) + ".dylib";
+#elif defined(__ANDROID__)
+	return std::string(BaseName) + ".so";
+#elif defined(__linux__)
+	return std::string(BaseName) + ".so";
+#else
+	return std::string(BaseName);
+#endif
+}
+
+/**
  * Custom deleter for the OS module handle -- a DLL is released with
  * FreeLibrary/dlclose, not `delete`. FAssembly owns the handle and releases it
  * on destruction, so the host's FModuleManager just owns FAssembly values.

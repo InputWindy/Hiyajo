@@ -23,6 +23,7 @@ set_target_properties(Log PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 target_compile_definitions(Log PRIVATE MAHO_LOG_MODULE_EXPORTS)
 target_link_libraries(Log PUBLIC Maho)
 set_property(TARGET Log PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>")
+set_target_properties(Log PROPERTIES OUTPUT_NAME "FLog" PREFIX "")
 set_target_properties(Log PROPERTIES FOLDER "Maho/Plugins/Common")
 source_group(TREE "${CMAKE_CURRENT_LIST_DIR}" FILES ${Log_PUBLIC_HEADERS} ${Log_PRIVATE_HEADERS} ${Log_PRIVATE_SOURCES})
 # -- /MAHOGEN Log --

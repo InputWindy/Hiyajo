@@ -17,16 +17,16 @@
 #include <string_view>
 #include <vector>
 
-#define MAHO_DECLARE_ENGINE(EngineType, DLL)            \
-public:                                                 \
-	static Maho::FEngineBase* CreateEngine()            \
-	{                                                   \
-		return new EngineType();                        \
-	}                                                   \
-	static std::string_view GetModulePath()             \
-	{                                                   \
-		return DLL;                                     \
-	}                                                   \
+#define MAHO_DECLARE_ENGINE(EngineType)                     \
+public:                                                      \
+	static Maho::FEngineBase* CreateEngine()                 \
+	{                                                        \
+		return new EngineType();                              \
+	}                                                        \
+	static std::string GetModulePath()                       \
+	{                                                        \
+		return Maho::ApplyModuleExtension(#EngineType);        \
+	}                                                        \
 
 /**
  * Stage dispatch specializations - the primary template + specialization sugar

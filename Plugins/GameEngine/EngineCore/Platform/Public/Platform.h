@@ -124,12 +124,12 @@ public:
  *   Platform::FPlatform Platform;
  *   Platform.Initialize(0, nullptr);
  *   Platform.CreateWindow(1280, 720, "MyGame");
- *   Engine.Install("Platform.dll");
+ *   Engine.Install<FPlatform>();   // or Install(ApplyModuleExtension("FPlatform"))
  */
 class FPlatform : public FLayer<IPreInit, IInit, IPostInit, IBeginFrame, ITick, IEndFrame, IExit, IPreShutdown, IShutdown, IPostShutdown>
 {
 public:
-	MAHO_DECLARE_LAYER(FPlatform, "Platform.dll");
+	MAHO_DECLARE_LAYER(FPlatform);
 
 	FPlatform();
 	~FPlatform() override;

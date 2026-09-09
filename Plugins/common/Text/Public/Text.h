@@ -76,7 +76,7 @@ class FTextManager
 	: public FLayer<IPreInit, IInit, IPostInit, IPreShutdown, IShutdown, IPostShutdown>
 {
 public:
-	MAHO_DECLARE_LAYER(FTextManager, "Text.dll");
+	MAHO_DECLARE_LAYER(FTextManager);
 
 	[[nodiscard]] std::string_view GetCulture() const;
 	void SetCulture(std::string InCulture);

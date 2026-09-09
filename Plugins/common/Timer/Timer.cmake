@@ -23,6 +23,7 @@ set_target_properties(Timer PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 target_compile_definitions(Timer PRIVATE MAHO_TIMER_MODULE_EXPORTS)
 target_link_libraries(Timer PUBLIC Maho)
 set_property(TARGET Timer PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>")
+set_target_properties(Timer PROPERTIES OUTPUT_NAME "FTimer" PREFIX "")
 set_target_properties(Timer PROPERTIES FOLDER "Maho/Plugins/Common")
 source_group(TREE "${CMAKE_CURRENT_LIST_DIR}" FILES ${Timer_PUBLIC_HEADERS} ${Timer_PRIVATE_HEADERS} ${Timer_PRIVATE_SOURCES})
 # -- /MAHOGEN Timer --

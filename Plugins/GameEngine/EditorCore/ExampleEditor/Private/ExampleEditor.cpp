@@ -407,9 +407,10 @@ void FExampleEditor::InstallEditorComponents()
 {
 	// Editor components are loaded as DLLs and installed into this host's collector
 	// (safe point: their IEditorInit graph runs on FlushPendingUpdatePipelines).
-	Install("EditorViewport.dll");
-	Install("EditorConsole.dll");
-	//Install("EditorTheme.dll");
+	// Load by module base name + platform suffix, never a hardcoded .dll.
+	Install(Maho::ApplyModuleExtension("FEditorViewport"));
+	Install(Maho::ApplyModuleExtension("FEditorConsole"));
+	//Install(Maho::ApplyModuleExtension("FEditorTheme"));
 	FlushPendingUpdatePipelines<TTypeList<IEditorInit>, TTypeList<IEditorShutdown>>();
 }
 
@@ -854,13 +855,14 @@ void FExampleEditor::PreUnInstall(FRender& R)
 
 void FExampleEditor::ShutdownEditorComponents()
 {
-	// Uninstall by DLL path -- symmetric with Install("EditorConsole.dll"). The layer's
-	// GetName() is "FEditorConsole", but TryUninstall resolves either form, so this
-	// guarantees the component's IEditorShutdown (EditorConsole unbinding its OnLog
-	// subscription) runs BEFORE FLog::Shutdown -- no name/module asymmetry to trip on.
-	TryUninstall("EditorConsole.dll");
-	TryUninstall("EditorViewport.dll");
-	TryUninstall("EditorTheme.dll");
+	// Uninstall by module base name + suffix -- symmetric with Install(...). The
+	// layer's GetName() is "FEditorConsole", but TryUninstall resolves either form,
+	// so this guarantees the component's IEditorShutdown (EditorConsole unbinding
+	// its OnLog subscription) runs BEFORE FLog::Shutdown -- no name/module
+	// asymmetry to trip on.
+	TryUninstall(Maho::ApplyModuleExtension("FEditorConsole"));
+	TryUninstall(Maho::ApplyModuleExtension("FEditorViewport"));
+	TryUninstall(Maho::ApplyModuleExtension("FEditorTheme"));
 	FlushPendingUpdatePipelines<TTypeList<IEditorInit>, TTypeList<IEditorShutdown>>();
 }
 

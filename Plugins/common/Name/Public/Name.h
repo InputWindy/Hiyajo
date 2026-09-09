@@ -56,7 +56,7 @@ private:
 class FNamePool
 	: public FLayer<IPreInit, IInit, IPostInit, IPreShutdown, IShutdown, IPostShutdown>
 {
-	MAHO_DECLARE_LAYER(FNamePool, "Name.dll");
+	MAHO_DECLARE_LAYER(FNamePool);
 
 private:
 	// -- engine layer stages (scheduler-only) --

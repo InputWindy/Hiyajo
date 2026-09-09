@@ -29,7 +29,7 @@ namespace Maho
  */
 class FEditorConsole : public FLayer<IEditorInit, IEditorPanel, IEditorShutdown>
 {
-	MAHO_DECLARE_LAYER(FEditorConsole, "EditorConsole.dll");
+	MAHO_DECLARE_LAYER(FEditorConsole);
 
 public:
 	void Init(FExampleEditor& Editor) override;

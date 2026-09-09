@@ -33,7 +33,7 @@ struct FTriangleShader
  */
 class FDrawTriangleFeature : public FLayer<IRender>
 {
-MAHO_DECLARE_LAYER(FDrawTriangleFeature, "DrawTriangleFeature.dll");
+MAHO_DECLARE_LAYER(FDrawTriangleFeature);
 
 	FDrawTriangleFeature();
 	~FDrawTriangleFeature() override;

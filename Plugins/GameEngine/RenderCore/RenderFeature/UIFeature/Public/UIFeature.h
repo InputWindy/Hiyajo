@@ -64,7 +64,7 @@ struct FUIShader
  */
 class MAHO_UIFEATURE_API FUIFeature : public FLayer<IOnInstalled, IInitViews, IRenderUI, IPreUnInstall>
 {
-MAHO_DECLARE_LAYER(FUIFeature, "UIFeature.dll");
+MAHO_DECLARE_LAYER(FUIFeature);
 
 	FUIFeature();
 
