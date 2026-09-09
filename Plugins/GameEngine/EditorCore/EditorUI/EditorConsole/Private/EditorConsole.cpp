@@ -87,15 +87,22 @@ void FEditorConsole::Draw(FExampleEditor& Editor)
 	// menu-bar row stays visible; the filter/CVar input frames stay dark to match the gutter.
 	// Give this panel a visible soft edge (ImGuiCol_Border) so it keeps an outline -- the previous
 	// change flattened the whole chrome to the gutter color, erasing the panel frame + menu bar.
-	const ImVec4 GutterChrome = ImVec4(14.0f / 255.0f, 14.0f / 255.0f, 16.0f / 255.0f, 1.0f);
-	const ImVec4 SoftEdge = ImVec4(48.0f / 255.0f, 50.0f / 255.0f, 56.0f / 255.0f, 1.0f);
+	// Panel chrome is theme-driven now: read the live global ImGui colors so the
+	// console follows Apply/Reset like every other editor panel. The previous
+	// hard-coded GutterChrome/SoftEdge/PanelFace triples made the console immune
+	// to the theme, which is exactly what the "apply doesn't recolor console" bug
+	// traces back to.
+	const ImVec4& GutterChrome = ImGui::GetStyle().Colors[ImGuiCol_FrameBg];
+	const ImVec4& SoftEdge = ImGui::GetStyle().Colors[ImGuiCol_Border];
+	const ImVec4& PanelFace = ImGui::GetStyle().Colors[ImGuiCol_WindowBg];
 	ImGui::PushStyleColor(ImGuiCol_FrameBg, GutterChrome);
 	ImGui::PushStyleColor(ImGuiCol_Border, SoftEdge);
+	ImGui::PushStyleColor(ImGuiCol_WindowBg, PanelFace);
 
 	if (!ImGui::Begin("Console", nullptr, ImGuiWindowFlags_NoCollapse))
 	{
 		ImGui::End();
-		ImGui::PopStyleColor(2);
+		ImGui::PopStyleColor(3);
 		return;
 	}
 
@@ -173,7 +180,7 @@ void FEditorConsole::Draw(FExampleEditor& Editor)
 		}
 	}
 
-	ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.055f, 0.055f, 0.06f, 1.0f));
+	ImGui::PushStyleColor(ImGuiCol_ChildBg, ImGui::GetStyle().Colors[ImGuiCol_ChildBg]);
 	ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 3.0f);
 	// Reserve a bottom row for the CVar command box (drawn after EndChild), so the
 	// log fills the rest of the panel rather than covering the command input.
@@ -457,7 +464,7 @@ void FEditorConsole::Draw(FExampleEditor& Editor)
 	}
 
 	ImGui::End();
-	ImGui::PopStyleColor(2);
+	ImGui::PopStyleColor(3);
 
 	// Autocomplete dropdown floating just ABOVE the input box. A vertical-scroll listbox
 	// caps the visible rows; clicking a row fills the box with that cvar name. Rendered
@@ -466,7 +473,7 @@ void FEditorConsole::Draw(FExampleEditor& Editor)
 	{
 		ImGui::SetNextWindowPos(ImVec2(DropLeft, DropTop), ImGuiCond_Always);
 		ImGui::SetNextWindowSize(ImVec2(PopupW, PopupH), ImGuiCond_Always);
-		ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.10f, 0.10f, 0.11f, 0.98f));
+		ImGui::PushStyleColor(ImGuiCol_WindowBg, ImGui::GetStyle().Colors[ImGuiCol_PopupBg]);
 		ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
 		if (ImGui::Begin("##CvarSuggest", nullptr,
 			ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove

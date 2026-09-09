@@ -409,6 +409,7 @@ void FExampleEditor::InstallEditorComponents()
 	// (safe point: their IEditorInit graph runs on FlushPendingUpdatePipelines).
 	Install("EditorViewport.dll");
 	Install("EditorConsole.dll");
+	//Install("EditorTheme.dll");
 	FlushPendingUpdatePipelines<TTypeList<IEditorInit>, TTypeList<IEditorShutdown>>();
 }
 
@@ -731,16 +732,19 @@ void FExampleEditor::RenderEditorUI(FRender& R)
 	}
 	const ERHIFormat ColorFormat = EditorRT.GetFormat();
 	FDrawList& DrawList = this->DrawList;
-	if (!DrawList.HasPrimitiveData())
-	{
-		return;
-	}
+	// Always clear + present even with no visible panels, so the swapchain shows the
+	// editor's black backplate instead of an undefined (grey) surface.
 
 	FRenderTarget Target;
 	FRenderTarget::FAttachment Color;
 	Color.View = EditorRT;
 	Color.LoadOp = ERHILoadOp::Clear;
 	Color.StoreOp = ERHIStoreOp::Store;
+	const ImVec4& BgColor = GetEditorBgColor();
+	Color.ClearColor[0] = BgColor.x;
+	Color.ClearColor[1] = BgColor.y;
+	Color.ClearColor[2] = BgColor.z;
+	Color.ClearColor[3] = 1.0f;
 	Target.AddColor(Color);
 
 	if (!FontTexture.IsValid())
@@ -856,6 +860,7 @@ void FExampleEditor::ShutdownEditorComponents()
 	// subscription) runs BEFORE FLog::Shutdown -- no name/module asymmetry to trip on.
 	TryUninstall("EditorConsole.dll");
 	TryUninstall("EditorViewport.dll");
+	TryUninstall("EditorTheme.dll");
 	FlushPendingUpdatePipelines<TTypeList<IEditorInit>, TTypeList<IEditorShutdown>>();
 }
 

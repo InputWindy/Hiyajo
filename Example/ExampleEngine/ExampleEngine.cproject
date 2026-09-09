@@ -115,6 +115,10 @@
     {
       "Name": "EditorConsole",
       "Enabled": true
+    },
+    {
+      "Name": "EditorTheme",
+      "Enabled": true
     }
   ]
 }
