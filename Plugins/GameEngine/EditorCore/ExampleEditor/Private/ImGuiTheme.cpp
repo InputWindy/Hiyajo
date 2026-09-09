@@ -108,8 +108,11 @@ void ApplyMahoNightTheme()
 	Colors[ImGuiCol_Header] = Rgba(52, 54, 60, 0.75f);
 	Colors[ImGuiCol_HeaderHovered] = EdgeSoft;
 	Colors[ImGuiCol_HeaderActive] = EdgeStrong;
-	// Invisible dock/window separators (dock path uses Border; keep Separ sync).
-	Colors[ImGuiCol_Separator] = Rgba(0, 0, 0, 0.0f);
+	// Dock/window separator rest state. The dock splitter's rest fill is the Separator
+	// color overlaid on an opaque WindowBg strip (SplitterBehavior), NOT Border -- so the
+	// rest state must be the panel background itself or that strip reads as a "border"
+	// line between the two panels. Hover/active stay the bright resize accents below.
+	Colors[ImGuiCol_Separator] = Panel;
 	Colors[ImGuiCol_SeparatorHovered] = EdgeSoft;
 	Colors[ImGuiCol_SeparatorActive] = EdgeStrong;
 	Colors[ImGuiCol_ResizeGrip] = Rgba(255, 255, 255, 0.12f);
