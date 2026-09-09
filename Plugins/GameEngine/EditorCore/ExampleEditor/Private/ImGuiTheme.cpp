@@ -83,14 +83,14 @@ void ApplyMahoNightTheme()
 	Colors[ImGuiCol_WindowBg] = Panel;
 	Colors[ImGuiCol_ChildBg] = Panel;
 	Colors[ImGuiCol_PopupBg] = Rgba(28, 29, 33, 0.98f);
-	// Docked-window outer border (RenderWindowOuterBorders) -- the thin non-hover line the
-	// user sees between adjacent docked panels (e.g. Viewport | Console). It sits ON TOP of
-	// the dock splitter's WindowBg strip, so it must be transparent or it reads as a "border"
-	// line against the panel body. Hover/active feedback is independent (SeparatorHovered/
-	// SeparatorActive below), so making Border transparent keeps resize drag usable. The
-	// floating/undocked window edge is instead tinted via ImGuiCol_WindowBg+rounding
-	// (WindowBorderSize=1) and stays visible through the panel's translucent bg.
-	Colors[ImGuiCol_Border] = Rgba(0, 0, 0, 0.0f);
+	// Docked-window outer border (RenderWindowOuterBorders). The dock gutter (splitter) is
+	// chrome -- the chassis TabWell -- so the window edge must use the SAME dark chrome, or a
+	// light 1px border gets drawn at each panel's edge and reads as a "border" line between
+	// adjacent docked panels (Viewport | Console) at rest. TabWell keeps the border structure
+	// (floating windows still have an edge) while blending into the dark gutter. Hover/active
+	// feedback is independent (SeparatorHovered/SeparatorActive below), so resize drag stays
+	// usable.
+	Colors[ImGuiCol_Border] = TabWell;
 	Colors[ImGuiCol_BorderShadow] = Rgba(0, 0, 0, 0.50f);
 	Colors[ImGuiCol_FrameBg] = Well;
 	Colors[ImGuiCol_FrameBgHovered] = Raised;
@@ -112,11 +112,13 @@ void ApplyMahoNightTheme()
 	Colors[ImGuiCol_Header] = Rgba(52, 54, 60, 0.75f);
 	Colors[ImGuiCol_HeaderHovered] = EdgeSoft;
 	Colors[ImGuiCol_HeaderActive] = EdgeStrong;
-	// Dock/window separator rest state. The dock splitter's rest fill is the Separator
-	// color overlaid on an opaque WindowBg strip (SplitterBehavior), NOT Border -- so the
-	// rest state must be the panel background itself or that strip reads as a "border"
-	// line between the two panels. Hover/active stay the bright resize accents below.
-	Colors[ImGuiCol_Separator] = Panel;
+	// Dock separator rest state. The splitter's fill is the Separator color overlaid on a
+	// WindowBg strip (SplitterBehavior). The dock gutter is CHROME (the chassis TabWell behind
+	// the tab strip), so the rest state must be TabWell, not the panel color -- otherwise the
+	// light WindowBg base strip + a light overlay reads as a bright "border" line between the
+	// two panels at rest. TabWell makes the gutter blend into the dark tab strip above the
+	// console; Hover/active stay the bright resize accents below.
+	Colors[ImGuiCol_Separator] = TabWell;
 	Colors[ImGuiCol_SeparatorHovered] = EdgeSoft;
 	Colors[ImGuiCol_SeparatorActive] = EdgeStrong;
 	Colors[ImGuiCol_ResizeGrip] = Rgba(255, 255, 255, 0.12f);
