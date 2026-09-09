@@ -83,10 +83,14 @@ void ApplyMahoNightTheme()
 	Colors[ImGuiCol_WindowBg] = Panel;
 	Colors[ImGuiCol_ChildBg] = Panel;
 	Colors[ImGuiCol_PopupBg] = Rgba(28, 29, 33, 0.98f);
-	// Dock splitter rest-state fill and floating-window edge share Border. Set to the panel
-	// background so the splitter blends into the panels at rest (hover/active stay the bright
-	// ResizeGrip accents above); floating windows keep a subtle, non-glare edge.
-	Colors[ImGuiCol_Border] = Panel;
+	// Docked-window outer border (RenderWindowOuterBorders) -- the thin non-hover line the
+	// user sees between adjacent docked panels (e.g. Viewport | Console). It sits ON TOP of
+	// the dock splitter's WindowBg strip, so it must be transparent or it reads as a "border"
+	// line against the panel body. Hover/active feedback is independent (SeparatorHovered/
+	// SeparatorActive below), so making Border transparent keeps resize drag usable. The
+	// floating/undocked window edge is instead tinted via ImGuiCol_WindowBg+rounding
+	// (WindowBorderSize=1) and stays visible through the panel's translucent bg.
+	Colors[ImGuiCol_Border] = Rgba(0, 0, 0, 0.0f);
 	Colors[ImGuiCol_BorderShadow] = Rgba(0, 0, 0, 0.50f);
 	Colors[ImGuiCol_FrameBg] = Well;
 	Colors[ImGuiCol_FrameBgHovered] = Raised;
