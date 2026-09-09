@@ -41,7 +41,7 @@ void ApplyMahoNightTheme()
 	Style.FrameRounding = 2.0f;
 	Style.FrameBorderSize = 1.0f;
 	Style.ItemSpacing = ImVec2(6.0f, 5.0f);
-	Style.ItemInnerSpacing = ImVec2(5.0f, 3.0f);
+	Style.ItemInnerSpacing = ImVec2(2.0f, 3.0f);
 	Style.CellPadding = ImVec2(5.0f, 3.0f);
 	Style.IndentSpacing = 16.0f;
 	Style.ColumnsMinSpacing = 4.0f;
