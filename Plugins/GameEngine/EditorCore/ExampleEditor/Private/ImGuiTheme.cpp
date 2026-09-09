@@ -49,7 +49,7 @@ void ApplyMahoNightTheme()
 	Style.ScrollbarRounding = 2.0f;
 	Style.GrabMinSize = 10.0f;
 	Style.GrabRounding = 2.0f;
-	Style.TabRounding = 12.0f;
+	Style.TabRounding = 3.0f;
 	Style.TabBorderSize = 0.0f;
 	Style.TabBarBorderSize = 0.0f; // hide tab-bar bottom separator (uses TabSelected color)
 	Style.TabBarOverlineSize = 2.0f;
@@ -61,7 +61,7 @@ void ApplyMahoNightTheme()
 	Style.SeparatorTextBorderSize = 1.0f;
 	Style.SeparatorTextAlign = ImVec2(0.0f, 0.5f);
 	Style.SeparatorTextPadding = ImVec2(10.0f, 2.0f);
-	Style.DockingSeparatorSize = 4.0f; // dock gutter thickness (fill stays transparent via Border)
+	Style.DockingSeparatorSize = 2.0f; // dock gutter thickness (fill stays transparent via Border)
 
 	// Chrome hierarchy:
 	//   MenuBar -> chassis TabWell (dock gutters + tab strip) -> selected TabFrame (border color)
@@ -132,10 +132,10 @@ void ApplyMahoNightTheme()
 	// stays scoped to the splitter.
 	Colors[ImGuiCol_ResizeGripHovered] = Rgba(142, 147, 156);
 	Colors[ImGuiCol_ResizeGripActive] = Rgba(172, 177, 186);
-	// Tabs: the selected tab face = the dark gutter chrome (TabWell), matching the tab strip above
-	// and the docked content below -- "不高亮". Unselected tabs stay fully transparent so only their
-	// label shows against the darkest chassis (TabWell). Hover/overline stay a hair lighter (Panel)
-	// so a hovered or selected tab is still detectable without a bright block.
+	// Tabs: the selected tab face = the docked panel's outer border (ImGuiCol_Border, drawn by the
+	// dock HOST window = TabWell), so the tab is not brighter than the console frame it sits on.
+	// Unselected tabs stay fully transparent so only their label shows against the darkest chassis.
+	// Hover stays a hair lighter (Panel) so a hovered tab is still detectable without a bright block.
 	Colors[ImGuiCol_Tab] = ImVec4(Panel.x, Panel.y, Panel.z, 0.0f);
 	Colors[ImGuiCol_TabHovered] = Panel;
 	Colors[ImGuiCol_TabSelected] = TabWell;

@@ -83,12 +83,14 @@ void FEditorConsole::Draw(FExampleEditor& Editor)
 		ImGui::SetNextWindowDockID(static_cast<ImGuiID>(DockId), ImGuiCond_FirstUseEver);
 	}
 
-	// Match this panel's chrome to the dark dock gutter from the separator fix (TabWell 14,14,16),
-	// so the toolbar row (WindowBg, drawn by Begin) and the filter/CVar input frames (FrameBg)
-	// read as the same dark chrome as the Viewport|Console boundary instead of lighter gray strips.
+	// The console window body (toolbar row) keeps the panel surface (theme WindowBg) so the
+	// menu-bar row stays visible; the filter/CVar input frames stay dark to match the gutter.
+	// Give this panel a visible soft edge (ImGuiCol_Border) so it keeps an outline -- the previous
+	// change flattened the whole chrome to the gutter color, erasing the panel frame + menu bar.
 	const ImVec4 GutterChrome = ImVec4(14.0f / 255.0f, 14.0f / 255.0f, 16.0f / 255.0f, 1.0f);
-	ImGui::PushStyleColor(ImGuiCol_WindowBg, GutterChrome);
+	const ImVec4 SoftEdge = ImVec4(48.0f / 255.0f, 50.0f / 255.0f, 56.0f / 255.0f, 1.0f);
 	ImGui::PushStyleColor(ImGuiCol_FrameBg, GutterChrome);
+	ImGui::PushStyleColor(ImGuiCol_Border, SoftEdge);
 
 	if (!ImGui::Begin("Console", nullptr, ImGuiWindowFlags_NoCollapse))
 	{
@@ -171,7 +173,7 @@ void FEditorConsole::Draw(FExampleEditor& Editor)
 		}
 	}
 
-	ImGui::PushStyleColor(ImGuiCol_ChildBg, GutterChrome);
+	ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.055f, 0.055f, 0.06f, 1.0f));
 	ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 3.0f);
 	// Reserve a bottom row for the CVar command box (drawn after EndChild), so the
 	// log fills the rest of the panel rather than covering the command input.
