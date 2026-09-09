@@ -64,10 +64,9 @@ void ApplyMahoNightTheme()
 	Style.DockingSeparatorSize = 4.0f; // dock gutter thickness (fill stays transparent via Border)
 
 	// Chrome hierarchy:
-	//   MenuBar -> chassis TabWell (dock gutters + tab strip) -> TabIdle -> selected Panel
+	//   MenuBar -> chassis TabWell (dock gutters + tab strip) -> selected TabFrame (border color)
 	const ImVec4 MenuBar = Rgba(12, 12, 14);
 	const ImVec4 TabWell = Rgba(14, 14, 16);       // deepest chassis / dock gutters / tab strip bg
-	const ImVec4 TabIdle = Rgba(30, 31, 35);       // unselected tab face
 	const ImVec4 Panel = Rgba(38, 39, 43, 0.72f);  // translucent so desktop wallpaper shows through
 	const ImVec4 Well = Rgba(26, 27, 30);
 	const ImVec4 Raised = Rgba(52, 54, 60);
@@ -84,9 +83,10 @@ void ApplyMahoNightTheme()
 	Colors[ImGuiCol_WindowBg] = Panel;
 	Colors[ImGuiCol_ChildBg] = Panel;
 	Colors[ImGuiCol_PopupBg] = Rgba(28, 29, 33, 0.98f);
-	// Visible window edge for floating panels. DockSpace temporarily clears
-	// Style.Colors[Border] so docking splitters stay transparent gutters.
-	Colors[ImGuiCol_Border] = Rgba(110, 114, 124, 0.55f);
+	// Dock splitter rest-state fill and floating-window edge share Border. Set to the panel
+	// background so the splitter blends into the panels at rest (hover/active stay the bright
+	// ResizeGrip accents above); floating windows keep a subtle, non-glare edge.
+	Colors[ImGuiCol_Border] = Panel;
 	Colors[ImGuiCol_BorderShadow] = Rgba(0, 0, 0, 0.50f);
 	Colors[ImGuiCol_FrameBg] = Well;
 	Colors[ImGuiCol_FrameBgHovered] = Raised;
@@ -113,15 +113,23 @@ void ApplyMahoNightTheme()
 	Colors[ImGuiCol_SeparatorHovered] = EdgeSoft;
 	Colors[ImGuiCol_SeparatorActive] = EdgeStrong;
 	Colors[ImGuiCol_ResizeGrip] = Rgba(255, 255, 255, 0.12f);
-	Colors[ImGuiCol_ResizeGripHovered] = EdgeSoft;
-	Colors[ImGuiCol_ResizeGripActive] = EdgeStrong;
-	Colors[ImGuiCol_Tab] = TabIdle;
-	Colors[ImGuiCol_TabHovered] = Hover;
+	// Dock splitter: the rest-state gutter uses Border (kept subtle); hover/active must be
+	// BRIGHTER than that or the splitter reads inverted (rest brighter than hover). These also
+	// tint window-edge resize feedback, which dockspace windows keep transparent so the change
+	// stays scoped to the splitter.
+	Colors[ImGuiCol_ResizeGripHovered] = Rgba(142, 147, 156);
+	Colors[ImGuiCol_ResizeGripActive] = Rgba(172, 177, 186);
+	// Tabs: the selected tab merges with the docked content panel (Panel) instead of standing
+	// out as a bright block -- "不高亮". Unselected tabs render fully transparent so only their
+	// label shows against the darkest chassis (TabWell). The overline strip uses the panel
+	// background itself so it fades into the tab face and never reads as a bright arc.
+	Colors[ImGuiCol_Tab] = ImVec4(Panel.x, Panel.y, Panel.z, 0.0f);
+	Colors[ImGuiCol_TabHovered] = Panel;
 	Colors[ImGuiCol_TabSelected] = Panel;
-	Colors[ImGuiCol_TabSelectedOverline] = Rgba(110, 114, 124, 0.60f);
-	Colors[ImGuiCol_TabDimmed] = TabWell;
+	Colors[ImGuiCol_TabSelectedOverline] = Panel;
+	Colors[ImGuiCol_TabDimmed] = ImVec4(Panel.x, Panel.y, Panel.z, 0.0f);
 	Colors[ImGuiCol_TabDimmedSelected] = Panel;
-	Colors[ImGuiCol_TabDimmedSelectedOverline] = Rgba(110, 114, 124, 0.45f);
+	Colors[ImGuiCol_TabDimmedSelectedOverline] = Panel;
 	Colors[ImGuiCol_DockingPreview] = Rgba(110, 114, 124, 0.30f);
 	Colors[ImGuiCol_DockingEmptyBg] = Rgba(14, 14, 16, 0.0f); // let editor wallpaper show in empty dock areas
 	Colors[ImGuiCol_PlotLines] = Rgba(150, 165, 190);
