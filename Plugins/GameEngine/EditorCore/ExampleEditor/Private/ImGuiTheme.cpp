@@ -132,16 +132,16 @@ void ApplyMahoNightTheme()
 	// stays scoped to the splitter.
 	Colors[ImGuiCol_ResizeGripHovered] = Rgba(142, 147, 156);
 	Colors[ImGuiCol_ResizeGripActive] = Rgba(172, 177, 186);
-	// Tabs: the selected tab face = the docked panel's outer border (ImGuiCol_Border, drawn by the
-	// dock HOST window = TabWell), so the tab is not brighter than the console frame it sits on.
-	// Unselected tabs stay fully transparent so only their label shows against the darkest chassis.
-	// Hover stays a hair lighter (Panel) so a hovered tab is still detectable without a bright block.
+	// Tabs: the selected tab face = the console panel surface (Panel, opaque) so it stays visible on
+	// the dark chassis without being brighter than the console's EdgeSoft frame. Unselected tabs stay
+	// fully transparent so only their label shows. Hover stays a hair lighter (Panel) so a hovered tab
+	// is still detectable without a bright block.
 	Colors[ImGuiCol_Tab] = ImVec4(Panel.x, Panel.y, Panel.z, 0.0f);
 	Colors[ImGuiCol_TabHovered] = Panel;
-	Colors[ImGuiCol_TabSelected] = TabWell;
+	Colors[ImGuiCol_TabSelected] = ImVec4(Panel.x, Panel.y, Panel.z, 1.0f);
 	Colors[ImGuiCol_TabSelectedOverline] = Panel;
 	Colors[ImGuiCol_TabDimmed] = ImVec4(Panel.x, Panel.y, Panel.z, 0.0f);
-	Colors[ImGuiCol_TabDimmedSelected] = TabWell;
+	Colors[ImGuiCol_TabDimmedSelected] = ImVec4(Panel.x, Panel.y, Panel.z, 1.0f);
 	Colors[ImGuiCol_TabDimmedSelectedOverline] = Panel;
 	Colors[ImGuiCol_DockingPreview] = Rgba(110, 114, 124, 0.30f);
 	Colors[ImGuiCol_DockingEmptyBg] = Rgba(14, 14, 16, 0.0f); // let editor wallpaper show in empty dock areas
