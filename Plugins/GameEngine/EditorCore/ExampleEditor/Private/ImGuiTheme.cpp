@@ -134,10 +134,11 @@ void ApplyMahoNightTheme()
 	Colors[ImGuiCol_ResizeGripActive] = Rgba(172, 177, 186);
 	// Tabs: the selected tab face = the console panel surface (Panel, opaque) so it stays visible on
 	// the dark chassis without being brighter than the console's EdgeSoft frame. Unselected tabs stay
-	// fully transparent so only their label shows. Hover keeps the base look (transparent for
-	// unselected) so hovering does not light a tab up -- no hover color-change effect.
+	// fully transparent so only their label shows. Hover is locked to the selected-tab color so the
+	// active tab never shifts on hover; an unselected tab hovers to the same Panel face (soft, and
+	// identical to a selected tab) rather than a distracting color change.
 	Colors[ImGuiCol_Tab] = ImVec4(Panel.x, Panel.y, Panel.z, 0.0f);
-	Colors[ImGuiCol_TabHovered] = ImVec4(Panel.x, Panel.y, Panel.z, 0.0f);
+	Colors[ImGuiCol_TabHovered] = Panel;
 	Colors[ImGuiCol_TabSelected] = ImVec4(Panel.x, Panel.y, Panel.z, 1.0f);
 	Colors[ImGuiCol_TabSelectedOverline] = Panel;
 	Colors[ImGuiCol_TabDimmed] = ImVec4(Panel.x, Panel.y, Panel.z, 0.0f);
