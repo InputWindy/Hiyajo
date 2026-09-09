@@ -49,7 +49,11 @@ void ApplyMahoNightTheme()
 	Style.ScrollbarRounding = 2.0f;
 	Style.GrabMinSize = 10.0f;
 	Style.GrabRounding = 2.0f;
-	Style.TabRounding = 3.0f;
+	// Square tab corners: a nonzero TabRounding leaves the chassis (TitleBg/Border) showing as a
+	// half-round notch at the filled tab's top-left corner and a left edge that doesn't reach the
+	// top. Square fill covers the full rect -- no notch, no seam. (Dock tab bar backplate is the
+	// host title bar, not a rounded TabBarBg, so rounding can't be matched away.)
+	Style.TabRounding = 0.0f;
 	Style.TabBorderSize = 0.0f;
 	Style.TabBarBorderSize = 0.0f; // hide tab-bar bottom separator (uses TabSelected color)
 	Style.TabBarOverlineSize = 2.0f;
