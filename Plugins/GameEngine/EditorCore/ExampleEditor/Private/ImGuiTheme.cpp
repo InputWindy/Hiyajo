@@ -95,9 +95,13 @@ void ApplyMahoNightTheme()
 	Colors[ImGuiCol_FrameBg] = Well;
 	Colors[ImGuiCol_FrameBgHovered] = Raised;
 	Colors[ImGuiCol_FrameBgActive] = Pressed;
-	Colors[ImGuiCol_TitleBg] = Rgba(14, 14, 16, 0.75f);
-	Colors[ImGuiCol_TitleBgActive] = Rgba(14, 14, 16, 0.75f);
-	Colors[ImGuiCol_TitleBgCollapsed] = Rgba(14, 14, 16, 0.75f);
+	// Docked tab strip (the dock node's title bar, drawn by DockNodeUpdate with the global
+	// TitleBg). The chrome hierarchy makes this the chassis TabWell; the 0.75 alpha rendered a
+	// hair lighter than the opaque gutter, so at rest the tab strip read as a faint lighter band
+	// above the selected tab. Use the exact gutter color so the whole strip is uniform chrome.
+	Colors[ImGuiCol_TitleBg] = TabWell;
+	Colors[ImGuiCol_TitleBgActive] = TabWell;
+	Colors[ImGuiCol_TitleBgCollapsed] = TabWell;
 	Colors[ImGuiCol_MenuBarBg] = MenuBar;
 	Colors[ImGuiCol_ScrollbarBg] = TabWell;
 	Colors[ImGuiCol_ScrollbarGrab] = Raised;
@@ -128,16 +132,16 @@ void ApplyMahoNightTheme()
 	// stays scoped to the splitter.
 	Colors[ImGuiCol_ResizeGripHovered] = Rgba(142, 147, 156);
 	Colors[ImGuiCol_ResizeGripActive] = Rgba(172, 177, 186);
-	// Tabs: the selected tab merges with the docked content panel (Panel) instead of standing
-	// out as a bright block -- "不高亮". Unselected tabs render fully transparent so only their
-	// label shows against the darkest chassis (TabWell). The overline strip uses the panel
-	// background itself so it fades into the tab face and never reads as a bright arc.
+	// Tabs: the selected tab face = the dark gutter chrome (TabWell), matching the tab strip above
+	// and the docked content below -- "不高亮". Unselected tabs stay fully transparent so only their
+	// label shows against the darkest chassis (TabWell). Hover/overline stay a hair lighter (Panel)
+	// so a hovered or selected tab is still detectable without a bright block.
 	Colors[ImGuiCol_Tab] = ImVec4(Panel.x, Panel.y, Panel.z, 0.0f);
 	Colors[ImGuiCol_TabHovered] = Panel;
-	Colors[ImGuiCol_TabSelected] = Panel;
+	Colors[ImGuiCol_TabSelected] = TabWell;
 	Colors[ImGuiCol_TabSelectedOverline] = Panel;
 	Colors[ImGuiCol_TabDimmed] = ImVec4(Panel.x, Panel.y, Panel.z, 0.0f);
-	Colors[ImGuiCol_TabDimmedSelected] = Panel;
+	Colors[ImGuiCol_TabDimmedSelected] = TabWell;
 	Colors[ImGuiCol_TabDimmedSelectedOverline] = Panel;
 	Colors[ImGuiCol_DockingPreview] = Rgba(110, 114, 124, 0.30f);
 	Colors[ImGuiCol_DockingEmptyBg] = Rgba(14, 14, 16, 0.0f); // let editor wallpaper show in empty dock areas

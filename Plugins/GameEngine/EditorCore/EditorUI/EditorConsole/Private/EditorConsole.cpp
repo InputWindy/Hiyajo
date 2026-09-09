@@ -83,9 +83,17 @@ void FEditorConsole::Draw(FExampleEditor& Editor)
 		ImGui::SetNextWindowDockID(static_cast<ImGuiID>(DockId), ImGuiCond_FirstUseEver);
 	}
 
+	// Match this panel's chrome to the dark dock gutter from the separator fix (TabWell 14,14,16),
+	// so the toolbar row (WindowBg, drawn by Begin) and the filter/CVar input frames (FrameBg)
+	// read as the same dark chrome as the Viewport|Console boundary instead of lighter gray strips.
+	const ImVec4 GutterChrome = ImVec4(14.0f / 255.0f, 14.0f / 255.0f, 16.0f / 255.0f, 1.0f);
+	ImGui::PushStyleColor(ImGuiCol_WindowBg, GutterChrome);
+	ImGui::PushStyleColor(ImGuiCol_FrameBg, GutterChrome);
+
 	if (!ImGui::Begin("Console", nullptr, ImGuiWindowFlags_NoCollapse))
 	{
 		ImGui::End();
+		ImGui::PopStyleColor(2);
 		return;
 	}
 
@@ -163,7 +171,7 @@ void FEditorConsole::Draw(FExampleEditor& Editor)
 		}
 	}
 
-	ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.055f, 0.055f, 0.06f, 1.0f));
+	ImGui::PushStyleColor(ImGuiCol_ChildBg, GutterChrome);
 	ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 3.0f);
 	// Reserve a bottom row for the CVar command box (drawn after EndChild), so the
 	// log fills the rest of the panel rather than covering the command input.
@@ -447,6 +455,7 @@ void FEditorConsole::Draw(FExampleEditor& Editor)
 	}
 
 	ImGui::End();
+	ImGui::PopStyleColor(2);
 
 	// Autocomplete dropdown floating just ABOVE the input box. A vertical-scroll listbox
 	// caps the visible rows; clicking a row fills the box with that cvar name. Rendered
