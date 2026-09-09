@@ -264,6 +264,14 @@ FUIFeature::FUIFeature()
 	// (their submits reach the queue first), so the UI composites over the scene.
 	MyStage<IRenderUI>().IsWaiting<Scene::FScene>().ForStage<IEndRender>();
 	MyStage<IRenderUI>().IsWaiting<FDrawTriangleFeature>().ForStage<IEndRender>();
+	// The composite base (InitViews) resolves the SceneColor mirror by name and the
+	// compose pass (RenderUI) samples that SAME texture. On a (re)size the scene's
+	// IBeginRender -> EnsureTargets destroys + recreates SceneColor. Without a declared
+	// edge, IInitViews (a parallel worker) can resolve the STALE pre-resize mirror before
+	// the recreate lands; RenderUI then flips the NEW SceneColor to SR but draws the OLD
+	// one (still COLOR_ATTACHMENT) -> vkCmdDraw layout-mismatch validation error. Pin the
+	// data-flow edge so the reader always sees the current target.
+	MyStage<IInitViews>().IsWaiting<Scene::FScene>().ForStage<IBeginRender>();
 	// This feature is OFF-SCREEN ONLY now: it draws the ImGui list into its own
 	// composite target and sets it as FRender's present target. It no longer owns
 	// the present blit -- the frame feature does. Declare the reverse edge so the
@@ -446,6 +454,10 @@ void FUIFeature::InitViews(FRender& R)
 				R.ReleaseTexture(UIRenderTarget);
 				UIRenderTarget.Reset();
 			}
+			// Recreated target's native starts UNDEFINED; it is re-transitioned Common ->
+			// RenderTarget below, so the stale SR flag must be cleared or RenderUI's head
+			// would emit a bogus ShaderResource -> RenderTarget barrier (oldLayout mismatch).
+			bUIRenderTargetLayoutSR = false;
 			FRHITextureDesc Desc;
 			Desc.Format = R.GetSwapchainFormat();
 			Desc.Dimension = ERHITextureDimension::Tex2D;
@@ -816,6 +828,17 @@ void FUIFeature::RenderUI(FRender& R)
 	FDrawList& DrawList = this->DrawList;
 	if (!DrawList.HasPrimitiveData())
 	{
+		// No draws this frame, but the editor's pass3 always samples GetPresentTarget()
+		// (the game composite) and NEVER re-flips it -- it relies on pass2 leaving
+		// UIRenderTarget in SHADER_READ_ONLY for exactly that sampled read. So even on a
+		// no-draw frame we must keep the present slot on UIRenderTarget and (editor build)
+		// flip it to SR; otherwise pass3 reads a COLOR_ATTACHMENT texture as a shader
+		// resource (descriptors hardcode SHADER_READ_ONLY) and the validator fires. The
+		// head flip below undoes this the next time a draw actually happens.
+		R.SetPresentTarget(UIRenderTarget);
+#ifdef MAHO_EDITOR_BUILD
+		TransitionUIRenderTargetForSampling(R);
+#endif
 		return;
 	}
 

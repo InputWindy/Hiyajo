@@ -815,7 +815,6 @@ void FExampleEditor::EditorCompose(FRender& R)
 	// InitViews builds the ImGui frame (feed + NewFrame + panels + Render + translate),
 	// RenderUI composes it into EditorRT and takes over the present target. Panels /
 	// component draws (DrawEditorPanels) are the content you fill.
-	MAHO_LOG_CORE_INFO("ExampleEditor::EditorCompose (pass3)");
 	InitEditorViews(R);
 	RenderEditorUI(R);
 }

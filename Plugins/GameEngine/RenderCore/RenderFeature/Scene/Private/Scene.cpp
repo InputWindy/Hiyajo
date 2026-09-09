@@ -133,6 +133,14 @@ void FScene::EnsureTargets(FRender& R)
 	// feature's own command list (the first list to use the targets), not the
 	// frame buffer -- see Render().
 	bTargetsNeedTransition = true;
+	// SceneColor was just (re)created: its native is born VK_IMAGE_LAYOUT_UNDEFINED,
+	// but SceneColorLayout still holds the PREVIOUS target's value (RenderTarget after
+	// a normal frame). If it is not reset here, the reactive Common -> RenderTarget
+	// transition in Render() is skipped and every frame afterwards renders into an
+	// image the validator still tracks as UNDEFINED (VUID-vkCmdBeginRendering-
+	// pRenderingInfo-09592), and the downstream sampling flip chain desyncs. Depth is
+	// already handled by bTargetsNeedTransition; color needs its own flag reset.
+	SceneColorLayout = ESceneColorLayout::Undefined;
 
 	CachedWidth = W;
 	CachedHeight = H;

@@ -354,6 +354,19 @@ void FRender::EndFrame(FEngineBase&)
 	{
 		RenderGraph->Flush();
 	}
+	// Retire any per-pass submit fence left pending by the last AddPass (and, by
+	// waiting, guarantee this frame's per-pass GPU work completed before the frame
+	// buffer's submit/present is queued behind it).
+	if (IRHI* P = RHI.get())
+	{
+		std::lock_guard<std::mutex> Lock(PassSubmitMutex);
+		for (FRHIFence* Fence : PendingPassFences)
+		{
+			P->WaitForFence(Fence);
+			P->DestroyFence(Fence);
+		}
+		PendingPassFences.clear();
+	}
 	if (IRHI* RHIp = RHI.get())
 	{
 		RHIp->EndFrame();
@@ -802,12 +815,30 @@ void FRender::AddPass(ERHICommandListType PassType, std::function<void(FRHIComma
 	{
 		return;
 	}
-	List->Begin();
-	PassFn(*List);
-	List->End();
+	// If earlier per-pass submits are still pending, wait them BEFORE this pass records.
+	// Recording rewrites resources those pending submits read (the mutable descriptor set
+	// updated at record time below, or a transient buffer this pass reuses). Without this
+	// a later pass mutates a descriptor set / frees a buffer an in-flight command buffer
+	// still references (Vulkan validation VUID-*-03047 / VUID-*-00922). The whole
+	// wait -> record -> submit is one critical section so a concurrent stage node cannot
+	// slip a submit in between another thread's wait and submit.
 	if (IRHI* P = RHI.get())
 	{
-		P->Submit(List, PassType);
+		std::lock_guard<std::mutex> Lock(PassSubmitMutex);
+		for (FRHIFence* Fence : PendingPassFences)
+		{
+			P->WaitForFence(Fence);
+			P->DestroyFence(Fence);
+		}
+		PendingPassFences.clear();
+
+		List->Begin();
+		PassFn(*List);
+		List->End();
+
+		FRHIFence* Fence = P->CreateFence(false);
+		P->Submit(List, PassType, nullptr, 0, nullptr, 0, Fence);
+		PendingPassFences.push_back(Fence);
 	}
 }
 

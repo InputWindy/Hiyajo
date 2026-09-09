@@ -539,6 +539,17 @@ private:
 #endif
 	std::unique_ptr<FLayerTaskGraph<FRenderStages, FRender>> RenderGraph;
 
+	// Per-pass submit serialization. AddPass records a pass then submits it immediately
+	// (un-fenced). A later pass reuses a resource the earlier, still-pending submit reads
+	// -- its mutable descriptor set (rewritten at record time) or a transient buffer --
+	// so without ordering the later pass rewrites a descriptor set / frees a buffer the
+	// GPU is still reading (VUID-vkUpdateDescriptorSets-None-03047 / VUID-vkDestroyBuffer-
+	// buffer-00922). Each per-pass submit carries its own fence; the next AddPass waits
+	// every prior one before recording. Guarded because render-graph stage nodes can
+	// record passes concurrently on the thread pool.
+	std::mutex PassSubmitMutex;
+	std::vector<FRHIFence*> PendingPassFences;
+
 	// -- CPU asset -> GPU mirror --
 	/** Asset FName -> RDG mirror resource (texture or buffer). Owned by the render
 	 *  resource pool; a Persistent texture/buffer stays alive until pool shutdown.
