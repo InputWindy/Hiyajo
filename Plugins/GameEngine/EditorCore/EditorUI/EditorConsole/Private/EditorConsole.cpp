@@ -2,6 +2,7 @@
 
 #include <cctype>
 #include <cstdint>
+#include <algorithm>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -118,9 +119,10 @@ void FEditorConsole::Draw(FExampleEditor& Editor)
 	ImGui::SameLine();
 	if (ImGui::Button("Clear"))
 	{
-		std::lock_guard<std::mutex> Lock(LinesMutex);
-		Lines.clear();
-		SelectedLogLine = -1;
+			std::lock_guard<std::mutex> Lock(LinesMutex);
+			Lines.clear();
+			SelAnchor = -1;
+			SelEnd = -1;
 	}
 
 	// Case-insensitive filter needle, computed once per frame from the box text.
@@ -173,25 +175,66 @@ void FEditorConsole::Draw(FExampleEditor& Editor)
 		// UE/Unity per-row model: every log line is its OWN selectable, so per-level
 		// color (PushStyleColor on ImGuiCol_Text) coexists with click-to-select + Ctrl+C.
 		// A single InputTextMultiline (the "rich text box") cannot do per-line color.
-			// The per-line ID must be unique even when two lines render identical text
-			// (e.g. repeated "Info: ExampleEditor: EditorCompose (pass3)" rows). That is
-			// exactly why the write-up above warns about `PushID()/PopID()` in loops:
-			// same text -> same ImGui ID -> "conflicting ID" programmer error. Scope each
-			// Selectable under PushID(i)/PopID() so the index disambiguates duplicates.
-			for (std::size_t i = 0; i < Snapshot.size(); ++i)
+		// Multi-line select: left-click a line seeds the anchor; drag (or Shift+click)
+		// extends the range; every line in [min,max] highlights; Ctrl+C copies the range.
+		const int n = static_cast<int>(Snapshot.size());
+		const int SelLo = (SelAnchor >= 0 && SelEnd >= 0) ? (SelAnchor < SelEnd ? SelAnchor : SelEnd) : -1;
+		const int SelHi = (SelAnchor >= 0 && SelEnd >= 0) ? (SelAnchor > SelEnd ? SelAnchor : SelEnd) : -1;
+		std::vector<float> LineBottom(n);
+		bool AnyLineClicked = false;
+
+		// The per-line ID must be unique even when two lines render identical text
+		// (e.g. repeated "Info: ExampleEditor: EditorCompose (pass3)" rows). That is
+		// exactly why the write-up above warns about `PushID()/PopID()` in loops:
+		// same text -> same ImGui ID -> "conflicting ID" programmer error. Scope each
+		// Selectable under PushID(i)/PopID() so the index disambiguates duplicates.
+		for (int i = 0; i < n; ++i)
+		{
+			const FLogEntry& E = Snapshot[i];
+			const std::string Text = BuildLine(E);
+			ImGui::PushID(i);
+			ImGui::PushStyleColor(ImGuiCol_Text, LevelColor(E.Level));
+			const bool IsSelected = (i >= SelLo && i <= SelHi);
+			ImGui::Selectable(Text.c_str(), IsSelected);
+			if (ImGui::IsItemClicked(ImGuiMouseButton_Left))
 			{
-				const FLogEntry& E = Snapshot[i];
-				const std::string Text = BuildLine(E);
-				ImGui::PushID(static_cast<int>(i));
-				ImGui::PushStyleColor(ImGuiCol_Text, LevelColor(E.Level));
-				if (ImGui::Selectable(Text.c_str(), static_cast<int>(i) == SelectedLogLine))
+				AnyLineClicked = true;
+				if (ImGui::GetIO().KeyShift)
 				{
-					SelectedLogLine = static_cast<int>(i);
+					if (SelAnchor < 0) { SelAnchor = i; }
+					SelEnd = i;
 				}
-				ImGui::PopStyleColor();
-				ImGui::PopID();
+				else
+				{
+					SelAnchor = i;
+					SelEnd = i;
+				}
 			}
+			ImGui::PopStyleColor();
+			LineBottom[i] = ImGui::GetItemRectMax().y;
+			ImGui::PopID();
+		}
 		ImGui::PopStyleVar();
+
+		// Drag left across rows to extend the selection to the line under the cursor.
+		if (ImGui::IsMouseDragging(ImGuiMouseButton_Left) && SelAnchor >= 0 && n > 0)
+		{
+			const float MouseY = ImGui::GetMousePos().y;
+			int Hover = -1;
+			for (int i = 0; i < n; ++i)
+			{
+				if (MouseY <= LineBottom[i]) { Hover = i; break; }
+			}
+			if (Hover < 0) { Hover = n - 1; }
+			SelEnd = Hover;
+		}
+
+		// Clicking empty area (not on a line) clears the selection.
+		if (ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !AnyLineClicked)
+		{
+			SelAnchor = -1;
+			SelEnd = -1;
+		}
 
 		// Sticky-bottom policy:
 		//   (1) thumb pinned to the bottom -> follow the newest line (stays at bottom).
@@ -229,18 +272,28 @@ void FEditorConsole::Draw(FExampleEditor& Editor)
 	ImGui::PopStyleVar();
 	ImGui::PopStyleColor();
 
-	// UE/Unity-style copy: click a line to select it, Ctrl+C copies that line.
-	if (SelectedLogLine >= 0 && static_cast<std::size_t>(SelectedLogLine) < Snapshot.size())
+	// UE/Unity-style copy: Ctrl+C copies the selected line range.
+	if (SelAnchor >= 0 && SelEnd >= 0)
 	{
-		// The editor context may surface Ctrl either as io.KeyCtrl, the ImGuiMod_Ctrl
-		// key, or the LeftCtrl/RightCtrl named keys -- accept any of them.
-		const bool CtrlDown = ImGui::GetIO().KeyCtrl
-			|| ImGui::IsKeyDown(ImGuiMod_Ctrl)
-			|| ImGui::IsKeyDown(ImGuiKey_LeftCtrl) || ImGui::IsKeyDown(ImGuiKey_RightCtrl);
-		if (ImGui::IsKeyPressed(ImGuiKey_C, false) && CtrlDown)
+		const int lo = SelAnchor < SelEnd ? SelAnchor : SelEnd;
+		const int hi = SelAnchor > SelEnd ? SelAnchor : SelEnd;
+		if (lo >= 0 && hi < static_cast<int>(Snapshot.size()))
 		{
-			const std::string Sel = BuildLine(Snapshot[static_cast<std::size_t>(SelectedLogLine)]);
-			ImGui::SetClipboardText(Sel.c_str());
+			// The editor context may surface Ctrl either as io.KeyCtrl, the ImGuiMod_Ctrl
+			// key, or the LeftCtrl/RightCtrl named keys -- accept any of them.
+			const bool CtrlDown = ImGui::GetIO().KeyCtrl
+				|| ImGui::IsKeyDown(ImGuiMod_Ctrl)
+				|| ImGui::IsKeyDown(ImGuiKey_LeftCtrl) || ImGui::IsKeyDown(ImGuiKey_RightCtrl);
+			if (ImGui::IsKeyPressed(ImGuiKey_C, false) && CtrlDown)
+			{
+				std::string Sel;
+				for (int i = lo; i <= hi; ++i)
+				{
+					Sel += BuildLine(Snapshot[i]);
+					Sel += '\n';
+				}
+				ImGui::SetClipboardText(Sel.c_str());
+			}
 		}
 	}
 

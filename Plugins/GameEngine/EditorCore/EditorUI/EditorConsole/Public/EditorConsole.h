@@ -52,10 +52,12 @@ private:
 	std::mutex                LinesMutex;   // guards Lines against producer (LogLine) races
 	std::deque<FLogEntry>     Lines;
 	FSubscriptionID           ListenerId = 0;
-	/** UE/Unity-style per-line selection: the line the user last clicked (index into the
-	 *  current Snapshot, -1 = none). Ctrl+C copies it; per-line color and click-to-select
-	 *  coexist because every line is its own Selectable, not one shared InputTextMultiline. */
-	int                       SelectedLogLine = -1;
+	/** UE/Unity-style multi-line selection (indices into the current Snapshot):
+	 *  click a line to seed the anchor, drag (or Shift+click) to extend the range,
+	 *  Ctrl+C copies the whole range. Per-line color and click-to-select coexist
+	 *  because every line is its own Selectable, not one shared InputTextMultiline. */
+	int                       SelAnchor = -1;   // selection start line (anchor), -1 = none
+	int                       SelEnd = -1;      // selection end line, -1 = none
 
 	/** Head lines dropped by the MaxLines trim since the last frame's snapshot. The frame
 	 *  thread consumes this (under LinesMutex) to shift the scroll view back down, so a
