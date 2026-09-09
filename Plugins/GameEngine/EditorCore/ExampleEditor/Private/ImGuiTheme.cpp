@@ -17,6 +17,34 @@ namespace
 		A);
 }
 
+/** Shift a color toward white (t>0) or toward black (t<0) by a fixed amount.
+ *  The whole theme derives every state color from the three palette knobs via
+ *  this single rule, so retuning the palette retunes every widget at once. */
+[[nodiscard]] ImVec4 Shade(const ImVec4& C, float T)
+{
+	T = T > 1.0f ? 1.0f : (T < -1.0f ? -1.0f : T);
+	if (T >= 0.0f)
+	{
+		const float K = 1.0f - T;
+		return ImVec4(C.x + (1.0f - C.x) * T, C.y + (1.0f - C.y) * T, C.z + (1.0f - C.z) * T, C.w);
+	}
+	else
+	{
+		const float K = 1.0f + T;
+		return ImVec4(C.x * K, C.y * K, C.z * K, C.w);
+	}
+}
+
+// ── 3-knob palette ─────────────────────────────────────────────────────
+// The entire editor deploys exactly three colors. Hover / active / pressed /
+// selected are derived from `Accent` by Shade() only -- no per-widget hue.
+//   Bg     black background (window faces, tab strip backplate, panels)
+//   Border deep-grey component border / recess (panels edge, dock gutter, ...)
+//   Accent bright-grey buttons / emphasis / readable text
+const ImVec4 Bg     = Rgba(18, 19, 22);
+const ImVec4 Border = Rgba(54, 56, 63);
+const ImVec4 Accent = Rgba(150, 155, 166);
+
 } // namespace
 
 void ApplyMahoNightTheme()
@@ -49,12 +77,15 @@ void ApplyMahoNightTheme()
 	Style.ScrollbarRounding = 2.0f;
 	Style.GrabMinSize = 10.0f;
 	Style.GrabRounding = 2.0f;
-	// TabRounding applies to the SELECTED tab only. The engine-side patch (imgui_widgets.cpp
-	// TabItemBackground) squares non-selected tabs, so only the active page keeps the rounded top
-	// "classic tab" shape; hovered/other filled tabs stay square (no chassis notch, no left seam).
+	// The selected tab keeps its rounded top (a classic "active page" tab shape).
+	// Because BOTH the dock tab strip backplate (TitleBg) and the selected-tab fill
+	// (TabSelected) are the SAME Bg color, the rounded top-left corner reveals nothing
+	// but the background -- no dark notch, no left seam. (The notch appears only when
+	// the backplate is a DIFFERENT color than the fill; keeping both = background makes
+	// the seam invisible.)
 	Style.TabRounding = 3.0f;
 	Style.TabBorderSize = 0.0f;
-	Style.TabBarBorderSize = 0.0f; // hide tab-bar bottom separator (uses TabSelected color)
+	Style.TabBarBorderSize = 0.0f; // hide tab-bar bottom separator (uses overline color)
 	Style.TabBarOverlineSize = 2.0f;
 	Style.TabCloseButtonMinWidthSelected = -1.0f;
 	Style.TabCloseButtonMinWidthUnselected = 0.0f;
@@ -66,102 +97,82 @@ void ApplyMahoNightTheme()
 	Style.SeparatorTextPadding = ImVec2(10.0f, 2.0f);
 	Style.DockingSeparatorSize = 2.0f; // dock gutter thickness (fill stays transparent via Border)
 
-	// Chrome hierarchy:
-	//   MenuBar -> chassis TabWell (dock gutters + tab strip) -> selected TabFrame (border color)
-	const ImVec4 MenuBar = Rgba(12, 12, 14);
-	const ImVec4 TabWell = Rgba(14, 14, 16);       // deepest chassis / dock gutters / tab strip bg
-	const ImVec4 Panel = Rgba(38, 39, 43, 0.72f);  // translucent so desktop wallpaper shows through
-	const ImVec4 Well = Rgba(26, 27, 30);
-	const ImVec4 Raised = Rgba(52, 54, 60);
-	const ImVec4 Hover = Rgba(66, 70, 78);
-	const ImVec4 Pressed = Rgba(30, 31, 35);
-	const ImVec4 EdgeStrong = Rgba(96, 100, 112);
-	const ImVec4 EdgeSoft = Rgba(48, 50, 56);
-	const ImVec4 Text = Rgba(236, 237, 240);
-	const ImVec4 TextMuted = Rgba(124, 128, 138);
-
 	ImVec4* Colors = Style.Colors;
-	Colors[ImGuiCol_Text] = Text;
-	Colors[ImGuiCol_TextDisabled] = TextMuted;
-	Colors[ImGuiCol_WindowBg] = Panel;
-	Colors[ImGuiCol_ChildBg] = Panel;
-	Colors[ImGuiCol_PopupBg] = Rgba(28, 29, 33, 0.98f);
-	// Docked-window outer border (RenderWindowOuterBorders). The dock gutter (splitter) is
-	// chrome -- the chassis TabWell -- so the window edge must use the SAME dark chrome, or a
-	// light 1px border gets drawn at each panel's edge and reads as a "border" line between
-	// adjacent docked panels (Viewport | Console) at rest. TabWell keeps the border structure
-	// (floating windows still have an edge) while blending into the dark gutter. Hover/active
-	// feedback is independent (SeparatorHovered/SeparatorActive below), so resize drag stays
-	// usable.
-	Colors[ImGuiCol_Border] = TabWell;
+
+	// Text / emphasis.
+	Colors[ImGuiCol_Text] = Accent;
+	Colors[ImGuiCol_TextDisabled] = Shade(Accent, -0.35f);
+	Colors[ImGuiCol_TextLink] = Accent;
+	Colors[ImGuiCol_TextSelectedBg] = Shade(Accent, -0.75f);
+	Colors[ImGuiCol_CheckMark] = Accent;
+
+	// Faces -- all black background.
+	Colors[ImGuiCol_WindowBg] = Bg;
+	Colors[ImGuiCol_ChildBg] = Bg;
+	Colors[ImGuiCol_PopupBg] = Bg;
+	Colors[ImGuiCol_MenuBarBg] = Bg;
+	Colors[ImGuiCol_TableHeaderBg] = Bg;
+	// Docked tab strip backplate == Bg, and the selected-tab fill == Bg, so the
+	// rounded corner merges into the backplate (no seam). See TabRounding note.
+	Colors[ImGuiCol_TitleBg] = Bg;
+	Colors[ImGuiCol_TitleBgActive] = Bg;
+	Colors[ImGuiCol_TitleBgCollapsed] = Bg;
+
+	// Border / recess.
+	Colors[ImGuiCol_Border] = Border;
 	Colors[ImGuiCol_BorderShadow] = Rgba(0, 0, 0, 0.50f);
-	Colors[ImGuiCol_FrameBg] = Well;
-	Colors[ImGuiCol_FrameBgHovered] = Raised;
-	Colors[ImGuiCol_FrameBgActive] = Pressed;
-	// Docked tab strip (the dock node's title bar, drawn by DockNodeUpdate with the global
-	// TitleBg). The chrome hierarchy makes this the chassis TabWell; the 0.75 alpha rendered a
-	// hair lighter than the opaque gutter, so at rest the tab strip read as a faint lighter band
-	// above the selected tab. Use the exact gutter color so the whole strip is uniform chrome.
-	Colors[ImGuiCol_TitleBg] = TabWell;
-	Colors[ImGuiCol_TitleBgActive] = TabWell;
-	Colors[ImGuiCol_TitleBgCollapsed] = TabWell;
-	Colors[ImGuiCol_MenuBarBg] = MenuBar;
-	Colors[ImGuiCol_ScrollbarBg] = TabWell;
-	Colors[ImGuiCol_ScrollbarGrab] = Raised;
-	Colors[ImGuiCol_ScrollbarGrabHovered] = Hover;
-	Colors[ImGuiCol_ScrollbarGrabActive] = EdgeStrong;
-	Colors[ImGuiCol_CheckMark] = Rgba(150, 155, 164);
-	Colors[ImGuiCol_SliderGrab] = Rgba(110, 114, 124);
-	Colors[ImGuiCol_SliderGrabActive] = Rgba(150, 155, 164);
-	Colors[ImGuiCol_Button] = Raised;
-	Colors[ImGuiCol_ButtonHovered] = Hover;
-	Colors[ImGuiCol_ButtonActive] = Pressed;
-	Colors[ImGuiCol_Header] = Rgba(52, 54, 60, 0.75f);
-	Colors[ImGuiCol_HeaderHovered] = EdgeSoft;
-	Colors[ImGuiCol_HeaderActive] = EdgeStrong;
-	// Dock separator rest state. The splitter's fill is the Separator color overlaid on a
-	// WindowBg strip (SplitterBehavior). The dock gutter is CHROME (the chassis TabWell behind
-	// the tab strip), so the rest state must be TabWell, not the panel color -- otherwise the
-	// light WindowBg base strip + a light overlay reads as a bright "border" line between the
-	// two panels at rest. TabWell makes the gutter blend into the dark tab strip above the
-	// console; Hover/active stay the bright resize accents below.
-	Colors[ImGuiCol_Separator] = TabWell;
-	Colors[ImGuiCol_SeparatorHovered] = EdgeSoft;
-	Colors[ImGuiCol_SeparatorActive] = EdgeStrong;
-	Colors[ImGuiCol_ResizeGrip] = Rgba(255, 255, 255, 0.12f);
-	// Dock splitter: the rest-state gutter uses Border (kept subtle); hover/active must be
-	// BRIGHTER than that or the splitter reads inverted (rest brighter than hover). These also
-	// tint window-edge resize feedback, which dockspace windows keep transparent so the change
-	// stays scoped to the splitter.
-	Colors[ImGuiCol_ResizeGripHovered] = Rgba(142, 147, 156);
-	Colors[ImGuiCol_ResizeGripActive] = Rgba(172, 177, 186);
-	// Tabs: the selected tab face = the console panel surface (Panel, opaque) so it stays visible on
-	// the dark chassis without being brighter than the console's EdgeSoft frame. Unselected tabs stay
-	// fully transparent so only their label shows. Hover is locked to the SELECTED-tab color at full
-	// alpha so the active tab never shifts on hover -- a translucent hover would let the chassis show
-	// through and read as a paler tab.
-	Colors[ImGuiCol_Tab] = ImVec4(Panel.x, Panel.y, Panel.z, 0.0f);
-	Colors[ImGuiCol_TabHovered] = ImVec4(Panel.x, Panel.y, Panel.z, 1.0f);
-	Colors[ImGuiCol_TabSelected] = ImVec4(Panel.x, Panel.y, Panel.z, 1.0f);
-	Colors[ImGuiCol_TabSelectedOverline] = Panel;
-	Colors[ImGuiCol_TabDimmed] = ImVec4(Panel.x, Panel.y, Panel.z, 0.0f);
-	Colors[ImGuiCol_TabDimmedSelected] = ImVec4(Panel.x, Panel.y, Panel.z, 1.0f);
-	Colors[ImGuiCol_TabDimmedSelectedOverline] = Panel;
-	Colors[ImGuiCol_DockingPreview] = Rgba(110, 114, 124, 0.30f);
-	Colors[ImGuiCol_DockingEmptyBg] = Rgba(14, 14, 16, 0.0f); // let editor wallpaper show in empty dock areas
-	Colors[ImGuiCol_PlotLines] = Rgba(150, 165, 190);
-	Colors[ImGuiCol_PlotLinesHovered] = Rgba(170, 174, 182);
-	Colors[ImGuiCol_PlotHistogram] = EdgeStrong;
-	Colors[ImGuiCol_PlotHistogramHovered] = Rgba(170, 174, 182);
-	Colors[ImGuiCol_TableHeaderBg] = TabWell;
-	Colors[ImGuiCol_TableBorderStrong] = EdgeStrong;
-	Colors[ImGuiCol_TableBorderLight] = EdgeSoft;
+	Colors[ImGuiCol_Separator] = Border;
+	Colors[ImGuiCol_SeparatorHovered] = Shade(Accent, -0.15f);
+	Colors[ImGuiCol_SeparatorActive] = Accent;
+	Colors[ImGuiCol_TableBorderStrong] = Accent;
+	Colors[ImGuiCol_TableBorderLight] = Border;
 	Colors[ImGuiCol_TableRowBg] = Rgba(0, 0, 0, 0.0f);
-	Colors[ImGuiCol_TableRowBgAlt] = Rgba(255, 255, 255, 0.025f);
-	Colors[ImGuiCol_TextLink] = TextMuted;
-	Colors[ImGuiCol_TextSelectedBg] = Rgba(110, 114, 124, 0.35f);
-	Colors[ImGuiCol_DragDropTarget] = EdgeStrong;
-	Colors[ImGuiCol_NavCursor] = Rgba(150, 155, 164);
+	Colors[ImGuiCol_TableRowBgAlt] = Shade(Accent, -0.85f);
+
+	// Input frames (recessed inside a panel).
+	Colors[ImGuiCol_FrameBg] = Shade(Accent, -0.62f);
+	Colors[ImGuiCol_FrameBgHovered] = Shade(Accent, -0.45f);
+	Colors[ImGuiCol_FrameBgActive] = Shade(Accent, -0.35f);
+
+	// Interactive / emphasis faces (buttons, headers, grabbers) -- all derived
+	// from Accent via Shade() so one knob retunes them together.
+	Colors[ImGuiCol_Button] = Shade(Accent, -0.55f);
+	Colors[ImGuiCol_ButtonHovered] = Shade(Accent, -0.35f);
+	Colors[ImGuiCol_ButtonActive] = Shade(Accent, -0.70f);
+	Colors[ImGuiCol_Header] = Shade(Accent, -0.60f);
+	Colors[ImGuiCol_HeaderHovered] = Shade(Accent, -0.40f);
+	Colors[ImGuiCol_HeaderActive] = Shade(Accent, -0.20f);
+	Colors[ImGuiCol_ScrollbarBg] = Border;
+	Colors[ImGuiCol_ScrollbarGrab] = Shade(Accent, -0.45f);
+	Colors[ImGuiCol_ScrollbarGrabHovered] = Shade(Accent, -0.25f);
+	Colors[ImGuiCol_ScrollbarGrabActive] = Accent;
+	Colors[ImGuiCol_SliderGrab] = Accent;
+	Colors[ImGuiCol_SliderGrabActive] = Shade(Accent, +0.10f);
+	Colors[ImGuiCol_ResizeGrip] = Rgba(255, 255, 255, 0.10f);
+	Colors[ImGuiCol_ResizeGripHovered] = Accent;
+	Colors[ImGuiCol_ResizeGripActive] = Accent;
+
+	// Tabs. Non-selected = fully transparent (label only). The selected/hover face
+	// is the SAME Bg as the backplate so the rounded top merges seamlessly.
+	Colors[ImGuiCol_Tab] = ImVec4(Bg.x, Bg.y, Bg.z, 0.0f);
+	Colors[ImGuiCol_TabHovered] = Bg;
+	Colors[ImGuiCol_TabSelected] = Bg;
+	Colors[ImGuiCol_TabSelectedOverline] = Accent;
+	Colors[ImGuiCol_TabDimmed] = ImVec4(Bg.x, Bg.y, Bg.z, 0.0f);
+	Colors[ImGuiCol_TabDimmedSelected] = Bg;
+	Colors[ImGuiCol_TabDimmedSelectedOverline] = Accent;
+
+	// Docking preview / empty area.
+	Colors[ImGuiCol_DockingPreview] = Rgba(Accent.x, Accent.y, Accent.z, 0.30f);
+	Colors[ImGuiCol_DockingEmptyBg] = ImVec4(Bg.x, Bg.y, Bg.z, 0.0f);
+
+	// Diagnostics / overlays.
+	Colors[ImGuiCol_PlotLines] = Shade(Accent, -0.20f);
+	Colors[ImGuiCol_PlotLinesHovered] = Accent;
+	Colors[ImGuiCol_PlotHistogram] = Accent;
+	Colors[ImGuiCol_PlotHistogramHovered] = Accent;
+	Colors[ImGuiCol_DragDropTarget] = Accent;
+	Colors[ImGuiCol_NavCursor] = Accent;
 	Colors[ImGuiCol_NavWindowingHighlight] = Rgba(255, 255, 255, 0.55f);
 	Colors[ImGuiCol_NavWindowingDimBg] = Rgba(0, 0, 0, 0.70f);
 	Colors[ImGuiCol_ModalWindowDimBg] = Rgba(0, 0, 0, 0.78f);
