@@ -65,6 +65,7 @@ void FEditorConsole::Init(FExampleEditor&)
 			if (Lines.size() >= MaxLines)
 			{
 				Lines.pop_front();
+				++DroppedCount;
 			}
 			Lines.push_back({ Msg.Level, Msg.Category, Msg.Message });
 		});
@@ -132,8 +133,11 @@ void FEditorConsole::Draw(FExampleEditor& Editor)
 
 	// -- Snapshot only the visible (filtered) lines under the lock ----------------
 	std::vector<FLogEntry> Snapshot;
+	std::size_t DroppedThisFrame = 0;
 	{
 		std::lock_guard<std::mutex> Lock(LinesMutex);
+		DroppedThisFrame = DroppedCount;
+		DroppedCount = 0;
 		if (!HasFilter)
 		{
 			Snapshot.assign(Lines.begin(), Lines.end());
@@ -162,8 +166,8 @@ void FEditorConsole::Draw(FExampleEditor& Editor)
 
 		ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.0f, 0.0f));
 
-		// Auto-scroll to the newest line ONLY if the user is already at the bottom, so a
-		// manual scroll-up to read a long back-log is not fought every frame.
+		// Auto-scroll to the newest line ONLY if the user is already pinned to the bottom,
+		// so a manual scroll-up to read a long back-log is not fought every frame.
 		const bool NearBottom = ImGui::GetScrollY() >= ImGui::GetScrollMaxY() - 1.0f;
 
 		// UE/Unity per-row model: every log line is its OWN selectable, so per-level
@@ -189,9 +193,24 @@ void FEditorConsole::Draw(FExampleEditor& Editor)
 			}
 		ImGui::PopStyleVar();
 
+		// Sticky-bottom policy:
+		//   (1) thumb pinned to the bottom -> follow the newest line (stays at bottom).
+		//   (2) thumb scrolled up -> hold the view where the user put it.
+		bool ScrolledToBottom = false;
 		if (NearBottom && !Snapshot.empty())
 		{
 			ImGui::SetScrollHereY(1.0f);
+			ScrolledToBottom = true;
+		}
+
+		// Head-trim compensation. When the user is NOT auto-scrolling (scrolled up), each
+		// line popped off the head (MaxLines cap) would otherwise nudge the whole visible
+		// output up one row every frame. Shift the view back down by the trimmed height so
+		// the reading position stays put.
+		if (DroppedThisFrame > 0 && !ScrolledToBottom)
+		{
+			const float LineH = ImGui::GetTextLineHeight();
+			ImGui::SetScrollY(ImGui::GetScrollY() - static_cast<float>(DroppedThisFrame) * LineH);
 		}
 
 		// Copy All (toolbar button) -- joins every currently-visible line.

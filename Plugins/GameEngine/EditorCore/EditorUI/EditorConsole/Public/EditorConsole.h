@@ -57,6 +57,11 @@ private:
 	 *  coexist because every line is its own Selectable, not one shared InputTextMultiline. */
 	int                       SelectedLogLine = -1;
 
+	/** Head lines dropped by the MaxLines trim since the last frame's snapshot. The frame
+	 *  thread consumes this (under LinesMutex) to shift the scroll view back down, so a
+	 *  scrolled-up reader isn't nudged up by each head trim. Written by the producer. */
+	std::size_t               DroppedCount = 0;
+
 	/** Live "Filter logs..." box text in the top menu bar. Case-insensitive substring
 	 *  match against the rendered line; empty shows everything. Fixed buffer so ImGui's
 	 *  InputText edits in place without std::string reallocation quirks. */
