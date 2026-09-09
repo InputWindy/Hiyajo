@@ -7,6 +7,7 @@
 #include <Maho.h>
 
 #include <cstdint>
+#include <functional>
 #include <map>
 #include <memory>
 #include <string>
@@ -81,6 +82,11 @@ public:
 
 	/** Find a registered variable; nullptr when absent. */
 	[[nodiscard]] IConsoleVariable* Find(std::string_view Name);
+
+	/** Visit every registered variable in name order (map order). Used by editor
+	 *  autocomplete to enumerate known names. The visitor runs while holding the
+	 *  registry mutex, so callbacks should not call back into the registry. */
+	void VisitAll(const std::function<void(IConsoleVariable&)>& Visitor) const;
 
 	/** Register (used by TAutoConsoleVariable). Returns the interface. */
 	IConsoleVariable* Register(

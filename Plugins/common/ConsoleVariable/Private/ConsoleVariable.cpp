@@ -113,6 +113,18 @@ IConsoleVariable* FConsoleVariable::Find(std::string_view Name)
 	return It != Registry.end() ? It->second.get() : nullptr;
 }
 
+void FConsoleVariable::VisitAll(const std::function<void(IConsoleVariable&)>& Visitor) const
+{
+	std::lock_guard<std::mutex> Lock(GMutex);
+	for (const auto& Item : Registry)
+	{
+		if (Item.second)
+		{
+			Visitor(*Item.second);
+		}
+	}
+}
+
 IConsoleVariable* FConsoleVariable::Register(
 	std::string_view Name,
 	ECVarType Type,

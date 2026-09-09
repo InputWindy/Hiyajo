@@ -68,6 +68,22 @@ private:
 	 *  match against the rendered line; empty shows everything. Fixed buffer so ImGui's
 	 *  InputText edits in place without std::string reallocation quirks. */
 	char                      FilterBuffer[256] = { 0 };
+
+	/** CVar command line below the log area. Enter executes "name [value]" against the
+	 *  ConsoleVariable registry and echoes the result back into the log panel. */
+	char                      CvarBuffer[256] = { 0 };
+
+	/** Set when a dropdown suggestion is picked. Clicking the suggestion deactivates the
+	 *  input (so the external CvarBuffer write sticks); this flag re-focuses it in the next
+	 *  Draw pass so the user can keep typing. */
+	bool                      CvarPendingFocus = false;
+
+	/** Whether the autocomplete dropdown should be shown. A plain IsItemActive() gate fails
+	 *  because clicking a suggestion deactivates the input on the same frame the click lands,
+	 *  so the dropdown would vanish before the click reaches a row. This flag persists across
+	 *  that frame and is only closed when the box clears, an exact name is typed, or the
+	 *  cursor leaves the dropdown without the input being focused. */
+	bool                      CvarDropdownOpen = false;
 };
 
 } // namespace Maho
