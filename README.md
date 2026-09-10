@@ -112,6 +112,26 @@ public:
 };
 ```
 
+### `.cplugin` Field Semantics
+
+Four fields, four distinct jobs — they are not interchangeable:
+
+| Field | Links the target? | Include dir added | Meaning |
+|------|------|------|------|
+| `Dependencies` | yes | target `Public/` (PUBLIC, transitive) | you need the target's **exports** |
+| `PublicIncludes` | no | target `Public/` (PUBLIC, transitive) | include only |
+| `PrivateIncludes` | no | target `Public/` (PRIVATE, not propagated) | include only |
+| `Plugins` | no | none | runtime anonymous install into **your own** collector |
+
+- Only `Dependencies` orders the build (target compiled before you). `Plugins` imposes **no**
+  compile order — otherwise `Render.Plugins = ["Scene"]` together with
+  `Scene.Dependencies = ["Render"]` would be a hard build cycle.
+- A plugin pulls up its `Plugins` itself, in its own earliest lifecycle stage
+  (`IPreInit::PreInitialize`, one line: `InstallSubPlugins(GetName())`). The engine never
+  enumerates another layer's children, and the children land in the declaring layer's collector
+  (so its context type, e.g. `FRender&`, stays their scheduling context). Uninstall is the mirror
+  image: a parent takes its catalog sub-plugins with it.
+
 ### Anonymous Layers + Stage Pipeline
 
 **FLayerBase** only closes over itself:

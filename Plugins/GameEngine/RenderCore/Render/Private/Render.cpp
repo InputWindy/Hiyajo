@@ -64,6 +64,18 @@ FRender::~FRender() = default;
 
 void FRender::PreInitialize(FEngineBase&)
 {
+	// Pull up the render features I declare (Render.cplugin Plugins), at the
+	// earliest stage of my own lifecycle -- before any of my business init runs.
+	// The catalog resolves them by MY name; each is loaded by module base name
+	// into MY collector (not the host engine's), so the render graph keeps
+	// driving them with FRender& as context. Recursive -- a feature's own
+	// declared children install too. The FRAME feature owns the single present
+	// point and must load last, so the catalog order is preserved.
+	//
+	// Loading (DLL + ctor) happens right here; the features' Init stages still
+	// run at my own flush safe point (Tick), so their ctors must NOT depend on
+	// anything my Initialize sets up -- they only declare stage deps.
+	InstallSubPlugins(GetName());
 }
 
 void FRender::Initialize(FEngineBase& Engine)
@@ -93,12 +105,8 @@ void FRender::Initialize(FEngineBase& Engine)
 	// Persistent render graph: Flush at frame start, Execute at frame end.
 	RenderGraph = std::make_unique<FLayerTaskGraph<FRenderStages, FRender>>(Pool, *this);
 
-	// Install the render features into OUR layer collection (not the host engine's)
-	// so the render graph drives them. The catalog (Render.cplugin Plugins) lists
-	// them; each is loaded by module base name into THIS collector. Recursive --
-	// any sub-plugin's own children are installed too. The FRAME feature owns the
-	// single present point and must load last, so the catalog order is preserved.
-	InstallSubPlugins(GetName());
+	// (The render features are installed in PreInitialize -- they are MY declared
+	// sub-plugins; Initialize only sets up the services they will use.)
 
 	// (The UI's CPU-side ImGui context is owned by FUIFeature now; FRender is
 	// UI-agnostic and sets nothing up here.)
