@@ -236,6 +236,15 @@ void FExampleEditor::EditorInput(FRender& R)
 	// ReportViewportRect during its Draw; if the panel isn't present yet (or the context isn't
 	// created) leave the game UI to its whole-window fallback (no SetEditorInput call this frame).
 	(void)R;
+
+	// OS file drop: drained BEFORE the viewport guards below, so a drop still reaches the
+	// panels when the game UI has no panel to present into (the batch is per-frame either way).
+	if (Platform::FPlatform* DropSource = Platform::GetPlatform())
+	{
+		DroppedFiles.clear();
+		DropSource->DrainDroppedFiles(DroppedFiles);
+	}
+
 	if (m_Context == nullptr || !bVpValid)
 	{
 		return;
@@ -821,6 +830,20 @@ void FExampleEditor::EditorCompose(FRender& R)
 	// component draws (DrawEditorPanels) are the content you fill.
 	InitEditorViews(R);
 	RenderEditorUI(R);
+
+	// A drop batch is one frame's worth of news: the panels have had their chance.
+	DroppedFiles.clear();
+}
+
+bool FExampleEditor::ConsumeDroppedFiles(std::vector<std::string>& Out)
+{
+	if (DroppedFiles.empty())
+	{
+		return false;
+	}
+	Out.insert(Out.end(), DroppedFiles.begin(), DroppedFiles.end());
+	DroppedFiles.clear();
+	return true;
 }
 
 void FExampleEditor::PreUnInstall(FRender& R)
@@ -860,6 +883,7 @@ void FExampleEditor::ShutdownEditorComponents()
 	// its OnLog subscription) runs BEFORE FLog::Shutdown -- no name/module
 	// asymmetry to trip on.
 	TryUninstall(Maho::ApplyModuleExtension("FEditorConsole"));
+	TryUninstall(Maho::ApplyModuleExtension("FContentBrowser"));
 	TryUninstall(Maho::ApplyModuleExtension("FEditorViewport"));
 	TryUninstall(Maho::ApplyModuleExtension("FEditorTheme"));
 	FlushPendingUpdatePipelines<TTypeList<IEditorInit>, TTypeList<IEditorShutdown>>();

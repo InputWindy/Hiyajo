@@ -8,6 +8,7 @@
 #include <functional>
 #include <memory>
 #include <mutex>
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -178,6 +179,12 @@ public:
 	 *  ReadInput (which is the repeatable state snapshot). */
 	void DrainInputEvents(std::vector<MInputEvent>& Out) const;
 
+	/** Drain the file paths dropped onto the window since the last call (OS drag &
+	 *  drop from a file manager). Appends to Out and clears the platform buffer.
+	 *  Paths are PHYSICAL ABSOLUTE paths in the engine's narrow-char convention --
+	 *  the platform does no virtual-path mapping (FPaths resolves that upward). */
+	void DrainDroppedFiles(std::vector<std::string>& Out) const;
+
 	/** Consume the accumulated mouse-wheel scroll deltas (GLFW notch units) since the
 	 *  last call. Single consumer (the editor); exchange-to-zero. */
 	void ConsumeMouseWheelXY(float& OutX, float& OutY);
@@ -210,6 +217,8 @@ private:
 	mutable std::mutex InputMutex;
 	MInputContext Input;
 	mutable std::vector<MInputEvent> InputEvents;
+	// Dropped file paths (OS drag & drop), same producer/consumer split as InputEvents.
+	mutable std::vector<std::string> DroppedFiles;
 
 	std::uint32_t WindowWidth = 0;
 	std::uint32_t WindowHeight = 0;

@@ -9,6 +9,7 @@
 
 #include <cstdint>
 #include <mutex>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -135,6 +136,17 @@ public:
 	 *  pixels) the game UI is presented into. EditorInput re-bases the game cursor to it. */
 	void ReportViewportRect(float X, float Y, float W, float H) { VpX = X; VpY = Y; VpW = W; VpH = H; bVpValid = W > 0.f && H > 0.f; }
 
+	/** File paths dropped onto the window THIS frame (physical absolute paths from the OS
+	 *  file manager). A batch lives for exactly one frame: EditorInput fills it, a panel
+	 *  reads it while drawing, EditorCompose clears the remainder. Consumers decide
+	 *  themselves whether the drop belongs to them (e.g. "is my window hovered"). */
+	[[nodiscard]] std::span<const std::string> GetDroppedFiles() const { return DroppedFiles; }
+
+	/** Consume this frame's dropped files. First consumer wins -- a later panel sees an
+	 *  empty batch, so two drop targets can never import the same file. Returns false
+	 *  when nothing was pending. */
+	bool ConsumeDroppedFiles(std::vector<std::string>& Out);
+
 	/** Shared component state (selected entity, scene-ready flag). */
 	FEditorContext& GetEditorContext() { return EditorContext; }
 	/** The FRender the host frame is driven from (set each InitViews). */
@@ -188,6 +200,10 @@ private:
 	 *  cache when true and otherwise leaves the stream alone (the game-UI context's own
 	 *  whole-window fallback is THE drainer that frame, and a second drain would be empty). */
 	bool bEditorInputCached = false;
+
+	/** OS drop batch for the current frame (filled by EditorInput, cleared at the end of
+	 *  EditorCompose). Same single-frame contract as the input cache above. */
+	std::vector<std::string> DroppedFiles;
 
 	std::mutex ImGuiFrameMutex;   // one thread at a time owns the editor's Id: NewFrame
 

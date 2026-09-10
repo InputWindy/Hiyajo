@@ -24,8 +24,32 @@ namespace Maho
 namespace
 {
 
-/** Directory of the running executable (each platform's canonical query). */
-std::filesystem::path ExecutableDir()
+/** First directory (of the candidates) that actually holds PluginCatalog.json. */
+std::optional<std::filesystem::path> FindCatalogFile()
+{
+	const std::filesystem::path ExeDir = FPluginCatalog::ExecutableDir();
+	const std::filesystem::path Cwd = std::filesystem::current_path();
+	std::vector<std::filesystem::path> Candidates;
+	if (!ExeDir.empty())
+	{
+		Candidates.push_back(ExeDir / "PluginCatalog.json");
+		Candidates.push_back(ExeDir / ".." / "Intermediate" / "PluginCatalog.json");
+	}
+	Candidates.push_back(Cwd / "PluginCatalog.json");
+	for (const auto& C : Candidates)
+	{
+		std::error_code Ec;
+		if (std::filesystem::is_regular_file(C, Ec))
+		{
+			return C;
+		}
+	}
+	return std::nullopt;
+}
+
+} // namespace
+
+std::filesystem::path FPluginCatalog::ExecutableDir()
 {
 #if defined(_WIN32)
 	char Buf[MAX_PATH]{};
@@ -51,31 +75,6 @@ std::filesystem::path ExecutableDir()
 #endif
 	return {};
 }
-
-/** First directory (of the candidates) that actually holds PluginCatalog.json. */
-std::optional<std::filesystem::path> FindCatalogFile()
-{
-	const std::filesystem::path ExeDir = ExecutableDir();
-	const std::filesystem::path Cwd = std::filesystem::current_path();
-	std::vector<std::filesystem::path> Candidates;
-	if (!ExeDir.empty())
-	{
-		Candidates.push_back(ExeDir / "PluginCatalog.json");
-		Candidates.push_back(ExeDir / ".." / "Intermediate" / "PluginCatalog.json");
-	}
-	Candidates.push_back(Cwd / "PluginCatalog.json");
-	for (const auto& C : Candidates)
-	{
-		std::error_code Ec;
-		if (std::filesystem::is_regular_file(C, Ec))
-		{
-			return C;
-		}
-	}
-	return std::nullopt;
-}
-
-} // namespace
 
 FPluginCatalog& FPluginCatalog::Get()
 {
@@ -113,6 +112,14 @@ bool FPluginCatalog::Load()
 		TopLevel.clear();
 		SubPlugins.clear();
 		Modules.clear();
+		EngineRoot.clear();
+		// Load() failing at any point clears the engine root too -- a stale root from
+		// a previous successful Load must not survive a failed re-load.
+		bLoaded = false;
+		if (J.contains("EngineRoot") && J["EngineRoot"].is_string())
+		{
+			EngineRoot = J["EngineRoot"].get<std::string>();
+		}
 		if (J.contains("TopLevel") && J["TopLevel"].is_array())
 		{
 			for (const auto& E : J["TopLevel"])

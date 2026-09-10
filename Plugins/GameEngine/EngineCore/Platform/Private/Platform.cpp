@@ -25,8 +25,48 @@
 #	undef CreateWindow
 #endif
 
+#if defined(_WIN32)
+#	include <windows.h>
+#endif
+
 namespace Maho::Platform
 {
+
+namespace
+{
+/** GLFW hands drop paths as UTF-8; the engine's file APIs are all narrow-char
+ *  (native ANSI code page on Windows). Convert at this boundary so a dropped path
+ *  behaves like every other path producer (ExecutableDir, ini reads, ifstream) on
+ *  the way down. On other platforms narrow IS UTF-8 and the copy stands. */
+std::string ToNativeNarrowPath(const char* Utf8)
+{
+	if (Utf8 == nullptr)
+	{
+		return {};
+	}
+#if defined(_WIN32)
+	const int WideLen = ::MultiByteToWideChar(CP_UTF8, 0, Utf8, -1, nullptr, 0);
+	if (WideLen <= 1)
+	{
+		return {};
+	}
+	std::wstring Wide(static_cast<std::size_t>(WideLen), L'\0');
+	::MultiByteToWideChar(CP_UTF8, 0, Utf8, -1, Wide.data(), WideLen);
+
+	const int NarrowLen = ::WideCharToMultiByte(CP_ACP, 0, Wide.c_str(), -1, nullptr, 0, nullptr, nullptr);
+	if (NarrowLen <= 1)
+	{
+		return {};
+	}
+	std::string Narrow(static_cast<std::size_t>(NarrowLen), '\0');
+	::WideCharToMultiByte(CP_ACP, 0, Wide.c_str(), -1, Narrow.data(), NarrowLen, nullptr, nullptr);
+	Narrow.resize(static_cast<std::size_t>(NarrowLen - 1));   // drop the terminating NUL
+	return Narrow;
+#else
+	return std::string(Utf8);
+#endif
+}
+} // namespace
 
 FPlatform* GPlatform = nullptr;
 
@@ -131,6 +171,20 @@ namespace
 							auto* Self = static_cast<FGlfwWindow*>(glfwGetWindowUserPointer(W));
 							if (Self && Self->OnWindowFocus) Self->OnWindowFocus(Focused != 0);
 						});
+						// OS drag & drop from a file manager: paths are UTF-8 (GLFW's
+						// contract), per-file forwarded to the owner which converts them to
+						// the engine's narrow-char convention and queues them.
+						glfwSetDropCallback(Window, [](GLFWwindow* W, int Count, const char** Paths)
+						{
+							auto* Self = static_cast<FGlfwWindow*>(glfwGetWindowUserPointer(W));
+							if (Self && Self->OnDropFile)
+							{
+								for (int I = 0; I < Count; ++I)
+								{
+									Self->OnDropFile(Paths[I]);
+								}
+							}
+						});
 				}
 			}
 		}
@@ -184,6 +238,10 @@ namespace
 		/** Window-focus listener, invoked by the GLFW window-focus callback (owner wires it).
 		 *  Args: (focused bool). */
 		std::function<void(bool)> OnWindowFocus;
+
+		/** Dropped-file listener, invoked once per file by the GLFW drop callback
+		 *  (owner wires it). Arg: the FILE PATH in GLFW's UTF-8 encoding. */
+		std::function<void(const char*)> OnDropFile;
 
 	private:
 		GLFWwindow* Window = nullptr;
@@ -275,6 +333,7 @@ namespace
 		std::function<void(std::function<void(std::uint32_t)>)> SetCharListener;
 		std::function<void(std::function<void(bool)>)> SetCursorEnterListener;
 		std::function<void(std::function<void(bool)>)> SetWindowFocusListener;
+		std::function<void(std::function<void(const char*)>)> SetDropFileListener;
 	};
 
 	FPlatformBackend CreateWindowBackend(int Width, int Height, std::string_view Title)
@@ -295,6 +354,7 @@ namespace
 			[Raw](std::function<void(std::uint32_t)> Listener) { Raw->OnChar = std::move(Listener); },
 			[Raw](std::function<void(bool)> Listener) { Raw->OnCursorEnter = std::move(Listener); },
 			[Raw](std::function<void(bool)> Listener) { Raw->OnWindowFocus = std::move(Listener); },
+			[Raw](std::function<void(const char*)> Listener) { Raw->OnDropFile = std::move(Listener); },
 		};
 #else
 		return {};
@@ -458,6 +518,22 @@ bool FPlatform::CreateWindow(int Width, int Height, std::string_view Title)
 			InputEvents.push_back(Ev);
 		});
 	}
+	if (Backend.SetDropFileListener)
+	{
+		// OS file drop. GLFW reports the paths as UTF-8; they are converted to the
+		// engine's narrow-char convention here (one boundary) and queued as PHYSICAL
+		// ABSOLUTE paths. No virtual-path mapping happens at this layer.
+		Backend.SetDropFileListener([this](const char* Utf8Path)
+		{
+			std::string Path = ToNativeNarrowPath(Utf8Path);
+			if (Path.empty())
+			{
+				return;
+			}
+			std::lock_guard<std::mutex> L(InputMutex);
+			DroppedFiles.push_back(std::move(Path));
+		});
+	}
 	return Surface != nullptr && Surface->GetNativeWindow() != nullptr;
 }
 
@@ -483,6 +559,7 @@ void FPlatform::DestroyWindow()
 	GlfwWindowFn = {};
 	Input = {};
 	InputEvents.clear();
+	DroppedFiles.clear();
 }
 
 void FPlatform::PollEvents()
@@ -541,6 +618,13 @@ void FPlatform::DrainInputEvents(std::vector<MInputEvent>& Out) const
 	std::lock_guard<std::mutex> L(InputMutex);
 	Out.insert(Out.end(), InputEvents.begin(), InputEvents.end());
 	InputEvents.clear();
+}
+
+void FPlatform::DrainDroppedFiles(std::vector<std::string>& Out) const
+{
+	std::lock_guard<std::mutex> L(InputMutex);
+	Out.insert(Out.end(), DroppedFiles.begin(), DroppedFiles.end());
+	DroppedFiles.clear();
 }
 
 void FPlatform::ConsumeMouseWheelXY(float& OutX, float& OutY)

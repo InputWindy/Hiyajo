@@ -2,6 +2,7 @@
 
 #include <Core/Export.h>
 
+#include <filesystem>
 #include <map>
 #include <string>
 #include <string_view>
@@ -46,6 +47,15 @@ public:
 	 *  Empty when unknown. */
 	[[nodiscard]] std::string GetModule(std::string_view LayerName) const;
 
+	/** Engine source root recorded by codegen (ENGINE_DIR as an absolute path, in
+	 *  the generator's posix form). Empty when absent -- callers fall back to their
+	 *  own probing. Never a compile-time constant in C++: the manifest is data. */
+	[[nodiscard]] const std::string& GetEngineRoot() const { return EngineRoot; }
+
+	/** Directory of the running executable (each platform's canonical query); empty
+	 *  on failure. Shared by every runtime path probe (catalog lookup, virtual roots). */
+	[[nodiscard]] static std::filesystem::path ExecutableDir();
+
 private:
 	FPluginCatalog() = default;
 	~FPluginCatalog() = default;
@@ -53,6 +63,7 @@ private:
 	FPluginCatalog& operator=(const FPluginCatalog&) = delete;
 
 	bool bLoaded = false;
+	std::string EngineRoot;
 	std::vector<std::string> TopLevel;
 	std::map<std::string, std::vector<std::string>> SubPlugins;
 	std::map<std::string, std::string> Modules;

@@ -1,0 +1,13 @@
+{
+  "FileVersion": 1,
+  "Name": "ContentBrowser",
+  "Description": "Editor content browser panel - virtual-filesystem view of the project/engine Content roots (.casset only) with OS file-drop import.",
+  "Type": "Editor",
+  "Dependencies": [
+	"ExampleEditor",
+	"Paths",
+	"Asset",
+	"Resource",
+	"Log"
+  ]
+}

@@ -14,6 +14,7 @@
 #include <Archive.h>
 
 #include <cstdint>
+#include <span>
 #include <string>
 #include <utility>
 #include <vector>
@@ -40,6 +41,13 @@ enum class EAssetType : std::uint8_t
 	/** First user-defined type; project types extend from here. */
 	UserBase,
 };
+
+/** Container probe: the asset type recorded in a casset header, or EAssetType::Unknown
+ *  when the bytes are not a recognizable container (bad/short magic, unsupported version).
+ *  Reads the fixed header only -- no decode, no allocation, no exception -- so a caller can
+ *  pick the right TResourceImporter<T> (Import<T>) before handing a file to the resource
+ *  system. An unrecognized type byte is returned as-is (the caller decides it is unsupported). */
+[[nodiscard]] MAHO_ASSET_API EAssetType PeekCassetAssetType(std::span<const std::uint8_t> Bytes);
 
 // -- texture-facing enums (asset-side concepts only) --
 

@@ -1121,6 +1121,7 @@ def _write_plugin_catalog(
 	selected: list[str],
 	chain: list[str],
 	build_type: str,
+	engine_root: Path,
 ) -> dict[str, Any]:
 	"""Emit Intermediate/PluginCatalog.json — the runtime's plugin install map.
 
@@ -1161,6 +1162,10 @@ def _write_plugin_catalog(
 
 	catalog = {
 		"FileVersion": 1,
+		# Engine source root as an absolute, posix-form path. The runtime reads it to
+		# seed the "Engine" virtual path root (engine Content/) -- baked into DATA, never
+		# into C++ (a relocated engine only needs a re-generate, not a recompile).
+		"EngineRoot": engine_root.resolve().as_posix(),
 		"TopLevel": top_level,
 		"SubPlugins": sub_plugins,
 		"ByLayerName": by_layer,
@@ -1243,7 +1248,7 @@ def _write_cmake_lists(
 	engine_layer_type = _layer_type_from_plugin(host_dir) or project_name
 	# Emit the runtime install catalog (TopLevel/SubPlugins/ByLayerName). Also
 	# staged to <Binaries>/<Config> by a POST_BUILD copy for runtime discovery.
-	_write_plugin_catalog(project_dir, project_name, infos, selected, chain, build_type)
+	_write_plugin_catalog(project_dir, project_name, infos, selected, chain, build_type, engine_root)
 	(project_dir / "CMakeLists.txt").write_text(
 		CMAKELISTS.format(
 			name=project_name,
@@ -1801,6 +1806,28 @@ def generate_from_cproject(
 		lock.release()
 
 
+def _stage_content_roots(project_dir: Path, packaged: Path, *, log: Any = print) -> None:
+	"""Stage both content roots next to the packaged binaries, mirroring the runtime
+	virtual-path layout the `Paths` layer resolves:
+
+	  <project>/Content  ->  <packaged>/Content/Game     (the "Game" root)
+	  <engine>/Content   ->  <packaged>/Content/Engine   (the "Engine" root)
+
+	A missing source directory is not an error -- it just means that root ships empty
+	(and the deployed-layout probe in FPaths falls back to the source tree)."""
+	cprojects = sorted(project_dir.glob("*.cproject"))
+	if not cprojects:
+		return
+	engine_root = resolve_engine_directory(cprojects[0], read_cproject(cprojects[0]))
+
+	for src, root_name in ((project_dir / "Content", "Game"), (engine_root / "Content", "Engine")):
+		if not src.is_dir():
+			continue
+		dst = packaged / "Content" / root_name
+		shutil.copytree(src, dst, dirs_exist_ok=True)
+		log(f"[Maho] Staged content root '{root_name}' → {dst}")
+
+
 def run_package(
 	project_dir: Path,
 	config: str = "Release",
@@ -1854,6 +1881,10 @@ def run_package(
 		shutil.copytree(config_dir, packaged / "Config", dirs_exist_ok=True)
 	if copied == 0:
 		raise RuntimeError(f"No build outputs found under {bin_dir}")
+
+	# Content roots ride along with the binaries so a deployed layout resolves
+	# "Game"/"Engine" from <ExeDir>/Content/<Root> instead of the source tree.
+	_stage_content_roots(project_dir, packaged, log=log)
 
 	log(f"[Maho] Packaged → {packaged}")
 

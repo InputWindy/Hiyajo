@@ -77,6 +77,26 @@ bool ExportTexture(const FExportConfig& Config, const FTexture& Resource, std::v
 
 } // namespace detail
 
+EAssetType PeekCassetAssetType(std::span<const std::uint8_t> Bytes)
+{
+	// Header layout, exactly as FAssetsResource::Serialize writes it: Magic, Version,
+	// TypeByte (4 + 4 + 1). Reading it needs no reader construction and cannot throw.
+	constexpr std::size_t HeaderSize = sizeof(std::uint32_t) * 2 + sizeof(std::uint8_t);
+	if (Bytes.size() < HeaderSize || !detail::HasCassetMagic(Bytes))
+	{
+		return EAssetType::Unknown;
+	}
+
+	std::uint32_t Version = 0;
+	std::memcpy(&Version, Bytes.data() + sizeof(std::uint32_t), sizeof(Version));
+	if (Version == 0 || Version > CassetVersion)
+	{
+		return EAssetType::Unknown;
+	}
+
+	return static_cast<EAssetType>(Bytes[sizeof(std::uint32_t) * 2]);
+}
+
 void FAssetsResource::Serialize(Archive::FArchive& Ar)
 {
 	std::uint32_t Magic = CassetMagic;
