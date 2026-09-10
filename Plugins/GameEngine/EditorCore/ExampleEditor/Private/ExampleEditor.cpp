@@ -695,11 +695,23 @@ void FExampleEditor::InitEditorViews(FRender& R)
 			Batch.bIndex32 = sizeof(ImDrawIdx) == 4;
 			Batch.VertexOffset = static_cast<std::uint32_t>((VtxBase + DrawCmd.VtxOffset) * sizeof(ImDrawVert));
 			Batch.IndexOffset = static_cast<std::uint32_t>((IdxBase + DrawCmd.IdxOffset) * sizeof(ImDrawIdx));
+			// Scissor = clip rect clamped to the framebuffer (DisplaySize == it).
+			// ImGui collapses a clip rect that lies entirely OUTSIDE the display by pulling
+			// its max onto its min (content scrolled below the fold, or a docked window
+			// placed off-screen by a stale layout ini). Subtracting a min which is already
+			// past the display edge from that collapsed max leaves a NEGATIVE extent, and
+			// the uint32 cast turns it into ~4.29e9 -- vkCmdSetScissor then trips
+			// VUID-vkCmdSetScissor-offset-00597 (int32 overflow). Clamp BOTH edges first,
+			// then take the non-negative difference (0 = empty scissor, draws nothing).
 			const ImVec4 Clip = DrawCmd.ClipRect;
-			Batch.ScissorX = static_cast<std::int32_t>(Clip.x < 0.0f ? 0.0f : Clip.x);
-			Batch.ScissorY = static_cast<std::int32_t>(Clip.y < 0.0f ? 0.0f : Clip.y);
-			Batch.ScissorW = static_cast<std::uint32_t>(static_cast<std::int32_t>(Clip.z > DisplayW ? DisplayW : Clip.z) - Batch.ScissorX);
-			Batch.ScissorH = static_cast<std::uint32_t>(static_cast<std::int32_t>(Clip.w > DisplayH ? DisplayH : Clip.w) - Batch.ScissorY);
+			const auto ClampEdge = [](float V, float Max)
+			{ return static_cast<std::int32_t>(V < 0.0f ? 0.0f : (V > Max ? Max : V)); };
+			Batch.ScissorX = ClampEdge(Clip.x, DisplayW);
+			Batch.ScissorY = ClampEdge(Clip.y, DisplayH);
+			const std::int32_t ScissorR = ClampEdge(Clip.z, DisplayW);
+			const std::int32_t ScissorB = ClampEdge(Clip.w, DisplayH);
+			Batch.ScissorW = static_cast<std::uint32_t>(ScissorR > Batch.ScissorX ? ScissorR - Batch.ScissorX : 0);
+			Batch.ScissorH = static_cast<std::uint32_t>(ScissorB > Batch.ScissorY ? ScissorB - Batch.ScissorY : 0);
 			Batch.bHasScissor = true;
 			if (DrawCmd.TextureId != 0)
 			{
