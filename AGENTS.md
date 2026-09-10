@@ -48,6 +48,17 @@ engine core + engine plugins + project core  <--  project plugins (link Maho, ge
 - **Pure libraries** (Archive/Compress/Unicode): free functions/classes, no singleton, no state, no lifecycle.
 - **服务层（FLayer 派生）**: install/uninstall via `FLayerCollector`/`FEngineBase`'s `Install`/`TryUninstall` (pending set, applied at the next-frame safe point `FlushPendingUpdatePipelines`).
 
+## Export / Module-Boundary Rules (strict)
+
+A type that crosses a DLL boundary has exactly one hard question: **which module's vtable and deleting destructor are inside the instance?** Get it wrong and the failure is a silent `0xC0000005` inside `delete`, not a compile error (validated 2026-09-10: editor crashed on close after an OS-dragged PNG import).
+
+- **Rule**: a type whose instances can outlive the module that constructed them, **and** can be destroyed by a different module, **MUST be exported as a DLL interface** - `MAHO_<NAME>_API` from that plugin's `Public/<Name>Api.h` (toggled by codegen's `MAHO_<NAME>_MODULE_EXPORTS`; `MAHO_EXPORT`/`MAHO_IMPORT` live in `Source/Public/Core/Export.h`).
+- **Why the tag is required**: a class with no key function (all-inline, e.g. `explicit FTexture2D(std::string P) : FTexture(std::move(P)) {}`) has its vftable + deleting dtor emitted as a COMDAT **per module**; whichever TU instantiates the ctor stamps *its own* module's vptr into the object. `__declspec(dllimport)` on the class forbids local emission, so every consumer must reference the imported symbol (`__imp_??_7...`) - the hazard becomes a compile error. (GCC/Clang equivalent: a key function, i.e. the first out-of-line virtual.)
+- **"Put the instantiation in a .cpp" is not sufficient.** It must be *the owning type's* cpp (`TResourceCreator<T>` specializations are defined out-of-line in the type's own module), and it still misses by-value returns, `vector<T>`/`optional<T>`/`make_shared<T>` inside header templates, caller-side local construction, and lambdas capturing `T`.
+- **Project-side derived types follow the same rule.** A project plugin's resource/asset type derived from an engine type must be exported too, or keep its vtable in a module that provably outlives every consumer. An unexported derived type silently re-introduces the bug for the base's export tag.
+- **Fix the boundary, never the delete site.** Do not "solve" a vptr-into-freed-image crash by leaking, by clearing a catalog earlier, or by moving the delete into another module - the lifetime belongs to the type, so the missing export tag is the bug.
+- Precedent in this repo: `RHIResources.h`/`RDG.h`/`Render.h`/`Scene.h`/`UIFeature.h`/`GameWorld.h`/`ExampleEditor.h` export every class; the resource chain is `MAHO_RESOURCE_API FResource` -> `MAHO_ASSET_API FAssetsResource` -> concrete asset types (see `Plugins/GameEngine/EngineCore/Resource/AGENTS.md`).
+
 ## Driving Mechanism
 
 - **Dependency-graph scheduling** (FTaskGraph): node = (object name, stage) pair, edges from dependency tuples. A node is immediately schedulable after all its direct dependencies complete (no stage barrier, cross-stage pipeline). `Init` -> `Compile` (wiring + validation) -> `Execute` (async topological dispatch) -> `Flush` (barrier).

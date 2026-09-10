@@ -30,6 +30,12 @@
 #	pragma warning(disable : 4251)
 #endif
 
+// Norm: a type whose instances outlive the module that constructed them, and are
+// destroyed by another module, must carry the owning plugin's MAHO_<NAME>_API tag.
+// An all-inline class has no key function, so its vftable + deleting dtor are emitted
+// per module and `delete` can dispatch through a vptr into an unloaded image (silent
+// 0xC0000005). See root AGENTS.md, "Export / Module-Boundary Rules (strict)".
+
 /**
  * Null-guard statement -- evaluate a possibly-null pointer expression ONCE and
  * run the statement only when non-null. The bound name is a local, so the
