@@ -58,6 +58,23 @@ FRender::FRender()
 	// Asset mirror: the render mirror consumes imported assets (upload to GPU), so
 	// the resource system must run its IInit (start the IO thread) before mine.
 	MyStage<IInit>().IsWaiting<Resource::FResourceSystem>().ForStage<IInit>();
+
+	// Asset mirror at RUNTIME: the resource system's ITick drains its import queue on
+	// its own thread and fans the result straight into my mirror
+	// (OnAssetMirrorImported -> upload, OnAssetMirrorUnloaded -> release), which
+	// allocates from MY resource pool and submits its own transfer pass. That drain
+	// is invisible to my render graph, so it must be ordered against the frame:
+	//   - after my IBeginFrame, which advances the pool and hands every transient slot
+	//     of the finished frame back to the free list;
+	//   - before my ITick, which dispatches the graph whose nodes allocate from the
+	//     same pool (their tasks are only joined in my IEndFrame).
+	// Both edges are declared by ME -- I am the one whose pool is written. Without
+	// them the drain recycles a slot the frame still holds, and because the handle
+	// carries only a slot id (FRDGBufferRef) a following GetBuffer hands out the
+	// wrong buffer: an index buffer bound as a vertex buffer, copy/barrier sizes
+	// taken from a descriptor the native no longer has.
+	MyStage<IBeginFrame>().IsBlocking<Resource::FResourceSystem>().OnStage<ITick>();
+	MyStage<ITick>().IsWaiting<Resource::FResourceSystem>().ForStage<ITick>();
 }
 
 FRender::~FRender() = default;
