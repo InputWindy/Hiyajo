@@ -123,9 +123,15 @@ Four fields, four distinct jobs — they are not interchangeable:
 | `PrivateIncludes` | no | target `Public/` (PRIVATE, not propagated) | include only |
 | `Plugins` | no | none | runtime anonymous install into **your own** collector |
 
-- Only `Dependencies` orders the build (target compiled before you). `Plugins` imposes **no**
-  compile order — otherwise `Render.Plugins = ["Scene"]` together with
-  `Scene.Dependencies = ["Render"]` would be a hard build cycle.
+- Only `Dependencies` orders the build (target compiled before you). `Plugins` declares **no target
+  dependency** — otherwise `Render.Plugins = ["Scene"]` together with
+  `Scene.Dependencies = ["Render"]` would be a hard build cycle. It does, however, **trigger the
+  build of the plugins it enables**: once a parent plugin has linked, a script action
+  (`Tools/build_subplugins.cmake`, a `POST_BUILD` step) builds the enabled sub-plugins, so a
+  single-target build (VS Shift+F6 on `Render`, or `cmake --build --target Render`) can never
+  install a child DLL left over from an earlier build. Builds that already cover those targets
+  (VS F7 on the solution) skip the trigger; a nested sub-plugin build is re-entrancy guarded, so
+  it never re-cleans or re-links the chain the outer build just produced.
 - A plugin pulls up its `Plugins` itself, in its own earliest lifecycle stage
   (`IPreInit::PreInitialize`, one line: `InstallSubPlugins(GetName())`). The engine never
   enumerates another layer's children, and the children land in the declaring layer's collector

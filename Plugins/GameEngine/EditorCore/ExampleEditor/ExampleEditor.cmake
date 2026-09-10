@@ -34,6 +34,29 @@ target_link_libraries(ExampleEditor PUBLIC Maho)
 set_property(TARGET ExampleEditor PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>")
 set_target_properties(ExampleEditor PROPERTIES OUTPUT_NAME "FExampleEditor" PREFIX "")
 target_link_libraries(ExampleEditor PUBLIC Render Scene UIFeature)
+# Building ExampleEditor alone must also build the sub-plugins it installs at
+# runtime (EditorViewport EditorConsole EditorTheme) - otherwise a sub-plugin DLL left over from a
+# previous build is silently installed. A POST_BUILD script action, NOT
+# add_dependencies(ExampleEditor, <sub>): a sub-plugin links ExampleEditor, so that edge
+# would close a target cycle and CMake refuses to generate (cycles are
+# allowed only among static libraries).
+# ExampleEditor_SubPlugins is a plain handle (nothing links or depends on it) that
+# names every sub-plugin in ONE nested build: one msbuild invocation per
+# target would rebuild the shared dependency chain once per sub-plugin.
+add_custom_target(ExampleEditor_SubPlugins)
+add_dependencies(ExampleEditor_SubPlugins EditorViewport EditorConsole EditorTheme)
+set_target_properties(ExampleEditor_SubPlugins PROPERTIES FOLDER "Maho/Plugins/GameEngine/EditorCore")
+add_custom_command(TARGET ExampleEditor POST_BUILD
+	COMMAND "${CMAKE_COMMAND}"
+		"-DMAHO_BUILD_DIR=${CMAKE_BINARY_DIR}"
+		"-DMAHO_CONFIG=$<CONFIG>"
+		"-DMAHO_TARGETS=ExampleEditor_SubPlugins"
+		"-DMAHO_IN_SOLUTION_BUILD=$(BuildingSolutionFile)"
+		"-DMAHO_SUBPLUGIN_BUILD=$(MahoSubPluginBuild)"
+		-P "${ENGINE_DIR}/Tools/build_subplugins.cmake"
+	COMMENT "ExampleEditor: ensuring enabled sub-plugins are up to date (EditorViewport EditorConsole EditorTheme)"
+	VERBATIM
+)
 set_target_properties(ExampleEditor PROPERTIES FOLDER "Maho/Plugins/GameEngine/EditorCore")
 source_group(TREE "${CMAKE_CURRENT_LIST_DIR}" FILES ${ExampleEditor_PUBLIC_HEADERS} ${ExampleEditor_PRIVATE_HEADERS} ${ExampleEditor_PRIVATE_SOURCES})
 # -- /MAHOGEN ExampleEditor --

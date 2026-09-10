@@ -36,6 +36,29 @@ target_link_libraries(Render PUBLIC Maho)
 set_property(TARGET Render PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>")
 set_target_properties(Render PROPERTIES OUTPUT_NAME "FRender" PREFIX "")
 target_link_libraries(Render PUBLIC RHI Platform Resource Asset GameWorld)
+# Building Render alone must also build the sub-plugins it installs at
+# runtime (Scene DrawTriangleFeature UIFeature FrameRenderFeature) - otherwise a sub-plugin DLL left over from a
+# previous build is silently installed. A POST_BUILD script action, NOT
+# add_dependencies(Render, <sub>): a sub-plugin links Render, so that edge
+# would close a target cycle and CMake refuses to generate (cycles are
+# allowed only among static libraries).
+# Render_SubPlugins is a plain handle (nothing links or depends on it) that
+# names every sub-plugin in ONE nested build: one msbuild invocation per
+# target would rebuild the shared dependency chain once per sub-plugin.
+add_custom_target(Render_SubPlugins)
+add_dependencies(Render_SubPlugins Scene DrawTriangleFeature UIFeature FrameRenderFeature)
+set_target_properties(Render_SubPlugins PROPERTIES FOLDER "Maho/Plugins/GameEngine/RenderCore")
+add_custom_command(TARGET Render POST_BUILD
+	COMMAND "${CMAKE_COMMAND}"
+		"-DMAHO_BUILD_DIR=${CMAKE_BINARY_DIR}"
+		"-DMAHO_CONFIG=$<CONFIG>"
+		"-DMAHO_TARGETS=Render_SubPlugins"
+		"-DMAHO_IN_SOLUTION_BUILD=$(BuildingSolutionFile)"
+		"-DMAHO_SUBPLUGIN_BUILD=$(MahoSubPluginBuild)"
+		-P "${ENGINE_DIR}/Tools/build_subplugins.cmake"
+	COMMENT "Render: ensuring enabled sub-plugins are up to date (Scene DrawTriangleFeature UIFeature FrameRenderFeature)"
+	VERBATIM
+)
 set_target_properties(Render PROPERTIES FOLDER "Maho/Plugins/GameEngine/RenderCore")
 source_group(TREE "${CMAKE_CURRENT_LIST_DIR}" FILES ${Render_PUBLIC_HEADERS} ${Render_PRIVATE_HEADERS} ${Render_PRIVATE_SOURCES})
 # -- /MAHOGEN Render --

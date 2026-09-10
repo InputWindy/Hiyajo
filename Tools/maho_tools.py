@@ -514,11 +514,34 @@ target_link_libraries(Maho PUBLIC glm::glm nlohmann_json::nlohmann_json CLI11::C
 # any plugin DLL lands in Binaries/<Config>. Third-party targets that ALSO
 # output there (glfw, maho_imgui) do NOT link Maho, so order them after it
 # explicitly -- otherwise the clean races their concurrent writes and fails.
-add_custom_command(TARGET Maho PRE_BUILD
-	COMMAND ${{CMAKE_COMMAND}} -E rm -rf "${{CMAKE_BINARY_DIR}}/Binaries/$<CONFIG>"
-	COMMENT "Cleaning Binaries/$<CONFIG> (publish output)"
-	VERBATIM
-)
+# A nested sub-plugin build (Tools/build_subplugins.cmake) re-enters this project
+# in the middle of an outer build: there the clean must be skipped, because it
+# would delete the DLLs the outer build just produced (including the sub-plugin
+# the nested build was started for) and relink the whole chain a second time.
+# The skip is keyed on the MahoSubPluginBuild MSBuild property, which the nested
+# build passes on its own command line (/p:MahoSubPluginBuild=1) -- an
+# environment variable cannot be used: MSBuild runs a pre-build event in a reused
+# worker node, whose environment predates the build, so a variable set for the
+# nested build is not visible here (measured - the nested clean still ran).
+# It is tested at cmd/sh level instead of via a "cmake -P" helper script:
+# MSBuild re-encodes a PRE_BUILD event's command line, so a script path holding
+# non-ASCII characters (this tree does) arrives at cmake.exe mangled.
+# The removal itself goes through "cmake -E rm -rf" rather than cmd's rd:
+# CMAKE_BINARY_DIR uses forward slashes, which rd rejects ("the system cannot
+# find the file specified"), and rm also tolerates a dir that is not there yet.
+if(WIN32)
+	add_custom_command(TARGET Maho PRE_BUILD
+		COMMAND cmd /c if $(MahoSubPluginBuild)X==X "${{CMAKE_COMMAND}}" -E rm -rf "${{CMAKE_BINARY_DIR}}/Binaries/$<CONFIG>"
+		COMMENT "Cleaning Binaries/$<CONFIG> (publish output)"
+		VERBATIM
+	)
+else()
+	add_custom_command(TARGET Maho PRE_BUILD
+		COMMAND sh -c "test x$MAHO_SUBPLUGIN_BUILD != x || '${{CMAKE_COMMAND}}' -E rm -rf '${{CMAKE_BINARY_DIR}}/Binaries/$<CONFIG>'"
+		COMMENT "Cleaning Binaries/$<CONFIG> (publish output)"
+		VERBATIM
+	)
+endif()
 foreach(_MahoBinTgt glfw maho_imgui)
 	if(TARGET ${{_MahoBinTgt}})
 		add_dependencies(${{_MahoBinTgt}} Maho)
@@ -880,9 +903,41 @@ def _plugin_targets(
 	    headers are compile-time-included by the host).
 	  - all_names: every plugin — build targets + EntryPoint add_dependencies
 	    (project feature plugins are loaded at RUNTIME via FAssembly).
+
+	A plugin that declares `Plugins` also gets a POST_BUILD script step that builds
+	that sub-plugin closure, so a single-target build (VS Shift+F6 on the parent)
+	still refreshes every DLL the parent will install at runtime. See
+	`_sub_plugin_closure` + Tools/build_subplugins.cmake for why it is a script
+	action and not an add_dependencies edge.
 	"""
 	infos = _all_plugin_infos(engine_root, project_dir)
 	name_set = set(names)
+
+	def _sub_plugin_closure(root: str) -> list[str]:
+		"""Enabled sub-plugin closure of `root`: walk its `Plugins` edges and keep
+		only names in the resolved build set — a plugin that is not enabled (or an
+		Editor-typed plugin in a Runtime build) is never built. The visited guard
+		also makes a `Plugins` cycle (already a hard error earlier) non-fatal here.
+		"""
+		order: list[str] = []
+		seen: set[str] = set()
+		pending = [
+			c
+			for c in (infos.get(root, {}).get("Plugins") or [])
+			if c in name_set and c != root
+		]
+		while pending:
+			child = pending.pop(0)
+			if child in seen:
+				continue
+			seen.add(child)
+			order.append(child)
+			pending.extend(
+				c
+				for c in (infos.get(child, {}).get("Plugins") or [])
+				if c in name_set and c != child
+			)
+		return order
 
 	includes: list[str] = []
 	link_names: list[str] = []
@@ -994,6 +1049,37 @@ def _plugin_targets(
 			)
 		if deps_in_chain:
 			gen_lines.append(f"target_link_libraries({name} PUBLIC {' '.join(deps_in_chain)})")
+		# Sub-plugin build trigger: the parent's own build also builds the
+		# sub-plugins it will install at runtime (single-target builds included).
+		sub_plugins = _sub_plugin_closure(name)
+		if sub_plugins:
+			sub_names = " ".join(sub_plugins)
+			handle = f"{name}_SubPlugins"
+			gen_lines += [
+				f"# Building {name} alone must also build the sub-plugins it installs at",
+				f"# runtime ({sub_names}) - otherwise a sub-plugin DLL left over from a",
+				f"# previous build is silently installed. A POST_BUILD script action, NOT",
+				f"# add_dependencies({name}, <sub>): a sub-plugin links {name}, so that edge",
+				f"# would close a target cycle and CMake refuses to generate (cycles are",
+				f"# allowed only among static libraries).",
+				f"# {handle} is a plain handle (nothing links or depends on it) that",
+				f"# names every sub-plugin in ONE nested build: one msbuild invocation per",
+				f"# target would rebuild the shared dependency chain once per sub-plugin.",
+				f"add_custom_target({handle})",
+				f"add_dependencies({handle} {' '.join(sub_plugins)})",
+				f'set_target_properties({handle} PROPERTIES FOLDER "{folder}")',
+				f"add_custom_command(TARGET {name} POST_BUILD",
+				f'\tCOMMAND "${{CMAKE_COMMAND}}"',
+				f'\t\t"-DMAHO_BUILD_DIR=${{CMAKE_BINARY_DIR}}"',
+				f'\t\t"-DMAHO_CONFIG=$<CONFIG>"',
+				f'\t\t"-DMAHO_TARGETS={handle}"',
+				f'\t\t"-DMAHO_IN_SOLUTION_BUILD=$(BuildingSolutionFile)"',
+				f'\t\t"-DMAHO_SUBPLUGIN_BUILD=$(MahoSubPluginBuild)"',
+				f'\t\t-P "${{ENGINE_DIR}}/Tools/build_subplugins.cmake"',
+				f'\tCOMMENT "{name}: ensuring enabled sub-plugins are up to date ({sub_names})"',
+				f"\tVERBATIM",
+				f")",
+			]
 		gen_lines += [
 			f'set_target_properties({name} PROPERTIES FOLDER "{folder}")',
 			f'source_group(TREE "${{CMAKE_CURRENT_LIST_DIR}}" FILES '
