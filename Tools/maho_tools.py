@@ -508,6 +508,22 @@ target_include_directories(Maho PUBLIC "${{ENGINE_DIR}}/Source/Public")
 # zstd …); PUBLIC so every Consumer (entry plugin + EntryPoint + sub-plugins)
 # can just #include them directly.
 target_link_libraries(Maho PUBLIC glm::glm nlohmann_json::nlohmann_json CLI11::CLI11 libzstd_static)
+# Publish/output dir is cleared every build (no stale DLLs from a prior config
+# or removed plugin survive into the fresh output). Maho is the root of the
+# build DAG (every plugin + EntryPoint links it), so its PRE_BUILD runs before
+# any plugin DLL lands in Binaries/<Config>. Third-party targets that ALSO
+# output there (glfw, maho_imgui) do NOT link Maho, so order them after it
+# explicitly -- otherwise the clean races their concurrent writes and fails.
+add_custom_command(TARGET Maho PRE_BUILD
+	COMMAND ${{CMAKE_COMMAND}} -E rm -rf "${{CMAKE_BINARY_DIR}}/Binaries/$<CONFIG>"
+	COMMENT "Cleaning Binaries/$<CONFIG> (publish output)"
+	VERBATIM
+)
+foreach(_MahoBinTgt glfw maho_imgui)
+	if(TARGET ${{_MahoBinTgt}})
+		add_dependencies(${{_MahoBinTgt}} Maho)
+	endif()
+endforeach()
 set_target_properties(Maho PROPERTIES FOLDER "Maho")
 
 add_executable(EntryPoint WIN32 Intermediate/Main.cpp)
@@ -529,6 +545,16 @@ if(EXISTS "${{CMAKE_CURRENT_SOURCE_DIR}}/Config")
 		VERBATIM
 	)
 endif()
+
+# Stage the runtime plugin catalog next to the binary so FPluginCatalog can
+# discover it (TopLevel + SubPlugins) at startup.
+add_custom_command(TARGET EntryPoint POST_BUILD
+	COMMAND ${{CMAKE_COMMAND}} -E copy_if_different
+		"${{CMAKE_CURRENT_SOURCE_DIR}}/Intermediate/PluginCatalog.json"
+		"${{CMAKE_BINARY_DIR}}/Binaries/$<CONFIG>/PluginCatalog.json"
+	COMMENT "Staging PluginCatalog.json to runtime dir"
+	VERBATIM
+)
 
 # One Binaries/<Config> dir for the exe + Maho.dll + every plugin DLL, so at
 # runtime they all resolve each other (both Maho.dll and the plugin DLLs must
@@ -704,6 +730,8 @@ def _all_plugin_infos(
 			# so the compiled DLL is <layer type> + platform suffix. Empty for
 			# pure-library plugins (no layer macro) — their output keeps dir_name.
 			"layer_type": _layer_type_from_plugin(plugin_dir),
+			# Sub-plugins installed at runtime by this plugin (parent → child).
+			"Plugins": data.get("Plugins", []) or [],
 		}
 
 	# Engine plugins: Plugins/<group>/<name>/.
@@ -731,15 +759,64 @@ def _all_plugin_infos(
 
 
 def _resolve_plugin_chain(
-	engine_root: Path, selected: list[str], project_dir: Path | None = None
+	engine_root: Path, selected: list[str], project_dir: Path | None = None, build_type: str = "Runtime"
 ) -> list[str]:
-	"""Selected plugins + their transitive deps, topo order (deps first).
+	"""Selected plugins + their transitive deps + runtime sub-plugins, deps-first.
 
-	Raises ValueError on a dependency cycle (A → B → A, transitively).
+	Two separate concerns (a sub-plugin may legitimately LINK its parent while the
+	parent runtime-loads it — e.g. Scene depends on Render, Render installs Scene):
+	  - build set: closure over BOTH Dependencies (link) and Plugins (runtime sub-
+	    plugin) edges, so every sub-plugin DLL exists in the sln. A Runtime build
+	    skips Editor-typed children (same filter as `selected`). No ordering here.
+	  - topo order: Dependencies edges ONLY; a cycle here is a hard link error.
+	Raises ValueError on a dependency cycle, or on a pure sub-plugin cycle (the
+	runtime recursive install would never terminate).
 	"""
 	by_name = _all_plugin_infos(engine_root, project_dir)
+
+	# 1) Build set — closure over deps + plugins (visited-guard, no cycle error).
+	build_set: set[str] = set()
+	pending = [n for n in selected if n in by_name]
+	while pending:
+		name = pending.pop()
+		if name in build_set:
+			continue
+		build_set.add(name)
+		info = by_name.get(name) or {}
+		for dep in info.get("Dependencies", []) or []:
+			if dep in by_name and dep not in build_set:
+				pending.append(dep)
+		for child in info.get("Plugins", []) or []:
+			if child in by_name and child not in build_set:
+				if build_type == "Runtime" and by_name.get(child, {}).get("Type", "Runtime") == "Editor":
+					continue
+				pending.append(child)
+
+	# 2) Pure sub-plugin cycle check (InstallSubPlugins would recurse forever).
+	pstate: dict[str, int] = {}
+	pstack: list[str] = []
+
+	def pvisit(name: str) -> None:
+		st = pstate.get(name, 0)
+		if st == 2:
+			return
+		if st == 1:
+			start = pstack.index(name)
+			cycle = pstack[start:] + [name]
+			raise ValueError(f"FATAL: sub-plugin cycle: {' → '.join(cycle)}")
+		pstate[name] = 1
+		pstack.append(name)
+		for child in by_name.get(name, {}).get("Plugins", []) or []:
+			if child in by_name:
+				pvisit(child)
+		pstack.pop()
+		pstate[name] = 2
+
+	for name in build_set:
+		pvisit(name)
+
+	# 3) Topo order by LINK-deps only (deps first), cycle detection here.
 	order: list[str] = []
-	# 0 = unvisited, 1 = in-progress (on the current DFS stack), 2 = done.
 	state: dict[str, int] = {}
 	stack: list[str] = []
 
@@ -748,25 +825,28 @@ def _resolve_plugin_chain(
 		if st == 2:
 			return
 		if st == 1:
-			# Find where the cycle starts on the current stack and render A → B → … → A.
 			start = stack.index(name)
 			cycle = stack[start:] + [name]
-			chain = " → ".join(cycle)
 			raise ValueError(
-				f"FATAL: plugin dependency cycle: {chain}"
+				f"FATAL: plugin dependency cycle: {' → '.join(cycle)}"
 			)
 		state[name] = 1
 		stack.append(name)
-		info = by_name.get(name) or {}
-		for dep in info.get("Dependencies", []) or []:
-			if dep in by_name:
+		for dep in by_name.get(name, {}).get("Dependencies", []) or []:
+			if dep in build_set:
 				visit(dep)
 		stack.pop()
 		state[name] = 2
 		order.append(name)
 
+	# Selected in .cproject order first; then any sub-plugin pulled into the build
+	# set that no selected entry links (deterministic follow-up pass).
 	for name in selected:
-		visit(name)
+		if name in build_set:
+			visit(name)
+	for name in list(build_set):
+		if state.get(name, 0) != 2:
+			visit(name)
 	return order
 
 
@@ -948,6 +1028,66 @@ def _plugin_targets(
 	return "\n".join(includes), link_names, all_names
 
 
+def _write_plugin_catalog(
+	project_dir: Path,
+	project_name: str,
+	infos: dict[str, dict[str, Any]],
+	selected: list[str],
+	chain: list[str],
+	build_type: str,
+) -> dict[str, Any]:
+	"""Emit Intermediate/PluginCatalog.json — the runtime's plugin install map.
+
+	Keyed by LAYER TYPE (the module base name, e.g. FScene), because that is what
+	the runtime resolves against: an installed layer's GetName() == its layer type
+	and its DLL is <layer type> + platform suffix.
+
+	- TopLevel: each selected top-level plugin the host installs in PreMain
+	  (excluding the host itself). Pure-library plugins (no layer macro) are not
+	  layers and are skipped.
+	- SubPlugins: parent layer type → its sub-plugin layer types (for the
+	  collector's recursive Install).
+	- ByLayerName: complete lookup (Module + SubPlugins) per layer.
+	"""
+	top_level: list[str] = []
+	for name in selected:
+		if name == project_name:
+			continue
+		lt = infos.get(name, {}).get("layer_type")
+		if lt:
+			top_level.append(lt)
+
+	sub_plugins: dict[str, list[str]] = {}
+	by_layer: dict[str, dict[str, Any]] = {}
+	for name in chain:
+		info = infos.get(name) or {}
+		lt = info.get("layer_type")
+		if not lt:
+			continue
+		child_types: list[str] = []
+		for child in info.get("Plugins", []) or []:
+			clt = infos.get(child, {}).get("layer_type")
+			if clt:
+				child_types.append(clt)
+		by_layer[lt] = {"Module": lt, "SubPlugins": child_types}
+		if child_types:
+			sub_plugins[lt] = child_types
+
+	catalog = {
+		"FileVersion": 1,
+		"TopLevel": top_level,
+		"SubPlugins": sub_plugins,
+		"ByLayerName": by_layer,
+	}
+	intermediate = project_dir / "Intermediate"
+	intermediate.mkdir(parents=True, exist_ok=True)
+	(intermediate / "PluginCatalog.json").write_text(
+		json.dumps(catalog, indent=2, ensure_ascii=False) + "\n",
+		encoding="utf-8", newline="\n",
+	)
+	return catalog
+
+
 def _write_cmake_lists(
 	project_dir: Path,
 	project_name: str,
@@ -976,7 +1116,7 @@ def _write_cmake_lists(
 	if build_type == "Runtime":
 		selected = [p for p in selected if infos.get(p, {}).get("Type", "Runtime") != "Editor"]
 	chain = _resolve_plugin_chain(
-		engine_root, [p for p in selected if p != project_name], project_dir
+		engine_root, [p for p in selected if p != project_name], project_dir, build_type
 	)
 	# The project's own plugin is the host (added separately) — never a dep target.
 	chain = [p for p in chain if p != project_name]
@@ -1015,6 +1155,9 @@ def _write_cmake_lists(
 	# Engine layer type = the host plugin's MAHO_DECLARE_ENGINE first arg (a
 	# generated project is always F{project_name}); fall back to the plain name.
 	engine_layer_type = _layer_type_from_plugin(host_dir) or project_name
+	# Emit the runtime install catalog (TopLevel/SubPlugins/ByLayerName). Also
+	# staged to <Binaries>/<Config> by a POST_BUILD copy for runtime discovery.
+	_write_plugin_catalog(project_dir, project_name, infos, selected, chain, build_type)
 	(project_dir / "CMakeLists.txt").write_text(
 		CMAKELISTS.format(
 			name=project_name,
@@ -2064,6 +2207,19 @@ def read_cplugin(path: Path) -> dict[str, Any]:
 			data[key] = []
 		elif not isinstance(val, list):
 			raise ValueError(f"Invalid .cplugin ({key} must be an array): {path}")
+	# Sub-plugins this plugin installs/loads at runtime (parent → child). This is
+	# NOT a link dependency — the child is runtime-loaded into the parent's own
+	# collector (e.g. Render → the render-feature DLLs). The build scheduler still
+	# expands the selection along this edge so sub-plugin DLLs exist in the sln.
+	plugins = data.get("Plugins")
+	if plugins is None:
+		data["Plugins"] = []
+		plugins = data["Plugins"]
+	elif not isinstance(plugins, list):
+		raise ValueError(f"Invalid .cplugin (Plugins must be an array): {path}")
+	for sub in plugins:
+		if not isinstance(sub, str) or not sub.strip():
+			raise ValueError(f"Invalid .cplugin (Plugins entry must be a string): {path}")
 	return data
 
 
@@ -2303,9 +2459,11 @@ def scan_plugin_modules(
 	modules_by_name: dict[str, dict[str, Any]] = {}
 
 	# Pre-pass: resolve transitive enablement — enabling a plugin also enables
-	# its Dependencies + Inherits parents (recursively).
+	# its Dependencies + Inherits parents (recursively) and its runtime
+	# sub-plugins (parent → child).
 	_name_to_deps: dict[str, set[str]] = {}
 	_name_to_default: dict[str, bool] = {}
+	_name_to_plugins: dict[str, set[str]] = {}
 	for cplugin_path in cplugin_files:
 		data = read_cplugin(cplugin_path)
 		plugin_name = cplugin_path.parent.name
@@ -2315,6 +2473,7 @@ def scan_plugin_modules(
 			norm = _normalize_module_entry(raw, cplugin_path=cplugin_path)
 			deps.update(norm["Dependencies"])
 		_name_to_deps[plugin_name] = deps
+		_name_to_plugins[plugin_name] = set(data.get("Plugins", []) or [])
 
 	if enabled_overrides is not None:
 		enabled_set = {n for n, on in enabled_overrides.items() if on}
@@ -2328,6 +2487,10 @@ def scan_plugin_modules(
 			for dep in _name_to_deps.get(n, ()):
 				if dep in _name_to_deps and dep not in enabled_set:
 					enabled_set.add(dep)
+					changed = True
+			for child in _name_to_plugins.get(n, ()):
+				if child in _name_to_default and child not in enabled_set:
+					enabled_set.add(child)
 					changed = True
 
 	for cplugin_path in cplugin_files:
@@ -2447,6 +2610,10 @@ def validate_plugin(cplugin_path: Path) -> list[tuple[str, str]]:
 	for dep in data.get("Dependencies", []) or []:
 		if dep not in all_names:
 			problems.append(("error", f"Dependency '{dep}' not found in the engine catalog"))
+	# Sub-plugins must also exist (they become build targets + runtime layers).
+	for sub in data.get("Plugins", []) or []:
+		if sub not in all_names:
+			problems.append(("error", f"Sub-plugin '{sub}' not found in the engine catalog"))
 
 	# Api.h should exist (the export macro header).
 	public_dir = cplugin_path.parent / "Public"

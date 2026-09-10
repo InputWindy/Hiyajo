@@ -93,17 +93,12 @@ void FRender::Initialize(FEngineBase& Engine)
 	// Persistent render graph: Flush at frame start, Execute at frame end.
 	RenderGraph = std::make_unique<FLayerTaskGraph<FRenderStages, FRender>>(Pool, *this);
 
-	// Install the global scene feature + the render features into OUR layer
-	// collection (not the host engine's) so the render graph drives them.
-	// All are engine plugins beside this one (same layer, Plugins/Engine/).
-	// They are loaded by DLL name at runtime (Install<T> → FAssembly), so this
-	// DLL only includes their headers and never links them -- see Render.cplugin
-	// PrivateIncludes. The FRAME feature owns the single present point and must
-	// load last (its IPresent depends on the other features' final stages).
-	Install<Scene::FScene>();
-	Install<FDrawTriangleFeature>();
-	Install<FUIFeature>();
-	Install<FFrameRenderFeature>();
+	// Install the render features into OUR layer collection (not the host engine's)
+	// so the render graph drives them. The catalog (Render.cplugin Plugins) lists
+	// them; each is loaded by module base name into THIS collector. Recursive --
+	// any sub-plugin's own children are installed too. The FRAME feature owns the
+	// single present point and must load last, so the catalog order is preserved.
+	InstallSubPlugins(GetName());
 
 	// (The UI's CPU-side ImGui context is owned by FUIFeature now; FRender is
 	// UI-agnostic and sets nothing up here.)

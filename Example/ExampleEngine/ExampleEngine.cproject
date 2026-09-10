@@ -81,22 +81,6 @@
       "Enabled": true
     },
     {
-      "Name": "Scene",
-      "Enabled": true
-    },
-    {
-      "Name": "DrawTriangleFeature",
-      "Enabled": true
-    },
-    {
-      "Name": "UIFeature",
-      "Enabled": true
-    },
-    {
-      "Name": "FrameRenderFeature",
-      "Enabled": true
-    },
-    {
       "Name": "GameWorld",
       "Enabled": true
     },
@@ -106,18 +90,6 @@
     },
     {
       "Name": "ExampleEditor",
-      "Enabled": true
-    },
-    {
-      "Name": "EditorViewport",
-      "Enabled": true
-    },
-    {
-      "Name": "EditorConsole",
-      "Enabled": true
-    },
-    {
-      "Name": "EditorTheme",
       "Enabled": true
     }
   ]

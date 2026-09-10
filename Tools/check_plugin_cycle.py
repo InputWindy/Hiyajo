@@ -35,10 +35,12 @@ def main(argv: list[str]) -> int:
 			for p in data.get("Plugins", [])
 			if p.get("Enabled", True)
 		]
+		build_type = str(data.get("BuildType", "Runtime")).strip() or "Runtime"
 		m._resolve_plugin_chain(
 			engine_root,
 			[p for p in selected if p != project_name],
 			cproject.parent,
+			build_type,
 		)
 		print("[Maho] Plugin dependency graph OK")
 		return 0

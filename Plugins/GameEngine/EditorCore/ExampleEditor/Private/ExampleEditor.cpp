@@ -405,12 +405,11 @@ void FExampleEditor::OnInstalled(FRender& R)
 
 void FExampleEditor::InstallEditorComponents()
 {
-	// Editor components are loaded as DLLs and installed into this host's collector
-	// (safe point: their IEditorInit graph runs on FlushPendingUpdatePipelines).
-	// Load by module base name + platform suffix, never a hardcoded .dll.
-	Install(Maho::ApplyModuleExtension("FEditorViewport"));
-	Install(Maho::ApplyModuleExtension("FEditorConsole"));
-	//Install(Maho::ApplyModuleExtension("FEditorTheme"));
+	// Editor components (viewport, console, theme) are declaratively listed in
+	// ExampleEditor.cplugin Plugins and installed into this host's collector by
+	// module base name at the next safe point (their IEditorInit graph runs on
+	// FlushPendingUpdatePipelines). Recursive -- grandchildren install too.
+	InstallSubPlugins(GetName());
 	FlushPendingUpdatePipelines<TTypeList<IEditorInit>, TTypeList<IEditorShutdown>>();
 }
 

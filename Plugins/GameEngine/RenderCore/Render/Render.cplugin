@@ -14,5 +14,11 @@
     "DrawTriangleFeature",
     "UIFeature",
     "FrameRenderFeature"
+  ],
+  "Plugins": [
+    "Scene",
+    "DrawTriangleFeature",
+    "UIFeature",
+    "FrameRenderFeature"
   ]
 }

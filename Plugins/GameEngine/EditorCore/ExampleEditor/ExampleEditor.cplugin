@@ -9,9 +9,14 @@
 	"UIFeature"
   ],
   "PrivateIncludes": [
-	"FrameRenderFeature",
-	"UIFeature",
-	"UISystem",
-	"GameWorld"
+    "FrameRenderFeature",
+    "UIFeature",
+    "UISystem",
+    "GameWorld"
+  ],
+  "Plugins": [
+    "EditorViewport",
+    "EditorConsole",
+    "EditorTheme"
   ]
 }

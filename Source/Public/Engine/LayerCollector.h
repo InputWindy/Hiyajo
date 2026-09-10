@@ -5,6 +5,7 @@
 #include <Core/Fatal.h>
 #include <Engine/Layer.h>
 #include <Engine/LayerTaskGraph.h>
+#include <Engine/PluginCatalog.h>
 #include <Engine/Query.h>
 
 #include <algorithm>
@@ -152,7 +153,12 @@ public:
 	 *  layer whose GetName() equals it (e.g. "FScene") OR whose installed DLL path
 	 *  equals it (e.g. "EditorConsole.dll") -- the latter is symmetric with
 	 *  Install("...dll"). A pointer-installed layer has no DLL path, so it matches
-	 *  only by name. Ignored when absent (no error). */
+	 *  only by name. Ignored when absent (no error).
+	 *
+	 *  A parent layer takes its catalog-declared sub-plugins with it (recursively):
+	 *  they were installed BY the parent (InstallSubPlugins) and are unreachable --
+	 *  and would leak -- once it is gone. The unload heap still orders the batch
+	 *  dependency-safely. */
 	void TryUninstall(std::string_view Query)
 	{
 		// 1) Exact layer name (GetName()) -- the pre-existing form; callers like
@@ -161,7 +167,7 @@ public:
 		{
 			if (L->GetName() == Query)
 			{
-				RequestUninstall(L);
+				RequestUninstallWithSubPlugins(L);
 				return;
 			}
 		}
@@ -171,9 +177,25 @@ public:
 		{
 			if (Features[I] && I < ModulePaths.size() && ModulePaths[I] == Query)
 			{
-				RequestUninstall(Features[I].get());
+				RequestUninstallWithSubPlugins(Features[I].get());
 				return;
 			}
+		}
+	}
+
+	/** Recursively install the catalog-declared sub-plugins of a parent layer into
+	 *  THIS collector (e.g. FRender installs its render features; FExampleEditor
+	 *  its editor components). Sub-plugin DLLs are loaded by module base name via
+	 *  Install(DllPath) — never linked, always runtime-loaded into this collector.
+	 *  `ParentLayer` is the parent's layer type name (GetName()); grandchildren
+	 *  are resolved recursively from the catalog. No-op when the parent has no
+	 *  catalog-declared sub-plugins. */
+	void InstallSubPlugins(std::string_view ParentLayer)
+	{
+		for (const std::string& Child : FPluginCatalog::Get().GetSubPlugins(ParentLayer))
+		{
+			Install(ApplyModuleExtension(Child));
+			InstallSubPlugins(Child);   // grandchildren (recursive)
 		}
 	}
 
@@ -419,6 +441,29 @@ private:
 		{
 			PendingRemoveRequests.insert(Pipeline);
 		}
+	}
+
+	/** Request the unload of a layer AND every catalog-declared sub-plugin below it
+	 *  (children first, recursively). Child lookup is by layer name against the
+	 *  active set -- a child that was never installed is simply skipped. */
+	void RequestUninstallWithSubPlugins(FLayerBase* Pipeline)
+	{
+		if (Pipeline == nullptr)
+		{
+			return;
+		}
+		for (const std::string& Child : FPluginCatalog::Get().GetSubPlugins(Pipeline->GetName()))
+		{
+			for (FLayerBase* L : Pipelines)
+			{
+				if (L->GetName() == Child)
+				{
+					RequestUninstallWithSubPlugins(L);
+					break;
+				}
+			}
+		}
+		RequestUninstall(Pipeline);
 	}
 
 	/** The engine owns feature instances + DLLs; on unload it deletes + FreeLibrary them together. */
