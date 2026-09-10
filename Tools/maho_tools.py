@@ -1879,6 +1879,13 @@ def run_package(
 	config_dir = bin_dir / "Config"
 	if config_dir.is_dir():
 		shutil.copytree(config_dir, packaged / "Config", dirs_exist_ok=True)
+	# The plugin catalog (install map + engine root) is staged next to the
+	# binaries by CMake; a packaged run with no catalog beside the exe resolves
+	# no module at all and hangs on startup, so it must ride along too.
+	catalog = bin_dir / "PluginCatalog.json"
+	if catalog.is_file():
+		shutil.copy2(catalog, packaged / catalog.name)
+		log(f"[Maho] Staged plugin catalog → {packaged / catalog.name}")
 	if copied == 0:
 		raise RuntimeError(f"No build outputs found under {bin_dir}")
 
