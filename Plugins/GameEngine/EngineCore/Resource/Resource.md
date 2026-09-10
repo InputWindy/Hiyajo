@@ -12,13 +12,15 @@ Resource 是类型化异步资源系统：**导入/导出在专用 IO 线程上�
 
 ### 1. 数据基类 FResource
 
-`FResource` 只携带路径（`GetPath()`）；派生类持有实际载荷。目录键 = 虚拟路径去扩展名（`detail::FindLastDot` 切分）。
+`FResource` 只携带路径（`GetPath()`）；派生类持有实际载荷。目录键 = 虚拟路径去扩展名（`detail::FindLastDot` 切分）。整个类型链（`FResource` → `FAssetsResource` → 具体类型）都带导出宏（`MAHO_RESOURCE_API` / `MAHO_ASSET_API`），即"DLL 接口类"：消费者不本地生成 vtable，vptr 永远指向存活模块。
 
 ### 2. 导入器 / 导出器 / 构造器（用户特化点）
 
 `TResourceImporter<TResource>` / `TResourceExporter<TResource>` / `TResourceCreator<TResource>` 未定义，按资源类型特化。导入器经 `FImportConfig`（虚拟源路径）接收 `std::span<const std::uint8_t>` 并解码；导出器在调用线程编码，把 `std::vector<uint8_t>` 交给 IO 线程写盘。
 
 `TResourceCreator<T>` 提供实例构造（`std::unique_ptr<T>`），**定义必须放在该类型自己的插件 .cpp 里**（out-of-line）：`Import<T>` / `CreateResource<T>` 是头文件模板，若在模板里 `make_unique`，vtable + 删除析构会落在调用方模块；调用方可能是稍后被动态卸载的子插件（编辑器面板），而资源仍在目录里，Shutdown 删除它就会跳进已卸载的映像（崩溃）。经构造器后，所有实例的 vtable 都归属长期存活的类型模块。
+
+这台构造器是**运行期**的一半；**编译期**的一半是给整条类型链打导出宏（`MAHO_RESOURCE_API` / `MAHO_ASSET_API`）。消费者在 `dllimport` 类上无法本地生成 vtable/删除析构，只能引用导入符号——于是"把将死模块的 vptr 盖进实例"从"靠人遵守的约定"变成"编不过的硬约束"。项目侧自定义资源类型同样要导出（或至少让 vtable 所在模块比目录活得久）。
 
 ```cpp
 template <>

@@ -119,7 +119,12 @@ enum class ETextureAddressMode : std::uint8_t
 // 再追加自身业务字段。ResourceManager 只负责把磁盘字节读进 bulkdata 交给
 // importer，不关心具体引擎类型。
 
-class FAssetsResource : public FResource, public Archive::ISerialize
+// Every asset type below is exported as a DLL interface (MAHO_ASSET_API): instances are
+// constructed in Asset.dll but their lifetime belongs to the resource catalog, and the
+// caller that triggered the import may be a sub-plugin unloaded before the catalog is
+// torn down. Exporting pins each type's vtable + deleting dtor to this module, so no
+// consumer can stamp its own (soon-to-be-freed) vptr into an instance.
+class MAHO_ASSET_API FAssetsResource : public FResource, public Archive::ISerialize
 {
 public:
 	FAssetsResource(std::string InPath, EAssetType InType)
@@ -147,7 +152,7 @@ protected:
 // every texture-dimension asset type (1D/2D/3D/cube/2D-array/cube-array); each
 // dimension is its own derived type for typed Import<T>. --
 
-class FTexture : public FAssetsResource
+class MAHO_ASSET_API FTexture : public FAssetsResource
 {
 public:
 	explicit FTexture(std::string InPath) : FAssetsResource(std::move(InPath), EAssetType::Texture) {}
@@ -226,7 +231,7 @@ protected:
 // each is a thin typed tag over FTexture with a dimension-specialized payload
 // constructor (the decode path builds it directly).
 
-class FTexture1D : public FTexture
+class MAHO_ASSET_API FTexture1D : public FTexture
 {
 public:
 	explicit FTexture1D(std::string InPath) : FTexture(std::move(InPath)) {}
@@ -238,7 +243,7 @@ public:
 	}
 };
 
-class FTexture2D : public FTexture
+class MAHO_ASSET_API FTexture2D : public FTexture
 {
 public:
 	explicit FTexture2D(std::string InPath) : FTexture(std::move(InPath)) {}
@@ -250,7 +255,7 @@ public:
 	}
 };
 
-class FTexture3D : public FTexture
+class MAHO_ASSET_API FTexture3D : public FTexture
 {
 public:
 	explicit FTexture3D(std::string InPath) : FTexture(std::move(InPath)) {}
@@ -262,7 +267,7 @@ public:
 	}
 };
 
-class FTextureCube : public FTexture
+class MAHO_ASSET_API FTextureCube : public FTexture
 {
 public:
 	explicit FTextureCube(std::string InPath) : FTexture(std::move(InPath)) {}
@@ -273,7 +278,7 @@ public:
 	}
 };
 
-class FTexture2DArray : public FTexture
+class MAHO_ASSET_API FTexture2DArray : public FTexture
 {
 public:
 	explicit FTexture2DArray(std::string InPath) : FTexture(std::move(InPath)) {}
@@ -285,7 +290,7 @@ public:
 	}
 };
 
-class FTextureCubeArray : public FTexture
+class MAHO_ASSET_API FTextureCubeArray : public FTexture
 {
 public:
 	explicit FTextureCubeArray(std::string InPath) : FTexture(std::move(InPath)) {}
@@ -353,7 +358,7 @@ struct FAnimationKey
 
 // ── Static Mesh ────────────────────────────────────────────────
 
-class FStaticMesh : public FAssetsResource
+class MAHO_ASSET_API FStaticMesh : public FAssetsResource
 {
 public:
 	explicit FStaticMesh(std::string InPath) : FAssetsResource(std::move(InPath), EAssetType::StaticMesh) {}
@@ -406,7 +411,7 @@ struct FAnimationTrack
 	std::vector<FAnimationKey> Keys;
 };
 
-class FSkeleton : public FAssetsResource
+class MAHO_ASSET_API FSkeleton : public FAssetsResource
 {
 public:
 	explicit FSkeleton(std::string InPath) : FAssetsResource(std::move(InPath), EAssetType::Skeleton) {}
@@ -420,7 +425,7 @@ protected:
 	std::vector<FSkeletonBone> Bones;
 };
 
-class FAnimation : public FAssetsResource
+class MAHO_ASSET_API FAnimation : public FAssetsResource
 {
 public:
 	explicit FAnimation(std::string InPath) : FAssetsResource(std::move(InPath), EAssetType::Animation) {}
@@ -442,7 +447,7 @@ protected:
 
 // ── Material ───────────────────────────────────────────────────
 
-class FMaterial : public FAssetsResource
+class MAHO_ASSET_API FMaterial : public FAssetsResource
 {
 public:
 	explicit FMaterial(std::string InPath)
@@ -486,7 +491,7 @@ protected:
 
 // ── AnimationGraph / Prefab (document holders) ─────────────────
 
-class FAnimationGraph : public FAssetsResource
+class MAHO_ASSET_API FAnimationGraph : public FAssetsResource
 {
 public:
 	explicit FAnimationGraph(std::string InPath)
@@ -508,7 +513,7 @@ protected:
 	std::string DocumentJson;
 };
 
-class FPrefab : public FAssetsResource
+class MAHO_ASSET_API FPrefab : public FAssetsResource
 {
 public:
 	explicit FPrefab(std::string InPath)

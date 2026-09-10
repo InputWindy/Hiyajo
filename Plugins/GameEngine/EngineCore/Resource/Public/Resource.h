@@ -100,7 +100,13 @@ struct FExportConfig
 
 // -- resource base - typed resources derive from this --
 
-class FResource
+/** Exported as a DLL interface. A resource is constructed by the module that owns its
+ *  type but destroyed by the resource system's catalog, and the caller that triggered
+ *  the import may itself be a sub-plugin unloaded long before that. Tagging the class
+ *  makes every consumer reference the vtable + deleting dtor through the import table
+ *  instead of emitting a local copy - the compiler then cannot stamp a dying module's
+ *  vptr into the instance (see TResourceCreator below for the construction side). */
+class MAHO_RESOURCE_API FResource
 {
 public:
 	virtual ~FResource() = default;
