@@ -23,6 +23,7 @@ target_include_directories(GameWorld PUBLIC
 )
 target_include_directories(GameWorld PRIVATE
 	"${ENGINE_DIR}/Plugins/GameEngine/GameCore/SystemGroup/UISystem/Public"
+	"${ENGINE_DIR}/Plugins/GameEngine/EngineCore/UI/Public"
 )
 set_target_properties(GameWorld PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 target_compile_definitions(GameWorld PRIVATE MAHO_GAMEWORLD_MODULE_EXPORTS)

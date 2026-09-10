@@ -17,6 +17,11 @@
 #include <Platform.h>
 #include <Scene.h>
 #include <UIFeature.h>
+#include <UIView.h>
+#include <UIViewRegistry.h>
+#include <UITranslate.h>
+#include <UIClipboard.h>
+#include <UIResource.h>
 #include <RHI/RHICommandList.h>
 #include <RHI/RHIEnums.h>
 #include <RHI/RHIResources.h>
@@ -177,6 +182,11 @@ namespace Maho
 	std::uint32_t FExampleEditor::PresentTargetTextureId()
 	{
 		return Name::FName(kPresentTargetTexName).GetId();
+	}
+
+	UI::FUIName FExampleEditor::PresentTargetName()
+	{
+		return UI::FUIName(kPresentTargetTexName);
 	}
 }
 
@@ -383,6 +393,10 @@ void FExampleEditor::OnInstalled(FRender& R)
 		ImGuiIO& IO = ImGui::GetIO();
 		IO.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 		IO.IniFilename = "EditorLayout.ini";
+		// The editor's OWN startup bake: same theme font x size steps, but into THIS
+		// context's atlas (font entries are keyed per context, so the game's baked fonts
+		// are never handed to the editor). Must precede the first atlas fetch.
+		UI::BakeUIThemeFonts();
 #if defined(_WIN32)
 		// 1.91 InputText copy gates on g.PlatformIO.Platform_SetClipboardTextFn (not
 		// io.SetClipboardTextFn); set it so Ctrl+C in a readonly InputText writes the
@@ -392,6 +406,34 @@ void FExampleEditor::OnInstalled(FRender& R)
 #endif
 		ApplyMahoNightTheme();
 		MAHO_LOG_CORE_INFO("ExampleEditor: ImGui context created (editor-own, no GLFW backend)");
+
+		// Resource resolution for the declarative tree. v1 resolves exactly ONE name -- the
+		// present target -- so a panel can `FUIImage` the live surface; every other reference
+		// (icons, thumbnails) stays unresolved and the backend draws its placeholder. The UI
+		// plugin never links Render, so the mapping lives here (the side that owns the RHI).
+		UI::SetUIResourceResolver([](const UI::FUIName& Resource, bool bIsFont)
+		{
+			UI::FUIResolvedResource Out;
+			Out.Name = Resource;
+			if (bIsFont) { return Out; }
+			if (Resource == FExampleEditor::PresentTargetName())
+			{
+				Out.bValid = true;
+				Out.NativeHandle = FExampleEditor::PresentTargetTextureId();
+			}
+			return Out;
+		});
+
+#if defined(_WIN32)
+		// Text clipboard: the host owns the window, so it injects the platform capability
+		// into the UI plugin (which has no Platform dependency).
+		UI::SetUIClipboardHandlers(nullptr,
+			[](std::string_view Text)
+			{
+				const std::string Owned(Text);   // 立刻拷贝进系统剪贴板，不留悬垂指针
+				SetSystemClipboard(Owned.c_str());
+			});
+#endif
 	}
 
 	ImGui::SetCurrentContext(m_Context);
@@ -560,6 +602,9 @@ void FExampleEditor::InitEditorViews(FRender& R)
 		MAHO_LOG_CORE_ERROR("ExampleEditor: font atlas not built");
 		return;
 	}
+	// 声明期先于后端帧：组件只改自己的 UI 树，绝不碰 ImGui（此顺序是 §10.7 的硬约束）。
+	UpdateEditorPanels();
+
 	ImGui::NewFrame();
 
 	// Dock frame shell (host-owned) + each editor component draws its own window.
@@ -727,9 +772,36 @@ void FExampleEditor::DrawEditorPanels()
 	ImGui::DockSpace(EditorDockSpaceId, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_PassthruCentralNode);
 	ImGui::End();
 
+	// 声明式视图：通用循环 —— 宿主只提供上下文/显示区/停靠 id，开窗与翻译由视图库统一做。
+	UI::FUIViewFrameDesc Desc;
+	Desc.ImGuiContext = m_Context;
+	Desc.DisplayWidth = ImGui::GetIO().DisplaySize.x;
+	Desc.DisplayHeight = ImGui::GetIO().DisplaySize.y;
+	Desc.DockSpaceId = EditorDockSpaceId;
+	UI::TranslateRegisteredViews(Desc);
+}
+
+void FExampleEditor::UpdateEditorPanels()
+{
+	// 先抽干：上一帧翻译线程入队的交互事件交回各自所有者线程（回调内可再次 Edit()）。
+	// 只抽本编辑器上下文（m_Context）的视图：注册表是全进程共享的，游戏侧视图属于游戏
+	// 自己的上下文，其所有者（UISystem）在自己的更新期抽干 —— 越上下文抽干会把事件投递
+	// 到别的所有者线程上。
+	if (UI::FUIViewRegistry* Registry = UI::GetUIViewRegistry())
+	{
+		for (UI::FUIView* View : Registry->SnapshotViews())
+		{
+			if (View->GetRenderContext() != m_Context)
+			{
+				continue;
+			}
+			View->DrainEvents();
+		}
+	}
+
 	for (IEditorPanel* P : Cast<IEditorPanel>())
 	{
-		P->Draw(*this);
+		P->Update(*this);
 	}
 }
 
@@ -866,6 +938,9 @@ void FExampleEditor::PreUnInstall(FRender& R)
 	// Destroy the ImGui context (no GLFW backend to shut down -- input is hand-fed).
 	if (m_Context != nullptr)
 	{
+		// Drop THIS context's baked font entries before its atlas dies (the game context
+		// keeps its own, keyed separately).
+		UI::ClearUIFonts(static_cast<void*>(m_Context));
 		ImGui::SetCurrentContext(nullptr);
 		ImGui::DestroyContext(m_Context);
 		m_Context = nullptr;
@@ -881,7 +956,10 @@ void FExampleEditor::ShutdownEditorComponents()
 	// layer's GetName() is "FEditorConsole", but TryUninstall resolves either form,
 	// so this guarantees the component's IEditorShutdown (EditorConsole unbinding
 	// its OnLog subscription) runs BEFORE FLog::Shutdown -- no name/module
-	// asymmetry to trip on.
+	// asymmetry to trip on. The same holds for the UI view registry: every panel
+	// unregisters its view in IEditorShutdown here, and FRender (the layer that drives
+	// THIS teardown) declares the registry's IShutdown behind its own -- a panel is a
+	// sub-plugin, so an edge it declared itself would never bind.
 	TryUninstall(Maho::ApplyModuleExtension("FEditorConsole"));
 	TryUninstall(Maho::ApplyModuleExtension("FContentBrowser"));
 	TryUninstall(Maho::ApplyModuleExtension("FEditorViewport"));

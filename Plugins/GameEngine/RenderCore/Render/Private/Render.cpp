@@ -54,6 +54,12 @@ FRender::FRender()
 	// live objects.
 	MyStage<IShutdown>().IsBlocking<Resource::FResourceSystem>().OnStage<IShutdown>();
 	MyStage<IShutdown>().IsBlocking<GameWorld::FGameWorld>().OnStage<IShutdown>();
+	// The UI view registry is the same kind of environment: the editor panels this layer
+	// tears down below (FExampleEditor::PreUnInstall -> try-uninstall -> each panel's
+	// IEditorShutdown) unregister their views there, so the registry's IShutdown must run
+	// AFTER mine. Declared by NAME, not by type: the UI plugin is optional for this layer
+	// (no build dependency, and the graph skips the edge when it is not installed).
+	BlockOn("FUIViewRegistry", std::type_index(typeid(IShutdown)), std::type_index(typeid(IShutdown)));
 
 	// Asset mirror: the render mirror consumes imported assets (upload to GPU), so
 	// the resource system must run its IInit (start the IO thread) before mine.

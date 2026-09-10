@@ -6,17 +6,17 @@
   "Dependencies": [
 	"Render",
 	"Scene",
+	"UI",
 	"UIFeature"
   ],
   "PrivateIncludes": [
     "FrameRenderFeature",
-    "UIFeature",
-    "UISystem",
-    "GameWorld"
+    "UIFeature"
   ],
   "Plugins": [
     "EditorViewport",
     "EditorConsole",
-    "ContentBrowser"
+    "ContentBrowser",
+    "EditorTheme"
   ]
 }

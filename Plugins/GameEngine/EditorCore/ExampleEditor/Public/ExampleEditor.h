@@ -6,6 +6,7 @@
 #include <Render.h>
 #include <RDG.h>
 #include <RenderDrawList.h>
+#include <UITypes.h>
 
 #include <cstdint>
 #include <mutex>
@@ -41,8 +42,9 @@ struct FEditorContext
 /**
  * Editor component stage interfaces. A component plugin derives from any subset
  * of these (via FLayer<...>). Init/Shutdown are driven by the host's own
- * FLayerCollector install/uninstall graph; Draw is driven by the host's frame
- * loop (Select<IEditorPanel>() -> for over Draw). The context is the host
+ * FLayerCollector install/uninstall graph; Update is driven by the host's frame
+ * loop BEFORE `ImGui::NewFrame()` (Select<IEditorPanel>() -> for over Update), and
+ * the host then translates the registered views. The context is the host
  * FExampleEditor&, so a component reads shared UI state and reaches FRender
  * through it -- it never owns ImGui/RHI resources.
  */
@@ -53,11 +55,18 @@ public:
 	virtual void Init(FExampleEditor&) = 0;
 };
 
+/**
+ * Panel stage. A panel owns a persistent UI tree (`UI::FUIView`) and rebuilds it in
+ * `Update`, which the host calls BEFORE `ImGui::NewFrame()` (declaration phase). The
+ * host then translates every registered view inside the frame -- a panel never calls
+ * ImGui. This is the only panel door: the legacy direct-draw door is gone.
+ */
 class MAHO_EXAMPLEEDITOR_API IEditorPanel
 {
 public:
 	virtual ~IEditorPanel() = default;
-	virtual void Draw(FExampleEditor&) = 0;
+	/** 声明期（宿主 `NewFrame` 之前）：只改自己的 UI 树，不碰后端。 */
+	virtual void Update(FExampleEditor&) = 0;
 };
 
 class MAHO_EXAMPLEEDITOR_API IEditorShutdown
@@ -95,21 +104,24 @@ struct FEditorShader
  * the final present. It is the ONLY place the editor touches RHI.
  *
 	 * As a sub-collector it derives FLayerCollector<FExampleEditor> and installs the
-	 * editor COMPONENT plugins (currently EditorViewport) as DLLs.
- * Each component is an anonymous FLayer mounting the IEditor* stage interfaces.
- * The host installs them at OnInstalled (next safe point runs their Init graph),
- * draws them every frame via Select<IEditorPanel>() -> for over Draw (single
- * thread, ImGui order), and uninstalls them at PreUnInstall (their Shutdown graph
- * first). Components only draw their own window into the host's context -- they
- * carry no ImGui/RHI resource ownership.
- *
- * The frame shell (DockSpace) stays in the host; each component Begins/Ends its
- * own window name inside it. The plugin is Type=Editor: a Runtime build drops it
- * (and its components) at codegen, so editor DLLs/headers/ImGui compile only in
- * an Editor build. It is installed into FRender by module base name
- * (Install(ApplyModuleExtension("FExampleEditor"))) from the host when the build
- * is an editor build (MAHO_EDITOR_BUILD).
- */
+	 * editor COMPONENT plugins (EditorViewport / EditorConsole / ContentBrowser /
+	 * EditorTheme) as DLLs.
+	 * Each component is an anonymous FLayer mounting the IEditor* stage interfaces.
+	 * The host installs them at OnInstalled (next safe point runs their Init graph),
+	 * rebuilds their UI trees every frame via Select<IEditorPanel>() -> for over Update
+	 * (before `NewFrame`), translates every registered view in-frame, and uninstalls
+	 * them at PreUnInstall (their Shutdown graph first). Components only declare their
+	 * own tree -- they carry no ImGui/RHI resource ownership.
+	 *
+	 * The frame shell (DockSpace) stays in the host, and so does the docking identity:
+	 * the host applies `SetNextWindowDockID(its own dockspace id)` before it opens any
+	 * shelled view, so a component never needs to know a dock id. The plugin is Type=Editor:
+	 * a Runtime build drops it (and its components) at codegen, so editor
+	 * DLLs/headers/ImGui compile only in
+	 * an Editor build. It is installed into FRender by module base name
+	 * (Install(ApplyModuleExtension("FExampleEditor"))) from the host when the build
+	 * is an editor build (MAHO_EDITOR_BUILD).
+	 */
 class MAHO_EXAMPLEEDITOR_API FExampleEditor
 	: public FLayer<IOnInstalled, IEditorInput, IEditorCompose, IPreUnInstall>
 	, public FLayerCollector<FExampleEditor>
@@ -132,7 +144,7 @@ public:
 	void EditorCompose(FRender&) override;
 	void PreUnInstall(FRender&) override;
 
-	/** Called by a viewport component (Draw) to publish the on-screen panel rect (client
+	/** Called by a viewport component (Update) to publish the on-screen panel rect (client
 	 *  pixels) the game UI is presented into. EditorInput re-bases the game cursor to it. */
 	void ReportViewportRect(float X, float Y, float W, float H) { VpX = X; VpY = Y; VpW = W; VpH = H; bVpValid = W > 0.f && H > 0.f; }
 
@@ -154,6 +166,10 @@ public:
 	/** The host's main docking-space node id (owner of the frame shell). A component
 	 *  calls DockBuilder/SetNextWindowDockID against it to land inside the shared space. */
 	std::uint32_t GetEditorDockSpaceId() const { return EditorDockSpaceId; }
+
+	/** 编辑器 ImGui 上下文的 opaque 句柄。面板建视图时用它登记
+	 *  `FUIView::SetRenderContext` —— 通用翻译循环按上下文筛选视图，两套上下文互不串扰。 */
+	void* GetUIRenderContext() const { return m_Context; }
 	/** ImTextureID for the live present target (the game composite UIRenderTarget in an
 	 *  editor build, resolved to EditorRT only at the very end of the frame). The host's
 	 *  translate step resolves THIS id to R.GetPresentTarget() instead of a name-keyed
@@ -161,13 +177,22 @@ public:
 	 *  current on-screen surface with a single stable id. */
 	static std::uint32_t PresentTargetTextureId();
 
+	/** The present target as a UI-tree resource REFERENCE (`FUIName`). A declarative panel
+	 *  declares `FUIImage` with this name; the resolver the host injects maps the name back
+	 *  to `PresentTargetTextureId()`, so the panel never sees an ImTextureID. */
+	static UI::FUIName PresentTargetName();
+
 private:
 	/** Install the editor component DLLs + run their Init graph (safe point). */
 	void InstallEditorComponents();
 	/** Uninstall the 4 editor components (run their Shutdown graph) before teardown. */
 	void ShutdownEditorComponents();
-	/** Host-owned frame shell: own context, fullscreen DockSpace, then for over
-	 *  Cast<IEditorPanel>() drives each component's Draw (single thread, ImGui-safe). */
+	/** 声明期：抽干各视图上一帧入队的交互事件，再让每个组件 `Update` 自己的 UI 树。
+	 *  在 `ImGui::NewFrame()` 之前调用 —— 后端此刻还没有帧，组件也就不可能碰 ImGui。 */
+	void UpdateEditorPanels();
+	/** Host-owned frame shell: own context, fullscreen DockSpace, then the generic
+	 *  registered-view loop (host supplies context/display rect/dock id; the UI plugin
+	 *  opens each window and translates its tree -- the host knows no concrete view). */
 	void DrawEditorPanels();
 	/** Formerly the IInitViews stage -- now the frame-build half of EditorCompose:
 	 *  feed + NewFrame + panels + Render + translate to an FDrawList. Runs first. */

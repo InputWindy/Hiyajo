@@ -20,22 +20,21 @@ target_include_directories(ExampleEditor PUBLIC
 	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEngine/Public"
 	"${ENGINE_DIR}/Plugins/GameEngine/RenderCore/Render/Public"
 	"${ENGINE_DIR}/Plugins/GameEngine/RenderCore/RenderFeature/Scene/Public"
+	"${ENGINE_DIR}/Plugins/GameEngine/EngineCore/UI/Public"
 	"${ENGINE_DIR}/Plugins/GameEngine/RenderCore/RenderFeature/UIFeature/Public"
 )
 target_include_directories(ExampleEditor PRIVATE
 	"${ENGINE_DIR}/Plugins/GameEngine/RenderCore/RenderFeature/FrameRenderFeature/Public"
 	"${ENGINE_DIR}/Plugins/GameEngine/RenderCore/RenderFeature/UIFeature/Public"
-	"${ENGINE_DIR}/Plugins/GameEngine/GameCore/SystemGroup/UISystem/Public"
-	"${ENGINE_DIR}/Plugins/GameEngine/GameCore/GameWorld/Public"
 )
 set_target_properties(ExampleEditor PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 target_compile_definitions(ExampleEditor PRIVATE MAHO_EXAMPLEEDITOR_MODULE_EXPORTS)
 target_link_libraries(ExampleEditor PUBLIC Maho)
 set_property(TARGET ExampleEditor PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>")
 set_target_properties(ExampleEditor PROPERTIES OUTPUT_NAME "FExampleEditor" PREFIX "")
-target_link_libraries(ExampleEditor PUBLIC Render Scene UIFeature)
+target_link_libraries(ExampleEditor PUBLIC Render Scene UI UIFeature)
 # Building ExampleEditor alone must also build the sub-plugins it installs at
-# runtime (EditorViewport EditorConsole ContentBrowser) - otherwise a sub-plugin DLL left over from a
+# runtime (EditorViewport EditorConsole ContentBrowser EditorTheme) - otherwise a sub-plugin DLL left over from a
 # previous build is silently installed. A POST_BUILD script action, NOT
 # add_dependencies(ExampleEditor, <sub>): a sub-plugin links ExampleEditor, so that edge
 # would close a target cycle and CMake refuses to generate (cycles are
@@ -46,7 +45,7 @@ target_link_libraries(ExampleEditor PUBLIC Render Scene UIFeature)
 # It carries no sources and no output of its own, so it is parked under
 # ThirdParty/CodeGen — a code-gen artifact of ExampleEditor, not a plugin of it.
 add_custom_target(ExampleEditor_SubPlugins)
-add_dependencies(ExampleEditor_SubPlugins EditorViewport EditorConsole ContentBrowser)
+add_dependencies(ExampleEditor_SubPlugins EditorViewport EditorConsole ContentBrowser EditorTheme)
 set_target_properties(ExampleEditor_SubPlugins PROPERTIES FOLDER "ThirdParty/CodeGen")
 add_custom_command(TARGET ExampleEditor POST_BUILD
 	COMMAND "${CMAKE_COMMAND}"
@@ -56,7 +55,7 @@ add_custom_command(TARGET ExampleEditor POST_BUILD
 		"-DMAHO_IN_SOLUTION_BUILD=$(BuildingSolutionFile)"
 		"-DMAHO_SUBPLUGIN_BUILD=$(MahoSubPluginBuild)"
 		-P "${ENGINE_DIR}/Tools/build_subplugins.cmake"
-	COMMENT "ExampleEditor: ensuring enabled sub-plugins are up to date (EditorViewport EditorConsole ContentBrowser)"
+	COMMENT "ExampleEditor: ensuring enabled sub-plugins are up to date (EditorViewport EditorConsole ContentBrowser EditorTheme)"
 	VERBATIM
 )
 set_target_properties(ExampleEditor PROPERTIES FOLDER "Maho/Plugins/GameEngine/EditorCore")
@@ -100,21 +99,10 @@ endif()
 
 # The editor links the ImGui symbols + the Render/Scene feature plugins it calls into.
 # Scene is compile-visible via Dependencies here (GetScene symbol); the render surface the
-# editor owns is created through FRender (Render is a Dependencies link). UISystem /
-# FrameRenderFeature / GameWorld are compile-only type references (BlockOn template +
-# FUIControl) and are provided by the codegen PrivateIncludes include paths.
-target_link_libraries(ExampleEditor PUBLIC maho_imgui Render Scene)
-
-# Compile-time include dirs for the editor's cross-feature type references (Scene.h for the
-# viewport mirror, UISystem.h for the relocated control set, FrameRenderFeature.h for the
-# reverse BlockOn edge, GameWorld.h transitively from UISystem.h).
-foreach(_INC
-	"${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/Scene/Public"
-	"${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/FrameRenderFeature/Public"
-	"${ENGINE_DIR}/Plugins/Engine/GameEngine/RenderCore/RenderFeature/UIFeature/Public"
-	"${ENGINE_DIR}/Plugins/Engine/GameEngine/GameCore/SystemGroup/UISystem/Public"
-	"${ENGINE_DIR}/Plugins/Engine/GameEngine/GameCore/GameWorld/Public"
-)
-	target_include_directories(ExampleEditor PRIVATE "${_INC}")
-endforeach()
-unset(_INC)
+# editor owns is created through FRender (Render is a Dependencies link). Cross-feature type
+# references (UIView.h from the UI plugin, FrameRenderFeature.h for the reverse BlockOn edge)
+# come from the codegen PrivateIncludes include paths.
+# The editor is the docking host and the only layer that drives ImGui's frame for its OWN
+# context; the plugin links it explicitly. Render/Scene/UI/UIFeature come from the generated
+# block above (codegen from Dependencies).
+target_link_libraries(ExampleEditor PUBLIC maho_imgui)

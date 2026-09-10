@@ -1,0 +1,9 @@
+{
+  "FileVersion": 1,
+  "Name": "UI",
+  "Description": "声明式 UI 组件树：持久状态树 + 每帧全量翻译到 ImGui + 跨 DLL 视图注册表",
+  "Dependencies": [
+    "Name",
+    "Log"
+  ]
+}

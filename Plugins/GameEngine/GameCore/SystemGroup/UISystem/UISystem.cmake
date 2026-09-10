@@ -19,26 +19,21 @@ target_include_directories(UISystem PUBLIC
 	"${CMAKE_CURRENT_LIST_DIR}/Public"
 	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEngine/Public"
 	"${ENGINE_DIR}/Plugins/GameEngine/GameCore/GameWorld/Public"
-	"${ENGINE_DIR}/Plugins/GameEngine/EngineCore/Resource/Public"
-	"${ENGINE_DIR}/Plugins/GameEngine/EngineCore/Asset/Public"
+	"${ENGINE_DIR}/Plugins/GameEngine/EngineCore/UI/Public"
 )
 set_target_properties(UISystem PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 target_compile_definitions(UISystem PRIVATE MAHO_UISYSTEM_MODULE_EXPORTS)
 target_link_libraries(UISystem PUBLIC Maho)
 set_property(TARGET UISystem PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>")
 set_target_properties(UISystem PROPERTIES OUTPUT_NAME "FUISystem" PREFIX "")
-target_link_libraries(UISystem PUBLIC GameWorld Resource Asset)
+target_link_libraries(UISystem PUBLIC GameWorld UI)
 set_target_properties(UISystem PROPERTIES FOLDER "Maho/Plugins/GameEngine/GameCore/SystemGroup")
 source_group(TREE "${CMAKE_CURRENT_LIST_DIR}" FILES ${UISystem_PUBLIC_HEADERS} ${UISystem_PRIVATE_HEADERS} ${UISystem_PRIVATE_SOURCES})
 # -- /MAHOGEN UISystem --
 
-# UISystem links ImGui via the shared maho_imgui (defined by UIFeature.cmake) so its
-# draw closures can call ImGui::*, and the Resource + Asset layers to enumerate
-# the loaded FTexture assets (Resource::ForEachResource + Resource::FTexture). It does
-# NOT depend on UIFeature or FRender -- the game submits draw closures to its UIBuilder,
-# and the render feature pulls them; the game never perceives Render.
-target_include_directories(UISystem PUBLIC
-	"${ENGINE_DIR}/Plugins/Engine/GameEngine/EngineCore/Resource/Public"
-	"${ENGINE_DIR}/Plugins/Engine/GameEngine/EngineCore/Asset/Public"
-)
-target_link_libraries(UISystem PUBLIC maho_imgui Resource Asset)
+# UISystem owns the GAME-side UI: it declares a persistent view tree per widget entity
+# and registers the view in the UI plugin's registry (MAHO_UI). It therefore NEVER
+# links or includes ImGui -- only the translation layer (UIFeature) speaks the backend.
+# The game context is fetched through UI::GetUIGameRenderContext() (published by
+# UIFeature), so UISystem does not depend on UIFeature either: the game never
+# perceives Render.

@@ -103,6 +103,13 @@ When extending project-side code, follow these three rules:
 
 **Hourglass dependency**: engine -> project entry plugin -> feature sub-plugins. The entry plugin is the only host (inherits FEngineBase and exports `CreateEngine()`).
 
+### 4 UI Is Declared as a Component Tree, Never Drawn (strict)
+
+- **Every UI is declared as a component tree** through the UI plugin (`Maho::UI`, `Plugins/GameEngine/EngineCore/UI`): a persistent `UI::FUIView` (the tree IS the widget -- runtime state survives across frames) is re-declared each frame inside `FUIView::Edit()`, and re-declaring a node with the SAME id AND type reuses it. Panels and game code call `UI::FUIBuilder` / the `Widgets/` types only.
+- **No `ImGui::*` call and no `<imgui.h>` include outside the translator.** The one translation boundary is the UI plugin's `Private/UIImGuiTranslator.*` + `Private/UIImGuiEntry.cpp` (the `maho_imgui` link lives only on the layers that own an ImGui context: `UIFeature` for the game, `ExampleEditor` for the editor). A panel that hand-writes an ImGui call bypasses the ownership/teardown/flush contract and will be rejected in review -- the same rule holds for `Public/*.h` (see the include-direction rules above).
+- **Cross-thread contract is exclusive-write / shared-read**: a view with `EUIOwnership::CrossThread` is mutated only inside `Edit()` (exclusive write, `std::shared_mutex`) and read by the translation thread under a shared read; interaction events are queued by the translator and replayed on the OWNER thread by `DrainEvents()`. A view with `EUIOwnership::SameThread` is touched by one thread only.
+- **A view owner declares its teardown ordering against the registry at the layer that drives the teardown**: the registry holds raw pointers, so every view must be unregistered BEFORE the registry's `IShutdown`. A sub-plugin's own `BlockOn` is silently skipped (a collector sub-graph only contains its own pending set), so the edge belongs on the TopLevel layer that drives the uninstall (`FGameWorld` for world systems, `FRender`/`FExampleEditor` for editor panels) and is expressed by NAME to avoid forcing a build dependency on the optional UI plugin.
+
 ## Docs
 
 - [Docs.md](Docs.md) - full repository documentation index

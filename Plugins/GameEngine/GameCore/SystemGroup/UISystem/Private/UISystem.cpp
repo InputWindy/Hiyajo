@@ -1,8 +1,7 @@
 #include "UISystem.h"
 
-#include <string>
-
-#include "imgui.h"
+#include <UIViewRegistry.h>
+#include <Widgets/FUIText.h>
 
 namespace Maho
 {
@@ -10,206 +9,117 @@ namespace GameWorld
 {
 
 // Global accessor target (cross-DLL, mirrors Resource::GResourceSystem). Set at
-// OnInstalled, cleared at PreUnInstall; the render feature reads it to broadcast
-// the UI frame orchestration.
+// OnInstalled, cleared at PreUnInstall.
 FUISystem* GUISystem = nullptr;
-
-namespace
-{
-// Draw one data-driven control from a widget's component. Interaction (Button/Checkbox/
-// Slider) queues an FUIEvent (routed by ControlId); the game thread drains + writes the
-// new value back to the owning control in Update. No stored callbacks -- the widget's
-// component is the state.
-void DrawControl(const FUIControl& C)
-{
-	switch (C.Type)
-	{
-		case EUIControlType::Label:     ImGui::Text("%s", C.Text.c_str()); break;
-		case EUIControlType::Text:      ImGui::TextWrapped("%s", C.Text.c_str()); break;
-		case EUIControlType::Separator: ImGui::Separator(); break;
-		case EUIControlType::Image:
-			ImGui::Image(static_cast<ImTextureID>(C.ResourceId), ImVec2(C.V0, C.V1));
-			break;
-		case EUIControlType::Button:
-			if (ImGui::Button(C.Text.c_str()))
-			{
-				if (FUISystem* UI = GetUISystem()) { UI->PushUIEvent({ C.Id, C.Type, 1.f, 1.f }); }
-			}
-			break;
-		case EUIControlType::Checkbox:
-		{
-			bool b = C.V0 > 0.f;
-			if (ImGui::Checkbox(C.Text.c_str(), &b))
-			{
-				if (FUISystem* UI = GetUISystem()) { UI->PushUIEvent({ C.Id, C.Type, b ? 1.f : 0.f, 1.f }); }
-			}
-			break;
-		}
-		case EUIControlType::Slider:
-		{
-			float V = C.V0;
-			if (ImGui::SliderFloat("##slider", &V, 0.f, C.V1))
-			{
-				if (FUISystem* UI = GetUISystem()) { UI->PushUIEvent({ C.Id, C.Type, V, C.V1 }); }
-			}
-			break;
-		}
-		default: break;
-	}
-}
-} // namespace
 
 void FUISystem::OnInstalled(FGameWorld& World)
 {
 	GUISystem = this;
-
-	// UI is data-driven: spawn a demo FUIWidget as an ECS entity + component, written
-	// through the world accessor. Update renders every FUIWidget entity each frame, so
-	// the game defines UI by composing entities + FUIControls, not a hardcoded closure.
-	FEntity E = World.CreateEntity();
-	FUIWidget W;
-	W.Name = "Game UI";
-	W.AnchorX = 0.05f; W.AnchorY = 0.05f;
-	W.SizeX = 0.30f;   W.SizeY = 0.25f;
-	FUIControl Label;  Label.Type = EUIControlType::Label;  Label.Text = "Game UI placeholder";
-	FUIControl Hint;   Hint.Type  = EUIControlType::Text;   Hint.Text  = "Drag this window by its title bar.";
-	W.Controls.push_back(Label);
-	W.Controls.push_back(Hint);
-	World.AddComponent<FUIWidget>(E, W);
-	DemoWidget = E;
 }
 
 void FUISystem::ProcessInput(FGameWorld&)
 {
-	// Input hook -- the world's IProcessInput stage. No game input backend yet;
-	// left empty so the system demonstrates a stage it does not yet fill.
+	// Input hook -- the world's IProcessInput stage. UI input is delivered to the tree by
+	// the translation layer (the render side owns the context), so there is nothing to
+	// poll here; the stage stays as a declared-but-empty capability.
+}
+
+UI::FUIView* FUISystem::EnsureDemoView(FGameWorld& World)
+{
+	if (DemoWidget.IsValid())
+	{
+		FUIWidget* Widget = World.GetComponent<FUIWidget>(DemoWidget);
+		if (Widget != nullptr && Widget->View != nullptr)
+		{
+			return Widget->View.get();
+		}
+	}
+
+	// 注册表与游戏上下文都由 UI 插件/渲染特性发布；任一未就位就下一帧再试。
+	UI::FUIViewRegistry* Registry = UI::GetUIViewRegistry();
+	if (Registry == nullptr)
+	{
+		return nullptr;
+	}
+	void* Context = UI::GetUIGameRenderContext();
+	if (Context == nullptr)
+	{
+		return nullptr;
+	}
+
+	std::shared_ptr<UI::FUIView> View =
+		std::make_shared<UI::FUIView>(UI::FUIName("GameUI"), UI::EUIOwnership::CrossThread);
+	// 外壳开窗：旧演示是 "Game UI" 标题 + NoResize，位置/尺寸按显示区比例给
+	// （位置只在首次生效，之后可由标题栏拖动 —— 与旧 `FUIWidget` 锚点语义一致）。
+	View->SetWindowShell(true, "Game UI", {}, {}, UI::EUIShellFlags::NoResize);
+	View->SetShellFractions(UI::FUIVector2{ 0.05f, 0.05f }, UI::FUIVector2{ 0.30f, 0.25f });
+	View->SetRenderContext(Context);
+	Registry->RegisterView(*View);
+
+	FEntity E = World.CreateEntity();
+	FUIWidget Component;
+	Component.View = std::move(View);
+	World.AddComponent<FUIWidget>(E, std::move(Component));
+	DemoWidget = E;
+
+	return World.GetComponent<FUIWidget>(E)->View.get();
+}
+
+void FUISystem::BuildDemoTree(UI::FUIBuilder& Root)
+{
+	Root.Layout().SetDirection(UI::EUIDirection::Column);
+	Root.Layout().SetSpacing(4.f);
+
+	// 节点 Id 稳定：同 Id 同类型重声明 = 复用（运行期状态跨帧存活）。
+	Root.AddItem<UI::FUIText>(UI::FUIName("GameUI.Label")).SetText("Game UI placeholder");
+
+	Root.AddItem<UI::FUIText>(UI::FUIName("GameUI.Hint"))
+		.SetText("Drag this window by its title bar.")
+		.SetWrap(true);
 }
 
 void FUISystem::Update(FGameWorld& World)
 {
-	// Write back render-side interaction events (a button/checkbox/slider was activated
-	// on the render worker) into the owning widget control, so the component persists.
-	WriteBackEvents();
-
-	// UI is data-driven: render every FUIWidget entity as one ImGui window. Each closure
-	// captures a SNAPSHOT (copy) of the widget, so the render worker runs against stable
-	// data while the game thread may mutate the component the next frame. Position/size
-	// follow display fraction (Always for size, Once for pos so it stays draggable).
-	for (FEntity E : World.GetAllWithComponent<FUIWidget>())
+	UI::FUIView* View = EnsureDemoView(World);
+	if (View == nullptr)
 	{
-		const FUIWidget* Widget = World.GetComponent<FUIWidget>(E);
-		if (!Widget)
-		{
-			continue;
-		}
-		const FUIWidget Snap = *Widget;
-		UIBuilder.Submit([Snap]()
-		{
-			const ImVec2 DS = ImGui::GetIO().DisplaySize;
-			ImGui::SetNextWindowPos(ImVec2(Snap.AnchorX * DS.x, Snap.AnchorY * DS.y), ImGuiCond_Once);
-			ImGui::SetNextWindowSize(ImVec2(Snap.SizeX * DS.x, Snap.SizeY * DS.y), ImGuiCond_Always);
-			if (ImGui::Begin(Snap.Name.c_str(), nullptr, ImGuiWindowFlags_NoResize))
-			{
-				for (const FUIControl& C : Snap.Controls)
-				{
-					DrawControl(C);
-				}
-			}
-			ImGui::End();
-		});
+		return;   // 注册表/上下文未就位，下一帧再试
 	}
 
-	// THIS frame's UI is fully built: broadcast so subscribers (FUIFeature) copy the
-	// UIBuilder batch to their OWN side. The broadcast + the copy run on the game
-	// thread, AFTER Submit finished -- so the snapshot is a complete frame, never a
-	// partial batch, and the render side always has a full set to draw. (The game
-	// submit runs in an un-flushed, cross-frame-pipelined world update; WITHOUT this
-	// event the render's Execute() would race the submit and see empty batches.)
-	{
-		std::lock_guard Lock(EventMutex);
-		OnUIBuilt.Broadcast(UIBuilder);
-	}
-}
+	// 交互事件先回传：翻译线程只入队，真正的回调在所有者线程（此处）执行，回调内可再次 Edit()。
+	View->DrainEvents();
 
-uint64_t FUISystem::SubscribeUIHandler(std::function<void(const FUIBuilder&)> Handler)
-{
-	if (!Handler)
+	// 声明期：独占写（std::shared_mutex）。翻译线程持共享读时本段会等它翻完这一帧，反之亦然。
 	{
-		return 0;
-	}
-	std::lock_guard Lock(EventMutex);
-	return OnUIBuilt.Bind(std::move(Handler));
-}
-
-void FUISystem::UnsubscribeUIHandler(uint64_t Subscription)
-{
-	if (Subscription == 0)
-	{
-		return;
-	}
-	std::lock_guard Lock(EventMutex);
-	OnUIBuilt.Unbind(Subscription);
-}
-
-void FUISystem::PushUIEvent(FUIEvent E)
-{
-	std::lock_guard Lock(UIEventMutex);
-	PendingUIEvents.push_back(std::move(E));
-}
-
-std::vector<FUIEvent> FUISystem::DrainUIEvents()
-{
-	std::lock_guard Lock(UIEventMutex);
-	std::vector<FUIEvent> Out = std::move(PendingUIEvents);
-	PendingUIEvents.clear();
-	return Out;
-}
-
-void FUISystem::WriteBackEvents()
-{
-	// Write each queued interaction event back to the owning control (matched by Id),
-	// so a button/checkbox/slider's state persists in the widget's component.
-	FGameWorld* World = GetGameWorld();
-	if (!World)
-	{
-		return;
-	}
-	for (const FUIEvent& Event : DrainUIEvents())
-	{
-		for (FEntity E : World->GetAllWithComponent<FUIWidget>())
-		{
-			FUIWidget* Widget = World->GetComponent<FUIWidget>(E);
-			if (!Widget)
-			{
-				continue;
-			}
-			for (FUIControl& C : Widget->Controls)
-			{
-				if (C.Id == Event.ControlId)
-				{
-					C.V0 = Event.A;
-					C.V1 = Event.B;
-					break;
-				}
-			}
-		}
+		UI::FUIEditScope Scope = View->Edit();
+		BuildDemoTree(Scope.GetRoot());
 	}
 }
 
 void FUISystem::PreUnInstall(FGameWorld& World)
 {
-	// Destroy the ECS widget entity this system spawned (close our own state -- do
-	// not rely on collector ordering). The render feature (UIFeature) is uninstalled
-	// BEFORE this world system (it depends on UISystem), so it pulls no further
-	// closures after this point. Meanwhile the UIBuilder's leftover closures capture
-	// only values/globals -- nothing dangles. The event is going away with this
-	// system, so clear any residual subscriptions outright.
+	// 关表先于释放树：注册表只持裸指针，视图必须先注销再被销毁。
+	// 顺序由 FGameWorld 声明（它才是驱动本阶段的层）：`BlockOn("FUIViewRegistry", IShutdown)`
+	// 让注册表的 IShutdown 排在本层 IShutdown（→ 本系统的 PreUnInstall）之后。此处判空只是
+	// 防御左值（注册表未安装时本系统也拿不到它）。
+	if (UI::FUIViewRegistry* Registry = UI::GetUIViewRegistry())
+	{
+		if (DemoWidget.IsValid())
+		{
+			if (const FUIWidget* Widget = World.GetComponent<FUIWidget>(DemoWidget))
+			{
+				if (Widget->View != nullptr)
+				{
+					Registry->UnregisterView(*Widget->View);
+				}
+			}
+		}
+	}
 	if (DemoWidget.IsValid())
 	{
 		World.DestroyEntity(DemoWidget);
 		DemoWidget = FEntity{};
 	}
-	OnUIBuilt.RemoveAll();
 	GUISystem = nullptr;
 }
 

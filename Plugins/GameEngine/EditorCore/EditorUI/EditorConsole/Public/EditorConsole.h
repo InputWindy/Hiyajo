@@ -4,28 +4,38 @@
 #include <Engine/Layer.h>
 #include <ExampleEditor.h>
 #include <Log.h>
+#include <UIView.h>
 
 #include <deque>
+#include <memory>
 #include <mutex>
 #include <string>
+#include <vector>
 
 namespace Maho
 {
 
 /**
  * EditorConsole - an editor component plugin that mirrors the live engine log
- * stream into a host-docked ImGui panel. This is the log-ONLY build: it draws just
- * the accumulated message list (level-colored text, selectable/copyable), with no
- * filter toolbar and no command input box.
+ * stream into a host-docked panel. The panel owns a persistent declarative UI
+ * tree (`UI::FUIView`): `Update` -- the declaration phase, which the host runs
+ * before it begins its UI frame -- rebuilds that tree; the host then translates
+ * it in-frame. The plugin never touches the backend.
  *
  * It mounts IEditorInit/IEditorPanel/IEditorShutdown. Init subscribes to the Log
  * layer's listener stream (producer thread pushes into a mutex-guarded deque, so
  * the panel is safe even though LogLine runs on any emitting thread); each frame
- * Draw drains the deque into level-colored Selectable lines (per-level color, like
- * UE/Unity -- a line's severity is encoded by its color), click-to-select a line and
- * Ctrl+C to copy it, with a Copy All button in the header. Shutdown unsubscribes before
- * the Log layer goes away. Like every editor component it carries no ImGui/RHI
- * resource ownership -- the host owns the ImGui context.
+ * `Update` drains the deque into one level-colored FUISelectable per visible line,
+ * click-to-select / Shift+click-or-drag range select / Copy / Copy All, plus a live
+ * string-match filter box + a Clear button in the toolbar and a CVar command line at
+ * the bottom (Enter submits; a floating completion list follows the box).
+ * Shutdown unsubscribes before the Log layer goes away. Like every editor component
+ * it carries no backend/RHI resource ownership -- the host owns the UI context.
+ *
+ * Widget values live on the tree nodes: the backend writes them in place during
+ * translation, so `Update` reads them back into `FilterBuffer`/`CvarBuffer` before
+ * declaring (a suggestion pick or a command run refreshes the buffer first and marks
+ * it authoritative for that frame instead).
  */
 class FEditorConsole : public FLayer<IEditorInit, IEditorPanel, IEditorShutdown>
 {
@@ -33,7 +43,9 @@ class FEditorConsole : public FLayer<IEditorInit, IEditorPanel, IEditorShutdown>
 
 public:
 	void Init(FExampleEditor& Editor) override;
-	void Draw(FExampleEditor& Editor) override;
+	/** 声明期（宿主 `NewFrame` 之前）：只重建本视图的树，不碰后端。 */
+	void Update(FExampleEditor& Editor) override;
+	/** 解绑日志监听 + 注销视图（注册表只持裸指针，从不删除）。 */
 	void Shutdown(FExampleEditor& Editor) override;
 
 private:
@@ -48,14 +60,27 @@ private:
 
 	static constexpr std::size_t MaxLines = 4096;
 
+	/** Lazy view creation + registration: the UI plugin may not be up during Init. */
+	UI::FUIView* EnsureView(FExampleEditor& Editor);
+
+	/** Run the CVar command line: parse "name [value]" against the ConsoleVariable
+	 *  registry, echo the result back into the log list and clear the box. */
+	void ExecuteCvarLine();
+
+	/** Persistent UI tree, owned here, registered in the UI view registry. */
+	std::unique_ptr<UI::FUIView> View;
+
+	/** Stable per-line node Ids, indexed by line number (built once, reused). */
+	std::vector<UI::FUIName>     LineIds;
+
 	// -- line buffer (producer writes, frame thread snapshots) --
 	std::mutex                LinesMutex;   // guards Lines against producer (LogLine) races
 	std::deque<FLogEntry>     Lines;
 	FSubscriptionID           ListenerId = 0;
-	/** UE/Unity-style multi-line selection (indices into the current Snapshot):
-	 *  click a line to seed the anchor, drag (or Shift+click) to extend the range,
-	 *  Ctrl+C copies the whole range. Per-line color and click-to-select coexist
-	 *  because every line is its own Selectable, not one shared InputTextMultiline. */
+	/** UE/Unity-style line selection: click a line to select it; Shift+click extends the
+	 *  range from the anchor (modifiers arrive with the event -- `GetLastModifiers()`);
+	 *  dragging across lines extends it too (a pressed line plus a hovered one).
+	 *  Per-line color and click-to-select coexist because every line is its own Selectable. */
 	int                       SelAnchor = -1;   // selection start line (anchor), -1 = none
 	int                       SelEnd = -1;      // selection end line, -1 = none
 
@@ -65,24 +90,37 @@ private:
 	std::size_t               DroppedCount = 0;
 
 	/** Live "Filter logs..." box text in the top menu bar. Case-insensitive substring
-	 *  match against the rendered line; empty shows everything. Fixed buffer so ImGui's
-	 *  InputText edits in place without std::string reallocation quirks. */
+	 *  match against the rendered line; empty shows everything. Read back from the
+	 *  filter node before each declaration. */
 	char                      FilterBuffer[256] = { 0 };
 
-	/** CVar command line below the log area. Enter executes "name [value]" against the
-	 *  ConsoleVariable registry and echoes the result back into the log panel. */
+	/** CVar command line below the log area. Executing runs "name [value]" against the
+	 *  ConsoleVariable registry and echoes the result back into the log panel. Read back
+	 *  from the cvar node before each declaration. */
 	char                      CvarBuffer[256] = { 0 };
 
-	/** Set when a dropdown suggestion is picked. Clicking the suggestion deactivates the
-	 *  input (so the external CvarBuffer write sticks); this flag re-focuses it in the next
-	 *  Draw pass so the user can keep typing. */
+	/** Set when a suggestion is picked: the buffer (not the node) is the truth for this
+	 *  frame, so the read-back must not push the node's stale text back, and the node's
+	 *  text must be written from the buffer. */
+	bool                      CvarAuthoritative = false;
+
+	/** Set by the Run button's callback or the cvar box's Enter submit. The host drains
+	 *  events BEFORE `Update`, so the buffer is not yet synced at callback time -- the
+	 *  command runs in `Update`, right after the read-back. */
+	bool                      CvarRunRequested = false;
+
+	/** Set when a suggestion is picked: the cvar node asks the backend for the keyboard
+	 *  focus on its next translation (`RequestKeyboardFocus()`), so typing continues. */
 	bool                      CvarPendingFocus = false;
 
-	/** Whether the autocomplete dropdown should be shown. A plain IsItemActive() gate fails
-	 *  because clicking a suggestion deactivates the input on the same frame the click lands,
-	 *  so the dropdown would vanish before the click reaches a row. This flag persists across
-	 *  that frame and is only closed when the box clears, an exact name is typed, or the
-	 *  cursor leaves the dropdown without the input being focused. */
+	/** Set by the toolbar's Copy / Copy All callbacks. Like CvarRunRequested, the work
+	 *  happens in `Update`: only there is the frame's visible-line snapshot available. */
+	bool                      CopyRequested = false;
+	bool                      CopyAllRequested = false;
+
+	/** Whether the name-completion list should be shown. It persists across the frame that
+	 *  the click lands on (clicking a row deactivates the box before the click is drained),
+	 *  and is only closed when the box clears, an exact name is typed, or it loses focus. */
 	bool                      CvarDropdownOpen = false;
 };
 

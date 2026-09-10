@@ -24,6 +24,16 @@ FGameWorld::FGameWorld()
 	// installs the UISystem peer layer (which owns the UI broker). Any resource/type the
 	// world needs is reachable through the systems it installs, so it does not gate on
 	// other engine plugins (forward WaitFor on an absent plugin breaks graph Compile).
+	//
+	// Reverse edge only: the UI view registry is an ENVIRONMENT service for this layer's
+	// teardown transition. A world system that owns a view (UISystem) unregisters it in its
+	// IPreUnInstall, which Shutdown() drives below -- so the registry's IShutdown must run
+	// AFTER mine. Declared here, at the layer that actually drives that teardown: a system
+	// is installed into MY sub-graph, so an edge it declares itself would never bind (the
+	// sub-graph only contains the systems). Addressed by NAME, not by type: FGameWorld is
+	// generic scaffolding and must not build-depend on the optional UI plugin; the graph
+	// skips an edge whose target is not installed.
+	BlockOn("FUIViewRegistry", std::type_index(typeid(IShutdown)), std::type_index(typeid(IShutdown)));
 }
 
 FGameWorld::~FGameWorld()
@@ -74,9 +84,10 @@ void FGameWorld::Initialize(FEngineBase&)
 	}
 
 	// Install the world systems (peer layers). Applied at the next Tick's
-	// FlushPendingUpdatePipelines safe point (IOnInstalled). UISystem owns the
-	// game->render UI broker (+ the draggable text-box placeholder); it submits its
-	// draw closure via the UIBuilder, which FUIFeature runs on the render worker.
+	// FlushPendingUpdatePipelines safe point (IOnInstalled). UISystem owns the game-side
+	// UI: it declares the demo widget's persistent view tree (and the draggable text-box
+	// placeholder) and registers the view in the UI view registry, which the render
+	// feature translates once per frame.
 	Install<GameWorld::FUISystem>();
 }
 

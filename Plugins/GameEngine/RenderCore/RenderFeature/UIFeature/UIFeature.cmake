@@ -20,8 +20,7 @@ target_include_directories(UIFeature PUBLIC
 	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEngine/Public"
 	"${ENGINE_DIR}/Plugins/GameEngine/RenderCore/Render/Public"
 	"${ENGINE_DIR}/Plugins/GameEngine/RenderCore/RenderFeature/Scene/Public"
-	"${ENGINE_DIR}/Plugins/GameEngine/GameCore/GameWorld/Public"
-	"${ENGINE_DIR}/Plugins/GameEngine/GameCore/SystemGroup/UISystem/Public"
+	"${ENGINE_DIR}/Plugins/GameEngine/EngineCore/UI/Public"
 )
 target_include_directories(UIFeature PRIVATE
 	"${ENGINE_DIR}/Plugins/GameEngine/RenderCore/RenderFeature/DrawTriangleFeature/Public"
@@ -32,21 +31,22 @@ target_compile_definitions(UIFeature PRIVATE MAHO_UIFEATURE_MODULE_EXPORTS)
 target_link_libraries(UIFeature PUBLIC Maho)
 set_property(TARGET UIFeature PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>")
 set_target_properties(UIFeature PROPERTIES OUTPUT_NAME "FUIFeature" PREFIX "")
-target_link_libraries(UIFeature PUBLIC Render Scene GameWorld UISystem)
+target_link_libraries(UIFeature PUBLIC Render Scene UI)
 set_target_properties(UIFeature PROPERTIES FOLDER "Maho/Plugins/GameEngine/RenderCore/RenderFeature")
 source_group(TREE "${CMAKE_CURRENT_LIST_DIR}" FILES ${UIFeature_PUBLIC_HEADERS} ${UIFeature_PRIVATE_HEADERS} ${UIFeature_PRIVATE_SOURCES})
 # -- /MAHOGEN UIFeature --
 
 # UIFeature: third-party dependencies.
-# Dear ImGui (docking branch) is compiled into a SHARED "maho_imgui" library so
-# BOTH the UI render feature (owns the context + drives the frame) and the game-side
-# UISystem (submits the UI draw closures to the UIBuilder) link ONE
-# process-wide ImGui instance -- a single GImGui shared across the two DLLs. A shared
-# lib is REQUIRED: two plugin DLLs each statically linking their own imgui.cpp would
-# get separate ImGui state, and the context would crash. The feature still owns the
-# ImGui context (created/destroyed in OnInstalled/PreUnInstall) and translates
-# ImDrawData into an FDrawList for FRender::AddPass. NO imgui_impl_* backend --
-# rendering is the project's custom FRHI backend.
+# Dear ImGui (docking branch) is compiled into a SHARED "maho_imgui" library. This
+# feature is the ONLY consumer in the engine: it owns the ImGui context(s), drives the
+# frame, and translates the declarative UI tree (engine UI plugin) into ImGui calls.
+# The game side (UISystem) declares trees through the UI plugin's builder API and never
+# links or includes ImGui, so a single shared GImGui is trivially consistent -- but the
+# shared lib stays REQUIRED (two DLLs statically linking their own imgui.cpp would get
+# separate ImGui state; the context would crash). The feature still owns its context
+# (created/destroyed in OnInstalled/PreUnInstall) and translates ImDrawData into an
+# FDrawList for FRender::AddPass. NO imgui_impl_* backend -- rendering is the project's
+# custom FRHI backend.
 maho_git_repository_url(_IMGUI_URL https://github.com/ocornut/imgui.git)
 maho_fetchcontent_populate_or_reuse(imgui ${_IMGUI_URL} v1.91.9-docking imgui.h)
 unset(_IMGUI_URL)
@@ -67,15 +67,7 @@ if(NOT TARGET maho_imgui)
 	set_property(TARGET maho_imgui PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>")
 endif()
 
-# The feature links the ImGui symbols (NewFrame/Render/GetDrawData) and the UI system
-# (GetUISystem + GetUIBuilder) that it pulls every frame.
+# The feature links the ImGui symbols (NewFrame/Render/GetDrawData). The game-side UI is
+# reached through the UI plugin (UI::GetUIViewRegistry / UI::GetUIGameRenderContext), which
+# the generated block above already links -- no UISystem include or link is needed.
 target_link_libraries(UIFeature PUBLIC maho_imgui)
-
-# The feature pulls the game-side UI commands from the UIBuilder: it includes
-# <UISystem.h> (which pulls <GameWorld.h>) and links the UISystem + its GameWorld
-# dependency.
-target_include_directories(UIFeature PUBLIC
-	"${ENGINE_DIR}/Plugins/Engine/GameEngine/GameCore/GameWorld/Public"
-	"${ENGINE_DIR}/Plugins/Engine/GameEngine/GameCore/SystemGroup/UISystem/Public"
-)
-target_link_libraries(UIFeature PUBLIC UISystem GameWorld)

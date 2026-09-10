@@ -1,11 +1,11 @@
 {
   "FileVersion": 1,
   "Name": "EditorViewport",
-  "Description": "Editor viewport panel - draws scene mirror into the host dock.",
+  "Description": "Editor viewport panel - draws the scene mirror into the host dock as a declarative UI tree.",
   "Type": "Editor",
   "Dependencies": [
     "ExampleEditor",
-    "GameWorld",
+    "UI",
     "Name"
   ]
 }

@@ -4,7 +4,6 @@
   "Description": "GameWorld UI system: ECS-side UI widget model (spawn/update/teardown)",
   "Dependencies": [
     "GameWorld",
-    "Resource",
-    "Asset"
+    "UI"
   ]
 }

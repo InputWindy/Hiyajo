@@ -15,7 +15,9 @@
 #include <Name.h>
 #include <Platform.h>
 #include <Scene.h>
-#include <UISystem.h>
+#include <UITranslate.h>
+#include <UIResource.h>
+#include <UIViewRegistry.h>
 #include <RHI/RHICommandList.h>
 #include <RHI/RHIEnums.h>
 #include <RHI/RHIResources.h>
@@ -242,11 +244,10 @@ void FUIFeature::UploadFont(FRender& R)
 	});
 }
 
-// (The frame's UI orchestration -- the game draws whatever it wants -- now lives in
-// the game-side UISystem's UIBuilder: game UI components Submit draw closures there,
-// and this feature pulls + runs them (FUIBuilder::Execute) between NewFrame and
-// Render below. The feature no longer builds any UI: it only owns the ImGui context
-// + the FName->RDG mirror resolution during draw.)
+// (The frame's UI orchestration -- the game declares a persistent view tree in the UI
+// view registry, and this feature translates it once per frame between NewFrame and
+// Render via UI::TranslateRegisteredViews. The feature owns only the ImGui context +
+// the draw-data translation; it issues no UI calls of its own.)
 
 // Cross-DLL global accessor state (mirrors Resource::GetResourceSystem() and
 // Log::GetLog()). Set at OnInstalled, cleared at PreUnInstall. The editor feature
@@ -281,33 +282,6 @@ FUIFeature::FUIFeature()
 	MyStage<IRenderUI>().IsBlocking<FFrameRenderFeature>().OnStage<IPresent>();
 }
 
-void FUIFeature::TrySubscribeUI()
-{
-	if (bSubscribedUI)
-	{
-		return;
-	}
-	GameWorld::FUISystem* UI = GameWorld::GetUISystem();
-	if (UI == nullptr)
-	{
-		return;   // world system not installed yet; retry on a later frame
-	}
-	// Handler runs ON THE GAME BROADCAST THREAD, right after the game finished
-	// building this frame's closures (Submit done), and receives the UIBuilder by
-	// reference (no GetUISystem() re-lookup). Copy the batch to THIS feature's snapshot.
-	// The snapshot is replaced, never cleared -- so InitViews always has a complete
-	// frame, even if it runs before the next broadcast.
-	// Keep the returned subscription id so PreUnInstall unsubscribes ONLY this
-	// handler (a subscriber owns its own subscription -- never RemoveAll).
-	m_UISubscription = UI->SubscribeUIHandler([this](const GameWorld::FUIBuilder& Builder)
-	{
-		std::vector<std::function<void()>> Batch = Builder.CopyFrame();
-		std::lock_guard Lock(m_UISnapshotMutex);
-		m_UICommands = std::move(Batch);
-	});
-	bSubscribedUI = true;
-}
-
 void FUIFeature::OnInstalled(FRender& R)
 {
 	// THIS feature owns the UI's CPU-side ImGui context (FRender is now completely
@@ -328,6 +302,10 @@ void FUIFeature::OnInstalled(FRender& R)
 		ImGuiIO& IO = ImGui::GetIO();
 		IO.ConfigFlags |= ImGuiConfigFlags_DockingEnable;   // the editor shell docks later
 		ImGui::StyleColorsDark();
+		// Startup bake of the theme font x every size step (before the atlas is first
+		// fetched below -- the atlas rasterizes on first GetTexDataAsRGBA32, so entries
+		// added later would never make it in). Runtime never re-bakes.
+		UI::BakeUIThemeFonts();
 		bContextCreated = true;
 		MAHO_LOG_CORE_INFO("FUIFeature: ImGui context created (CPU side; FRender untouched)");
 	}
@@ -352,6 +330,9 @@ void FUIFeature::OnInstalled(FRender& R)
 
 	// Publish the cross-DLL accessor so the editor feature can reach this context.
 	GUIFeature = this;
+	// Publish the GAME context through the UI plugin, so a game-side view owner (FUISystem)
+	// can tag its views for THIS context without a UISystem -> UIFeature build dependency.
+	UI::SetUIGameRenderContext(m_Context);
 }
 
 void FUIFeature::SetEditorInput(
@@ -614,41 +595,20 @@ void FUIFeature::InitViews(FRender& R)
 		}
 	}
 
-	// Pull the game-side UI commands from the UISystem's UIBuilder and run them. The
-	// game UI components Submit draw closures (FUIBuilder::Submit) during their Update;
-	// this render worker runs them between NewFrame and Render -- every ImGui call the
-	// game makes stays on this single owner thread. The game defines what to draw;
-	// this feature only owns the ImGui context and the draw-data translation.
-	//
-	// EVENT-DRIVEN SNAPSHOT (NOT a racy Execute): the game update is dispatched
-	// un-flushed (cross-frame pipelined), so calling Execute() here would race the
-	// Submit and sometimes see an EMPTY/partial batch -- ImGui hides windows that were
-	// not Begin()'d that frame, which flickered the widgets. Instead this feature
-	// subscribes to the UI-built event (TrySubscribeUI): on the GAME thread, right
-	// after Submit finished building the frame, the handler copies the UIBuilder batch
-	// into m_UICommands. The snapshot is only REPLACED, never cleared, so every frame
-	// runs a complete set -- no empty-batch flicker.
-	TrySubscribeUI();
-	std::vector<std::function<void()>> Commands;
-	{
-		std::lock_guard Lock(m_UISnapshotMutex);
-		Commands = m_UICommands;   // copy of the last complete frame snapshot
-	}
-	for (auto& Fn : Commands)
-	{
-		try
-		{
-			Fn();
-		}
-		catch (const std::exception& E)
-		{
-			MAHO_LOG_CORE_ERROR("FUIFeature: game UI command threw: {}", E.what());
-		}
-		catch (...)
-		{
-			MAHO_LOG_CORE_ERROR("FUIFeature: game UI command threw an unknown exception");
-		}
-	}
+	// Translate every view registered for THIS context (the UI plugin owns the walk:
+	// shell/overlay handling, docking, size derivation, then the tree traversal). The
+	// game side declares a PERSISTENT tree and never issues an ImGui call; the tree is
+	// read under the view's shared lock for the whole traversal, so a game-thread
+	// `Edit()` (exclusive write) simply waits for this frame's translation to end.
+	// Views tagged with another context (or none) are skipped inside the translator --
+	// this feature only ever renders its own context. The display rect is the WHOLE
+	// window (game layout never re-scales to an editor panel), i.e. the same space the
+	// input feed above used.
+	UI::FUIViewFrameDesc FrameDesc;
+	FrameDesc.ImGuiContext = m_Context;
+	FrameDesc.DisplayWidth = IO.DisplaySize.x;
+	FrameDesc.DisplayHeight = IO.DisplaySize.y;
+	UI::TranslateRegisteredViews(FrameDesc);
 
 	// Close the frame + take the draw data. ALWAYS runs -- even if a closure threw
 	// above, the frame is still ended so g.FrameCountEnded stays synchronized. The
@@ -991,22 +951,15 @@ void FUIFeature::PreUnInstall(FRender& R)
 		R.ReleaseTexture(UIRenderTarget);
 		UIRenderTarget.Reset();
 	}
-	// This feature owns the ImGui context, so it tears it down here. This feature is
-	// uninstalled BEFORE UISystem (it depends on UISystem), so the game side is still
-	// alive: drop our UI-built subscription so the (still-live) game event no longer
-	// captures a dead `this`, then clear the snapshot.
-	if (GameWorld::FUISystem* UI = GameWorld::GetUISystem())
-	{
-		UI->UnsubscribeUIHandler(m_UISubscription);
-	}
-	m_UISubscription = 0;
-	{
-		std::lock_guard Lock(m_UISnapshotMutex);
-		m_UICommands.clear();
-	}
-	bSubscribedUI = false;
+	// This feature owns the ImGui context, so it tears it down here. Unpublish first:
+	// a view owner that registers between now and its own teardown must not adopt a dead
+	// context (`GetUIGameRenderContext()` returning null makes it retry, never crash).
+	UI::SetUIGameRenderContext(nullptr);
 	if (bContextCreated)
 	{
+		// Drop this context's baked font entries BEFORE the atlas dies: the registry stores
+		// raw ImFont* (the editor's context keeps its own, keyed separately).
+		UI::ClearUIFonts(static_cast<void*>(m_Context));
 		ImGui::SetCurrentContext(nullptr);
 		ImGui::DestroyContext(m_Context);
 		m_Context = nullptr;

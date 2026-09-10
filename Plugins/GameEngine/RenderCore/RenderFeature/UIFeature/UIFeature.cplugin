@@ -1,12 +1,11 @@
 {
   "FileVersion": 1,
   "Name": "UIFeature",
-  "Description": "UI render feature: draws the UI layer's draw data (currently ImGui) into SceneColor (before present)",
+  "Description": "UI render feature: translates the UI plugin's declarative view trees into ImGui and draws them into SceneColor (before present)",
   "Dependencies": [
     "Render",
     "Scene",
-    "GameWorld",
-    "UISystem"
+    "UI"
   ],
   "PrivateIncludes": [
     "DrawTriangleFeature",

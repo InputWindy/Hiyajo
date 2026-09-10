@@ -5,6 +5,7 @@
   "Type": "Editor",
   "Dependencies": [
 	"ExampleEditor",
+	"UI",
 	"Paths",
 	"Asset",
 	"Resource",

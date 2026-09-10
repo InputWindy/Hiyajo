@@ -8,9 +8,7 @@
 #include <RenderDrawList.h>
 
 #include <cstdint>
-#include <functional>
 #include <mutex>
-#include <vector>
 
 #include <Platform.h>
 
@@ -41,10 +39,11 @@ struct FUIShader
  * ImGui render feature - the OWNER of the UI's CPU-side ImGui context and the
  * whole frame lifecycle. This feature creates/destroys the ImGui context
  * (OnInstalled / PreUnInstall) and drives the frame inside InitViews: frame feed ->
- * NewFrame -> pull the game-side UI commands from the UISystem's UIBuilder and run
- * them (FUIBuilder::Execute -- the game submits draw closures defining the UI; this
- * worker executes every ImGui call) -> Render -> GetDrawData -> translate the draw
- * data into GPU buffers (uploaded in InitViews) + an FDrawList holding the refs.
+ * NewFrame -> generic registered-view loop (UI::TranslateRegisteredViews: every view
+ * registered in the UI view registry for THIS context is opened + fully translated by
+ * the UI plugin; the game side declares a persistent tree, never an ImGui call) ->
+ * Render -> GetDrawData -> translate the
+ * draw data into GPU buffers (uploaded in InitViews) + an FDrawList holding the refs.
  * RenderUI draws that list into this feature's OWN off-screen composite target
  * (UIRenderTarget, sized to the swapchain canvas + format) and sets it as FRender's present
  * target -- the frame feature's IPresent blits it to the swapchain. The UI is the final
@@ -52,6 +51,10 @@ struct FUIShader
  * control. This feature is OFF-SCREEN ONLY: it no longer owns the present point (the frame
  * feature does). FRender is completely UI-agnostic -- it holds no ImGui state, never links
  * or references ImGui.
+ *
+ * It also publishes the GAME ImGui context through the UI plugin
+ * (UI::SetUIGameRenderContext) so a game-side view owner (FUISystem) can tag its
+ * views with THIS context without a UISystem -> UIFeature build dependency.
  *
  * Stateless draw feature: the UI shader goes through FRender::TryGetShader<FUIShader>
  * (async compile + per-type cache, above). The FONT backend holds ONLY the RDG
@@ -115,13 +118,6 @@ private:
 	 *  No-op after the first call. */
 	void UploadFont(FRender& R);
 
-	/** Subscribe to the UISystem's "UI built" event (thread-safe, idempotent). The
-	 *  handler runs on the GAME broadcast thread AFTER Submit finished, so it copies
-	 *  the UIBuilder batch into m_UICommands -- a COMPLETE frame snapshot, never a
-	 *  partial/empty one. Called lazily from InitViews: the world system installs
-	 *  after this render feature, so the subscription is registered on first frame. */
-	void TrySubscribeUI();
-
 	// ImGui texture-id semantics: ImTextureID == 0 selects the PASS-LEVEL font set
 	// (FontTexture + a pooled clamp sampler, bound via FUIParameters). A NON-zero
 	// ImTextureID holds a mirror FName id (FName::GetId()) -- the per-batch set is
@@ -147,21 +143,10 @@ private:
 	 *  process-wide imgui DLL but each owns a distinct context; InitViews selects this
 	 *  one (SetCurrentContext) so a frame is never built against the other context. */
 	ImGuiContext* m_Context = nullptr;
-	/** Whether this feature has subscribed to the UISystem's UI-built event. */
-	bool bSubscribedUI = false;
 	/** Editor-build input takeover flag. Set by SetEditorInput (the editor's pass0 stage);
 	 *  InitViews reads it to decide whether to skip its own OS poll. Reset to false after
 	 *  InitViews consumes it each frame. */
 	bool bEditorInputThisFrame = false;
-	/** The UI-built subscription id (0 = not subscribed). Retained so PreUnInstall
-	 *  unsubscribes ONLY this feature's handler -- not any other subscriber's. */
-	uint64_t m_UISubscription = 0;
-	/** Render-side snapshot of the game's UI closures. REPLACED (never cleared) by
-	 *  the UI-built event handler on the game thread, so InitViews always has a
-	 *  complete frame to run -- no empty/partial batch, no flicker. Guarded by
-	 *  m_UISnapshotMutex (game handler writes it, render InitViews reads + runs a copy). */
-	std::mutex m_UISnapshotMutex;
-	std::vector<std::function<void()>> m_UICommands;
 	/** The pass-level font texture (pool-owned persistent). Bound via FUIParameters
 	 *  every RenderUI; the sampler is a pooled clamp sampler (content-addressable). */
 	FRDGTextureRef FontTexture;

@@ -2,84 +2,43 @@
 
 #include "UISystemApi.h"
 #include <GameWorld.h>
-#include "FUIBuilder.h"
-#include <Core/Delegate.h>
+#include <UIView.h>
 
-#include <cstdint>
-#include <functional>
-#include <mutex>
-#include <string>
-#include <vector>
+#include <memory>
 
 namespace Maho
 {
 namespace GameWorld
 {
 
-/** UI control kinds -- one branch per kind in the editor's DrawControl dispatcher. */
-enum class EUIControlType : std::uint8_t
-{
-	Label, Text, Image, Button, Slider, Checkbox, Separator
-};
-
 /**
- * One data-driven ImGui control. Type x data selects what to draw. Interaction
- * (button/checkbox/slider) does NOT call a stored callback -- the render worker
- * queues an FUIEvent (routed by Id) and the GAME thread drains + writes it back on
- * the next Update, so the control's state persists in the widget's component.
- */
-struct FUIControl
-{
-	EUIControlType Type  = EUIControlType::Label;
-	std::string    Text;             // label / button / checkbox text
-	std::uint32_t  ResourceId = 0;   // image texture resource id (FName::GetId(), for Type::Image)
-	std::uint32_t  Id = 0;           // routing id (assigned by UISystem at widget creation)
-	float          V0 = 0.f;         // Type-dependent: slider value / checkbox state / image width
-	float          V1 = 1.f;         // Type-dependent: slider max / image height
-};
-
-/** One UI interaction event, queued on the render thread and drained (written back to
- *  the owning widget control) by the game thread on the next Update. */
-struct FUIEvent
-{
-	std::uint32_t   ControlId = 0;
-	EUIControlType  Type = EUIControlType::Label;
-	float           A = 0.f;   // slider value / checkbox state (0/1)
-	float           B = 1.f;   // slider max
-};
-
-/**
- * ECS-side UI widget: one ImGui window anchored by display fraction (X/Y position +
- * W/H size). Pure game data, written through the world accessor; the UI system renders
- * every FUIWidget entity (clamping to a data-driven control set) on the next frame. The
- * widget is the data -- it replaces a hardcoded draw closure, so UI is composable from
- * entities + FUIControl components instead of being baked into a std::function.
+ * ECS-side UI widget: the OWNER of one persistent declarative UI tree.
+ *
+ * The tree IS the widget. A `UI::FUIView` lives across frames and keeps its runtime
+ * state (text buffers, toggles, scroll offsets); the world re-declares the frame's
+ * content inside `FUIView::Edit()` each Update, and a node re-declared with the same id
+ * AND type is REUSED (its state survives). The render side translates the whole tree
+ * once per frame -- the game never issues an ImGui call.
+ *
+ * `shared_ptr` (not `unique_ptr`): the component pool moves elements by value when it
+ * grows, and a copyable member keeps that path trivially valid.
  */
 struct FUIWidget
 {
-	std::string    Name;                    // window title
-	float          AnchorX = 0.05f;         // pos fraction of the display
-	float          AnchorY = 0.05f;
-	float          SizeX   = 0.30f;         // size fraction of the display
-	float          SizeY   = 0.25f;
-	std::vector<FUIControl> Controls;       // ordered controls (window content)
+	std::shared_ptr<UI::FUIView> View;
 };
 
 /**
- * GameWorld UI system -- a WORLD SYSTEM, installed into FGameWorld as a peer
- * layer (via the sub-landlord collector). It owns the FUIBuilder -- the
- * game->render UI command broker -- and on each Update submits ONE draw closure
- * that shows a single draggable text box (the game-side UI placeholder). The
- * full data-driven control set (FUIControl/EUIControlType + its DrawControl
- * dispatch) is owned by the EDITOR plugin; the game keeps only the broker + a
- * minimal text-box closure.
+ * GameWorld UI system -- a WORLD SYSTEM, installed into FGameWorld as a peer layer (via
+ * the sub-landlord collector). It owns the game-side UI: every `FUIWidget` entity owns a
+ * persistent `UI::FUIView` registered in the UI view registry. Each Update it re-declares
+ * every widget's tree from its component -- an EXCLUSIVE write (`Edit()`, the tree's
+ * `std::shared_mutex`) -- and then drains the events the translation thread queued while
+ * the render side walked the tree under a SHARED read. So the cross-thread contract is
+ * exclusive-write / shared-read, and neither side holds the tree across the boundary.
  *
- * It also owns the FUIBuilder -- the game->render UI command broker. Game-side UI
- * components (this system included) Submit draw CLOSURES to it; FUIFeature pulls them
- * once per render frame and executes the closures between ImGui::NewFrame and
- * ImGui::Render. So the game defines what to draw (the closures call ImGui::*), while
- * the render worker executes every ImGui call on its own frame. The game never touches
- * FRender; the render feature only owns the ImGui context + the FName->RDG mirror.
+ * No ImGui here: the game declares trees through the UI plugin's builder API, and the
+ * translation layer (owned by the render feature) maps them to ImGui.
  */
 class MAHO_UISYSTEM_API FUISystem : public FLayer<IOnInstalled, IProcessInput, IUpdate, IPreUnInstall>
 {
@@ -91,42 +50,17 @@ public:
 	void Update(FGameWorld& World) override;
 	void PreUnInstall(FGameWorld& World) override;
 
-	/** Subscribe a handler to the "UI built this frame" broadcast. Thread-safe: the
-	 *  subscriber (the render feature) may join from a render worker while the game
-	 *  thread broadcasts. The handler runs ON THE BROADCAST THREAD (the game thread,
-	 *  after Submit finished building the frame), RECEIVING the UIBuilder by reference --
-	 *  so it can CopyFrame() directly, no GetUISystem() re-lookup (and no null-window
-	 *  during teardown). Returns a subscription id; UnsubscribeUIHandler(id) removes ONLY
-	 *  this handler. Callers MUST retain it until they unload. */
-	uint64_t SubscribeUIHandler(std::function<void(const FUIBuilder&)> Handler);
-
-	/** Remove ONLY the handler registered under this subscription id (mirror of
-	 *  SubscribeUIHandler). No-op if the id is stale. */
-	void UnsubscribeUIHandler(uint64_t Subscription);
-
-	/** Queue a UI interaction event (called from the RENDER worker when a control is
-	 *  activated). Thread-safe. The game thread drains it in Update and writes the new
-	 *  value back to the owning widget control. */
-	void PushUIEvent(FUIEvent E);
-
-	/** Drain queued UI events (call from the GAME thread, typically at Update). The
-	 *  returned list is owned by the caller. */
-	std::vector<FUIEvent> DrainUIEvents();
-
 private:
+	/** Create (once) the demo widget's entity + component + persistent view, bind it to
+	 *  the game render context and register it. Returns nullptr while the UI registry or
+	 *  the game context is not up yet -- the caller retries next frame (init order
+	 *  between the game world and the render features is not fixed). */
+	UI::FUIView* EnsureDemoView(FGameWorld& World);
 
-	FUIBuilder UIBuilder;   // game->render UI command broker (owned by this world system)
-	FEntity DemoWidget;     // ECS entity hosting the demo FUIWidget (spawned on install)
+	/** Re-declare the demo tree (called from inside a live `Edit()` scope). */
+	void BuildDemoTree(UI::FUIBuilder& Root);
 
-	/** Drain queued render-side interaction events and write the new value back to the
-	 *  owning widget control (identified by ControlId). Call from the game thread. */
-	void WriteBackEvents();
-
-	mutable std::mutex EventMutex;   // guards OnUIBuilt (bind vs broadcast race)
-	TMulticastEvent<void(const FUIBuilder&)> OnUIBuilt;
-
-	mutable std::mutex UIEventMutex;   // guards PendingUIEvents (render push vs game drain)
-	std::vector<FUIEvent> PendingUIEvents;
+	FEntity DemoWidget;
 };
 
 /** Global accessor to the UI system (cross-DLL, mirrors Resource::GetResourceSystem()).

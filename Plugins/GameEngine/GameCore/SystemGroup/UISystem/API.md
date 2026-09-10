@@ -2,7 +2,17 @@
 
 ## Exported surface
 
-- `FUISystem` (`MAHO_UISYSTEM_API`) -- the world system layer.
+- `FUISystem` (`MAHO_UISYSTEM_API`) -- the world system layer, `MAHO_DECLARE_LAYER(FUISystem)`.
+- `UI::FUIWidget`-owning helper types are internal; the component struct itself is public:
+
+```cpp
+struct FUIWidget
+{
+	std::shared_ptr<UI::FUIView> View;   // the persistent declarative tree, registered in the UI registry
+};
+```
+
+`shared_ptr` (not `unique_ptr`) because the component pool moves elements by value when it grows.
 
 ## C export
 
@@ -13,12 +23,14 @@ extern "C" MAHO_UISYSTEM_API Maho::FLayerBase* CreateLayer();
 Looked up by symbol at dynamic install (`FAssembly`), so `FGameWorld` can load the
 plugin by name / typed `Install<GameWorld::FUISystem>()`.
 
-## Types
+## Accessor
 
-- `FUIWidget` -- ECS-side widget state (screen anchor by `X/Y` + size). Pure game
-  data, written through the world accessor.
+```cpp
+MAHO_UISYSTEM_API FUISystem* GetUISystem();   // nullptr until installed (mirrors Resource::GetResourceSystem)
+```
 
 ## Wiring
 
-GameWorld installs it as a peer layer. The render layer (`FUIFeature`) reads the
-model (not yet wired -- UI is model-only until a consumer exists).
+`FGameWorld` installs it as a peer world system. Render side: `UIFeature` translates
+every registered view once per frame (it publishes the game UI context through the UI
+plugin, which is how this plugin tags its views without depending on `UIFeature`).

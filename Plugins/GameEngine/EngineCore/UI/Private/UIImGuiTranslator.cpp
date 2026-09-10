@@ -1,0 +1,611 @@
+#include "UIImGuiTranslator.h"
+
+#include <UITheme.h>
+
+#include <Log.h>
+
+#include <algorithm>
+#include <cmath>
+#include <cstring>
+
+namespace Maho { namespace UI {
+
+namespace
+{
+/** 占位图案的灰阶（资源未就绪时的一致性缺省外观）。 */
+const FUIColor kPlaceholderGray{ 0.5f, 0.5f, 0.5f, 0.35f };
+
+bool NearlyEqual(float A, float B)
+{
+	return std::fabs(A - B) < 1e-4f;
+}
+} // namespace
+
+// -- 坐标与颜色 --------------------------------------------------------------------------
+
+ImVec2 FImGuiTranslator::ScreenMin(const FUIRect& Local) const
+{
+	return ImVec2(Origin.X + Local.X, Origin.Y + Local.Y);
+}
+
+ImVec2 FImGuiTranslator::ScreenMax(const FUIRect& Local) const
+{
+	return ImVec2(Origin.X + Local.X + Local.W, Origin.Y + Local.Y + Local.H);
+}
+
+FUIRect FImGuiTranslator::ToScreen(const FUIRect& Local) const
+{
+	return FUIRect{ Origin.X + Local.X, Origin.Y + Local.Y, Local.W, Local.H };
+}
+
+ImU32 FImGuiTranslator::ToColor(const FUIColor& C)
+{
+	return ImGui::GetColorU32(ImVec4(C.R, C.G, C.B, C.A));
+}
+
+// -- 视图进出 ----------------------------------------------------------------------------
+
+void FImGuiTranslator::BeginView(FUIView& InView, const FUIRect& DisplayRect)
+{
+	View = &InView;
+	TextureCache.clear();
+	FontCache.clear();
+	OriginStack.clear();
+	DisabledDepth = 0;
+	PendingFocusId = 0;   // 焦点请求只在提出它的那一帧有效，不留到下一帧
+
+	// 原点 = 窗口内容区左上（面板路径含窗口内边距；叠加层路径内边距为 0）。
+	Origin = FUIVector2{ ImGui::GetCursorScreenPos().x, ImGui::GetCursorScreenPos().y };
+	Display = DisplayRect;
+}
+
+void FImGuiTranslator::EndView(FUIView& InView)
+{
+	(void)InView;
+	while (DisabledDepth > 0)
+	{
+		ImGui::EndDisabled();
+		--DisabledDepth;
+	}
+	OriginStack.clear();
+	TextureCache.clear();
+	FontCache.clear();
+	View = nullptr;
+}
+
+void FImGuiTranslator::EnqueueEvent(FUIEventRecord Record)
+{
+	// 修饰键在入队这一刻采集：此刻的键盘状态正是命中那一刻的状态（树回调要跨帧才跑到）。
+	const ImGuiIO& IO = ImGui::GetIO();
+	if (IO.KeyShift) { Record.Modifiers = Record.Modifiers | EUIModifiers::Shift; }
+	if (IO.KeyCtrl)  { Record.Modifiers = Record.Modifiers | EUIModifiers::Ctrl; }
+	if (IO.KeyAlt)   { Record.Modifiers = Record.Modifiers | EUIModifiers::Alt; }
+
+	// 翻译线程只入队：回调由视图所有者的 `DrainEvents()` 执行（跨线程写规则不破）。
+	if (View != nullptr) { View->PushEvent(std::move(Record)); }
+}
+
+// -- 资源 --------------------------------------------------------------------------------
+
+FUIResolvedResource FImGuiTranslator::ResolveFont(FUIName Font, float Size)
+{
+	const float Snapped = SnapFontSize(Size);
+	const std::uint32_t Key = Font.GetId() ^ (static_cast<std::uint32_t>(Snapped * 16.f) << 20);
+	if (const auto It = FontCache.find(Key); It != FontCache.end()) { return It->second; }
+
+	FUIResolvedResource Out;
+	Out.Name = Font;
+	if (void* Native = FindUIFont(Context, Font, Snapped))
+	{
+		Out.bValid = true;
+		Out.NativeHandle = reinterpret_cast<std::uintptr_t>(Native);
+		FontCache.emplace(Key, Out);
+		return Out;
+	}
+
+	// 未烘 / 未登记的字体：用后端缺省字体绘制，且只记一条诊断（不逐帧刷屏）。
+	static bool bWarned = false;
+	if (!bWarned)
+	{
+		bWarned = true;
+		MAHO_IF_NOT_NULL(GetLog(), L) { L->Warn("UI: 字体引用未登记，回退缺省字体（图集按主题字体×档位启动烘制）"); }
+	}
+	Out.bValid = false;
+	FontCache.emplace(Key, Out);
+	return Out;
+}
+
+FUIResolvedResource FImGuiTranslator::ResolveTexture(FUIName Texture)
+{
+	if (Texture.IsNone()) { return FUIResolvedResource{}; }
+	if (const auto It = TextureCache.find(Texture.GetId()); It != TextureCache.end())
+	{
+		return It->second;
+	}
+	FUIResolvedResource Out = ResolveUIResource(Texture, false);
+	TextureCache.emplace(Texture.GetId(), Out);
+	return Out;
+}
+
+ImFont* FImGuiTranslator::FontOf(const FUIResolvedResource& Font, float Size) const
+{
+	(void)Size;
+	if (Font.bValid && Font.NativeHandle != 0)
+	{
+		return reinterpret_cast<ImFont*>(Font.NativeHandle);
+	}
+	return ImGui::GetFont();   // 缺省字体
+}
+
+// -- 测量 --------------------------------------------------------------------------------
+
+FUIVector2 FImGuiTranslator::MeasureText(std::string_view Text, const FUIResolvedResource& Font, float Size)
+{
+	ImFont* F = FontOf(Font, Size);
+	const float UseSize = (Font.bValid && Size > 0.f) ? SnapFontSize(Size) : ImGui::GetFontSize();
+	const ImVec2 S = F->CalcTextSizeA(UseSize, FLT_MAX, 0.f, Text.data(), Text.data() + Text.size());
+	return FUIVector2{ S.x, S.y };
+}
+
+FUIVector2 FImGuiTranslator::MeasureIcon(const FUIResolvedResource& Icon, float Size)
+{
+	if (!Icon.bValid)
+	{
+		return FUIVector2{ Size, Size };   // 占位方块按请求边长
+	}
+	const float W = static_cast<float>(Icon.Width > 0 ? Icon.Width : static_cast<std::uint32_t>(Size));
+	const float H = static_cast<float>(Icon.Height > 0 ? Icon.Height : static_cast<std::uint32_t>(Size));
+	const float Scale = (W > 0.f) ? (Size / W) : 1.f;
+	return FUIVector2{ W * Scale, H * Scale };
+}
+
+// -- 基元 --------------------------------------------------------------------------------
+
+void FImGuiTranslator::PushDisabled()
+{
+	ImGui::BeginDisabled(true);
+	++DisabledDepth;
+}
+
+void FImGuiTranslator::PopDisabled()
+{
+	if (DisabledDepth > 0)
+	{
+		ImGui::EndDisabled();
+		--DisabledDepth;
+	}
+}
+
+void FImGuiTranslator::PushClip(const FUIRect& Rect)
+{
+	ImGui::PushClipRect(ScreenMin(Rect), ScreenMax(Rect), true);
+}
+
+void FImGuiTranslator::PopClip()
+{
+	ImGui::PopClipRect();
+}
+
+void FImGuiTranslator::DrawRect(const FUIRect& Rect, const FUIResolvedStyle& S)
+{
+	if (Rect.IsEmpty()) { return; }
+	ImDrawList* Draw = ImGui::GetWindowDrawList();
+	const ImVec2 Min = ScreenMin(Rect);
+	const ImVec2 Max = ScreenMax(Rect);
+
+	if (S.Fill.A > 0.f)
+	{
+		Draw->AddRectFilled(Min, Max, ToColor(S.Fill), S.Radius);
+	}
+	if (S.StrokeWidth > 0.f && S.Stroke.A > 0.f)
+	{
+		Draw->AddRect(Min, Max, ToColor(S.Stroke), S.Radius, ImDrawFlags_None, S.StrokeWidth);
+	}
+}
+
+void FImGuiTranslator::DrawText(const FUIRect& Rect, std::string_view Text,
+								const FUIResolvedResource& Font, float Size,
+								const FUIResolvedStyle& S, EUITextAlign Align)
+{
+	if (Text.empty() || Rect.IsEmpty()) { return; }
+
+	ImFont* F = FontOf(Font, Size);
+	const float UseSize = (Font.bValid && Size > 0.f) ? SnapFontSize(Size) : ImGui::GetFontSize();
+	const ImVec2 TextSize = F->CalcTextSizeA(UseSize, FLT_MAX, 0.f, Text.data(), Text.data() + Text.size());
+
+	float X = Rect.X;
+	if (Align == EUITextAlign::Center) { X += (Rect.W - TextSize.x) * 0.5f; }
+	else if (Align == EUITextAlign::Right) { X += Rect.W - TextSize.x; }
+	const float Y = Rect.Y + (Rect.H - TextSize.y) * 0.5f;
+
+	ImDrawList* Draw = ImGui::GetWindowDrawList();
+	Draw->PushClipRect(ScreenMin(Rect), ScreenMax(Rect), true);
+	Draw->AddText(F, UseSize, ImVec2(Origin.X + X, Origin.Y + Y), ToColor(S.Text),
+				  Text.data(), Text.data() + Text.size());
+	Draw->PopClipRect();
+}
+
+void FImGuiTranslator::DrawIcon(const FUIRect& Rect, const FUIResolvedResource& Icon, const FUIResolvedStyle& S)
+{
+	if (Rect.IsEmpty()) { return; }
+	ImDrawList* Draw = ImGui::GetWindowDrawList();
+	const ImVec2 Min = ScreenMin(Rect);
+	const ImVec2 Max = ScreenMax(Rect);
+
+	if (Icon.bValid && Icon.NativeHandle != 0)
+	{
+		Draw->AddImage(static_cast<ImTextureID>(Icon.NativeHandle), Min, Max, ImVec2(0.f, 0.f), ImVec2(1.f, 1.f),
+					   ToColor(S.Text));
+		return;
+	}
+	// 资源未就绪：占位方块（不阻塞布局，资源就绪后自动接续）
+	FUIColor Placeholder = kPlaceholderGray;
+	Placeholder.A *= S.Text.A;
+	Draw->AddRectFilled(Min, Max, ToColor(Placeholder), 2.f);
+}
+
+void FImGuiTranslator::DrawImage(const FUIRect& Rect, const FUIResolvedResource& Texture,
+								 const FUIColor& Tint, const FUIVector2& UV0, const FUIVector2& UV1)
+{
+	if (Rect.IsEmpty()) { return; }
+	ImDrawList* Draw = ImGui::GetWindowDrawList();
+	const ImVec2 Min = ScreenMin(Rect);
+	const ImVec2 Max = ScreenMax(Rect);
+	if (!Texture.bValid || Texture.NativeHandle == 0)
+	{
+		FUIColor Placeholder = kPlaceholderGray;
+		Placeholder.A *= Tint.A;
+		Draw->AddRectFilled(Min, Max, ToColor(Placeholder), 2.f);
+		return;
+	}
+	Draw->AddImage(static_cast<ImTextureID>(Texture.NativeHandle), Min, Max, ImVec2(UV0.X, UV0.Y), ImVec2(UV1.X, UV1.Y),
+				   ToColor(Tint));
+}
+
+// -- 命中 --------------------------------------------------------------------------------
+
+FUIHitResult FImGuiTranslator::HitTestItem(FUIName Id, const FUIRect& Local, bool bHitTest)
+{
+	FUIHitResult Out;
+	ImGui::PushID(static_cast<int>(Id.GetId()));
+	ImGui::SetCursorScreenPos(ScreenMin(Local));
+
+	const float W = std::max(Local.W, 1.f);
+	const float H = std::max(Local.H, 1.f);
+	if (PendingFocusId == Id.GetId())
+	{
+		ImGui::SetKeyboardFocusHere();
+		PendingFocusId = 0;
+	}
+	if (bHitTest)
+	{
+		ImGui::InvisibleButton("##hit", ImVec2(W, H));
+		Out.bHovered = ImGui::IsItemHovered();
+		Out.bPressed = ImGui::IsItemActive();
+		Out.bClicked = ImGui::IsItemClicked();
+		Out.bReleased = ImGui::IsItemDeactivated();
+		Out.bDragging = ImGui::IsItemActive() && ImGui::IsMouseDragging(ImGuiMouseButton_Left, 2.f);
+		if (ImGui::IsItemActive()) { FocusedId = Id.GetId(); }
+	}
+	else
+	{
+		ImGui::Dummy(ImVec2(W, H));
+	}
+	ImGui::PopID();
+	if (bDebugDraw && (Out.bHovered || Out.bPressed))
+	{
+		const FUIColor DebugColor = Out.bPressed ? FUIColor{ 1.f, 0.4f, 0.2f, 1.f } : FUIColor{ 0.2f, 1.f, 0.6f, 1.f };
+		DebugDrawRect(Local, DebugColor);
+	}
+	return Out;
+}
+
+FUIHitResult FImGuiTranslator::WidgetButton(FUIName Id, const FUIRect& Rect, const FUIResolvedStyle& S)
+{
+	const FUIHitResult Out = HitTestItem(Id, Rect, true);
+	DrawRect(Rect, S);
+	return Out;
+}
+
+FUIHitResult FImGuiTranslator::WidgetCheckbox(FUIName Id, const FUIRect& Rect, bool& bValue,
+											  const FUIResolvedStyle& S)
+{
+	const FUIHitResult Out = HitTestItem(Id, Rect, true);
+	if (Out.bClicked) { bValue = !bValue; }
+	DrawRect(Rect, S);
+	return Out;
+}
+
+FUIHitResult FImGuiTranslator::WidgetSliderFloat(FUIName Id, const FUIRect& Rect, float& Value,
+												 float Min, float Max, std::string_view Format,
+												 const FUIResolvedStyle& S)
+{
+	(void)S;
+	FUIHitResult Out;
+	ImGui::PushID(static_cast<int>(Id.GetId()));
+	ImGui::SetCursorScreenPos(ScreenMin(Rect));
+	ImGui::SetNextItemWidth(std::max(Rect.W, 1.f));
+	const std::string Fmt = Format.empty() ? std::string("%.3f") : std::string(Format);
+	const float Old = Value;
+	if (ImGui::SliderFloat("##slider", &Value, Min, Max, Fmt.c_str()))
+	{
+		Out.bClicked = true;
+	}
+	Out.bHovered = ImGui::IsItemHovered();
+	Out.bPressed = ImGui::IsItemActive();
+	if (!NearlyEqual(Old, Value)) { Out.bDragging = ImGui::IsItemActive(); }
+	ImGui::PopID();
+	return Out;
+}
+
+FUIHitResult FImGuiTranslator::WidgetInputText(FUIName Id, const FUIRect& Rect, std::string& Text,
+											   std::string_view Hint, std::size_t MaxLength,
+											   bool bMultiline, const FUIResolvedStyle& S)
+{
+	(void)S;
+	FUIHitResult Out;
+	std::vector<char> Buffer(1024, '\0');
+	const std::size_t CopyLen = std::min(Text.size(), Buffer.size() - 1);
+	std::memcpy(Buffer.data(), Text.data(), CopyLen);
+
+	ImGui::PushID(static_cast<int>(Id.GetId()));
+	ImGui::SetCursorScreenPos(ScreenMin(Rect));
+	bool bEnter = false;
+	if (bMultiline)
+	{
+		ImGui::InputTextMultiline("##text", Buffer.data(), Buffer.size(),
+								  ImVec2(std::max(Rect.W, 1.f), std::max(Rect.H, 1.f)));
+	}
+	else
+	{
+		const std::string HintCopy(Hint);
+		ImGui::SetNextItemWidth(std::max(Rect.W, 1.f));
+		// 回车提交：返回值**只**指回车（文本改动由下面的内容比较判定），两者可同帧并发。
+		bEnter = ImGui::InputTextWithHint("##text", HintCopy.c_str(), Buffer.data(), Buffer.size(),
+										  ImGuiInputTextFlags_EnterReturnsTrue);
+	}
+	Out.bHovered = ImGui::IsItemHovered();
+	Out.bPressed = ImGui::IsItemActive();
+	if (ImGui::IsItemActive()) { FocusedId = Id.GetId(); }
+
+	std::string NewText(Buffer.data());
+	if (MaxLength > 0 && NewText.size() > MaxLength) { NewText.resize(MaxLength); }
+	if (NewText != Text)
+	{
+		Text = std::move(NewText);
+		Out.bClicked = true;
+	}
+	if (bEnter) { Out.bSubmitted = true; }
+	ImGui::PopID();
+	return Out;
+}
+
+FUIHitResult FImGuiTranslator::WidgetSelectable(FUIName Id, const FUIRect& Rect, bool bSelected,
+												const FUIResolvedStyle& S)
+{
+	const FUIHitResult Out = HitTestItem(Id, Rect, true);
+	DrawRect(Rect, S);
+	(void)bSelected;
+	return Out;
+}
+
+FUIHitResult FImGuiTranslator::WidgetDragFloat(FUIName Id, const FUIRect& Rect, float* Values,
+											   int Components, float Speed, std::string_view Format,
+											   const FUIResolvedStyle& S)
+{
+	(void)S;
+	FUIHitResult Out;
+	if (Values == nullptr || Components < 1) { return Out; }
+
+	ImGui::PushID(static_cast<int>(Id.GetId()));
+	ImGui::SetCursorScreenPos(ScreenMin(Rect));
+	ImGui::SetNextItemWidth(std::max(Rect.W, 1.f));
+	const std::string Fmt = Format.empty() ? std::string("%.3f") : std::string(Format);
+	bool bChanged = false;
+	// v_min == v_max：不夹取（与 ImGui 的 DragFloatN 语义一致：只受 Speed 影响）。
+	switch (Components)
+	{
+	case 2:  bChanged = ImGui::DragFloat2("##drag", Values, Speed, 0.f, 0.f, Fmt.c_str()); break;
+	case 3:  bChanged = ImGui::DragFloat3("##drag", Values, Speed, 0.f, 0.f, Fmt.c_str()); break;
+	case 4:  bChanged = ImGui::DragFloat4("##drag", Values, Speed, 0.f, 0.f, Fmt.c_str()); break;
+	default: bChanged = ImGui::DragFloat("##drag", Values, Speed, 0.f, 0.f, Fmt.c_str()); break;
+	}
+	Out.bHovered = ImGui::IsItemHovered();
+	Out.bPressed = ImGui::IsItemActive();
+	if (bChanged) { Out.bClicked = true; }
+	if (ImGui::IsItemActive()) { FocusedId = Id.GetId(); }
+	ImGui::PopID();
+	return Out;
+}
+
+FUIHitResult FImGuiTranslator::WidgetColorEdit(FUIName Id, const FUIRect& Rect, float* RGBA,
+											   const FUIResolvedStyle& S)
+{
+	(void)S;
+	FUIHitResult Out;
+	if (RGBA == nullptr) { return Out; }
+
+	ImGui::PushID(static_cast<int>(Id.GetId()));
+	ImGui::SetCursorScreenPos(ScreenMin(Rect));
+	ImGui::SetNextItemWidth(std::max(Rect.W, 1.f));
+	const bool bChanged = ImGui::ColorEdit4("##color", RGBA, ImGuiColorEditFlags_AlphaBar);
+	Out.bHovered = ImGui::IsItemHovered();
+	Out.bPressed = ImGui::IsItemActive();
+	if (bChanged) { Out.bClicked = true; }
+	if (ImGui::IsItemActive()) { FocusedId = Id.GetId(); }
+	ImGui::PopID();
+	return Out;
+}
+
+FUIHitResult FImGuiTranslator::WidgetCollapsingHeader(FUIName Id, const FUIRect& Rect, bool& bOpen,
+													  const FUIResolvedStyle& S)
+{
+	FUIHitResult Out;
+	ImGui::PushID(static_cast<int>(Id.GetId()));
+	ImGui::SetCursorScreenPos(ScreenMin(Rect));
+	if (bOpen) { ImGui::SetNextItemOpen(true, ImGuiCond_Always); }
+	ImGui::CollapsingHeader("##header", bOpen ? ImGuiTreeNodeFlags_DefaultOpen : ImGuiTreeNodeFlags_None);
+	Out.bHovered = ImGui::IsItemHovered();
+	Out.bPressed = ImGui::IsItemActive();
+	if (ImGui::IsItemClicked()) { Out.bClicked = true; }
+	if (ImGui::IsItemToggledOpen()) { bOpen = !bOpen; }
+	ImGui::PopID();
+	DrawRect(Rect, S);
+	return Out;
+}
+
+// -- 滚动 --------------------------------------------------------------------------------
+
+bool FImGuiTranslator::BeginScrollRegion(FUIName Id, const FUIRect& Rect, const FUIScrollRequest& Request)
+{
+	ImGui::PushID(static_cast<int>(Id.GetId()));
+	ImGui::SetCursorScreenPos(ScreenMin(Rect));
+	const bool bVisible = ImGui::BeginChild("##scroll", ImVec2(std::max(Rect.W, 1.f), std::max(Rect.H, 1.f)),
+											ImGuiChildFlags_None, ImGuiWindowFlags_None);
+	// 区域内原点 = 子窗口内容起点（滚动量已由 ImGui 计进内容偏移）
+	OriginStack.push_back(Origin);
+	Origin = FUIVector2{ ImGui::GetCursorScreenPos().x, ImGui::GetCursorScreenPos().y };
+	ScrollStack.push_back(Request);   // 贴底要等内容摆完再请求，留到 EndScrollRegion
+	(void)bVisible;
+	return true;
+}
+
+FImGuiTranslator::FUIScrollInfo FImGuiTranslator::EndScrollRegion()
+{
+	const FUIScrollRequest Request = ScrollStack.empty() ? FUIScrollRequest{} : ScrollStack.back();
+	if (!ScrollStack.empty()) { ScrollStack.pop_back(); }
+	// 内容已摆完：此刻才知道可滚动范围，贴底/置量才有效。
+	if (Request.bToBottom) { ImGui::SetScrollHereY(1.f); }
+	else if (Request.bSetScrollY) { ImGui::SetScrollY(Request.ScrollY); }
+
+	FUIScrollInfo Info;
+	Info.ScrollY = ImGui::GetScrollY();
+	Info.ScrollMaxY = ImGui::GetScrollMaxY();
+	ImGui::EndChild();
+	if (!OriginStack.empty())
+	{
+		Origin = OriginStack.back();
+		OriginStack.pop_back();
+	}
+	ImGui::PopID();
+	return Info;
+}
+
+// -- 弹出层 ------------------------------------------------------------------------------
+
+bool FImGuiTranslator::BeginTooltip(FUIName Id, const FUIRect& Anchor, bool bFollowMouse)
+{
+	(void)Id;
+	if (bFollowMouse)
+	{
+		const ImVec2 Mouse = ImGui::GetIO().MousePos;
+		ImGui::SetNextWindowPos(ImVec2(Mouse.x + 16.f, Mouse.y + 16.f));
+	}
+	else
+	{
+		ImGui::SetNextWindowPos(ScreenMin(Anchor));
+	}
+	ImGui::BeginTooltip();
+	// 提示窗是独立窗口：原点切到它的内容区，出栈时恢复（与弹层同一约定）。
+	OriginStack.push_back(Origin);
+	Origin = FUIVector2{ ImGui::GetCursorScreenPos().x, ImGui::GetCursorScreenPos().y };
+	return true;
+}
+
+void FImGuiTranslator::EndTooltip()
+{
+	ImGui::EndTooltip();
+	if (!OriginStack.empty())
+	{
+		Origin = OriginStack.back();
+		OriginStack.pop_back();
+	}
+}
+
+bool FImGuiTranslator::BeginPopup(FUIName Id, bool bOpen, const FUIRect& Anchor, bool bModal)
+{
+	const std::string Name = "##uiPopup" + std::to_string(Id.GetId());
+	const bool bWasOpen = OpenPopups[Id.GetId()];
+	if (bOpen && !bWasOpen) { ImGui::OpenPopup(Name.c_str()); }
+	OpenPopups[Id.GetId()] = bOpen;
+
+	if (Anchor.W > 0.f || Anchor.H > 0.f) { ImGui::SetNextWindowPos(ScreenMin(Anchor)); }
+	const bool bShown = bModal ? ImGui::BeginPopupModal(Name.c_str(), nullptr, ImGuiWindowFlags_AlwaysAutoResize)
+							   : ImGui::BeginPopup(Name.c_str(), ImGuiWindowFlags_AlwaysAutoResize);
+	if (!bShown) { return false; }
+
+	// 业务把 bOpen 置回 false：本帧收窗（不然后端窗口会一直挂着）
+	if (!bOpen) { ImGui::CloseCurrentPopup(); }
+
+	// 弹层是新窗口：原点切到它的内容区，出栈时恢复。
+	OriginStack.push_back(Origin);
+	Origin = FUIVector2{ ImGui::GetCursorScreenPos().x, ImGui::GetCursorScreenPos().y };
+	bPopupOpen = true;
+	return true;
+}
+
+void FImGuiTranslator::EndPopup()
+{
+	ImGui::EndPopup();
+	if (!OriginStack.empty())
+	{
+		Origin = OriginStack.back();
+		OriginStack.pop_back();
+	}
+	bPopupOpen = false;
+}
+
+// -- 拖放 --------------------------------------------------------------------------------
+
+bool FImGuiTranslator::BeginDragSource(FUIName Id, std::string_view PayloadType, std::string_view Payload,
+									   std::string_view PreviewText)
+{
+	(void)Id;
+	if (!ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)) { return false; }
+	const std::string Type(PayloadType);
+	ImGui::SetDragDropPayload(Type.c_str(), Payload.data(), Payload.size());
+	if (!PreviewText.empty()) { ImGui::TextUnformatted(PreviewText.data(), PreviewText.data() + PreviewText.size()); }
+	return true;
+}
+
+void FImGuiTranslator::EndDragSource()
+{
+	ImGui::EndDragDropSource();
+}
+
+bool FImGuiTranslator::IsDropTarget(FUIName Id, std::string_view PayloadType, std::string* OutPayload)
+{
+	(void)Id;
+	if (!ImGui::BeginDragDropTarget()) { return false; }
+	bool bAccepted = false;
+	const std::string Type(PayloadType);
+	if (const ImGuiPayload* P = ImGui::AcceptDragDropPayload(Type.c_str()))
+	{
+		if (OutPayload != nullptr)
+		{
+			OutPayload->assign(static_cast<const char*>(P->Data), static_cast<std::size_t>(P->DataSize));
+		}
+		bAccepted = true;
+	}
+	ImGui::EndDragDropTarget();
+	return bAccepted;
+}
+
+// -- 焦点与调试 --------------------------------------------------------------------------
+
+void FImGuiTranslator::SetKeyboardFocus(FUIName Id)
+{
+	PendingFocusId = Id.GetId();
+}
+
+bool FImGuiTranslator::HasFocus(FUIName Id) const
+{
+	return FocusedId == Id.GetId();
+}
+
+void FImGuiTranslator::DebugDrawRect(const FUIRect& Rect, const FUIColor& C)
+{
+	ImGui::GetWindowDrawList()->AddRect(ScreenMin(Rect), ScreenMax(Rect), ToColor(C));
+}
+
+}} // namespace Maho::UI

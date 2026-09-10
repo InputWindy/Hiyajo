@@ -3,5 +3,5 @@
   "Name": "EditorTheme",
   "Description": "Editor theme configurator panel - expose every theme color, live apply + save/load.",
   "Type": "Editor",
-  "Dependencies": ["ExampleEditor"]
+  "Dependencies": ["ExampleEditor", "UI"]
 }
