@@ -56,6 +56,17 @@ struct TResourceExporter;   // undefined - specialize per resource type
 template <typename TResource>
 struct TResourceCreateDesc;   // undefined - specialize per resource type
 
+/** Instance factory, specialized per resource type. `Import<T>` / `CreateResource<T>` are
+ *  header templates, so a `make_unique<T>` there would stamp the instance's vtable + deleting
+ *  dtor into whichever module instantiated them - and a caller may be a dynamically-loaded
+ *  sub-plugin (e.g. an editor panel) that is unloaded long before the engine's Shutdown graph
+ *  runs. Deleting a catalog entry then dispatches through a vptr pointing into a freed image.
+ *  Each specialization is therefore DEFINED out-of-line in the resource type's own module (for
+ *  the engine asset types: AssetTypes.cpp, i.e. Asset.dll), so every instance's vtable and
+ *  dtor belong to a module that outlives the catalog. */
+template <typename TResource>
+struct TResourceCreator;   // undefined - specialize per resource type
+
 /** Transfer completion callback - the upstream (FResourceSystem) builds this and
  *  hands it to a listener when broadcasting an imported/loaded resource; the listener
  *  invokes it after it has finished consuming (e.g. uploaded + mirrored) to report
@@ -282,8 +293,11 @@ bool FResourceSystem::Import(typename TResourceImporter<TResource>::FConfig Conf
 		AssetPath,
 		[this, Config = std::move(Config), AssetPath](std::span<const std::uint8_t> Bytes) mutable
 		{
-			// Decode on the game thread once the bulk data is ready.
-			auto Resource = std::make_unique<TResource>(AssetPath);
+			// Decode on the game thread once the bulk data is ready. The instance is
+			// constructed through the type's own module (TResourceCreator), NOT here:
+			// its vtable + deleting dtor must outlive this caller, which may be a
+			// sub-plugin unloaded while the resource is still in the catalog.
+			auto Resource = TResourceCreator<TResource>::Create(AssetPath);
 			if (TResourceImporter<TResource>::Import(Config, Bytes, *Resource, *this))
 			{
 				RegisterResource(AssetPath, std::move(Resource));
@@ -300,9 +314,14 @@ TResource* FResourceSystem::CreateResource(std::string_view AssetPath, typename 
 		return nullptr;
 	}
 	const std::string Path(AssetPath);
-	// TResourceCreateDesc<T>::Make(Path, Config) - the descriptor fills the creation fields
+	// Constructed through the type's own module (TResourceCreator), NOT here - same
+	// module-lifetime reason as Import. The create descriptor fills the creation fields
 	// so a listener (OnAssetCreated) can build a persistent GPU mirror from those fields.
-	auto Resource = std::make_unique<TResource>(TResourceCreateDesc<TResource>::Make(Path, Config));
+	std::unique_ptr<TResource> Resource = TResourceCreator<TResource>::Create(Path, Config);
+	if (Resource == nullptr)
+	{
+		return nullptr;
+	}
 	TResource* Raw = Resource.get();
 	// Delegate to the .cpp-defined RegisterResource so the template never dereferences
 	// the private (header-incomplete) FImpl. Register BEFORE broadcasting so a listener that

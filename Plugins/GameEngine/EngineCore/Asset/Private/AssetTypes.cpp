@@ -487,6 +487,76 @@ bool TResourceExporter<FTextureCubeArray>::Export(const FExportConfig& Config, c
 	return detail::ExportTexture(Config, Resource, OutBytes);
 }
 
+// -- TResourceCreator<T>: instances are constructed HERE (in this module), never in the
+// caller's TU - Import<T> / CreateResource<T> are header templates and a caller may be a
+// sub-plugin that gets unloaded while the resource is still in the catalog. See the
+// declaration in AssetTypes.h.
+
+std::unique_ptr<FTexture1D> TResourceCreator<FTexture1D>::Create(std::string_view Path)
+{
+	return std::make_unique<FTexture1D>(std::string(Path));
+}
+
+std::unique_ptr<FTexture2D> TResourceCreator<FTexture2D>::Create(std::string_view Path)
+{
+	return std::make_unique<FTexture2D>(std::string(Path));
+}
+
+std::unique_ptr<FTexture2D> TResourceCreator<FTexture2D>::Create(std::string_view Path, const TResourceCreateDesc<FTexture2D>::FConfig& Config)
+{
+	return std::make_unique<FTexture2D>(TResourceCreateDesc<FTexture2D>::Make(Path, Config));
+}
+
+std::unique_ptr<FTexture3D> TResourceCreator<FTexture3D>::Create(std::string_view Path)
+{
+	return std::make_unique<FTexture3D>(std::string(Path));
+}
+
+std::unique_ptr<FTextureCube> TResourceCreator<FTextureCube>::Create(std::string_view Path)
+{
+	return std::make_unique<FTextureCube>(std::string(Path));
+}
+
+std::unique_ptr<FTexture2DArray> TResourceCreator<FTexture2DArray>::Create(std::string_view Path)
+{
+	return std::make_unique<FTexture2DArray>(std::string(Path));
+}
+
+std::unique_ptr<FTextureCubeArray> TResourceCreator<FTextureCubeArray>::Create(std::string_view Path)
+{
+	return std::make_unique<FTextureCubeArray>(std::string(Path));
+}
+
+std::unique_ptr<FMaterial> TResourceCreator<FMaterial>::Create(std::string_view Path)
+{
+	return std::make_unique<FMaterial>(std::string(Path));
+}
+
+std::unique_ptr<FStaticMesh> TResourceCreator<FStaticMesh>::Create(std::string_view Path)
+{
+	return std::make_unique<FStaticMesh>(std::string(Path));
+}
+
+std::unique_ptr<FSkeleton> TResourceCreator<FSkeleton>::Create(std::string_view Path)
+{
+	return std::make_unique<FSkeleton>(std::string(Path));
+}
+
+std::unique_ptr<FAnimation> TResourceCreator<FAnimation>::Create(std::string_view Path)
+{
+	return std::make_unique<FAnimation>(std::string(Path));
+}
+
+std::unique_ptr<FAnimationGraph> TResourceCreator<FAnimationGraph>::Create(std::string_view Path)
+{
+	return std::make_unique<FAnimationGraph>(std::string(Path));
+}
+
+std::unique_ptr<FPrefab> TResourceCreator<FPrefab>::Create(std::string_view Path)
+{
+	return std::make_unique<FPrefab>(std::string(Path));
+}
+
 // -- importer / exporter specializations ------------------------------------
 
 bool TResourceImporter<FMaterial>::Import(const FImportConfig& Config, std::span<const std::uint8_t> Bytes, FMaterial& Out, FResourceSystem& System)

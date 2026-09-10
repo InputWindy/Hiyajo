@@ -530,6 +530,89 @@ protected:
 	std::string DocumentJson;
 };
 
+// -- TResourceCreator<T>: instance factory, defined in the type's OWN module --
+// Import<T> / CreateResource<T> are header templates in the Resource plugin, so constructing
+// the instance there would stamp its vtable + deleting dtor into the CALLER's module. A caller
+// may be a dynamically-loaded sub-plugin (an editor panel, a hot-reloadable plugin) that is
+// unloaded while the resource is still in the catalog; the engine's Shutdown then deletes it
+// through a vptr pointing into a freed image. Every instance is therefore constructed HERE,
+// out-of-line, in the module that owns the type. A project adding an asset type specializes
+// this next to its TResourceImporter - the specialization must be DEFINED out-of-line in that
+// plugin's .cpp, never inline in a header, or the vtable lands back in the caller.
+
+template <>
+struct TResourceCreator<FTexture1D>
+{
+	[[nodiscard]] MAHO_ASSET_API static std::unique_ptr<FTexture1D> Create(std::string_view Path);
+};
+
+template <>
+struct TResourceCreator<FTexture2D>
+{
+	[[nodiscard]] MAHO_ASSET_API static std::unique_ptr<FTexture2D> Create(std::string_view Path);
+	[[nodiscard]] MAHO_ASSET_API static std::unique_ptr<FTexture2D> Create(std::string_view Path, const TResourceCreateDesc<FTexture2D>::FConfig& Config);
+};
+
+template <>
+struct TResourceCreator<FTexture3D>
+{
+	[[nodiscard]] MAHO_ASSET_API static std::unique_ptr<FTexture3D> Create(std::string_view Path);
+};
+
+template <>
+struct TResourceCreator<FTextureCube>
+{
+	[[nodiscard]] MAHO_ASSET_API static std::unique_ptr<FTextureCube> Create(std::string_view Path);
+};
+
+template <>
+struct TResourceCreator<FTexture2DArray>
+{
+	[[nodiscard]] MAHO_ASSET_API static std::unique_ptr<FTexture2DArray> Create(std::string_view Path);
+};
+
+template <>
+struct TResourceCreator<FTextureCubeArray>
+{
+	[[nodiscard]] MAHO_ASSET_API static std::unique_ptr<FTextureCubeArray> Create(std::string_view Path);
+};
+
+template <>
+struct TResourceCreator<FMaterial>
+{
+	[[nodiscard]] MAHO_ASSET_API static std::unique_ptr<FMaterial> Create(std::string_view Path);
+};
+
+template <>
+struct TResourceCreator<FStaticMesh>
+{
+	[[nodiscard]] MAHO_ASSET_API static std::unique_ptr<FStaticMesh> Create(std::string_view Path);
+};
+
+template <>
+struct TResourceCreator<FSkeleton>
+{
+	[[nodiscard]] MAHO_ASSET_API static std::unique_ptr<FSkeleton> Create(std::string_view Path);
+};
+
+template <>
+struct TResourceCreator<FAnimation>
+{
+	[[nodiscard]] MAHO_ASSET_API static std::unique_ptr<FAnimation> Create(std::string_view Path);
+};
+
+template <>
+struct TResourceCreator<FAnimationGraph>
+{
+	[[nodiscard]] MAHO_ASSET_API static std::unique_ptr<FAnimationGraph> Create(std::string_view Path);
+};
+
+template <>
+struct TResourceCreator<FPrefab>
+{
+	[[nodiscard]] MAHO_ASSET_API static std::unique_ptr<FPrefab> Create(std::string_view Path);
+};
+
 // -- TResourceImporter<T: texture>: decode raw raster bytes into a CPU image --
 // Every texture-dimension type shares one codec path (the dimension is a payload
 // field), so each specialization delegates to the same private helper; the

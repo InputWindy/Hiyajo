@@ -76,6 +76,33 @@ struct Maho::Resource::TResourceExporter<FMesh>
 | `using FConfig` | 导出配置类型 |
 | `static bool Export(const FConfig&, const TResource&, std::vector<std::uint8_t>&)` | 编码资源到字节；返回 false 视为失败 |
 
+### TResourceCreator<TResource> <struct（用户特化）>
+
+实例工厂特化点——**未定义，按资源类型特化**。`Import<T>` / `CreateResource<T>` 是头文件里的模板，若在其中 `make_unique<T>`，实例的 vtable 与删除析构函数就会落在**调用方模块**里；而调用方可能是被动态卸载的子插件（编辑器面板、热重载插件），资源却仍在目录中——引擎 Shutdown 删除它时经 vptr 跳进已卸载的映像（崩溃）。因此实例一律在**类型自己的模块**里构造。
+
+⚠️ 特化必须在**该插件的 .cpp 里out-of-line定义**，绝不能写成头文件内联，否则 vtable 又回到调用方。
+
+```cpp
+// AssetTypes.h（声明）
+template <>
+struct Maho::Resource::TResourceCreator<FTexture2D>
+{
+    [[nodiscard]] MAHO_ASSET_API static std::unique_ptr<FTexture2D> Create(std::string_view Path);
+};
+// AssetTypes.cpp（定义，实例在这里构造）
+std::unique_ptr<FTexture2D> TResourceCreator<FTexture2D>::Create(std::string_view Path)
+{
+    return std::make_unique<FTexture2D>(std::string(Path));
+}
+```
+
+#### 约束
+
+| 成员 | 说明 |
+|------|------|
+| `static std::unique_ptr<TResource> Create(std::string_view Path)` | 空实例（导入前构造，再由 `TResourceImporter` 填充） |
+| `static std::unique_ptr<TResource> Create(std::string_view Path, const TResourceCreateDesc<TResource>::FConfig& Config)` | 仅限有创建描述符的类型（`CreateResource<T>` 用）；描述符填充字段 |
+
 ### FResourceSystem <class>
 
 异步传输服务器 + 类型化导入/导出。`FLayer<IPreInit..IPostShutdown>`（10 阶段引擎服务层）+ `FThreadedServer`（IO 线程）。异步传输机制（句柄/批量数据/挂起队列）完全内部——头文件只前向声明。导入器只见 `std::span` / `std::vector` 原始字节。
@@ -85,8 +112,9 @@ struct Maho::Resource::TResourceExporter<FMesh>
 | 签名 | 说明 |
 |------|------|
 | `~FResourceSystem() override` | 析构（FImpl 完整后在这里删除） |
-| `template <typename TResource> bool Import(typename TResourceImporter<TResource>::FConfig Config, std::function<void(const FResource*)> OnDone = {})` | 异步导入；OnDone 收到注册的资源或 nullptr（游戏线程） |
-| `template <typename TResource> bool Export(typename TResourceExporter<TResource>::FConfig Config, std::string_view AssetPath, std::function<void(bool)> OnDone = {})` | 异步导出；OnDone(bool) 报告成败（游戏线程）。调用方必须在导出期间保持资源存活且不变 |
+| `template <typename TResource> bool Import(typename TResourceImporter<TResource>::FConfig Config)` | 异步导入；成功后注册并广播 `OnAssetImported`（资产 FName + 完成回调）。实例由 `TResourceCreator<T>` 在资源类型自己的模块中构造 |
+| `template <typename TResource> TResource* CreateResource(std::string_view AssetPath, typename TResourceCreateDesc<TResource>::FConfig Config)` | 由创建描述符生成运行时持久资源并注册，广播 `OnAssetCreated`；实例同样由 `TResourceCreator<T>` 构造 |
+| `template <typename TResource> bool Export(typename TResourceExporter<TResource>::FConfig Config, std::string_view AssetPath)` | 在调用线程编码后交给 IO 线程写盘；成败由 `OnAssetExported` 广播。调用方必须在导出期间保持资源存活且不变 |
 | `[[nodiscard]] const FResource* Find(std::string_view AssetPath) const` | 查已加载资源；无则 nullptr |
 | `[[nodiscard]] const FResource* TryLoad(std::string_view AssetPath)` | 尝试加载 = Find；未加载时 nullptr |
 
