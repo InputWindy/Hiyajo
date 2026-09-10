@@ -43,9 +43,11 @@ target_link_libraries(ExampleEditor PUBLIC Render Scene UIFeature)
 # ExampleEditor_SubPlugins is a plain handle (nothing links or depends on it) that
 # names every sub-plugin in ONE nested build: one msbuild invocation per
 # target would rebuild the shared dependency chain once per sub-plugin.
+# It carries no sources and no output of its own, so it is parked under
+# ThirdParty/CodeGen — a code-gen artifact of ExampleEditor, not a plugin of it.
 add_custom_target(ExampleEditor_SubPlugins)
 add_dependencies(ExampleEditor_SubPlugins EditorViewport EditorConsole ContentBrowser)
-set_target_properties(ExampleEditor_SubPlugins PROPERTIES FOLDER "Maho/Plugins/GameEngine/EditorCore")
+set_target_properties(ExampleEditor_SubPlugins PROPERTIES FOLDER "ThirdParty/CodeGen")
 add_custom_command(TARGET ExampleEditor POST_BUILD
 	COMMAND "${CMAKE_COMMAND}"
 		"-DMAHO_BUILD_DIR=${CMAKE_BINARY_DIR}"

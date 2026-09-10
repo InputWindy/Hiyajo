@@ -45,9 +45,11 @@ target_link_libraries(Render PUBLIC RHI Platform Resource Asset GameWorld)
 # Render_SubPlugins is a plain handle (nothing links or depends on it) that
 # names every sub-plugin in ONE nested build: one msbuild invocation per
 # target would rebuild the shared dependency chain once per sub-plugin.
+# It carries no sources and no output of its own, so it is parked under
+# ThirdParty/CodeGen — a code-gen artifact of Render, not a plugin of it.
 add_custom_target(Render_SubPlugins)
 add_dependencies(Render_SubPlugins Scene DrawTriangleFeature UIFeature FrameRenderFeature)
-set_target_properties(Render_SubPlugins PROPERTIES FOLDER "Maho/Plugins/GameEngine/RenderCore")
+set_target_properties(Render_SubPlugins PROPERTIES FOLDER "ThirdParty/CodeGen")
 add_custom_command(TARGET Render POST_BUILD
 	COMMAND "${CMAKE_COMMAND}"
 		"-DMAHO_BUILD_DIR=${CMAKE_BINARY_DIR}"
