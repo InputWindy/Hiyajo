@@ -69,7 +69,7 @@ public:
 	bool BeginTooltip(FUIName Id, const FUIRect& Anchor, bool bFollowMouse) override;
 	void EndTooltip() override;
 	bool BeginPopup(FUIName Id, bool bOpen, bool bWasShown, const FUIRect& Anchor, bool bModal,
-					float ContentHeight, const FUIResolvedStyle& S) override;
+					const FUIRect& ContentBox, const FUIResolvedStyle& S) override;
 	void EndPopup() override;
 
 	bool BeginDragSource(FUIName Id, std::string_view PayloadType, std::string_view Payload,

@@ -71,12 +71,12 @@ void FUIPopup::PaintContent(IUITranslator& T, const FUIResolvedStyle& S)
 {
 	const FUIRect Anchor = ResolveAnchorRect();
 
-	// 内容尺寸**先量**：弹层窗口的落位（贴锚点下沿 / 放不下翻到上沿）要用它。量在 `BeginPopup`
+	// 内容尺寸**先量**：弹层窗口的落位（贴锚点上沿 / 放不下翻到锚点下沿）要用它。量在 `BeginPopup`
 	// 之前是必须的 —— 翻译器一帧一实例，记不住上一帧的高度，后端无从事后取回这个尺寸。
 	const FUIVector2 Raw = FUIBuilder::MeasureContent(T, FUIVector2{ kPopupMeasureWidth, 0.f });
 	const FUIRect Body = FUILayoutEngine::ContentRect(*this, FUIRect{ 0.f, 0.f, Raw.X, Raw.Y });
 
-	const bool bShown = T.BeginPopup(GetId(), bOpen, bShownLastFrame, Anchor, bModal, Body.H, S);
+	const bool bShown = T.BeginPopup(GetId(), bOpen, bShownLastFrame, Anchor, bModal, Body, S);
 	// 后端刚报的事实就是下一帧的"上一帧"：**必须**在早退之前落账，否则 `bShownLastFrame` 一直是
 	// false，`BeginPopup` 每帧都当成上升沿重新开窗 —— 弹层永远关不掉（旧病）。
 	bShownLastFrame = bShown;

@@ -104,6 +104,7 @@ void FUILayoutEngine::ArrangeIn(FUIBuilder& Node, IUITranslator& T, const FUIRec
 		float       MainLen = 0.f;    // 内容主轴长（不含 Margin）
 		float       CrossLen = 0.f;
 		bool        bFill = false;
+		bool        bOverlay = false; // 浮层（零尺寸、内容活在第二个窗口）：不占流内空间
 	};
 
 	std::vector<FSlot> Slots;
@@ -111,6 +112,9 @@ void FUILayoutEngine::ArrangeIn(FUIBuilder& Node, IUITranslator& T, const FUIRec
 
 	float UsedMain = 0.f;
 	int   FillCount = 0;
+	// 参与流内排布的槽数：浮层不算 —— 它零尺寸却仍是同级的一员，若让它占一份间距，同一容器内
+	// 最后一个可见控件之后就会凭空多出一段横向间隙（先例：控制台命令框下方那条顶不满的空白）。
+	int   FlowCount = 0;
 	for (const auto& Child : Node.Children)
 	{
 		if (!Child->bVisible) { continue; }
@@ -123,6 +127,8 @@ void FUILayoutEngine::ArrangeIn(FUIBuilder& Node, IUITranslator& T, const FUIRec
 		FSlot Slot;
 		Slot.Node = Child.get();
 		Slot.Margin = CL.Margin;
+		Slot.bOverlay = Child->IsOverlayLayer();
+		if (!Slot.bOverlay) { ++FlowCount; }
 
 		const float MeasuredMain = bRow ? Measured.X : Measured.Y;
 		const float MeasuredCross = bRow ? Measured.Y : Measured.X;
@@ -175,7 +181,7 @@ void FUILayoutEngine::ArrangeIn(FUIBuilder& Node, IUITranslator& T, const FUIRec
 		Slots.push_back(Slot);
 	}
 
-	const float TotalSpacing = L.Spacing * static_cast<float>(Slots.size() > 0 ? Slots.size() - 1 : 0);
+	const float TotalSpacing = L.Spacing * static_cast<float>(FlowCount > 0 ? FlowCount - 1 : 0);
 	const float Remain = std::max(0.f, MainTotal - TotalSpacing - UsedMain);
 	const float FillEach = FillCount > 0 ? Remain / static_cast<float>(FillCount) : 0.f;
 
@@ -208,7 +214,8 @@ void FUILayoutEngine::ArrangeIn(FUIBuilder& Node, IUITranslator& T, const FUIRec
 			: FUIRect{ Content.X + CrossOffset + CrossBegin, Content.Y + MainPos, AllocCross, AllocMain };
 
 		Slot.Node->Translate(T, Alloc);
-		MainPos += AllocMain + L.Spacing;
+		// 浮层之后不推进间距：它不占位，也就不该在自己身后留下一段空档（它常常是同级最后一项）。
+		MainPos += Slot.bOverlay ? AllocMain : (AllocMain + L.Spacing);
 	}
 }
 

@@ -541,7 +541,7 @@ void FImGuiTranslator::EndTooltip()
 }
 
 bool FImGuiTranslator::BeginPopup(FUIName Id, bool bOpen, bool bWasShown, const FUIRect& Anchor,
-								  bool bModal, float ContentHeight, const FUIResolvedStyle& S)
+								  bool bModal, const FUIRect& ContentBox, const FUIResolvedStyle& S)
 {
 	const std::string Name = "##uiPopup" + std::to_string(Id.GetId());
 	// 开合的**边沿**由调用方给的 `bWasShown`（上一帧后端真画出它了吗）决定：本类一帧一实例
@@ -565,9 +565,11 @@ bool FImGuiTranslator::BeginPopup(FUIName Id, bool bOpen, bool bWasShown, const 
 		const ImGuiViewport* Viewport = ImGui::GetMainViewport();
 		const float ViewTop = Viewport->WorkPos.y;
 		const float ViewBottom = Viewport->WorkPos.y + Viewport->WorkSize.y;
-		// 高度由调用方量出（内容高 + 窗口自身的竖直内边距）。估高只用来判断"放不放得下"，
-		// 差一二十像素无害；实际尺寸仍由弹层窗口按内容自适应。
-		const float EstH = ContentHeight + ImGui::GetStyle().WindowPadding.y * 2.f;
+		// 弹层窗口的高度（ImGui 自适应，`CalcWindowAutoFitSize`）= **内容起点偏移 + 内容高**
+		// + 窗口内边距×2：内容起点就是 `ContentBox.Y`（调用方把子树摆在自己内边距之后），
+		// 内容高是 `ContentBox.H`。少算起点那一段，弹层下沿就压住锚点几个像素 —— 而锚点常常
+		// 正是被补全的那个输入框；这档误差必须为零，弹层下沿才正好贴住锚点上沿。
+		const float EstH = ContentBox.Y + ContentBox.H + ImGui::GetStyle().WindowPadding.y * 2.f;
 
 		const float Below = Min.y + Anchor.H;
 		float Y = Below;

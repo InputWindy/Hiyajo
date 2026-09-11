@@ -152,12 +152,16 @@ public:
 	 *  用户自己关掉（点外部 / Esc）时"树要开但后端已关"，后端据 `bWasShown` 不开新窗、如实报 false，
 	 *  调用方落回 `bOpen=false`。少了这份记忆就是每帧重新 `OpenPopup`：弹层反复被当成刚出现，
 	 *  且"点外部关掉 -> 下一帧又弹"永不可关。`bModal` 映射模态弹层。
-	 *  `ContentHeight` 是调用方量出的内容高度（不含窗口内边距）：落位要用它决定"贴锚点下沿
-	 *  还是翻到上沿"—— 同样因为翻译器记不住上一帧尺寸，故由调用方在开窗**之前**量好。
+	 *  `ContentBox` 是调用方摆子树用的内容矩形（弹层自身**局部坐标**，含自身内边距的偏移）：
+	 *  落位要用它决定"贴锚点下沿还是翻到上沿"—— 同样因为翻译器记不住上一帧尺寸，故由调用方
+	 *  在开窗**之前**量好。注意高度要用 `ContentBox.Y + ContentBox.H`（内容底边在窗口内的
+	 *  偏移），不是 `H`：ImGui 自适应窗口的高度 = **内容起点偏移 + 内容高** + 窗口内边距×2
+	 *  （`CalcWindowAutoFitSize`），内容起点本身已在窗口内偏移了一个自身内边距 —— 少算这一段
+	 *  就是弹层下沿压住锚点的那几像素。
 	 *  `S` 是弹层自身样式：弹层内容是第二个窗口，后端取 `Normal.Fill` 当它的窗口底色
 	 *  （调用方自己的绘制不覆盖那个窗口）。 */
 	virtual bool BeginPopup(FUIName Id, bool bOpen, bool bWasShown, const FUIRect& Anchor, bool bModal,
-							float ContentHeight, const FUIResolvedStyle& S) = 0;
+							const FUIRect& ContentBox, const FUIResolvedStyle& S) = 0;
 	virtual void EndPopup() = 0;
 
 	// -- 拖放（内容浏览器/资产拖拽复用同一套载荷）--------------------------
