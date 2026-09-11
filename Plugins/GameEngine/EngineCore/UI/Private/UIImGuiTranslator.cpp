@@ -642,17 +642,34 @@ bool FImGuiTranslator::BeginPopup(FUIName Id, bool bOpen, bool bWasShown, const 
 	const ImGuiWindowFlags PopupFlags = bModal
 		? ImGuiWindowFlags_AlwaysAutoResize
 		: (ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoFocusOnAppearing);
-	// 弹层窗口的底色只在"开窗那一刻"取（`Begin` 里的 `ImGuiCol_PopupBg`），故样式压在 `Begin`
-	// **之前**：弹层内容活在第二个窗口里，调用方自己画的那套（`FUIPopup` 的填充/描边）盖不到它，
-	// 编辑器主题又把 `ImGuiCol_PopupBg` 设成全透明 —— 不推这一下，弹层就是个没有底色的玻璃框。
-	ImGui::PushStyleColor(ImGuiCol_PopupBg, ToColor(S.Fill));
-	bPopupBgPushed = true;
+	// 弹层窗口的样式（底色/描边）只在"开窗那一刻"取（`Begin` 里的 `ImGuiCol_PopupBg` /
+	// `RenderWindowOuterBorders` 里的 `ImGuiCol_Border`），故全压在 `Begin` **之前**：弹层内容活在
+	// 第二个窗口里，调用方自己画的那套（`FUIPopup` 的填充/描边）盖不到它，而编辑器那套调色板
+	// （`ApplyMahoNightTheme`）把 `ImGuiCol_PopupBg`/`ImGuiCol_Border` 都设成了**全透明** ——
+	// 不推这两下，弹层就是个既没底也没边框的玻璃框。
+	//
+	// 底色：声明侧给了实色就按声明走；没给（`A == 0`，`FUIPopup` 的类型默认就是"不声明"）则取
+	// 输入框自己画的底色 `ImGuiCol_FrameBg` —— `WidgetInputText` 画的输入框用的正是这一个 token，
+	// 故"弹层内里和输入框一样"只有读同一个 token 才成立（引擎 UI 主题的 `ControlFill` 跟屏上那个
+	// 输入框没有对应关系：输入框由后端画，不吃引擎主题）。
+	ImVec4 PopupBg = ImGui::GetStyle().Colors[ImGuiCol_FrameBg];
+	if (S.Fill.A > 0.f) { PopupBg = ImVec4(S.Fill.R, S.Fill.G, S.Fill.B, S.Fill.A); }
+	ImGui::PushStyleColor(ImGuiCol_PopupBg, PopupBg);
+	// 描边：弹层窗口的边框色/宽是 `ImGuiCol_Border` + `ImGuiStyleVar_PopupBorderSize`（编辑器把前者
+	// 设成透明、后者默认 1），故声明侧那支灰边框必须自己推 —— 这样"弹层边框灰"才是声明说了算，
+	// 单个弹层也能靠覆写 `Stroke`/`StrokeWidth` 换掉它。
+	ImGui::PushStyleColor(ImGuiCol_Border, ToColor(S.Stroke));
+	ImGui::PushStyleVar(ImGuiStyleVar_PopupBorderSize, S.StrokeWidth);
+	PopupColorPushed = 1;
+	PopupStyleVarPushed = 1;
 	const bool bShown = bModal ? ImGui::BeginPopupModal(Name.c_str(), nullptr, PopupFlags)
 							   : ImGui::BeginPopup(Name.c_str(), PopupFlags);
 	if (!bShown)
 	{
-		ImGui::PopStyleColor();
-		bPopupBgPushed = false;
+		ImGui::PopStyleVar(PopupStyleVarPushed);
+		ImGui::PopStyleColor(PopupColorPushed);
+		PopupStyleVarPushed = 0;
+		PopupColorPushed = 0;
 		return false;
 	}
 
@@ -685,11 +702,16 @@ bool FImGuiTranslator::BeginPopup(FUIName Id, bool bOpen, bool bWasShown, const 
 void FImGuiTranslator::EndPopup()
 {
 	ImGui::EndPopup();
-	// 弹层窗口底色的样式压栈配平（`BeginPopup` 里压、这里弹；开窗失败的那条路已在原处弹掉）。
-	if (bPopupBgPushed)
+	// 弹层窗口样式的压栈配平（`BeginPopup` 里压、这里弹；开窗失败的那条路已在原处弹掉）。
+	if (PopupStyleVarPushed > 0)
 	{
-		ImGui::PopStyleColor();
-		bPopupBgPushed = false;
+		ImGui::PopStyleVar(PopupStyleVarPushed);
+		PopupStyleVarPushed = 0;
+	}
+	if (PopupColorPushed > 0)
+	{
+		ImGui::PopStyleColor(PopupColorPushed);
+		PopupColorPushed = 0;
 	}
 	if (!OriginStack.empty())
 	{

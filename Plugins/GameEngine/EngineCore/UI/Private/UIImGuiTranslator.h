@@ -117,7 +117,8 @@ private:
 	std::uint32_t FocusedId = 0;
 	int           DisabledDepth = 0;
 	bool          bPopupOpen = false;                     // 当前是否已在弹层窗口内
-	bool          bPopupBgPushed = false;                 // 弹层窗口底色的样式压栈配平（开窗失败也要弹掉）
+	int           PopupColorPushed = 0;                   // 弹层窗口样色的压栈数（开窗失败也要弹掉）
+	int           PopupStyleVarPushed = 0;                // 弹层窗口样式的压栈数（同上）
 	std::vector<FUIScrollRequest> ScrollStack;            // 滚动区域的待应用请求（贴底要等内容摆完）
 };
 
