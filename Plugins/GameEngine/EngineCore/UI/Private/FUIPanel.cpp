@@ -183,6 +183,7 @@ EUIInputFlags FUIPanel::GetInputFlags() const
 {
 	EUIInputFlags Out = FUIBuilder::GetInputFlags();
 	if (bScrollable) { Out = Out | EUIInputFlags::Scroll | EUIInputFlags::Clip; }
+	if (bContextMenu) { Out = Out | EUIInputFlags::ContextMenu; }
 	return Out;
 }
 
@@ -194,6 +195,7 @@ void FUIPanel::SyncConfig(const FUIBuilder& Declared)
 	Chrome = Other->Chrome;
 	bClosable = Other->bClosable;
 	bScrollable = Other->bScrollable;
+	bContextMenu = Other->bContextMenu;
 	bHasAnchor = Other->bHasAnchor;
 	AnchorX = Other->AnchorX;
 	AnchorY = Other->AnchorY;

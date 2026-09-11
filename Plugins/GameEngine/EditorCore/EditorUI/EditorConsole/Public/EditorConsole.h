@@ -27,9 +27,10 @@ namespace Maho
  * the panel is safe even though LogLine runs on any emitting thread); each frame
  * `Update` drains the deque into one level-colored FUISelectable per visible line,
  * click-to-select / Shift+click-or-drag range select / Ctrl+C to copy the selection
- * (Ctrl+A selects every visible line first), plus a live string-match filter box + a
- * Clear button in the toolbar and a CVar command line at the bottom (Enter submits; a
- * floating completion list follows the box).
+ * (Ctrl+A selects every visible line first), plus a live string-match filter box in the
+ * toolbar and a CVar command line at the bottom (Enter submits; a floating completion list
+ * follows the box). Right-clicking the log area opens a context menu at the pointer whose
+ * first entry is Clear (it replaced the old toolbar Clear button).
  * Shutdown unsubscribes before the Log layer goes away. Like every editor component
  * it carries no backend/RHI resource ownership -- the host owns the UI context.
  *
@@ -133,6 +134,13 @@ private:
 	 *  the click lands on (clicking a row deactivates the box before the click is drained),
 	 *  and is only closed when the box clears, an exact name is typed, or it loses focus. */
 	bool                      CvarDropdownOpen = false;
+
+	/** Log-area context menu (the old toolbar Clear button's replacement): right-clicking the
+	 *  log panel opens it. The backend writes the right-click and the pointer position into the
+	 *  panel's runtime state on the frame it happens (`EUIInputFlags::ContextMenu`); `Update`
+	 *  reads them one frame later, exactly like the line hit-state reads above. */
+	bool                      bContextMenuOpen = false;
+	UI::FUIVector2            ContextMenuAnchor{};
 };
 
 } // namespace Maho

@@ -37,7 +37,8 @@ enum class EUIInputFlags : std::uint32_t
 	Clip       = 1u << 1,   // 自身矩形作为子节点裁剪矩形
 	Scroll     = 1u << 2,   // 允许滚动，内容超出时可滚动
 	DragSource = 1u << 3,   // 可拖出
-	DropTarget = 1u << 4    // 可落入
+	DropTarget = 1u << 4,   // 可落入
+	ContextMenu = 1u << 5   // 自身矩形是右键菜单区域（右键命中回写 `FUIWidgetState`，见 `HitTestSecondary`）
 };
 
 MAHO_UI_API EUIInputFlags operator|(EUIInputFlags A, EUIInputFlags B);
@@ -140,11 +141,25 @@ public:
 	virtual FUIHitResult WidgetCollapsingHeader(FUIName Id, const FUIRect& Rect, bool& bOpen,
 												const FUIResolvedStyle& S) = 0;
 
+	/** 右键（次要键）**区域**命中：指针落在 `Rect` 内且本帧按下了右键。
+	 *  纯几何判定、不走 item 命中 —— 滚动容器自己的 item 会被它的内容子窗口挡掉（子窗口在上），
+	 *  而右键菜单要的恰是"整个矩形"这层含义。`OutPos` = 命中那一刻的指针位置（视图局部坐标），
+	 *  可直接当弹层锚点（`FUIPopup` 把弹层左下角贴到锚点左上角 ⇒ 左下角即指针处）。 */
+	[[nodiscard]] virtual bool HitTestSecondary(const FUIRect& Rect, FUIVector2& OutPos) = 0;
+
 	// -- 弹出层（翻译器开第二窗口；面板零后端代码）--------------------------
 	/** 悬停提示：返回 true 时后端已开提示窗口，调用方在窗口内摆子树后 `EndTooltip`。
 	 *  `Anchor` 为锚点矩形（局部坐标），`bFollowMouse` 时锚点忽略。 */
 	virtual bool BeginTooltip(FUIName Id, const FUIRect& Anchor, bool bFollowMouse) = 0;
 	virtual void EndTooltip() = 0;
+
+	/** 弹层锚点：**零尺寸矩形是合法的点锚点**（右键菜单：左下角落在指针处），故"有没有锚点"
+	 *  单独用一位表达 —— 只看矩形是否为空就分不清"点锚点"和"没给锚点"。 */
+	struct FUIPopupAnchor
+	{
+		bool   bHas = false;
+		FUIRect Rect{};   // 局部坐标；落位用 `Rect.Min`（弹层左下角）与 `Rect.H`（放不下时翻到其下沿）
+	};
 
 	/** 弹层：返回 true 时后端已开始弹层，调用方摆子树后 `EndPopup()`。
 	 *  `bOpen` 是树的期望状态；`bWasShown` 是**上一帧后端是否真的画出了它** —— 后端的跨帧记忆，
@@ -160,8 +175,8 @@ public:
 	 *  就是弹层下沿压住锚点的那几像素。
 	 *  `S` 是弹层自身样式：弹层内容是第二个窗口，后端取 `Normal.Fill` 当它的窗口底色
 	 *  （调用方自己的绘制不覆盖那个窗口）。 */
-	virtual bool BeginPopup(FUIName Id, bool bOpen, bool bWasShown, const FUIRect& Anchor, bool bModal,
-							const FUIRect& ContentBox, const FUIResolvedStyle& S) = 0;
+	virtual bool BeginPopup(FUIName Id, bool bOpen, bool bWasShown, const FUIPopupAnchor& Anchor,
+							bool bModal, const FUIRect& ContentBox, const FUIResolvedStyle& S) = 0;
 	virtual void EndPopup() = 0;
 
 	// -- 拖放（内容浏览器/资产拖拽复用同一套载荷）--------------------------

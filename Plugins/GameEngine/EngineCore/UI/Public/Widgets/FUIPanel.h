@@ -27,6 +27,9 @@ public:
 	FUIPanel& SetClosable(bool bIn) { bClosable = bIn; return *this; }
 	FUIPanel& SetChrome(EUIPanelChrome C) { Chrome = C; return *this; }
 	FUIPanel& SetScrollable(bool bIn) { bScrollable = bIn; return *this; }
+	/** 本面板矩形即右键菜单区域：区域内右键回写 `GetState().bSecondaryClicked` 与
+	 *  `.PointerPos`（下一帧读；位置可直接当 `FUIPopup::SetAnchor` 的点锚点）。 */
+	FUIPanel& SetContextMenu(bool bIn) { bContextMenu = bIn; return *this; }
 	FUIPanel& SetHeaderHeight(float H) { HeaderHeight = H; return *this; }
 
 	[[nodiscard]] bool HasAnchor() const { return bHasAnchor; }
@@ -51,6 +54,7 @@ private:
 	EUIPanelChrome Chrome = EUIPanelChrome::None;
 	bool  bClosable = false;
 	bool  bScrollable = false;
+	bool  bContextMenu = false;
 	bool  bHasAnchor = false;
 	float AnchorX = 0.f, AnchorY = 0.f, AnchorW = 1.f, AnchorH = 1.f;
 	float HeaderHeight = 24.f;

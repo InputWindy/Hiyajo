@@ -32,8 +32,9 @@ namespace
 /** 稳定节点 Id：同级唯一即可（事件路由走根→目标的 Id 路径）。 */
 constexpr const char* kIdToolbar  = "EditorConsole.Toolbar";
 constexpr const char* kIdFilter   = "EditorConsole.Filter";
-constexpr const char* kIdBtnClear = "EditorConsole.Button.Clear";
 constexpr const char* kIdLines    = "EditorConsole.Lines";
+constexpr const char* kIdMenu     = "EditorConsole.ContextMenu";
+constexpr const char* kIdMenuClear = "EditorConsole.ContextMenu.Clear";
 constexpr const char* kIdSuggest  = "EditorConsole.Suggest";
 constexpr const char* kIdCmdRow   = "EditorConsole.Command";
 constexpr const char* kIdCvar     = "EditorConsole.Cvar";
@@ -430,8 +431,8 @@ void FEditorConsole::Update(FExampleEditor& Editor)
 
 	bool bNew = false;
 
-	// 工具栏行：过滤框 + Clear。旧版把这一行画在窗口自身的背景上（不是 MenuBar），
-	// 现在由 `FUIPanel` 外壳的 WindowBg 承担，行内只放控件。
+	// 工具栏行：只留过滤框。旧版这一行还有个 Clear 按钮，现在清空走日志面板的右键菜单
+	// （`kIdMenuClear`）。行本身仍在外壳的 WindowBg 上，故行内只放控件。
 	{
 		UI::FUIBox& Toolbar = Ensure<UI::FUIBox>(Root, UI::FUIName(kIdToolbar), bNew);
 		Toolbar.Layout().SetDirection(UI::EUIDirection::Row);
@@ -447,19 +448,6 @@ void FEditorConsole::Update(FExampleEditor& Editor)
 			FilterBox.SetValue(FilterBuffer);   // 之后以用户输入为准（不再逐帧压回）
 		}
 		FilterBox.Layout().SetSize(UI::FUILength::Fixed(220.f), UI::FUILength::Content());
-
-		UI::FUIButton& ClearButton = Ensure<UI::FUIButton>(Toolbar, UI::FUIName(kIdBtnClear), bNew);
-		ClearButton.SetLabel("Clear");
-		if (bNew)
-		{
-			ClearButton.OnClick([this](UI::FUIBuilder&)
-			{
-				std::lock_guard<std::mutex> Lock(LinesMutex);
-				Lines.clear();
-				SelAnchor = -1;
-				SelEnd = -1;
-			});
-		}
 	}
 
 	// 日志主体：旧版是"底部预留一行命令框高度"的带边框子窗口。
@@ -469,6 +457,16 @@ void FEditorConsole::Update(FExampleEditor& Editor)
 	LinesPanel.SetScrollable(true);
 	LinesPanel.Layout().SetSize(UI::FUILength::Fill(), UI::FUILength::Fill());
 	LinesPanel.Layout().SetSpacing(0.f);   // 旧 PushStyleVar(ItemSpacing, 0)
+
+	// 右键菜单区域：面板矩形内的右键由翻译期回写（纯几何命中，见 `EUIInputFlags::ContextMenu`
+	// —— 滚动容器的 item 会被内容子窗口挡掉，菜单要的恰是整个矩形）。这里读上一帧那次右键的
+	// 指针位置当锚点：`FUIPopup` 把弹层左下角贴到锚点左上角，锚点是零尺寸的点 ⇒ 左下角在指针处。
+	LinesPanel.SetContextMenu(true);
+	if (LinesPanel.GetState().bSecondaryClicked)
+	{
+		ContextMenuAnchor = LinesPanel.GetState().PointerPos;
+		bContextMenuOpen = true;
+	}
 
 	// 面板级快捷键（声明式，见 `UI::FUIKeyChord`）：Ctrl+C 复制选中区间、Ctrl+A 全选可见行。
 	// 挂在日志面板上 = "面板在翻译（可见）时才响应"；后端的守卫还要求键盘焦点在本视图窗口
@@ -517,8 +515,8 @@ void FEditorConsole::Update(FExampleEditor& Editor)
 		});
 	}
 
-	// 命令行行：CVar 输入框 + Run。旧版靠输入框回车提交执行；新输入控件也带回车提交
-	// （`OnSubmitted`，见下），Run 按钮保留为同一段执行逻辑的显式入口。
+	// 命令行行：只有 CVar 输入框（回车提交执行）。旧版这一行右侧还有个 Run 按钮，
+	// 与回车走同一段执行逻辑，已删。
 	UI::FUIBox& CmdRow = Ensure<UI::FUIBox>(Root, UI::FUIName(kIdCmdRow), bNew);
 	CmdRow.Layout().SetDirection(UI::EUIDirection::Row);
 	CmdRow.Layout().SetSpacing(6.f);
@@ -570,6 +568,32 @@ void FEditorConsole::Update(FExampleEditor& Editor)
 				CvarAuthoritative = true;   // 本帧缓冲是权威值：把名字写回节点
 			});
 		}
+	}
+
+	// 右键菜单：日志区域的 Clear 入口（旧版是工具栏上的 Clear 按钮）。锚点就是右键那一刻的
+	// 指针（零尺寸点锚点），故菜单左下角正落在指针处。菜单项目前只有 Clear，后续项按同一模式加。
+	UI::FUIPopup& MenuPopup = Ensure<UI::FUIPopup>(Root, UI::FUIName(kIdMenu), bNew);
+	if (bNew)
+	{
+		// 点外部 / Esc 关掉：与候选列表同一路径（后端入队，所有者线程落回业务状态）。
+		MenuPopup.OnClosed([this](UI::FUIBuilder&) { bContextMenuOpen = false; });
+	}
+	MenuPopup.SetAnchor(UI::FUIRect{ ContextMenuAnchor.X, ContextMenuAnchor.Y, 0.f, 0.f });
+	MenuPopup.SetOpen(bContextMenuOpen);
+	MenuPopup.ResetChildren();
+	if (bContextMenuOpen)
+	{
+		UI::FUISelectable& ClearItem = MenuPopup.AddItem<UI::FUISelectable>(UI::FUIName(kIdMenuClear));
+		ClearItem.SetLabel("Clear");
+		ClearItem.SetSpanAll(true);
+		ClearItem.OnSelected([this](UI::FUIBuilder&)
+		{
+			std::lock_guard<std::mutex> Lock(LinesMutex);
+			Lines.clear();
+			SelAnchor = -1;
+			SelEnd = -1;
+			bContextMenuOpen = false;
+		});
 	}
 
 	// 焦点请求：一次性，翻译后自动清除（`FUIBuilder::RequestKeyboardFocus`）。

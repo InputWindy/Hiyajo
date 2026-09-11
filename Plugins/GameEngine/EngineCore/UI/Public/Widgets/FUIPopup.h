@@ -29,8 +29,8 @@ protected:
 	bool       IsOverlayLayer() const override { return true; }
 
 private:
-	/** 弹层内容的期望矩形（锚点或父节点矩形；局部坐标）。 */
-	[[nodiscard]] FUIRect ResolveAnchorRect() const;
+	/** 弹层落位目标（锚点或父节点矩形；局部坐标；可能没锚点 —— 见 `IUITranslator::FUIPopupAnchor`）。 */
+	[[nodiscard]] IUITranslator::FUIPopupAnchor ResolveAnchor() const;
 
 	FUIRect Anchor{};
 	bool    bOpen = false;

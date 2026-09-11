@@ -472,6 +472,19 @@ FUIHitResult FImGuiTranslator::WidgetCollapsingHeader(FUIName Id, const FUIRect&
 	return Out;
 }
 
+bool FImGuiTranslator::HitTestSecondary(const FUIRect& Local, FUIVector2& OutPos)
+{
+	if (!ImGui::IsMouseClicked(ImGuiMouseButton_Right)) { return false; }
+
+	const ImVec2 Mouse = ImGui::GetIO().MousePos;
+	const ImVec2 Min = ScreenMin(Local);
+	const ImVec2 Max = ScreenMax(Local);
+	if (Mouse.x < Min.x || Mouse.x >= Max.x || Mouse.y < Min.y || Mouse.y >= Max.y) { return false; }
+
+	OutPos = FUIVector2{ Mouse.x - Origin.X, Mouse.y - Origin.Y };
+	return true;
+}
+
 // -- 滚动 --------------------------------------------------------------------------------
 
 bool FImGuiTranslator::BeginScrollRegion(FUIName Id, const FUIRect& Rect, const FUIScrollRequest& Request)
@@ -540,7 +553,7 @@ void FImGuiTranslator::EndTooltip()
 	}
 }
 
-bool FImGuiTranslator::BeginPopup(FUIName Id, bool bOpen, bool bWasShown, const FUIRect& Anchor,
+bool FImGuiTranslator::BeginPopup(FUIName Id, bool bOpen, bool bWasShown, const IUITranslator::FUIPopupAnchor& Anchor,
 								  bool bModal, const FUIRect& ContentBox, const FUIResolvedStyle& S)
 {
 	const std::string Name = "##uiPopup" + std::to_string(Id.GetId());
@@ -554,16 +567,17 @@ bool FImGuiTranslator::BeginPopup(FUIName Id, bool bOpen, bool bWasShown, const 
 	if (bOpen && !bWasShown) { ImGui::OpenPopup(Name.c_str()); }
 
 	// 锚点摆放：默认把弹层的**左下角**对准锚点的**左上角**（自下而上生长，不压住正在被补全的
-	// 那个输入框）；锚点上方放不下才翻到锚点下方。
+	// 那个输入框）；锚点上方放不下才翻到锚点下方。零尺寸锚点（右键菜单：锚点就是指针本身）
+	// 落到同一公式里即"左下角在指针处"。
 	// 必须自己翻：`SetNextWindowPos` 一旦被调用，ImGui 就不再跑它那套自动翻转策略
 	// （`imgui.cpp` 的落位只在 `window_pos_set_by_api` 为假时生效，且只对"缩放后重新出现"的
 	// 弹层跑 `FindBestWindowPosForPopup`），于是贴着屏幕底部停靠的面板里，候选列表整条长到
 	// 显示区之外 —— 只看得见最上面一条，整条落在窗口外就完全看不见。
 	// 弹层窗口的**估算**高度：真实高度是 ImGui 在 `Begin` 里用上一帧内容算的，而落位必须在
 	// `Begin` 之前给出，翻译器又记不住跨帧尺寸 —— 故只能按公式推（见下方注释）。
-	if (Anchor.W > 0.f || Anchor.H > 0.f)
+	if (Anchor.bHas)
 	{
-		const ImVec2 Min = ScreenMin(Anchor);
+		const ImVec2 Min = ScreenMin(Anchor.Rect);
 		const ImGuiViewport* Viewport = ImGui::GetMainViewport();
 		const float ViewTop = Viewport->WorkPos.y;
 		const float ViewBottom = Viewport->WorkPos.y + Viewport->WorkSize.y;
@@ -573,7 +587,7 @@ bool FImGuiTranslator::BeginPopup(FUIName Id, bool bOpen, bool bWasShown, const 
 		// 正是被补全的那个输入框；这档误差必须为零，弹层下沿才正好贴住锚点上沿。
 		const float EstH = ContentBox.Y + ContentBox.H + ImGui::GetStyle().WindowPadding.y * 2.f;
 
-		const float Below = Min.y + Anchor.H;
+		const float Below = Min.y + Anchor.Rect.H;
 		float Y = Below;
 		if (EstH > 0.f)
 		{

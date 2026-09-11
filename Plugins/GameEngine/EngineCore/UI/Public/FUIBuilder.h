@@ -29,6 +29,10 @@ struct FUIWidgetState
 	bool       bActive    = false;  // 被按下且指针仍在其上
 	bool       bFocused  = false;
 	bool       bSelected = false;
+	/** 本帧在"右键菜单区域"（`EUIInputFlags::ContextMenu`）内按下了右键。
+	 *  一次性：它表达的是"刚刚发生的一次右键"，业务在下一帧读它开菜单（与其余运行期状态同序）。 */
+	bool       bSecondaryClicked = false;
+	FUIVector2 PointerPos{};        // `bSecondaryClicked` 那一刻的指针位置（视图局部坐标，可直接当弹层锚点）
 	EUIModifiers LastModifiers = EUIModifiers::None;   // 最近一次事件命中时的修饰键（回调里读）
 	FUIVector2 ContentSize{};       // 本帧测量结果
 	float      ScrollY    = 0.f;    // 滚动容器当前纵向滚动量

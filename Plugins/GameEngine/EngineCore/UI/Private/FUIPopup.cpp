@@ -59,17 +59,23 @@ FUIVector2 FUIPopup::MeasureContent(IUITranslator& T, const FUIVector2& Availabl
 	return FUIVector2{ 0.f, 0.f };   // 正常流里零尺寸：弹层内容活在第二个窗口
 }
 
-FUIRect FUIPopup::ResolveAnchorRect() const
+IUITranslator::FUIPopupAnchor FUIPopup::ResolveAnchor() const
 {
-	if (bHasAnchor) { return Anchor; }
+	// 显式锚点（含零尺寸的点锚点：右键菜单的指针位置）优先；否则跟随父节点矩形；
+	// 都没有 = 没锚点（矩形空，后端不落位）—— 故"有没有锚点"必须与矩形尺寸分开报。
+	if (bHasAnchor) { return IUITranslator::FUIPopupAnchor{ true, Anchor }; }
 	const FUIBuilder* Host = GetParent();
-	if (bFollowAnchor && Host != nullptr) { return Host->GetRect(); }
-	return GetRect();
+	if (bFollowAnchor && Host != nullptr)
+	{
+		const FUIRect Rect = Host->GetRect();
+		if (!Rect.IsEmpty()) { return IUITranslator::FUIPopupAnchor{ true, Rect }; }
+	}
+	return IUITranslator::FUIPopupAnchor{};
 }
 
 void FUIPopup::PaintContent(IUITranslator& T, const FUIResolvedStyle& S)
 {
-	const FUIRect Anchor = ResolveAnchorRect();
+	const IUITranslator::FUIPopupAnchor Anchor = ResolveAnchor();
 
 	// 内容尺寸**先量**：弹层窗口的落位（贴锚点上沿 / 放不下翻到锚点下沿）要用它。量在 `BeginPopup`
 	// 之前是必须的 —— 翻译器一帧一实例，记不住上一帧的高度，后端无从事后取回这个尺寸。

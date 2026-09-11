@@ -465,6 +465,20 @@ void FUIBuilder::Translate(IUITranslator& T, const FUIRect& InRect)
 		}
 	}
 
+	// 右键菜单区域（`EUIInputFlags::ContextMenu`）：纯几何判定、不走 item 命中（滚动容器自己的
+	// item 会被内容子窗口挡掉，而右键菜单要的恰是"整个矩形"）。命中即回写运行期状态，业务在
+	// 下一帧读 `GetState().bSecondaryClicked` / `.PointerPos` 开菜单 —— 一次性，本帧先清。
+	State.bSecondaryClicked = false;
+	if (HasFlag(GetInputFlags(), EUIInputFlags::ContextMenu) && !IsDisabled())
+	{
+		FUIVector2 Pointer;
+		if (T.HitTestSecondary(State.Rect, Pointer))
+		{
+			State.bSecondaryClicked = true;
+			State.PointerPos = Pointer;
+		}
+	}
+
 	if (IsDisabled()) { T.PushDisabled(); }
 
 	PaintSelf(T, S);

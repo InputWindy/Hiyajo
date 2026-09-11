@@ -65,10 +65,11 @@ public:
 	FUIScrollInfo EndScrollRegion() override;
 	FUIHitResult WidgetCollapsingHeader(FUIName Id, const FUIRect& Rect, bool& bOpen,
 										const FUIResolvedStyle& S) override;
+	bool HitTestSecondary(const FUIRect& Rect, FUIVector2& OutPos) override;
 
 	bool BeginTooltip(FUIName Id, const FUIRect& Anchor, bool bFollowMouse) override;
 	void EndTooltip() override;
-	bool BeginPopup(FUIName Id, bool bOpen, bool bWasShown, const FUIRect& Anchor, bool bModal,
+	bool BeginPopup(FUIName Id, bool bOpen, bool bWasShown, const FUIPopupAnchor& Anchor, bool bModal,
 					const FUIRect& ContentBox, const FUIResolvedStyle& S) override;
 	void EndPopup() override;
 
