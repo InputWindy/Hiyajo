@@ -199,6 +199,7 @@ void FEditorConsole::ExecuteCvarLine()
 	// 刚执行完的那批候选留在空框上。
 	SuggestIndex = -1;
 	SuggestNeedle[0] = '\0';
+	SuggestOffset = 0;
 
 	// "name [value]": a bare name prints the current value, "name value" sets it.
 	const std::size_t Space = Line.find_first_of(" \t");
@@ -536,6 +537,7 @@ void FEditorConsole::Update(FExampleEditor& Editor)
 			// 状态让位（两个列表互斥）。历史那条路自带 `CvarEditing` / 空历史的守卫。
 			SuggestIndex = -1;
 			SuggestNeedle[0] = '\0';
+			SuggestOffset = 0;
 			StepHistory(Step);
 		}
 	}
@@ -546,6 +548,7 @@ void FEditorConsole::Update(FExampleEditor& Editor)
 	{
 		SuggestIndex = -1;
 		SuggestNeedle[0] = '\0';
+		SuggestOffset = 0;
 	}
 
 	// 弹层行：↑ 展开的历史列表优先（两者互斥），否则是输入中的候选名字。
@@ -563,15 +566,19 @@ void FEditorConsole::Update(FExampleEditor& Editor)
 	const int MaxRows = bHistoryList ? static_cast<int>(MaxHistory) : 8;
 	const int ShowRows = std::min(static_cast<int>(Rows.size()), MaxRows);
 
-	// 高亮行（历史 = `HistoryIndex`，候选 = `SuggestIndex`）。候选可以多过一屏（一屏 8 行），
-	// 故取一个起点把高亮那行挪进视野 —— 显示行号 = 起点 + 行内偏移，高亮/点选都按它折算。
-	// 历史一屏放得下 10 条，起点恒为 0。
+	// 高亮行（历史 = `HistoryIndex`，候选 = `SuggestIndex`）。显示行号 = 起点 + 行内偏移，高亮/
+	// 点选都按它折算。历史一屏放得下 10 条，起点恒为 0；候选一屏 8 行且可以多过一屏，起点跨帧
+	// 记在 `SuggestOffset` 里 —— 只在高亮要走出窗口时挪一格（见该成员：逐帧按"把高亮钉在窗口
+	// 边上"重算，内容会跟着按键反向滑动，↑ 看起来也是往下）。
 	const int Highlight = bHistoryList ? HistoryIndex : SuggestIndex;
 	int RowOffset = 0;
-	if (Highlight >= 0)
+	if (!bHistoryList && Highlight >= 0)
 	{
-		const int MaxOffset = static_cast<int>(Rows.size()) - ShowRows;
-		RowOffset = std::min(std::max(Highlight - (ShowRows - 1), 0), MaxOffset);
+		const int MaxOffset = std::max(static_cast<int>(Rows.size()) - ShowRows, 0);
+		if (SuggestOffset < Highlight - (ShowRows - 1)) { SuggestOffset = Highlight - (ShowRows - 1); }   // 走出下沿
+		else if (SuggestOffset > Highlight) { SuggestOffset = Highlight; }                               // 走出上沿
+		SuggestOffset = std::min(std::max(SuggestOffset, 0), MaxOffset);
+		RowOffset = SuggestOffset;
 	}
 
 	// ---- 声明期：只改本视图的树 -------------------------------------------
@@ -693,6 +700,7 @@ void FEditorConsole::Update(FExampleEditor& Editor)
 			HistoryIndex = -1;
 			SuggestIndex = -1;
 			SuggestNeedle[0] = '\0';
+			SuggestOffset = 0;
 		});
 		// ↑/↓：命名键，走声明式快捷键（后端把 ↑ 映射成 UpArrow；命名键不受"输入框在收键盘"
 		// 那道守卫限制，否则输入框里的 ↑ 永远不命中）。回调此刻还不知道候选有没有、有几个，
@@ -745,6 +753,7 @@ void FEditorConsole::Update(FExampleEditor& Editor)
 				// （它钉住过滤词），点选则是"挑完了"，钉住的过滤词一并作废。
 				SuggestIndex = -1;
 				SuggestNeedle[0] = '\0';
+				SuggestOffset = 0;
 				FillFromList(Name);
 				CvarDropdownOpen = false;
 			});

@@ -363,7 +363,8 @@ FUIHitResult FImGuiTranslator::WidgetInputText(FUIName Id, const FUIRect& Rect, 
 	// 只在提出它的那一帧有效，且必须**紧贴**下一个 item 之前发出（否则焦点落到别的控件上）。
 	// 输入框是唯一"焦点即生命周期"的控件：不消费这个请求，编辑器"选完候选把焦点交回输入框"
 	// 的路径就是死代码（旧版靠 `IsItemActive()` 回读，新树不逐帧回写活跃位）。
-	if (PendingFocusId == Id.GetId())
+	const bool bFocusHandover = (PendingFocusId == Id.GetId());
+	if (bFocusHandover)
 	{
 		ImGui::SetKeyboardFocusHere();
 		PendingFocusId = 0;
@@ -375,11 +376,23 @@ FUIHitResult FImGuiTranslator::WidgetInputText(FUIName Id, const FUIRect& Rect, 
 	// 还额外产出一条 `TextChanged` —— 而"改字即收"的守卫会把刚弹出的列表当场收掉（表现为闪烁，
 	// 且弹层每帧重开时尺寸/落位各错一帧）。官方给的正是这条路：把 buf 主动灌回活跃状态，命中
 	// 后端本帧的 `init_reload_from_user_buf` 分支，由它按 buf 重算文本与光标。
-	if (ImGuiContext* Ctx = ImGui::GetCurrentContext(); Ctx != nullptr && Ctx->ActiveId != 0 &&
-		Ctx->InputTextState.ID == Ctx->ActiveId && Ctx->ActiveId == ImGui::GetID("##text"))
+	// 另一条要一起兜住的情形是"焦点本帧才交回"（`bFocusHandover`）：那之后输入框按**导航激活**
+	// 被重新初始化（`init_state`），而这条路会**全选**已有文本 —— 它置 `select_all`，条件是
+	// `input_requested_by_nav && (!recycle_state || !ImGuiActivateFlags_TryToPreserveState)`；
+	// `SetKeyboardFocusHere` 走的不是制表符那条（只有制表符会带上 TryToPreserveState），故只要
+	// 是导航激活就必然全选。后果是恢复焦点后的**第一个按键替换掉整条文本**：命令行点完候选随手
+	// 一按空格，框里就只剩那个空格（看着像被清空），此后缓冲以空格开头、补全再也匹配不上任何
+	// 候选 —— 用户得先手动点一下输入框才恢复正常。所以交回焦点这一帧**无条件**把缓冲灌回去，
+	// 把状态引到 `init_reload_from_user_buf` 分支（它按 buf 重算文本与光标、无选区），全选随之跳过。
+	if (ImGuiContext* Ctx = ImGui::GetCurrentContext(); Ctx != nullptr)
 	{
+		const ImGuiID TextItemId = ImGui::GetID("##text");
+		const bool bStateIsActive = (Ctx->ActiveId != 0 && Ctx->InputTextState.ID == Ctx->ActiveId && Ctx->ActiveId == TextItemId);
 		const char* StateText = (Ctx->InputTextState.TextA.Data != nullptr) ? Ctx->InputTextState.TextA.Data : "";
-		if (Text != StateText) { Ctx->InputTextState.ReloadUserBufAndMoveToEnd(); }
+		if (bFocusHandover || (bStateIsActive && Text != StateText))
+		{
+			Ctx->InputTextState.ReloadUserBufAndMoveToEnd();
+		}
 	}
 	bool bEnter = false;
 	if (bMultiline)

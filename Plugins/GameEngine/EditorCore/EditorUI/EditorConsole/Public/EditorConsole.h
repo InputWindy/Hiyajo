@@ -181,6 +181,14 @@ private:
 	 *  the list would collapse mid-walk. Empty = not walking. */
 	char                      SuggestNeedle[256] = { 0 };
 
+	/** The candidate list's window origin (index of the top visible row) while `↑`/`↓` walks it,
+	 *  carried across frames on purpose. Recomputed every frame as "pin the highlight to the
+	 *  window's edge" the content slid against the key: a `↑` step (row - 1) dragged the window
+	 *  along, so on screen the whole list went DOWN -- `↑` and `↓` looked identical. Held here,
+	 *  the highlight moves inside the window and the window only shifts one row when the highlight
+	 *  would leave it. Reset with the rest of the walk state. */
+	int                       SuggestOffset = 0;
+
 	/** The `↑`/`↓` step recorded by the shortcut callbacks. They run during the event drain,
 	 *  before `Update` has gathered the candidates, so which list the step belongs to
 	 *  (completion or history) is decided in `Update`. */
