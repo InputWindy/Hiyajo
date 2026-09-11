@@ -246,9 +246,8 @@ void FEditorConsole::FillFromHistory()
 
 void FEditorConsole::StepHistory(int Step)
 {
-	// 守卫只有两条：过滤框正在收键盘（那时 ↑ 属于过滤框，不该翻命令历史）、历史空。**不**要求
-	// 命令行自己是活跃项 —— 空框时按 ↑ 挑一条历史是这块区域的常规用法（先点了日志区再看历史），
-	// 而这一步本来就会把选中的命令填回命令框并要回焦点，故入口比"命令行在收键盘"宽一档。
+	// 守卫：过滤框正在收键盘（那时 ↑ 属于过滤框，不该翻命令历史）、历史空。命令框自己有没有在
+	// 收键盘由调用方在分派处挡（见 `Update` 里 ↑/↓ 的总闸）。
 	if (FilterEditing || History.empty())
 	{
 		return;
@@ -525,19 +524,25 @@ void FEditorConsole::Update(FExampleEditor& Editor)
 	}
 
 	// ↑/↓ 的一步：回调在事件抽干时就跑（那时候选还没算出来），故只记下"要走一步"，由本帧的
-	// 两张列表状态分派 —— 候选列表在显示就走候选，否则走历史（空框 ↑ 展开最近 10 条）。
+	// 两张列表状态分派 —— 候选列表在显示就走候选，否则走历史。
+	// 总闸：命令框必须正拿着键盘（光标在框里）。箭头键是**输入框正在收键盘**时才轮到命令行的那
+	// 一组键，框没进入编辑态时它属于视图导航/滚动，这里直接丢弃这一步（也不动任何行走状态）。
 	if (PendingStep != 0)
 	{
 		const int Step = PendingStep;
 		PendingStep = 0;
-		if (CvarEditing && CvarDropdownOpen && !Matches.empty())
+		if (!CvarEditing)
+		{
+			// 丢弃这一步：不动任何行走状态。
+		}
+		else if (CvarDropdownOpen && !Matches.empty())
 		{
 			StepSuggest(Step, Matches);
 		}
 		else
 		{
-			// 没候选可走（空框 / 没有匹配 / 焦点不在命令行）：这一步属于历史列表，候选的走动
-			// 状态让位（两个列表互斥）。历史那条路自带 `CvarEditing` / 空历史的守卫。
+			// 没候选可走（空框 / 没有匹配）：这一步属于历史列表，候选的走动状态让位（两个列表
+			// 互斥）。历史那条路自带空历史的守卫。
 			SuggestIndex = -1;
 			SuggestNeedle[0] = '\0';
 			SuggestOffset = 0;

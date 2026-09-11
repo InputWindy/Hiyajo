@@ -28,10 +28,11 @@ namespace Maho
  * `Update` drains the deque into one level-colored FUISelectable per visible line,
  * click-to-select / Shift+click-or-drag range select / Ctrl+C to copy the selection
  * (Ctrl+A selects every visible line first), plus a live string-match filter box in the
- * toolbar and a CVar command line at the bottom (Enter submits; a floating completion list
- * follows the box -- `↑`/`↓` walk it, filling the highlighted name back into the box -- and
- * with nothing to complete `↑` re-opens the same popup as the last 10 executed commands,
- * `↑`/`↓` walking those instead).
+ * toolbar and a CVar command line at the bottom (Enter submits; while the box holds the
+ * keyboard a floating completion list follows it -- `↑`/`↓` walk it, filling the highlighted
+ * name back into the box -- and with nothing to complete `↑` re-opens the same popup as the
+ * last 10 executed commands, `↑`/`↓` walking those instead; with the box unfocused the arrows
+ * are left to view navigation).
  * Right-clicking the log area opens a context menu at the pointer whose first entry is Clear
  * (it replaced the old toolbar Clear button).
  * Shutdown unsubscribes before the Log layer goes away. Like every editor component
@@ -84,8 +85,9 @@ private:
 
 	/** Walk the command history by `Step` (-1 = older, +1 = newer). A closed list (-1) is
 	 *  opened by an older step and lands on the newest line; the ends clamp. Refused only while
-	 *  the filter box is the one typing and when there is no history -- `↑` on an empty command
-	 *  line (the box not even focused) still opens the list. */
+	 *  the filter box is the one typing and when there is no history -- the dispatch already
+	 *  refuses to call it unless the command line holds the keyboard (see the `↑`/`↓` master
+	 *  gate in `Update`), so the arrows never walk history with the box unfocused. */
 	void StepHistory(int Step);
 
 	/** Walk the completion candidates of `Matches` (the pinned needle's, see `SuggestNeedle`)
@@ -145,14 +147,15 @@ private:
 	bool                      CvarRunRequested = false;
 
 	/** Whether the command line currently holds the keyboard (the box's active bit, read back
-	 *  from the node each frame). The `↑`/`↓` walks run in `Update` and use it to tell "the box is
-	 *  being typed into" from "nobody is", see `FilterEditing`. */
+	 *  from the node each frame). The `↑`/`↓` walks run in `Update` and this is their master gate:
+	 *  the arrows only mean "walk history / candidates" while the box has the caret, and belong to
+	 *  view navigation (focus move, panel scroll) otherwise. */
 	bool                      CvarEditing = false;
 
 	/** Same active bit for the toolbar's filter box. `↑` is a NAMED key, so the shortcut layer's
 	 *  "an input box owns the keyboard" guard does not apply to it (see
-	 *  `IUITranslator::IsShortcutPressed`) and the history list would open while the filter box is
-	 *  the one being typed into. This is the one gate that keeps `↑` with its own box. */
+	 *  `IUITranslator::IsShortcutPressed`) and the history list would otherwise open while the
+	 *  filter box is the one being typed into. Second gate behind `CvarEditing`. */
 	bool                      FilterEditing = false;
 
 	/** Set when a suggestion is picked: the cvar node asks the backend for the keyboard
