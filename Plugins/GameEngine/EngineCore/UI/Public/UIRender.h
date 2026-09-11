@@ -149,8 +149,11 @@ public:
 
 	// -- 弹出层（翻译器开第二窗口；面板零后端代码）--------------------------
 	/** 悬停提示：返回 true 时后端已开提示窗口，调用方在窗口内摆子树后 `EndTooltip`。
-	 *  `Anchor` 为锚点矩形（局部坐标），`bFollowMouse` 时锚点忽略。 */
-	virtual bool BeginTooltip(FUIName Id, const FUIRect& Anchor, bool bFollowMouse) = 0;
+	 *  `Anchor` 为锚点矩形（局部坐标），`bFollowMouse` 时锚点忽略。
+	 *  `S` 是提示窗自身样式：提示窗是第二个窗口，底/边框/圆角/边框宽由窗口样式决定
+	 *  （调用方自己的绘制不覆盖那个窗口），故声明侧的值必须由后端压进去才落到屏上。 */
+	virtual bool BeginTooltip(FUIName Id, const FUIRect& Anchor, bool bFollowMouse,
+							  const FUIResolvedStyle& S) = 0;
 	virtual void EndTooltip() = 0;
 
 	/** 弹层锚点：**零尺寸矩形是合法的点锚点**（右键菜单：左下角落在指针处），故"有没有锚点"

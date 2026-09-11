@@ -34,11 +34,11 @@ const FUIStyle& FUIPopup::TypeDefaultStyle() const
 	return Cache.Get([](FUIStyle& S)
 	{
 		const FUITheme& Th = GetUITheme();
-		// 底色**不声明**：弹层窗口的底由后端推 `ImGuiCol_PopupBg`，声明侧没给实色时它就取输入框画的
-		// 那个底色（`ImGuiCol_FrameBg`）—— "弹层内里和 cvar 输入框一样"因此天然成立，且跟着编辑器那套
-		// ImGui 调色板走（引擎主题的 `ControlFill` 与屏上那个输入框并无对应关系）。要覆写就给实色
-		// `Fill`（`A > 0` 即按声明走，见 `FImGuiTranslator::BeginPopup`）。
-		S[EUIState::Normal].Stroke    = Th.Border;
+		// 底与描边按声明给：弹层窗口的底/边框/圆角/边框宽由后端压成这里声明的值（见
+		// `FImGuiTranslator::PushWindowStyle`）—— 字段色那套（近黑底 + 灰描边）与输入框同源，
+		// "弹层内里和 cvar 输入框一样"因此是声明说了算，不再依赖后端去读 ImGui 的 `ImGuiCol_FrameBg`。
+		S[EUIState::Normal].Fill      = Th.FieldFill;
+		S[EUIState::Normal].Stroke    = Th.FieldStroke;
 		S[EUIState::Normal].Text      = Th.Text;
 		S[EUIState::Normal].FontSize  = Th.FontSize;
 		S[EUIState::Normal].Radius    = Th.Radius;

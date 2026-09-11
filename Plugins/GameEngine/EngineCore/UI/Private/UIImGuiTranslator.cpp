@@ -47,6 +47,11 @@ ImU32 FImGuiTranslator::ToColor(const FUIColor& C)
 	return ImGui::GetColorU32(ImVec4(C.R, C.G, C.B, C.A));
 }
 
+ImVec4 FImGuiTranslator::ToColor4(const FUIColor& C)
+{
+	return ImVec4(C.R, C.G, C.B, C.A);
+}
+
 // -- 视图进出 ----------------------------------------------------------------------------
 
 void FImGuiTranslator::BeginView(FUIView& InView, const FUIRect& DisplayRect)
@@ -139,6 +144,83 @@ ImFont* FImGuiTranslator::FontOf(const FUIResolvedResource& Font, float Size) co
 		return reinterpret_cast<ImFont*>(Font.NativeHandle);
 	}
 	return ImGui::GetFont();   // 缺省字体
+}
+
+// -- 声明即真值（样式压栈）---------------------------------------------------------------
+
+namespace
+{
+	// 压/弹同源的项数：改压栈清单必须同步改这里。
+	constexpr int kControlStyleColors = 13;
+	constexpr int kControlStyleVars = 4;
+	constexpr int kWindowStyleColors = 2;
+	constexpr int kWindowStyleVars = 4;
+}
+
+void FImGuiTranslator::PushControlStyle(const FUIResolvedStyle& S)
+{
+	// 底色：声明侧给了实色就按声明走；`A == 0`（回退链全空 = 声明没意见）逐槽推回**它自己的当前值**
+	// —— 不是"不压"：压回同一值等于没动，压栈项数才能固定（弹栈只认个数），且后端那套调色板一个字
+	// 都不改。
+	const bool bFilled = (S.Fill.A > 0.f);
+	const auto Slot = [&](ImGuiCol Color)
+	{ return bFilled ? ToColor4(S.Fill) : ImGui::GetStyle().Colors[Color]; };
+	// 后端画的控件在同一帧内自己算悬停/按下（`FrameBgHovered`/`FrameBgActive`），而状态是树裁的
+	// （`FUIBuilder::GetVisualState`）：三个槽先都压成"本帧解析出来的那一态"，才不会再叠一层后端自己
+	// 的悬停反馈（否则指针扫过就闪一下，与树声明的 Hovered 打架）。
+	ImGui::PushStyleColor(ImGuiCol_Text, ToColor4(S.Text));
+	ImGui::PushStyleColor(ImGuiCol_TextDisabled, ImVec4(S.Text.R, S.Text.G, S.Text.B, S.Text.A * 0.5f));
+	ImGui::PushStyleColor(ImGuiCol_FrameBg, Slot(ImGuiCol_FrameBg));
+	ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, Slot(ImGuiCol_FrameBgHovered));
+	ImGui::PushStyleColor(ImGuiCol_FrameBgActive, Slot(ImGuiCol_FrameBgActive));
+	ImGui::PushStyleColor(ImGuiCol_Border, ToColor4(S.Stroke));
+	ImGui::PushStyleColor(ImGuiCol_Button, Slot(ImGuiCol_Button));
+	ImGui::PushStyleColor(ImGuiCol_ButtonHovered, Slot(ImGuiCol_ButtonHovered));
+	ImGui::PushStyleColor(ImGuiCol_ButtonActive, Slot(ImGuiCol_ButtonActive));
+	ImGui::PushStyleColor(ImGuiCol_Header, Slot(ImGuiCol_Header));
+	ImGui::PushStyleColor(ImGuiCol_HeaderHovered, Slot(ImGuiCol_HeaderHovered));
+	ImGui::PushStyleColor(ImGuiCol_HeaderActive, Slot(ImGuiCol_HeaderActive));
+	// 控件自己开的第二窗口（`ColorEdit4` 的取色器）也是弹层：它的底取 `PopupBg`。
+	ImGui::PushStyleColor(ImGuiCol_PopupBg, Slot(ImGuiCol_PopupBg));
+	// 框内边距即声明的 `Padding`：ImGui 的框高 = 字号 + `FramePadding.y`×2（不认调用方给的矩形高），
+	// 故"声明 Padding"与组件测量公式必须同源（见 `FUIInputText::MeasureContent`）。
+	ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(S.Padding.Left, S.Padding.Top));
+	ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, S.Radius);
+	ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, S.StrokeWidth);
+	ImGui::PushStyleVar(ImGuiStyleVar_PopupRounding, S.Radius);
+	// 字体/字号：控件的文字由 ImGui 按**当前字体**画（`g.FontSize`），不推就还是后端缺省字体那一档，
+	// 声明侧的字号只反映在组件测量里 —— 框里框外两个字号。
+	const FUIResolvedResource Font = ResolveFont(S.Font, S.FontSize);
+	ImGui::PushFont(FontOf(Font, S.FontSize));
+}
+
+void FImGuiTranslator::PopControlStyle()
+{
+	ImGui::PopFont();
+	ImGui::PopStyleVar(kControlStyleVars);
+	ImGui::PopStyleColor(kControlStyleColors);
+}
+
+void FImGuiTranslator::PushWindowStyle(const FUIResolvedStyle& S)
+{
+	const ImVec4 Bg = (S.Fill.A > 0.f) ? ToColor4(S.Fill)
+									   : ImGui::GetStyle().Colors[ImGuiCol_PopupBg];
+	const ImVec4 Bd = (S.Stroke.A > 0.f) ? ToColor4(S.Stroke)
+										 : ImGui::GetStyle().Colors[ImGuiCol_Border];
+	ImGui::PushStyleColor(ImGuiCol_PopupBg, Bg);
+	ImGui::PushStyleColor(ImGuiCol_Border, Bd);
+	// 边框宽/圆角有两套来源：非模态弹层吃 `PopupBorderSize`/`PopupRounding`，模态弹层与提示窗的
+	// 圆角走 `WindowBorderSize`/`WindowRounding`（`Begin` 里按窗口 flag 分支取），两套都压才都覆盖。
+	ImGui::PushStyleVar(ImGuiStyleVar_PopupBorderSize, S.StrokeWidth);
+	ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, S.StrokeWidth);
+	ImGui::PushStyleVar(ImGuiStyleVar_PopupRounding, S.Radius);
+	ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, S.Radius);
+}
+
+void FImGuiTranslator::PopWindowStyle()
+{
+	ImGui::PopStyleVar(kWindowStyleVars);
+	ImGui::PopStyleColor(kWindowStyleColors);
 }
 
 // -- 测量 --------------------------------------------------------------------------------
@@ -329,7 +411,7 @@ FUIHitResult FImGuiTranslator::WidgetSliderFloat(FUIName Id, const FUIRect& Rect
 												 float Min, float Max, std::string_view Format,
 												 const FUIResolvedStyle& S)
 {
-	(void)S;
+	PushControlStyle(S);
 	FUIHitResult Out;
 	ImGui::PushID(static_cast<int>(Id.GetId()));
 	ImGui::SetCursorScreenPos(ScreenMin(Rect));
@@ -344,6 +426,7 @@ FUIHitResult FImGuiTranslator::WidgetSliderFloat(FUIName Id, const FUIRect& Rect
 	Out.bPressed = ImGui::IsItemActive();
 	if (!NearlyEqual(Old, Value)) { Out.bDragging = ImGui::IsItemActive(); }
 	ImGui::PopID();
+	PopControlStyle();
 	return Out;
 }
 
@@ -351,7 +434,7 @@ FUIHitResult FImGuiTranslator::WidgetInputText(FUIName Id, const FUIRect& Rect, 
 											   std::string_view Hint, std::size_t MaxLength,
 											   bool bMultiline, const FUIResolvedStyle& S)
 {
-	(void)S;
+	PushControlStyle(S);
 	FUIHitResult Out;
 	std::vector<char> Buffer(1024, '\0');
 	const std::size_t CopyLen = std::min(Text.size(), Buffer.size() - 1);
@@ -421,6 +504,7 @@ FUIHitResult FImGuiTranslator::WidgetInputText(FUIName Id, const FUIRect& Rect, 
 	}
 	if (bEnter) { Out.bSubmitted = true; }
 	ImGui::PopID();
+	PopControlStyle();
 	return Out;
 }
 
@@ -437,10 +521,10 @@ FUIHitResult FImGuiTranslator::WidgetDragFloat(FUIName Id, const FUIRect& Rect, 
 											   int Components, float Speed, std::string_view Format,
 											   const FUIResolvedStyle& S)
 {
-	(void)S;
 	FUIHitResult Out;
 	if (Values == nullptr || Components < 1) { return Out; }
 
+	PushControlStyle(S);
 	ImGui::PushID(static_cast<int>(Id.GetId()));
 	ImGui::SetCursorScreenPos(ScreenMin(Rect));
 	ImGui::SetNextItemWidth(std::max(Rect.W, 1.f));
@@ -459,16 +543,17 @@ FUIHitResult FImGuiTranslator::WidgetDragFloat(FUIName Id, const FUIRect& Rect, 
 	if (bChanged) { Out.bClicked = true; }
 	if (ImGui::IsItemActive()) { FocusedId = Id.GetId(); }
 	ImGui::PopID();
+	PopControlStyle();
 	return Out;
 }
 
 FUIHitResult FImGuiTranslator::WidgetColorEdit(FUIName Id, const FUIRect& Rect, float* RGBA,
 											   const FUIResolvedStyle& S)
 {
-	(void)S;
 	FUIHitResult Out;
 	if (RGBA == nullptr) { return Out; }
 
+	PushControlStyle(S);
 	ImGui::PushID(static_cast<int>(Id.GetId()));
 	ImGui::SetCursorScreenPos(ScreenMin(Rect));
 	ImGui::SetNextItemWidth(std::max(Rect.W, 1.f));
@@ -478,6 +563,7 @@ FUIHitResult FImGuiTranslator::WidgetColorEdit(FUIName Id, const FUIRect& Rect, 
 	if (bChanged) { Out.bClicked = true; }
 	if (ImGui::IsItemActive()) { FocusedId = Id.GetId(); }
 	ImGui::PopID();
+	PopControlStyle();
 	return Out;
 }
 
@@ -485,6 +571,7 @@ FUIHitResult FImGuiTranslator::WidgetCollapsingHeader(FUIName Id, const FUIRect&
 													  const FUIResolvedStyle& S)
 {
 	FUIHitResult Out;
+	PushControlStyle(S);
 	ImGui::PushID(static_cast<int>(Id.GetId()));
 	ImGui::SetCursorScreenPos(ScreenMin(Rect));
 	if (bOpen) { ImGui::SetNextItemOpen(true, ImGuiCond_Always); }
@@ -494,6 +581,8 @@ FUIHitResult FImGuiTranslator::WidgetCollapsingHeader(FUIName Id, const FUIRect&
 	if (ImGui::IsItemClicked()) { Out.bClicked = true; }
 	if (ImGui::IsItemToggledOpen()) { bOpen = !bOpen; }
 	ImGui::PopID();
+	// 折叠头是树画的（`FUICollapsingHeader` 的底与描边），后端只画箭头与标题：弹出样式后照旧描一遍。
+	PopControlStyle();
 	DrawRect(Rect, S);
 	return Out;
 }
@@ -550,9 +639,12 @@ FImGuiTranslator::FUIScrollInfo FImGuiTranslator::EndScrollRegion()
 
 // -- 弹出层 ------------------------------------------------------------------------------
 
-bool FImGuiTranslator::BeginTooltip(FUIName Id, const FUIRect& Anchor, bool bFollowMouse)
+bool FImGuiTranslator::BeginTooltip(FUIName Id, const FUIRect& Anchor, bool bFollowMouse,
+									const FUIResolvedStyle& S)
 {
 	(void)Id;
+	// 提示窗也是独立窗口：底/边框/圆角/边框宽由窗口样式决定，与弹层走同一套"声明即真值"。
+	PushWindowStyle(S);
 	if (bFollowMouse)
 	{
 		const ImVec2 Mouse = ImGui::GetIO().MousePos;
@@ -572,6 +664,7 @@ bool FImGuiTranslator::BeginTooltip(FUIName Id, const FUIRect& Anchor, bool bFol
 void FImGuiTranslator::EndTooltip()
 {
 	ImGui::EndTooltip();
+	PopWindowStyle();
 	if (!OriginStack.empty())
 	{
 		Origin = OriginStack.back();
@@ -642,34 +735,18 @@ bool FImGuiTranslator::BeginPopup(FUIName Id, bool bOpen, bool bWasShown, const 
 	const ImGuiWindowFlags PopupFlags = bModal
 		? ImGuiWindowFlags_AlwaysAutoResize
 		: (ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoFocusOnAppearing);
-	// 弹层窗口的样式（底色/描边）只在"开窗那一刻"取（`Begin` 里的 `ImGuiCol_PopupBg` /
-	// `RenderWindowOuterBorders` 里的 `ImGuiCol_Border`），故全压在 `Begin` **之前**：弹层内容活在
-	// 第二个窗口里，调用方自己画的那套（`FUIPopup` 的填充/描边）盖不到它，而编辑器那套调色板
+	// 弹层窗口的样式（底色/描边/边框宽/圆角）只在"开窗那一刻"取（`Begin` 里的 `ImGuiCol_PopupBg`
+	// / `ImGuiCol_Border`，以及按窗口 flag 分支取的 `*BorderSize`/`*Rounding`），故全压在 `Begin`
+	// **之前**：弹层内容活在第二个窗口里，调用方自己画的那套盖不到它，而编辑器那套调色板
 	// （`ApplyMahoNightTheme`）把 `ImGuiCol_PopupBg`/`ImGuiCol_Border` 都设成了**全透明** ——
-	// 不推这两下，弹层就是个既没底也没边框的玻璃框。
-	//
-	// 底色：声明侧给了实色就按声明走；没给（`A == 0`，`FUIPopup` 的类型默认就是"不声明"）则取
-	// 输入框自己画的底色 `ImGuiCol_FrameBg` —— `WidgetInputText` 画的输入框用的正是这一个 token，
-	// 故"弹层内里和输入框一样"只有读同一个 token 才成立（引擎 UI 主题的 `ControlFill` 跟屏上那个
-	// 输入框没有对应关系：输入框由后端画，不吃引擎主题）。
-	ImVec4 PopupBg = ImGui::GetStyle().Colors[ImGuiCol_FrameBg];
-	if (S.Fill.A > 0.f) { PopupBg = ImVec4(S.Fill.R, S.Fill.G, S.Fill.B, S.Fill.A); }
-	ImGui::PushStyleColor(ImGuiCol_PopupBg, PopupBg);
-	// 描边：弹层窗口的边框色/宽是 `ImGuiCol_Border` + `ImGuiStyleVar_PopupBorderSize`（编辑器把前者
-	// 设成透明、后者默认 1），故声明侧那支灰边框必须自己推 —— 这样"弹层边框灰"才是声明说了算，
-	// 单个弹层也能靠覆写 `Stroke`/`StrokeWidth` 换掉它。
-	ImGui::PushStyleColor(ImGuiCol_Border, ToColor(S.Stroke));
-	ImGui::PushStyleVar(ImGuiStyleVar_PopupBorderSize, S.StrokeWidth);
-	PopupColorPushed = 1;
-	PopupStyleVarPushed = 1;
+	// 不压这几下，弹层就是个既没底也没边框的玻璃框。声明侧没意见（`Fill.A == 0`）时由
+	// `PushWindowStyle` 原样推回当前值。
+	PushWindowStyle(S);
 	const bool bShown = bModal ? ImGui::BeginPopupModal(Name.c_str(), nullptr, PopupFlags)
 							   : ImGui::BeginPopup(Name.c_str(), PopupFlags);
 	if (!bShown)
 	{
-		ImGui::PopStyleVar(PopupStyleVarPushed);
-		ImGui::PopStyleColor(PopupColorPushed);
-		PopupStyleVarPushed = 0;
-		PopupColorPushed = 0;
+		PopWindowStyle();
 		return false;
 	}
 
@@ -703,16 +780,7 @@ void FImGuiTranslator::EndPopup()
 {
 	ImGui::EndPopup();
 	// 弹层窗口样式的压栈配平（`BeginPopup` 里压、这里弹；开窗失败的那条路已在原处弹掉）。
-	if (PopupStyleVarPushed > 0)
-	{
-		ImGui::PopStyleVar(PopupStyleVarPushed);
-		PopupStyleVarPushed = 0;
-	}
-	if (PopupColorPushed > 0)
-	{
-		ImGui::PopStyleColor(PopupColorPushed);
-		PopupColorPushed = 0;
-	}
+	PopWindowStyle();
 	if (!OriginStack.empty())
 	{
 		Origin = OriginStack.back();

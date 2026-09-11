@@ -20,6 +20,11 @@ struct MAHO_UI_API FUITheme
 	FUIColor ControlFill{ 0.16f, 0.16f, 0.18f, 1.f };
 	FUIColor ControlHover{ 0.22f, 0.22f, 0.25f, 1.f };
 	FUIColor ControlPress{ 0.28f, 0.28f, 0.31f, 1.f };
+	// 字段类控件的底与描边：输入框/滑条/拖拽/颜色选择，以及弹层的窗口底。与 `Control*` 分开 ——
+	// 那支是"按钮/控件"的中灰，这支是编辑器输入框那层近黑。
+	FUIColor FieldFill{ 0.027f, 0.027f, 0.027f, 1.f };
+	FUIColor FieldHover{ 0.055f, 0.055f, 0.055f, 1.f };
+	FUIColor FieldStroke{ 0.16f, 0.16f, 0.16f, 1.f };
 	FUIColor Accent{ 0.26f, 0.59f, 0.98f, 1.f };
 	FUIColor Text{ 0.86f, 0.86f, 0.88f, 1.f };
 	FUIColor TextDisabled{ 0.45f, 0.45f, 0.47f, 1.f };

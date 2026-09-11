@@ -50,26 +50,27 @@ const FUIStyle& FUIColorEdit::TypeDefaultStyle() const
 	return Cache.Get([](FUIStyle& S)
 	{
 		const FUITheme& Th = GetUITheme();
-		S[EUIState::Normal].Fill      = Th.ControlFill;
-		S[EUIState::Normal].Stroke    = Th.Border;
+		// 字段色（`Field*`）：色块那支由后端自己画，内里吃这一套（与 `Control*` 那支中灰分开）。
+		S[EUIState::Normal].Fill      = Th.FieldFill;
+		S[EUIState::Normal].Stroke    = Th.FieldStroke;
 		S[EUIState::Normal].Text      = Th.Text;
 		S[EUIState::Normal].FontSize  = Th.FontSize;
 		S[EUIState::Normal].Radius    = Th.Radius;
 		S[EUIState::Normal].StrokeWidth = Th.StrokeWidth;
 		S[EUIState::Normal].Padding   = FMargin(4.f, 2.f);
 
-		S[EUIState::Hovered].Fill = Th.ControlHover;
+		S[EUIState::Hovered].Fill = Th.FieldHover;
 		S[EUIState::Hovered].Text = Th.Text;
 
-		S[EUIState::Pressed].Fill   = Th.ControlPress;
+		S[EUIState::Pressed].Fill   = Th.FieldFill;
 		S[EUIState::Pressed].Stroke = Th.Accent;
 		S[EUIState::Pressed].Text   = Th.Text;
 
-		S[EUIState::Selected].Fill   = Th.ControlFill;
+		S[EUIState::Selected].Fill   = Th.FieldFill;
 		S[EUIState::Selected].Stroke = Th.Accent;
 		S[EUIState::Selected].Text   = Th.Text;
 
-		S[EUIState::Disabled].Fill = Th.ControlFill;
+		S[EUIState::Disabled].Fill = Th.FieldFill;
 		S[EUIState::Disabled].Text = Th.TextDisabled;
 	});
 }
@@ -84,7 +85,9 @@ FUIVector2 FUIColorEdit::MeasureContent(IUITranslator& T, const FUIVector2& Avai
 		LabelW = T.MeasureText(Label, Font, S.FontSize).X + 8.f;
 	}
 	const float EditW = std::min(kMinColorWidth, std::max(0.f, Available.X - LabelW));
-	return FUIVector2{ LabelW + EditW, std::max(S.FontSize * 1.4f, 20.f) };
+	// 框高与后端同源：ImGui 的框高 = 字号 + `FramePadding.y`×2（翻译器把声明的 `Padding` 压成
+	// `FramePadding`，见 `PushControlStyle`），量不一样高就会压住下面的兄弟。
+	return FUIVector2{ LabelW + EditW, S.FontSize + S.Padding.Top + S.Padding.Bottom };
 }
 
 void FUIColorEdit::PaintSelf(IUITranslator& T, const FUIResolvedStyle& S)

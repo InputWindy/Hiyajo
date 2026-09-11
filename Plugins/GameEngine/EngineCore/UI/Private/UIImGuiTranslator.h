@@ -67,7 +67,7 @@ public:
 										const FUIResolvedStyle& S) override;
 	bool HitTestSecondary(const FUIRect& Rect, FUIVector2& OutPos) override;
 
-	bool BeginTooltip(FUIName Id, const FUIRect& Anchor, bool bFollowMouse) override;
+	bool BeginTooltip(FUIName Id, const FUIRect& Anchor, bool bFollowMouse, const FUIResolvedStyle& S) override;
 	void EndTooltip() override;
 	bool BeginPopup(FUIName Id, bool bOpen, bool bWasShown, const FUIPopupAnchor& Anchor, bool bModal,
 					const FUIRect& ContentBox, const FUIResolvedStyle& S) override;
@@ -95,7 +95,16 @@ private:
 	[[nodiscard]] ImVec2            ScreenMin(const FUIRect& Local) const;
 	[[nodiscard]] ImVec2            ScreenMax(const FUIRect& Local) const;
 	[[nodiscard]] static ImU32      ToColor(const FUIColor& C);
+	[[nodiscard]] static ImVec4     ToColor4(const FUIColor& C);
 	[[nodiscard]] ImFont*           FontOf(const FUIResolvedResource& Font, float Size) const;
+	// 声明即真值：后端自己画的控件（输入框/滑条/拖拽/颜色选择/折叠头）不吃树画的 `DrawRect`，
+	// 只有把解析结果压成 ImGui 样式（颜色 + FramePadding/Rounding/BorderSize + 字体档位），
+	// 节点上声明的 `FUIStyle` 才真正落到屏上。压/弹必须成对（计数固定，见 .cpp 里的常量）。
+	void PushControlStyle(const FUIResolvedStyle& S);
+	void PopControlStyle();
+	// 弹层/提示窗：它们是独立窗口，底/边框/圆角/边框宽由 ImGui 的窗口样式决定，同样压成声明的值。
+	void PushWindowStyle(const FUIResolvedStyle& S);
+	void PopWindowStyle();
 	// `bAllowHoverWhileActive`：同窗口另有活跃项时仍报告悬停位。ImGui 默认把「非活跃项」的
 	// `IsItemHovered()` 直接压成 false（`IsWindowContentHoverable` 的同窗口活跃项过滤），
 	// 于是"拖着 A 扫过 B"里 B 永远不报悬停。拖拽扩选（控制台日志行）正需要 B 的悬停位。
@@ -117,8 +126,6 @@ private:
 	std::uint32_t FocusedId = 0;
 	int           DisabledDepth = 0;
 	bool          bPopupOpen = false;                     // 当前是否已在弹层窗口内
-	int           PopupColorPushed = 0;                   // 弹层窗口样色的压栈数（开窗失败也要弹掉）
-	int           PopupStyleVarPushed = 0;                // 弹层窗口样式的压栈数（同上）
 	std::vector<FUIScrollRequest> ScrollStack;            // 滚动区域的待应用请求（贴底要等内容摆完）
 };
 

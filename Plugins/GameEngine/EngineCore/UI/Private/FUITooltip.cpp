@@ -89,7 +89,7 @@ void FUITooltip::PaintContent(IUITranslator& T, const FUIResolvedStyle& S)
 
 	// v1：`Delay` 由后端即时提示（ImGui 不排队计时），字段先落在节点上
 	const FUIRect Anchor = Host->GetRect();
-	if (!T.BeginTooltip(GetId(), Anchor, bFollowMouse)) { return; }
+	if (!T.BeginTooltip(GetId(), Anchor, bFollowMouse, S)) { return; }
 
 	const FUIVector2 Size = MeasureTipContent(T);
 	const FUIRect Body{ 0.f, 0.f, Size.X, Size.Y };
