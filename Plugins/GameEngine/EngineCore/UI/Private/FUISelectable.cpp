@@ -35,11 +35,15 @@ const FUIStyle& FUISelectable::TypeDefaultStyle() const
 		S[EUIState::Normal].Padding   = FMargin(6.f, 3.f);
 		S[EUIState::Normal].IconSize  = 14.f;
 
-		S[EUIState::Hovered].Fill = Th.ControlHover;
+		// 悬停/按下取主色（`Accent`）而不是控件灰：本类型是"列表项/菜单项"，ImGui 自身的 selectable
+		// 悬停（`ImGuiCol_HeaderHovered`）用的就是这块主色蓝。原先给 `ControlHover` 的后果是弹层里的
+		// 菜单项悬停只浮一层灰，和同一弹层里被声明选中的行（`Selected` = 主色）看着不是一套东西。
+		// 按下与悬停同色：两者都由指针落在本行触发（`Selected` 才是键盘/业务高亮），不必再分明暗。
+		S[EUIState::Hovered].Fill = Th.Accent;
 		S[EUIState::Hovered].Text = Th.Text;
 		S[EUIState::Hovered].Icon = Th.IconAsset;
 
-		S[EUIState::Pressed].Fill = Th.ControlPress;
+		S[EUIState::Pressed].Fill = Th.Accent;
 		S[EUIState::Pressed].Text = Th.Text;
 
 		S[EUIState::Selected].Fill = Th.Accent;

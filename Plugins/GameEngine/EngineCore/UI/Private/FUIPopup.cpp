@@ -34,19 +34,22 @@ const FUIStyle& FUIPopup::TypeDefaultStyle() const
 	return Cache.Get([](FUIStyle& S)
 	{
 		const FUITheme& Th = GetUITheme();
-		S[EUIState::Normal].Fill      = Th.PanelFill;
-		S[EUIState::Normal].Stroke    = Th.PanelStroke;
+		// 弹层按"浮起来的输入框"配：内部底色取 `ControlFill` —— 后端输入框的底色（ImGui `FrameBg`）就是
+		// 它（`UIImGuiEntry.cpp`），故弹层内里与 cvar 输入框完全一致；描边取通用灰边框 `Border`（ImGui 画
+		// 弹层/控件边框用的同一 token）。原先与面板同色（`PanelFill`）时整块糊成一片，看不出是输入框那种盒子。
+		S[EUIState::Normal].Fill      = Th.ControlFill;
+		S[EUIState::Normal].Stroke    = Th.Border;
 		S[EUIState::Normal].Text      = Th.Text;
 		S[EUIState::Normal].FontSize  = Th.FontSize;
 		S[EUIState::Normal].Radius    = Th.Radius;
 		S[EUIState::Normal].StrokeWidth = Th.StrokeWidth;
 		S[EUIState::Normal].Padding   = FMargin(10.f, 8.f);
 
-		S[EUIState::Hovered].Fill = Th.PanelFill;
+		S[EUIState::Hovered].Fill = Th.ControlFill;
 		S[EUIState::Hovered].Text = Th.Text;
-		S[EUIState::Pressed].Fill = Th.PanelFill;
+		S[EUIState::Pressed].Fill = Th.ControlFill;
 		S[EUIState::Pressed].Text = Th.Text;
-		S[EUIState::Selected].Fill = Th.PanelFill;
+		S[EUIState::Selected].Fill = Th.ControlFill;
 		S[EUIState::Selected].Text = Th.Text;
 		S[EUIState::Disabled].Text = Th.TextDisabled;
 	});
