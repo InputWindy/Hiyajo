@@ -83,7 +83,9 @@ private:
 	void FillFromHistory();
 
 	/** Walk the command history by `Step` (-1 = older, +1 = newer). A closed list (-1) is
-	 *  opened by an older step and lands on the newest line; the ends clamp. */
+	 *  opened by an older step and lands on the newest line; the ends clamp. Refused only while
+	 *  the filter box is the one typing and when there is no history -- `↑` on an empty command
+	 *  line (the box not even focused) still opens the list. */
 	void StepHistory(int Step);
 
 	/** Walk the completion candidates of `Matches` (the pinned needle's, see `SuggestNeedle`)
@@ -143,9 +145,15 @@ private:
 	bool                      CvarRunRequested = false;
 
 	/** Whether the command line currently holds the keyboard (the box's active bit, read back
-	 *  from the node each frame). The `↑`/`↓` walks run in `Update` and gate on this, so the
-	 *  history list does not open while another box (e.g. the filter) is the one being typed into. */
+	 *  from the node each frame). The `↑`/`↓` walks run in `Update` and use it to tell "the box is
+	 *  being typed into" from "nobody is", see `FilterEditing`. */
 	bool                      CvarEditing = false;
+
+	/** Same active bit for the toolbar's filter box. `↑` is a NAMED key, so the shortcut layer's
+	 *  "an input box owns the keyboard" guard does not apply to it (see
+	 *  `IUITranslator::IsShortcutPressed`) and the history list would open while the filter box is
+	 *  the one being typed into. This is the one gate that keeps `↑` with its own box. */
+	bool                      FilterEditing = false;
 
 	/** Set when a suggestion is picked: the cvar node asks the backend for the keyboard
 	 *  focus on its next translation (`RequestKeyboardFocus()`), so typing continues. */

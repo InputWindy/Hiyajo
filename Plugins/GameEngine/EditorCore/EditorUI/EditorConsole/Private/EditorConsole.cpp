@@ -246,9 +246,10 @@ void FEditorConsole::FillFromHistory()
 
 void FEditorConsole::StepHistory(int Step)
 {
-	// 守卫：只有命令行自己在收键盘时才走历史。同一个视图里还有过滤框，而命名键不受快捷键
-	// 那道"无输入框"守卫限制（见 `IUITranslator::IsShortcutPressed`），故挡在这里。
-	if (!CvarEditing || History.empty())
+	// 守卫只有两条：过滤框正在收键盘（那时 ↑ 属于过滤框，不该翻命令历史）、历史空。**不**要求
+	// 命令行自己是活跃项 —— 空框时按 ↑ 挑一条历史是这块区域的常规用法（先点了日志区再看历史），
+	// 而这一步本来就会把选中的命令填回命令框并要回焦点，故入口比"命令行在收键盘"宽一档。
+	if (FilterEditing || History.empty())
 	{
 		return;
 	}
@@ -305,10 +306,12 @@ void FEditorConsole::Update(FExampleEditor& Editor)
 	// 翻译期后端原地改写节点的值（用户输入的真值在节点上），故先收回缓冲，再按缓冲
 	// 声明 —— 用户编辑因此跨帧存活。建议行刚点选的那一帧除外：缓冲才是真值
 	// （CvarAuthoritative），回读会把陈旧的节点文本压回去。
+	FilterEditing = false;
 	if (const auto* FilterNode = dynamic_cast<const UI::FUIInputText*>(PanelView->Find(UI::FUIName(kIdFilter))))
 	{
 		std::strncpy(FilterBuffer, FilterNode->GetValue().c_str(), sizeof(FilterBuffer) - 1);
 		FilterBuffer[sizeof(FilterBuffer) - 1] = '\0';
+		FilterEditing = FilterNode->GetState().bPressed;   // 同上：过滤框的活跃位
 	}
 
 	CvarEditing = false;
