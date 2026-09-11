@@ -159,8 +159,11 @@ private:
 	 *  keeps the intent readable in `StepHistory` itself. */
 	bool                      FilterEditing = false;
 
-	/** Set when a suggestion is picked: the cvar node asks the backend for the keyboard
-	 *  focus on its next translation (`RequestKeyboardFocus()`), so typing continues. */
+	/** Set when a suggestion is picked, or when Enter submits the line: the cvar node asks the
+	 *  backend for the keyboard focus on its next translation (`RequestKeyboardFocus()`), so the
+	 *  caret stays in the command line and typing continues. Without it the submit would drop the
+	 *  box out of its edit state and the `↑`/`↓` chords (scope `NodeActive`) would stop firing
+	 *  until the box is clicked again. */
 	bool                      CvarPendingFocus = false;
 
 	/** Set by the log panel's `Ctrl+C` shortcut (declarative, see `FUIKeyChord`); `Ctrl+A`

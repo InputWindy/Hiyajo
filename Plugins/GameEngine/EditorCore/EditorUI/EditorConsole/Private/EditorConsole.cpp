@@ -383,6 +383,10 @@ void FEditorConsole::Update(FExampleEditor& Editor)
 		CvarRunRequested = false;
 		ExecuteCvarLine();
 		CvarAuthoritative = true;
+		// 回车提交让后端把输入框退出编辑态（`ImGuiInputTextFlags_EnterReturnsTrue` 的语义：回车即
+		// 离开），光标随之离开命令行 —— 此后 ↑/↓（声明作用域 `NodeActive`）与继续打字都不再轮到它，
+		// 用户得再点一下框。故提交完顺手把焦点要回来：一次性请求，下一帧翻译时交回（见本函数末尾）。
+		CvarPendingFocus = true;
 	}
 
 	// -- 复制（Ctrl+C）-------------------------------------------------------
