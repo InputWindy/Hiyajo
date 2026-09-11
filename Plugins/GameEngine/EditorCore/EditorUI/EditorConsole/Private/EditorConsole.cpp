@@ -632,12 +632,22 @@ void FEditorConsole::Update(FExampleEditor& Editor)
 	// 面板级快捷键（声明式，见 `UI::FUIKeyChord`）：Ctrl+C 复制选中区间、Ctrl+A 全选可见行。
 	// 挂在日志面板上 = "面板在翻译（可见）时才响应"；后端的守卫还要求键盘焦点在本视图窗口
 	// 且当前没有文本输入在收键盘，故在过滤框/命令行里打字不会误触发。
+	// 两条键共用一个回调并按载荷（`ToString()`）认领：`Shortcut` 事件是本节点的多播，命中哪一条
+	// 都会送到该节点的全部订阅者，逐键各挂一个回调的话按 Ctrl+A 会顺手把复制也跑一遍
+	// （复制的是上一段旧选区），按 Ctrl+C 则顺手全选。
 	if (bNew)
 	{
-		LinesPanel.OnShortcut({ 'C', UI::EUIModifiers::Ctrl },
-			[this](UI::FUIBuilder&, std::string_view) { CopyRequested = true; });
-		LinesPanel.OnShortcut({ 'A', UI::EUIModifiers::Ctrl },
-			[this](UI::FUIBuilder&, std::string_view) { SelectAllRequested = true; });
+		const UI::FUIKeyChord CopyChord{ 'C', UI::EUIModifiers::Ctrl };
+		const UI::FUIKeyChord SelectAllChord{ 'A', UI::EUIModifiers::Ctrl };
+		const UI::FUITextEventHandler PanelChord = [this, Copy = CopyChord.ToString(), SelectAll = SelectAllChord.ToString()](
+			UI::FUIBuilder&, std::string_view Pressed)
+		{
+			const std::string Chord(Pressed);
+			if (Chord == Copy)           { CopyRequested = true; }
+			else if (Chord == SelectAll) { SelectAllRequested = true; }
+		};
+		LinesPanel.OnShortcut(CopyChord, PanelChord);
+		LinesPanel.OnShortcut(SelectAllChord, PanelChord);
 	}
 
 	// 逐行一个 FUISelectable。旧版的 PushID(i) 是为了让同文本的行不撞 Id；这里的行 Id
@@ -708,10 +718,21 @@ void FEditorConsole::Update(FExampleEditor& Editor)
 		// ↑/↓：命名键，走声明式快捷键（后端把 ↑ 映射成 UpArrow；命名键不受"输入框在收键盘"
 		// 那道守卫限制，否则输入框里的 ↑ 永远不命中）。回调此刻还不知道候选有没有、有几个，
 		// 故只记下这一步，分派留给 `Update` 里那段 —— 有候选就走候选，没有就走历史。
-		CvarBox.OnShortcut(UI::FUIKeyChord::NamedKey(UI::EUIKey::Up),
-			[this](UI::FUIBuilder&, std::string_view) { PendingStep = -1; });
-		CvarBox.OnShortcut(UI::FUIKeyChord::NamedKey(UI::EUIKey::Down),
-			[this](UI::FUIBuilder&, std::string_view) { PendingStep = 1; });
+		// 两条键共用一个回调并按载荷（`FUIKeyChord::ToString()`）认领：同一个 `Shortcut` 事件是
+		// 本节点的**多播**，命中任意一条快捷键都会把它送给该节点的全部订阅者，逐键各挂一个回调
+		// 的话按 ↑ 会先跑 ↑ 的那个、再跑 ↓ 的那个 —— `PendingStep` 被后者盖成 +1，"往上翻历史"
+		// 就永远走了"往下、列表关着即返回"那条路（历史列表只剩 ↓ 语义、且从不打开）。
+		const UI::FUIKeyChord UpChord = UI::FUIKeyChord::NamedKey(UI::EUIKey::Up);
+		const UI::FUIKeyChord DownChord = UI::FUIKeyChord::NamedKey(UI::EUIKey::Down);
+		const UI::FUITextEventHandler StepChord = [this, Up = UpChord.ToString(), Down = DownChord.ToString()](
+			UI::FUIBuilder&, std::string_view Pressed)
+		{
+			const std::string Chord(Pressed);
+			if (Chord == Up)        { PendingStep = -1; }
+			else if (Chord == Down) { PendingStep = 1; }
+		};
+		CvarBox.OnShortcut(UpChord, StepChord);
+		CvarBox.OnShortcut(DownChord, StepChord);
 	}
 	CvarBox.Layout().SetSize(UI::FUILength::Fill(), UI::FUILength::Content());
 
