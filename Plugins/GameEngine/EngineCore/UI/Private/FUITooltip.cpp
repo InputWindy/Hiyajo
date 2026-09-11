@@ -71,12 +71,14 @@ FUIVector2 FUITooltip::MeasureTipContent(IUITranslator& T) const
 	}
 	else
 	{
-		// 子树内容：用同一套布局量原始内容尺寸（本节点 Padding 在下面一次性加回）
+		// 子树内容：用同一套布局量原始内容尺寸
 		Out = FUIBuilder::MeasureContent(T, FUIVector2{ kTipMeasureWidth, 0.f });
 	}
 
-	const FMargin& Pad = S.Padding;
-	return FUIVector2{ Out.X + Pad.Left + Pad.Right, Out.Y + Pad.Top + Pad.Bottom };
+	// 声明的 `Padding` 不加在这里：它由后端压成提示窗的**窗口内边距**
+	// （`FImGuiTranslator::PushWindowStyle`），内容之外那一圈后端自己会留。这里再加一次，
+	// 提示窗就是两倍内缩（同 `FUIPopup` 那片空档）。
+	return Out;
 }
 
 void FUITooltip::PaintContent(IUITranslator& T, const FUIResolvedStyle& S)
@@ -91,6 +93,7 @@ void FUITooltip::PaintContent(IUITranslator& T, const FUIResolvedStyle& S)
 	const FUIRect Anchor = Host->GetRect();
 	if (!T.BeginTooltip(GetId(), Anchor, bFollowMouse, S)) { return; }
 
+	// 提示窗的内容原点 = 窗口左上 + 后端压的窗口内边距（= 本节点声明的 `Padding`），故子树从 (0,0) 摆起。
 	const FUIVector2 Size = MeasureTipContent(T);
 	const FUIRect Body{ 0.f, 0.f, Size.X, Size.Y };
 	if (bHasText && !Text.empty())
@@ -100,7 +103,7 @@ void FUITooltip::PaintContent(IUITranslator& T, const FUIResolvedStyle& S)
 	}
 	else
 	{
-		FUILayoutEngine::ArrangeIn(*this, T, FUILayoutEngine::ContentRect(*this, Body));
+		FUILayoutEngine::ArrangeIn(*this, T, Body);
 	}
 	T.EndTooltip();
 }

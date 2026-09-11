@@ -154,7 +154,7 @@ namespace
 	constexpr int kControlStyleColors = 13;
 	constexpr int kControlStyleVars = 4;
 	constexpr int kWindowStyleColors = 2;
-	constexpr int kWindowStyleVars = 4;
+	constexpr int kWindowStyleVars = 5;
 }
 
 void FImGuiTranslator::PushControlStyle(const FUIResolvedStyle& S)
@@ -211,6 +211,12 @@ void FImGuiTranslator::PushWindowStyle(const FUIResolvedStyle& S)
 	ImGui::PushStyleColor(ImGuiCol_Border, Bd);
 	// 边框宽/圆角有两套来源：非模态弹层吃 `PopupBorderSize`/`PopupRounding`，模态弹层与提示窗的
 	// 圆角走 `WindowBorderSize`/`WindowRounding`（`Begin` 里按窗口 flag 分支取），两套都压才都覆盖。
+	// 窗口内边距同理是**唯一那份内缩**：ImGui 的内容原点 = 窗口左上 + 本内边距 + 边框
+	// （`imgui.cpp` 的 `DC.CursorStartPos`），自动尺寸又在内容外加同值的内边距
+	// （`CalcWindowAutoFitSize`：`size_contents + WindowPadding*2 + 边框`）—— 故调用方摆子树时
+	// 必须把矩形摆在内容原点（`FUIPopup`/`FUITooltip` 的 `Body` 都是 (0,0) 起算），声明侧的
+	// `Padding` 由这里一次性落成窗口内边距；再让组件自己偏移一次就是两倍内缩（弹层左上那片空档）。
+	ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(S.Padding.Left, S.Padding.Top));
 	ImGui::PushStyleVar(ImGuiStyleVar_PopupBorderSize, S.StrokeWidth);
 	ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, S.StrokeWidth);
 	ImGui::PushStyleVar(ImGuiStyleVar_PopupRounding, S.Radius);
@@ -700,11 +706,11 @@ bool FImGuiTranslator::BeginPopup(FUIName Id, bool bOpen, bool bWasShown, const 
 		const ImGuiViewport* Viewport = ImGui::GetMainViewport();
 		const float ViewTop = Viewport->WorkPos.y;
 		const float ViewBottom = Viewport->WorkPos.y + Viewport->WorkSize.y;
-		// 弹层窗口的高度（ImGui 自适应，`CalcWindowAutoFitSize`）= **内容起点偏移 + 内容高**
-		// + 窗口内边距×2：内容起点就是 `ContentBox.Y`（调用方把子树摆在自己内边距之后），
-		// 内容高是 `ContentBox.H`。少算起点那一段，弹层下沿就压住锚点几个像素 —— 而锚点常常
-		// 正是被补全的那个输入框；这档误差必须为零，弹层下沿才正好贴住锚点上沿。
-		const float EstH = ContentBox.Y + ContentBox.H + ImGui::GetStyle().WindowPadding.y * 2.f;
+		// 弹层窗口的高度（ImGui 自适应，`CalcWindowAutoFitSize`）= **内容高 + (内边距 + 边框)×2**：
+		// 调用方报的 `ContentBox` 是纯内容矩形（起点即窗口内容原点），声明侧的内边距由
+		// `PushWindowStyle` 压成窗口内边距、与边框一起加在内容之外。少算这一段，弹层下沿就压住
+		// 锚点几个像素 —— 而锚点正是被补全的那个输入框；这档误差必须为零，弹层下沿才正好贴住锚点上沿。
+		const float EstH = ContentBox.Y + ContentBox.H + (S.Padding.Top + S.StrokeWidth) * 2.f;
 
 		const float Below = Min.y + Anchor.Rect.H;
 		float Y = Below;
