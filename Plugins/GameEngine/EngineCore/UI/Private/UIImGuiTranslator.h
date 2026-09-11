@@ -115,7 +115,6 @@ private:
 	std::uint32_t FocusedId = 0;
 	int           DisabledDepth = 0;
 	std::unordered_map<std::uint32_t, bool> OpenPopups;   // 弹层打开请求的上一帧值
-	std::unordered_map<std::uint32_t, float> PopupHeights; // 弹层上一帧实测高度（贴合翻转要它）
 	bool          bPopupOpen = false;                     // 当前是否已在弹层窗口内
 	std::vector<FUIScrollRequest> ScrollStack;            // 滚动区域的待应用请求（贴底要等内容摆完）
 };

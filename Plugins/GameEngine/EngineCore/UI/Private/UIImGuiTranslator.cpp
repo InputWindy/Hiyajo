@@ -553,15 +553,37 @@ bool FImGuiTranslator::BeginPopup(FUIName Id, bool bOpen, const FUIRect& Anchor,
 	if (Anchor.W > 0.f || Anchor.H > 0.f)
 	{
 		const ImVec2 Min = ScreenMin(Anchor);
-		const float EstH = PopupHeights[Id.GetId()];
-		float Y = Min.y + Anchor.H;
+		const ImGuiViewport* Viewport = ImGui::GetMainViewport();
+		const float ViewTop = Viewport->WorkPos.y;
+		const float ViewBottom = Viewport->WorkPos.y + Viewport->WorkSize.y;
+		// 弹层上一帧的实测高度：从 ImGui 侧的弹层窗口回读 —— 翻译器是"一次翻译一实例"（不跨帧
+		// 复用），存不住上一帧的高度；窗口对象本身跨帧存在，`Size.y` 就是上一帧自适应出来的高度。
+		float EstH = 0.f;
+		if (ImGuiWindow* PopupWindow = ImGui::FindWindowByName(Name.c_str()))
+		{
+			EstH = PopupWindow->LastFrameActive > 0 ? PopupWindow->Size.y : 0.f;
+		}
+
+		const float Below = Min.y + Anchor.H;
+		// 宿主窗口底边（贴着弹层的那个面板，此刻的当前窗口）
+		const float HostBottom = ImGui::GetWindowPos().y + ImGui::GetWindowSize().y;
+		float Y = Below;
 		if (EstH > 0.f)
 		{
-			// 宿主窗口底边（`GetCurrentWindow` 属 imgui_internal，翻译器只走公开 API）
-			const float HostBottom = ImGui::GetWindowPos().y + ImGui::GetWindowSize().y;
-			// 翻上去也不能翻出主视口（超出就宁可往下溢：至少顶部那几行在读）
-			const float Above = Min.y - EstH;
-			if (Y + EstH > HostBottom && Above >= ImGui::GetMainViewport()->WorkPos.y) { Y = Above; }
+			// 面板里放不下就翻到锚点上方（盖住面板内容，但不盖住输入框）
+			if (Below + EstH > HostBottom && Min.y - EstH >= ViewTop) { Y = Min.y - EstH; }
+			// 仍然放不下（弹层比"面板 + 上方余量"还高）：夹住显示区，宁可压住锚点也不能翻到
+			// 窗口外 —— 弹层是顶层窗口，落到窗口外就整条看不见了。
+			Y = std::max(std::min(Y, ViewBottom - EstH), ViewTop);
+		}
+		else
+		{
+			// 首帧（ImGui 侧还没有这个窗口）量不到高度，本帧只能按"贴锚点下沿"落位、下一帧归位。
+			MAHO_IF_NOT_NULL(GetLog(), L)
+			{
+				L->Info("UI: 弹层首帧落位（尚无实测高度）id={:#x} below={:.1f} host_bottom={:.1f} view=({:.1f},{:.1f})",
+						Id.GetId(), Below, HostBottom, ViewTop, ViewBottom);
+			}
 		}
 		ImGui::SetNextWindowPos(ImVec2(Min.x, Y));
 	}
@@ -598,9 +620,6 @@ bool FImGuiTranslator::BeginPopup(FUIName Id, bool bOpen, const FUIRect& Anchor,
 			ImGui::BringWindowToDisplayFront(Ctx->CurrentWindow);
 		}
 	}
-
-	// 本帧实测高度：下一帧贴合翻转的估计值（弹层窗口已是当前窗口，直接量它）
-	PopupHeights[Id.GetId()] = ImGui::GetWindowSize().y;
 
 	// 业务把 bOpen 置回 false：本帧收窗（不然后端窗口会一直挂着）
 	if (!bOpen) { ImGui::CloseCurrentPopup(); }
