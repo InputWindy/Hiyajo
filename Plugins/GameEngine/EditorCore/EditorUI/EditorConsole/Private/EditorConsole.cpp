@@ -297,9 +297,9 @@ void FEditorConsole::Update(FExampleEditor& Editor)
 		CvarAuthoritative = true;
 	}
 
-	// -- 复制（工具栏按钮）---------------------------------------------------
-	// 旧版：工具栏 "Copy All" 复制全部可见行，Ctrl+C 复制选中区间。树里的全局键盘快捷键
-	// 没有入口（事件只承载命中它的那个控件），选中区间改由 "Copy" 按钮承担。
+	// -- 复制（工具栏按钮 / Ctrl+C）-------------------------------------------
+	// 工具栏 "Copy" 复制选中区间、"Copy All" 复制全部可见行；日志面板自身声明了
+	// Ctrl+C / Ctrl+A 两条快捷键（见下面的 `OnShortcut`），命中后落到同一对标志上。
 	if (CopyRequested || CopyAllRequested)
 	{
 		std::string Text;
@@ -324,6 +324,15 @@ void FEditorConsole::Update(FExampleEditor& Editor)
 		UI::SetUIClipboardText(Text);
 		CopyRequested = false;
 		CopyAllRequested = false;
+	}
+
+	// -- 全选（Ctrl+A）-------------------------------------------------------
+	// 只改选中区间：行的选中态由 SelAnchor/SelEnd 驱动（区间越界由下面的声明按快照裁剪）。
+	if (SelectAllRequested)
+	{
+		SelectAllRequested = false;
+		SelAnchor = Snapshot.empty() ? -1 : 0;
+		SelEnd = static_cast<int>(Snapshot.size()) - 1;
 	}
 
 	// 上一帧实测的行高：旧 `GetTextLineHeight()` 的替代（从头丢弃补偿要用它）。
@@ -482,6 +491,17 @@ void FEditorConsole::Update(FExampleEditor& Editor)
 	LinesPanel.SetScrollable(true);
 	LinesPanel.Layout().SetSize(UI::FUILength::Fill(), UI::FUILength::Fill());
 	LinesPanel.Layout().SetSpacing(0.f);   // 旧 PushStyleVar(ItemSpacing, 0)
+
+	// 面板级快捷键（声明式，见 `UI::FUIKeyChord`）：Ctrl+C 复制选中区间、Ctrl+A 全选可见行。
+	// 挂在日志面板上 = "面板在翻译（可见）时才响应"；后端的守卫还要求键盘焦点在本视图窗口
+	// 且当前没有文本输入在收键盘，故在过滤框/命令行里打字不会误触发。
+	if (bNew)
+	{
+		LinesPanel.OnShortcut({ 'C', UI::EUIModifiers::Ctrl },
+			[this](UI::FUIBuilder&, std::string_view) { CopyRequested = true; });
+		LinesPanel.OnShortcut({ 'A', UI::EUIModifiers::Ctrl },
+			[this](UI::FUIBuilder&, std::string_view) { SelectAllRequested = true; });
+	}
 
 	// 逐行一个 FUISelectable。旧版的 PushID(i) 是为了让同文本的行不撞 Id；这里的行 Id
 	// 本来就带行号，天然唯一。逐帧重建子节点：行数（受过滤器影响）每帧都可能变。

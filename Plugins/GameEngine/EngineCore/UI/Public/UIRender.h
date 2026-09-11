@@ -161,6 +161,10 @@ public:
 	// -- 字体与光标 --------------------------------------------------------
 	virtual void SetKeyboardFocus(FUIName Id) = 0;
 	virtual bool HasFocus(FUIName Id) const = 0;
+
+	/** 声明式键盘快捷键查询（翻译期由声明了快捷键的节点调用）：本帧命中该组合返回 true。
+	 *  仅在键盘焦点落在本视图窗口（含子窗口）且当前无文本输入时命中 —— 否则打字会误触发。 */
+	virtual bool IsShortcutPressed(const FUIKeyChord& Chord) = 0;
 	virtual void DebugDrawRect(const FUIRect& Rect, const FUIColor& C) = 0;
 };
 

@@ -5,6 +5,7 @@
 
 #include "UILayoutEngine.h"
 
+#include "UIStyleResolver.h"
 #include <algorithm>
 #include <vector>
 
@@ -51,6 +52,14 @@ FUIVector2 FUILayoutEngine::Measure(FUIBuilder& Node, IUITranslator& T, const FU
 		Node.State.ContentSize = FUIVector2{ 0.f, 0.f };
 		return FUIVector2{ 0.f, 0.f };
 	}
+
+	// 量之前先把本节点样式解析到最新：`MeasureContent` 与 `EffectivePadding` 都读解析结果，
+	// 而逐帧重建的节点（列表行 / 面包屑 / 树项）在本帧翻译前没有任何缓存 —— 不在这里解析，
+	// 量出来的就是"零内边距"尺寸，与随后自绘所用的样式（类型默认，按钮 = 10/5）不一致：
+	// 量 32×14 的按钮，画的时候标签区被内边距裁到 12×4，只剩一条。
+	// 父节点在 `FUIBuilder::Translate` 里先解析了自己的样式，故逐级继承取父已解析值仍成立。
+	Node.ResolvedStyle = FUIStyleResolver::Resolve(
+		Node, Node.GetParent() != nullptr ? &Node.GetParent()->ResolvedStyle : nullptr);
 
 	const FUIVector2 Content = Node.MeasureContent(T, Available);
 

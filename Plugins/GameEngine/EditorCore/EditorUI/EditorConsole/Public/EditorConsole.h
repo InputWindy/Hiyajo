@@ -114,9 +114,13 @@ private:
 	bool                      CvarPendingFocus = false;
 
 	/** Set by the toolbar's Copy / Copy All callbacks. Like CvarRunRequested, the work
-	 *  happens in `Update`: only there is the frame's visible-line snapshot available. */
+	 *  happens in `Update`: only there is the frame's visible-line snapshot available.
+	 *  The same two flags are also raised by the log panel's `Ctrl+C` / `Ctrl+A`
+	 *  shortcuts (declarative, see `FUIKeyChord`) -- SelectAllRequested only moves the
+	 *  selection range, the copy itself still goes through CopyRequested. */
 	bool                      CopyRequested = false;
 	bool                      CopyAllRequested = false;
+	bool                      SelectAllRequested = false;
 
 	/** Whether the name-completion list should be shown. It persists across the frame that
 	 *  the click lands on (clicking a row deactivates the box before the click is drained),

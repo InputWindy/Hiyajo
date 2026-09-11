@@ -543,7 +543,24 @@ bool FImGuiTranslator::BeginPopup(FUIName Id, bool bOpen, const FUIRect& Anchor,
 	if (bOpen && !bWasOpen) { ImGui::OpenPopup(Name.c_str()); }
 	OpenPopups[Id.GetId()] = bOpen;
 
-	if (Anchor.W > 0.f || Anchor.H > 0.f) { ImGui::SetNextWindowPos(ScreenMin(Anchor)); }
+	// 锚点摆放：默认贴锚点**下沿**（自上而下生长），上一帧实测高度放不下就翻到锚点**上沿**。
+	// 必须自己翻：`SetNextWindowPos` 一旦被调用，ImGui 就不再跑它那套自动翻转策略，
+	// 于是贴着屏幕底部停靠的面板里，候选列表整条长到显示区之外（只看得见最下面一条）。
+	if (Anchor.W > 0.f || Anchor.H > 0.f)
+	{
+		const ImVec2 Min = ScreenMin(Anchor);
+		const float EstH = PopupHeights[Id.GetId()];
+		float Y = Min.y + Anchor.H;
+		if (EstH > 0.f)
+		{
+			// 宿主窗口底边（`GetCurrentWindow` 属 imgui_internal，翻译器只走公开 API）
+			const float HostBottom = ImGui::GetWindowPos().y + ImGui::GetWindowSize().y;
+			// 翻上去也不能翻出主视口（超出就宁可往下溢：至少顶部那几行在读）
+			const float Above = Min.y - EstH;
+			if (Y + EstH > HostBottom && Above >= ImGui::GetMainViewport()->WorkPos.y) { Y = Above; }
+		}
+		ImGui::SetNextWindowPos(ImVec2(Min.x, Y));
+	}
 	// 非模态弹层**不许抢焦点**：ImGui 的弹窗在刚出现那一帧会 `want_focus=true`（除非显式
 	// 声明 `NoFocusOnAppearing`），抢焦点的副作用是 `ClearActiveID` —— 被它盖住的那个输入框
 	// （弹层通常正是贴着某个输入框弹出的候选列表）当帧就丢了 ActiveId，于是"能输入/能框选"
@@ -555,6 +572,9 @@ bool FImGuiTranslator::BeginPopup(FUIName Id, bool bOpen, const FUIRect& Anchor,
 	const bool bShown = bModal ? ImGui::BeginPopupModal(Name.c_str(), nullptr, PopupFlags)
 							   : ImGui::BeginPopup(Name.c_str(), PopupFlags);
 	if (!bShown) { return false; }
+
+	// 本帧实测高度：下一帧贴合翻转的估计值（弹层窗口已是当前窗口，直接量它）
+	PopupHeights[Id.GetId()] = ImGui::GetWindowSize().y;
 
 	// 业务把 bOpen 置回 false：本帧收窗（不然后端窗口会一直挂着）
 	if (!bOpen) { ImGui::CloseCurrentPopup(); }
@@ -623,6 +643,33 @@ void FImGuiTranslator::SetKeyboardFocus(FUIName Id)
 bool FImGuiTranslator::HasFocus(FUIName Id) const
 {
 	return FocusedId == Id.GetId();
+}
+
+bool FImGuiTranslator::IsShortcutPressed(const FUIKeyChord& Chord)
+{
+	if (Chord.IsNone()) { return false; }
+
+	// 两道守卫：键盘焦点必须在本视图窗口（含子窗口 —— 日志主体/滚动区都是子窗口），
+	// 且当前没有输入框在收键盘。少了后者，在 Cvar/过滤框里敲 "c" 就命中 Ctrl+C。
+	if (ImGui::GetIO().WantTextInput) { return false; }
+	if (!ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows)) { return false; }
+
+	// 单字符键：A-Z / 0-9（ImGui 的字母键与数字键是连续的，直接偏移即可）。
+	ImGuiKey ChordKey = ImGuiKey_None;
+	const char C = Chord.Key;
+	if (C >= 'a' && C <= 'z')      { ChordKey = static_cast<ImGuiKey>(ImGuiKey_A + (C - 'a')); }
+	else if (C >= 'A' && C <= 'Z') { ChordKey = static_cast<ImGuiKey>(ImGuiKey_A + (C - 'A')); }
+	else if (C >= '0' && C <= '9') { ChordKey = static_cast<ImGuiKey>(ImGuiKey_0 + (C - '0')); }
+	else                           { return false; }
+
+	ImGuiKeyChord Full = ChordKey;
+	if (HasModifier(Chord.Mods, EUIModifiers::Ctrl))  { Full |= ImGuiMod_Ctrl; }
+	if (HasModifier(Chord.Mods, EUIModifiers::Shift)) { Full |= ImGuiMod_Shift; }
+	if (HasModifier(Chord.Mods, EUIModifiers::Alt))   { Full |= ImGuiMod_Alt; }
+
+	// `IsKeyChordPressed` 是**精确**修饰键匹配（多按一个 Shift 即不命中）—— 这是 ImGui 的既定
+	// 语义，与它的其它快捷键一致，故不放宽。
+	return ImGui::IsKeyChordPressed(Full);
 }
 
 void FImGuiTranslator::DebugDrawRect(const FUIRect& Rect, const FUIColor& C)

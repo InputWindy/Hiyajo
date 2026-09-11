@@ -87,6 +87,7 @@ FUIBuilder& FUIBuilder::operator[](FUIBlock InBlock)
 			Existing.LayoutParams = Declared->LayoutParams;
 			Existing.StyleOverride = Declared->StyleOverride;
 			Existing.DragPayload = Declared->DragPayload;
+			Existing.Shortcuts = Declared->Shortcuts;   // 快捷键集合取声明（空 = 未声明任何快捷键）
 			Existing.bDisabled = Declared->bDisabled;
 			Existing.bVisible = Declared->bVisible;
 			Existing.bSelected = Declared->bSelected;
@@ -203,6 +204,11 @@ FUIEventSubscription FUIBuilder::BindPopupClosed(FUIEventHandler H)
 	return EnsureEvents().PopupClosed.Bind(std::move(H));
 }
 
+FUIEventSubscription FUIBuilder::BindShortcut(FUITextEventHandler H)
+{
+	return EnsureEvents().Shortcut.Bind(std::move(H));
+}
+
 void FUIBuilder::UnbindClick(FUIEventSubscription S)
 {
 	if (Events) { Events->Clicked.Unbind(S); }
@@ -241,6 +247,11 @@ void FUIBuilder::UnbindDragDropped(FUIEventSubscription S)
 void FUIBuilder::UnbindPopupClosed(FUIEventSubscription S)
 {
 	if (Events) { Events->PopupClosed.Unbind(S); }
+}
+
+void FUIBuilder::UnbindShortcut(FUIEventSubscription S)
+{
+	if (Events) { Events->Shortcut.Unbind(S); }
 }
 
 FUIBuilder& FUIBuilder::OnClick(FUIEventHandler H)
@@ -291,6 +302,13 @@ FUIBuilder& FUIBuilder::OnPopupClosed(FUIEventHandler H)
 	return *this;
 }
 
+FUIBuilder& FUIBuilder::OnShortcut(FUIKeyChord Chord, FUITextEventHandler H)
+{
+	if (!Chord.IsNone()) { Shortcuts.push_back(Chord); }
+	BindShortcut(std::move(H));
+	return *this;
+}
+
 void FUIBuilder::BroadcastEvent(const FUIEventRecord& Record)
 {
 	// 修饰键先落到本节点，再派发：回调里 `GetLastModifiers()` 读到的就是本次命中的键盘状态。
@@ -324,6 +342,9 @@ void FUIBuilder::BroadcastEvent(const FUIEventRecord& Record)
 		break;
 	case EUIEventType::PopupClosed:
 		Events->PopupClosed.Broadcast(*this);
+		break;
+	case EUIEventType::Shortcut:
+		Events->Shortcut.Broadcast(*this, Record.Text);
 		break;
 	default:
 		break;
@@ -428,6 +449,21 @@ void FUIBuilder::Translate(IUITranslator& T, const FUIRect& InRect)
 
 	// 焦点请求在本节点开始绘制前落地：后端命中本 Id 时即请求键盘焦点（本帧生效）。
 	if (ConsumeFocusRequest()) { T.SetKeyboardFocus(Id); }
+
+	// 声明式快捷键：本帧命中的组合入队（回调仍归所有者线程）。禁用节点不响应；
+	// "键盘焦点在本视图窗口 + 当前无文本输入"的守卫在后端（否则打字会误触发 Ctrl+C）。
+	if (!Shortcuts.empty() && !IsDisabled())
+	{
+		for (const FUIKeyChord& Chord : Shortcuts)
+		{
+			if (!T.IsShortcutPressed(Chord)) { continue; }
+			FUIEventRecord Record = MakeEvent(EUIEventType::Shortcut);
+			Record.Modifiers = Chord.Mods;
+			Record.Text = Chord.ToString();   // 同一节点多条快捷键时靠它区分
+			T.EnqueueEvent(std::move(Record));
+			break;
+		}
+	}
 
 	if (IsDisabled()) { T.PushDisabled(); }
 
