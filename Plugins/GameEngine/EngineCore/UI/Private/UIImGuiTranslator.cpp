@@ -568,7 +568,16 @@ bool FImGuiTranslator::BeginPopup(FUIName Id, bool bOpen, const FUIRect& Anchor,
 	// 模态弹层保持抢焦点（那正是模态的语义）。
 	const ImGuiWindowFlags PopupFlags = bModal
 		? ImGuiWindowFlags_AlwaysAutoResize
-		: (ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoFocusOnAppearing);
+		// 非模态弹层还必须"是宿主窗口的子窗口"（`ChildWindow`）：子窗口的画序每帧由宿主重排
+		// （`EndFrame` 的 `AddWindowToSortBuffer` 按 `ChildWindowComparer` 先排普通子窗口、
+		// 后排弹层），于是弹层恒在宿主内容之上；而顶层弹窗的显示槽位只在**创建那一帧**被排到
+		// 最前，此后宿主一被聚焦（点日志、点标签）就被 `BringWindowToDisplayFront` 挪到它前面
+		// —— 弹层被日志面板盖住（翻上去落进宿主矩形内时表现为"整条看不见"）。焦点路径不能
+		// 用来救：`FocusWindow` 会 `ClearActiveID()`，输入框当帧丢焦点 = 候选列表闪烁的老病。
+		// 子窗口化后 `Begin` 里的 `host_rect` 对 `ChildWindow && Popup` 取视口，故翻到宿主矩形
+		// 之外也不被裁；`EndPopup` 对子窗口弹层有专门分支（补 `WithinEndChildID`），收尾不变。
+		: (ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoFocusOnAppearing |
+		   ImGuiWindowFlags_ChildWindow);
 	const bool bShown = bModal ? ImGui::BeginPopupModal(Name.c_str(), nullptr, PopupFlags)
 							   : ImGui::BeginPopup(Name.c_str(), PopupFlags);
 	if (!bShown) { return false; }
