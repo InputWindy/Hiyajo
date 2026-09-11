@@ -2,6 +2,10 @@
 
 #include <UITheme.h>
 
+// 弹层置顶用了一个 imgui.h 未公开的原语（`BringWindowToDisplayFront`：把窗口挪到 `g.Windows`
+// 末尾 = 本帧最后画）。公开 API 里没有"只置顶、不动焦点"的写法，见 `BeginPopup` 内的注释。
+#include <imgui_internal.h>
+
 #include <Log.h>
 
 #include <algorithm>
@@ -566,21 +570,34 @@ bool FImGuiTranslator::BeginPopup(FUIName Id, bool bOpen, const FUIRect& Anchor,
 	// （弹层通常正是贴着某个输入框弹出的候选列表）当帧就丢了 ActiveId，于是"能输入/能框选"
 	// 的前置条件（`g.ActiveId == id`）每帧被打断：表现为候选列表一闪而过、按键进不去。
 	// 模态弹层保持抢焦点（那正是模态的语义）。
+	//
+	// 非模态弹层的置顶不是"挂到哪个宿主名下"能解决的：贴着命令行弹出的候选列表常常翻到宿主
+	// 矩形**之外**（宿主矮、候选项多），那一段被谁盖住只取决于**宿主的画序** —— 宿主一被聚焦
+	// （打字时它一直是活跃窗口）就整棵子树被 `BringWindowToDisplayFront` 甩到兄弟面板后面，
+	// 挂成它的子窗口也一样被盖。故弹层保持顶层窗口，并在每帧 `Begin` 之后把它自己挪到画序
+	// 末尾（见下方调用）。顶层弹层的裁剪框是视口（`Begin` 里 `host_rect` 只对非弹层的子窗口
+	// 取宿主矩形），故翻到宿主矩形之外也不会被裁。
 	const ImGuiWindowFlags PopupFlags = bModal
 		? ImGuiWindowFlags_AlwaysAutoResize
-		// 非模态弹层还必须"是宿主窗口的子窗口"（`ChildWindow`）：子窗口的画序每帧由宿主重排
-		// （`EndFrame` 的 `AddWindowToSortBuffer` 按 `ChildWindowComparer` 先排普通子窗口、
-		// 后排弹层），于是弹层恒在宿主内容之上；而顶层弹窗的显示槽位只在**创建那一帧**被排到
-		// 最前，此后宿主一被聚焦（点日志、点标签）就被 `BringWindowToDisplayFront` 挪到它前面
-		// —— 弹层被日志面板盖住（翻上去落进宿主矩形内时表现为"整条看不见"）。焦点路径不能
-		// 用来救：`FocusWindow` 会 `ClearActiveID()`，输入框当帧丢焦点 = 候选列表闪烁的老病。
-		// 子窗口化后 `Begin` 里的 `host_rect` 对 `ChildWindow && Popup` 取视口，故翻到宿主矩形
-		// 之外也不被裁；`EndPopup` 对子窗口弹层有专门分支（补 `WithinEndChildID`），收尾不变。
-		: (ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoFocusOnAppearing |
-		   ImGuiWindowFlags_ChildWindow);
+		: (ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoFocusOnAppearing);
 	const bool bShown = bModal ? ImGui::BeginPopupModal(Name.c_str(), nullptr, PopupFlags)
 							   : ImGui::BeginPopup(Name.c_str(), PopupFlags);
 	if (!bShown) { return false; }
+
+	// 每帧重新置顶：宿主（贴着弹层的那个面板）每帧都可能被聚焦而排到画序末尾，弹层必须重新
+	// 压回去。公开 API 里"只置顶、不动焦点"是缺的（`SetNextWindowFocus`/`SetWindowFocus` 都走
+	// `FocusWindow`，顺手 `ClearActiveID()` 清掉输入框的活跃位 —— 候选项闪烁的老病），故这一处
+	// 破例走内部原语：把窗口挪到 `g.Windows` 末尾 = 本帧最后画，且鼠标命中优先它。
+	if (!bModal)
+	{
+		// 取当前窗口不能走内联的 `GetCurrentWindow()`：它直接引 `GImGui` 这个**数据**符号，而
+		// `WINDOWS_EXPORT_ALL_SYMBOLS` 只导函数不导数据，跨 DLL 链不过（LNK2001）。公开的
+		// `GetCurrentContext()` 是导出函数，`CurrentWindow` 只是结构体字段访问（无符号需求）。
+		if (ImGuiContext* Ctx = ImGui::GetCurrentContext(); Ctx != nullptr && Ctx->CurrentWindow != nullptr)
+		{
+			ImGui::BringWindowToDisplayFront(Ctx->CurrentWindow);
+		}
+	}
 
 	// 本帧实测高度：下一帧贴合翻转的估计值（弹层窗口已是当前窗口，直接量它）
 	PopupHeights[Id.GetId()] = ImGui::GetWindowSize().y;
