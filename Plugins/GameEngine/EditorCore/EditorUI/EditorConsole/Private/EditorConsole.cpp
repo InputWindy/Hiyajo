@@ -247,7 +247,7 @@ void FEditorConsole::FillFromHistory()
 void FEditorConsole::StepHistory(int Step)
 {
 	// 守卫：过滤框正在收键盘（那时 ↑ 属于过滤框，不该翻命令历史）、历史空。命令框自己有没有在
-	// 收键盘由调用方在分派处挡（见 `Update` 里 ↑/↓ 的总闸）。
+	// 收键盘由引擎挡在派发之前（两条 ↑/↓ chord 声明在命令框上，默认作用域 `NodeActive`）。
 	if (FilterEditing || History.empty())
 	{
 		return;
@@ -525,17 +525,13 @@ void FEditorConsole::Update(FExampleEditor& Editor)
 
 	// ↑/↓ 的一步：回调在事件抽干时就跑（那时候选还没算出来），故只记下"要走一步"，由本帧的
 	// 两张列表状态分派 —— 候选列表在显示就走候选，否则走历史。
-	// 总闸：命令框必须正拿着键盘（光标在框里）。箭头键是**输入框正在收键盘**时才轮到命令行的那
-	// 一组键，框没进入编辑态时它属于视图导航/滚动，这里直接丢弃这一步（也不动任何行走状态）。
+	// "命令框必须正拿着键盘（光标在框里）"由快捷键的声明作用域（默认 `NodeActive`）在引擎侧保证：
+	// 框没进入编辑态时那两条 chord 根本不会派发（箭头键那时属于视图导航/滚动），这里不必再判一次。
 	if (PendingStep != 0)
 	{
 		const int Step = PendingStep;
 		PendingStep = 0;
-		if (!CvarEditing)
-		{
-			// 丢弃这一步：不动任何行走状态。
-		}
-		else if (CvarDropdownOpen && !Matches.empty())
+		if (CvarDropdownOpen && !Matches.empty())
 		{
 			StepSuggest(Step, Matches);
 		}
@@ -637,22 +633,14 @@ void FEditorConsole::Update(FExampleEditor& Editor)
 	// 面板级快捷键（声明式，见 `UI::FUIKeyChord`）：Ctrl+C 复制选中区间、Ctrl+A 全选可见行。
 	// 挂在日志面板上 = "面板在翻译（可见）时才响应"；后端的守卫还要求键盘焦点在本视图窗口
 	// 且当前没有文本输入在收键盘，故在过滤框/命令行里打字不会误触发。
-	// 两条键共用一个回调并按载荷（`ToString()`）认领：`Shortcut` 事件是本节点的多播，命中哪一条
-	// 都会送到该节点的全部订阅者，逐键各挂一个回调的话按 Ctrl+A 会顺手把复制也跑一遍
-	// （复制的是上一段旧选区），按 Ctrl+C 则顺手全选。
+	// 作用域必须是 `Anywhere`：面板是容器，自己永远不会成为活跃项，用默认的 `NodeActive` 永不命中。
+	// 事件按 chord 分组派发，故两条键各挂各的回调、互不串台（不必再靠载荷认领）。
 	if (bNew)
 	{
-		const UI::FUIKeyChord CopyChord{ 'C', UI::EUIModifiers::Ctrl };
-		const UI::FUIKeyChord SelectAllChord{ 'A', UI::EUIModifiers::Ctrl };
-		const UI::FUITextEventHandler PanelChord = [this, Copy = CopyChord.ToString(), SelectAll = SelectAllChord.ToString()](
-			UI::FUIBuilder&, std::string_view Pressed)
-		{
-			const std::string Chord(Pressed);
-			if (Chord == Copy)           { CopyRequested = true; }
-			else if (Chord == SelectAll) { SelectAllRequested = true; }
-		};
-		LinesPanel.OnShortcut(CopyChord, PanelChord);
-		LinesPanel.OnShortcut(SelectAllChord, PanelChord);
+		LinesPanel.OnShortcut({ 'C', UI::EUIModifiers::Ctrl },
+			[this](UI::FUIBuilder&) { CopyRequested = true; }, UI::EUIShortcutScope::Anywhere);
+		LinesPanel.OnShortcut({ 'A', UI::EUIModifiers::Ctrl },
+			[this](UI::FUIBuilder&) { SelectAllRequested = true; }, UI::EUIShortcutScope::Anywhere);
 	}
 
 	// 逐行一个 FUISelectable。旧版的 PushID(i) 是为了让同文本的行不撞 Id；这里的行 Id
@@ -723,21 +711,13 @@ void FEditorConsole::Update(FExampleEditor& Editor)
 		// ↑/↓：命名键，走声明式快捷键（后端把 ↑ 映射成 UpArrow；命名键不受"输入框在收键盘"
 		// 那道守卫限制，否则输入框里的 ↑ 永远不命中）。回调此刻还不知道候选有没有、有几个，
 		// 故只记下这一步，分派留给 `Update` 里那段 —— 有候选就走候选，没有就走历史。
-		// 两条键共用一个回调并按载荷（`FUIKeyChord::ToString()`）认领：同一个 `Shortcut` 事件是
-		// 本节点的**多播**，命中任意一条快捷键都会把它送给该节点的全部订阅者，逐键各挂一个回调
-		// 的话按 ↑ 会先跑 ↑ 的那个、再跑 ↓ 的那个 —— `PendingStep` 被后者盖成 +1，"往上翻历史"
-		// 就永远走了"往下、列表关着即返回"那条路（历史列表只剩 ↓ 语义、且从不打开）。
-		const UI::FUIKeyChord UpChord = UI::FUIKeyChord::NamedKey(UI::EUIKey::Up);
-		const UI::FUIKeyChord DownChord = UI::FUIKeyChord::NamedKey(UI::EUIKey::Down);
-		const UI::FUITextEventHandler StepChord = [this, Up = UpChord.ToString(), Down = DownChord.ToString()](
-			UI::FUIBuilder&, std::string_view Pressed)
-		{
-			const std::string Chord(Pressed);
-			if (Chord == Up)        { PendingStep = -1; }
-			else if (Chord == Down) { PendingStep = 1; }
-		};
-		CvarBox.OnShortcut(UpChord, StepChord);
-		CvarBox.OnShortcut(DownChord, StepChord);
+		// 默认作用域 `NodeActive`：只有命令框自己正拿着键盘（光标在框里）时引擎才派发这两条，
+		// 框没进入编辑态时箭头键属于视图导航/滚动 —— 这道闸门因此是引擎语义，面板不再自写。
+		// 事件按 chord 分组派发，两条键各挂各的回调、互不串台（同一次按键不会把两条都跑一遍）。
+		CvarBox.OnShortcut(UI::FUIKeyChord::NamedKey(UI::EUIKey::Up),
+			[this](UI::FUIBuilder&) { PendingStep = -1; });
+		CvarBox.OnShortcut(UI::FUIKeyChord::NamedKey(UI::EUIKey::Down),
+			[this](UI::FUIBuilder&) { PendingStep = 1; });
 	}
 	CvarBox.Layout().SetSize(UI::FUILength::Fill(), UI::FUILength::Content());
 

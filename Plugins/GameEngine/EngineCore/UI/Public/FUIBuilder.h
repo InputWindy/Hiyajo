@@ -137,8 +137,9 @@ public:
 	FUIEventSubscription BindSelectionChanged(FUIBoolEventHandler H);
 	FUIEventSubscription BindDragDropped(FUINameEventHandler H);
 	FUIEventSubscription BindPopupClosed(FUIEventHandler H);
-	/** 键盘快捷键（`EUIEventType::Shortcut`），载荷 = `FUIKeyChord::ToString()`。 */
-	FUIEventSubscription BindShortcut(FUITextEventHandler H);
+	/** 键盘快捷键（`EUIEventType::Shortcut`）：订阅**这一条 chord** 的命中。事件按 chord 分组
+	 *  派发，回调不带载荷（组本身就是身份）。作用域在声明侧（`OnShortcut`）给出。 */
+	FUIEventSubscription BindShortcut(FUIKeyChord Chord, FUIEventHandler H);
 	void UnbindClick(FUIEventSubscription Id);
 	void UnbindValueChanged(FUIEventSubscription Id);
 	void UnbindToggled(FUIEventSubscription Id);
@@ -147,7 +148,8 @@ public:
 	void UnbindSelectionChanged(FUIEventSubscription Id);
 	void UnbindDragDropped(FUIEventSubscription Id);
 	void UnbindPopupClosed(FUIEventSubscription Id);
-	void UnbindShortcut(FUIEventSubscription Id);
+	/** 注销 `BindShortcut` 的订阅（需要给出当时声明的 chord：订阅组按 chord 分）。 */
+	void UnbindShortcut(FUIKeyChord Chord, FUIEventSubscription Id);
 
 	/** 糖：订阅 + 返回 `*this`（链式）。注销请用上面的 BindXxx 取票据。 */
 	FUIBuilder& OnClick(FUIEventHandler H);
@@ -159,11 +161,15 @@ public:
 	FUIBuilder& OnDragDropped(FUINameEventHandler H);
 	FUIBuilder& OnPopupClosed(FUIEventHandler H);
 
-	/** 键盘快捷键：声明"本节点关心的组合 + 命中回调"。
-	 *  翻译期（本节点参与翻译且未禁用时）逐条查询后端，命中即入队 `EUIEventType::Shortcut`。
+	/** 键盘快捷键：声明"本节点关心的组合 + 作用域 + 命中回调"。
+	 *  翻译期（本节点参与翻译且未禁用时）按声明序逐条查询后端，命中即入队 `EUIEventType::Shortcut`；
+	 *  所有者线程只把它派发给**这一条 chord** 的订阅者（按 chord 分组，同一节点多条快捷键互不串台）。
+	 *  作用域默认 `NodeActive` = 本节点自己正拿着输入才匹配（"输入框没光标就别响应箭头键"因此是
+	 *  引擎语义，面板不必自写闸门）；容器级/面板级快捷键显式传 `Anywhere`。
 	 *  快捷键的**可见性由本节点决定** —— 声明了就有，没声明就没有（不需要全局注册表）。
 	 *  只应声明一次，逐帧重来会累积订阅（与其它 `OnXxx` 同约定，放在 `if (bNew)` 里）。 */
-	FUIBuilder& OnShortcut(FUIKeyChord Chord, FUITextEventHandler H);
+	FUIBuilder& OnShortcut(FUIKeyChord Chord, FUIEventHandler H,
+						   EUIShortcutScope Scope = EUIShortcutScope::NodeActive);
 
 	/** 翻译器改用：把一条事件在本节点上 Broadcast（所有者线程调用）。 */
 	void BroadcastEvent(const FUIEventRecord& Record);
@@ -263,7 +269,7 @@ private:
 	mutable std::unique_ptr<FUIEvents> Events;      // 懒分配的多播事件集
 
 	FUIName DragPayload{};
-	std::vector<FUIKeyChord> Shortcuts;   // 声明式快捷键（声明序 = 查询序）
+	std::vector<FUIShortcutDecl> Shortcuts;   // 声明式快捷键（声明序 = 查询序）
 	bool    bDisabled = false;
 	bool    bVisible  = true;
 	bool    bSelected = false;

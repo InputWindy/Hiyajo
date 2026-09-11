@@ -85,9 +85,9 @@ private:
 
 	/** Walk the command history by `Step` (-1 = older, +1 = newer). A closed list (-1) is
 	 *  opened by an older step and lands on the newest line; the ends clamp. Refused only while
-	 *  the filter box is the one typing and when there is no history -- the dispatch already
-	 *  refuses to call it unless the command line holds the keyboard (see the `↑`/`↓` master
-	 *  gate in `Update`), so the arrows never walk history with the box unfocused. */
+	 *  the filter box is the one typing and when there is no history -- the engine already refuses
+	 *  to dispatch the box's `↑`/`↓` chords with the box unfocused (default `NodeActive` scope),
+	 *  so the arrows never walk history while the command line is idle. */
 	void StepHistory(int Step);
 
 	/** Walk the completion candidates of `Matches` (the pinned needle's, see `SuggestNeedle`)
@@ -147,15 +147,16 @@ private:
 	bool                      CvarRunRequested = false;
 
 	/** Whether the command line currently holds the keyboard (the box's active bit, read back
-	 *  from the node each frame). The `↑`/`↓` walks run in `Update` and this is their master gate:
-	 *  the arrows only mean "walk history / candidates" while the box has the caret, and belong to
-	 *  view navigation (focus move, panel scroll) otherwise. */
+	 *  from the node each frame). The `↑`/`↓` chords are declared on the box with the default
+	 *  `EUIShortcutScope::NodeActive`, so the engine already refuses to fire them while the box
+	 *  is not the active item (the arrows belong to view navigation then); this bit is what keeps
+	 *  the two lists honest -- the completion list opens/closes on it and the history list closes
+	 *  when it drops. */
 	bool                      CvarEditing = false;
 
-	/** Same active bit for the toolbar's filter box. `↑` is a NAMED key, so the shortcut layer's
-	 *  "an input box owns the keyboard" guard does not apply to it (see
-	 *  `IUITranslator::IsShortcutPressed`) and the history list would otherwise open while the
-	 *  filter box is the one being typed into. Second gate behind `CvarEditing`. */
+	/** Same active bit for the toolbar's filter box. Second gate behind the `NodeActive` scope:
+	 *  with the filter box active the box's `↑` chords do not fire either, but the explicit guard
+	 *  keeps the intent readable in `StepHistory` itself. */
 	bool                      FilterEditing = false;
 
 	/** Set when a suggestion is picked: the cvar node asks the backend for the keyboard

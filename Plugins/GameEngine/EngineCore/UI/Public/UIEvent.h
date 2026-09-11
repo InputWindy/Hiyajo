@@ -6,6 +6,8 @@
 #include <Core/Delegate.h>
 
 #include <functional>
+#include <map>
+#include <memory>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -76,8 +78,8 @@ constexpr const char* EUIKeyName(EUIKey K)
 
 /** 键盘快捷键：一个键 + 修饰键组合。字符键（A-Z / 0-9，ASCII，大小写等价）填 `Key`，
  *  无字符的键（↑/↓）填 `Named` —— 两者二选一。节点用 `FUIBuilder::OnShortcut` 声明；
- *  命中时入队 `EUIEventType::Shortcut`，记录里的 `Text` 即本结构的 `ToString()`，
- *  回调仍在所有者线程。 */
+ *  命中时入队 `EUIEventType::Shortcut`，记录里的 `Text` 是本结构的 `ToString()` —— 它是
+ *  **按 chord 分组派发**的查找键（只有订阅了这条 chord 的回调收到），回调本身不带载荷。 */
 struct FUIKeyChord
 {
 	char         Key = '\0';
@@ -97,7 +99,7 @@ struct FUIKeyChord
 		return Chord;
 	}
 
-	/** 显示名（"Ctrl+Shift+C" / "Up"）—— 同一节点可声明多条快捷键，事件靠它区分是哪一条。 */
+	/** 显示名（"Ctrl+Shift+C" / "Up"）—— 既是**派发分组的键**，也是面板上显示给用户看的写法。 */
 	[[nodiscard]] std::string ToString() const
 	{
 		std::string Out;
@@ -108,6 +110,24 @@ struct FUIKeyChord
 		else if (Named != EUIKey::None) { Out += EUIKeyName(Named); }
 		return Out;
 	}
+};
+
+/** 快捷键的**派发作用域**：声明在哪个节点上，不等于"随时都该响应"。
+ *  - `NodeActive`（默认）：只有**这个节点自己**正拿着输入（后端写回的活跃位，与业务侧读的活跃位
+ *    同一个）才去匹配。于是"输入框没进入编辑态就别响应 ↑/↓"是**引擎语义**，各面板不必自写闸门。
+ *  - `Anywhere`：只要键盘焦点在本视图窗口、且当前没有输入框在收键盘就匹配 —— 容器级（面板）
+ *    快捷键用它，因为容器自己永远不会变成活跃项（否则那条 chord 永不命中）。 */
+enum class EUIShortcutScope : std::uint8_t
+{
+	NodeActive,
+	Anywhere
+};
+
+/** 节点上的一条快捷键声明：键组合 + 作用域。翻译期按声明序逐条匹配，先命中者入队。 */
+struct FUIShortcutDecl
+{
+	FUIKeyChord      Chord{};
+	EUIShortcutScope Scope = EUIShortcutScope::NodeActive;
 };
 
 /** 翻译线程 → 所有者线程 的一条事件。携带 Id 路径（根→目标）以消歧同名节点，
@@ -131,6 +151,14 @@ using FUIBoolEventHandler = std::function<void(FUIBuilder&, bool)>;
 using FUITextEventHandler = std::function<void(FUIBuilder&, std::string_view)>;
 using FUINameEventHandler = std::function<void(FUIBuilder&, FUIName)>;   // 拖放载荷
 
+/** 一条快捷键的订阅组：**一个 chord 一组**。命中该 chord 的事件只广播到这一组 —— 同一节点声明
+ *  多条快捷键因此天然互不串台（此前是一条共用的多播，回调得自己从载荷里认领是哪条键）。
+ *  组本身就是身份，回调不需要载荷。 */
+struct FUIShortcutGroup
+{
+	TMulticastEvent<void(FUIBuilder&)> Handlers;
+};
+
 /** 节点事件集：**多播 Delegate**（Core 的 `TMulticastEvent`，header-only、线程安全）。
  *  翻译线程**从不**执行它们 —— 只入队 `FUIEventRecord`，由所有者在 `DrainEvents()` 里 `Broadcast`。
  *  懒分配（`FUIBuilder` 里是 `unique_ptr`）：没订阅就不付 mutex + vector 的钱；
@@ -145,7 +173,9 @@ struct FUIEvents
 	TMulticastEvent<void(FUIBuilder&, bool)>             SelectionChanged; // 选中项
 	TMulticastEvent<void(FUIBuilder&, FUIName)>          DragDropped;      // 落点的载荷
 	TMulticastEvent<void(FUIBuilder&)>                   PopupClosed;      // FUIPopup 关闭
-	TMulticastEvent<void(FUIBuilder&, std::string_view)> Shortcut;         // 键盘快捷键（载荷 = 组合名）
+	/** 键盘快捷键：按 chord 分组（键 = `FUIKeyChord::ToString()`）。值是 `unique_ptr`：
+	 *  Delegate 内含 mutex（不可移动），只能指过去。 */
+	std::map<std::string, std::unique_ptr<FUIShortcutGroup>> Shortcuts;
 };
 
 /** 订阅票据（Core `FSubscriptionID` 的别名，便于节点 API 读数）。 */

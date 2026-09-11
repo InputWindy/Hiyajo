@@ -204,9 +204,12 @@ FUIEventSubscription FUIBuilder::BindPopupClosed(FUIEventHandler H)
 	return EnsureEvents().PopupClosed.Bind(std::move(H));
 }
 
-FUIEventSubscription FUIBuilder::BindShortcut(FUITextEventHandler H)
+FUIEventSubscription FUIBuilder::BindShortcut(FUIKeyChord Chord, FUIEventHandler H)
 {
-	return EnsureEvents().Shortcut.Bind(std::move(H));
+	FUIEvents& Set = EnsureEvents();
+	auto& Group = Set.Shortcuts[Chord.ToString()];
+	if (!Group) { Group = std::make_unique<FUIShortcutGroup>(); }
+	return Group->Handlers.Bind(std::move(H));
 }
 
 void FUIBuilder::UnbindClick(FUIEventSubscription S)
@@ -249,9 +252,11 @@ void FUIBuilder::UnbindPopupClosed(FUIEventSubscription S)
 	if (Events) { Events->PopupClosed.Unbind(S); }
 }
 
-void FUIBuilder::UnbindShortcut(FUIEventSubscription S)
+void FUIBuilder::UnbindShortcut(FUIKeyChord Chord, FUIEventSubscription S)
 {
-	if (Events) { Events->Shortcut.Unbind(S); }
+	if (!Events) { return; }
+	const auto It = Events->Shortcuts.find(Chord.ToString());
+	if (It != Events->Shortcuts.end() && It->second) { It->second->Handlers.Unbind(S); }
 }
 
 FUIBuilder& FUIBuilder::OnClick(FUIEventHandler H)
@@ -302,10 +307,11 @@ FUIBuilder& FUIBuilder::OnPopupClosed(FUIEventHandler H)
 	return *this;
 }
 
-FUIBuilder& FUIBuilder::OnShortcut(FUIKeyChord Chord, FUITextEventHandler H)
+FUIBuilder& FUIBuilder::OnShortcut(FUIKeyChord Chord, FUIEventHandler H, EUIShortcutScope Scope)
 {
-	if (!Chord.IsNone()) { Shortcuts.push_back(Chord); }
-	BindShortcut(std::move(H));
+	if (Chord.IsNone()) { return *this; }   // 空组合命中不了任何事件，绑定也没有意义
+	Shortcuts.push_back(FUIShortcutDecl{ Chord, Scope });
+	BindShortcut(Chord, std::move(H));
 	return *this;
 }
 
@@ -344,7 +350,12 @@ void FUIBuilder::BroadcastEvent(const FUIEventRecord& Record)
 		Events->PopupClosed.Broadcast(*this);
 		break;
 	case EUIEventType::Shortcut:
-		Events->Shortcut.Broadcast(*this, Record.Text);
+		// 按 chord 分组派发：只有订阅了这条 chord 的回调收到（同一节点多条快捷键互不串台）。
+		if (const auto It = Events->Shortcuts.find(Record.Text);
+			It != Events->Shortcuts.end() && It->second)
+		{
+			It->second->Handlers.Broadcast(*this);
+		}
 		break;
 	default:
 		break;
@@ -452,14 +463,19 @@ void FUIBuilder::Translate(IUITranslator& T, const FUIRect& InRect)
 
 	// 声明式快捷键：本帧命中的组合入队（回调仍归所有者线程）。禁用节点不响应；
 	// "键盘焦点在本视图窗口 + 当前无文本输入"的守卫在后端（否则打字会误触发 Ctrl+C）。
+	// 作用域：`NodeActive`（默认）要求**本节点自己**就是那个正拿着输入的活跃项 —— 读的是上一帧
+	// 写回的 `State.bPressed`（命中回写排在下面，此刻还是上一帧的值；与业务侧读的是同一个位），
+	// 于是"框里没光标时箭头键不响应"由引擎统一表达，面板不用各写一道闸门。
+	// `Anywhere` 给容器级（面板）快捷键用：容器自己永远不会变成活跃项。
 	if (!Shortcuts.empty() && !IsDisabled())
 	{
-		for (const FUIKeyChord& Chord : Shortcuts)
+		for (const FUIShortcutDecl& Decl : Shortcuts)
 		{
-			if (!T.IsShortcutPressed(Chord)) { continue; }
+			if (Decl.Scope == EUIShortcutScope::NodeActive && !State.bPressed) { continue; }
+			if (!T.IsShortcutPressed(Decl.Chord)) { continue; }
 			FUIEventRecord Record = MakeEvent(EUIEventType::Shortcut);
-			Record.Modifiers = Chord.Mods;
-			Record.Text = Chord.ToString();   // 同一节点多条快捷键时靠它区分
+			Record.Modifiers = Decl.Chord.Mods;
+			Record.Text = Decl.Chord.ToString();   // 派发按它找到这条 chord 的订阅组
 			T.EnqueueEvent(std::move(Record));
 			break;
 		}
