@@ -29,8 +29,9 @@ namespace Maho
  * click-to-select / Shift+click-or-drag range select / Ctrl+C to copy the selection
  * (Ctrl+A selects every visible line first), plus a live string-match filter box in the
  * toolbar and a CVar command line at the bottom (Enter submits; a floating completion list
- * follows the box). Right-clicking the log area opens a context menu at the pointer whose
- * first entry is Clear (it replaced the old toolbar Clear button).
+ * follows the box, and `↑` re-opens it as the last 10 executed commands, `↑`/`↓` walking them).
+ * Right-clicking the log area opens a context menu at the pointer whose first entry is Clear
+ * (it replaced the old toolbar Clear button).
  * Shutdown unsubscribes before the Log layer goes away. Like every editor component
  * it carries no backend/RHI resource ownership -- the host owns the UI context.
  *
@@ -68,6 +69,15 @@ private:
 	/** Run the CVar command line: parse "name [value]" against the ConsoleVariable
 	 *  registry, echo the result back into the log list and clear the box. */
 	void ExecuteCvarLine();
+
+	/** Fill the command line from `History[HistoryIndex]` (shared by the ↑/↓ keys and a row
+	 *  pick): the buffer becomes authoritative for this frame, and the text is recorded as the
+	 *  last picked name so the completion list does not re-open over it. */
+	void FillFromHistory();
+
+	/** Walk the command history by `Step` (-1 = older, +1 = newer). A closed list (-1) is
+	 *  opened by an older step and lands on the newest line; the ends clamp. */
+	void StepHistory(int Step);
 
 	/** Persistent UI tree, owned here, registered in the UI view registry. */
 	std::unique_ptr<UI::FUIView> View;
@@ -119,6 +129,12 @@ private:
 	 *  after the read-back. */
 	bool                      CvarRunRequested = false;
 
+	/** Whether the command line currently holds the keyboard (the box's active bit, read back
+	 *  from the node each frame). The `↑`/`↓` handlers run during the event drain -- before
+	 *  `Update` -- so they read this instead, and it also keeps the `↑` history list from
+	 *  opening while another box (e.g. the filter) is the one being typed into. */
+	bool                      CvarEditing = false;
+
 	/** Set when a suggestion is picked: the cvar node asks the backend for the keyboard
 	 *  focus on its next translation (`RequestKeyboardFocus()`), so typing continues. */
 	bool                      CvarPendingFocus = false;
@@ -134,6 +150,14 @@ private:
 	 *  the click lands on (clicking a row deactivates the box before the click is drained),
 	 *  and is only closed when the box clears, an exact name is typed, or it loses focus. */
 	bool                      CvarDropdownOpen = false;
+
+	/** Command history behind the command line's `↑` key: the last `MaxHistory` executed
+	 *  lines, newest last. `HistoryIndex` is the highlighted row of the `↑` list, -1 = the
+	 *  list is closed; the rows reuse the completion popup (they are mutually exclusive), the
+	 *  newest row is the bottom one so `↑` walks backwards away from the box. */
+	static constexpr std::size_t MaxHistory = 10;
+	std::deque<std::string>   History;
+	int                       HistoryIndex = -1;
 
 	/** Log-area context menu (the old toolbar Clear button's replacement): right-clicking the
 	 *  log panel opens it. The backend writes the right-click and the pointer position into the

@@ -83,7 +83,8 @@ void FUIPopup::PaintContent(IUITranslator& T, const FUIResolvedStyle& S)
 	// 内容矩形同时是"内容起点"的真值（后端算弹层真实高度要它：内容起点 + 内容高 + 窗口内边距×2）。
 	// 直接拿子树尺寸去 `ContentRect` 就把同一段内边距扣了两次，报给后端的高度恰好少一个内边距，
 	// 弹层下沿于是压住锚点 —— 而锚点常正是被补全的那个输入框。
-	const FUIVector2 Content = FUIBuilder::MeasureContent(T, FUIVector2{ kPopupMeasureWidth, 0.f });
+	const float Width = (MeasureWidth > 0.f) ? MeasureWidth : kPopupMeasureWidth;
+	const FUIVector2 Content = FUIBuilder::MeasureContent(T, FUIVector2{ Width, 0.f });
 	const FUIRect Body = FUILayoutEngine::ContentRect(*this, FUILayoutEngine::OuterRect(*this, Content));
 
 	const bool bShown = T.BeginPopup(GetId(), bOpen, bShownLastFrame, Anchor, bModal, Body, S);
@@ -113,6 +114,7 @@ void FUIPopup::SyncConfig(const FUIBuilder& Declared)
 	bModal = Other->bModal;
 	bHasAnchor = Other->bHasAnchor;
 	bFollowAnchor = Other->bFollowAnchor;
+	MeasureWidth = Other->MeasureWidth;
 	// 开合由声明侧（业务状态）决定：节点自己因用户关闭而置 false 后，业务不置回就一直关着
 	bOpen = Other->bOpen;
 }

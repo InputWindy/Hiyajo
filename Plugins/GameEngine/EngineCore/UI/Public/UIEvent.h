@@ -53,24 +53,59 @@ constexpr EUIModifiers operator|(EUIModifiers A, EUIModifiers B)
 	return (static_cast<std::uint8_t>(Set) & static_cast<std::uint8_t>(Flag)) != 0;
 }
 
-/** 键盘快捷键：单字符键（A-Z / 0-9，ASCII，大小写等价）+ 修饰键组合。
- *  节点用 `FUIBuilder::OnShortcut` 声明；命中时入队 `EUIEventType::Shortcut`，
- *  记录里的 `Text` 即本结构的 `ToString()`，回调仍在所有者线程。 */
+/** 命名键（无字符的键）：字符键走 `FUIKeyChord::Key`，↑/↓ 这类没有字符可表达的键走这里。
+ *  只在后端有对应物理键时才有意义（v1 后端 = ImGui）。 */
+enum class EUIKey : std::uint8_t
+{
+	None = 0,
+	Up,
+	Down
+};
+
+/** 命名键的显示名（快捷键事件的载荷 `FUIKeyChord::ToString` 用它）。 */
+constexpr const char* EUIKeyName(EUIKey K)
+{
+	switch (K)
+	{
+	case EUIKey::Up:   return "Up";
+	case EUIKey::Down: return "Down";
+	case EUIKey::None: break;
+	}
+	return "";
+}
+
+/** 键盘快捷键：一个键 + 修饰键组合。字符键（A-Z / 0-9，ASCII，大小写等价）填 `Key`，
+ *  无字符的键（↑/↓）填 `Named` —— 两者二选一。节点用 `FUIBuilder::OnShortcut` 声明；
+ *  命中时入队 `EUIEventType::Shortcut`，记录里的 `Text` 即本结构的 `ToString()`，
+ *  回调仍在所有者线程。 */
 struct FUIKeyChord
 {
 	char         Key = '\0';
 	EUIModifiers Mods = EUIModifiers::None;
+	/** 命名键：只在 `Key == '\0'` 时生效。排最后是为了让既有的 `{ 'C', EUIModifiers::Ctrl }`
+	 *  聚合初始化继续成立。 */
+	EUIKey       Named = EUIKey::None;
 
-	[[nodiscard]] bool IsNone() const { return Key == '\0'; }
+	[[nodiscard]] bool IsNone() const { return Key == '\0' && Named == EUIKey::None; }
 
-	/** 显示名（"Ctrl+Shift+C"）—— 同一节点可声明多条快捷键，事件靠它区分是哪一条。 */
+	/** 命名键的构造糖：`FUIKeyChord::NamedKey(EUIKey::Up)` —— 省掉两个空位。 */
+	[[nodiscard]] static FUIKeyChord NamedKey(EUIKey In, EUIModifiers M = EUIModifiers::None)
+	{
+		FUIKeyChord Chord;
+		Chord.Mods = M;
+		Chord.Named = In;
+		return Chord;
+	}
+
+	/** 显示名（"Ctrl+Shift+C" / "Up"）—— 同一节点可声明多条快捷键，事件靠它区分是哪一条。 */
 	[[nodiscard]] std::string ToString() const
 	{
 		std::string Out;
 		if (HasModifier(Mods, EUIModifiers::Ctrl))  { Out += "Ctrl+"; }
 		if (HasModifier(Mods, EUIModifiers::Shift)) { Out += "Shift+"; }
 		if (HasModifier(Mods, EUIModifiers::Alt))   { Out += "Alt+"; }
-		if (Key != '\0') { Out += Key; }
+		if (Key != '\0')        { Out += Key; }
+		else if (Named != EUIKey::None) { Out += EUIKeyName(Named); }
 		return Out;
 	}
 };

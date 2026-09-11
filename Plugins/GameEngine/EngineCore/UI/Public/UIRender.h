@@ -191,7 +191,9 @@ public:
 	virtual bool HasFocus(FUIName Id) const = 0;
 
 	/** 声明式键盘快捷键查询（翻译期由声明了快捷键的节点调用）：本帧命中该组合返回 true。
-	 *  仅在键盘焦点落在本视图窗口（含子窗口）且当前无文本输入时命中 —— 否则打字会误触发。 */
+	 *  仅在键盘焦点落在本视图窗口（含子窗口）且当前无文本输入时命中 —— 否则打字会误触发。
+	 *  命名键（`EUIKey`，如 ↑/↓）不受"无文本输入"那道守卫限制：它不产生字符、不参与文本输入，
+	 *  而声明它的往往正是那个输入框自己（命令行 ↑ 翻历史），挡掉就永远不命中。 */
 	virtual bool IsShortcutPressed(const FUIKeyChord& Chord) = 0;
 	virtual void DebugDrawRect(const FUIRect& Rect, const FUIColor& C) = 0;
 };

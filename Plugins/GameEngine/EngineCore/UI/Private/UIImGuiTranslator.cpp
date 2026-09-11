@@ -727,16 +727,29 @@ bool FImGuiTranslator::IsShortcutPressed(const FUIKeyChord& Chord)
 
 	// 两道守卫：键盘焦点必须在本视图窗口（含子窗口 —— 日志主体/滚动区都是子窗口），
 	// 且当前没有输入框在收键盘。少了后者，在 Cvar/过滤框里敲 "c" 就命中 Ctrl+C。
-	if (ImGui::GetIO().WantTextInput) { return false; }
+	// 命名键（↑/↓）跳过第一道里的"无输入框"限制：它不产生字符、不参与文本输入，而声明它的
+	// 往往正是那个输入框自己（命令行 ↑ 翻历史）—— 挡掉就永远不命中。
+	const bool bNamed = (Chord.Key == '\0' && Chord.Named != EUIKey::None);
+	if (!bNamed && ImGui::GetIO().WantTextInput) { return false; }
 	if (!ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows)) { return false; }
 
-	// 单字符键：A-Z / 0-9（ImGui 的字母键与数字键是连续的，直接偏移即可）。
+	// 键到 ImGuiKey：字符键 A-Z / 0-9（ImGui 的字母键与数字键是连续的，直接偏移即可），
+	// 命名键（↑/↓）走显式映射。
 	ImGuiKey ChordKey = ImGuiKey_None;
 	const char C = Chord.Key;
 	if (C >= 'a' && C <= 'z')      { ChordKey = static_cast<ImGuiKey>(ImGuiKey_A + (C - 'a')); }
 	else if (C >= 'A' && C <= 'Z') { ChordKey = static_cast<ImGuiKey>(ImGuiKey_A + (C - 'A')); }
 	else if (C >= '0' && C <= '9') { ChordKey = static_cast<ImGuiKey>(ImGuiKey_0 + (C - '0')); }
-	else                           { return false; }
+	else if (bNamed)
+	{
+		switch (Chord.Named)
+		{
+		case EUIKey::Up:   ChordKey = ImGuiKey_UpArrow;   break;
+		case EUIKey::Down: ChordKey = ImGuiKey_DownArrow; break;
+		case EUIKey::None: return false;
+		}
+	}
+	else { return false; }
 
 	ImGuiKeyChord Full = ChordKey;
 	if (HasModifier(Chord.Mods, EUIModifiers::Ctrl))  { Full |= ImGuiMod_Ctrl; }
