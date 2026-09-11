@@ -147,11 +147,17 @@ public:
 	virtual void EndTooltip() = 0;
 
 	/** 弹层：返回 true 时后端已开始弹层，调用方摆子树后 `EndPopup()`。
-	 *  `bOpen` 是树的期望状态（false→true 由后端触发打开）；`bModal` 映射模态弹层。
+	 *  `bOpen` 是树的期望状态；`bWasShown` 是**上一帧后端是否真的画出了它** —— 后端的跨帧记忆，
+	 *  调用方持有（翻译器一帧一实例，记不住）：两者一起构成开合边沿，上升沿开、下降沿关；
+	 *  用户自己关掉（点外部 / Esc）时"树要开但后端已关"，后端据 `bWasShown` 不开新窗、如实报 false，
+	 *  调用方落回 `bOpen=false`。少了这份记忆就是每帧重新 `OpenPopup`：弹层反复被当成刚出现，
+	 *  且"点外部关掉 -> 下一帧又弹"永不可关。`bModal` 映射模态弹层。
 	 *  `ContentHeight` 是调用方量出的内容高度（不含窗口内边距）：落位要用它决定"贴锚点下沿
-	 *  还是翻到上沿"—— 翻译器一帧一实例、记不住上一帧尺寸，故由调用方在开窗**之前**量好。 */
-	virtual bool BeginPopup(FUIName Id, bool bOpen, const FUIRect& Anchor, bool bModal,
-							float ContentHeight) = 0;
+	 *  还是翻到上沿"—— 同样因为翻译器记不住上一帧尺寸，故由调用方在开窗**之前**量好。
+	 *  `S` 是弹层自身样式：弹层内容是第二个窗口，后端取 `Normal.Fill` 当它的窗口底色
+	 *  （调用方自己的绘制不覆盖那个窗口）。 */
+	virtual bool BeginPopup(FUIName Id, bool bOpen, bool bWasShown, const FUIRect& Anchor, bool bModal,
+							float ContentHeight, const FUIResolvedStyle& S) = 0;
 	virtual void EndPopup() = 0;
 
 	// -- 拖放（内容浏览器/资产拖拽复用同一套载荷）--------------------------

@@ -540,17 +540,22 @@ void FImGuiTranslator::EndTooltip()
 	}
 }
 
-bool FImGuiTranslator::BeginPopup(FUIName Id, bool bOpen, const FUIRect& Anchor, bool bModal,
-								  float ContentHeight)
+bool FImGuiTranslator::BeginPopup(FUIName Id, bool bOpen, bool bWasShown, const FUIRect& Anchor,
+								  bool bModal, float ContentHeight, const FUIResolvedStyle& S)
 {
 	const std::string Name = "##uiPopup" + std::to_string(Id.GetId());
-	const bool bWasOpen = OpenPopups[Id.GetId()];
-	if (bOpen && !bWasOpen) { ImGui::OpenPopup(Name.c_str()); }
-	OpenPopups[Id.GetId()] = bOpen;
+	// 开合的**边沿**由调用方给的 `bWasShown`（上一帧后端真画出它了吗）决定：本类一帧一实例
+	// （`UIImGuiEntry.cpp` 里 `TranslateViewImpl` 的栈上局部量），任何"上一帧状态"都必须由持有
+	// 跨帧状态的一方带进来。以前这里读自己的成员表，读到的永远是空，于是每帧都 `OpenPopup`：
+	// ImGui 内建了"用户误把 OpenPopup 每帧调用"的容忍路径，代价是弹层每帧被当成刚出现（窗口
+	// 反复重算出现态），而且"用户点外部关掉 -> 下一帧又被打开"，弹层再也关不掉、整个编辑器
+	// 卡在它上面。现在：上升沿才开，用户自己关掉的下一帧 `bOpen` 仍为真但 `bWasShown` 也为真
+	// —— 不开新窗，`BeginPopup` 如实返回 false，调用方据此落回 `bOpen=false` 并存 `PopupClosed`。
+	if (bOpen && !bWasShown) { ImGui::OpenPopup(Name.c_str()); }
 
 	// 锚点摆放：默认贴锚点**下沿**（自上而下生长），放不下就翻到锚点**上沿**。
 	// 必须自己翻：`SetNextWindowPos` 一旦被调用，ImGui 就不再跑它那套自动翻转策略
-	// （`imgui.cpp` 的落位只在 `!window_pos_set_by_api` 时生效，且只对"缩放后重新出现"的
+	// （`imgui.cpp` 的落位只在 `window_pos_set_by_api` 为假时生效，且只对"缩放后重新出现"的
 	// 弹层跑 `FindBestWindowPosForPopup`），于是贴着屏幕底部停靠的面板里，候选列表整条长到
 	// 显示区之外 —— 只看得见最上面一条，整条落在窗口外就完全看不见。
 	if (Anchor.W > 0.f || Anchor.H > 0.f)
@@ -592,9 +597,19 @@ bool FImGuiTranslator::BeginPopup(FUIName Id, bool bOpen, const FUIRect& Anchor,
 	const ImGuiWindowFlags PopupFlags = bModal
 		? ImGuiWindowFlags_AlwaysAutoResize
 		: (ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoFocusOnAppearing);
+	// 弹层窗口的底色只在"开窗那一刻"取（`Begin` 里的 `ImGuiCol_PopupBg`），故样式压在 `Begin`
+	// **之前**：弹层内容活在第二个窗口里，调用方自己画的那套（`FUIPopup` 的填充/描边）盖不到它，
+	// 编辑器主题又把 `ImGuiCol_PopupBg` 设成全透明 —— 不推这一下，弹层就是个没有底色的玻璃框。
+	ImGui::PushStyleColor(ImGuiCol_PopupBg, ToColor(S.Fill));
+	bPopupBgPushed = true;
 	const bool bShown = bModal ? ImGui::BeginPopupModal(Name.c_str(), nullptr, PopupFlags)
 							   : ImGui::BeginPopup(Name.c_str(), PopupFlags);
-	if (!bShown) { return false; }
+	if (!bShown)
+	{
+		ImGui::PopStyleColor();
+		bPopupBgPushed = false;
+		return false;
+	}
 
 	// 每帧重新置顶：宿主（贴着弹层的那个面板）每帧都可能被聚焦而排到画序末尾，弹层必须重新
 	// 压回去。公开 API 里"只置顶、不动焦点"是缺的（`SetNextWindowFocus`/`SetWindowFocus` 都走
@@ -611,8 +626,9 @@ bool FImGuiTranslator::BeginPopup(FUIName Id, bool bOpen, const FUIRect& Anchor,
 		}
 	}
 
-	// 业务把 bOpen 置回 false：本帧收窗（不然后端窗口会一直挂着）
-	if (!bOpen) { ImGui::CloseCurrentPopup(); }
+	// 下降沿（树要关、上一帧还开着）：本帧收窗，且只收这一帧 —— 下一帧 BeginPopup 早退，
+	// 不会对着一个已经关掉的弹层反复 `CloseCurrentPopup`。
+	if (!bOpen && bWasShown) { ImGui::CloseCurrentPopup(); }
 
 	// 弹层是新窗口：原点切到它的内容区，出栈时恢复。
 	OriginStack.push_back(Origin);
@@ -624,6 +640,12 @@ bool FImGuiTranslator::BeginPopup(FUIName Id, bool bOpen, const FUIRect& Anchor,
 void FImGuiTranslator::EndPopup()
 {
 	ImGui::EndPopup();
+	// 弹层窗口底色的样式压栈配平（`BeginPopup` 里压、这里弹；开窗失败的那条路已在原处弹掉）。
+	if (bPopupBgPushed)
+	{
+		ImGui::PopStyleColor();
+		bPopupBgPushed = false;
+	}
 	if (!OriginStack.empty())
 	{
 		Origin = OriginStack.back();

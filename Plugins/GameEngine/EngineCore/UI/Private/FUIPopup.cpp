@@ -69,7 +69,6 @@ FUIRect FUIPopup::ResolveAnchorRect() const
 
 void FUIPopup::PaintContent(IUITranslator& T, const FUIResolvedStyle& S)
 {
-	(void)S;
 	const FUIRect Anchor = ResolveAnchorRect();
 
 	// 内容尺寸**先量**：弹层窗口的落位（贴锚点下沿 / 放不下翻到上沿）要用它。量在 `BeginPopup`
@@ -77,7 +76,11 @@ void FUIPopup::PaintContent(IUITranslator& T, const FUIResolvedStyle& S)
 	const FUIVector2 Raw = FUIBuilder::MeasureContent(T, FUIVector2{ kPopupMeasureWidth, 0.f });
 	const FUIRect Body = FUILayoutEngine::ContentRect(*this, FUIRect{ 0.f, 0.f, Raw.X, Raw.Y });
 
-	if (!T.BeginPopup(GetId(), bOpen, Anchor, bModal, Body.H))
+	const bool bShown = T.BeginPopup(GetId(), bOpen, bShownLastFrame, Anchor, bModal, Body.H, S);
+	// 后端刚报的事实就是下一帧的"上一帧"：**必须**在早退之前落账，否则 `bShownLastFrame` 一直是
+	// false，`BeginPopup` 每帧都当成上升沿重新开窗 —— 弹层永远关不掉（旧病）。
+	bShownLastFrame = bShown;
+	if (!bShown)
 	{
 		// 后端没开/发现已关：用户点外部或 Esc 关掉了 -> 落回节点状态并入队
 		if (bOpen)

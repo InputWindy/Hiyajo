@@ -104,6 +104,14 @@ private:
 	 *  text must be written from the buffer. */
 	bool                      CvarAuthoritative = false;
 
+	/** The name last picked from the completion list. While the box holds exactly this
+	 *  text, the list must NOT auto-reopen: the box keeps keyboard focus (and the backend's
+	 *  active item) across the pick, so "active + non-empty text" alone reopens the list on
+	 *  the next frame and the user can never leave it (every row they click re-opens it --
+	 *  the editor looks frozen). Editing the text invalidates the guard by itself; picking
+	 *  a different row overwrites it. */
+	char                      CvarPickedName[256] = { 0 };
+
 	/** Set by the Run button's callback or the cvar box's Enter submit. The host drains
 	 *  events BEFORE `Update`, so the buffer is not yet synced at callback time -- the
 	 *  command runs in `Update`, right after the read-back. */

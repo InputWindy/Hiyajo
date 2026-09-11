@@ -68,7 +68,8 @@ public:
 
 	bool BeginTooltip(FUIName Id, const FUIRect& Anchor, bool bFollowMouse) override;
 	void EndTooltip() override;
-	bool BeginPopup(FUIName Id, bool bOpen, const FUIRect& Anchor, bool bModal, float ContentHeight) override;
+	bool BeginPopup(FUIName Id, bool bOpen, bool bWasShown, const FUIRect& Anchor, bool bModal,
+					float ContentHeight, const FUIResolvedStyle& S) override;
 	void EndPopup() override;
 
 	bool BeginDragSource(FUIName Id, std::string_view PayloadType, std::string_view Payload,
@@ -114,8 +115,8 @@ private:
 	std::uint32_t PendingFocusId = 0;
 	std::uint32_t FocusedId = 0;
 	int           DisabledDepth = 0;
-	std::unordered_map<std::uint32_t, bool> OpenPopups;   // 弹层打开请求的上一帧值
 	bool          bPopupOpen = false;                     // 当前是否已在弹层窗口内
+	bool          bPopupBgPushed = false;                 // 弹层窗口底色的样式压栈配平（开窗失败也要弹掉）
 	std::vector<FUIScrollRequest> ScrollStack;            // 滚动区域的待应用请求（贴底要等内容摆完）
 };
 

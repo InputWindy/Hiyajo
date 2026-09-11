@@ -412,9 +412,13 @@ void FEditorConsole::Update(FExampleEditor& Editor)
 
 	// 列表开合：旧版还看"鼠标是否悬在列表上"，新树的事件不携带指针位置，故只按
 	// "输入框活跃 + 有候选" 判定（点选后输入框失活 -> 下一帧自动收）。
+	// 例外：刚点选的那条名字还留在框里时**不重开**。点选后焦点交回输入框（`CvarPendingFocus`），
+	// 输入框重新变成活跃项并一直保持，若仍按"活跃 + 有字"判定，列表在点选后的每一帧都会重开
+	// —— 点谁谁来，用户离不开这张表（编辑器的"卡死"观感）。改字即解除守卫。
+	const bool bPickedNameIntact = (std::strcmp(CvarBuffer, CvarPickedName) == 0);
 	if (!CvarDropdownOpen)
 	{
-		CvarDropdownOpen = bCvarEditing && HasTyping;
+		CvarDropdownOpen = bCvarEditing && HasTyping && !bPickedNameIntact;
 	}
 	else if (!HasTyping || !bCvarEditing)
 	{
@@ -592,6 +596,8 @@ void FEditorConsole::Update(FExampleEditor& Editor)
 			{
 				std::strncpy(CvarBuffer, Name.c_str(), sizeof(CvarBuffer) - 1);
 				CvarBuffer[sizeof(CvarBuffer) - 1] = '\0';
+				std::strncpy(CvarPickedName, Name.c_str(), sizeof(CvarPickedName) - 1);
+				CvarPickedName[sizeof(CvarPickedName) - 1] = '\0';
 				CvarDropdownOpen = false;
 				CvarPendingFocus = true;    // 下一帧翻译把键盘焦点交回输入框
 				CvarAuthoritative = true;   // 本帧缓冲是权威值：把名字写回节点

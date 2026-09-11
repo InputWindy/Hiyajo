@@ -37,6 +37,12 @@ private:
 	bool    bModal = false;
 	bool    bHasAnchor = false;
 	bool    bFollowAnchor = true;   // 每帧跟随父节点矩形（否则只认 SetAnchor 的固定矩形）
+
+	/** 上一帧后端**真的**画出了这个弹层吗（后端的跨帧记忆，翻译器一帧一实例记不住，故寄存在
+	 *  节点上）：开合边沿要用它 —— 上升沿（树要开、后端没画）才开新窗；用户自己关掉的那一帧
+	 *  "树还要开、后端已经没画"，据此不开新窗，交给调用方落回 `bOpen=false`。
+	 *  **不进 `SyncConfig`**：这是后端的实测事实，不是声明侧能改写的东西。 */
+	bool    bShownLastFrame = false;
 };
 
 }} // namespace Maho::UI
