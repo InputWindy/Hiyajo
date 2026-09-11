@@ -147,8 +147,11 @@ public:
 	virtual void EndTooltip() = 0;
 
 	/** 弹层：返回 true 时后端已开始弹层，调用方摆子树后 `EndPopup()`。
-	 *  `bOpen` 是树的期望状态（false→true 由后端触发打开）；`bModal` 映射模态弹层。 */
-	virtual bool BeginPopup(FUIName Id, bool bOpen, const FUIRect& Anchor, bool bModal) = 0;
+	 *  `bOpen` 是树的期望状态（false→true 由后端触发打开）；`bModal` 映射模态弹层。
+	 *  `ContentHeight` 是调用方量出的内容高度（不含窗口内边距）：落位要用它决定"贴锚点下沿
+	 *  还是翻到上沿"—— 翻译器一帧一实例、记不住上一帧尺寸，故由调用方在开窗**之前**量好。 */
+	virtual bool BeginPopup(FUIName Id, bool bOpen, const FUIRect& Anchor, bool bModal,
+							float ContentHeight) = 0;
 	virtual void EndPopup() = 0;
 
 	// -- 拖放（内容浏览器/资产拖拽复用同一套载荷）--------------------------

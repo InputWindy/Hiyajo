@@ -540,29 +540,28 @@ void FImGuiTranslator::EndTooltip()
 	}
 }
 
-bool FImGuiTranslator::BeginPopup(FUIName Id, bool bOpen, const FUIRect& Anchor, bool bModal)
+bool FImGuiTranslator::BeginPopup(FUIName Id, bool bOpen, const FUIRect& Anchor, bool bModal,
+								  float ContentHeight)
 {
 	const std::string Name = "##uiPopup" + std::to_string(Id.GetId());
 	const bool bWasOpen = OpenPopups[Id.GetId()];
 	if (bOpen && !bWasOpen) { ImGui::OpenPopup(Name.c_str()); }
 	OpenPopups[Id.GetId()] = bOpen;
 
-	// 锚点摆放：默认贴锚点**下沿**（自上而下生长），上一帧实测高度放不下就翻到锚点**上沿**。
-	// 必须自己翻：`SetNextWindowPos` 一旦被调用，ImGui 就不再跑它那套自动翻转策略，
-	// 于是贴着屏幕底部停靠的面板里，候选列表整条长到显示区之外（只看得见最下面一条）。
+	// 锚点摆放：默认贴锚点**下沿**（自上而下生长），放不下就翻到锚点**上沿**。
+	// 必须自己翻：`SetNextWindowPos` 一旦被调用，ImGui 就不再跑它那套自动翻转策略
+	// （`imgui.cpp` 的落位只在 `!window_pos_set_by_api` 时生效，且只对"缩放后重新出现"的
+	// 弹层跑 `FindBestWindowPosForPopup`），于是贴着屏幕底部停靠的面板里，候选列表整条长到
+	// 显示区之外 —— 只看得见最上面一条，整条落在窗口外就完全看不见。
 	if (Anchor.W > 0.f || Anchor.H > 0.f)
 	{
 		const ImVec2 Min = ScreenMin(Anchor);
 		const ImGuiViewport* Viewport = ImGui::GetMainViewport();
 		const float ViewTop = Viewport->WorkPos.y;
 		const float ViewBottom = Viewport->WorkPos.y + Viewport->WorkSize.y;
-		// 弹层上一帧的实测高度：从 ImGui 侧的弹层窗口回读 —— 翻译器是"一次翻译一实例"（不跨帧
-		// 复用），存不住上一帧的高度；窗口对象本身跨帧存在，`Size.y` 就是上一帧自适应出来的高度。
-		float EstH = 0.f;
-		if (ImGuiWindow* PopupWindow = ImGui::FindWindowByName(Name.c_str()))
-		{
-			EstH = PopupWindow->LastFrameActive > 0 ? PopupWindow->Size.y : 0.f;
-		}
+		// 高度由调用方量出（内容高 + 窗口自身的竖直内边距）。估高只用来判断"放不放得下"，
+		// 差一二十像素无害；实际尺寸仍由弹层窗口按内容自适应。
+		const float EstH = ContentHeight + ImGui::GetStyle().WindowPadding.y * 2.f;
 
 		const float Below = Min.y + Anchor.H;
 		// 宿主窗口底边（贴着弹层的那个面板，此刻的当前窗口）
@@ -575,15 +574,6 @@ bool FImGuiTranslator::BeginPopup(FUIName Id, bool bOpen, const FUIRect& Anchor,
 			// 仍然放不下（弹层比"面板 + 上方余量"还高）：夹住显示区，宁可压住锚点也不能翻到
 			// 窗口外 —— 弹层是顶层窗口，落到窗口外就整条看不见了。
 			Y = std::max(std::min(Y, ViewBottom - EstH), ViewTop);
-		}
-		else
-		{
-			// 首帧（ImGui 侧还没有这个窗口）量不到高度，本帧只能按"贴锚点下沿"落位、下一帧归位。
-			MAHO_IF_NOT_NULL(GetLog(), L)
-			{
-				L->Info("UI: 弹层首帧落位（尚无实测高度）id={:#x} below={:.1f} host_bottom={:.1f} view=({:.1f},{:.1f})",
-						Id.GetId(), Below, HostBottom, ViewTop, ViewBottom);
-			}
 		}
 		ImGui::SetNextWindowPos(ImVec2(Min.x, Y));
 	}

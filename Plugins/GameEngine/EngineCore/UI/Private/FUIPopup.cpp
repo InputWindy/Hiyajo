@@ -71,7 +71,13 @@ void FUIPopup::PaintContent(IUITranslator& T, const FUIResolvedStyle& S)
 {
 	(void)S;
 	const FUIRect Anchor = ResolveAnchorRect();
-	if (!T.BeginPopup(GetId(), bOpen, Anchor, bModal))
+
+	// 内容尺寸**先量**：弹层窗口的落位（贴锚点下沿 / 放不下翻到上沿）要用它。量在 `BeginPopup`
+	// 之前是必须的 —— 翻译器一帧一实例，记不住上一帧的高度，后端无从事后取回这个尺寸。
+	const FUIVector2 Raw = FUIBuilder::MeasureContent(T, FUIVector2{ kPopupMeasureWidth, 0.f });
+	const FUIRect Body = FUILayoutEngine::ContentRect(*this, FUIRect{ 0.f, 0.f, Raw.X, Raw.Y });
+
+	if (!T.BeginPopup(GetId(), bOpen, Anchor, bModal, Body.H))
 	{
 		// 后端没开/发现已关：用户点外部或 Esc 关掉了 -> 落回节点状态并入队
 		if (bOpen)
@@ -82,8 +88,6 @@ void FUIPopup::PaintContent(IUITranslator& T, const FUIResolvedStyle& S)
 		return;
 	}
 
-	const FUIVector2 Raw = FUIBuilder::MeasureContent(T, FUIVector2{ kPopupMeasureWidth, 0.f });
-	const FUIRect Body = FUILayoutEngine::ContentRect(*this, FUIRect{ 0.f, 0.f, Raw.X, Raw.Y });
 	FUILayoutEngine::ArrangeIn(*this, T, Body);
 	T.EndPopup();
 }
