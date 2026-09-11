@@ -34,21 +34,17 @@ endif()
 # Not covered by that gate: an all-target build from the command line
 # (`cmake --build <dir>` == msbuild ALL_BUILD.vcxproj) reports no
 # $(BuildingSolutionFile), so the step nests once per parent even though that
-# outer build already builds every sub-plugin. Redundant, but harmless: the
-# nested Maho target sees MAHO_SUBPLUGIN_BUILD and skips its clean, so the outer
-# build's fresh DLLs survive and MSBuild's up-to-date check reuses them.
+# outer build already builds every sub-plugin. Redundant, but harmless: MSBuild's
+# up-to-date check reuses the DLLs the outer build just produced.
 
 # Re-entrancy guard: the nested build below runs MSBuild on individual .vcxproj
 # files, so their own POST_BUILD steps would nest again. The marker is the
 # MahoSubPluginBuild MSBuild property that the nested build passes on its own
-# command line (/p:MahoSubPluginBuild=1) -- it reaches here as -DMAHO_SUBPLUGIN_BUILD
-# and is what the Maho target's PRE_BUILD event tests to skip its Binaries clean
-# (that clean would otherwise delete the DLLs the outer build just produced and
-# relink the whole chain a second time). An environment variable is not usable:
-# MSBuild runs a pre-build event in a reused worker node whose environment
-# predates the build. A file marker is not usable either: MSBuild re-encodes a
-# pre-build event's command line, so an absolute path holding non-ASCII
-# characters (this tree does) arrives at cmd mangled.
+# command line (/p:MahoSubPluginBuild=1) -- it reaches here as -DMAHO_SUBPLUGIN_BUILD.
+# An environment variable is not usable: MSBuild runs a build event in a reused
+# worker node whose environment predates the build. A file marker is not usable
+# either: MSBuild re-encodes a build event's command line, so an absolute path
+# holding non-ASCII characters (this tree does) arrives at cmd mangled.
 if(NOT MAHO_BUILD_DIR)
 	message(FATAL_ERROR "Maho: build_subplugins.cmake needs -DMAHO_BUILD_DIR=<build tree>")
 endif()

@@ -508,45 +508,6 @@ target_include_directories(Maho PUBLIC "${{ENGINE_DIR}}/Source/Public")
 # zstd …); PUBLIC so every Consumer (entry plugin + EntryPoint + sub-plugins)
 # can just #include them directly.
 target_link_libraries(Maho PUBLIC glm::glm nlohmann_json::nlohmann_json CLI11::CLI11 libzstd_static)
-# Publish/output dir is cleared every build (no stale DLLs from a prior config
-# or removed plugin survive into the fresh output). Maho is the root of the
-# build DAG (every plugin + EntryPoint links it), so its PRE_BUILD runs before
-# any plugin DLL lands in Binaries/<Config>. Third-party targets that ALSO
-# output there (glfw, maho_imgui) do NOT link Maho, so order them after it
-# explicitly -- otherwise the clean races their concurrent writes and fails.
-# A nested sub-plugin build (Tools/build_subplugins.cmake) re-enters this project
-# in the middle of an outer build: there the clean must be skipped, because it
-# would delete the DLLs the outer build just produced (including the sub-plugin
-# the nested build was started for) and relink the whole chain a second time.
-# The skip is keyed on the MahoSubPluginBuild MSBuild property, which the nested
-# build passes on its own command line (/p:MahoSubPluginBuild=1) -- an
-# environment variable cannot be used: MSBuild runs a pre-build event in a reused
-# worker node, whose environment predates the build, so a variable set for the
-# nested build is not visible here (measured - the nested clean still ran).
-# It is tested at cmd/sh level instead of via a "cmake -P" helper script:
-# MSBuild re-encodes a PRE_BUILD event's command line, so a script path holding
-# non-ASCII characters (this tree does) arrives at cmake.exe mangled.
-# The removal itself goes through "cmake -E rm -rf" rather than cmd's rd:
-# CMAKE_BINARY_DIR uses forward slashes, which rd rejects ("the system cannot
-# find the file specified"), and rm also tolerates a dir that is not there yet.
-if(WIN32)
-	add_custom_command(TARGET Maho PRE_BUILD
-		COMMAND cmd /c if $(MahoSubPluginBuild)X==X "${{CMAKE_COMMAND}}" -E rm -rf "${{CMAKE_BINARY_DIR}}/Binaries/$<CONFIG>"
-		COMMENT "Cleaning Binaries/$<CONFIG> (publish output)"
-		VERBATIM
-	)
-else()
-	add_custom_command(TARGET Maho PRE_BUILD
-		COMMAND sh -c "test x$MAHO_SUBPLUGIN_BUILD != x || '${{CMAKE_COMMAND}}' -E rm -rf '${{CMAKE_BINARY_DIR}}/Binaries/$<CONFIG>'"
-		COMMENT "Cleaning Binaries/$<CONFIG> (publish output)"
-		VERBATIM
-	)
-endif()
-foreach(_MahoBinTgt glfw maho_imgui)
-	if(TARGET ${{_MahoBinTgt}})
-		add_dependencies(${{_MahoBinTgt}} Maho)
-	endif()
-endforeach()
 set_target_properties(Maho PROPERTIES FOLDER "Maho")
 
 add_executable(EntryPoint WIN32 Intermediate/Main.cpp)
