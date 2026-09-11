@@ -553,7 +553,8 @@ bool FImGuiTranslator::BeginPopup(FUIName Id, bool bOpen, bool bWasShown, const 
 	// —— 不开新窗，`BeginPopup` 如实返回 false，调用方据此落回 `bOpen=false` 并存 `PopupClosed`。
 	if (bOpen && !bWasShown) { ImGui::OpenPopup(Name.c_str()); }
 
-	// 锚点摆放：默认贴锚点**下沿**（自上而下生长），放不下就翻到锚点**上沿**。
+	// 锚点摆放：默认把弹层的**左下角**对准锚点的**左上角**（自下而上生长，不压住正在被补全的
+	// 那个输入框）；锚点上方放不下才翻到锚点下方。
 	// 必须自己翻：`SetNextWindowPos` 一旦被调用，ImGui 就不再跑它那套自动翻转策略
 	// （`imgui.cpp` 的落位只在 `window_pos_set_by_api` 为假时生效，且只对"缩放后重新出现"的
 	// 弹层跑 `FindBestWindowPosForPopup`），于是贴着屏幕底部停靠的面板里，候选列表整条长到
@@ -569,15 +570,15 @@ bool FImGuiTranslator::BeginPopup(FUIName Id, bool bOpen, bool bWasShown, const 
 		const float EstH = ContentHeight + ImGui::GetStyle().WindowPadding.y * 2.f;
 
 		const float Below = Min.y + Anchor.H;
-		// 宿主窗口底边（贴着弹层的那个面板，此刻的当前窗口）
-		const float HostBottom = ImGui::GetWindowPos().y + ImGui::GetWindowSize().y;
 		float Y = Below;
 		if (EstH > 0.f)
 		{
-			// 面板里放不下就翻到锚点上方（盖住面板内容，但不盖住输入框）
-			if (Below + EstH > HostBottom && Min.y - EstH >= ViewTop) { Y = Min.y - EstH; }
-			// 仍然放不下（弹层比"面板 + 上方余量"还高）：夹住显示区，宁可压住锚点也不能翻到
-			// 窗口外 —— 弹层是顶层窗口，落到窗口外就整条看不见了。
+			// 默认在锚点上方：弹层下沿 = 锚点上沿
+			Y = Min.y - EstH;
+			// 上方放不下、下方放得下：翻回锚点下沿
+			if (Y < ViewTop && Below + EstH <= ViewBottom) { Y = Below; }
+			// 两边都放不下（弹层比可用空间还高）：夹住显示区，宁可压住锚点也不能落到窗口外
+			// —— 弹层是顶层窗口，落到窗口外就整条看不见了。
 			Y = std::max(std::min(Y, ViewBottom - EstH), ViewTop);
 		}
 		ImGui::SetNextWindowPos(ImVec2(Min.x, Y));
