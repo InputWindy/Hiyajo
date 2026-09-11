@@ -608,7 +608,24 @@ void FUIFeature::InitViews(FRender& R)
 	FrameDesc.ImGuiContext = m_Context;
 	FrameDesc.DisplayWidth = IO.DisplaySize.x;
 	FrameDesc.DisplayHeight = IO.DisplaySize.y;
-	UI::TranslateRegisteredViews(FrameDesc);
+	const std::uint32_t Translated = UI::TranslateRegisteredViews(FrameDesc);
+
+	// 一次性自检：注册总数 vs 本上下文命中数。两者不等时，"UI 不见了" 的责任方就分得清 ——
+	// 注册总数 0 = 声明侧没跑（世界系统未驱动 / 注册表未就位），命中 0 而总数非 0 = 翻译侧
+	// 筛掉了（视图登记的上下文不是本上下文）。没有这条，这类失败是完全沉默的。
+	{
+		static bool bLoggedViewCount = false;
+		if (!bLoggedViewCount)
+		{
+			bLoggedViewCount = true;
+			std::size_t Registered = 0;
+			if (UI::FUIViewRegistry* Registry = UI::GetUIViewRegistry())
+			{
+				Registered = Registry->SnapshotViews().size();
+			}
+			MAHO_LOG_CORE_INFO("FUIFeature: UI views registered={} translated={}", Registered, Translated);
+		}
+	}
 
 	// Close the frame + take the draw data. ALWAYS runs -- even if a closure threw
 	// above, the frame is still ended so g.FrameCountEnded stays synchronized. The

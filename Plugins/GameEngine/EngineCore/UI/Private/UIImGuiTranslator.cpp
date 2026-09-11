@@ -350,6 +350,15 @@ FUIHitResult FImGuiTranslator::WidgetInputText(FUIName Id, const FUIRect& Rect, 
 
 	ImGui::PushID(static_cast<int>(Id.GetId()));
 	ImGui::SetCursorScreenPos(ScreenMin(Rect));
+	// 键盘焦点请求（`FUIBuilder::RequestKeyboardFocus`）：真值与 `HitTestItem` 同一约定 ——
+	// 只在提出它的那一帧有效，且必须**紧贴**下一个 item 之前发出（否则焦点落到别的控件上）。
+	// 输入框是唯一"焦点即生命周期"的控件：不消费这个请求，编辑器"选完候选把焦点交回输入框"
+	// 的路径就是死代码（旧版靠 `IsItemActive()` 回读，新树不逐帧回写活跃位）。
+	if (PendingFocusId == Id.GetId())
+	{
+		ImGui::SetKeyboardFocusHere();
+		PendingFocusId = 0;
+	}
 	bool bEnter = false;
 	if (bMultiline)
 	{
@@ -530,8 +539,16 @@ bool FImGuiTranslator::BeginPopup(FUIName Id, bool bOpen, const FUIRect& Anchor,
 	OpenPopups[Id.GetId()] = bOpen;
 
 	if (Anchor.W > 0.f || Anchor.H > 0.f) { ImGui::SetNextWindowPos(ScreenMin(Anchor)); }
-	const bool bShown = bModal ? ImGui::BeginPopupModal(Name.c_str(), nullptr, ImGuiWindowFlags_AlwaysAutoResize)
-							   : ImGui::BeginPopup(Name.c_str(), ImGuiWindowFlags_AlwaysAutoResize);
+	// 非模态弹层**不许抢焦点**：ImGui 的弹窗在刚出现那一帧会 `want_focus=true`（除非显式
+	// 声明 `NoFocusOnAppearing`），抢焦点的副作用是 `ClearActiveID` —— 被它盖住的那个输入框
+	// （弹层通常正是贴着某个输入框弹出的候选列表）当帧就丢了 ActiveId，于是"能输入/能框选"
+	// 的前置条件（`g.ActiveId == id`）每帧被打断：表现为候选列表一闪而过、按键进不去。
+	// 模态弹层保持抢焦点（那正是模态的语义）。
+	const ImGuiWindowFlags PopupFlags = bModal
+		? ImGuiWindowFlags_AlwaysAutoResize
+		: (ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoFocusOnAppearing);
+	const bool bShown = bModal ? ImGui::BeginPopupModal(Name.c_str(), nullptr, PopupFlags)
+							   : ImGui::BeginPopup(Name.c_str(), PopupFlags);
 	if (!bShown) { return false; }
 
 	// 业务把 bOpen 置回 false：本帧收窗（不然后端窗口会一直挂着）

@@ -31,6 +31,31 @@ target_link_libraries(GameWorld PUBLIC Maho)
 set_property(TARGET GameWorld PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>")
 set_target_properties(GameWorld PROPERTIES OUTPUT_NAME "FGameWorld" PREFIX "")
 target_link_libraries(GameWorld PUBLIC Resource Asset)
+# Building GameWorld alone must also build the sub-plugins it installs at
+# runtime (UISystem) - otherwise a sub-plugin DLL left over from a
+# previous build is silently installed. A POST_BUILD script action, NOT
+# add_dependencies(GameWorld, <sub>): a sub-plugin links GameWorld, so that edge
+# would close a target cycle and CMake refuses to generate (cycles are
+# allowed only among static libraries).
+# GameWorld_SubPlugins is a plain handle (nothing links or depends on it) that
+# names every sub-plugin in ONE nested build: one msbuild invocation per
+# target would rebuild the shared dependency chain once per sub-plugin.
+# It carries no sources and no output of its own, so it is parked under
+# ThirdParty/CodeGen — a code-gen artifact of GameWorld, not a plugin of it.
+add_custom_target(GameWorld_SubPlugins)
+add_dependencies(GameWorld_SubPlugins UISystem)
+set_target_properties(GameWorld_SubPlugins PROPERTIES FOLDER "ThirdParty/CodeGen")
+add_custom_command(TARGET GameWorld POST_BUILD
+	COMMAND "${CMAKE_COMMAND}"
+		"-DMAHO_BUILD_DIR=${CMAKE_BINARY_DIR}"
+		"-DMAHO_CONFIG=$<CONFIG>"
+		"-DMAHO_TARGETS=GameWorld_SubPlugins"
+		"-DMAHO_IN_SOLUTION_BUILD=$(BuildingSolutionFile)"
+		"-DMAHO_SUBPLUGIN_BUILD=$(MahoSubPluginBuild)"
+		-P "${ENGINE_DIR}/Tools/build_subplugins.cmake"
+	COMMENT "GameWorld: ensuring enabled sub-plugins are up to date (UISystem)"
+	VERBATIM
+)
 set_target_properties(GameWorld PROPERTIES FOLDER "Maho/Plugins/GameEngine/GameCore")
 source_group(TREE "${CMAKE_CURRENT_LIST_DIR}" FILES ${GameWorld_PUBLIC_HEADERS} ${GameWorld_PRIVATE_HEADERS} ${GameWorld_PRIVATE_SOURCES})
 # -- /MAHOGEN GameWorld --

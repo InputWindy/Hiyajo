@@ -41,6 +41,17 @@ FUIRect FUILayoutEngine::ContentRect(const FUIBuilder& Node, const FUIRect& Fram
 FUIVector2 FUILayoutEngine::Measure(FUIBuilder& Node, IUITranslator& T, const FUIVector2& Available)
 {
 	const FUILayout& L = Node.GetLayout();
+
+	// 浮层节点（提示 / 弹层）在正常流里**不占位**（见 `FUIBuilder::IsOverlayLayer` 契约）：
+	// 矩形可为空，内容由 `PaintContent` 画在第二个窗口里。类型默认样式带的内边距
+	// （`FUIPopup` = 10/8）不能在这里加上 —— 否则浮层会在同级流里吃掉一块真实空间，
+	// 把同一容器内 `Fill` 兄弟的份额挤小（先例：控制台弹层把日志面板的 Fill 顶掉一截）。
+	if (Node.IsOverlayLayer())
+	{
+		Node.State.ContentSize = FUIVector2{ 0.f, 0.f };
+		return FUIVector2{ 0.f, 0.f };
+	}
+
 	const FUIVector2 Content = Node.MeasureContent(T, Available);
 
 	const auto Solve = [](const FUILength& Len, float ContentLen, float AvailLen)
