@@ -29,7 +29,9 @@ namespace Maho
  * click-to-select / Shift+click-or-drag range select / Ctrl+C to copy the selection
  * (Ctrl+A selects every visible line first), plus a live string-match filter box in the
  * toolbar and a CVar command line at the bottom (Enter submits; a floating completion list
- * follows the box, and `↑` re-opens it as the last 10 executed commands, `↑`/`↓` walking them).
+ * follows the box -- `↑`/`↓` walk it, filling the highlighted name back into the box -- and
+ * with nothing to complete `↑` re-opens the same popup as the last 10 executed commands,
+ * `↑`/`↓` walking those instead).
  * Right-clicking the log area opens a context menu at the pointer whose first entry is Clear
  * (it replaced the old toolbar Clear button).
  * Shutdown unsubscribes before the Log layer goes away. Like every editor component
@@ -70,14 +72,25 @@ private:
 	 *  registry, echo the result back into the log list and clear the box. */
 	void ExecuteCvarLine();
 
-	/** Fill the command line from `History[HistoryIndex]` (shared by the ↑/↓ keys and a row
-	 *  pick): the buffer becomes authoritative for this frame, and the text is recorded as the
-	 *  last picked name so the completion list does not re-open over it. */
+	/** Write one line back into the command line (shared by a history row and a completion
+	 *  row pick, and by the `↑`/`↓` walks): the buffer becomes authoritative for this frame,
+	 *  the text is recorded as the last picked name so the completion list does not re-open
+	 *  over it, and the box asks for the keyboard back. */
+	void FillFromList(const std::string& Text);
+
+	/** Fill the command line from `History[HistoryIndex]` (shared by the `↑`/`↓` keys and a row
+	 *  pick). Also closes the completion list: the two lists are mutually exclusive. */
 	void FillFromHistory();
 
 	/** Walk the command history by `Step` (-1 = older, +1 = newer). A closed list (-1) is
 	 *  opened by an older step and lands on the newest line; the ends clamp. */
 	void StepHistory(int Step);
+
+	/** Walk the completion candidates of `Matches` (the pinned needle's, see `SuggestNeedle`)
+	 *  by `Step`: entering pins the needle and lands on the last row (`↑`) or the first (`↓`),
+	 *  the ends clamp, and every step fills the highlighted name back into the box. The list
+	 *  stays open -- walking is not picking. */
+	void StepSuggest(int Step, const std::vector<std::string>& Matches);
 
 	/** Persistent UI tree, owned here, registered in the UI view registry. */
 	std::unique_ptr<UI::FUIView> View;
@@ -130,9 +143,8 @@ private:
 	bool                      CvarRunRequested = false;
 
 	/** Whether the command line currently holds the keyboard (the box's active bit, read back
-	 *  from the node each frame). The `↑`/`↓` handlers run during the event drain -- before
-	 *  `Update` -- so they read this instead, and it also keeps the `↑` history list from
-	 *  opening while another box (e.g. the filter) is the one being typed into. */
+	 *  from the node each frame). The `↑`/`↓` walks run in `Update` and gate on this, so the
+	 *  history list does not open while another box (e.g. the filter) is the one being typed into. */
 	bool                      CvarEditing = false;
 
 	/** Set when a suggestion is picked: the cvar node asks the backend for the keyboard
@@ -158,6 +170,21 @@ private:
 	static constexpr std::size_t MaxHistory = 10;
 	std::deque<std::string>   History;
 	int                       HistoryIndex = -1;
+
+	/** Highlight of the completion list while `↑`/`↓` walks it, -1 = not walking. A step fills
+	 *  the highlighted name into the box, so the box holds `Matches[SuggestIndex]`. */
+	int                       SuggestIndex = -1;
+
+	/** The filter needle pinned when the walk entered the completion list. Walking writes whole
+	 *  names into the box, and following the box's text would narrow the candidates down to that
+	 *  one name and then have them dropped by the "the box already holds an exact name" rule --
+	 *  the list would collapse mid-walk. Empty = not walking. */
+	char                      SuggestNeedle[256] = { 0 };
+
+	/** The `↑`/`↓` step recorded by the shortcut callbacks. They run during the event drain,
+	 *  before `Update` has gathered the candidates, so which list the step belongs to
+	 *  (completion or history) is decided in `Update`. */
+	int                       PendingStep = 0;
 
 	/** Log-area context menu (the old toolbar Clear button's replacement): right-clicking the
 	 *  log panel opens it. The backend writes the right-click and the pointer position into the

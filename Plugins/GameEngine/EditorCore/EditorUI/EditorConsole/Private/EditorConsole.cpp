@@ -1,3 +1,8 @@
+// 本 TU 的 include 链会带进 <windows.h>：先关掉 min/max 宏（先例：Asset/TextureImageCodec.cpp）。
+#ifndef NOMINMAX
+#	define NOMINMAX
+#endif
+
 #include "EditorConsole.h"
 
 #include "ConsoleVariable.h"
@@ -190,6 +195,10 @@ void FEditorConsole::ExecuteCvarLine()
 		while (History.size() > MaxHistory) { History.pop_front(); }
 	}
 	HistoryIndex = -1;
+	// 候选列表的走动状态一并作废：它钉住的过滤词属于执行掉的这一段输入，挂着会让列表带着
+	// 刚执行完的那批候选留在空框上。
+	SuggestIndex = -1;
+	SuggestNeedle[0] = '\0';
 
 	// "name [value]": a bare name prints the current value, "name value" sets it.
 	const std::size_t Space = Line.find_first_of(" \t");
@@ -213,20 +222,24 @@ void FEditorConsole::ExecuteCvarLine()
 	}
 }
 
+void FEditorConsole::FillFromList(const std::string& Text)
+{
+	std::strncpy(CvarBuffer, Text.c_str(), sizeof(CvarBuffer) - 1);
+	CvarBuffer[sizeof(CvarBuffer) - 1] = '\0';
+	// 记成"刚选过的名字"：与候选补全同一条守卫，避免补全列表压在它自己那一行上重开。
+	std::strncpy(CvarPickedName, CvarBuffer, sizeof(CvarPickedName) - 1);
+	CvarPickedName[sizeof(CvarPickedName) - 1] = '\0';
+	CvarAuthoritative = true;   // 本帧缓冲是权威值：把它写回节点（挡住节点旧文本的回读）
+	CvarPendingFocus = true;    // 焦点留在命令行：可以接着打字 / 回车执行
+}
+
 void FEditorConsole::FillFromHistory()
 {
 	if (HistoryIndex < 0 || HistoryIndex >= static_cast<int>(History.size()))
 	{
 		return;
 	}
-	const std::string& Text = History[static_cast<std::size_t>(HistoryIndex)];
-	std::strncpy(CvarBuffer, Text.c_str(), sizeof(CvarBuffer) - 1);
-	CvarBuffer[sizeof(CvarBuffer) - 1] = '\0';
-	// 记成"刚选过的名字"：与候选补全同一条守卫，避免补全列表压在历史列表上重开。
-	std::strncpy(CvarPickedName, CvarBuffer, sizeof(CvarPickedName) - 1);
-	CvarPickedName[sizeof(CvarPickedName) - 1] = '\0';
-	CvarAuthoritative = true;   // 本帧缓冲是权威值：把它写回节点（挡住节点旧文本的回读）
-	CvarPendingFocus = true;    // 焦点留在命令行：可以接着打字 / 回车执行
+	FillFromList(History[static_cast<std::size_t>(HistoryIndex)]);
 	CvarDropdownOpen = false;   // 补全列表与历史列表互斥
 }
 
@@ -252,6 +265,31 @@ void FEditorConsole::StepHistory(int Step)
 		HistoryIndex = Next;
 	}
 	FillFromHistory();
+}
+
+void FEditorConsole::StepSuggest(int Step, const std::vector<std::string>& Matches)
+{
+	if (Matches.empty())
+	{
+		return;
+	}
+	const int Count = static_cast<int>(Matches.size());
+	if (SuggestIndex < 0)
+	{
+		// 进入：↑ 落在最下一行（贴着命令行那头，与历史列表同向），↓ 落在最上一行。
+		SuggestIndex = (Step < 0) ? Count - 1 : 0;
+		// 钉住过滤词：这一步之后框里就是整条候选名，不能再拿它当过滤词（见 `SuggestNeedle`）。
+		std::strncpy(SuggestNeedle, CvarBuffer, sizeof(SuggestNeedle) - 1);
+		SuggestNeedle[sizeof(SuggestNeedle) - 1] = '\0';
+	}
+	else
+	{
+		const int Next = SuggestIndex + Step;
+		if (Next < 0 || Next >= Count) { return; }   // 到头停住
+		SuggestIndex = Next;
+	}
+	// 高亮即填回命令框。列表**不**收：钉住的过滤词让候选照旧，可以接着走。
+	FillFromList(Matches[static_cast<std::size_t>(SuggestIndex)]);
 }
 
 void FEditorConsole::Update(FExampleEditor& Editor)
@@ -416,12 +454,16 @@ void FEditorConsole::Update(FExampleEditor& Editor)
 	// -- CVar 自动补全候选 ---------------------------------------------------
 	// While the user is typing, gather every registered cvar whose name string-matches
 	// the box text (case-insensitive substring).
-	const bool HasTyping = (CvarBuffer[0] != '\0');
+	// 过滤词：平时就是命令框里的文本；正在用 ↑/↓ 走候选时钉住开始走动那一段（见
+	// `SuggestNeedle`）—— 走动会把候选名整条填回框，跟着框走的话过滤词就变成那个完整名字，
+	// 候选只剩它自己、再被下面"完整名字即收"清空，列表当场塌掉。
+	const char* NeedleSource = (SuggestIndex >= 0 && SuggestNeedle[0] != '\0') ? SuggestNeedle : CvarBuffer;
+	const bool HasTyping = (NeedleSource[0] != '\0');
 	std::vector<std::string> Matches;
 	if (HasTyping)
 	{
 		std::string Needle;
-		for (const char* p = CvarBuffer; *p; ++p)
+		for (const char* p = NeedleSource; *p; ++p)
 		{
 			Needle += static_cast<char>(std::tolower(static_cast<unsigned char>(*p)));
 		}
@@ -442,8 +484,8 @@ void FEditorConsole::Update(FExampleEditor& Editor)
 	}
 
 	// Once the box holds a complete cvar name, drop the list (don't re-show the single
-	// exact match the user just picked).
-	if (Matches.size() == 1 && Matches.front() == CvarBuffer)
+	// exact match the user just picked). 正在走候选时除外：那时框里本来就是高亮那条完整名。
+	if (SuggestIndex < 0 && Matches.size() == 1 && Matches.front() == CvarBuffer)
 	{
 		Matches.clear();
 	}
@@ -478,10 +520,39 @@ void FEditorConsole::Update(FExampleEditor& Editor)
 		CvarDropdownOpen = false;
 	}
 
+	// ↑/↓ 的一步：回调在事件抽干时就跑（那时候选还没算出来），故只记下"要走一步"，由本帧的
+	// 两张列表状态分派 —— 候选列表在显示就走候选，否则走历史（空框 ↑ 展开最近 10 条）。
+	if (PendingStep != 0)
+	{
+		const int Step = PendingStep;
+		PendingStep = 0;
+		if (CvarEditing && CvarDropdownOpen && !Matches.empty())
+		{
+			StepSuggest(Step, Matches);
+		}
+		else
+		{
+			// 没候选可走（空框 / 没有匹配 / 焦点不在命令行）：这一步属于历史列表，候选的走动
+			// 状态让位（两个列表互斥）。历史那条路自带 `CvarEditing` / 空历史的守卫。
+			SuggestIndex = -1;
+			SuggestNeedle[0] = '\0';
+			StepHistory(Step);
+		}
+	}
+
+	// 走动状态的作废：候选列表收掉了（焦点走了 / 没候选）就不能再挂着高亮，否则高亮会在列表
+	// 重开时凭空落在某个候选上。
+	if (SuggestIndex >= 0 && (!CvarDropdownOpen || Matches.empty() || !CvarEditing))
+	{
+		SuggestIndex = -1;
+		SuggestNeedle[0] = '\0';
+	}
+
 	// 弹层行：↑ 展开的历史列表优先（两者互斥），否则是输入中的候选名字。
 	// 上限：候选 8 行（旧版一屏）；历史 10 行（"最近输入的 10 条"）。
+	const bool bHistoryList = (HistoryIndex >= 0);
 	std::vector<std::string> Rows;
-	if (HistoryIndex >= 0)
+	if (bHistoryList)
 	{
 		Rows.assign(History.begin(), History.end());   // 最新一条在末尾 = 列表最下一行
 	}
@@ -489,9 +560,19 @@ void FEditorConsole::Update(FExampleEditor& Editor)
 	{
 		Rows = Matches;
 	}
-	const int MaxRows = (HistoryIndex >= 0) ? static_cast<int>(MaxHistory) : 8;
-	const int ShowRows = static_cast<int>(Rows.size()) < MaxRows
-		? static_cast<int>(Rows.size()) : MaxRows;
+	const int MaxRows = bHistoryList ? static_cast<int>(MaxHistory) : 8;
+	const int ShowRows = std::min(static_cast<int>(Rows.size()), MaxRows);
+
+	// 高亮行（历史 = `HistoryIndex`，候选 = `SuggestIndex`）。候选可以多过一屏（一屏 8 行），
+	// 故取一个起点把高亮那行挪进视野 —— 显示行号 = 起点 + 行内偏移，高亮/点选都按它折算。
+	// 历史一屏放得下 10 条，起点恒为 0。
+	const int Highlight = bHistoryList ? HistoryIndex : SuggestIndex;
+	int RowOffset = 0;
+	if (Highlight >= 0)
+	{
+		const int MaxOffset = static_cast<int>(Rows.size()) - ShowRows;
+		RowOffset = std::min(std::max(Highlight - (ShowRows - 1), 0), MaxOffset);
+	}
 
 	// ---- 声明期：只改本视图的树 -------------------------------------------
 	UI::FUIEditScope Scope = PanelView->Edit();
@@ -605,14 +686,21 @@ void FEditorConsole::Update(FExampleEditor& Editor)
 	{
 		// 回车提交：后端只在真按了回车时报告（文本改动另走 TextChanged）。
 		CvarBox.OnSubmitted([this](UI::FUIBuilder&, std::string_view) { CvarRunRequested = true; });
-		// 一开始改字就收起 ↑ 历史列表（它只服务于"直接挑一条"）。
-		CvarBox.OnTextChanged([this](UI::FUIBuilder&, std::string_view) { HistoryIndex = -1; });
+		// 一开始改字就收起 ↑ 历史列表（它只服务于"直接挑一条"），候选的走动状态也一并作废
+		// （它钉住的过滤词属于上一段输入）。
+		CvarBox.OnTextChanged([this](UI::FUIBuilder&, std::string_view)
+		{
+			HistoryIndex = -1;
+			SuggestIndex = -1;
+			SuggestNeedle[0] = '\0';
+		});
 		// ↑/↓：命名键，走声明式快捷键（后端把 ↑ 映射成 UpArrow；命名键不受"输入框在收键盘"
-		// 那道守卫限制，否则输入框里的 ↑ 永远不命中）。
+		// 那道守卫限制，否则输入框里的 ↑ 永远不命中）。回调此刻还不知道候选有没有、有几个，
+		// 故只记下这一步，分派留给 `Update` 里那段 —— 有候选就走候选，没有就走历史。
 		CvarBox.OnShortcut(UI::FUIKeyChord::NamedKey(UI::EUIKey::Up),
-			[this](UI::FUIBuilder&, std::string_view) { StepHistory(-1); });
+			[this](UI::FUIBuilder&, std::string_view) { PendingStep = -1; });
 		CvarBox.OnShortcut(UI::FUIKeyChord::NamedKey(UI::EUIKey::Down),
-			[this](UI::FUIBuilder&, std::string_view) { StepHistory(1); });
+			[this](UI::FUIBuilder&, std::string_view) { PendingStep = 1; });
 	}
 	CvarBox.Layout().SetSize(UI::FUILength::Fill(), UI::FUILength::Content());
 
@@ -620,8 +708,7 @@ void FEditorConsole::Update(FExampleEditor& Editor)
 	// 上方的独立窗口。`FUIPopup` 在正常流里零尺寸，后端为它开第二个窗口，故不再占版面；
 	// 锚点取输入框矩形（上一帧的，与全树同序读回）。
 	UI::FUIPopup& SuggestPopup = Ensure<UI::FUIPopup>(Root, UI::FUIName(kIdSuggest), bNew);
-	const bool bHistory = (HistoryIndex >= 0);
-	const bool bShowSuggest = (bHistory || CvarDropdownOpen) && ShowRows > 0;
+	const bool bShowSuggest = (bHistoryList || CvarDropdownOpen) && ShowRows > 0;
 	SuggestPopup.SetAnchor(CvarBox.GetRect());
 	SuggestPopup.SetOpen(bShowSuggest);
 	if (bNew)
@@ -638,13 +725,14 @@ void FEditorConsole::Update(FExampleEditor& Editor)
 	{
 		for (int i = 0; i < ShowRows; ++i)
 		{
-			const std::string& Text = Rows[static_cast<std::size_t>(i)];
+			const int RowIndex = RowOffset + i;   // 行号是折算过的显示下标（见 `RowOffset`）
+			const std::string& Text = Rows[static_cast<std::size_t>(RowIndex)];
 			UI::FUISelectable& Row = SuggestPopup.AddItem<UI::FUISelectable>(MakeSuggestId(i));
 			Row.SetLabel(Text);
 			Row.SetSpanAll(true);
-			// 历史条：高亮当前那一条（选中态走基类的选中位，解析样式按它取 Selected 组）。
-			Row.SetSelected(bHistory && i == HistoryIndex);
-			Row.OnSelected([this, Name = Text, RowIndex = i, bIsHistory = bHistory](UI::FUIBuilder&)
+			// 高亮：历史/候选都按显示行号比一次（选中态走基类的选中位，解析样式按它取 Selected 组）。
+			Row.SetSelected(RowIndex == Highlight);
+			Row.OnSelected([this, Name = Text, RowIndex, bIsHistory = bHistoryList](UI::FUIBuilder&)
 			{
 				if (bIsHistory)
 				{
@@ -653,13 +741,12 @@ void FEditorConsole::Update(FExampleEditor& Editor)
 					FillFromHistory();
 					return;
 				}
-				std::strncpy(CvarBuffer, Name.c_str(), sizeof(CvarBuffer) - 1);
-				CvarBuffer[sizeof(CvarBuffer) - 1] = '\0';
-				std::strncpy(CvarPickedName, Name.c_str(), sizeof(CvarPickedName) - 1);
-				CvarPickedName[sizeof(CvarPickedName) - 1] = '\0';
+				// 候选条：填回并收起列表。键盘走动不走这里 —— `StepSuggest` 只填不收敛列表
+				// （它钉住过滤词），点选则是"挑完了"，钉住的过滤词一并作废。
+				SuggestIndex = -1;
+				SuggestNeedle[0] = '\0';
+				FillFromList(Name);
 				CvarDropdownOpen = false;
-				CvarPendingFocus = true;    // 下一帧翻译把键盘焦点交回输入框
-				CvarAuthoritative = true;   // 本帧缓冲是权威值：把名字写回节点
 			});
 		}
 	}
