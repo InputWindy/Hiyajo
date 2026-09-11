@@ -64,7 +64,4 @@ MAHO_UI_API std::uint32_t GetUIThemeStamp();
 /** 任意字号吸附到最近档位（不修改输入值；集合为空时原样返回）。越档时只记一条诊断。 */
 MAHO_UI_API float SnapFontSize(float Size);
 
-/** 把主题 token 同步到后端自带控件的配色（ImGui 内部控件；实现活在翻译后端里）。 */
-MAHO_UI_API void ApplyThemeToImGuiStyle();
-
 }} // namespace Maho::UI
