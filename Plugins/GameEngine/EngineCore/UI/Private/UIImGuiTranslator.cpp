@@ -368,6 +368,19 @@ FUIHitResult FImGuiTranslator::WidgetInputText(FUIName Id, const FUIRect& Rect, 
 		ImGui::SetKeyboardFocusHere();
 		PendingFocusId = 0;
 	}
+	// 声明真值：节点上的文本才是真值（声明侧可以改写它 —— 历史回溯把一条旧命令填回命令行）。
+	// 但后端在输入框**活跃**期间忽略调用方写进来的 buf：`imgui_widgets.cpp` 里从获得焦点那一刻
+	// 起 buf 的内容被无视，真值在 `ImGuiInputTextState::TextA`，且帧末 "state != buf" 会被它当成
+	// 一次改字回写到 buf（`apply_new_text`）。于是声明侧的新文本既显示不出来、又被回滚成旧文本，
+	// 还额外产出一条 `TextChanged` —— 而"改字即收"的守卫会把刚弹出的列表当场收掉（表现为闪烁，
+	// 且弹层每帧重开时尺寸/落位各错一帧）。官方给的正是这条路：把 buf 主动灌回活跃状态，命中
+	// 后端本帧的 `init_reload_from_user_buf` 分支，由它按 buf 重算文本与光标。
+	if (ImGuiContext* Ctx = ImGui::GetCurrentContext(); Ctx != nullptr && Ctx->ActiveId != 0 &&
+		Ctx->InputTextState.ID == Ctx->ActiveId && Ctx->ActiveId == ImGui::GetID("##text"))
+	{
+		const char* StateText = (Ctx->InputTextState.TextA.Data != nullptr) ? Ctx->InputTextState.TextA.Data : "";
+		if (Text != StateText) { Ctx->InputTextState.ReloadUserBufAndMoveToEnd(); }
+	}
 	bool bEnter = false;
 	if (bMultiline)
 	{
