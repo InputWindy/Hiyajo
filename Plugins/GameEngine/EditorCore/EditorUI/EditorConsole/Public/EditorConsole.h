@@ -26,9 +26,10 @@ namespace Maho
  * layer's listener stream (producer thread pushes into a mutex-guarded deque, so
  * the panel is safe even though LogLine runs on any emitting thread); each frame
  * `Update` drains the deque into one level-colored FUISelectable per visible line,
- * click-to-select / Shift+click-or-drag range select / Copy / Copy All, plus a live
- * string-match filter box + a Clear button in the toolbar and a CVar command line at
- * the bottom (Enter submits; a floating completion list follows the box).
+ * click-to-select / Shift+click-or-drag range select / Ctrl+C to copy the selection
+ * (Ctrl+A selects every visible line first), plus a live string-match filter box + a
+ * Clear button in the toolbar and a CVar command line at the bottom (Enter submits; a
+ * floating completion list follows the box).
  * Shutdown unsubscribes before the Log layer goes away. Like every editor component
  * it carries no backend/RHI resource ownership -- the host owns the UI context.
  *
@@ -112,22 +113,20 @@ private:
 	 *  a different row overwrites it. */
 	char                      CvarPickedName[256] = { 0 };
 
-	/** Set by the Run button's callback or the cvar box's Enter submit. The host drains
-	 *  events BEFORE `Update`, so the buffer is not yet synced at callback time -- the
-	 *  command runs in `Update`, right after the read-back. */
+	/** Set by the cvar box's Enter submit. The host drains events BEFORE `Update`, so the
+	 *  buffer is not yet synced at callback time -- the command runs in `Update`, right
+	 *  after the read-back. */
 	bool                      CvarRunRequested = false;
 
 	/** Set when a suggestion is picked: the cvar node asks the backend for the keyboard
 	 *  focus on its next translation (`RequestKeyboardFocus()`), so typing continues. */
 	bool                      CvarPendingFocus = false;
 
-	/** Set by the toolbar's Copy / Copy All callbacks. Like CvarRunRequested, the work
-	 *  happens in `Update`: only there is the frame's visible-line snapshot available.
-	 *  The same two flags are also raised by the log panel's `Ctrl+C` / `Ctrl+A`
-	 *  shortcuts (declarative, see `FUIKeyChord`) -- SelectAllRequested only moves the
-	 *  selection range, the copy itself still goes through CopyRequested. */
+	/** Set by the log panel's `Ctrl+C` shortcut (declarative, see `FUIKeyChord`); `Ctrl+A`
+	 *  only moves the selection range onto every visible line, so "copy all" is
+	 *  `Ctrl+A` then `Ctrl+C`. The work happens in `Update`: only there is the frame's
+	 *  visible-line snapshot available. */
 	bool                      CopyRequested = false;
-	bool                      CopyAllRequested = false;
 	bool                      SelectAllRequested = false;
 
 	/** Whether the name-completion list should be shown. It persists across the frame that

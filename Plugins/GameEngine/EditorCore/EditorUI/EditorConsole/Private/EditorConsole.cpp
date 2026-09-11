@@ -32,14 +32,11 @@ namespace
 /** 稳定节点 Id：同级唯一即可（事件路由走根→目标的 Id 路径）。 */
 constexpr const char* kIdToolbar  = "EditorConsole.Toolbar";
 constexpr const char* kIdFilter   = "EditorConsole.Filter";
-constexpr const char* kIdBtnCopy  = "EditorConsole.Button.Copy";
-constexpr const char* kIdBtnCopyAll = "EditorConsole.Button.CopyAll";
 constexpr const char* kIdBtnClear = "EditorConsole.Button.Clear";
 constexpr const char* kIdLines    = "EditorConsole.Lines";
 constexpr const char* kIdSuggest  = "EditorConsole.Suggest";
 constexpr const char* kIdCmdRow   = "EditorConsole.Command";
 constexpr const char* kIdCvar     = "EditorConsole.Cvar";
-constexpr const char* kIdBtnRun   = "EditorConsole.Button.Run";
 
 const char* LevelName(ELogLevel Level)
 {
@@ -297,21 +294,13 @@ void FEditorConsole::Update(FExampleEditor& Editor)
 		CvarAuthoritative = true;
 	}
 
-	// -- 复制（工具栏按钮 / Ctrl+C）-------------------------------------------
-	// 工具栏 "Copy" 复制选中区间、"Copy All" 复制全部可见行；日志面板自身声明了
-	// Ctrl+C / Ctrl+A 两条快捷键（见下面的 `OnShortcut`），命中后落到同一对标志上。
-	if (CopyRequested || CopyAllRequested)
+	// -- 复制（Ctrl+C）-------------------------------------------------------
+	// 日志面板自身声明了 Ctrl+C / Ctrl+A 两条快捷键（见下面的 `OnShortcut`）：Ctrl+A 只把选中
+	// 区间拉到全部可见行，Ctrl+C 落到这里复制该区间（"复制全部" = Ctrl+A 之后再 Ctrl+C）。
+	if (CopyRequested)
 	{
 		std::string Text;
-		if (CopyAllRequested)
-		{
-			for (const FLogEntry& E : Snapshot)
-			{
-				Text += BuildLine(E);
-				Text += '\n';
-			}
-		}
-		else if (SelAnchor >= 0 && SelEnd >= 0)
+		if (SelAnchor >= 0 && SelEnd >= 0)
 		{
 			const int Lo = SelAnchor < SelEnd ? SelAnchor : SelEnd;
 			const int Hi = SelAnchor > SelEnd ? SelAnchor : SelEnd;
@@ -323,7 +312,6 @@ void FEditorConsole::Update(FExampleEditor& Editor)
 		}
 		UI::SetUIClipboardText(Text);
 		CopyRequested = false;
-		CopyAllRequested = false;
 	}
 
 	// -- 全选（Ctrl+A）-------------------------------------------------------
@@ -460,20 +448,6 @@ void FEditorConsole::Update(FExampleEditor& Editor)
 		}
 		FilterBox.Layout().SetSize(UI::FUILength::Fixed(220.f), UI::FUILength::Content());
 
-		UI::FUIButton& CopyButton = Ensure<UI::FUIButton>(Toolbar, UI::FUIName(kIdBtnCopy), bNew);
-		CopyButton.SetLabel("Copy");
-		if (bNew)
-		{
-			CopyButton.OnClick([this](UI::FUIBuilder&) { CopyRequested = true; });
-		}
-
-		UI::FUIButton& CopyAllButton = Ensure<UI::FUIButton>(Toolbar, UI::FUIName(kIdBtnCopyAll), bNew);
-		CopyAllButton.SetLabel("Copy All");
-		if (bNew)
-		{
-			CopyAllButton.OnClick([this](UI::FUIBuilder&) { CopyAllRequested = true; });
-		}
-
 		UI::FUIButton& ClearButton = Ensure<UI::FUIButton>(Toolbar, UI::FUIName(kIdBtnClear), bNew);
 		ClearButton.SetLabel("Clear");
 		if (bNew)
@@ -561,17 +535,10 @@ void FEditorConsole::Update(FExampleEditor& Editor)
 	}
 	if (bNewCvar)
 	{
-		// 回车提交：后端只在真按了回车时报告（文本改动另走 TextChanged），与 Run 同路。
+		// 回车提交：后端只在真按了回车时报告（文本改动另走 TextChanged）。
 		CvarBox.OnSubmitted([this](UI::FUIBuilder&, std::string_view) { CvarRunRequested = true; });
 	}
 	CvarBox.Layout().SetSize(UI::FUILength::Fill(), UI::FUILength::Content());
-
-	UI::FUIButton& RunButton = Ensure<UI::FUIButton>(CmdRow, UI::FUIName(kIdBtnRun), bNew);
-	RunButton.SetLabel("Run");
-	if (bNew)
-	{
-		RunButton.OnClick([this](UI::FUIBuilder&) { CvarRunRequested = true; });
-	}
 
 	// 候选弹层：旧版是浮在输入框上方的独立窗口。`FUIPopup` 在正常流里零尺寸，后端为它
 	// 开第二个窗口，故不再占版面；锚点取输入框矩形（上一帧的，与全树同序读回）。
