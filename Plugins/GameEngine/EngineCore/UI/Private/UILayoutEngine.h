@@ -23,6 +23,11 @@ struct FUILayoutEngine
 	/** 外框再扣内边距 = 子节点可用区。
 	 *  内边距来源：`FUILayout::Padding` 非零则用它，否则用解析样式的 `Padding`。 */
 	static FUIRect ContentRect(const FUIBuilder& Node, const FUIRect& Frame);
+
+	/** `ContentRect` 的逆：子树尺寸 + 本节点自身内边距 = 外框（左上角在本节点原点）。
+	 *  `FUIBuilder::MeasureContent` 给的是**子树**尺寸，本节点内边距不在其中；要先经这里补回
+	 *  再交给 `ContentRect`，否则同一段内边距被扣两次（浮层调用方算内容起点就少这一段）。 */
+	static FUIRect OuterRect(const FUIBuilder& Node, const FUIVector2& Content);
 };
 
 }} // namespace Maho::UI

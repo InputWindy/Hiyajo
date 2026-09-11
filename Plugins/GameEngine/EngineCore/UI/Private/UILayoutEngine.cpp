@@ -39,6 +39,12 @@ FUIRect FUILayoutEngine::ContentRect(const FUIBuilder& Node, const FUIRect& Fram
 	return Shrink(Frame, EffectivePadding(Node));
 }
 
+FUIRect FUILayoutEngine::OuterRect(const FUIBuilder& Node, const FUIVector2& Content)
+{
+	const FMargin M = EffectivePadding(Node);
+	return { 0.f, 0.f, Content.X + M.Left + M.Right, Content.Y + M.Top + M.Bottom };
+}
+
 FUIVector2 FUILayoutEngine::Measure(FUIBuilder& Node, IUITranslator& T, const FUIVector2& Available)
 {
 	const FUILayout& L = Node.GetLayout();

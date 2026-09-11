@@ -73,8 +73,12 @@ void FUIPopup::PaintContent(IUITranslator& T, const FUIResolvedStyle& S)
 
 	// 内容尺寸**先量**：弹层窗口的落位（贴锚点上沿 / 放不下翻到锚点下沿）要用它。量在 `BeginPopup`
 	// 之前是必须的 —— 翻译器一帧一实例，记不住上一帧的高度，后端无从事后取回这个尺寸。
-	const FUIVector2 Raw = FUIBuilder::MeasureContent(T, FUIVector2{ kPopupMeasureWidth, 0.f });
-	const FUIRect Body = FUILayoutEngine::ContentRect(*this, FUIRect{ 0.f, 0.f, Raw.X, Raw.Y });
+	// 量到的只是**子树**尺寸，本节点自身内边距不在其中：先补回内边距还原成盒子，再取内容矩形 ——
+	// 内容矩形同时是"内容起点"的真值（后端算弹层真实高度要它：内容起点 + 内容高 + 窗口内边距×2）。
+	// 直接拿子树尺寸去 `ContentRect` 就把同一段内边距扣了两次，报给后端的高度恰好少一个内边距，
+	// 弹层下沿于是压住锚点 —— 而锚点常正是被补全的那个输入框。
+	const FUIVector2 Content = FUIBuilder::MeasureContent(T, FUIVector2{ kPopupMeasureWidth, 0.f });
+	const FUIRect Body = FUILayoutEngine::ContentRect(*this, FUILayoutEngine::OuterRect(*this, Content));
 
 	const bool bShown = T.BeginPopup(GetId(), bOpen, bShownLastFrame, Anchor, bModal, Body, S);
 	// 后端刚报的事实就是下一帧的"上一帧"：**必须**在早退之前落账，否则 `bShownLastFrame` 一直是

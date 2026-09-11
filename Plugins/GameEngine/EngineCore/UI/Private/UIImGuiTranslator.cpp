@@ -559,6 +559,11 @@ bool FImGuiTranslator::BeginPopup(FUIName Id, bool bOpen, bool bWasShown, const 
 	// （`imgui.cpp` 的落位只在 `window_pos_set_by_api` 为假时生效，且只对"缩放后重新出现"的
 	// 弹层跑 `FindBestWindowPosForPopup`），于是贴着屏幕底部停靠的面板里，候选列表整条长到
 	// 显示区之外 —— 只看得见最上面一条，整条落在窗口外就完全看不见。
+	// 弹层窗口的**估算**高度：落位必须在 `Begin` 之前给出，而真实高度是 ImGui 在 `Begin` 里
+	// 用上一帧内容算的，翻译器又记不住跨帧尺寸 —— 故只能按公式推（见下方注释），推完在这里
+	// 留档，供落位之后的诊断比对。
+	float EstH = 0.f;
+	float EstY = 0.f;
 	if (Anchor.W > 0.f || Anchor.H > 0.f)
 	{
 		const ImVec2 Min = ScreenMin(Anchor);
@@ -569,7 +574,7 @@ bool FImGuiTranslator::BeginPopup(FUIName Id, bool bOpen, bool bWasShown, const 
 		// + 窗口内边距×2：内容起点就是 `ContentBox.Y`（调用方把子树摆在自己内边距之后），
 		// 内容高是 `ContentBox.H`。少算起点那一段，弹层下沿就压住锚点几个像素 —— 而锚点常常
 		// 正是被补全的那个输入框；这档误差必须为零，弹层下沿才正好贴住锚点上沿。
-		const float EstH = ContentBox.Y + ContentBox.H + ImGui::GetStyle().WindowPadding.y * 2.f;
+		EstH = ContentBox.Y + ContentBox.H + ImGui::GetStyle().WindowPadding.y * 2.f;
 
 		const float Below = Min.y + Anchor.H;
 		float Y = Below;
@@ -583,6 +588,7 @@ bool FImGuiTranslator::BeginPopup(FUIName Id, bool bOpen, bool bWasShown, const 
 			// —— 弹层是顶层窗口，落到窗口外就整条看不见了。
 			Y = std::max(std::min(Y, ViewBottom - EstH), ViewTop);
 		}
+		EstY = Y;
 		ImGui::SetNextWindowPos(ImVec2(Min.x, Y));
 	}
 	// 非模态弹层**不许抢焦点**：ImGui 的弹窗在刚出现那一帧会 `want_focus=true`（除非显式
@@ -632,6 +638,35 @@ bool FImGuiTranslator::BeginPopup(FUIName Id, bool bOpen, bool bWasShown, const 
 	// 下降沿（树要关、上一帧还开着）：本帧收窗，且只收这一帧 —— 下一帧 BeginPopup 早退，
 	// 不会对着一个已经关掉的弹层反复 `CloseCurrentPopup`。
 	if (!bOpen && bWasShown) { ImGui::CloseCurrentPopup(); }
+
+	// 临时诊断（落位确认识精确后删）：估算高度 vs **实测**窗口高度，连续 3 帧都差过 1px 才记一行
+	// —— 弹层刚出现、或候选行数刚变的那一帧，ImGui 用的是上一帧的自适应尺寸，差属正常瞬态。
+	// 锚点常常正是被弹层压住的那个输入框，故顺带报"锚点上沿 vs 弹层下沿"这个直接读得懂的差值。
+	if (!bModal && bWasShown && EstH > 0.f)
+	{
+		if (ImGuiContext* Ctx = ImGui::GetCurrentContext(); Ctx != nullptr && Ctx->CurrentWindow != nullptr)
+		{
+			const ImGuiWindow* W = Ctx->CurrentWindow;
+			static int  MismatchFrames = 0;
+			static bool bReported = false;
+			if (std::fabs(W->Size.y - EstH) > 1.f)
+			{
+				if (++MismatchFrames == 3 && !bReported)
+				{
+					bReported = true;
+					MAHO_IF_NOT_NULL(GetLog(), L)
+					{
+						L->Warn("UI: 弹层高度估算 {}px 实测 {}px（弹层下沿 {} vs 锚点上沿 {}）",
+								EstH, W->Size.y, W->Pos.y + W->Size.y, EstY + EstH);
+					}
+				}
+			}
+			else
+			{
+				MismatchFrames = 0;
+			}
+		}
+	}
 
 	// 弹层是新窗口：原点切到它的内容区，出栈时恢复。
 	OriginStack.push_back(Origin);
