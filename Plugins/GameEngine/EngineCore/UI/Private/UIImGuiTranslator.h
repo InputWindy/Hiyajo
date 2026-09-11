@@ -93,7 +93,11 @@ private:
 	[[nodiscard]] ImVec2            ScreenMax(const FUIRect& Local) const;
 	[[nodiscard]] static ImU32      ToColor(const FUIColor& C);
 	[[nodiscard]] ImFont*           FontOf(const FUIResolvedResource& Font, float Size) const;
-	[[nodiscard]] FUIHitResult      HitTestItem(FUIName Id, const FUIRect& Local, bool bHitTest);
+	// `bAllowHoverWhileActive`：同窗口另有活跃项时仍报告悬停位。ImGui 默认把「非活跃项」的
+	// `IsItemHovered()` 直接压成 false（`IsWindowContentHoverable` 的同窗口活跃项过滤），
+	// 于是"拖着 A 扫过 B"里 B 永远不报悬停。拖拽扩选（控制台日志行）正需要 B 的悬停位。
+	[[nodiscard]] FUIHitResult      HitTestItem(FUIName Id, const FUIRect& Local, bool bHitTest,
+	                                            bool bAllowHoverWhileActive = false);
 
 	ImGuiContext* Context = nullptr;
 	FUIView*      View = nullptr;

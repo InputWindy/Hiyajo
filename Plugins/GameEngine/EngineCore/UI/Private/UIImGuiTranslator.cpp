@@ -264,7 +264,8 @@ void FImGuiTranslator::DrawImage(const FUIRect& Rect, const FUIResolvedResource&
 
 // -- 命中 --------------------------------------------------------------------------------
 
-FUIHitResult FImGuiTranslator::HitTestItem(FUIName Id, const FUIRect& Local, bool bHitTest)
+FUIHitResult FImGuiTranslator::HitTestItem(FUIName Id, const FUIRect& Local, bool bHitTest,
+										   bool bAllowHoverWhileActive)
 {
 	FUIHitResult Out;
 	ImGui::PushID(static_cast<int>(Id.GetId()));
@@ -280,7 +281,11 @@ FUIHitResult FImGuiTranslator::HitTestItem(FUIName Id, const FUIRect& Local, boo
 	if (bHitTest)
 	{
 		ImGui::InvisibleButton("##hit", ImVec2(W, H));
-		Out.bHovered = ImGui::IsItemHovered();
+		// 悬停位默认受"同窗口活跃项"过滤（见头文件说明）；扩选类控件要的是"指针在我上面"
+		// 这个纯几何真值，故按需放行 —— 活跃项自己那条路不受影响。
+		Out.bHovered = bAllowHoverWhileActive
+			? ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem)
+			: ImGui::IsItemHovered();
 		Out.bPressed = ImGui::IsItemActive();
 		Out.bClicked = ImGui::IsItemClicked();
 		Out.bReleased = ImGui::IsItemDeactivated();
@@ -392,7 +397,7 @@ FUIHitResult FImGuiTranslator::WidgetInputText(FUIName Id, const FUIRect& Rect, 
 FUIHitResult FImGuiTranslator::WidgetSelectable(FUIName Id, const FUIRect& Rect, bool bSelected,
 												const FUIResolvedStyle& S)
 {
-	const FUIHitResult Out = HitTestItem(Id, Rect, true);
+	const FUIHitResult Out = HitTestItem(Id, Rect, true, /*bAllowHoverWhileActive*/ true);
 	DrawRect(Rect, S);
 	(void)bSelected;
 	return Out;

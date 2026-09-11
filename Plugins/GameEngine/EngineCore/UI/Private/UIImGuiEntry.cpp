@@ -7,6 +7,9 @@
 
 #include <Log.h>
 
+#include <algorithm>
+#include <cstdint>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -35,6 +38,40 @@ constexpr ImGuiWindowFlags kOverlayRootFlags =
 	| ImGuiWindowFlags_NoDocking     // 叠加层绝不能被宿主 dockspace 吸走
 #endif
 	;
+
+/** 诊断：把一棵节点树连同矩形写进日志（一次性）。矩形与 Id 一对照，"看得见但认不出是谁 /
+ *  尺寸不对"的控件立刻明确 —— 比截图猜控件快且不会猜错。 */
+int DumpNodeRects(const FUIBuilder& Node, int Depth, int Budget)
+{
+	if (Budget <= 0 || Depth > 12) { return 0; }
+	const FUIRect R = Node.GetRect();
+	MAHO_LOG(ELogLevel::Info, "UIDump", "{}{} {} rect=({:.0f},{:.0f},{:.0f},{:.0f}){}",
+			 std::string(static_cast<std::size_t>(Depth) * 2, ' '), Node.GetTypeName(),
+			 Node.GetId().ToString(), R.X, R.Y, R.W, R.H,
+			 (R.W <= 0.f || R.H <= 0.f) ? "   <-- 空矩形" : "");
+
+	int Used = 1;
+	for (const std::unique_ptr<FUIBuilder>& Child : Node.GetChildren())
+	{
+		if (Child == nullptr || Used >= Budget) { continue; }
+		Used += DumpNodeRects(*Child, Depth + 1, Budget - Used);
+	}
+	return Used;
+}
+
+/** 每帧 dump 一个视图（每视图仅一次）：第 1 帧翻译才写实矩形，第 2 帧读到的是稳态。 */
+void DumpViewTreeOnce(const FUIView& InView, int FrameIndex)
+{
+	if (FrameIndex < 2 || InView.GetRoot().GetRect().W <= 0.f) { return; }
+
+	static std::vector<std::uint32_t> Dumped;
+	const std::uint32_t ViewId = InView.GetId().GetId();
+	if (std::find(Dumped.begin(), Dumped.end(), ViewId) != Dumped.end()) { return; }
+	Dumped.push_back(ViewId);
+
+	MAHO_LOG(ELogLevel::Info, "UIDump", "==== view {} ====", InView.GetId().ToString());
+	(void)DumpNodeRects(InView.GetRoot(), 0, 250);
+}
 
 std::string WindowNameOf(const FUIView& View, const FUIViewShell& Shell)
 {
@@ -69,6 +106,9 @@ void TranslateView(FUIView& View)
 
 std::uint32_t TranslateRegisteredViews(const FUIViewFrameDesc& Desc)
 {
+	static int FrameIndex = 0;
+	++FrameIndex;
+
 	FUIViewRegistry* Registry = GetUIViewRegistry();
 	if (Registry == nullptr) { return 0; }
 
@@ -129,6 +169,7 @@ std::uint32_t TranslateRegisteredViews(const FUIViewFrameDesc& Desc)
 				const ImVec2 Content = ImGui::GetContentRegionAvail();
 				View->SetDisplaySize(Content.x, Content.y);
 				TranslateViewImpl(*View, FUIRect{ 0.f, 0.f, Content.x, Content.y }, Desc.bDrawDebug);
+				DumpViewTreeOnce(*View, FrameIndex);
 				++Translated;
 			}
 			ImGui::End();
@@ -147,6 +188,7 @@ std::uint32_t TranslateRegisteredViews(const FUIViewFrameDesc& Desc)
 		{
 			View->SetDisplaySize(W, H);
 			TranslateViewImpl(*View, FUIRect{ 0.f, 0.f, W, H }, Desc.bDrawDebug);
+			DumpViewTreeOnce(*View, FrameIndex);
 			++Translated;
 		}
 		ImGui::End();
