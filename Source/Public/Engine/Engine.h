@@ -132,9 +132,9 @@ public:
 
 	virtual void ParseCommandLine(int Argc, char** Argv);
 
-	virtual void PreMain() = 0;
+	virtual void PreMain();
 
-	virtual void PostMain() = 0;
+	virtual void PostMain();
 
 	virtual int Main();
 public:

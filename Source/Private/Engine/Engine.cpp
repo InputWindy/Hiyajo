@@ -6,6 +6,10 @@
 #include <string>
 #include <vector>
 
+#ifndef NDEBUG
+#	include <fstream>
+#endif
+
 namespace Maho
 {
 
@@ -104,55 +108,100 @@ void FEngineBase::ParseCommandLine(int Argc, char** Argv)
 	}
 }
 
+void FEngineBase::PreMain()
+{
+	// Engine layers install from the runtime catalog's TopLevel list (codegen
+	// stages it as PluginCatalog.json next to the binary). Each is loaded by
+	// module base name, never a hardcoded .dll. Sub-plugins
+	// (Render's features, editor components) are installed by their OWN collector,
+	// so the host only installs the top levels.
+	FPluginCatalog::Get().Load();
+	for (const std::string& Layer : FPluginCatalog::Get().GetTopLevel())
+	{
+		Install(ApplyModuleExtension(Layer));
+	}
+	FlushPendingUpdatePipelines<
+		TTypeList<IPreInit, IInit, IPostInit>,
+		TTypeList<IPreShutdown, IShutdown, IPostShutdown>
+	>();
+}
+
+void FEngineBase::PostMain()
+{
+	// Teardown never loads. From here on Install / Reload are REFUSED (and reported),
+	// so a shutdown stage cannot pull a module in while the engine goes down -- and the
+	// loop below can only ever see removals.
+	bTearingDown = true;
+
+	// A load/reload queued by the last frame is dropped: release the instance AND the
+	// module it already loaded (the load itself happened back in Install()).
+	DropPendingInstalls();
+	PendingReloads.clear();
+
+	// Uninstall EVERY live layer -- not just the catalog's TopLevel list: sub-plugins
+	// come and go at runtime, and a layer left behind keeps its DLL loaded, which the
+	// process teardown would then free under a live module. (The catalog is still
+	// loaded from PreMain, and the sub-plugin lookup below needs it.)
+	for (FLayerBase* Layer : Pipelines)
+	{
+		TryUninstall(Layer->GetName());
+	}
+
+	// Apply the shutdown stages, then repeat while they request more (a parent's
+	// Shutdown uninstalls its sub-plugins). Bounded: a dependency cycle must not spin.
+	for (int Pass = 0; Pass < 8 && !PendingRemoveRequests.empty(); ++Pass)
+	{
+		FlushPendingUpdatePipelines<
+			TTypeList<IPreInit, IInit, IPostInit>,
+			TTypeList<IPreShutdown, IShutdown, IPostShutdown>
+		>();
+	}
+
+	// No plugin code may still be running when the host frees the DLLs: stage methods
+	// (the shutdown stages included) may have submitted work to the pool themselves.
+	Pool.Flush();
+
+	if (!PendingRemoveRequests.empty() || !Pipelines.empty())
+	{
+		ReportError((std::string("PostMain: layers left alive after teardown (pending=")
+			+ std::to_string(PendingRemoveRequests.size())
+			+ ", active=" + std::to_string(Pipelines.size())
+			+ ") -- a shutdown dependency edge is missing").c_str());
+	}
+}
+
 int FEngineBase::Main()
 {
-	// Merge the layers installed in PreMain into Pipelines. Their Initialize is
-	// driven by the InitGraph below (do NOT call FlushPendingUpdatePipelines here,
-	// which would init them twice).
-	for (FLayerBase* P : PendingAdded)
-	{
-		Pipelines.push_back(P);
-	}
-	PendingAdded.clear();
-
-	// Init pipeline: drive once with a temporary graph; layers implementing the
-	// init stage interfaces Initialize in dependency order. A broken layer is
-	// reported (non-fatal) and simply never initializes until the topology is
-	// fixed -- no guessing/healing here, the tick graph re-validates below.
-	using FInitStages = TTypeList<IPreInit, IInit, IPostInit>;
-	FLayerTaskGraph<FInitStages, FEngineBase> InitGraph(Pool, *this);
-	InitGraph.Init(Select<IPreInit, IInit, IPostInit>());
-	if (!InitGraph.Compile())
-	{
-		ReportError((std::string("init graph compile failed (layer '")
-			+ InitGraph.GetCompileErrorNode() + "' has a bad dependency)").c_str());
-	}
-	else
-	{
-		InitGraph.Execute();
-		InitGraph.Flush();
-	}
-
-	// Tick pipeline: the main loop. The graph is CACHED across frames and only
-	// re-expanded when OnLayersChanged fires (a layer-set change at a safe point);
-	// the common per-frame path is just Reset + Execute -- no re-Select, no re-wire.
+	// PreMain already installed AND initialized every layer (its
+	// FlushPendingUpdatePipelines drives the init stages), so Main only schedules the
+	// tick pipeline -- an init graph here would Initialize every layer twice.
+	//
+	// The tick graph is CACHED across frames (re-expanded only when OnLayersChanged
+	// fires) and frames PIPELINE: SubmitFrame overlaps up to MAHO_FRAMES_IN_FLIGHT
+	// frames instead of draining the pool every frame.
 	using FTickStages = TTypeList<IBeginFrame, ITick, IEndFrame, IExit>;
 	FLayerTaskGraph<FTickStages, FEngineBase> EngineGraph(Pool, *this);
 	std::string LastCompileErrorNode;
 	OnLayersChanged.Bind([this]() { bLayersDirty = true; });
 	while (true)
 	{
-		EngineGraph.Flush();   // drain the previous frame's foreground tasks
-		FlushPendingUpdatePipelines<TTypeList<IPreInit, IInit, IPostInit>, TTypeList<IPreShutdown, IShutdown, IPostShutdown>>();
+		// A queued install/uninstall/reload is a TOPOLOGY change: the rebuild below
+		// replaces the graph's node storage, so it may only run with the graph idle.
+		if (!PendingAdded.empty() || !PendingRemoveRequests.empty() || !PendingReloads.empty())
+		{
+			EngineGraph.WaitAll();
+			FlushPendingUpdatePipelines<TTypeList<IPreInit, IInit, IPostInit>, TTypeList<IPreShutdown, IShutdown, IPostShutdown>>();
+		}
 
 		if (bLayersDirty)
 		{
 			bLayersDirty = false;
+			EngineGraph.WaitAll();   // the rebuild replaces the node storage
 			EngineGraph.Init(Select<IBeginFrame, ITick, IEndFrame, IExit>());
 			if (!EngineGraph.Compile())
 			{
 				// Report ONCE per distinct breakage (no per-frame spam) and leave a
-				// known-empty graph so Execute() is a no-op. The broken layer is not
+				// known-empty graph so SubmitFrame() is a no-op. The broken layer is not
 				// scheduled until the topology changes (retried then).
 				const std::string Bad = EngineGraph.GetCompileErrorNode();
 				if (Bad != LastCompileErrorNode)
@@ -161,43 +210,40 @@ int FEngineBase::Main()
 					ReportError((std::string("layer graph compile failed (missing dependency or cycle); "
 						"layer '") + Bad + "' is not scheduled until the topology is fixed").c_str());
 				}
-				EngineGraph.Init({});   // empty graph -> Execute() is a no-op
-				continue;
+				EngineGraph.Init({});   // empty graph -> SubmitFrame() is a no-op
 			}
 		}
-		EngineGraph.Execute();
 
-		// An input layer (e.g. GameInputLayer) calls RequestExit inside Tick;
-		// this frame's Execute has already finished, so check the exit flag here safely.
+		// NOT a barrier: it waits only for the ring slot it is about to reuse, so up to
+		// K frames are in flight. Cross-frame safety comes from the per-layer gate in
+		// the graph (a layer never overlaps its own previous frame), not from here.
+		EngineGraph.SubmitFrame();
+
+		// An input layer (e.g. GameInputLayer) calls RequestExit inside Tick. The
+		// current frame may still be executing -- the tail WaitAll() drains it.
 		if (bIsShuttingDown.load(std::memory_order_acquire))
 		{
-			EngineGraph.Flush();
 			break;
 		}
 	}
 
-	// Drain the pool before tearing down -- a last-frame task must not race the
-	// shutdown graph below.
+	// Quiescence before teardown, and it has to cover BOTH:
+	//  - the graph: every in-flight frame must finish (PostMain uninstalls layers,
+	//    which must not race a stage method still executing);
+	//  - the pool: stage methods submit their own async work (nested graph work,
+	//    asset/RHI helpers) that no frame fence tracks. PostMain is about to free
+	//    plugin DLLs -- a module must never be unloaded under running code.
+	EngineGraph.WaitAll();
 	Pool.Flush();
 
-	// Shutdown pipeline: drive once with a temporary graph; layers implementing
-	// the shutdown stage interfaces Shutdown in dependency order.
-	using FShutdownStages = TTypeList<IPreShutdown, IShutdown, IPostShutdown>;
-	FLayerTaskGraph<FShutdownStages, FEngineBase> ShutdownGraph(Pool, *this);
-	ShutdownGraph.Init(Select<IPreShutdown, IShutdown, IPostShutdown>());
-	if (!ShutdownGraph.Compile())
+#ifndef NDEBUG
+	// Debug-only evidence that frames really overlap (look next to the executable).
 	{
-		ReportError("FEngineBase::Main: shutdown pipeline Compile failed");
+		std::ofstream Out("TaskGraphStats.txt", std::ios::app);
+		Out << "frames: max in flight = " << EngineGraph.GetMaxFramesInFlight()
+			<< " (ring depth " << EngineGraph.GetRingDepth() << ")\n";
 	}
-	else
-	{
-		ShutdownGraph.Execute();
-		ShutdownGraph.Flush();
-	}
-
-	// Delete feature instances first (virtual dtors live in their own DLLs), then release the DLLs.
-	Features.clear();
-	Modules.clear();
+#endif
 
 	return 0;
 }

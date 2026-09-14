@@ -63,6 +63,15 @@ public:
 	 *  Returns true on success. */
 	bool Install(std::string_view DllPath, const char* FactorySymbol = "CreateLayer")
 	{
+		// The host sets this while tearing down: loading a module then is never right
+		// (its stages would never run and its DLL would outlive the teardown order), so
+		// it is refused LOUDLY instead of being silently dropped later.
+		if (bTearingDown)
+		{
+			ReportError((std::string("Install refused: the engine is tearing down (") + std::string(DllPath) + ")").c_str());
+			return false;
+		}
+
 		auto Asm = std::make_unique<FAssembly>(DllPath);
 		if (!Asm->IsLoaded())
 		{
@@ -116,6 +125,12 @@ public:
 	 *  is still depended on. */
 	void Reload(std::string_view LayerName)
 	{
+		if (bTearingDown)
+		{
+			ReportError((std::string("Reload refused: the engine is tearing down (") + std::string(LayerName) + ")").c_str());
+			return;
+		}
+
 		for (FLayerBase* L : Pipelines)
 		{
 			if (L->GetName() != LayerName)
@@ -253,6 +268,21 @@ protected:
 		{
 			OnLayersChanged.Broadcast();
 		}
+	}
+
+	/** Discard installs that were queued but never applied. Install() loads the module
+	 *  and builds the instance RIGHT AWAY (only the init stages are deferred), so
+	 *  dropping the queue is not enough: the instance and its module have to be
+	 *  released too -- otherwise they survive to ~FLayerCollector, i.e. past every
+	 *  other layer's unload, and freeing a module whose dependencies are already gone
+	 *  is exactly where a detach crash lives. */
+	void DropPendingInstalls()
+	{
+		for (FLayerBase* Layer : PendingAdded)
+		{
+			DeleteUnloaded(Layer);
+		}
+		PendingAdded.clear();
 	}
 
 private:
@@ -488,6 +518,11 @@ private:
 	}
 
 protected:
+	/** Set by the host while tearing down: Install / Reload are refused from then on,
+	 *  so a shutdown stage cannot pull a module in while the engine goes down, and
+	 *  the teardown loop can only ever see removals. */
+	bool bTearingDown = false;
+
 	std::vector<FLayerBase*> Pipelines;               // active layers (anonymous)
 	std::vector<FLayerBase*> PendingAdded;            // pending installs
 	std::set<FLayerBase*>    PendingRemoveRequests;   // pending uninstall requests

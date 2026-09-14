@@ -16,20 +16,18 @@ namespace Maho
 {
 void FExampleEngine::PreMain()
 {
-	// Engine layers install from the runtime catalog's TopLevel list (codegen
-	// stages it as PluginCatalog.json next to the binary). Each is loaded by
-	// module base name, never a hardcoded .dll. Sub-plugins
-	// (Render's features, editor components) are installed by their OWN collector,
-	// so the host only installs the top levels.
-	FPluginCatalog::Get().Load();
-	for (const std::string& Layer : FPluginCatalog::Get().GetTopLevel())
-	{
-		Install(ApplyModuleExtension(Layer));
-	}
+	FEngineBase::PreMain();
+	/*
+		TODO something
+	*/
 }
 
 void FExampleEngine::PostMain()
 {
+	/*
+		TODO something
+	*/
+	FEngineBase::PostMain();
 }
 
 } // namespace Maho
