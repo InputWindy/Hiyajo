@@ -17,21 +17,22 @@ namespace Maho
 
 struct FEmptyContext {};
 
-// -- 3. Extract the stage sequence from a pipeline (pipeline exposes the TStages member) --
-
-template <typename P> struct TStagesOf { using Type = typename P::TStages; };
-
-// -- 4. FLayerTaskGraph: a set of FLayer -> compile -> execute -------------------------
+// -- 3. FLayerTaskGraph: a set of FLayer -> compile -> execute -------------------------
 
 /**
  * Layer task graph -- bridges a set of anonymous FLayer instances into a
- * FTaskGraph. CONTRACT: TStages is a TTypeList<StageInterface...>; every
- * FLayer passed in MUST implement every stage interface it mounts (filtered by
- * the caller via FQuery). Per layer the graph expands one node per stage:
+ * FTaskGraph. CONTRACT: TStages is a TTypeList<StageInterface...>. Every layer
+ * passed in expands into ONE NODE PER STAGE OF TStages; a node whose stage the
+ * layer does not implement is perfectly legal -- its dispatch is a silent no-op
+ * (the dynamic_cast in the Invoke specialization fails). Edges, per layer:
  *   - self-progression: stage N depends on stage N-1 of the SAME layer
  *   - cross-object deps: the layer's own declared deps at that stage
+ * Hence the rule "install a layer into the collector whose stage list it mounts":
+ * a layer whose stages are NOT in TStages still gets its no-op nodes, but it is
+ * never actually driven AND the deps it declared at those foreign stages never
+ * become edges -- Compile cannot even validate them.
  * Then Compile wires everything; Execute dispatches each ready node through the
- * free function Invoke<TStage>(Layer, Engine).
+ * free function Invoke<TStage>(Layer, Context).
  *
  *   using FTickStages = TTypeList<IBeginFrame, ITick, IEndFrame, IExit>;
  *   FLayerTaskGraph<FTickStages> G(Pool, Engine);
@@ -56,7 +57,7 @@ public:
 	{
 	}
 
-			/** (Re)build the graph from a layer set -- callable repeatedly (each frame / reconfigure). */
+	/** (Re)build the graph from a layer set -- callable repeatedly (each frame / reconfigure). */
 	void Init(std::vector<FLayerBase*> Layers)
 	{
 		NodeStorage.clear();
@@ -125,13 +126,13 @@ private:
 		Node.Stage = std::type_index(typeid(TCurrent));
 		Node.Layer = Layer;
 
-			// Self-progression: depend on my own previous stage.
-			if (PrevStage != NoStage)
-			{
-				Node.Dependencies.push_back({ Node.Name, PrevStage });
-			}
+		// Self-progression: depend on my own previous stage.
+		if (PrevStage != NoStage)
+		{
+			Node.Dependencies.push_back({ Node.Name, PrevStage });
+		}
 
-			// Cross-object dependencies: the dependency tuples declared at this stage.
+		// Cross-object dependencies: the dependency tuples declared at this stage.
 		if (auto It = Layer->GetDependencies().find(Node.Stage);
 			It != Layer->GetDependencies().end())
 		{
@@ -154,7 +155,7 @@ private:
 	{
 	}
 
-			// Runtime stage -> compile-time type match + the layer's embedded Invoke dispatch.
+	// Runtime stage -> compile-time type match + the layer's embedded Invoke dispatch.
 	void Dispatch(FLayerBase* Layer, const std::type_index& Stage)
 	{
 		DispatchImpl(Layer, Stage, FStages{});

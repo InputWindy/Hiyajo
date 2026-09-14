@@ -81,12 +81,14 @@ struct FTaskGraphNode
  * Cross-frame scheduling: each submit gets its own ring slot (MAHO_FRAMES_IN_FLIGHT
  * slots), so per-frame state no longer has to be Reset between frames, and
  * SubmitFrame keeps its own slot-reuse guard (it waits for the frame it overwrites).
- * Frames do NOT overlap today: the ring-reuse guard plus the host's per-frame drain
- * keep exactly one frame in flight, which makes the graph structurally free of
- * cross-frame cycles (every edge points back in frame time). Overlapping frames is a
- * follow-up that needs an explicit per-layer cross-frame mechanism -- the first
- * attempt (a per-layer gate) could wedge a layer's instance permanently, so it was
- * removed rather than shipped.
+ *
+ * Frames DO overlap. Cross-frame safety comes from the per-layer gate (FGroupGate):
+ * a layer's root node either CLAIMS its group or PARKS until the running instance's
+ * sink hands the gate over, so frame N+1 of a layer never overlaps its own frame N
+ * (its stage methods touch the layer's frame state, and its async resources assume
+ * the previous frame is done) -- while DIFFERENT layers still pipeline across frames.
+ * The hand-over is count-free (claim-or-park + exactly one sink pop per instance),
+ * so there is no counter to drift out of sync.
  *
  * Execution protocol is delegated to subclasses via ExecuteNode(): the base
  * FTaskGraphNode carries only {Name, Stage, Dependencies}; a subclass defines
@@ -139,16 +141,6 @@ public:
 
 	/** True when no frame is in flight. */
 	[[nodiscard]] bool IsIdle() const noexcept;
-
-	/** Ring depth (MAHO_FRAMES_IN_FLIGHT): how many frames may be in flight. */
-	[[nodiscard]] std::uint32_t GetRingDepth() const noexcept { return RingDepth; }
-
-	/** High-water mark of frames in flight at once (Debug builds track it). */
-	[[nodiscard]] std::uint32_t GetMaxFramesInFlight() const noexcept { return MaxInFlight.load(); }
-
-	/** Frames this graph submitted over its lifetime (monotonic across rebuilds).
-	 *  Diagnostics: a stalled/never-rendering graph shows a tiny number here. */
-	[[nodiscard]] std::uint64_t GetSubmittedFrames() const noexcept { return NextFrame > 1 ? NextFrame - 1 : 0; }
 
 	/** Name of the node whose dependency broke the last Compile (empty if none).
 	 *  Since node Name == the layer name, this identifies the offending layer. */
@@ -232,7 +224,6 @@ private:
 	std::vector<std::unique_ptr<FFrameSlot>>  Ring;       // MAHO_FRAMES_IN_FLIGHT slots
 	std::uint32_t                             RingDepth = MAHO_FRAMES_IN_FLIGHT;
 	std::uint64_t                             NextFrame = 1;   // frame id of the next SubmitFrame
-	std::atomic<std::uint32_t>                MaxInFlight{ 0 };   // frames in flight, high-water mark
 };
 
 } // namespace Maho

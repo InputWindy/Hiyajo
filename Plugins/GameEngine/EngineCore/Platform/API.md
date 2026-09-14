@@ -33,7 +33,7 @@ Platform 插件 = 原生表面 + 事件服务层，作为引擎 10 阶段帧层�
 
 | 签名 | 说明 |
 |------|------|
-| `FPlatform()` | 构造；`AddDependency(IInit, "FConfig", IInit)` |
+| `FPlatform()` | 构造；`MyStage<IInit>().IsWaiting<Config::FConfig>().ForStage<IInit>();` + `MyStage<IInit>().IsWaiting<FLog>().ForStage<IInit>();` |
 | `~FPlatform() override` | 析构 |
 | `bool CreateWindow(int Width, int Height, std::string_view Title)` | 创建窗口（按当前平台选后端）；失败返回 false |
 | `bool CreateHeadlessContext(int Width, int Height)` | 创建 headless 渲染上下文（Linux 上 EGL pbuffer） |

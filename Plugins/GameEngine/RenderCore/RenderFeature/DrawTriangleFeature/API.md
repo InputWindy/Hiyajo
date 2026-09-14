@@ -9,7 +9,7 @@
 ```cpp
 FDrawTriangleFeature::FDrawTriangleFeature()
 {
-    AddDependency(std::type_index(typeid(IRender)), "FScene", std::type_index(typeid(IRender)));
+    MyStage<IRender>().IsWaiting<Scene::FScene>().ForStage<IEndRender>();
 }
 ```
 

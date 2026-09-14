@@ -14,7 +14,7 @@ Exit     : closing the window -> FPlatform::RequestExit -> main loop ends -> sym
 ```
 
 - **Scene** is a global render-resource feature: it owns the shared off-screen targets (`SceneColor` / `SceneDepth`), clears them in its `Render` stage, and blits the color target to the swapchain backbuffer in `Present`.
-- **DrawTriangleFeature** mounts only the `IRender` stage. It lazily compiles an embedded fullscreen-triangle GLSL (via `FShaderCompilerServer`), builds a Vulkan graphics pipeline with dynamic rendering, and draws after Scene's clear (declared dependency `Scene.Render`).
+- **DrawTriangleFeature** mounts only the `IRender` stage. It lazily compiles an embedded fullscreen-triangle GLSL (via `FShaderCompilerServer`), builds a Vulkan graphics pipeline with dynamic rendering, and draws after Scene's clear (declared dependency `Scene.EndRender`).
 
 ## Directory Structure
 
@@ -48,7 +48,7 @@ ExampleEngine/
 ```cpp
 class FExampleEngine : public FEngineBase
 {
-    MAHO_DECLARE_ENGINE(FExampleEngine, "ExampleEngine.dll");
+    MAHO_DECLARE_ENGINE(FExampleEngine);
 
 public:
     void PreMain() override;
@@ -89,7 +89,7 @@ namespace Maho::Scene
 {
 class FScene : public FLayer<IBeginRender, IRender, IEndRender, IPresent>
 {
-    MAHO_DECLARE_LAYER(FScene, "Scene.dll");
+    MAHO_DECLARE_LAYER(FScene);
 
 public:
     FRDGTextureRef GetSceneColor() const { return SceneColor; }
@@ -120,7 +120,7 @@ Stage behavior:
 ```cpp
 class FDrawTriangleFeature : public FLayer<IRender>
 {
-    MAHO_DECLARE_LAYER(FDrawTriangleFeature, "DrawTriangleFeature.dll");
+    MAHO_DECLARE_LAYER(FDrawTriangleFeature);
 public:
     void Render(FRender& R) override;
     ...
@@ -132,7 +132,7 @@ Its constructor declares the cross-feature dependency - draw after Scene's clear
 ```cpp
 FDrawTriangleFeature::FDrawTriangleFeature()
 {
-    AddDependency(std::type_index(typeid(IRender)), "FScene", std::type_index(typeid(IRender)));
+    MyStage<IRender>().IsWaiting<Scene::FScene>().ForStage<IEndRender>();
 }
 ```
 

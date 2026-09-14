@@ -2,15 +2,15 @@
 
 ## Code Files
 
-- [Engine.cpp](Engine.cpp) — FEngineBase 主循环 / 命令行解析 / 退出标志
-- [Layer.cpp](Layer.cpp) — FLayerBase 析构 / 运行时依赖声明
+- [Engine.cpp](Engine.cpp) — FEngineBase 主循环 / 命令行解析 / PreMain·PostMain 生命周期 / 退出闸门
+- [Layer.cpp](Layer.cpp) — FLayerBase 虚析构 / `GetDependencies()` / 按名字寻址的依赖落点
 
 ## Concept -- Implementation
 
 Engine 层主体（`FLayerBase` / `FLayer` / `FLayerTaskGraph` / `LayerCollector`）是模板 + 内联实现，全在 `Source/Public/Engine/` 头文件里。Private 侧只有两个 cpp：
 
-- **Engine.cpp**：`FEngineBase` 的非模板成员——命令行解析（CLI11）、`Main()` 主循环（Init 图 → Tick 循环 → Shutdown 图）、`RequestExit()`、KV 读取。
-- **Layer.cpp**：`FLayerBase` 的虚析构、`GetDependencies()`、运行时字符串寻址的 `AddDependency` 重载。
+- **Engine.cpp**：`FEngineBase` 的非模板成员——命令行解析（CLI11）、`PreMain`（装载 + 初始化）/ `PostMain`（卸载 + 排干）、`Main()`（纯调度 Tick 环：帧边界应用挂起更新、拓扑变更时重展开、`SubmitFrame`、读 `ShouldExit()`）、`RequestExit()`、KV 读取。
+- **Layer.cpp**：`FLayerBase` 的虚析构、`GetDependencies()`、以及按名字寻址的 `WaitFor` / `BlockOn` 落点（`private`，只由依赖 DSL 的 builder 调用）。
 
 逐函数伪代码见 [EngineAPI.md](EngineAPI.md)。
 

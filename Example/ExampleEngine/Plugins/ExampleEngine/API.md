@@ -13,7 +13,7 @@
 | `void PreMain() override` | 安装引擎服务层（`Install("Log.dll")` 等） |
 | `void PostMain() override` | 出口钩子（本例为空） |
 
-## MAHO_DECLARE_ENGINE(FExampleEngine, "ExampleEngine.dll") <宏>
+## MAHO_DECLARE_ENGINE(FExampleEngine) <宏>
 
 生成 `static FEngineBase* CreateEngine()` 工厂 + `GetModulePath()`。
 

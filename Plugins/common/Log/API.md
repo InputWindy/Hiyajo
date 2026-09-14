@@ -1,6 +1,6 @@
 # Log — API 文档
 
-服务层：`FLog` 是 `FLayer<IPreInit, IInit, IPostInit, IPreShutdown, IShutdown, IPostShutdown>`（`Log.dll`）——**不是单例**，实例由引擎层系统持有、经 `GetLog()` 发布。`Initialize` 拉起 spdlog 日志器（stdout 彩色 + 轮转文件，遵守 `--log-level`）并发布 `this`；`Shutdown` flush + 撤销。spdlog 藏在 `Logger` 不完整类型后面，调用方永远看不到 spdlog 类型。
+服务层：`FLog` 是 `FLayer<IPreInit, IInit, IPostInit, IPreShutdown, IShutdown, IPostShutdown>`（`FLog.dll`）——**不是单例**，实例由引擎层系统持有、经 `GetLog()` 发布。`Initialize` 拉起 spdlog 日志器（stdout 彩色 + 轮转文件，遵守 `--log-level`）并发布 `this`；`Shutdown` flush + 撤销。spdlog 藏在 `Logger` 不完整类型后面，调用方永远看不到 spdlog 类型。
 
 ## Log.h
 
@@ -27,7 +27,7 @@
 
 | 签名 | 说明 |
 |------|------|
-| `MAHO_DECLARE_LAYER(FLog, "Log.dll")` | 层声明宏（DLL 导出入口） |
+| `MAHO_DECLARE_LAYER(FLog)` | 层声明宏（DLL 导出入口） |
 | `FLog()` / `~FLog() override` | 默认构造 / 析构（析构处 `spdlog::logger` 完整类型可见） |
 | `template<typename... Args> void Trace(fmt::format_string<Args...> Fmt, Args&&... A)` | 记录 Trace 级（fmt 编译期检查） |
 | `template<typename... Args> void Debug(fmt::format_string<Args...> Fmt, Args&&... A)` | 记录 Debug 级 |

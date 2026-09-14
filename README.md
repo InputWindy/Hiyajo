@@ -95,7 +95,7 @@ When creating a plugin, scaffold a bare layer with `CreatePlugin.bat` (or `Tools
 // entry - application root
 class FMyGame : public Maho::FEngineBase
 {
-    MAHO_DECLARE_ENGINE(FMyGame, "MyGame.dll");
+    MAHO_DECLARE_ENGINE(FMyGame);
 public:
     void PreMain() override;
     void PostMain() override;
@@ -104,7 +104,7 @@ public:
 // feature - feature layer (mounts only the stage interfaces it needs)
 class FRenderer : public Maho::FLayer<Maho::IBeginFrame, Maho::ITick, Maho::IEndFrame>
 {
-    MAHO_DECLARE_LAYER(FRenderer, "Renderer.dll");
+    MAHO_DECLARE_LAYER(FRenderer);
 public:
     void BeginFrame(Maho::FEngineBase&) override;
     void Tick(Maho::FEngineBase&) override;
@@ -148,9 +148,11 @@ class FLayerBase
     virtual std::string_view GetName() const = 0;   // stable identity name (topology key)
     const FDependencyTable& GetDependencies() const; // per-stage dependency table
 protected:
-    template <typename TMyStage, typename TDepObj, typename TDepStage>
-    void AddDependency();   // compile-time dependency: this at TMyStage depends on TDepObj at TDepStage
-    void AddDependency(type_index, string_view, type_index);  // runtime dependency (cross-DLL string addressing)
+    // dependency declaration DSL (the raw WaitFor/BlockOn templates and both tables are private)
+    MyStage<TMyStage>().IsWaiting<TOther>().ForStage<TOtherStage>();          // forward, by type
+    MyStage<TMyStage>().IsBlocking<TOther>().OnStage<TOtherStage>();          // reverse, by type
+    MyStage<TMyStage>().IsWaiting("FLog").ForStage<TOtherStage>();            // forward, by name
+    MyStage<TMyStage>().IsBlocking("FUIViewRegistry").OnStage<TOtherStage>(); // reverse, by name
 };
 ```
 
@@ -174,14 +176,14 @@ Cross-feature dependency (declared in the feature constructor):
 ```cpp
 class FWorld : public FLayer<ITick>
 {
-    MAHO_DECLARE_LAYER(FWorld, "World.dll");
+    MAHO_DECLARE_LAYER(FWorld);
 public:
     FWorld()
     {
-        // my Tick depends on FLog's BeginFrame (compile-time)
-        AddDependency<ITick, FLog, IBeginFrame>();
-        // or runtime string addressing (cross-DLL)
-        AddDependency(std::type_index(typeid(ITick)), "FLog", std::type_index(typeid(IBeginFrame)));
+        // my Tick depends on FLog's BeginFrame (compile-time, by type)
+        MyStage<ITick>().IsWaiting<FLog>().ForStage<IBeginFrame>();
+        // or by name (cross-DLL string addressing)
+        MyStage<ITick>().IsWaiting("FLog").ForStage<IBeginFrame>();
     }
 };
 ```
@@ -248,7 +250,7 @@ ExampleEngine/
 // ExampleEngine.h
 class FExampleEngine : public FEngineBase
 {
-    MAHO_DECLARE_ENGINE(FExampleEngine, "ExampleEngine.dll");
+    MAHO_DECLARE_ENGINE(FExampleEngine);
 public:
     void PreMain() override;
     void PostMain() override;
@@ -283,7 +285,7 @@ extern "C" MAHO_EXAMPLEENGINE_API Maho::FEngineBase* CreateEngine()
 // Scene.h - scene feature, mounts all four render stages
 class FScene : public FLayer<IBeginRender, IRender, IEndRender, IPresent>
 {
-    MAHO_DECLARE_LAYER(FScene, "Scene.dll");
+    MAHO_DECLARE_LAYER(FScene);
     ...
 };
 ```
@@ -294,7 +296,7 @@ class FScene : public FLayer<IBeginRender, IRender, IEndRender, IPresent>
 // DrawTriangleFeature.h
 class FDrawTriangleFeature : public FLayer<IRender>
 {
-    MAHO_DECLARE_LAYER(FDrawTriangleFeature, "DrawTriangleFeature.dll");
+    MAHO_DECLARE_LAYER(FDrawTriangleFeature);
 public:
     void Render(FRender& R) override;
     ...
@@ -306,7 +308,7 @@ The cross-feature dependency is declared in the constructor, so the triangle dra
 ```cpp
 FDrawTriangleFeature::FDrawTriangleFeature()
 {
-    AddDependency(std::type_index(typeid(IRender)), "FScene", std::type_index(typeid(IRender)));
+    MyStage<IRender>().IsWaiting<Scene::FScene>().ForStage<IEndRender>();
 }
 ```
 

@@ -50,7 +50,7 @@ Script::GetScriptSystem()->Call("OnUpdate", dt);    // 宿主逐帧驱动
 
 | 签名 | 说明 |
 |------|------|
-| `MAHO_DECLARE_LAYER(FScriptSystem, "Script.dll")` | 层声明（`CreateLayer` 导出，宿主按符号名查找动态安装） |
+| `MAHO_DECLARE_LAYER(FScriptSystem)` | 层声明（`CreateLayer` 导出，宿主按符号名查找动态安装） |
 | `FScriptSystem()` | 构造（构造期声明依赖 FLog 的 IInit——日志必须先初始化） |
 | `using FOnLanguageReady = TMulticastEvent<void(IScriptLanguage&)>` | 每个语言 `Initialize` 成功后广播（绑定队列已跑完） |
 | `void RegisterLanguage(IScriptLanguage* Language)` | 安装语言后端（宿主接管所有权）；按 `GetName()` 幂等——重名丢弃新实例 |
@@ -111,6 +111,6 @@ public:
 
 ### MAHO_SCRIPT_API <宏>
 
-DLL 导出/导入宏（模块边界）。构建 Script.dll 时 `MAHO_EXPORT`，消费方 `MAHO_IMPORT`。
+DLL 导出/导入宏（模块边界）。构建 FScriptSystem.dll 时 `MAHO_EXPORT`，消费方 `MAHO_IMPORT`。
 
 - [Script.md](Script.md) — 概念 · [实现字典](ImplAPI.md) — 算法

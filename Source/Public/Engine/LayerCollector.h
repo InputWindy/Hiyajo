@@ -68,12 +68,11 @@ public:
 	};
 
 	/** Payload of one status broadcast. All strings are COPIES: a layer's module may be
-	 *  unloaded immediately after the call, and the Name pool may already be gone during
-	 *  teardown -- nothing here points into either. */
+	 *  unloaded immediately after the call, so nothing here may point into it. */
 	struct FLayerStatusInfo
 	{
 		ELayerStatus Status = ELayerStatus::InstallQueued;
-		std::string  Name;     // the layer's name as stored by the collector (pool-free)
+		std::string  Name;     // the layer's name as stored by the collector (no vtable call)
 		std::string  Path;     // the DLL path it was loaded from / would be loaded from
 		std::string  Detail;   // why it was refused, who depends on it, which dep failed...
 	};
@@ -194,9 +193,9 @@ protected:
 			return false;
 		}
 
-		// Copy the name ONCE, into collector-owned storage: from here on the collector
-		// never asks the Name pool for it again (the pool is shut down before the
-		// collector finishes matching / reporting during teardown).
+		// Copy the name ONCE, into collector-owned storage: from here on the collector can
+		// match / report this layer without a virtual call into its module -- which may be
+		// released long before the parallel slot vectors are.
 		const std::string Name(Layer->GetName());
 
 		// One instance per name -- a duplicate would silently shadow the old one.
@@ -302,7 +301,8 @@ protected:
 	{
 		const std::string Path(Query);
 
-		// 1) Exact layer name -- matched through the collector's stored (pool-free) copy:
+		// 1) Exact layer name -- matched through the collector's stored copy, so matching
+		//    never calls into the layer's module.
 		//    callers like GameWorld/Render pass a layer's name and must keep working.
 		for (FLayerBase* L : Pipelines)
 		{
@@ -547,10 +547,11 @@ public:
 
 private:
 
-	/** The layer's name as stored by the collector (a plain string copied at Install) --
-	 *  NEVER through the Name pool. The pool is shut down during teardown while the
-	 *  collector still matches names, feeds status payloads and writes traces, and
-	 *  `FName::ToString()` on a cleared pool reads freed storage. Empty when unknown. */
+	/** The layer's name as stored by the collector (a plain string copied at Install):
+	 *  naming a layer this way needs NO call into its module. That matters because the
+	 *  parallel slot vectors outlive the module of a released layer -- DeleteUnloaded
+	 *  clears the name right next to resetting the instance, so matching / reporting
+	 *  during teardown never runs plugin code. Empty when unknown. */
 	[[nodiscard]] std::string_view StoredName(const FLayerBase* Layer) const
 	{
 		const std::size_t Slot = SlotOf(Layer);
@@ -915,7 +916,7 @@ protected:
 	std::vector<std::unique_ptr<FAssembly>> Modules;  // DLL keep-alive (move-only)
 	std::vector<std::string> ModulePaths;             // parallel to Modules/Features: DLL path per layer
 	std::vector<std::string> LayerNames;              // parallel too: the layer's name, copied at Install
-	                                                  // (pool-free: teardown matches / reports through this)
+	                                                  // (teardown matches / reports without a vtable call)
 
 	/** name -> slot in the parallel vectors. The one O(log n) lookup behind HasLayerName /
 	 *  StoredName, kept in sync by Install (insert) and DeleteUnloaded (erase). */

@@ -315,23 +315,6 @@ FFrameFence FTaskGraph::SubmitFrame()
 		}
 	}
 
-	// Frames in flight right now (this one included), for the high-water mark.
-	std::uint32_t InFlight = 0;
-	{
-		const std::uint64_t FirstAlive = NextFrame > RingDepth ? NextFrame - RingDepth : 1;
-		for (std::uint64_t F = FirstAlive; F <= Frame; ++F)
-		{
-			if (Ring[F % RingDepth]->Serial.load(std::memory_order_acquire) < F)
-			{
-				InFlight += 1;
-			}
-		}
-	}
-	if (InFlight > MaxInFlight.load(std::memory_order_relaxed))
-	{
-		MaxInFlight.store(InFlight, std::memory_order_relaxed);
-	}
-
 	return Frame;
 }
 

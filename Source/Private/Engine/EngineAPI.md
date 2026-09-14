@@ -9,20 +9,16 @@ cpp 侧每个函数的算法伪代码解释。Public 侧 API 文档通过 `#fn-.
 
 ← [公开 API](../../Public/Engine/EngineAPI.md) · `int`
 
-主循环：Init 图（一次）→ Tick 图（循环）→ Shutdown 图（一次）。每帧先等上一帧排空，再应用挂起安装/卸载，重建 Tick 图后异步派发；检查退出标志。
+主循环＝**纯调度 Tick 环**（不建 Init/Shutdown 图：装载与初始化归 `PreMain`，卸载与 Shutdown 归 `PostMain`）。帧之间会重叠——`SubmitFrame` 只等自己要复用的环槽，跨帧安全由图的每层 gate 保证。
 
 ```text
 Main():
-1. 把 PendingAdded 合并进 Pipelines（此处不调 FlushPendingUpdatePipelines，避免重复 init）
-2. Init 图：
-   InitGraph(FInitStages=IPreInit,IInit,IPostInit).Init(Select<这些阶段>())
-   Compile 失败 → ReportFatal
-   Execute(); Flush()
-3. Tick 循环：
+1. 构造 Tick 图（缓存）并绑定 OnLayersChanged → bLayersDirty
+2. Tick 循环：
    while true:
      if 有挂起安装/卸载/重载:                       // 拓扑变更要求图静止
        EngineGraph.WaitAll()
-       FlushPendingUpdatePipelines<IPreInit,IInit,IPostInit, IPreShutdown,IShutdown,IPostShutdown>()
+       FlushPendingUpdatePipelines<TInit, TShutdown>()
      if bLayersDirty:
        EngineGraph.WaitAll(); EngineGraph.Init(Select<IBeginFrame,ITick,IEndFrame,IExit>())
        Compile 失败 → 报一次 + 退化成空图
@@ -30,7 +26,6 @@ Main():
      if ShouldExit():                             // 本帧已提交完，安全读退出标志
          break
    EngineGraph.WaitAll(); Pool.Flush()            // 退出前：图 + 池 双静止
-主循环不再建 Init/Shutdown 图 —— 安装/初始化归 PreMain，卸载/Shutdown 归 PostMain。
 ```
 
 <a id="fn-engine-parsecmd"></a>
@@ -88,7 +83,7 @@ GetInt(Key): 空 → 0; stoi(Get(Key)) 失败 → 0
 
 ← [公开 API](../../Public/Engine/EngineAPI.md) · `virtual` / `const FDependencyTable&`
 
-析构默认实现；`GetDependencies()` 返回内部 `Dependencies` 表（引用，不拷贝）。
+析构默认实现；`GetDependencies()` 返回内部 `Dependencies` 表（引用，不拷贝）。`GetDependents()` 是头里的内联实现，不在此处。
 
 ```text
 ~FLayerBase() = default
@@ -96,15 +91,18 @@ GetDependencies(): return Dependencies
 ```
 
 <a id="fn-layer-adddep-runtime"></a>
-### FLayerBase::AddDependency(type_index, string_view, type_index)
+### FLayerBase::WaitFor(type_index, string_view, type_index) / BlockOn(string_view, type_index, type_index)
 
-← [公开 API](../../Public/Engine/EngineAPI.md) · `void`
+← [公开 API](../../Public/Engine/EngineAPI.md) · `void`（两成员均 `private`，只由 DSL builder 触达）
 
-运行时字符串寻址的依赖声明（跨 DLL feature 用层名点名依赖）：`this 在 MyStage 依赖 DepName 在 DepStage`。
+**按名字寻址**的依赖落点：跨 DLL 的 feature 用层名点名依赖，从而不对可选插件建立构建依赖。头文件里只有声明，实现落在这里；唯一调用者是 `Layer.h` 的 `FWaitForNamedBuilder` / `FBlockOnNamedBuilder` 嵌套类（嵌套类可访问外层 `private`）。点类型的 `WaitFor<...>()` / `BlockOn<...>()` 是模板，内联在头里。
 
 ```text
-AddDependency(MyStage, DepName, DepStage):
-1. Dependencies[MyStage].push_back({ string(DepName), DepStage })
+WaitFor(MyStage, OtherName, OtherStage):
+1. Dependencies[MyStage].push_back({ string(OtherName), OtherStage })
+
+BlockOn(OtherName, OtherStage, MyStage):
+1. Dependents.push_back({ string(OtherName), OtherStage, MyStage })
 ```
 
 - [EngineDoc.md](EngineDoc.md) — 实现目录 · [公开 API](../../Public/Engine/EngineAPI.md) — 签名入口
