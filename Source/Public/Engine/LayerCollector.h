@@ -164,16 +164,19 @@ public:
 		ReportError((std::string("Reload: no active layer named ") + std::string(LayerName)).c_str());
 	}
 
-	/** Anonymous unload. Accepts a query identifying the layer, matching the FIRST
+	/** Anonymous unload of ONE layer. Accepts a query identifying it, matching the FIRST
 	 *  layer whose GetName() equals it (e.g. "FScene") OR whose installed DLL path
 	 *  equals it (e.g. "EditorConsole.dll") -- the latter is symmetric with
-	 *  Install("...dll"). A pointer-installed layer has no DLL path, so it matches
-	 *  only by name. Ignored when absent (no error).
+	 *  Install("...dll"). A pointer-installed layer has no DLL path, so it matches only
+	 *  by name. Ignored when absent (no error).
 	 *
-	 *  A parent layer takes its catalog-declared sub-plugins with it (recursively):
-	 *  they were installed BY the parent (InstallChildrenOf) and are unreachable --
-	 *  and would leak -- once it is gone. The unload heap still orders the batch
-	 *  dependency-safely. */
+	 *  DIRECT layers only, mirroring InstallChildrenOf: each layer installs its own
+	 *  children into its own collector and uninstalls them in its own Shutdown, so
+	 *  uninstalling a parent must NOT walk the catalog tree below it. Doing that looked
+	 *  up child names in THIS collector's active set, where a parent's children never
+	 *  live (they live in the parent's collector) -- dead work at best, and a
+	 *  name-collision hazard across collectors at worst (two instances of one layer type
+	 *  in different collectors are legal here). */
 	void TryUninstall(std::string_view Query)
 	{
 		// 1) Exact layer name (GetName()) -- the pre-existing form; callers like
@@ -182,7 +185,7 @@ public:
 		{
 			if (L->GetName() == Query)
 			{
-				RequestUninstallWithSubPlugins(L);
+				RequestUninstall(L);
 				return;
 			}
 		}
@@ -192,7 +195,7 @@ public:
 		{
 			if (Features[I] && I < ModulePaths.size() && ModulePaths[I] == Query)
 			{
-				RequestUninstallWithSubPlugins(Features[I].get());
+				RequestUninstall(Features[I].get());
 				return;
 			}
 		}
@@ -484,29 +487,6 @@ private:
 			TraceTeardown((std::string("  request uninstall ") + std::string(Pipeline->GetName())).c_str());
 			PendingRemoveRequests.insert(Pipeline);
 		}
-	}
-
-	/** Request the unload of a layer AND every catalog-declared sub-plugin below it
-	 *  (children first, recursively). Child lookup is by layer name against the
-	 *  active set -- a child that was never installed is simply skipped. */
-	void RequestUninstallWithSubPlugins(FLayerBase* Pipeline)
-	{
-		if (Pipeline == nullptr)
-		{
-			return;
-		}
-		for (const std::string& Child : FPluginCatalog::Get().GetChildren(Pipeline->GetName()))
-		{
-			for (FLayerBase* L : Pipelines)
-			{
-				if (L->GetName() == Child)
-				{
-					RequestUninstallWithSubPlugins(L);
-					break;
-				}
-			}
-		}
-		RequestUninstall(Pipeline);
 	}
 
 	/** The engine owns feature instances + DLLs; on unload it deletes + FreeLibrary them together. */

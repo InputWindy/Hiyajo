@@ -141,15 +141,15 @@ void FRender::Initialize(FEngineBase& Engine)
 	// is up; unbind in Shutdown.
 	if (Resource::FResourceSystem* RS = Resource::GetResourceSystem())
 	{
-		RS->OnAssetImported.Bind([this](const Name::FName& N, Resource::FOnTransferDone D)
+		AssetImportedSub = RS->OnAssetImported.Bind([this](const Name::FName& N, Resource::FOnTransferDone D)
 		{
 			OnAssetMirrorImported(N, std::move(D));
 		});
-		RS->OnAssetUnloaded.Bind([this](const Name::FName& N, Resource::FOnTransferDone D)
+		AssetUnloadedSub = RS->OnAssetUnloaded.Bind([this](const Name::FName& N, Resource::FOnTransferDone D)
 		{
 			OnAssetMirrorUnloaded(N, std::move(D));
 		});
-		RS->OnAssetCreated.Bind([this](const Name::FName& N, const Resource::FResource& R)
+		AssetCreatedSub = RS->OnAssetCreated.Bind([this](const Name::FName& N, const Resource::FResource& R)
 		{
 			OnAssetMirrorCreated(N, R);
 		});
@@ -166,17 +166,20 @@ void FRender::Initialize(FEngineBase& Engine)
 
 void FRender::PostInitialize(FEngineBase&)
 {
-	// The startup test texture import moved to FGameWorld::PostInitialize (it now
-	// blocks until the texture is resident + mirrored, so the UI texture browser shows
-	// it on the first frame). FRender's asset-mirror delegates are already bound in
-	// Initialize; when the world system imports it, OnAssetImported -> OnAssetMirrorImported
-	// uploads it. Nothing to do here.
-#ifdef MAHO_EDITOR_BUILD
 	// Editor build: mount the editor feature (ExampleEditor, Type=Editor) into OUR
 	// collection so the render graph drives it at IEditorCompose -- sampling the game-UI
 	// composite (UIRenderTarget), drawing the editor overlay, and taking over the present
-	// target. Loads by DLL name (FAssembly), never linked. Runtime builds never define
-	// MAHO_EDITOR_BUILD, so this path is editor-only.
+	// target. It has to live HERE: the render graph only sees this collector, and the
+	// editor layer mounts render stages (IEditorInput/IEditorCompose), not engine ones.
+	//
+	// TODO(teardown order): this belongs in Render.cplugin's Plugins as a declarative
+	// child, but moving it there changes WHEN its module is freed (inside FRender's own
+	// shutdown instead of after the shutdown graph) and FResourceSystem::IShutdown then
+	// touches resources whose types live in that already-unloaded module -- a hard AV.
+	// Fix that first (ResourceSystem must not reach into unloaded plugin types, or the
+	// shutdown edge must order it before FRender), then delete this hardcoded install and
+	// drop ExampleEditor from the project's TopLevel list.
+#ifdef MAHO_EDITOR_BUILD
 	// Loads by module base name + platform suffix, never a hardcoded .dll.
 	if (!Install(Maho::ApplyModuleExtension("FExampleEditor")))
 	{
@@ -210,17 +213,21 @@ void FRender::Shutdown(FEngineBase&)
 	// then the two threaded servers (shader-compile thread + RHI render-server
 	GRender = nullptr;
 
-	// Unbind the asset-mirror delegates. The resource system's Shutdown is ordered
-	// AFTER this one (declared in the ctor), so GetResourceSystem() is live here --
-	// every binding, including SetReadback, is dropped against the live system, never
-	// a nulled global accessor. The mirror table entries are Persistent RDG refs owned
-	// by the resource pool, released by ResourcePool->Shutdown below -- just drop the
-	// refs.
+	// Unbind OUR OWN asset-mirror subscriptions (by id -- RemoveAll() would drop every
+	// other subscriber's handlers on the same event) and retract our readback provider.
+	// The resource system's Shutdown is ordered AFTER this one (declared in the ctor),
+	// so GetResourceSystem() is live here -- every binding is dropped against the live
+	// system, never a nulled global accessor. The mirror table entries are Persistent
+	// RDG refs owned by the resource pool, released by ResourcePool->Shutdown below --
+	// just drop the refs.
 	if (Resource::FResourceSystem* RS = Resource::GetResourceSystem())
 	{
-		RS->OnAssetImported.RemoveAll();
-		RS->OnAssetUnloaded.RemoveAll();
-		RS->OnAssetCreated.RemoveAll();
+		RS->OnAssetImported.Unbind(AssetImportedSub);
+		RS->OnAssetUnloaded.Unbind(AssetUnloadedSub);
+		RS->OnAssetCreated.Unbind(AssetCreatedSub);
+		AssetImportedSub = 0;
+		AssetUnloadedSub = 0;
+		AssetCreatedSub  = 0;
 		RS->SetReadback({});
 	}
 	GpuMirrors.clear();

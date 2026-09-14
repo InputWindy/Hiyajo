@@ -559,6 +559,13 @@ private:
 	 *  GPU mirror resource itself. */
 	std::unordered_map<Name::FName, FRDGResourceRef> GpuMirrors;
 
+	/** OUR OWN subscriptions on the resource system's events. Kept as ids so Shutdown
+	 *  unbinds exactly these three -- never RemoveAll(), which would also drop handlers
+	 *  other plugins registered on the same event. */
+	FSubscriptionID AssetImportedSub = 0;
+	FSubscriptionID AssetUnloadedSub = 0;
+	FSubscriptionID AssetCreatedSub  = 0;
+
 	/** Asset FName -> GPU sampler mirror, built from the texture's GPU sampling config
 	 *  in OnAssetMirrorCreated, resolved via GetMirrorSampler. The sampler is created
 	 *  through the pool (get-or-create, pool-shared); erased on OnAssetMirrorUnloaded. */

@@ -57,6 +57,27 @@ FScene::~FScene()
 	GScene = nullptr;
 }
 
+void FScene::PreUnInstall(FRender& R)
+{
+	(void)R;
+	// Drop the shared targets while OUR module is still loaded: the resource system
+	// outlives this sub-plugin, so a leftover here would be destroyed (dtor / mirror
+	// release) after this DLL is gone.
+	if (Resource::FResourceSystem* RS = Resource::GetResourceSystem())
+	{
+		if (SceneColor.IsValid() || SceneDepth.IsValid())
+		{
+			RS->DestroyResource(kSceneColorName);
+			RS->DestroyResource(kSceneDepthName);
+		}
+	}
+	SceneColor = {};
+	SceneDepth = {};
+	SceneColorLayout = ESceneColorLayout::Undefined;
+	CachedWidth = 0;
+	CachedHeight = 0;
+}
+
 void FScene::EnsureTargets(FRender& R)
 {
 	const std::uint32_t W = R.GetCanvasWidth();

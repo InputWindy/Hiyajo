@@ -27,7 +27,7 @@ MAHO_SCENE_API FScene* GetScene();
  * slots in FRender. Targets are rebuilt when the swapchain extent changes.
  * (The present/blit lives in the UI feature's IPresent, not here.)
  */
-class MAHO_SCENE_API FScene : public FLayer<IBeginRender, IRender, IEndRender>
+class MAHO_SCENE_API FScene : public FLayer<IBeginRender, IRender, IEndRender, IPreUnInstall>
 {
 	MAHO_DECLARE_LAYER(FScene);
 
@@ -49,6 +49,15 @@ public:
 	void BeginRender(FRender& R) override;
 	void Render(FRender& R) override;
 	void EndRender(FRender& R) override;
+
+	/**
+	 * Release the shared targets BEFORE this module unloads. FScene is a sub-plugin of
+	 * FRender (unloaded during FRender's shutdown), and SceneColor/SceneDepth are
+	 * cataloged in the resource system -- which outlives us. Leaving them behind makes
+	 * the resource system destroy objects whose owning module is already gone (the
+	 * validated crash: a sub-plugin unloaded before FResourceSystem::Shutdown).
+	 */
+	void PreUnInstall(FRender& R) override;
 
 	/**
 	 * SceneColor doubles as a render target (scene clears/draws into it) AND a sampled

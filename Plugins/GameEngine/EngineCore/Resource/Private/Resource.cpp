@@ -8,6 +8,7 @@
 #include <iterator>
 #include <mutex>
 #include <string>
+#include <typeinfo>
 #include <unordered_map>
 
 namespace Maho::Resource
@@ -131,6 +132,38 @@ void FResourceSystem::Shutdown(FEngineBase&)
 	FThreadedServer::Shutdown();   // stop + join the IO thread
 	{
 		std::lock_guard Lock(Impl->Mutex);
+
+		// Report leftovers BEFORE destroying them. Anything still here means its owner
+		// did not release it in its own Shutdown -- and destroying it now runs code
+		// (dtor / stored closure) from that owner's module, which may already be unloaded
+		// (the validated crash is a sub-plugin unloaded before this Shutdown with its
+		// transfers still here). Loud first, then release anyway (never dodge
+		// cross-module destruction by not releasing).
+		//
+		// Asset names are printed as raw ids: FNamePool::Shutdown clears/retracts the
+		// pool, and it is not ordered against this one, so ToString() here can read
+		// freed pool storage. GetPath() is a plain data read through a NON-virtual
+		// getter -- asking for typeid(*Resource) would dereference a vptr that is
+		// exactly what dangles when the module unloaded first.
+		for (const auto& [Asset, Pending] : Impl->PendingIO)
+		{
+			ReportError((std::string("ResourceSystem: leftover pending IMPORT (asset id ")
+				+ std::to_string(Asset.GetId())
+				+ ") -- the module that requested it must cancel it in its own Shutdown").c_str());
+		}
+		for (const auto& [Asset, Pending] : Impl->PendingExports)
+		{
+			ReportError((std::string("ResourceSystem: leftover pending EXPORT (asset id ")
+				+ std::to_string(Asset.GetId())
+				+ ") -- the module that requested it must cancel it in its own Shutdown").c_str());
+		}
+		for (const auto& [Asset, Resource] : Impl->Catalog)
+		{
+			ReportError((std::string("ResourceSystem: leftover resource (asset id ")
+				+ std::to_string(Asset.GetId()) + ", path '" + std::string(Resource->GetPath())
+				+ "') -- its creator must DestroyResource it in its own Shutdown").c_str());
+		}
+
 		Impl->PendingIO.clear();
 		Impl->PendingExports.clear();
 		Impl->Catalog.clear();
