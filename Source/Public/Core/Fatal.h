@@ -3,8 +3,6 @@
 #include <Core/Export.h>
 
 #include <cstdio>
-#include <cstdlib>   // getenv (teardown tracing)
-#include <fstream>   // teardown tracing
 
 namespace Maho
 {
@@ -17,21 +15,6 @@ MAHO_API void ReportError(const char* Message);
 
 /** Install std::terminate handler once (call from process entry before anything else). */
 MAHO_API void InstallFatalHandlers();
-
-// Teardown tracing: off by default (zero cost -- one cached bool per call), enabled
-// with MAHO_TEARDOWN_TRACE=1 in the environment. One flushed line per teardown step,
-// so the last line before a crash names the step/module that died.
-inline void TraceTeardown(const char* What)
-{
-	static const bool bEnabled = std::getenv("MAHO_TEARDOWN_TRACE") != nullptr;
-	if (!bEnabled)
-	{
-		return;
-	}
-	std::ofstream Out("TeardownTrace.txt", std::ios::app);
-	Out << What << "\n";
-	Out.flush();
-}
 
 } // namespace Maho
 

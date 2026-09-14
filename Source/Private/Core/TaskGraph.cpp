@@ -567,8 +567,6 @@ void FTaskGraph::SubmitTaskFor(std::size_t Index, std::uint64_t Frame)
 
 void FTaskGraph::ExecuteNodeFor(std::size_t Index)
 {
-	TraceTeardown((std::string("node ") + Tasks[Index]->Node->Name + "::"
-		+ Tasks[Index]->Node->Stage.name()).c_str());
 	ExecuteNode(Tasks[Index]->Node);
 }
 

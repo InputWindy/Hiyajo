@@ -59,7 +59,7 @@ FRender::FRender()
 	// IEditorShutdown) unregister their views there, so the registry's IShutdown must run
 	// AFTER mine. Declared by NAME, not by type: the UI plugin is optional for this layer
 	// (no build dependency, and the graph skips the edge when it is not installed).
-	BlockOn("FUIViewRegistry", std::type_index(typeid(IShutdown)), std::type_index(typeid(IShutdown)));
+	MyStage<IShutdown>().IsBlocking("FUIViewRegistry").OnStage<IShutdown>();
 
 	// Asset mirror: the render mirror consumes imported assets (upload to GPU), so
 	// the resource system must run its IInit (start the IO thread) before mine.

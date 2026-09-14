@@ -33,7 +33,7 @@ FGameWorld::FGameWorld()
 	// sub-graph only contains the systems). Addressed by NAME, not by type: FGameWorld is
 	// generic scaffolding and must not build-depend on the optional UI plugin; the graph
 	// skips an edge whose target is not installed.
-	BlockOn("FUIViewRegistry", std::type_index(typeid(IShutdown)), std::type_index(typeid(IShutdown)));
+	MyStage<IShutdown>().IsBlocking("FUIViewRegistry").OnStage<IShutdown>();
 }
 
 FGameWorld::~FGameWorld()
@@ -59,25 +59,21 @@ void FGameWorld::RebuildGraphs()
 	{
 		return;
 	}
-	TraceTeardown("RebuildGraphs: input Init/Compile");
 	InputGraph->Init(Select<IProcessInput>());
 	if (!InputGraph->Compile())
 	{
 		ReportError("FGameWorld: input stage graph Compile failed");
 	}
-	TraceTeardown("RebuildGraphs: fixed Init/Compile");
 	FixedGraph->Init(Select<IFixedUpdate>());
 	if (!FixedGraph->Compile())
 	{
 		ReportError("FGameWorld: fixed-step stage graph Compile failed");
 	}
-	TraceTeardown("RebuildGraphs: post Init/Compile");
 	PostGraph->Init(Select<IUpdate, ILateUpdate>());
 	if (!PostGraph->Compile())
 	{
 		ReportError("FGameWorld: post-fixed stage graph Compile failed");
 	}
-	TraceTeardown("RebuildGraphs: done");
 	bGraphsDirty = false;
 }
 void FGameWorld::BeginFrame(FEngineBase&) {}
@@ -143,9 +139,7 @@ void FGameWorld::Tick(FEngineBase&)
 
 	// Pre-fixed: resolve input once, synchronously -- simulation must read a
 	// settled input state, so flush immediately after dispatch.
-	TraceTeardown("Tick: input execute");
 	InputGraph->Execute();
-	TraceTeardown("Tick: input flush");
 	InputGraph->Flush();
 
 	// Fixed timestep: 0..N steps this frame, each strictly ordered (a step cannot
@@ -160,9 +154,7 @@ void FGameWorld::Tick(FEngineBase&)
 
 	// Post-fixed: update + late update, dispatched WITHOUT a trailing flush so they
 	// pipeline across frames; the next Tick's leading Flush (above) waits them.
-	TraceTeardown("Tick: post execute");
 	PostGraph->Execute();
-	TraceTeardown("Tick: done");
 }
 
 void FGameWorld::Shutdown(FEngineBase&)
@@ -171,16 +163,13 @@ void FGameWorld::Shutdown(FEngineBase&)
 	// whose destructors live in the systems' modules, and the graphs' nodes point at
 	// their instances -- freeing either of those once a system's DLL is unloaded runs
 	// code from an unmapped module (a hard AV, not a leak).
-	TraceTeardown("GameWorld::Shutdown: graphs flush + reset");
 	if (PostGraph) { PostGraph->Flush(); }
 	if (FixedGraph) { FixedGraph->Flush(); }
 	if (InputGraph) { InputGraph->Flush(); }
 	PostGraph.reset();
 	FixedGraph.reset();
 	InputGraph.reset();
-	TraceTeardown("GameWorld::Shutdown: ComponentPools clear");
 	ComponentPools.clear();
-	TraceTeardown("GameWorld::Shutdown: own state released");
 
 	// Now the systems: uninstall through the collector teardown pipeline so each one's
 	// IPreUnInstall runs BEFORE its instance is destroyed (a bare member destruction
@@ -191,10 +180,8 @@ void FGameWorld::Shutdown(FEngineBase&)
 		TryUninstall(L->GetName());
 	}
 	FlushPendingUpdatePipelines<TTypeList<IOnInstalled>, TTypeList<IPreUnInstall>>();
-	TraceTeardown("GameWorld::Shutdown: systems unloaded");
 
 	GGameWorld = nullptr;
-	TraceTeardown("GameWorld::Shutdown: done");
 }
 
 FEntity FGameWorld::CreateEntity()

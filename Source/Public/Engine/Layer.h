@@ -124,38 +124,6 @@ public:
 
 protected:
 	FLayerBase() = default;
-
-	// -- forward dependency: MY TMyStage waits for TOther@TOtherStage ----------
-	/** Typed: the consumer names the producer's type (it uses it, so it knows it). */
-	template <typename TMyStage, typename TOther, typename TOtherStage>
-	void WaitFor()
-	{
-		Dependencies[std::type_index(typeid(TMyStage))].push_back({
-			std::string(TOther::StaticName()),
-			std::type_index(typeid(TOtherStage))
-		});
-	}
-
-	/** Anonymous: same edge addressed by the producer's layer name, for
-	 *  dynamically-loaded plugins that reference each other without a compile-time
-	 *  type coupling (no header include). */
-	void WaitFor(std::type_index MyStage, std::string_view OtherName, std::type_index OtherStage);
-
-	// -- reverse dependency: TOther@TOtherStage waits for MY TMyStage ----------
-	/** Typed: "TOther is blocked on me at TMyStage" (TOther runs after me). */
-	template <typename TOther, typename TOtherStage, typename TMyStage>
-	void BlockOn()
-	{
-		Dependents.push_back({
-			std::string(TOther::StaticName()),
-			std::type_index(typeid(TOtherStage)),
-			std::type_index(typeid(TMyStage))
-		});
-	}
-
-	/** Anonymous: same edge addressed by the other layer's name. */
-	void BlockOn(std::string_view OtherName, std::type_index OtherStage, std::type_index MyStage);
-
 	// -- dependency DSL: fluent synonym over the typed WaitFor/BlockOn templates --
 	//
 	//   MyStage<TMy>().IsWaiting<TOther>().ForStage<TOtherStage>();
@@ -202,6 +170,53 @@ protected:
 		FLayerBase* Self;
 	};
 
+	// -- name-addressed variants ----------------------------------------------
+	//
+	//   MyStage<TMy>().IsWaiting("FLog").ForStage<TOtherStage>();
+	//   MyStage<TMy>().IsBlocking("FUIViewRegistry").OnStage<TOtherStage>();
+	//
+	// For a consumer that must NOT name the other layer's TYPE (which would force a
+	// build dependency on an optional plugin -- e.g. generic scaffolding arranging a
+	// view registry's teardown). Same semantics as the typed forms above: the name is
+	// resolved against the layers actually installed in this graph, and an unknown name
+	// simply does not bind.
+
+	// forward dep (named): my TMyStage waits for OtherName@TOtherStage.
+	template <typename TMyStage>
+	class FWaitForNamedBuilder
+	{
+	public:
+		FWaitForNamedBuilder(FLayerBase* InSelf, std::string_view InOther) : Self(InSelf), Other(InOther) {}
+
+		template <typename TOtherStage>
+		void ForStage() const
+		{
+			Self->WaitFor(std::type_index(typeid(TMyStage)), Other, std::type_index(typeid(TOtherStage)));
+		}
+
+	private:
+		FLayerBase*    Self;
+		std::string_view Other;
+	};
+
+	// reverse dep (named): OtherName@TOtherStage waits for my TMyStage.
+	template <typename TMyStage>
+	class FBlockOnNamedBuilder
+	{
+	public:
+		FBlockOnNamedBuilder(FLayerBase* InSelf, std::string_view InOther) : Self(InSelf), Other(InOther) {}
+
+		template <typename TOtherStage>
+		void OnStage() const
+		{
+			Self->BlockOn(Other, std::type_index(typeid(TOtherStage)), std::type_index(typeid(TMyStage)));
+		}
+
+	private:
+		FLayerBase*    Self;
+		std::string_view Other;
+	};
+
 	// entry: MyStage<TMy>() -> IsWaiting (forward) or IsBlocking (reverse).
 	template <typename TMyStage>
 	class FMyStageBuilder
@@ -221,6 +236,18 @@ protected:
 			return FBlockOnBuilder<TMyStage, TOther>(Self);
 		}
 
+		/** Name-addressed forward dep: my TMyStage waits for the layer NAMED OtherName. */
+		FWaitForNamedBuilder<TMyStage> IsWaiting(std::string_view OtherName) const
+		{
+			return FWaitForNamedBuilder<TMyStage>(Self, OtherName);
+		}
+
+		/** Name-addressed reverse dep: the layer NAMED OtherName runs after my TMyStage. */
+		FBlockOnNamedBuilder<TMyStage> IsBlocking(std::string_view OtherName) const
+		{
+			return FBlockOnNamedBuilder<TMyStage>(Self, OtherName);
+		}
+
 	private:
 		FLayerBase* Self;
 	};
@@ -231,6 +258,41 @@ protected:
 		return FMyStageBuilder<TMyStage>(this);
 	}
 
+private:
+
+	// -- forward dependency: MY TMyStage waits for TOther@TOtherStage ----------
+	/** Typed: the consumer names the producer's type (it uses it, so it knows it). */
+	template <typename TMyStage, typename TOther, typename TOtherStage>
+	void WaitFor()
+	{
+		Dependencies[std::type_index(typeid(TMyStage))].push_back({
+			std::string(TOther::StaticName()),
+			std::type_index(typeid(TOtherStage))
+			});
+	}
+
+	// -- reverse dependency: TOther@TOtherStage waits for MY TMyStage ----------
+	/** Typed: "TOther is blocked on me at TMyStage" (TOther runs after me). */
+	template <typename TOther, typename TOtherStage, typename TMyStage>
+	void BlockOn()
+	{
+		Dependents.push_back({
+			std::string(TOther::StaticName()),
+			std::type_index(typeid(TOtherStage)),
+			std::type_index(typeid(TMyStage))
+			});
+	}
+
+	/** Name-addressed forward dep: reached through the DSL builders only (the raw form
+	 *  stays private so a subclass can only declare deps through the DSL). Out-of-line
+	 *  in Layer.cpp. */
+	void WaitFor(std::type_index MyStage, std::string_view OtherName, std::type_index OtherStage);
+
+	/** Name-addressed reverse dep: reached through the DSL builders only. Out-of-line
+	 *  in Layer.cpp. */
+	void BlockOn(std::string_view OtherName, std::type_index OtherStage, std::type_index MyStage);
+
+private:
 	FDependencyTable Dependencies;
 	std::vector<FDependent> Dependents;
 };

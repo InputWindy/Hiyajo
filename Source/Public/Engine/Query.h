@@ -21,8 +21,10 @@
 //
 //   std::vector<FLayerBase*> Layers = ...;
 //   auto Tickable = FQuery<FLayerBase>(Layers).Select<IEngineTickPipeline>().Data;
+#include <Core/Fatal.h>
 #include <Core/TypeList.h>
 
+#include <cstddef>
 #include <functional>
 #include <type_traits>
 #include <utility>
@@ -121,15 +123,31 @@ public:
  * Runtime instance query result -- owns a filtered vector and is usable as a
  * vector via implicit conversion. Select/With/Not continue the chain on the
  * current result set (recursive querying).
+ *
+ * The vector is private: letting a caller push raw pointers in would bypass every
+ * predicate. It is also debug-audited against the collection it came from -- a pointer
+ * that is no longer in the source is a layer that was unloaded, and dereferencing it
+ * (a dynamic_cast reads the vptr!) is a crash, so the audit drops it and reports.
  */
 template <typename TBase>
 class FQueryResult
 {
 public:
-	std::vector<TBase*> Data;
+	FQueryResult() = default;
+
+	/** Built by FQuery::AsResult / Filter: remembers where the pointers came from, which
+	 *  is what the debug liveness audit checks them against. */
+	explicit FQueryResult(std::vector<TBase*>& InSource)
+		: Source(&InSource)
+	{
+	}
 
 	operator std::vector<TBase*>&() { return Data; }
 	operator const std::vector<TBase*>&() const { return Data; }
+
+	[[nodiscard]] std::size_t Num() const noexcept { return Data.size(); }
+	[[nodiscard]] bool IsEmpty() const noexcept { return Data.empty(); }
+	[[nodiscard]] const std::vector<TBase*>& GetData() const noexcept { return Data; }
 
 	/** Keep instances whose dynamic type derives ANY of TFilter... (OR). */
 	template <typename... TFilter>
@@ -145,50 +163,93 @@ public:
 		return Filter([](TBase* P) { return ((dynamic_cast<TFilter*>(P) != nullptr) && ...); });
 	}
 
-        /** Drop instances whose dynamic type derives ANY of TFilter... (NOR). */
-        template <typename... TFilter>
-        FQueryResult<TBase> Not() const
-        {
-            return Filter([](TBase* P) { return !((dynamic_cast<TFilter*>(P) != nullptr) || ...); });
-        }
+	/** Drop instances whose dynamic type derives ANY of TFilter... (NOR). */
+	template <typename... TFilter>
+	FQueryResult<TBase> Not() const
+	{
+		return Filter([](TBase* P) { return !((dynamic_cast<TFilter*>(P) != nullptr) || ...); });
+	}
 
-        /** Cast the current result set to a concrete interface type (dynamic_cast),
-         *  returning only the non-null survivors as std::vector<T*>. Lets a caller
-         *  drive the survivors directly (e.g. call interface methods) without
-         *  arranging a TaskGraph. */
-        template <typename T>
-        [[nodiscard]] std::vector<T*> Cast() const
-        {
-            std::vector<T*> Out;
-            Out.reserve(Data.size());
-            for (TBase* P : Data)
-            {
-                if (P == nullptr)
-                {
-                    continue;
-                }
-                if (auto* Tp = dynamic_cast<T*>(P))
-                {
-                    Out.push_back(Tp);
-                }
-            }
-            return Out;
-        }
+	/** Cast the current result set to a concrete interface type (dynamic_cast),
+	 *  returning only the non-null survivors as std::vector<T*>. Lets a caller
+	 *  drive the survivors directly (e.g. call interface methods) without
+	 *  arranging a TaskGraph. */
+	template <typename T>
+	[[nodiscard]] std::vector<T*> Cast() const
+	{
+		std::vector<T*> Out;
+		Out.reserve(Data.size());
+		for (TBase* P : Data)
+		{
+			if (!CheckStillLive(P))
+			{
+				continue;
+			}
+			if (auto* Tp = dynamic_cast<T*>(P))
+			{
+				Out.push_back(Tp);
+			}
+		}
+		return Out;
+	}
 
 private:
-        FQueryResult<TBase> Filter(std::function<bool(TBase*)> Pred) const
+	/** FQuery is the only other writer of Data (it seeds a result from the source). */
+	template <typename T>
+	friend class FQuery;
+
+	/** Is this pointer still in the collection the result came from? Unload erases a layer
+	 *  from the source BEFORE releasing it, so "gone from the source" == freed. Debug-only:
+	 *  in a release build this is just a null check (the audit costs a scan per element). */
+	[[nodiscard]] bool CheckStillLive(TBase* Ptr) const
 	{
-		FQueryResult<TBase> Result;
+#ifndef NDEBUG
+		if (Ptr == nullptr)
+		{
+			return false;
+		}
+		if (Source != nullptr)
+		{
+			for (const TBase* Live : *Source)
+			{
+				if (Live == Ptr)
+				{
+					return true;
+				}
+			}
+			ReportError("query result holds a pointer that is no longer in its source "
+				"(the layer was unloaded); the entry was dropped");
+			return false;
+		}
+		return true;
+#else
+		return Ptr != nullptr;
+#endif
+	}
+
+	template <typename TPred>
+	FQueryResult<TBase> Filter(TPred Pred) const
+	{
+		FQueryResult<TBase> Result(Source != nullptr ? *Source : EmptySource());
 		Result.Data.reserve(Data.size());
 		for (TBase* Ptr : Data)
 		{
-			if (Ptr != nullptr && Pred(Ptr))
+			if (CheckStillLive(Ptr) && Pred(Ptr))
 			{
 				Result.Data.push_back(Ptr);
 			}
 		}
 		return Result;
 	}
+
+	static std::vector<TBase*>& EmptySource()
+	{
+		static std::vector<TBase*> Empty;
+		return Empty;
+	}
+
+	std::vector<TBase*>  Data;
+	std::vector<TBase*>* Source = nullptr;   // the collection the pointers came from
 };
 
 /**
@@ -208,7 +269,9 @@ class FQuery
 public:
 	virtual ~FQuery() = default;
 
-	/** Data source: the subclass returns its instance collection. */
+	/** Data source: the subclass returns its instance collection. The NON-const form is
+	 *  the collector's own write path (install/unload) and is not exported: a caller that
+	 *  could hand-write into the collection would bypass every install check. */
 	virtual std::vector<TBase*>& GetQueryData() = 0;
 	virtual const std::vector<TBase*>& GetQueryData() const = 0;
 
@@ -242,10 +305,16 @@ public:
         }
 
 private:
+	/** FQuery seeds a result from its source (the only other writer of Data). */
+	template <typename T>
+	friend class FQuery;
+
 	FQueryResult<TBase> AsResult() const
 	{
-		FQueryResult<TBase> Result;
-		Result.Data = GetQueryData();   // copy the source pointers
+		// Bind the result to the LIVE source so its debug audit can tell "still there" from
+		// "unloaded while I held this result" -- a freed pointer is never dereferenced.
+		FQueryResult<TBase> Result(const_cast<std::vector<TBase*>&>(GetQueryData()));
+		Result.Data = GetQueryData();   // copy the source pointers (friend access)
 		return Result;
 	}
 };

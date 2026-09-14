@@ -41,10 +41,75 @@ class FLayerCollector : public virtual FQuery<FLayerBase>
 {
 public:
 
+	/** EVERY terminal state of an install / uninstall / reload operation. Grouped by
+	 *  direction so a consumer can switch once (see OnLayerStatus). */
+	enum class ELayerStatus : std::uint8_t
+	{
+		// -- install --
+		InstallQueued,          // accepted into PendingAdded; Init runs at the next safe point
+		InstallRefused,         // not accepted -- Detail says why (closing / load / factory / duplicate name)
+		InstallCompileFailed,   // Init graph Compile failed; the batch was RELEASED (instance +
+		                        // module) and reported -- the caller decides whether to retry by
+		                        // calling Install() again (nothing is retried automatically, and
+		                        // nothing is left half-alive)
+		Installed,              // Init stages ran; the layer is active
+		InstallCancelled,       // an uninstall request arrived first: the loaded module was released
+		                        // without ever being initialized
+		// -- uninstall --
+		UninstallQueued,        // recorded; applied at the next safe point
+		UninstallNotFound,      // the query matched nothing (neither active name nor module path)
+		UninstallRefused,       // still depended on -- Detail lists the dependents
+		UninstallCompileFailed, // Shutdown graph Compile failed; the layers stay ALIVE (a layer is
+		                        // never destroyed without its Shutdown stages having run)
+		Uninstalled,            // Shutdown stages ran; instance + module released
+		// -- reload --
+		ReloadQueued,           // uninstall + fresh install queued
+		ReloadRefused,          // Detail says why (no module path / still depended on / absent)
+	};
+
+	/** Payload of one status broadcast. All strings are COPIES: a layer's module may be
+	 *  unloaded immediately after the call, and the Name pool may already be gone during
+	 *  teardown -- nothing here points into either. */
+	struct FLayerStatusInfo
+	{
+		ELayerStatus Status = ELayerStatus::InstallQueued;
+		std::string  Name;     // the layer's name as stored by the collector (pool-free)
+		std::string  Path;     // the DLL path it was loaded from / would be loaded from
+		std::string  Detail;   // why it was refused, who depends on it, which dep failed...
+	};
+
 	/** Broadcast whenever the active layer set changes at a safe point. The host
 	 *  binds this to re-expand its cached task graph (push, not poll). */
 	TMulticastEvent<void()> OnLayersChanged;
 
+	/** Broadcast for EVERY terminal state above -- refused installs, cancelled installs,
+	 *  refused uninstalls, run teardown, the lot. Nothing is silent any more.
+	 *  OBSERVE ONLY: never call Install / Uninstall / Reload from a handler (ordering
+	 *  across modules is the task graph's job, and re-entering a flush is a bug). */
+	TMulticastEvent<void(const FLayerStatusInfo&)> OnLayerStatus;
+
+	/** Broadcast ONCE when the collector flips to closing (RequestExit reached it): the
+	 *  moment before teardown, while every layer is still alive. Observe only. */
+	TMulticastEvent<void()> OnClosing;
+
+	/** Current sizes, for tools / tests / panels (a query -- do not poll it per frame
+	 *  from a broadcast). */
+	struct FLayerStats
+	{
+		std::size_t Active = 0;          // layers in Pipelines
+		std::size_t PendingAdds = 0;
+		std::size_t PendingRemoves = 0;
+		std::size_t PendingReloads = 0;
+		std::size_t Modules = 0;         // module slots held (includes released ones)
+	};
+
+	[[nodiscard]] FLayerStats GetStats() const
+	{
+		return FLayerStats{ Pipelines.size(), PendingAdded.size(), PendingRemoveRequests.size(),
+			PendingReloads.size(), Modules.size() };
+	}
+
+protected:
 	/** Typed install: install a plugin by its layer type, resolving the DLL path
 	 *  from T::GetModulePath() (the layer type knows its own module). Equivalent
 	 *  to Install("T's dll"). Use this wherever the type is visible. */
@@ -64,45 +129,82 @@ public:
 	 *  Returns true on success. */
 	bool Install(std::string_view DllPath, const char* FactorySymbol = "CreateLayer")
 	{
+		const std::string Path(DllPath);
+
 		// Refused once the collection is closing: loading a module then is never right
 		// (its stages would never run and its DLL would outlive the teardown order), so
 		// it is refused LOUDLY instead of being silently dropped later.
 		if (IsClosing())
 		{
-			ReportError((std::string("Install refused: the collection is closing (") + std::string(DllPath) + ")").c_str());
+			const std::string Detail = "the collection is closing";
+			ReportError((std::string("Install refused: ") + Detail + " (" + Path + ")").c_str());
+			EmitStatus(ELayerStatus::InstallRefused, {}, Path, Detail);
 			return false;
 		}
 
 		auto Asm = std::make_unique<FAssembly>(DllPath);
 		if (!Asm->IsLoaded())
 		{
-			ReportError((std::string("Install: failed to load module: ") + std::string(DllPath)).c_str());
+			const std::string Detail = "failed to load the module";
+			ReportError((std::string("Install refused: ") + Detail + ": " + Path).c_str());
+			EmitStatus(ELayerStatus::InstallRefused, {}, Path, Detail);
 			return false;
 		}
 
-		using CreateFn = FLayerBase* (*)();
+		using CreateFn = FLayerBase * (*)();
 		auto Create = Asm->GetProcAs<CreateFn>(FactorySymbol);
 		if (Create == nullptr)
 		{
-			ReportError((std::string("Install: module exports no '") + FactorySymbol
-				+ "': " + std::string(DllPath)).c_str());
+			const std::string Detail = std::string("module exports no '") + FactorySymbol + "'";
+			ReportError((std::string("Install refused: ") + Detail + ": " + Path).c_str());
+			EmitStatus(ELayerStatus::InstallRefused, {}, Path, Detail);
 			return false;
 		}
 
-		auto Layer = std::unique_ptr<FLayerBase>(Create());
+		// A plugin factory is plugin code: it may throw (a bad ctor, a failed global init).
+		// Nothing is pushed into the parallel vectors before this point, so a throw here
+		// leaves the collector exactly as it was -- report it as a refusal instead of
+		// letting it escape into whatever drove the install.
+		FLayerBase* Raw = nullptr;
+		try
+		{
+			Raw = Create();
+		}
+		catch (const std::exception& E)
+		{
+			const std::string Detail = std::string("factory threw: ") + E.what();
+			ReportError((std::string("Install refused: ") + Detail + ": " + Path).c_str());
+			EmitStatus(ELayerStatus::InstallRefused, {}, Path, Detail);
+			return false;
+		}
+		catch (...)
+		{
+			const std::string Detail = "factory threw an unknown exception";
+			ReportError((std::string("Install refused: ") + Detail + ": " + Path).c_str());
+			EmitStatus(ELayerStatus::InstallRefused, {}, Path, Detail);
+			return false;
+		}
+
+		auto Layer = std::unique_ptr<FLayerBase>(Raw);
 		if (!Layer)
 		{
-			ReportError((std::string("Install: factory returned null: ") + std::string(DllPath)).c_str());
+			const std::string Detail = "factory returned null";
+			ReportError((std::string("Install refused: ") + Detail + ": " + Path).c_str());
+			EmitStatus(ELayerStatus::InstallRefused, {}, Path, Detail);
 			return false;
 		}
 
-		const std::string_view Name = Layer->GetName();
+		// Copy the name ONCE, into collector-owned storage: from here on the collector
+		// never asks the Name pool for it again (the pool is shut down before the
+		// collector finishes matching / reporting during teardown).
+		const std::string Name(Layer->GetName());
 
 		// One instance per name -- a duplicate would silently shadow the old one.
 		if (HasLayerName(Name))
 		{
-			ReportError((std::string("Install refused: layer already active with name '")
-				+ std::string(Name) + "' (one instance per name)").c_str());
+			const std::string Detail = "a layer with this name is already active or pending";
+			ReportError((std::string("Install refused: ") + Detail + ": '" + Name + "'").c_str());
+			EmitStatus(ELayerStatus::InstallRefused, Name, Path, Detail);
 			return false;
 		}
 
@@ -116,7 +218,10 @@ public:
 		PendingAdded.push_back(Layer.get());
 		Modules.push_back(std::move(Asm));
 		Features.push_back(std::move(Layer));
-		ModulePaths.push_back(std::string(DllPath));
+		ModulePaths.push_back(Path);
+		LayerNames.push_back(Name);
+		NameToSlot[Name] = Features.size() - 1;
+		EmitStatus(ELayerStatus::InstallQueued, Name, Path);
 		return true;
 	}
 
@@ -126,21 +231,24 @@ public:
 	 *  is still depended on. */
 	void Reload(std::string_view LayerName)
 	{
+		const std::string Query(LayerName);
+
 		if (IsClosing())
 		{
-			ReportError((std::string("Reload refused: the collection is closing (") + std::string(LayerName) + ")").c_str());
+			const std::string Detail = "the collection is closing";
+			ReportError((std::string("Reload refused: ") + Detail + " (" + Query + ")").c_str());
+			EmitStatus(ELayerStatus::ReloadRefused, Query, {}, Detail);
 			return;
 		}
 
 		for (FLayerBase* L : Pipelines)
 		{
-			if (L->GetName() != LayerName)
+			const std::string_view Name = StoredName(L);
+			if (Name != LayerName)
 			{
 				continue;
 			}
-			// Find the DLL path this layer was loaded from. The collector owns the
-			// load lifecycle, so it stores the path (parallel to Modules/Features);
-			// pointer-installed layers have no module to reload.
+			// The collector owns the load lifecycle, so it stored the path at Install.
 			for (std::size_t I = 0; I < Features.size(); ++I)
 			{
 				if (Features[I].get() != L)
@@ -150,19 +258,31 @@ public:
 				const std::string Path = (I < ModulePaths.size()) ? ModulePaths[I] : std::string{};
 				if (Path.empty())
 				{
-					ReportError((std::string("Reload: layer has no module path (installed by pointer): ")
-						+ std::string(LayerName)).c_str());
+					const std::string Detail = "no module path recorded for this layer";
+					ReportError((std::string("Reload refused: ") + Detail + ": " + Query).c_str());
+					EmitStatus(ELayerStatus::ReloadRefused, Query, Path, Detail);
 					return;
 				}
-				PendingReloads.emplace_back(LayerName, Path);
+				PendingReloads.emplace_back(Query, Path);
 				RequestUninstall(L);
+				EmitStatus(ELayerStatus::ReloadQueued, Query, Path);
 				return;
 			}
-			ReportError((std::string("Reload: layer was installed by pointer, nothing to reload: ")
-				+ std::string(LayerName)).c_str());
+			const std::string Detail = "layer has no module to reload";
+			ReportError((std::string("Reload refused: ") + Detail + ": " + Query).c_str());
+			EmitStatus(ELayerStatus::ReloadRefused, Query, {}, Detail);
 			return;
 		}
-		ReportError((std::string("Reload: no active layer named ") + std::string(LayerName)).c_str());
+		// Only ACTIVE layers can be reloaded: a layer whose install is still pending has no
+		// old instance to unload, so the caller cancels it (TryUninstall) and installs
+		// again if that is what it meant.
+		std::string Detail = "no ACTIVE layer with that name";
+		if (HasLayerName(Query))
+		{
+			Detail = "the layer's install is still PENDING; cancel it with TryUninstall and install again";
+		}
+		ReportError((std::string("Reload refused: ") + Detail + ": " + Query).c_str());
+		EmitStatus(ELayerStatus::ReloadRefused, Query, {}, Detail);
 	}
 
 	/** Anonymous unload of ONE layer. Accepts a query identifying it, matching the FIRST
@@ -180,27 +300,58 @@ public:
 	 *  in different collectors are legal here). */
 	void TryUninstall(std::string_view Query)
 	{
-		// 1) Exact layer name (GetName()) -- the pre-existing form; callers like
-		//    GameWorld/Render pass L->GetName() and must keep working.
+		const std::string Path(Query);
+
+		// 1) Exact layer name -- matched through the collector's stored (pool-free) copy:
+		//    callers like GameWorld/Render pass a layer's name and must keep working.
 		for (FLayerBase* L : Pipelines)
 		{
-			if (L->GetName() == Query)
+			if (StoredName(L) == Query)
 			{
 				RequestUninstall(L);
+				EmitStatus(ELayerStatus::UninstallQueued, StoredName(L), Path);
 				return;
 			}
 		}
-		// 2) DLL/module path (symmetry with Install("...dll")); ModulePaths is
-		//    parallel to Features and holds the exact string passed to Install.
+		// 2) A layer whose install is still PENDING is addressable by name too -- this is
+		//    how a caller takes back an install it just requested (the flush cancels it
+		//    before the init batch runs; see FlushPendingUpdatePipelines).
+		for (FLayerBase* L : PendingAdded)
+		{
+			if (StoredName(L) == Query)
+			{
+				RequestUninstall(L);
+				EmitStatus(ELayerStatus::UninstallQueued, StoredName(L), Path);
+				return;
+			}
+		}
+		// 3) DLL/module path (symmetry with Install("...dll")); ModulePaths is parallel to
+		//    Features/Names and holds the exact string passed to Install. Index-based, so
+		//    it reaches active and pending layers alike.
 		for (std::size_t I = 0; I < Features.size(); ++I)
 		{
 			if (Features[I] && I < ModulePaths.size() && ModulePaths[I] == Query)
 			{
 				RequestUninstall(Features[I].get());
+				EmitStatus(ELayerStatus::UninstallQueued, StoredName(Features[I].get()), Path);
 				return;
 			}
 		}
+
+		// Nothing matched. Still broadcast: a caller that asked for an unload deserves to
+		// know it hit nothing (PostMain's sweep only asks for names it just listed, so
+		// this stays quiet at teardown).
+		EmitStatus(ELayerStatus::UninstallNotFound, {}, Path, "no active layer matches this name or module path");
 	}
+
+	/** Result of one InstallChildrenOf pass: a parent can tell "3 of 6 children" instead
+	 *  of only seeing the per-child errors. */
+	struct FInstallSummary
+	{
+		std::size_t Requested = 0;
+		std::size_t Queued    = 0;
+		std::size_t Refused   = 0;
+	};
 
 	/** Install the catalog's DIRECT children of a node into THIS collector. This is
 	 *  the one call the host and every collector layer share -- identical install
@@ -213,18 +364,30 @@ public:
 	 *  Direct children only, deliberately: a child that has children of its own
 	 *  installs them itself (same call, its own collector), so no level has to know
 	 *  about the one below it and nothing can be installed twice. */
-	void InstallChildrenOf(std::string_view ParentLayer)
+	FInstallSummary InstallChildrenOf(std::string_view ParentLayer)
 	{
+		FInstallSummary Summary;
 		for (const std::string& Child : FPluginManager::Get().GetChildren(ParentLayer))
 		{
-			Install(ApplyModuleExtension(Child));
+			Summary.Requested += 1;
+			if (Install(ApplyModuleExtension(Child)))
+			{
+				Summary.Queued += 1;
+			}
+			else
+			{
+				Summary.Refused += 1;
+			}
 		}
+		if (Summary.Refused > 0)
+		{
+			ReportError((std::string("InstallChildrenOf '") + std::string(ParentLayer) + "': "
+				+ std::to_string(Summary.Queued) + " of " + std::to_string(Summary.Requested)
+				+ " children accepted, " + std::to_string(Summary.Refused)
+				+ " refused (see the per-child errors above)").c_str());
+		}
+		return Summary;
 	}
-
-protected:
-	// -- FQuery data source --
-	std::vector<FLayerBase*>& GetQueryData() override { return Pipelines; }
-	const std::vector<FLayerBase*>& GetQueryData() const override { return Pipelines; }
 
 	/** Apply pending installs (driving Init stages) + pending uninstalls (driving
 	 *  Shutdown stages). Broadcasts OnLayersChanged when anything changed so the
@@ -236,10 +399,73 @@ protected:
 	template <typename TInitStages, typename TShutdownStages>
 	void FlushPendingUpdatePipelines()
 	{
+		// REENTRANCY GUARD: a stage is free to install / uninstall (that is the normal way
+		// children appear), but it must not run a flush itself -- a nested flush would
+		// build a second graph and mutate Pipelines while the outer graph is still
+		// running. Refused loudly instead of left to chance; the flag is released by RAII
+		// so a thrown exception cannot leave the collector permanently "flushing".
+		struct FFlushGuard
+		{
+			bool& Flag;
+			explicit FFlushGuard(bool& InFlag) : Flag(InFlag) { Flag = true; }
+			~FFlushGuard() { Flag = false; }
+		};
+		if (bFlushing)
+		{
+			ReportError("FlushPendingUpdatePipelines refused: a flush is already running "
+				"(install/uninstall from a stage is fine -- flushing from one is not)");
+			return;
+		}
+		FFlushGuard Guard(bFlushing);
+
+		// A fatal error from plugin code (GetDependencies is the realistic candidate) must
+		// not corrupt the collection or kill the host: report it and return with the
+		// pending sets as they are, so the next flush simply retries them.
+		try
+		{
+			FlushPendingUpdatePipelinesImpl<TInitStages, TShutdownStages>();
+		}
+		catch (const std::exception& E)
+		{
+			ReportError((std::string("flush of pending layer updates threw: ") + E.what()).c_str());
+		}
+		catch (...)
+		{
+			ReportError("flush of pending layer updates threw an unknown exception");
+		}
+	}
+
+	/** The flush body (see the wrapper above for the guard + fatal-error handling). */
+	template <typename TInitStages, typename TShutdownStages>
+	void FlushPendingUpdatePipelinesImpl()
+	{
 		bool bChanged = false;
 		if (!PendingAdded.empty())
 		{
 			bChanged = true;
+
+			// FIRST, before the init batch: honor any removal requested for a layer whose
+			// install is still pending. Order matters -- running the batch first would
+			// install the layer and unload it again in the same flush, so a caller that
+			// changed its mind would watch it go active anyway.
+			std::vector<FLayerBase*> Cancelled;
+			for (FLayerBase* P : PendingAdded)
+			{
+				if (PendingRemoveRequests.count(P))
+				{
+					Cancelled.push_back(P);
+				}
+			}
+			for (FLayerBase* P : Cancelled)
+			{
+				const std::string Name(StoredName(P));
+				const std::string Path = ModulePathOf(P);
+				PendingAdded.erase(std::remove(PendingAdded.begin(), PendingAdded.end(), P), PendingAdded.end());
+				PendingRemoveRequests.erase(P);
+				DeleteUnloaded(P);   // instance + module released; never initialized
+				EmitStatus(ELayerStatus::InstallCancelled, Name, Path, "an uninstall request arrived first");
+			}
+
 			std::vector<FLayerBase*> NewLayers;
 			NewLayers.reserve(PendingAdded.size());
 			for (FLayerBase* P : PendingAdded)
@@ -250,19 +476,35 @@ protected:
 			PendingAdded.clear();
 
 			FLayerTaskGraph<TInitStages, TContext> InitGraph(Pool, GetContext());
-			InitGraph.Init(std::move(NewLayers));
+			InitGraph.Init(NewLayers);
 			if (!InitGraph.Compile())
 			{
-				// Non-fatal: report; the broken layer never initializes until the
-				// topology is fixed. No eject heuristic -- the host tick graph
-				// re-validates and reports once.
+				// Compile failed: report it, broadcast it, and RELEASE the batch. No silent
+				// retry: leaving these pending would re-Compile (and re-report) on every
+				// flush, and keeping only their instances would make the next Install()
+				// create a second one. Released-and-reported means the caller sees
+				// InstallCompileFailed (Detail names the offending layer) and, when it has
+				// fixed the order/dependency, simply calls Install() again.
+				const std::string BadDep = InitGraph.GetCompileErrorNode();
 				ReportError((std::string("install init graph compile failed (layer '")
-					+ InitGraph.GetCompileErrorNode() + "' has a bad dependency)").c_str());
+					+ BadDep + "' has a bad dependency); the batch was released").c_str());
+				for (FLayerBase* P : NewLayers)
+				{
+					const std::string Name(StoredName(P));
+					const std::string Path = ModulePathOf(P);
+					Pipelines.erase(std::remove(Pipelines.begin(), Pipelines.end(), P), Pipelines.end());
+					DeleteUnloaded(P);
+					EmitStatus(ELayerStatus::InstallCompileFailed, Name, Path, BadDep);
+				}
 			}
 			else
 			{
 				InitGraph.Execute();
 				InitGraph.Flush();
+				for (FLayerBase* P : NewLayers)
+				{
+					EmitStatus(ELayerStatus::Installed, StoredName(P), {});
+				}
 			}
 		}
 
@@ -273,7 +515,7 @@ protected:
 
 		if (bChanged)
 		{
-			OnLayersChanged.Broadcast();
+			BroadcastIsolated(OnLayersChanged);
 		}
 	}
 
@@ -293,23 +535,97 @@ protected:
 	}
 
 private:
-	bool HasLayerName(std::string_view Name) const
+
+	// -- FQuery data source --
+	// The NON-const form is the collector's own write path and stays private: handing out
+	// a mutable reference would let a caller push instances in, bypassing every check
+	// Install performs (module ownership, name uniqueness, the pending queue).
+	std::vector<FLayerBase*>& GetQueryData() override { return Pipelines; }
+
+public:
+	const std::vector<FLayerBase*>& GetQueryData() const override { return Pipelines; }
+
+private:
+
+	/** The layer's name as stored by the collector (a plain string copied at Install) --
+	 *  NEVER through the Name pool. The pool is shut down during teardown while the
+	 *  collector still matches names, feeds status payloads and writes traces, and
+	 *  `FName::ToString()` on a cleared pool reads freed storage. Empty when unknown. */
+	[[nodiscard]] std::string_view StoredName(const FLayerBase* Layer) const
 	{
-		for (const FLayerBase* L : Pipelines)
+		const std::size_t Slot = SlotOf(Layer);
+		return Slot < LayerNames.size() ? std::string_view(LayerNames[Slot]) : std::string_view{};
+	}
+
+	/** Slot of a layer's instance (== its index in Features/Modules/ModulePaths/LayerNames),
+	 *  or npos when unknown. */
+	[[nodiscard]] std::size_t SlotOf(const FLayerBase* Layer) const
+	{
+		for (std::size_t I = 0; I < Features.size(); ++I)
 		{
-			if (L->GetName() == Name)
+			if (Features[I].get() == Layer)
 			{
-				return true;
+				return I;
 			}
 		}
-		for (const FLayerBase* L : PendingAdded)
+		return NPos;
+	}
+
+	/** True when a layer with this name is active or pending. O(log n). */
+	[[nodiscard]] bool HasLayerName(std::string_view Name) const
+	{
+		return NameToSlot.find(std::string(Name)) != NameToSlot.end();
+	}
+
+	/** Is this layer still OWNED by the collector (i.e. alive)? The single liveness
+	 *  predicate: unload erases from Pipelines BEFORE releasing, so "owned" is the
+	 *  authoritative answer and any pointer the collector handed out can be checked
+	 *  against it instead of being dereferenced blind. */
+	[[nodiscard]] bool IsOwned(const FLayerBase* Layer) const
+	{
+		return Layer != nullptr && SlotOf(Layer) != NPos;
+	}
+
+	/** The DLL path this layer was loaded from (parallel storage, same lifetime rules
+	 *  as StoredName). Empty when unknown. */
+	[[nodiscard]] std::string ModulePathOf(const FLayerBase* Layer) const
+	{
+		const std::size_t Slot = SlotOf(Layer);
+		return Slot < ModulePaths.size() ? ModulePaths[Slot] : std::string{};
+	}
+
+	/** Broadcast one terminal state, with every string copied into the payload.
+	 *  ISOLATED: a subscriber that throws must not be able to abort a teardown halfway
+	 *  (EmitStatus runs INSIDE the unload loop, between releasing one layer and the
+	 *  next) -- so the exception is reported and swallowed here. Handlers AFTER the
+	 *  throwing one in the same broadcast are skipped; the collector's own state stays
+	 *  consistent, which is what matters. */
+	void EmitStatus(ELayerStatus Status, std::string_view Name, std::string_view Path, std::string Detail = {})
+	{
+		FLayerStatusInfo Info;
+		Info.Status = Status;
+		Info.Name.assign(Name);
+		Info.Path.assign(Path);
+		Info.Detail = std::move(Detail);
+		BroadcastIsolated(OnLayerStatus, Info);
+	}
+
+	/** Same isolation for a no-payload event (OnLayersChanged / OnClosing). */
+	template <typename TEvent, typename... TArgs>
+	void BroadcastIsolated(TEvent& Event, const TArgs&... Args) noexcept
+	{
+		try
 		{
-			if (L->GetName() == Name)
-			{
-				return true;
-			}
+			Event.Broadcast(Args...);
 		}
-		return false;
+		catch (const std::exception& E)
+		{
+			ReportError((std::string("layer event handler threw: ") + E.what()).c_str());
+		}
+		catch (...)
+		{
+			ReportError("layer event handler threw an unknown exception");
+		}
 	}
 
 	TContext& GetContext() { return *static_cast<TContext*>(this); }
@@ -321,11 +637,11 @@ private:
 
 		for (FLayerBase* L : Pipelines)
 		{
-			ReverseDepCount[std::string(L->GetName())] = 0;
+			ReverseDepCount[std::string(StoredName(L))] = 0;
 		}
 		for (FLayerBase* L : PendingAdded)
 		{
-			ReverseDepCount[std::string(L->GetName())] = 0;
+			ReverseDepCount[std::string(StoredName(L))] = 0;
 		}
 
 		for (FLayerBase* L : Pipelines)
@@ -358,8 +674,6 @@ private:
 	template <typename TShutdownStages>
 	bool FlushUnload()
 	{
-		TraceTeardown((std::string("FlushUnload enter requests=") + std::to_string(PendingRemoveRequests.size())
-			+ " pipelines=" + std::to_string(Pipelines.size())).c_str());
 		if (PendingRemoveRequests.empty())
 		{
 			return false;
@@ -369,7 +683,7 @@ private:
 		std::map<std::string, FLayerBase*> ByName;
 		for (FLayerBase* L : Pipelines)
 		{
-			ByName[std::string(L->GetName())] = L;
+			ByName[std::string(StoredName(L))] = L;
 		}
 
 		using HeapEntry = std::pair<int, std::string>;
@@ -377,7 +691,7 @@ private:
 		std::priority_queue<HeapEntry, std::vector<HeapEntry>, decltype(Cmp)> Heap(Cmp);
 		for (FLayerBase* L : PendingRemoveRequests)
 		{
-			const std::string Name = std::string(L->GetName());
+			const std::string Name(StoredName(L));
 			Heap.push({ ReverseDepCount[Name], Name });
 		}
 
@@ -421,9 +735,40 @@ private:
 			}
 		}
 
+		// (2) Whatever the greedy could not take is still depended on: report it WITH the
+		//     dependents and broadcast. This used to be a silent clear(), so a caller's
+		//     uninstall request simply vanished.
+		if (!PendingRemoveRequests.empty())
+		{
+			for (FLayerBase* L : PendingRemoveRequests)
+			{
+				const std::string Name(StoredName(L));
+				std::set<std::string> Dependents;
+				for (FLayerBase* Other : Pipelines)
+				{
+					for (const auto& [Stage, Deps] : Other->GetDependencies())
+					{
+						(void)Stage;
+						for (const auto& Dep : Deps)
+						{
+							if (Dep.Name == Name)
+							{
+								Dependents.insert(std::string(StoredName(Other)));
+							}
+						}
+					}
+				}
+				std::string Detail = "still depended on by:";
+				for (const std::string& D : Dependents)
+				{
+					Detail += " " + D;
+				}
+				ReportError((std::string("uninstall refused: layer '") + Name + "' (" + Detail + ")").c_str());
+				EmitStatus(ELayerStatus::UninstallRefused, Name, {}, Detail);
+			}
+		}
 		PendingRemoveRequests.clear();
 
-		TraceTeardown((std::string("  toUnload=") + std::to_string(ToUnload.size())).c_str());
 		if (ToUnload.empty())
 		{
 			return false;
@@ -438,30 +783,38 @@ private:
 		ShutdownGraph.Init(ToUnload);
 		if (!ShutdownGraph.Compile())
 		{
-			ReportError("FLayerCollector: unload shutdown pipeline Compile failed");
-		}
-		else
-		{
-			ShutdownGraph.Execute();
-			ShutdownGraph.Flush();
+			// NEVER erase or destroy these: their Shutdown stages have not run, and a layer
+			// destroyed without its teardown is where "resources still cataloged / threads
+			// still alive" turns into a crash later. Report, broadcast, and leave them
+			// ALIVE -- the host's teardown sweep reports them again.
+			const std::string BadDep = ShutdownGraph.GetCompileErrorNode();
+			ReportError((std::string("unload shutdown graph compile failed (layer '") + BadDep
+				+ "' has a bad dependency); keeping the batch alive, nothing destroyed").c_str());
+			for (FLayerBase* L : ToUnload)
+			{
+				EmitStatus(ELayerStatus::UninstallCompileFailed, StoredName(L), {}, BadDep);
+			}
+			return false;   // the active set did not change
 		}
 
+		ShutdownGraph.Execute();
+		ShutdownGraph.Flush();
+
+		std::set<std::string> UnloadedNames;   // collected BEFORE DeleteUnloaded clears the stored names
 		for (FLayerBase* L : ToUnload)
 		{
+			const std::string Name(StoredName(L));
+			const std::string Path = ModulePathOf(L);
+			UnloadedNames.insert(Name);
 			Pipelines.erase(std::remove(Pipelines.begin(), Pipelines.end(), L), Pipelines.end());
 			DeleteUnloaded(L);
+			EmitStatus(ELayerStatus::Uninstalled, Name, Path);
 		}
-		TraceTeardown((std::string("  pipelines left=") + std::to_string(Pipelines.size())).c_str());
 
 		// Hot reload: the old instance + module are now freed -- load a fresh
 		// copy of each reloaded layer. Its Init runs at the next safe point.
 		if (!PendingReloads.empty())
 		{
-			std::set<std::string> UnloadedNames;
-			for (FLayerBase* L : ToUnload)
-			{
-				UnloadedNames.insert(std::string(L->GetName()));
-			}
 			for (const auto& [Name, Path] : PendingReloads)
 			{
 				if (UnloadedNames.count(Name))
@@ -470,8 +823,9 @@ private:
 				}
 				else
 				{
-					ReportError((std::string("Reload refused (layer still depended on or absent): ")
-						+ Name).c_str());
+					const std::string Detail = "still depended on, or absent";
+					ReportError((std::string("Reload refused: ") + Detail + ": " + Name).c_str());
+					EmitStatus(ELayerStatus::ReloadRefused, Name, Path, Detail);
 				}
 			}
 			PendingReloads.clear();
@@ -485,7 +839,6 @@ private:
 	{
 		if (Pipeline != nullptr)
 		{
-			TraceTeardown((std::string("  request uninstall ") + std::string(Pipeline->GetName())).c_str());
 			PendingRemoveRequests.insert(Pipeline);
 		}
 	}
@@ -497,9 +850,8 @@ private:
 		{
 			if (Features[I].get() == Layer)
 			{
-				TraceTeardown((std::string("  destroy instance ") + std::string(Layer->GetName())).c_str());
+				const std::string MyName(I < LayerNames.size() ? LayerNames[I] : std::string());
 				Features[I].reset();
-				TraceTeardown("  release module");
 				if (I < Modules.size())
 				{
 					Modules[I].reset();
@@ -508,12 +860,23 @@ private:
 				{
 					ModulePaths[I].clear();
 				}
+				if (I < LayerNames.size())
+				{
+					LayerNames[I].clear();
+				}
+				if (!MyName.empty())
+				{
+					NameToSlot.erase(MyName);
+				}
 				return;
 			}
 		}
 	}
 
 protected:
+	/** "no slot" / "not found" sentinel for slot indices. */
+	static constexpr std::size_t NPos = static_cast<std::size_t>(-1);
+
 	/** The one "this collection is closing" flag, owned here because it answers for both
 	 *  sides of it:
 	 *    - Install / Reload REFUSE once it is set -- a module loaded while the collection
@@ -524,8 +887,26 @@ protected:
 	 *  Atomic: it is set from a stage (any thread) and read from the loop and the guards. */
 	std::atomic<bool> bClosing{ false };
 
+	/** Non-zero while a flush is applying pendings (reentrancy guard, RAII-managed). */
+	bool bFlushing = false;
+
 	[[nodiscard]] bool IsClosing() const noexcept { return bClosing.load(std::memory_order_acquire); }
 
+	/** Flip to closing (idempotent). The collector owns the transition so OnClosing has
+	 *  exactly one home: the host calls it from RequestExit (and teardown). */
+	void CloseForLoads()
+	{
+		if (bClosing.exchange(true, std::memory_order_acq_rel))
+		{
+			return;   // already closing -- broadcast once
+		}
+		BroadcastIsolated(OnClosing);
+	}
+
+	/** Active layers. INVARIANT: a layer is erased from here BEFORE its instance and module
+	 *  are released (FlushUnload erases, then DeleteUnloaded frees), so "in Pipelines" ==
+	 *  alive -- which is what makes an instance pointer checkable (IsOwned) instead of
+	 *  something to dereference blind, and what the query audit relies on. */
 	std::vector<FLayerBase*> Pipelines;               // active layers (anonymous)
 	std::vector<FLayerBase*> PendingAdded;            // pending installs
 	std::set<FLayerBase*>    PendingRemoveRequests;   // pending uninstall requests
@@ -533,6 +914,12 @@ protected:
 	std::map<std::string, int> ReverseDepCount;       // layer name -> depended-on count
 	std::vector<std::unique_ptr<FAssembly>> Modules;  // DLL keep-alive (move-only)
 	std::vector<std::string> ModulePaths;             // parallel to Modules/Features: DLL path per layer
+	std::vector<std::string> LayerNames;              // parallel too: the layer's name, copied at Install
+	                                                  // (pool-free: teardown matches / reports through this)
+
+	/** name -> slot in the parallel vectors. The one O(log n) lookup behind HasLayerName /
+	 *  StoredName, kept in sync by Install (insert) and DeleteUnloaded (erase). */
+	std::map<std::string, std::size_t> NameToSlot;
 	std::vector<std::unique_ptr<FLayerBase>> Features; // layer instance ownership
 	FThreadPool Pool;                                 // task execution
 };

@@ -6,30 +6,12 @@
 #include <string>
 #include <vector>
 
-#ifndef NDEBUG
-#	include <fstream>
-#endif
-
 namespace Maho
 {
 
 FEngineBase::FEngineBase() = default;
 
-FEngineBase::~FEngineBase()
-{
-	// TEMP: what is still owned when the engine object starts dying (its Features /
-	// Modules members die right after this body).
-	std::size_t Live = 0;
-	for (const auto& Feature : Features)
-	{
-		if (Feature)
-		{
-			Live += 1;
-		}
-	}
-	TraceTeardown((std::string("~FEngineBase: live features=") + std::to_string(Live)
-		+ " module slots=" + std::to_string(Modules.size())).c_str());
-}
+FEngineBase::~FEngineBase() = default;
 
 void FEngineBase::ParseCommandLine(int Argc, char** Argv)
 {
@@ -124,13 +106,10 @@ void FEngineBase::ParseCommandLine(int Argc, char** Argv)
 
 void FEngineBase::PostMain()
 {
-	TraceTeardown("PostMain enter");
 	// Teardown never loads: Install / Reload are refused from here on (the collector's
-	// closing flag), so a shutdown stage cannot pull a module in while the engine goes
-	// down -- and the loop below can only ever see removals. Main already set the flag
-	// through the exit request that ended its loop; setting it again keeps PostMain
-	// correct on its own.
-	bClosing.store(true, std::memory_order_release);
+	// closing flag). Main already flipped it through the exit request that ended its
+	// loop; closing again is idempotent (and OnClosing only ever broadcasts once).
+	CloseForLoads();
 
 	// A load/reload queued by the last frame is dropped: release the instance AND the
 	// module it already loaded (the load itself happened back in Install()).
@@ -145,14 +124,11 @@ void FEngineBase::PostMain()
 	{
 		TryUninstall(Layer->GetName());
 	}
-	TraceTeardown((std::string("PostMain: uninstalls requested pipelines=") + std::to_string(Pipelines.size())
-		+ " requests=" + std::to_string(PendingRemoveRequests.size())).c_str());
 
 	// Apply the shutdown stages, then repeat while they request more (a parent's
 	// Shutdown uninstalls its sub-plugins). Bounded: a dependency cycle must not spin.
 	for (int Pass = 0; Pass < 8 && !PendingRemoveRequests.empty(); ++Pass)
 	{
-		TraceTeardown("PostMain: flush pass");
 		FlushPendingUpdatePipelines<
 			TTypeList<IPreInit, IInit, IPostInit>,
 			TTypeList<IPreShutdown, IShutdown, IPostShutdown>
@@ -161,9 +137,7 @@ void FEngineBase::PostMain()
 
 	// No plugin code may still be running when the host frees the DLLs: stage methods
 	// (the shutdown stages included) may have submitted work to the pool themselves.
-	TraceTeardown("PostMain: Pool.Flush in");
 	Pool.Flush();
-	TraceTeardown("PostMain: done");
 
 	if (!PendingRemoveRequests.empty() || !Pipelines.empty())
 	{
@@ -245,22 +219,13 @@ int FEngineBase::Main()
 	EngineGraph.WaitAll();
 	Pool.Flush();
 
-#ifndef NDEBUG
-	// Debug-only evidence that frames really overlap (look next to the executable).
-	{
-		std::ofstream Out("TaskGraphStats.txt", std::ios::app);
-		Out << "tick graph: frames=" << EngineGraph.GetSubmittedFrames()
-			<< " max in flight = " << EngineGraph.GetMaxFramesInFlight()
-			<< " (ring depth " << EngineGraph.GetRingDepth() << ")\n";
-	}
-#endif
-
 	return 0;
 }
 
 void FEngineBase::RequestExit()
 {
-	bClosing.store(true, std::memory_order_release);
+	// The collector owns the transition (and the OnClosing broadcast that goes with it).
+	CloseForLoads();
 }
 
 bool FEngineBase::Has(std::string_view Key) const

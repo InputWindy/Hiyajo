@@ -70,9 +70,7 @@ inline int Main(int Argc, char** Argv)
 		App->PreMain();
 		const int Result = App->Main();
 		App->PostMain();
-		TraceTeardown("EntryPoint: deleting the engine object");
 		delete App; // FEngineBase virtual dtor - removes the whole object through the DLL.
-		TraceTeardown("EntryPoint: engine object gone; unloading the engine DLL next");
 		return Result;
 	}
 	catch (const std::exception& E)
