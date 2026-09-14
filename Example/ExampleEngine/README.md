@@ -56,19 +56,19 @@ public:
 };
 ```
 
-**`Private/ExampleEngine.cpp`** - installs the engine service layers up front:
+**`Private/ExampleEngine.cpp`** - installs the engine service layers from the install tree:
 
 ```cpp
 void FExampleEngine::PreMain()
 {
-    // Engine service layers installed up front; the window drives the engine
-    // loop and FPlatform requests exit when the window is closed.
-    Install("Log.dll");
-    Install("Config.dll");
-    Install("Platform.dll");
-    Install("Resource.dll");
-    Install("Script.dll");
-    Install("Render.dll");
+    // The install TREE (PluginManager.json, generated from the .cproject's TopLevel
+    // list) replaces hand-written DLL names: the host installs the ROOT node's direct
+    // children, and each of those installs its own children into its own collector
+    // (Render its features, ExampleEditor its panels, GameWorld its system).
+    FPluginManager::Get().Load();
+    InstallChildrenOf(GetName());
+    FlushPendingUpdatePipelines<TTypeList<IPreInit, IInit, IPostInit>,
+                                TTypeList<IPreShutdown, IShutdown, IPostShutdown>>();
 }
 ```
 
@@ -150,16 +150,17 @@ The host engine only sees `FRender` as a layer; render features are installed an
 
 ## Runtime Anonymous Plugin Install
 
-The main DLL (`ExampleEngine.dll`) has **zero compile-time dependency** on the render features (`Scene` / `DrawTriangleFeature`) - no linking, no including their headers, no knowledge of their types. Everything is loaded by name at runtime through `Install("Scene.dll")` / `Install("DrawTriangleFeature.dll")` (performed by the render plugin, or by the user's own feature).
+The main DLL (`ExampleEngine.dll`) has **zero compile-time dependency** on the render features (`Scene` / `DrawTriangleFeature`) - no linking, no including their headers, no knowledge of their types. `Render.cplugin` declares them in its `Plugins` list, and `FRender::PreInitialize` pulls the tree up with `InstallChildrenOf(GetName())`; per child that goes through exactly the same anonymous load path:
 
 ### Anonymous Load Chain
 
 ```cpp
-Install("Scene.dll")                     // 1 pass a name only; the main DLL does not know the FScene type
-  `- FAssembly("Scene.dll")              // 2 LoadLibrary
-       `- GetProcAddress("CreateLayer")  // 3 look up the C export by symbol name
-            `- FScene::CreateLayer()     // 4 returns FLayerBase* (base pointer)
-                 `- Install(Layer.get()) // 5 owner records it; applied at next safe point
+InstallChildrenOf("FRender")             // 1 walk the tree; per child pass a name only
+  `- Install("FScene.dll")               // 2 the main DLL still does not know the FScene type
+       `- FAssembly("FScene.dll")        // 3 LoadLibrary
+            `- GetProcAddress("CreateLayer")  // 4 look up the C export by symbol name
+                 `- FScene::CreateLayer()     // 5 returns FLayerBase* (base pointer)
+                      `- owner records it     // 6 applied at next safe point
 ```
 
 The main DLL only ever sees the `FLayerBase*` base pointer; the concrete `FScene` type only exists inside `Scene.dll`. Features interact only through the `FLayerBase` base contract + the render stage interfaces.
@@ -178,7 +179,7 @@ TryUninstall("FScene")                   // anonymous addressing by layer name (
 | **Anonymous layer** (FLayerBase) | each feature only exposes `GetName()` (class name) + dependency table |
 | **stage pipeline** (IPipeline) | engine stages: `IBeginFrame -> ITick -> IEndFrame`; render stages: `IBeginRender -> IRender -> IEndRender -> IPresent` |
 | **dependency-graph scheduling** (FLayerTaskGraph) | `FEngineBase::Main` runs Init -> Compile -> Execute -> Flush each frame |
-| **dynamic install** | `Install("Xxx.dll")` via FAssembly load + owner holds ownership |
+| **dynamic install** | `Install("<LayerType>.dll")` (layer type + platform suffix) via FAssembly load + owner holds ownership |
 | **dependency-safe uninstall** | `TryUninstall` uses reverse-dependency-count min-heap greedy; if depended on, drop |
 | **recursive subsystem** (FRender) | a layer that is itself a layer-collector with its own render thread + stage pipeline |
 | **context-parameterized stages** | `void Render(FRender&)` - render features reach RHI through the `FRender` context |

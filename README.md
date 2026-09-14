@@ -191,12 +191,14 @@ public:
 ### Dynamic Install / Uninstall / Reload
 
 ```cpp
-// dynamic load + install (engine owns the DLL + instance)
-Install("Renderer.dll");
+// dynamic load + install (the loader owns the DLL + instance). The DLL name is the
+// layer type + platform suffix; where the type is visible use the typed helper.
+Install("FRenderer.dll");   // == Install<FRenderer>();
 
 // anonymous uninstall (by layer name), dependency-safe:
-//   - depended on -> uninstall fails, dropped
-//   - no dependencies -> min-heap greedy, dependents pop first with chain uninstall
+//   - depended on -> REPORTED and refused (UninstallRefused + the dependents' names),
+//     the layer stays alive
+//   - unloadable -> min-heap greedy, dependents pop first with chain uninstall
 TryUninstall("FRenderer");
 
 // hot reload: uninstall at the next safe point, re-install the same DLL the frame after
@@ -208,7 +210,7 @@ RequestExit();
 
 Install/uninstall are recorded into pending sets and applied at the next safe point (`FlushPendingUpdatePipelines`), which broadcasts `OnLayersChanged` so the host re-expands its cached graph. Failures are loud, not silent:
 
-- layers are always loaded by name (`Install("X.dll")`) -- there is no raw-pointer install;
+- layers are always loaded by name (`Install("<LayerType>.dll")`, i.e. layer type + platform suffix) -- there is no raw-pointer install;
 - a duplicate layer name (one instance per name) is refused;
 - a layer whose declared dependency is not yet installed is refused (**deps first**) -- a failed install propagates to its dependents, mirroring uninstall's "depended-on is refused";
 - a load / symbol / factory failure reports the reason;
@@ -261,14 +263,13 @@ public:
 // ExampleEngine.cpp
 void FExampleEngine::PreMain()
 {
-    // Engine service layers installed up front; the window drives the engine
-    // loop and FPlatform requests exit when the window is closed.
-    Install("Log.dll");
-    Install("Config.dll");
-    Install("Platform.dll");
-    Install("Resource.dll");
-    Install("Script.dll");
-    Install("Render.dll");
+    // Install TREE (PluginManager.json <- the .cproject's TopLevel list): the host
+    // installs the ROOT node's direct children, each of which installs its own
+    // children into its own collector.
+    FPluginManager::Get().Load();
+    InstallChildrenOf(GetName());
+    FlushPendingUpdatePipelines<TTypeList<IPreInit, IInit, IPostInit>,
+                                TTypeList<IPreShutdown, IShutdown, IPostShutdown>>();
 }
 
 extern "C" MAHO_EXAMPLEENGINE_API Maho::FEngineBase* CreateEngine()

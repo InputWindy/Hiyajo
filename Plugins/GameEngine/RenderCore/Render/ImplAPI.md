@@ -9,9 +9,15 @@ cpp 侧关键函数的算法伪代码解释。Public 侧 API 文档通过 `#fn-.
 
 ← [公开 API](API.md) · `void`
 
-启动渲染子系统：建 RHI（用 Platform 原生窗口）→ 资源池 → 着色器编译服务 → 渲染图 → 安装内置 feature → 启动渲染线程。
+装载归 `PreInitialize`（安装树声明，见下），服务归 `Initialize`：RHI（用 Platform 原生窗口）→ 资源池 → 着色器编译服务 → 渲染图 → 资产镜像绑定 → 渲染线程。
 
 ```text
+PreInitialize(Engine):
+1. InstallChildrenOf(GetName())   // 本层声明在 Render.cplugin 的 Plugins：
+                                  // Scene / DrawTriangleFeature / UIFeature / FrameRenderFeature / ExampleEditor(Type=Editor)
+                                  // 按 module base name 装进**本 collector**（不是宿主的），
+                                  // 装载 + 构造即时发生；它们的 Init 阶段在我自己的安全点（Tick）才跑
+
 Initialize(Engine):
 1. P = Platform::GetPlatform()
 2. if P != nullptr && P->GetNativeWindow() != nullptr:
@@ -22,7 +28,7 @@ Initialize(Engine):
 3. ResourcePool = make_unique<FRHIResourcePool>(RHI.get())
 4. ShaderCompiler = make_unique<FShaderCompilerServer>(); ShaderCompiler->Initialize()
 5. RenderGraph = make_unique<FLayerTaskGraph<FRenderStages, FRender>>(Pool, *this)
-6. Install("Scene.dll"); Install("DrawTriangleFeature.dll")   // 项目插件进我们的 collector
+6. 绑定 Resource 的资产镜像回调（OnAssetImported / OnAssetUnloaded / OnAssetCreated + SetReadback）
 7. FThreadedServer::Initialize()                              // 渲染线程
 ```
 
@@ -47,18 +53,17 @@ EndFrame(Engine):
 
 ← [公开 API](API.md) · `void`
 
-驱动渲染图：应用 feature 安装/卸载 → 编译执行 IBeginRender→IRender→IEndRender 并排空 → 再驱动 IPresent（图上 flush 后，与帧命令缓冲串行）。
+驱动渲染图：帧首排空上一帧 → 应用 feature 安装/卸载 → `Init` + `Compile` + `Execute`（**无尾 Flush**：本帧任务留给下一次帧首 `Flush` 或 `EndFrame` 的 `Flush`）。
 
 ```text
 Tick(Engine):
 1. if !RenderGraph: return
-2. FlushPendingUpdatePipelines<IBeginRender, IRender, IEndRender>()
-3. RenderGraph->Init(Select<IBeginRender, IRender, IEndRender>())
-4. if !RenderGraph->Compile(): ReportFatal("FRender::Tick: render pipeline Compile failed")
-5. RenderGraph->Execute()
-6. RenderGraph->Flush()          // 等渲染 feature 完成（帧原语串行）
-7. for Presenter in Select<IPresent>().Data:
-       Invoke<IPresent, FRender>(Presenter, *this)   // IPresent 在图上 flush 后驱动
+2. RenderGraph->Flush()                       // 帧首栅栏：等上一帧的图任务（Init 不与在飞的 Render() 竞争）
+3. FlushPendingUpdatePipelines<IOnInstalled, IPreUnInstall>()   // 应用 feature 的安装 / 卸载
+4. RenderGraph->Init(Select<[IEditorInput,] IInitViews, IBeginRender, IRender, IEndRender,
+                           IPostProcess, IRenderUI [, IEditorCompose], IPresent>())
+5. if !RenderGraph->Compile(): ReportFatal("FRender::Tick: render pipeline Compile failed")
+6. RenderGraph->Execute()                     // 无尾 Flush
 ```
 
 <a id="fn-render-shutdown"></a>

@@ -17,7 +17,7 @@ FRender 自有的 4 个渲染 stage 能力接口——每个只有一个纯虚�
 
 ### FRender <class>
 
-渲染子系统——三合一：宿主引擎的 10 阶段帧层 + `FLayerCollector<FRender>`（渲染 feature 集合）+ `FThreadedServer`（渲染线程）。内部持有一个持久渲染图 `FLayerTaskGraph<TTypeList<IBeginRender, IRender, IEndRender>, FRender>`：帧首 Flush 等上一帧异步任务，帧末 Execute 提交下一帧——渲染线程跨帧流水。IPresent **不进渲染图**，由 `FRender::Tick` 在图上 flush 后驱动，共享帧命令缓冲从不被并发录制。
+渲染子系统——三合一：宿主引擎的 10 阶段帧层 + `FLayerCollector<FRender>`（渲染 feature 集合）+ `FThreadedServer`（渲染线程）。内部持有一个持久渲染图 `FLayerTaskGraph<FRenderStages, FRender>`，stage 集合 = `Select<IInitViews, IBeginRender, IRender, IEndRender, IPostProcess, IRenderUI, IPresent>`（编辑器构建另插 `IEditorInput` / `IEditorCompose`）；层没实现的 stage 是静默 no-op。`Tick` 的回合是：帧首 `Flush`（等上一帧图任务）→ 应用 feature 安装/卸载 → `Init` + `Compile` + `Execute`（**无尾 Flush**）；`EndFrame` 在 `RHI->EndFrame()`（end + submit + present）之前再 `Flush` 一次，保证每个 feature 的提交都完成后才提交帧缓冲——共享帧命令缓冲从不被并发录制。
 
 #### 接口
 
@@ -39,14 +39,15 @@ FRender 自有的 4 个渲染 stage 能力接口——每个只有一个纯虚�
 
 | 阶段 | 方法 | 行为 |
 |------|------|------|
-| `IInit` | `Initialize(FEngineBase&)` | 用 Platform 原生窗口建 RHI；建资源池 + 着色器编译服务 + 渲染图；安装 Scene.dll / DrawTriangleFeature.dll；启动渲染线程 |
+| `IPreInit` | `PreInitialize(FEngineBase&)` | `InstallChildrenOf(GetName())` —— 装本层在 `Render.cplugin` `Plugins` 里声明的 feature（Scene / DrawTriangleFeature / UIFeature / FrameRenderFeature / ExampleEditor(Type=Editor)），装进**本 collector**（不是宿主引擎的）；装载 + 构造此刻发生，它们的 Init 阶段在我的安全点（Tick）才跑 |
+| `IInit` | `Initialize(FEngineBase&)` | 用 Platform 原生窗口建 RHI；建资源池 + 着色器编译服务 + 渲染图；绑定 Resource 的资产镜像回调；启动渲染线程 |
 | `IBeginFrame` | `BeginFrame(FEngineBase&)` | `RHI->BeginFrame()` + `ResourcePool->BeginFrame()`（transient 资源过期） |
-| `ITick` | `Tick(FEngineBase&)` | 应用 feature 安装/卸载 → 编译执行渲染图（IBeginRender→IRender→IEndRender）并排空 → 驱动 IPresent presenters |
-| `IEndFrame` | `EndFrame(FEngineBase&)` | `RHI->EndFrame()` |
+| `ITick` | `Tick(FEngineBase&)` | 帧首 `RenderGraph->Flush()` → 应用 feature 安装/卸载 → `Init` + `Compile` + `Execute`（无尾 Flush，留给下一次帧首 Flush / `EndFrame` 的 Flush） |
+| `IEndFrame` | `EndFrame(FEngineBase&)` | `RenderGraph->Flush()`（排空 feature 提交）→ `RHI->EndFrame()` |
 | `IShutdown` | `Shutdown(FEngineBase&)` | 逆序释放：渲染图 → 编译服务（FlushCompiles）→ 资源池 → RHI → 渲染线程 |
-| 其余 5 个 | — | no-op |
+| 其余 4 个 | — | no-op |
 
-依赖：构造时声明 `IInit` 依赖 `"FPlatform"` 的 `IPostInit`（窗口必须先创建、`GPlatform` 先发布，RHI 才能读原生句柄）。
+依赖（在构造函数里用 DSL 声明）：`MyStage<IInit>().IsWaiting<Platform::FPlatform>().ForStage<IPostInit>()`（窗口必须先创建、`GPlatform` 先发布，RHI 才能读原生句柄）、`IsWaiting<FLog>().ForStage<IInit>()`、`MyStage<IPostInit>().IsWaiting<Paths::FPaths>()/IsWaiting<Name::FNamePool>().ForStage<IPostInit>()`，以及卸载侧的反向边（`FLog` / `FPlatform` / `Resource::FResourceSystem` / `GameWorld::FGameWorld` / 按名的 `"FUIViewRegistry"` 都必须排在我的 `IShutdown` 之后）。
 
 ## RDG.h
 

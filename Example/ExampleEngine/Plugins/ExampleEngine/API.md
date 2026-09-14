@@ -4,14 +4,14 @@
 
 ## FExampleEngine <class : FEngineBase>
 
-应用根。`PreMain` 安装引擎服务层（Log/Config/Platform/Resource/Script/Render）；`PostMain` 出口钩子。
+应用根。`PreMain` 从安装树装载根的直系子层并驱动 Init 阶段（`FPluginManager::Get().Load()` → `InstallChildrenOf(GetName())` → `FlushPendingUpdatePipelines<Init, Shutdown>()`）；`PostMain` 是出口钩子（关闸门 → 卸全部活层 → 排干）。
 
 #### 接口
 
 | 签名 | 说明 |
 |------|------|
-| `void PreMain() override` | 安装引擎服务层（`Install("Log.dll")` 等） |
-| `void PostMain() override` | 出口钩子（本例为空） |
+| `void PreMain() override` | 装载 + 初始化：安装树 → `InstallChildrenOf(GetName())` → `FlushPendingUpdatePipelines<IPreInit,IInit,IPostInit, IPreShutdown,IShutdown,IPostShutdown>()` |
+| `void PostMain() override` | 出口钩子（本例先调 `FEngineBase::PostMain()`） |
 
 ## MAHO_DECLARE_ENGINE(FExampleEngine) <宏>
 

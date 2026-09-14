@@ -45,25 +45,34 @@ Render.ReleaseTexture(Scene);
 ### 4. 生命周期
 
 ```text
+PreInitialize:                       // 安装树：本层在 Render.cplugin 的 Plugins 里声明的 feature
+  InstallChildrenOf(GetName())       // Scene / DrawTriangleFeature / UIFeature / FrameRenderFeature / ExampleEditor(Type=Editor)
+                                     // 装进**本 collector**；装载 + 构造即时发生，Init 阶段等到 Tick 的安全点
+
 Initialize:
   1. RHI = make_unique<FRHI>(); RHI->Initialize(Platform->GetNativeWindow(), W, H)
   2. ResourcePool = make_unique<FRHIResourcePool>(RHI.get())
   3. ShaderCompiler = make_unique<FShaderCompilerServer>(); ShaderCompiler->Initialize()
   4. RenderGraph = make_unique<FLayerTaskGraph<FRenderStages, FRender>>(Pool, *this)
-  5. Install("Scene.dll"); Install("DrawTriangleFeature.dll")
-  6. FThreadedServer::Initialize()
+  5. 绑定 Resource 的资产镜像回调（OnAssetImported / OnAssetUnloaded / OnAssetCreated + SetReadback）
+  6. FThreadedServer::Initialize()   // 渲染线程
+
+Tick: 帧首 RenderGraph->Flush() -> FlushPendingUpdatePipelines<IOnInstalled, IPreUnInstall>()
+      -> RenderGraph->Init(Select<...IPresent...>) + Compile + Execute（无尾 Flush）
+EndFrame: RenderGraph->Flush() -> RHI->EndFrame()（end + submit + present）
 
 Shutdown（逆序释放）:
   RenderGraph.reset() -> ShaderCompiler->FlushCompiles()/reset -> ResourcePool->Shutdown()/reset
   -> RHI->ShutdownRHI()/reset -> FThreadedServer::Shutdown()
 ```
 
-依赖：`FRender` 的 `Initialize` 依赖 Platform 的 `PostInitialize`（窗口必须先创建、`GPlatform` 先发布，RHI 才能读原生句柄）。
+依赖（构造里用 DSL 声明）：`MyStage<IInit>().IsWaiting<Platform::FPlatform>().ForStage<IPostInit>()`（窗口必须先创建、`GPlatform` 先发布，RHI 才能读原生句柄），另有 `FLog` / `FPaths` / `FNamePool` 的正向边与卸载侧反向边（`FLog` / `FPlatform` / `FResourceSystem` / `FGameWorld` / 按名的 `"FUIViewRegistry"`）。
 
 ## Third-party dependencies
 
 - **glslang / SPIRV-Tools**（`MAHO_WITH_GLSLANG`，异步 GLSL → SPIR-V 编译）
-- 其他插件：`RHI`（IRHI 命令面）、`Platform`（原生窗口句柄）——`.cplugin` Dependencies = `["RHI", "Platform"]`
+- 其他插件（`.cplugin` `Dependencies` = `["RHI", "Platform", "Resource", "Asset", "GameWorld"]`）：`RHI`（IRHI 命令面）、`Platform`（原生窗口句柄）、`Resource`/`Asset`（GPU 镜像 + 读回）、`GameWorld`（世界系统在 `IOnInstalled` 后驱动）
+- 子插件（`.cplugin` `Plugins` = `["Scene", "DrawTriangleFeature", "UIFeature", "FrameRenderFeature", "ExampleEditor"]`）：由 `PreInitialize` 的 `InstallChildrenOf(GetName())` 装进本 collector；`ExampleEditor` 是 `Type=Editor`，Runtime 构建自动跳过
 
 ## Related docs
 
