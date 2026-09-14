@@ -171,7 +171,7 @@ public:
 	 *  only by name. Ignored when absent (no error).
 	 *
 	 *  A parent layer takes its catalog-declared sub-plugins with it (recursively):
-	 *  they were installed BY the parent (InstallSubPlugins) and are unreachable --
+	 *  they were installed BY the parent (InstallChildrenOf) and are unreachable --
 	 *  and would leak -- once it is gone. The unload heap still orders the batch
 	 *  dependency-safely. */
 	void TryUninstall(std::string_view Query)
@@ -198,19 +198,22 @@ public:
 		}
 	}
 
-	/** Recursively install the catalog-declared sub-plugins of a parent layer into
-	 *  THIS collector (e.g. FRender installs its render features; FExampleEditor
-	 *  its editor components). Sub-plugin DLLs are loaded by module base name via
-	 *  Install(DllPath) — never linked, always runtime-loaded into this collector.
-	 *  `ParentLayer` is the parent's layer type name (GetName()); grandchildren
-	 *  are resolved recursively from the catalog. No-op when the parent has no
-	 *  catalog-declared sub-plugins. */
-	void InstallSubPlugins(std::string_view ParentLayer)
+	/** Install the catalog's DIRECT children of a node into THIS collector. This is
+	 *  the one call the host and every collector layer share -- identical install
+	 *  code, because each node already knows its own name:
+	 *    host:      InstallChildrenOf(GetName())   // MAHO_DECLARE_ENGINE's GetName()
+	 *    collector: InstallChildrenOf(GetName())   // FLayerBase::GetName()
+	 *  Child DLLs are loaded by module base name via Install(DllPath) -- never linked,
+	 *  always runtime-loaded into this collector. No-op when the node has no children.
+	 *
+	 *  Direct children only, deliberately: a child that has children of its own
+	 *  installs them itself (same call, its own collector), so no level has to know
+	 *  about the one below it and nothing can be installed twice. */
+	void InstallChildrenOf(std::string_view ParentLayer)
 	{
-		for (const std::string& Child : FPluginCatalog::Get().GetSubPlugins(ParentLayer))
+		for (const std::string& Child : FPluginCatalog::Get().GetChildren(ParentLayer))
 		{
 			Install(ApplyModuleExtension(Child));
-			InstallSubPlugins(Child);   // grandchildren (recursive)
 		}
 	}
 
@@ -351,6 +354,8 @@ private:
 	template <typename TShutdownStages>
 	bool FlushUnload()
 	{
+		TraceTeardown((std::string("FlushUnload enter requests=") + std::to_string(PendingRemoveRequests.size())
+			+ " pipelines=" + std::to_string(Pipelines.size())).c_str());
 		if (PendingRemoveRequests.empty())
 		{
 			return false;
@@ -414,13 +419,19 @@ private:
 
 		PendingRemoveRequests.clear();
 
+		TraceTeardown((std::string("  toUnload=") + std::to_string(ToUnload.size())).c_str());
 		if (ToUnload.empty())
 		{
 			return false;
 		}
 
 		FLayerTaskGraph<TShutdownStages, TContext> ShutdownGraph(Pool, GetContext());
-		ShutdownGraph.Init(std::move(ToUnload));
+		// Copy, do NOT move: ToUnload is still needed below to erase the layers from
+		// Pipelines and to release their instances + modules. Moving it here left the
+		// loop below iterating an empty vector -- the Shutdown stages ran, but nothing
+		// was ever destroyed, so every layer's DLL was released last (after its own
+		// dependencies were already unloaded).
+		ShutdownGraph.Init(ToUnload);
 		if (!ShutdownGraph.Compile())
 		{
 			ReportError("FLayerCollector: unload shutdown pipeline Compile failed");
@@ -436,6 +447,7 @@ private:
 			Pipelines.erase(std::remove(Pipelines.begin(), Pipelines.end(), L), Pipelines.end());
 			DeleteUnloaded(L);
 		}
+		TraceTeardown((std::string("  pipelines left=") + std::to_string(Pipelines.size())).c_str());
 
 		// Hot reload: the old instance + module are now freed -- load a fresh
 		// copy of each reloaded layer. Its Init runs at the next safe point.
@@ -469,6 +481,7 @@ private:
 	{
 		if (Pipeline != nullptr)
 		{
+			TraceTeardown((std::string("  request uninstall ") + std::string(Pipeline->GetName())).c_str());
 			PendingRemoveRequests.insert(Pipeline);
 		}
 	}
@@ -482,7 +495,7 @@ private:
 		{
 			return;
 		}
-		for (const std::string& Child : FPluginCatalog::Get().GetSubPlugins(Pipeline->GetName()))
+		for (const std::string& Child : FPluginCatalog::Get().GetChildren(Pipeline->GetName()))
 		{
 			for (FLayerBase* L : Pipelines)
 			{
@@ -503,7 +516,9 @@ private:
 		{
 			if (Features[I].get() == Layer)
 			{
+				TraceTeardown((std::string("  destroy instance ") + std::string(Layer->GetName())).c_str());
 				Features[I].reset();
+				TraceTeardown("  release module");
 				if (I < Modules.size())
 				{
 					Modules[I].reset();

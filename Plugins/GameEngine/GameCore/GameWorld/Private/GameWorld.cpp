@@ -41,26 +41,44 @@ FGameWorld::~FGameWorld()
 	// WorldGraph is reset in Shutdown; ComponentPools cleared there too.
 }
 
-template <typename... TStages>
-bool FGameWorld::ExecuteGraph()
-{
-	WorldGraph->Init(Select<TStages...>());
-	if (!WorldGraph->Compile())
-	{
-		ReportError("FGameWorld::ExecuteGraph: world stage graph Compile failed");
-		return false;
-	}
-	WorldGraph->Execute();
-	return true;
-}
-
 // -- engine stage overrides (host drives these). Initialize/Tick/Shutdown carry
 // the real work; the remaining stages are empty -- FGameWorld only hosts the world
 // and schedules its systems, the per-stage ECS frame runs in Tick.
 void FGameWorld::PreInitialize(FEngineBase&) {}
 void FGameWorld::PostInitialize(FEngineBase&) 
 {
-	WorldGraph = std::make_unique<FLayerTaskGraph<FWorldStages, FGameWorld>>(Pool, *this);
+	InputGraph = std::make_unique<FLayerTaskGraph<FInputStages, FGameWorld>>(Pool, *this);
+	FixedGraph = std::make_unique<FLayerTaskGraph<FFixedStages, FGameWorld>>(Pool, *this);
+	PostGraph = std::make_unique<FLayerTaskGraph<FPostStages, FGameWorld>>(Pool, *this);
+	bGraphsDirty = true;
+}
+
+void FGameWorld::RebuildGraphs()
+{
+	if (!InputGraph || !FixedGraph || !PostGraph)
+	{
+		return;
+	}
+	TraceTeardown("RebuildGraphs: input Init/Compile");
+	InputGraph->Init(Select<IProcessInput>());
+	if (!InputGraph->Compile())
+	{
+		ReportError("FGameWorld: input stage graph Compile failed");
+	}
+	TraceTeardown("RebuildGraphs: fixed Init/Compile");
+	FixedGraph->Init(Select<IFixedUpdate>());
+	if (!FixedGraph->Compile())
+	{
+		ReportError("FGameWorld: fixed-step stage graph Compile failed");
+	}
+	TraceTeardown("RebuildGraphs: post Init/Compile");
+	PostGraph->Init(Select<IUpdate, ILateUpdate>());
+	if (!PostGraph->Compile())
+	{
+		ReportError("FGameWorld: post-fixed stage graph Compile failed");
+	}
+	TraceTeardown("RebuildGraphs: done");
+	bGraphsDirty = false;
 }
 void FGameWorld::BeginFrame(FEngineBase&) {}
 void FGameWorld::EndFrame(FEngineBase&) {}
@@ -93,21 +111,30 @@ void FGameWorld::Initialize(FEngineBase&)
 
 void FGameWorld::Tick(FEngineBase&)
 {
-	if (!WorldGraph)
+	if (!InputGraph)
 	{
 		return;
 	}
 
-	// Frame-start barrier: wait the PREVIOUS frame's trailing stage group. The
-	// post-fixed group (IUpdate/ILateUpdate) is dispatched un-flushed below, so it
-	// pipelines across frames into this wait -- cross-frame parallelism, same as
-	// the render graph. Must precede Init (a rebuild under live tasks is a use of
-	// a freed node).
-	WorldGraph->Flush();
+	// Frame-start barrier: the post-fixed group is dispatched un-flushed below, so it
+	// pipelines across frames into this wait -- cross-frame parallelism, same as the
+	// render graph. Must precede any rebuild (a rebuild under live tasks is a use of a
+	// freed node).
+	PostGraph->Flush();
 
-	// Apply pending install/uninstall of world systems (attach -> IOnInstalled,
-	// detach -> IPreUnInstall) at the safe point.
+	// Safe point for world-system install/uninstall (attach -> IOnInstalled, detach ->
+	// IPreUnInstall). A changed system set is the ONLY thing that rebuilds the graphs,
+	// and it happens right here, with nothing in flight.
+	const bool bSetChanged = !PendingAdded.empty() || !PendingRemoveRequests.empty();
 	FlushPendingUpdatePipelines<TTypeList<IOnInstalled>, TTypeList<IPreUnInstall>>();
+	if (bSetChanged)
+	{
+		bGraphsDirty = true;
+	}
+	if (bGraphsDirty)
+	{
+		RebuildGraphs();
+	}
 
 	// Delta time.
 	const auto Now = std::chrono::steady_clock::now();
@@ -116,47 +143,58 @@ void FGameWorld::Tick(FEngineBase&)
 
 	// Pre-fixed: resolve input once, synchronously -- simulation must read a
 	// settled input state, so flush immediately after dispatch.
-	ExecuteGraph<IProcessInput>();
-	WorldGraph->Flush();
+	TraceTeardown("Tick: input execute");
+	InputGraph->Execute();
+	TraceTeardown("Tick: input flush");
+	InputGraph->Flush();
 
 	// Fixed timestep: 0..N steps this frame, each strictly ordered (a step cannot
-	// overlap the next, so each is flushed before the next builds).
+	// overlap the next, so each is flushed before the next runs).
 	Accumulator += DeltaSeconds;
 	while (Accumulator >= FixedStepSeconds)
 	{
-		if (!ExecuteGraph<IFixedUpdate>())
-		{
-			break;
-		}
-		WorldGraph->Flush();
+		FixedGraph->Execute();
+		FixedGraph->Flush();
 		Accumulator -= FixedStepSeconds;
 	}
 
 	// Post-fixed: update + late update, dispatched WITHOUT a trailing flush so they
 	// pipeline across frames; the next Tick's leading Flush (above) waits them.
-	ExecuteGraph<IUpdate, ILateUpdate>();
+	TraceTeardown("Tick: post execute");
+	PostGraph->Execute();
+	TraceTeardown("Tick: done");
 }
 
 void FGameWorld::Shutdown(FEngineBase&)
 {
-	// Uninstall every world system through the collector teardown pipeline so each
-	// system's IPreUnInstall runs BEFORE its instance is destroyed. A bare member
-	// destruction (UISystem blowing away with this object) would skip the teardown
-	// stage and leak cross-module subscriptions (e.g. a system's std::function bound
-	// into another DLL's event, whose target manager lives in the unloaded DLL).
+	// MY OWN state first, the world systems AFTER. The component pools hold objects
+	// whose destructors live in the systems' modules, and the graphs' nodes point at
+	// their instances -- freeing either of those once a system's DLL is unloaded runs
+	// code from an unmapped module (a hard AV, not a leak).
+	TraceTeardown("GameWorld::Shutdown: graphs flush + reset");
+	if (PostGraph) { PostGraph->Flush(); }
+	if (FixedGraph) { FixedGraph->Flush(); }
+	if (InputGraph) { InputGraph->Flush(); }
+	PostGraph.reset();
+	FixedGraph.reset();
+	InputGraph.reset();
+	TraceTeardown("GameWorld::Shutdown: ComponentPools clear");
+	ComponentPools.clear();
+	TraceTeardown("GameWorld::Shutdown: own state released");
+
+	// Now the systems: uninstall through the collector teardown pipeline so each one's
+	// IPreUnInstall runs BEFORE its instance is destroyed (a bare member destruction
+	// would skip that stage and leak cross-module subscriptions -- e.g. a system's
+	// std::function bound into another DLL's event).
 	for (FLayerBase* L : Pipelines)
 	{
 		TryUninstall(L->GetName());
 	}
 	FlushPendingUpdatePipelines<TTypeList<IOnInstalled>, TTypeList<IPreUnInstall>>();
+	TraceTeardown("GameWorld::Shutdown: systems unloaded");
 
-	if (WorldGraph)
-	{
-		WorldGraph->Flush();   // drain any leftover world-system tasks
-		WorldGraph.reset();
-	}
-	ComponentPools.clear();
 	GGameWorld = nullptr;
+	TraceTeardown("GameWorld::Shutdown: done");
 }
 
 FEntity FGameWorld::CreateEntity()

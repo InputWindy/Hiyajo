@@ -175,11 +175,11 @@ private:
 	void Shutdown(FEngineBase&) override;
 	void PostShutdown(FEngineBase&) override;
 
-	// Build + dispatch one stage group through the graph, WITHOUT flushing. The
-	// caller decides where the barrier goes: pre-fixed groups flush immediately,
-	// the trailing group stays async so it pipelines across frames.
-	template <typename... TStages>
-	bool ExecuteGraph();
+	/** (Re)build the per-group world graphs. Called ONLY when the world-system set
+	 *  changed (at the safe point) and never with a frame in flight: a graph's node set
+	 *  is what the frame ring indexes into, so rebuilding it under live tasks is a
+	 *  use-after-free waiting to happen. */
+	void RebuildGraphs();
 
 	template <typename C>
 	TComponentPool<C>* GetOrAddPool()
@@ -210,8 +210,18 @@ private:
 		return nullptr;
 	}
 
-	using FWorldStages = TTypeList<IOnInstalled, IProcessInput, IFixedUpdate, IUpdate, ILateUpdate, IPreUnInstall>;
-	std::unique_ptr<FLayerTaskGraph<FWorldStages, FGameWorld>> WorldGraph;
+	// One graph per stage GROUP, each carrying exactly its own stages: a graph expands
+	// one node per stage in its list for every layer it is given, so a wider list would
+	// quietly run those stages too (IOnInstalled/IPreUnInstall belong to the collector's
+	// install/uninstall graphs, not to the frame). Init happens once per system-set
+	// change; every frame after that is Execute-only.
+	using FInputStages = TTypeList<IProcessInput>;
+	using FFixedStages = TTypeList<IFixedUpdate>;
+	using FPostStages  = TTypeList<IUpdate, ILateUpdate>;
+	std::unique_ptr<FLayerTaskGraph<FInputStages, FGameWorld>> InputGraph;
+	std::unique_ptr<FLayerTaskGraph<FFixedStages, FGameWorld>> FixedGraph;
+	std::unique_ptr<FLayerTaskGraph<FPostStages, FGameWorld>>  PostGraph;
+	bool bGraphsDirty = true;
 
 	FEntityRegistry Registry;
 	std::vector<std::unique_ptr<IComponentPool>> ComponentPools;   // one TComponentPool<T> per component type

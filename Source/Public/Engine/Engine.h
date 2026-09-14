@@ -27,6 +27,14 @@ public:                                                      \
 	{                                                        \
 		return Maho::ApplyModuleExtension(#EngineType);        \
 	}                                                        \
+	static constexpr std::string_view StaticName()           \
+	{                                                        \
+		return #EngineType;                                    \
+	}                                                        \
+	std::string_view GetName() const                \
+	{                                                        \
+		return StaticName();                                  \
+	}
 
 /**
  * Stage dispatch specializations - the primary template + specialization sugar
@@ -132,7 +140,7 @@ public:
 
 	virtual void ParseCommandLine(int Argc, char** Argv);
 
-	virtual void PreMain();
+	virtual void PreMain() = 0;
 
 	virtual void PostMain();
 

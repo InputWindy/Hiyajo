@@ -109,9 +109,7 @@ bool FPluginCatalog::Load()
 	try
 	{
 		const auto J = nlohmann::json::parse(Text);
-		TopLevel.clear();
-		SubPlugins.clear();
-		Modules.clear();
+		Children.clear();
 		EngineRoot.clear();
 		// Load() failing at any point clears the engine root too -- a stale root from
 		// a previous successful Load must not survive a failed re-load.
@@ -120,40 +118,26 @@ bool FPluginCatalog::Load()
 		{
 			EngineRoot = J["EngineRoot"].get<std::string>();
 		}
-		if (J.contains("TopLevel") && J["TopLevel"].is_array())
+		if (J.contains("Children") && J["Children"].is_object())
 		{
-			for (const auto& E : J["TopLevel"])
+			for (auto It = J["Children"].begin(); It != J["Children"].end(); ++It)
 			{
-				if (E.is_string())
+				if (!It.value().is_array())
 				{
-					TopLevel.push_back(E.get<std::string>());
+					continue;
 				}
-			}
-		}
-		if (J.contains("ByLayerName") && J["ByLayerName"].is_object())
-		{
-			for (auto It = J["ByLayerName"].begin(); It != J["ByLayerName"].end(); ++It)
-			{
-				const std::string Name = It.key();
-				const auto& V = It.value();
-				std::vector<std::string> Subs;
-				if (V.contains("SubPlugins") && V["SubPlugins"].is_array())
+				std::vector<std::string> Kids;
+				for (const auto& Child : It.value())
 				{
-					for (const auto& S : V["SubPlugins"])
+					if (Child.is_string())
 					{
-						if (S.is_string())
-						{
-							Subs.push_back(S.get<std::string>());
-						}
+						Kids.push_back(Child.get<std::string>());
 					}
 				}
-				SubPlugins[Name] = std::move(Subs);
-				std::string Module = Name;
-				if (V.contains("Module") && V["Module"].is_string())
+				if (!Kids.empty())
 				{
-					Module = V["Module"].get<std::string>();
+					Children[It.key()] = std::move(Kids);
 				}
-				Modules[Name] = std::move(Module);
 			}
 		}
 		bLoaded = true;
@@ -166,16 +150,11 @@ bool FPluginCatalog::Load()
 	}
 }
 
-std::vector<std::string> FPluginCatalog::GetSubPlugins(std::string_view LayerName) const
+const std::vector<std::string>& FPluginCatalog::GetChildren(std::string_view LayerName) const
 {
-	const auto It = SubPlugins.find(std::string(LayerName));
-	return It != SubPlugins.end() ? It->second : std::vector<std::string>{};
-}
-
-std::string FPluginCatalog::GetModule(std::string_view LayerName) const
-{
-	const auto It = Modules.find(std::string(LayerName));
-	return It != Modules.end() ? It->second : std::string{};
+	static const std::vector<std::string> Empty;
+	const auto It = Children.find(std::string(LayerName));
+	return It != Children.end() ? It->second : Empty;
 }
 
 } // namespace Maho

@@ -133,7 +133,7 @@ Four fields, four distinct jobs — they are not interchangeable:
   (VS F7 on the solution) skip the trigger; a nested sub-plugin build is re-entrancy guarded, so
   it never re-cleans or re-links the chain the outer build just produced.
 - A plugin pulls up its `Plugins` itself, in its own earliest lifecycle stage
-  (`IPreInit::PreInitialize`, one line: `InstallSubPlugins(GetName())`). The engine never
+  (`IPreInit::PreInitialize`, one line: `InstallChildrenOf(GetName())`). The engine never
   enumerates another layer's children, and the children land in the declaring layer's collector
   (so its context type, e.g. `FRender&`, stays their scheduling context). Uninstall is the mirror
   image: a parent takes its catalog sub-plugins with it.

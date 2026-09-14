@@ -91,14 +91,15 @@ void FRender::PreInitialize(FEngineBase&)
 	// earliest stage of my own lifecycle -- before any of my business init runs.
 	// The catalog resolves them by MY name; each is loaded by module base name
 	// into MY collector (not the host engine's), so the render graph keeps
-	// driving them with FRender& as context. Recursive -- a feature's own
-	// declared children install too. The FRAME feature owns the single present
-	// point and must load last, so the catalog order is preserved.
+	// driving them with FRender& as context. The feature's own declared children
+	// (none today) would be installed by that feature into this same collector. The
+	// FRAME feature owns the single present point and must load last, so the catalog
+	// order is preserved.
 	//
 	// Loading (DLL + ctor) happens right here; the features' Init stages still
 	// run at my own flush safe point (Tick), so their ctors must NOT depend on
 	// anything my Initialize sets up -- they only declare stage deps.
-	InstallSubPlugins(GetName());
+	InstallChildrenOf(GetName());
 }
 
 void FRender::Initialize(FEngineBase& Engine)

@@ -531,7 +531,7 @@ if(EXISTS "${{CMAKE_CURRENT_SOURCE_DIR}}/Config")
 endif()
 
 # Stage the runtime plugin catalog next to the binary so FPluginCatalog can
-# discover it (TopLevel + SubPlugins) at startup.
+# discover it (the install tree + engine root) at startup.
 add_custom_command(TARGET EntryPoint POST_BUILD
 	COMMAND ${{CMAKE_COMMAND}} -E copy_if_different
 		"${{CMAKE_CURRENT_SOURCE_DIR}}/Intermediate/PluginCatalog.json"
@@ -776,7 +776,8 @@ def _resolve_plugin_chain(
 					continue
 				pending.append(child)
 
-	# 2) Pure sub-plugin cycle check (InstallSubPlugins would recurse forever).
+	# 2) Pure sub-plugin cycle check: the install tree must be a tree, not a cycle
+	#    (A declares B while B declares A would install the same layer twice).
 	pstate: dict[str, int] = {}
 	pstack: list[str] = []
 
@@ -1086,29 +1087,18 @@ def _write_plugin_catalog(
 	build_type: str,
 	engine_root: Path,
 ) -> dict[str, Any]:
-	"""Emit Intermediate/PluginCatalog.json — the runtime's plugin install map.
+	"""Emit Intermediate/PluginCatalog.json — the runtime's plugin install TREE.
 
 	Keyed by LAYER TYPE (the module base name, e.g. FScene), because that is what
 	the runtime resolves against: an installed layer's GetName() == its layer type
-	and its DLL is <layer type> + platform suffix.
+	and its DLL is <layer type> + platform suffix. Every node knows its own name, so
+	the manifest stores only the tree (and the engine root) -- no name lookups back.
 
-	- TopLevel: each selected top-level plugin the host installs in PreMain
-	  (excluding the host itself). Pure-library plugins (no layer macro) are not
-	  layers and are skipped.
-	- SubPlugins: parent layer type → its sub-plugin layer types (for the
-	  collector's recursive Install).
-	- ByLayerName: complete lookup (Module + SubPlugins) per layer.
+	- Children: node (layer type) -> its DIRECT child layer types. The root node is
+	  the project itself, so "who installs what" is ONE query everywhere (GetChildren):
+	  the host asks with its MAHO_DECLARE_ENGINE name, a collector layer with GetName().
 	"""
-	top_level: list[str] = []
-	for name in selected:
-		if name == project_name:
-			continue
-		lt = infos.get(name, {}).get("layer_type")
-		if lt:
-			top_level.append(lt)
-
-	sub_plugins: dict[str, list[str]] = {}
-	by_layer: dict[str, dict[str, Any]] = {}
+	children: dict[str, list[str]] = {}
 	for name in chain:
 		info = infos.get(name) or {}
 		lt = info.get("layer_type")
@@ -1119,19 +1109,26 @@ def _write_plugin_catalog(
 			clt = infos.get(child, {}).get("layer_type")
 			if clt:
 				child_types.append(clt)
-		by_layer[lt] = {"Module": lt, "SubPlugins": child_types}
 		if child_types:
-			sub_plugins[lt] = child_types
+			children[lt] = child_types
+
+	# The project is the tree's root: its children are the selected top levels
+	# (excluding the host itself), in manifest order.
+	root_type = (infos.get(project_name) or {}).get("layer_type") or project_name
+	root_children = [
+		lt for lt in (infos.get(name, {}).get("layer_type") for name in selected if name != project_name)
+		if lt
+	]
+	if root_children:
+		children[root_type] = root_children
 
 	catalog = {
-		"FileVersion": 1,
+		"FileVersion": 2,
 		# Engine source root as an absolute, posix-form path. The runtime reads it to
 		# seed the "Engine" virtual path root (engine Content/) -- baked into DATA, never
 		# into C++ (a relocated engine only needs a re-generate, not a recompile).
 		"EngineRoot": engine_root.resolve().as_posix(),
-		"TopLevel": top_level,
-		"SubPlugins": sub_plugins,
-		"ByLayerName": by_layer,
+		"Children": children,
 	}
 	intermediate = project_dir / "Intermediate"
 	intermediate.mkdir(parents=True, exist_ok=True)
@@ -1209,7 +1206,7 @@ def _write_cmake_lists(
 	# Engine layer type = the host plugin's MAHO_DECLARE_ENGINE first arg (a
 	# generated project is always F{project_name}); fall back to the plain name.
 	engine_layer_type = _layer_type_from_plugin(host_dir) or project_name
-	# Emit the runtime install catalog (TopLevel/SubPlugins/ByLayerName). Also
+	# Emit the runtime install catalog (the install tree + engine root). Also
 	# staged to <Binaries>/<Config> by a POST_BUILD copy for runtime discovery.
 	_write_plugin_catalog(project_dir, project_name, infos, selected, chain, build_type, engine_root)
 	(project_dir / "CMakeLists.txt").write_text(

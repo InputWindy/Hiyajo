@@ -15,7 +15,21 @@ namespace Maho
 
 FEngineBase::FEngineBase() = default;
 
-FEngineBase::~FEngineBase() = default;
+FEngineBase::~FEngineBase()
+{
+	// TEMP: what is still owned when the engine object starts dying (its Features /
+	// Modules members die right after this body).
+	std::size_t Live = 0;
+	for (const auto& Feature : Features)
+	{
+		if (Feature)
+		{
+			Live += 1;
+		}
+	}
+	TraceTeardown((std::string("~FEngineBase: live features=") + std::to_string(Live)
+		+ " module slots=" + std::to_string(Modules.size())).c_str());
+}
 
 void FEngineBase::ParseCommandLine(int Argc, char** Argv)
 {
@@ -108,26 +122,9 @@ void FEngineBase::ParseCommandLine(int Argc, char** Argv)
 	}
 }
 
-void FEngineBase::PreMain()
-{
-	// Engine layers install from the runtime catalog's TopLevel list (codegen
-	// stages it as PluginCatalog.json next to the binary). Each is loaded by
-	// module base name, never a hardcoded .dll. Sub-plugins
-	// (Render's features, editor components) are installed by their OWN collector,
-	// so the host only installs the top levels.
-	FPluginCatalog::Get().Load();
-	for (const std::string& Layer : FPluginCatalog::Get().GetTopLevel())
-	{
-		Install(ApplyModuleExtension(Layer));
-	}
-	FlushPendingUpdatePipelines<
-		TTypeList<IPreInit, IInit, IPostInit>,
-		TTypeList<IPreShutdown, IShutdown, IPostShutdown>
-	>();
-}
-
 void FEngineBase::PostMain()
 {
+	TraceTeardown("PostMain enter");
 	// Teardown never loads. From here on Install / Reload are REFUSED (and reported),
 	// so a shutdown stage cannot pull a module in while the engine goes down -- and the
 	// loop below can only ever see removals.
@@ -146,11 +143,14 @@ void FEngineBase::PostMain()
 	{
 		TryUninstall(Layer->GetName());
 	}
+	TraceTeardown((std::string("PostMain: uninstalls requested pipelines=") + std::to_string(Pipelines.size())
+		+ " requests=" + std::to_string(PendingRemoveRequests.size())).c_str());
 
 	// Apply the shutdown stages, then repeat while they request more (a parent's
 	// Shutdown uninstalls its sub-plugins). Bounded: a dependency cycle must not spin.
 	for (int Pass = 0; Pass < 8 && !PendingRemoveRequests.empty(); ++Pass)
 	{
+		TraceTeardown("PostMain: flush pass");
 		FlushPendingUpdatePipelines<
 			TTypeList<IPreInit, IInit, IPostInit>,
 			TTypeList<IPreShutdown, IShutdown, IPostShutdown>
@@ -159,7 +159,9 @@ void FEngineBase::PostMain()
 
 	// No plugin code may still be running when the host frees the DLLs: stage methods
 	// (the shutdown stages included) may have submitted work to the pool themselves.
+	TraceTeardown("PostMain: Pool.Flush in");
 	Pool.Flush();
+	TraceTeardown("PostMain: done");
 
 	if (!PendingRemoveRequests.empty() || !Pipelines.empty())
 	{
@@ -185,11 +187,16 @@ int FEngineBase::Main()
 	OnLayersChanged.Bind([this]() { bLayersDirty = true; });
 	while (true)
 	{
+		// Frame submission is NOT a barrier: SubmitFrame waits only for the ring slot it
+		// is about to reuse, so up to MAHO_FRAMES_IN_FLIGHT frames are in flight. Cross-
+		// frame safety comes from the per-layer gate in the graph (a layer never overlaps
+		// its own previous frame), which also tolerates a stray sink report by advancing
+		// the chain instead of wedging the layer.
+
 		// A queued install/uninstall/reload is a TOPOLOGY change: the rebuild below
 		// replaces the graph's node storage, so it may only run with the graph idle.
 		if (!PendingAdded.empty() || !PendingRemoveRequests.empty() || !PendingReloads.empty())
 		{
-			EngineGraph.WaitAll();
 			FlushPendingUpdatePipelines<TTypeList<IPreInit, IInit, IPostInit>, TTypeList<IPreShutdown, IShutdown, IPostShutdown>>();
 		}
 
@@ -240,7 +247,8 @@ int FEngineBase::Main()
 	// Debug-only evidence that frames really overlap (look next to the executable).
 	{
 		std::ofstream Out("TaskGraphStats.txt", std::ios::app);
-		Out << "frames: max in flight = " << EngineGraph.GetMaxFramesInFlight()
+		Out << "tick graph: frames=" << EngineGraph.GetSubmittedFrames()
+			<< " max in flight = " << EngineGraph.GetMaxFramesInFlight()
 			<< " (ring depth " << EngineGraph.GetRingDepth() << ")\n";
 	}
 #endif

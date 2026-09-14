@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Core/Export.h>
+#include <Core/Fatal.h>   // TEMP (TraceTeardown)
 
 #include <memory>
 #include <string>
@@ -53,6 +54,14 @@ struct FModuleDeleter
 			return;
 		}
 #if defined(_WIN32)
+		// TEMP: name the module about to be released (the crash hunter).
+		{
+			char Path[MAX_PATH] = {};
+			const DWORD N = GetModuleFileNameA(static_cast<HMODULE>(Handle), Path, MAX_PATH);
+			std::string Line = "FreeLibrary ";
+			Line += (N > 0 ? Path : "(unknown)");
+			TraceTeardown(Line.c_str());
+		}
 		FreeLibrary(static_cast<HMODULE>(Handle));
 #else
 		dlclose(Handle);

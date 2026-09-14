@@ -144,6 +144,12 @@ bool FTaskGraph::Compile()
 	{
 		Gate = std::make_unique<FGroupGate>();
 	}
+	GroupNames.clear();
+	GroupNames.resize(GroupIndex.size());
+	for (const auto& [Name, Index] : GroupIndex)
+	{
+		GroupNames[Index] = Name;
+	}
 	std::vector<std::uint32_t> RootCount(GroupIndex.size(), 0);
 	std::vector<std::uint32_t> SinkCount(GroupIndex.size(), 0);
 	for (const auto& Task : Tasks)
@@ -200,7 +206,13 @@ bool FTaskGraph::Compile()
 		}
 	}
 
-	// Frame ring: one independent state set per in-flight frame.
+	// Frame ring: one independent state set per in-flight frame. Frame IDs stay
+	// MONOTONIC across a rebuild (a reset made the idle guard blind to the previous
+	// generation's live frames), and the rebuild RETIRES all history: it has just waited
+	// for every recent frame (IsIdle/WaitAll above), so each slot's drained value can be
+	// bumped straight to NextFrame - 1. Carrying the old values instead left a slot
+	// "behind" and every later wait on it hung forever.
+	const std::uint64_t Retired = NextFrame > 0 ? NextFrame - 1 : 0;
 	RingDepth = MAHO_FRAMES_IN_FLIGHT > 0 ? MAHO_FRAMES_IN_FLIGHT : 1;
 	Ring.clear();
 	Ring.reserve(RingDepth);
@@ -214,9 +226,9 @@ bool FTaskGraph::Compile()
 			Slot->Pending[T].store(0, std::memory_order_relaxed);
 			Slot->Parked[T].store(false, std::memory_order_relaxed);
 		}
+		Slot->Serial.store(Retired, std::memory_order_release);
 		Ring.push_back(std::move(Slot));
 	}
-	NextFrame = 1;
 
 	return true;
 }
@@ -351,11 +363,16 @@ void FTaskGraph::GateComplete(std::size_t Group, std::uint64_t Frame)
 		std::lock_guard<std::mutex> Lock(Gate.M);
 		if (!Gate.bBusy || Gate.RunningFrame != Frame)
 		{
-			// The sink of an instance the gate is not tracking: report and do NOT wedge
-			// the layer (returning here would park every later frame forever).
-			ReportError((std::string("task graph: gate sink for frame ") + std::to_string(Frame)
+			// Bookkeeping hiccup: a stray/duplicate report, or a sink for an instance the
+			// gate is not tracking. NEVER return here -- that would leave the layer busy
+			// forever and park every later frame of it (a hiccup becomes a whole-graph
+			// hang). Report and fall through to the normal hand-over instead: the FIFO
+			// chain is still advanced exactly one step, every parked root is still
+			// dispatched exactly once, and the worst case degrades to one extra overlap.
+			ReportError((std::string("task graph: gate sink for layer '")
+				+ (Group < GroupNames.size() ? GroupNames[Group] : std::string("?"))
+				+ "' frame " + std::to_string(Frame)
 				+ " reported against running frame " + std::to_string(Gate.RunningFrame)).c_str());
-			return;
 		}
 		if (Gate.Waiting.empty())
 		{
@@ -550,6 +567,8 @@ void FTaskGraph::SubmitTaskFor(std::size_t Index, std::uint64_t Frame)
 
 void FTaskGraph::ExecuteNodeFor(std::size_t Index)
 {
+	TraceTeardown((std::string("node ") + Tasks[Index]->Node->Name + "::"
+		+ Tasks[Index]->Node->Stage.name()).c_str());
 	ExecuteNode(Tasks[Index]->Node);
 }
 

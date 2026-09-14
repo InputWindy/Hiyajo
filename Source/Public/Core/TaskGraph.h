@@ -146,6 +146,10 @@ public:
 	/** High-water mark of frames in flight at once (Debug builds track it). */
 	[[nodiscard]] std::uint32_t GetMaxFramesInFlight() const noexcept { return MaxInFlight.load(); }
 
+	/** Frames this graph submitted over its lifetime (monotonic across rebuilds).
+	 *  Diagnostics: a stalled/never-rendering graph shows a tiny number here. */
+	[[nodiscard]] std::uint64_t GetSubmittedFrames() const noexcept { return NextFrame > 1 ? NextFrame - 1 : 0; }
+
 	/** Name of the node whose dependency broke the last Compile (empty if none).
 	 *  Since node Name == the layer name, this identifies the offending layer. */
 	[[nodiscard]] const std::string& GetCompileErrorNode() const { return CompileErrorNode; }
@@ -224,6 +228,7 @@ private:
 	std::string CompileErrorNode;                                          // node that broke Compile
 
 	std::vector<std::unique_ptr<FGroupGate>>  Gates;      // one per distinct group (node Name)
+	std::vector<std::string>                  GroupNames;  // Gates[i]'s layer name (diagnostics)
 	std::vector<std::unique_ptr<FFrameSlot>>  Ring;       // MAHO_FRAMES_IN_FLIGHT slots
 	std::uint32_t                             RingDepth = MAHO_FRAMES_IN_FLIGHT;
 	std::uint64_t                             NextFrame = 1;   // frame id of the next SubmitFrame

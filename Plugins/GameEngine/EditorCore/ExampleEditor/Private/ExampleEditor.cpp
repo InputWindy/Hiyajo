@@ -459,8 +459,9 @@ void FExampleEditor::InstallEditorComponents()
 	// Editor components (viewport, console, theme) are declaratively listed in
 	// ExampleEditor.cplugin Plugins and installed into this host's collector by
 	// module base name at the next safe point (their IEditorInit graph runs on
-	// FlushPendingUpdatePipelines). Recursive -- grandchildren install too.
-	InstallSubPlugins(GetName());
+	// FlushPendingUpdatePipelines). A component with children of its own would
+	// install them itself, into this same collector.
+	InstallChildrenOf(GetName());
 	FlushPendingUpdatePipelines<TTypeList<IEditorInit>, TTypeList<IEditorShutdown>>();
 }
 

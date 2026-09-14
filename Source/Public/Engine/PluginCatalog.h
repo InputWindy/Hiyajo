@@ -12,12 +12,16 @@ namespace Maho
 {
 
 /**
- * Runtime plugin-install manifest, loaded from PluginCatalog.json (staged next to
- * the binary by codegen's EntryPoint POST_BUILD). Answers the two questions the
- * installer needs:
- *   - which layers the host installs up-front (TopLevel);
- *   - the child plugins each parent collector recursively installs into itself
- *     (SubPlugins), resolved by LAYER TYPE (the module base name == GetName()).
+ * Runtime plugin-install TREE, loaded from PluginCatalog.json (staged next to the
+ * binary by codegen's EntryPoint POST_BUILD). The manifest is a tree of layer types:
+ * the project is the ROOT node, and every node's children are the plugins it installs
+ * into its own collector. One query answers it for everybody, and every node already
+ * knows its own name -- so host and collector run the SAME call:
+ *
+ *   InstallChildrenOf(GetName());   // host (MAHO_DECLARE_ENGINE) and layer alike
+ *
+ * Nothing carries a name in the other direction: the catalog stores the tree and the
+ * engine root, not who anybody is.
  *
  * Process-unique: the accessor is declared here and defined in the engine DLL
  * (Maho), so any plugin DLL linking Maho shares the single instance.
@@ -36,16 +40,10 @@ public:
 	/** True once a Load() produced a usable catalog. */
 	[[nodiscard]] bool IsLoaded() const { return bLoaded; }
 
-	/** Top-level layers the host installs in PreMain, in manifest order. */
-	[[nodiscard]] const std::vector<std::string>& GetTopLevel() const { return TopLevel; }
-
-	/** Child layer types a parent collector recursively installs into itself.
-	 *  Empty when the parent declares no sub-plugins. */
-	[[nodiscard]] std::vector<std::string> GetSubPlugins(std::string_view LayerName) const;
-
-	/** Module base name for a layer (== its layer type under the naming protocol).
-	 *  Empty when unknown. */
-	[[nodiscard]] std::string GetModule(std::string_view LayerName) const;
+	/** DIRECT child layer types of a node, in manifest order -- the single query the
+	 *  host and every collector use, each with its own name. Empty (not an error) for
+	 *  a node with none. */
+	[[nodiscard]] const std::vector<std::string>& GetChildren(std::string_view LayerName) const;
 
 	/** Engine source root recorded by codegen (ENGINE_DIR as an absolute path, in
 	 *  the generator's posix form). Empty when absent -- callers fall back to their
@@ -64,9 +62,7 @@ private:
 
 	bool bLoaded = false;
 	std::string EngineRoot;
-	std::vector<std::string> TopLevel;
-	std::map<std::string, std::vector<std::string>> SubPlugins;
-	std::map<std::string, std::string> Modules;
+	std::map<std::string, std::vector<std::string>> Children;   // node -> its direct children
 };
 
 } // namespace Maho
