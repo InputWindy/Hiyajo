@@ -87,10 +87,6 @@
     {
       "Name": "GameWorld",
       "Enabled": true
-    },
-    {
-      "Name": "ExampleEditor",
-      "Enabled": true
     }
   ]
 }

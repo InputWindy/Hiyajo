@@ -166,26 +166,13 @@ void FRender::Initialize(FEngineBase& Engine)
 
 void FRender::PostInitialize(FEngineBase&)
 {
-	// Editor build: mount the editor feature (ExampleEditor, Type=Editor) into OUR
-	// collection so the render graph drives it at IEditorCompose -- sampling the game-UI
-	// composite (UIRenderTarget), drawing the editor overlay, and taking over the present
-	// target. It has to live HERE: the render graph only sees this collector, and the
-	// editor layer mounts render stages (IEditorInput/IEditorCompose), not engine ones.
-	//
-	// TODO(teardown order): this belongs in Render.cplugin's Plugins as a declarative
-	// child, but moving it there changes WHEN its module is freed (inside FRender's own
-	// shutdown instead of after the shutdown graph) and FResourceSystem::IShutdown then
-	// touches resources whose types live in that already-unloaded module -- a hard AV.
-	// Fix that first (ResourceSystem must not reach into unloaded plugin types, or the
-	// shutdown edge must order it before FRender), then delete this hardcoded install and
-	// drop ExampleEditor from the project's TopLevel list.
-#ifdef MAHO_EDITOR_BUILD
-	// Loads by module base name + platform suffix, never a hardcoded .dll.
-	if (!Install(Maho::ApplyModuleExtension("FExampleEditor")))
-	{
-		MAHO_LOG_CORE_ERROR("ExampleEditor install FAILED (IEditorCompose will have no implementer -> black screen)");
-	}
-#endif
+	// The editor feature (ExampleEditor, Type=Editor) is declared in Render.cplugin's
+	// Plugins, so InstallChildrenOf(GetName()) in PreInitialize mounts it into OUR
+	// collection -- which is where it belongs: the render graph only sees this collector,
+	// and the editor layer mounts render stages (IEditorInput/IEditorCompose), not engine
+	// ones. The catalog skips Type=Editor children in Runtime builds, so this replaces the
+	// old hand-written #ifdef install; naming a sibling module in C++ here was also what
+	// left a SECOND, inert FExampleEditor instance in the host's collector.
 }
 
 void FRender::WaitShaderCompiles()

@@ -19,6 +19,7 @@
     "Scene",
     "DrawTriangleFeature",
     "UIFeature",
-    "FrameRenderFeature"
+    "FrameRenderFeature",
+    "ExampleEditor"
   ]
 }
