@@ -164,8 +164,12 @@ public:
 	/** Request the main loop to exit at the next frame boundary. */
 	void RequestExit();
 
+	/** True once RequestExit was called: the host's own vocabulary for the collector's
+	 *  "closing" state (the same flag also refuses Install / Reload there). */
+	[[nodiscard]] bool ShouldExit() const noexcept { return IsClosing(); }
+
 private:
-	std::atomic<bool> bIsShuttingDown = false;   // whether the engine is shutting down
+	// The "going down" flag lives in FLayerCollector (it also gates Install/Reload).
 	bool bLayersDirty = true;                    // set when OnLayersChanged fires; Main re-expands the cached graph
 
 private:

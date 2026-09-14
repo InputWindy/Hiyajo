@@ -5,10 +5,11 @@
 #include <Core/Fatal.h>
 #include <Engine/Layer.h>
 #include <Engine/LayerTaskGraph.h>
-#include <Engine/PluginCatalog.h>
+#include <Engine/PluginManager.h>
 #include <Engine/Query.h>
 
 #include <algorithm>
+#include <atomic>
 #include <cstdint>
 #include <map>
 #include <memory>
@@ -63,12 +64,12 @@ public:
 	 *  Returns true on success. */
 	bool Install(std::string_view DllPath, const char* FactorySymbol = "CreateLayer")
 	{
-		// The host sets this while tearing down: loading a module then is never right
+		// Refused once the collection is closing: loading a module then is never right
 		// (its stages would never run and its DLL would outlive the teardown order), so
 		// it is refused LOUDLY instead of being silently dropped later.
-		if (bTearingDown)
+		if (IsClosing())
 		{
-			ReportError((std::string("Install refused: the engine is tearing down (") + std::string(DllPath) + ")").c_str());
+			ReportError((std::string("Install refused: the collection is closing (") + std::string(DllPath) + ")").c_str());
 			return false;
 		}
 
@@ -125,9 +126,9 @@ public:
 	 *  is still depended on. */
 	void Reload(std::string_view LayerName)
 	{
-		if (bTearingDown)
+		if (IsClosing())
 		{
-			ReportError((std::string("Reload refused: the engine is tearing down (") + std::string(LayerName) + ")").c_str());
+			ReportError((std::string("Reload refused: the collection is closing (") + std::string(LayerName) + ")").c_str());
 			return;
 		}
 
@@ -214,7 +215,7 @@ public:
 	 *  about the one below it and nothing can be installed twice. */
 	void InstallChildrenOf(std::string_view ParentLayer)
 	{
-		for (const std::string& Child : FPluginCatalog::Get().GetChildren(ParentLayer))
+		for (const std::string& Child : FPluginManager::Get().GetChildren(ParentLayer))
 		{
 			Install(ApplyModuleExtension(Child));
 		}
@@ -513,10 +514,17 @@ private:
 	}
 
 protected:
-	/** Set by the host while tearing down: Install / Reload are refused from then on,
-	 *  so a shutdown stage cannot pull a module in while the engine goes down, and
-	 *  the teardown loop can only ever see removals. */
-	bool bTearingDown = false;
+	/** The one "this collection is closing" flag, owned here because it answers for both
+	 *  sides of it:
+	 *    - Install / Reload REFUSE once it is set -- a module loaded while the collection
+	 *      comes down would never have its stages run, and its DLL would outlive the
+	 *      teardown order;
+	 *    - the host derives its own vocabulary from it (an `IExit` stage calls the
+	 *      engine's RequestExit, and the main loop reads the engine's ShouldExit).
+	 *  Atomic: it is set from a stage (any thread) and read from the loop and the guards. */
+	std::atomic<bool> bClosing{ false };
+
+	[[nodiscard]] bool IsClosing() const noexcept { return bClosing.load(std::memory_order_acquire); }
 
 	std::vector<FLayerBase*> Pipelines;               // active layers (anonymous)
 	std::vector<FLayerBase*> PendingAdded;            // pending installs

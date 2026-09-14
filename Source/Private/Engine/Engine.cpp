@@ -125,10 +125,12 @@ void FEngineBase::ParseCommandLine(int Argc, char** Argv)
 void FEngineBase::PostMain()
 {
 	TraceTeardown("PostMain enter");
-	// Teardown never loads. From here on Install / Reload are REFUSED (and reported),
-	// so a shutdown stage cannot pull a module in while the engine goes down -- and the
-	// loop below can only ever see removals.
-	bTearingDown = true;
+	// Teardown never loads: Install / Reload are refused from here on (the collector's
+	// closing flag), so a shutdown stage cannot pull a module in while the engine goes
+	// down -- and the loop below can only ever see removals. Main already set the flag
+	// through the exit request that ended its loop; setting it again keeps PostMain
+	// correct on its own.
+	bClosing.store(true, std::memory_order_release);
 
 	// A load/reload queued by the last frame is dropped: release the instance AND the
 	// module it already loaded (the load itself happened back in Install()).
@@ -228,7 +230,7 @@ int FEngineBase::Main()
 
 		// An input layer (e.g. GameInputLayer) calls RequestExit inside Tick. The
 		// current frame may still be executing -- the tail WaitAll() drains it.
-		if (bIsShuttingDown.load(std::memory_order_acquire))
+		if (ShouldExit())
 		{
 			break;
 		}
@@ -258,7 +260,7 @@ int FEngineBase::Main()
 
 void FEngineBase::RequestExit()
 {
-	bIsShuttingDown.store(true, std::memory_order_release);
+	bClosing.store(true, std::memory_order_release);
 }
 
 bool FEngineBase::Has(std::string_view Key) const

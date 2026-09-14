@@ -20,16 +20,17 @@ Main():
    Execute(); Flush()
 3. Tick 循环：
    while true:
-     EngineGraph.Flush()                          // 等上一帧排空
-     FlushPendingUpdatePipelines<IPreInit,IInit,IPostInit>()   // 应用挂起安装/卸载
-     EngineGraph.Init(Select<IBeginFrame,ITick,IEndFrame,IExit>())
-     Compile 失败 → ReportFatal
-     EngineGraph.Execute()                        // 异步派发
-     if bIsShuttingDown:                          // 本帧 Execute 已派发完，安全读退出标志
-         EngineGraph.Flush(); break
-4. Shutdown 图：ShutdownGraph(IPreShutdown,IShutdown,IPostShutdown) 同 Init 图跑一次
-5. Features.clear(); Modules.clear()             // 先删实例（虚析构在各自 DLL），再卸 DLL
-6. return 0
+     if 有挂起安装/卸载/重载:                       // 拓扑变更要求图静止
+       EngineGraph.WaitAll()
+       FlushPendingUpdatePipelines<IPreInit,IInit,IPostInit, IPreShutdown,IShutdown,IPostShutdown>()
+     if bLayersDirty:
+       EngineGraph.WaitAll(); EngineGraph.Init(Select<IBeginFrame,ITick,IEndFrame,IExit>())
+       Compile 失败 → 报一次 + 退化成空图
+     EngineGraph.SubmitFrame()                    // 只等自己要复用的环槽；最多 MAHO_FRAMES_IN_FLIGHT 帧在飞
+     if ShouldExit():                             // 本帧已提交完，安全读退出标志
+         break
+   EngineGraph.WaitAll(); Pool.Flush()            // 退出前：图 + 池 双静止
+主循环不再建 Init/Shutdown 图 —— 安装/初始化归 PreMain，卸载/Shutdown 归 PostMain。
 ```
 
 <a id="fn-engine-parsecmd"></a>
@@ -58,11 +59,13 @@ ParseCommandLine(Argc, Argv):
 
 ← [公开 API](../../Public/Engine/EngineAPI.md) · `void`
 
-置原子退出标志；主循环在本帧 Execute 派发完成后读到并退出。
+置收集器的"收摊"标志；主循环在本帧提交完成后读到并退出。同一个标志也让
+`FLayerCollector::Install` / `Reload` 拒绝（收摊后装载的模块永远等不到它的阶段跑）。
 
 ```text
 RequestExit():
-1. bIsShuttingDown.store(true, memory_order_release)
+1. bClosing.store(true, memory_order_release)    // FLayerCollector::bClosing
+2. 宿主侧读它用 ShouldExit()；收集器侧读它用 IsClosing()
 ```
 
 <a id="fn-engine-kv"></a>

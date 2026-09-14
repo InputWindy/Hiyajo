@@ -1,6 +1,6 @@
 #include "Paths.h"
 
-#include <Engine/PluginCatalog.h>
+#include <Engine/PluginManager.h>
 
 #include <system_error>
 #include <utility>
@@ -32,7 +32,7 @@ bool IsDirectory(const std::filesystem::path& P)
  *  falls back to the working directory. */
 std::filesystem::path ProjectRoot()
 {
-	const std::filesystem::path ExeDir = FPluginCatalog::ExecutableDir();
+	const std::filesystem::path ExeDir = FPluginManager::ExecutableDir();
 	std::error_code Ec;
 	if (!ExeDir.empty())
 	{
@@ -57,7 +57,7 @@ std::filesystem::path Utf8Path(std::string_view Utf8)
 /** Engine source root from the generated manifest (empty when unavailable). */
 std::filesystem::path EngineRoot()
 {
-	FPluginCatalog& Catalog = FPluginCatalog::Get();
+	FPluginManager& Catalog = FPluginManager::Get();
 	if (!Catalog.IsLoaded())
 	{
 		Catalog.Load();
@@ -79,7 +79,7 @@ void FPaths::Initialize(FEngineBase&)
 	// Defaults only fill aliases nobody registered -- repeated Initialize keeps an
 	// explicit SetRoot intact. Roots are registered unconditionally: a missing
 	// directory is a valid (empty) content root, not an error.
-	const std::filesystem::path ExeDir = FPluginCatalog::ExecutableDir();
+	const std::filesystem::path ExeDir = FPluginManager::ExecutableDir();
 	const std::filesystem::path DeployedGame = ExeDir / "Content" / "Game";
 	const std::filesystem::path DeployedEngine = ExeDir / "Content" / "Engine";
 

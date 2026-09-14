@@ -530,13 +530,13 @@ if(EXISTS "${{CMAKE_CURRENT_SOURCE_DIR}}/Config")
 	)
 endif()
 
-# Stage the runtime plugin catalog next to the binary so FPluginCatalog can
+# Stage the runtime plugin manifest next to the binary so FPluginManager can
 # discover it (the install tree + engine root) at startup.
 add_custom_command(TARGET EntryPoint POST_BUILD
 	COMMAND ${{CMAKE_COMMAND}} -E copy_if_different
-		"${{CMAKE_CURRENT_SOURCE_DIR}}/Intermediate/PluginCatalog.json"
-		"${{CMAKE_BINARY_DIR}}/Binaries/$<CONFIG>/PluginCatalog.json"
-	COMMENT "Staging PluginCatalog.json to runtime dir"
+		"${{CMAKE_CURRENT_SOURCE_DIR}}/Intermediate/PluginManager.json"
+		"${{CMAKE_BINARY_DIR}}/Binaries/$<CONFIG>/PluginManager.json"
+	COMMENT "Staging PluginManager.json to runtime dir"
 	VERBATIM
 )
 
@@ -1087,7 +1087,7 @@ def _write_plugin_catalog(
 	build_type: str,
 	engine_root: Path,
 ) -> dict[str, Any]:
-	"""Emit Intermediate/PluginCatalog.json — the runtime's plugin install TREE.
+	"""Emit Intermediate/PluginManager.json — the runtime's plugin install TREE.
 
 	Keyed by LAYER TYPE (the module base name, e.g. FScene), because that is what
 	the runtime resolves against: an installed layer's GetName() == its layer type
@@ -1132,7 +1132,7 @@ def _write_plugin_catalog(
 	}
 	intermediate = project_dir / "Intermediate"
 	intermediate.mkdir(parents=True, exist_ok=True)
-	(intermediate / "PluginCatalog.json").write_text(
+	(intermediate / "PluginManager.json").write_text(
 		json.dumps(catalog, indent=2, ensure_ascii=False) + "\n",
 		encoding="utf-8", newline="\n",
 	)
@@ -1842,7 +1842,7 @@ def run_package(
 	# The plugin catalog (install map + engine root) is staged next to the
 	# binaries by CMake; a packaged run with no catalog beside the exe resolves
 	# no module at all and hangs on startup, so it must ride along too.
-	catalog = bin_dir / "PluginCatalog.json"
+	catalog = bin_dir / "PluginManager.json"
 	if catalog.is_file():
 		shutil.copy2(catalog, packaged / catalog.name)
 		log(f"[Maho] Staged plugin catalog → {packaged / catalog.name}")

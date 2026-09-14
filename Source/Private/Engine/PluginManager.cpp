@@ -1,4 +1,4 @@
-#include <Engine/PluginCatalog.h>
+#include <Engine/PluginManager.h>
 
 #include <nlohmann/json.hpp>
 
@@ -24,18 +24,18 @@ namespace Maho
 namespace
 {
 
-/** First directory (of the candidates) that actually holds PluginCatalog.json. */
+/** First directory (of the candidates) that actually holds PluginManager.json. */
 std::optional<std::filesystem::path> FindCatalogFile()
 {
-	const std::filesystem::path ExeDir = FPluginCatalog::ExecutableDir();
+	const std::filesystem::path ExeDir = FPluginManager::ExecutableDir();
 	const std::filesystem::path Cwd = std::filesystem::current_path();
 	std::vector<std::filesystem::path> Candidates;
 	if (!ExeDir.empty())
 	{
-		Candidates.push_back(ExeDir / "PluginCatalog.json");
-		Candidates.push_back(ExeDir / ".." / "Intermediate" / "PluginCatalog.json");
+		Candidates.push_back(ExeDir / "PluginManager.json");
+		Candidates.push_back(ExeDir / ".." / "Intermediate" / "PluginManager.json");
 	}
-	Candidates.push_back(Cwd / "PluginCatalog.json");
+	Candidates.push_back(Cwd / "PluginManager.json");
 	for (const auto& C : Candidates)
 	{
 		std::error_code Ec;
@@ -49,7 +49,7 @@ std::optional<std::filesystem::path> FindCatalogFile()
 
 } // namespace
 
-std::filesystem::path FPluginCatalog::ExecutableDir()
+std::filesystem::path FPluginManager::ExecutableDir()
 {
 #if defined(_WIN32)
 	char Buf[MAX_PATH]{};
@@ -76,13 +76,13 @@ std::filesystem::path FPluginCatalog::ExecutableDir()
 	return {};
 }
 
-FPluginCatalog& FPluginCatalog::Get()
+FPluginManager& FPluginManager::Get()
 {
-	static FPluginCatalog Instance;
+	static FPluginManager Instance;
 	return Instance;
 }
 
-bool FPluginCatalog::Load()
+bool FPluginManager::Load()
 {
 	const std::optional<std::filesystem::path> Catalog = FindCatalogFile();
 	if (!Catalog)
@@ -150,7 +150,7 @@ bool FPluginCatalog::Load()
 	}
 }
 
-const std::vector<std::string>& FPluginCatalog::GetChildren(std::string_view LayerName) const
+const std::vector<std::string>& FPluginManager::GetChildren(std::string_view LayerName) const
 {
 	static const std::vector<std::string> Empty;
 	const auto It = Children.find(std::string(LayerName));

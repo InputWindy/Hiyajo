@@ -12,7 +12,7 @@ namespace Maho
 {
 
 /**
- * Runtime plugin-install TREE, loaded from PluginCatalog.json (staged next to the
+ * Runtime plugin-install TREE, loaded from PluginManager.json (staged next to the
  * binary by codegen's EntryPoint POST_BUILD). The manifest is a tree of layer types:
  * the project is the ROOT node, and every node's children are the plugins it installs
  * into its own collector. One query answers it for everybody, and every node already
@@ -26,13 +26,13 @@ namespace Maho
  * Process-unique: the accessor is declared here and defined in the engine DLL
  * (Maho), so any plugin DLL linking Maho shares the single instance.
  */
-class MAHO_API FPluginCatalog
+class MAHO_API FPluginManager
 {
 public:
 	/** The process-unique instance (lazy-loaded on first access). */
-	static FPluginCatalog& Get();
+	static FPluginManager& Get();
 
-	/** Load (or re-load) PluginCatalog.json. Searches the current working dir and
+	/** Load (or re-load) PluginManager.json. Searches the current working dir and
 	 *  the executable's directory. Returns false when absent/unparseable — callers
 	 *  fall back. */
 	bool Load();
@@ -55,10 +55,10 @@ public:
 	[[nodiscard]] static std::filesystem::path ExecutableDir();
 
 private:
-	FPluginCatalog() = default;
-	~FPluginCatalog() = default;
-	FPluginCatalog(const FPluginCatalog&) = delete;
-	FPluginCatalog& operator=(const FPluginCatalog&) = delete;
+	FPluginManager() = default;
+	~FPluginManager() = default;
+	FPluginManager(const FPluginManager&) = delete;
+	FPluginManager& operator=(const FPluginManager&) = delete;
 
 	bool bLoaded = false;
 	std::string EngineRoot;

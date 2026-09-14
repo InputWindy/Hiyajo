@@ -32,7 +32,7 @@ private:
 };
 ```
 
-- 宿主 Install 一次（`Example/ExampleEngine/ExampleEngine.cproject` 的 `Plugins` 里挂 `UI`，运行时由 `PluginCatalog.json` 的 TopLevel 装）。
+- 宿主 Install 一次（`Example/ExampleEngine/ExampleEngine.cproject` 的 `Plugins` 里挂 `UI`，运行时由 `PluginManager.json` 的安装树装）。
 - `Initialize` 里发日志，故声明了 `MyStage<IInit>().IsWaiting<FLog>().ForStage<IInit>()`。
 - `Shutdown` 时仍在册的视图会打一条 Warn —— 那是所有权漏了，不是正常路径。
 

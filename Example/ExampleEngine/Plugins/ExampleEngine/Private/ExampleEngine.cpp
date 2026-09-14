@@ -10,7 +10,7 @@
 #include <Script.h>
 #include <GameWorld.h>
 
-#include <Engine/PluginCatalog.h>
+#include <Engine/PluginManager.h>
 
 namespace Maho
 {
@@ -21,7 +21,7 @@ void FExampleEngine::PreMain()
 	// layer makes for its own children (InstallChildrenOf(GetName())), one argument
 	// apart. Each installed layer then installs ITS children into its own collector,
 	// so nothing is installed twice and nobody needs a special "top level" list.
-	FPluginCatalog::Get().Load();
+	FPluginManager::Get().Load();
 	InstallChildrenOf(GetName());
 	FlushPendingUpdatePipelines<
 		TTypeList<IPreInit, IInit, IPostInit>,
