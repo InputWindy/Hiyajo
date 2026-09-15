@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EngineAPI</title>
+<style>
+:root {
+  --bg:#0d1117; --panel:#161b22; --panel2:#1c2128; --line:#30363d;
+  --fg:#c9d1d9; --muted:#8b949e; --accent:#58a6ff; --accent2:#7ee787;
+  --code:#0b0f14; --warn:#d29922;
+}
+* { box-sizing:border-box; }
+html { scroll-behavior:smooth; }
+body {
+  margin:0; background:var(--bg); color:var(--fg);
+  font:15px/1.65 -apple-system,"Segoe UI",Roboto,"Helvetica Neue","PingFang SC","Microsoft YaHei",sans-serif;
+}
+a { color:var(--accent); text-decoration:none; }
+a:hover { text-decoration:underline; }
+code, pre, kbd { font-family:ui-monospace,"Cascadia Mono","JetBrains Mono",Consolas,"Courier New",monospace; }
+.layout { display:flex; align-items:flex-start; gap:28px; max-width:1400px; margin:0 auto; padding:0 24px; }
+nav.side {
+  position:sticky; top:0; align-self:flex-start; flex:0 0 268px; max-height:100vh;
+  overflow-y:auto; padding:22px 12px 60px; border-right:1px solid var(--line);
+}
+nav.side h4 { margin:0 0 6px; font-size:12px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); }
+nav.side ul { list-style:none; margin:0 0 18px; padding:0; }
+nav.side li { margin:2px 0; }
+nav.side a { color:var(--fg); display:block; padding:3px 8px; border-radius:6px; font-size:13.5px; }
+nav.side a:hover { background:var(--panel2); text-decoration:none; }
+nav.side a.lvl3 { padding-left:20px; color:var(--muted); font-size:13px; }
+nav.side a.here { background:var(--panel2); color:var(--accent); }
+main { flex:1 1 auto; min-width:0; padding:26px 0 90px; }
+header.page { border-bottom:1px solid var(--line); padding-bottom:14px; margin-bottom:22px; }
+header.page .crumbs { color:var(--muted); font-size:13px; }
+header.page .gen { margin-top:8px; color:var(--warn); font-size:12.5px; }
+h1 { font-size:30px; line-height:1.25; margin:18px 0 14px; }
+h2 { font-size:22px; margin:34px 0 12px; padding-bottom:7px; border-bottom:1px solid var(--line); }
+h3 { font-size:17.5px; margin:26px 0 10px; }
+h4 { font-size:15px; margin:20px 0 8px; color:var(--muted); }
+p { margin:10px 0; }
+hr { border:0; border-top:1px solid var(--line); margin:26px 0; }
+ul, ol { padding-left:26px; }
+li { margin:4px 0; }
+ul.nested { margin:5px 0; }
+code { background:var(--panel2); border:1px solid var(--line); border-radius:5px; padding:1px 5px; font-size:13px; }
+pre {
+  background:var(--code); border:1px solid var(--line); border-radius:8px;
+  padding:14px 16px; overflow-x:auto; margin:14px 0;
+}
+pre code { background:none; border:0; padding:0; font-size:13px; line-height:1.55; }
+blockquote {
+  margin:14px 0; padding:8px 16px; border-left:3px solid var(--accent);
+  background:var(--panel); border-radius:0 6px 6px 0; color:var(--muted);
+}
+.table-wrap { overflow-x:auto; margin:14px 0; }
+table { border-collapse:collapse; width:100%; font-size:14px; }
+th, td { border:1px solid var(--line); padding:7px 11px; vertical-align:top; }
+th { background:var(--panel2); text-align:left; font-weight:600; }
+tbody tr:nth-child(even) { background:rgba(255,255,255,.02); }
+footer.page { margin-top:44px; padding-top:14px; border-top:1px solid var(--line); color:var(--muted); font-size:13px; display:flex; gap:16px; flex-wrap:wrap; }
+footer.page .spacer { flex:1 1 auto; }
+</style>
+</head>
+<body>
+<div class="layout">
+<nav class="side">
+<div class="crumbs">Public / Engine / <span>EngineAPI.md</span></div>
+<h4>本页目录</h4>
+<ul><li><a class="lvl2" href="#layer-h">Layer.h</a></li><li><a class="lvl3" href="#invoke-tstage-tcontext-function-模板">Invoke&lt;TStage, TContext&gt; &lt;function（模板）&gt;</a></li><li><a class="lvl3" href="#maho_declare_stage_dispatch-contexttype-stagetype-casttype-method-宏">MAHO_DECLARE_STAGE_DISPATCH(ContextType, StageType, CastType, Method) &lt;宏&gt;</a></li><li><a class="lvl3" href="#flayerbase-class">FLayerBase &lt;class&gt;</a></li><li><a class="lvl3" href="#flayer-tpipelines-class">FLayer&lt;TPipelines...&gt; &lt;class&gt;</a></li><li><a class="lvl3" href="#maho_declare_layer-layertype-宏">MAHO_DECLARE_LAYER(LayerType) &lt;宏&gt;</a></li><li><a class="lvl2" href="#query-h">Query.h</a></li><li><a class="lvl3" href="#tquery-tlist-class-编译期">TQuery&lt;TList&gt; &lt;class（编译期）&gt;</a></li><li><a class="lvl3" href="#fquery-tbase-class-运行时">FQuery&lt;TBase&gt; &lt;class（运行时）&gt;</a></li><li><a class="lvl3" href="#fqueryresult-tbase-class">FQueryResult&lt;TBase&gt; &lt;class&gt;</a></li><li><a class="lvl2" href="#layertaskgraph-h">LayerTaskGraph.h</a></li><li><a class="lvl3" href="#flayertaskgraph-tstages-tcontext-femptycontext-class-ftaskgraph">FLayerTaskGraph&lt;TStages, TContext = FEmptyContext&gt; &lt;class : FTaskGraph&gt;</a></li><li><a class="lvl2" href="#layercollector-h">LayerCollector.h</a></li><li><a class="lvl3" href="#flayercollector-tcontext-class-fquery-flayerbase">FLayerCollector&lt;TContext&gt; &lt;class : FQuery&lt;FLayerBase&gt;&gt;</a></li><li><a class="lvl2" href="#engine-h">Engine.h</a></li><li><a class="lvl3" href="#阶段接口-ipreinit-iinit-ipostinit-ipreshutdown-ishutdown-ipostshutdown-ibeginframe-itick-iendframe-iexit-class">阶段接口：IPreInit / IInit / IPostInit / IPreShutdown / IShutdown / IPostShutdown / IBeginFrame / ITick / IEndFrame / IExit &lt;class&gt;</a></li><li><a class="lvl3" href="#fenginebase-class-flayercollector-fenginebase">FEngineBase &lt;class : FLayerCollector&lt;FEngineBase&gt;&gt;</a></li><li><a class="lvl3" href="#maho_declare_engine-enginetype-宏">MAHO_DECLARE_ENGINE(EngineType) &lt;宏&gt;</a></li><li><a class="lvl2" href="#entrypoint-h">EntryPoint.h</a></li><li><a class="lvl3" href="#maho-main-int-argc-char-argv-function">Maho::Main(int Argc, char Argv) &lt;function&gt;</a></li></ul>
+<h4>本目录</h4><ul><li><a class="here" href="EngineAPI.html">EngineAPI</a></li><li><a class="" href="EngineDoc.html">EngineDoc</a></li></ul>
+</nav>
+<main>
+<header class="page">
+<div class="crumbs">Public / Engine / <span>EngineAPI.md</span></div>
+<div class="gen">generated by Tools/md_to_html.py from EngineAPI.md — edit the .md, not this file</div>
+</header>
+<h1 id="engine-api-文档">Engine — API 文档</h1>
+<p>Engine 层 = 层系统：匿名层锚点 + 有序 stage 管线 + 依赖图调度。层只声明身份与逐 stage 依赖，全局调度由 <code>FLayerTaskGraph</code> 统一负责。全在 <code>Source/Public/Engine/</code> 头文件（模板 + 内联）。</p>
+<h2 id="layer-h">Layer.h</h2>
+<h3 id="invoke-tstage-tcontext-function-模板">Invoke&lt;TStage, TContext&gt; &lt;function（模板）&gt;</h3>
+<p>阶段派发自由函数模板，按 (stage, context) 对特化。<code>FLayerTaskGraph</code> 运行时调用 <code>Invoke&lt;TStage&gt;(Layer, Context)</code>；每个 stage 接口针对每种 context 有全特化（如 <code>Engine.h</code> 里 <code>Invoke&lt;IInit, FEngineBase&gt;</code>、<code>Render.h</code> 里 <code>Invoke&lt;IRender, FRender&gt;</code>）。未实现该接口的层经 <code>dynamic_cast</code> 失败<strong>静默跳过</strong>（这是合法状态，不是错误）。</p>
+<h3 id="maho_declare_stage_dispatch-contexttype-stagetype-casttype-method-宏">MAHO_DECLARE_STAGE_DISPATCH(ContextType, StageType, CastType, Method) &lt;宏&gt;</h3>
+<p>阶段派发特化糖——把 <code>Invoke&lt;StageType, ContextType&gt;</code> 全特化为 dynamic_cast 到 <code>CastType</code> 并调用 <code>Method(Context)</code>：</p>
+<pre><code class="language-cpp">MAHO_DECLARE_STAGE_DISPATCH(FEngineBase, IInit, IInit, Initialize)
+// =&gt; Invoke&lt;IInit, FEngineBase&gt;(Layer, Engine) -&gt; cast IInit -&gt; Initialize(Engine)</code></pre>
+<h3 id="flayerbase-class">FLayerBase &lt;class&gt;</h3>
+<p><strong>匿名层锚点</strong>——可能动态加载的 feature 的多态基类。携带身份 + 逐 stage 依赖声明。生命周期经 <code>IPipeline&lt;TStages...&gt;</code> 组合；层<strong>永不管理依赖生命周期</strong>——执行上下文完整性由 <code>FLayerTaskGraph</code> 保证。层只闭合自己。</p>
+<h4 id="接口">接口</h4>
+<div class="table-wrap"><table><thead><tr><th>签名</th><th>说明</th></tr></thead><tbody><tr><td><code>virtual ~FLayerBase()</code></td><td>虚析构（跨 DLL 删除经 DLL 自己的代码）</td></tr><tr><td><code>virtual std::string_view GetName() const = 0</code></td><td>稳定身份名——TaskGraph 拓扑键；由声明宏从类型名字符串化而来（<code>#LayerType</code>，编译期字面量）</td></tr><tr><td><code>virtual const FDependencyTable&amp; GetDependencies() const</code></td><td>逐 stage 依赖表（引擎读；子类不访问）</td></tr><tr><td><code>const std::vector&lt;FDependent&gt;&amp; GetDependents() const</code></td><td>反向依赖表（引擎读；子类不访问）</td></tr></tbody></table></div>
+<h4 id="嵌套类型">嵌套类型</h4>
+<div class="table-wrap"><table><thead><tr><th>类型</th><th>说明</th></tr></thead><tbody><tr><td><code>FDependency { Name, Stage }</code></td><td>正向依赖元组：dep 名 + dep 的 stage 接口 <code>type_index</code></td></tr><tr><td><code>FDependencyTable</code></td><td><code>map&lt;我的 stage type_index, vector&lt;FDependency&gt;&gt;</code></td></tr><tr><td><code>FDependent { Name, Stage, MyStage }</code></td><td>反向依赖元组：谁（<code>Name</code>@<code>Stage</code>）必须等我（<code>MyStage</code>）</td></tr></tbody></table></div>
+<h4 id="依赖声明-dsl-protected-子类唯一入口">依赖声明 DSL（<code>protected</code>，子类唯一入口）</h4>
+<p>裸模板 <code>WaitFor&lt;...&gt;()</code> / <code>BlockOn&lt;...&gt;()</code> 与两张表都是 <code>private</code>：声明只能经 DSL 表达（DSL builder 是嵌套类，才能触到私有落点）。</p>
+<div class="table-wrap"><table><thead><tr><th>形式</th><th>含义</th></tr></thead><tbody><tr><td><code>MyStage&lt;TMy&gt;().IsWaiting&lt;TOther&gt;().ForStage&lt;TOtherStage&gt;()</code></td><td>我的 <code>TMy</code> 等 <code>TOther</code> 的 <code>TOtherStage</code>（正向，点名类型）</td></tr><tr><td><code>MyStage&lt;TMy&gt;().IsBlocking&lt;TOther&gt;().OnStage&lt;TOtherStage&gt;()</code></td><td><code>TOther</code> 的 <code>TOtherStage</code> 等我 <code>TMy</code>（反向，点名类型）</td></tr><tr><td><code>MyStage&lt;TMy&gt;().IsWaiting("FLog").ForStage&lt;TOtherStage&gt;()</code></td><td>同上正向，但<strong>按名字</strong>寻址</td></tr><tr><td><code>MyStage&lt;TMy&gt;().IsBlocking("FUIViewRegistry").OnStage&lt;TOtherStage&gt;()</code></td><td>同上反向，但<strong>按名字</strong>寻址</td></tr></tbody></table></div>
+<p>按名字的形式用于<strong>不能点名对方类型</strong>的消费者——点名会强加对可选插件的构建依赖（例：通用脚手架安排某个视图注册表的卸载次序）。名字在<strong>实际安装进本图</strong>的层里解析，找不到就不绑边（优雅降级）。</p>
+<h3 id="flayer-tpipelines-class">FLayer&lt;TPipelines...&gt; &lt;class&gt;</h3>
+<p>装配语法糖——把 <code>FLayerBase</code>（身份 + 依赖）与一个或多个 <code>IPipeline</code>（有序 stage）绑成一个层类型。<code>FLayerBase</code> 与 <code>TPipelines...</code> 无继承关系，调度时经 <code>dynamic_cast</code> 侧向转换。</p>
+<pre><code class="language-cpp">class FWorld : public FLayer&lt;IPipeline&lt;IMain, IShutdown&gt;&gt; {};
+class FWorldMulti : public FLayer&lt;IEngineTickPipeline, IEngineInitPipeline&gt; {};</code></pre>
+<h3 id="maho_declare_layer-layertype-宏">MAHO_DECLARE_LAYER(LayerType) &lt;宏&gt;</h3>
+<p>层声明糖——生成 <code>StaticName()</code> + <code>GetName()</code> + <code>CreateLayer()</code> + <code>GetModulePath()</code>。名字来自类型名字符串化（<code>#LayerType</code>），依赖声明用同一类型推导，拓扑键自洽。DLL 名 = 类型名 + 平台后缀（<code>ApplyModuleExtension</code>），宏只收一个参数：</p>
+<pre><code class="language-cpp">class FWorld : public FLayer&lt;...&gt; { MAHO_DECLARE_LAYER(FWorld); ... };
+// StaticName()/GetName() == "FWorld"；GetModulePath() == "FWorld.dll"（平台后缀在运行时拼接）</code></pre>
+<h2 id="query-h">Query.h</h2>
+<p>两个正交的筛选器：<code>TQuery</code> 纯类型运算（编译期）、<code>FQuery</code>/<code>FQueryResult</code> 实例筛选（运行时）。</p>
+<h3 id="tquery-tlist-class-编译期">TQuery&lt;TList&gt; &lt;class（编译期）&gt;</h3>
+<p>类型表上的 LINQ：输入 <code>TTypeList</code>，输出筛选后的 <code>TTypeList</code>，不引用任何实例。</p>
+<div class="table-wrap"><table><thead><tr><th>链式调用</th><th>语义</th></tr></thead><tbody><tr><td><code>Select&lt;T...&gt;</code></td><td>保留派生自 T 中<strong>任意一个</strong>的类型（OR）</td></tr><tr><td><code>With&lt;T...&gt;</code></td><td>保留派生自 T 中<strong>全部</strong>的类型（AND）</td></tr><tr><td><code>Not&lt;T...&gt;</code></td><td>去掉派生自 T 中任意一个的类型（NOR）</td></tr><tr><td><code>FResult</code></td><td>当前幸存类型表</td></tr></tbody></table></div>
+<pre><code class="language-cpp">using FTable = TTypeList&lt;FLog, FNet, FAudio&gt;;
+using FTickable = TQuery&lt;FTable&gt;::Select&lt;ITick&gt;::With&lt;IShared&gt;::FResult;</code></pre>
+<h3 id="fquery-tbase-class-运行时">FQuery&lt;TBase&gt; &lt;class（运行时）&gt;</h3>
+<p>对<strong>实例集合</strong>做同样的接口谓词筛选（<code>dynamic_cast</code>），层集在编译期未知时使用。</p>
+<div class="table-wrap"><table><thead><tr><th>签名</th><th>说明</th></tr></thead><tbody><tr><td><code>virtual std::vector&lt;TBase*&gt;&amp; GetQueryData() = 0</code></td><td>数据源<strong>写路径</strong>；在收集器里是 <code>private</code>（对外只给 const 版本，防止绕过安装校验直接塞指针）</td></tr><tr><td><code>virtual const std::vector&lt;TBase*&gt;&amp; GetQueryData() const = 0</code></td><td>数据源读路径（对外可见）</td></tr><tr><td><code>template&lt;T...&gt; FQueryResult&lt;TBase&gt; Select&lt;T...&gt;()</code></td><td>OR 筛选</td></tr><tr><td><code>template&lt;T...&gt; FQueryResult&lt;TBase&gt; With&lt;T...&gt;()</code></td><td>AND 筛选</td></tr><tr><td><code>template&lt;T...&gt; FQueryResult&lt;TBase&gt; Not&lt;T...&gt;()</code></td><td>NOR 筛选</td></tr><tr><td><code>template&lt;T&gt; std::vector&lt;T*&gt; Cast&lt;T&gt;()</code></td><td>转成具体接口指针向量（只留非空幸存者）</td></tr></tbody></table></div>
+<h3 id="fqueryresult-tbase-class">FQueryResult&lt;TBase&gt; &lt;class&gt;</h3>
+<p>筛选结果的<strong>值类型</strong>，可直接当 <code>vector</code> 用（隐式转换保留，<code>FLayerTaskGraph::Init(Query)</code> 依赖它）。</p>
+<div class="table-wrap"><table><thead><tr><th>签名</th><th>说明</th></tr></thead><tbody><tr><td><code>operator std::vector&lt;TBase*&gt;&amp;()</code> / <code>const&amp;()</code></td><td>隐式转换（与既有调用点兼容）</td></tr><tr><td><code>Num()</code> / <code>IsEmpty()</code> / <code>GetData()</code></td><td>只读访问</td></tr><tr><td><code>Select/With/Not/Cast</code></td><td>在<strong>当前结果集</strong>上继续链式筛选</td></tr></tbody></table></div>
+<ul><li>内部 <code>Data</code> 是 <code>private</code>：外部无法注入裸指针。</li><li>结果记住<strong>来源集合</strong>，<code>Cast</code>/<code>Filter</code> 在 Debug 下先做<strong>活性审计</strong>（该指针是否仍在来源里）——不在就丢弃并 <code>ReportError</code>。原因：卸载是「先移出 <code>Pipelines</code> 再释放模块」，而 <code>dynamic_cast</code> 要解引用 vptr，对已卸载对象做就是崩。Release 下退化为非空判断（零成本）。</li><li>契约：结果只在下一次集合变更前有效；跨帧保存裸指针请改用 <code>Cast&lt;T&gt;()</code> 并自行重查。</li></ul>
+<h2 id="layertaskgraph-h">LayerTaskGraph.h</h2>
+<h3 id="flayertaskgraph-tstages-tcontext-femptycontext-class-ftaskgraph">FLayerTaskGraph&lt;TStages, TContext = FEmptyContext&gt; &lt;class : FTaskGraph&gt;</h3>
+<p>一组匿名 <code>FLayer*</code> → 编译 → 执行。<code>TStages</code> 是 <code>TTypeList&lt;StageInterface...&gt;</code>；<strong>每个传入层沿 <code>TStages</code> 展开成每阶段一个节点</strong>——层没实现的阶段也照样出节点，派发时 <code>dynamic_cast</code> 失败即静默 no-op。</p>
+<ul><li><strong>自推进</strong>：阶段 N 依赖同层阶段 N-1</li><li><strong>跨对象依赖</strong>：层在该阶段声明的 <code>WaitFor</code> 元组</li><li><strong>反向依赖</strong>：层声明的 <code>BlockOn</code> 元组在 <code>Init</code> 时施加到对方节点；对方不在本图则跳过</li></ul>
+<p>推论（据此定规则「层必须装进挂载了它 stage 列表的那个 collector」）：若某层的 stage 不在 <code>TStages</code> 里，它虽然仍有 no-op 节点，却<strong>永远不会被真正驱动</strong>，且它在那些外来 stage 上声明的依赖<strong>永远不会变成边</strong>——<code>Compile</code> 根本看不到它们。</p>
+<div class="table-wrap"><table><thead><tr><th>签名</th><th>说明</th></tr></thead><tbody><tr><td><code>FLayerTaskGraph(FThreadPool&amp;, TContext&amp;)</code></td><td>绑定线程池 + 执行上下文（引用，不拷贝）</td></tr><tr><td><code>void Init(std::vector&lt;FLayerBase*&gt;)</code></td><td>重建节点集（可重复调用；须图静止）</td></tr><tr><td><code>bool Compile()</code></td><td>接线 + 环/缺依赖检测；失败时 <code>GetCompileErrorNode()</code> 给出坏层名</td></tr><tr><td><code>void Execute()</code></td><td>提交一帧（内联转调 <code>SubmitFrame</code>，安装/卸载图沿用）</td></tr><tr><td><code>void SubmitFrame()</code> / <code>void WaitFence()</code> / <code>void WaitAll()</code> / <code>bool IsIdle()</code></td><td>继承自 <code>FTaskGraph</code> 的帧 API</td></tr></tbody></table></div>
+<pre><code class="language-cpp">using FTickStages = TTypeList&lt;IBeginFrame, ITick, IEndFrame, IExit&gt;;
+FLayerTaskGraph&lt;FTickStages, FEngineBase&gt; G(Pool, Engine);
+G.Init(Engine.Select&lt;IBeginFrame, ITick, IEndFrame, IExit&gt;());
+if (G.Compile()) { G.Execute(); G.WaitAll(); }</code></pre>
+<h2 id="layercollector-h">LayerCollector.h</h2>
+<h3 id="flayercollector-tcontext-class-fquery-flayerbase">FLayerCollector&lt;TContext&gt; &lt;class : FQuery&lt;FLayerBase&gt;&gt;</h3>
+<p>层集合管理基类——拥有 + 调度一组匿名 <code>FLayerBase</code>。安装/卸载/重载记录进 pending 集，在 <code>FlushPendingUpdatePipelines</code> 安全点应用；卸载依赖安全（反向计数最小堆贪心）。<code>TContext</code> 是每个 stage 方法收到的调度上下文（引擎是 <code>FEngineBase</code>，渲染子系统是 <code>FRender</code>），同时充当 <code>FQuery</code> 数据源。</p>
+<h4 id="事件-public-每收集器一套">事件（<code>public</code>，每收集器一套）</h4>
+<div class="table-wrap"><table><thead><tr><th>签名</th><th>说明</th></tr></thead><tbody><tr><td><code>TMulticastEvent&lt;void()&gt; OnLayersChanged</code></td><td>层集在安全点发生变化；宿主绑定它重编缓存图（push 而非轮询）</td></tr><tr><td><code>TMulticastEvent&lt;void(const FLayerStatusInfo&amp;)&gt; OnLayerStatus</code></td><td><strong>每个终态</strong>一条（见 <code>ELayerStatus</code>）——拒绝、取消、编译失败、装载完成、卸载完成……不再有静默路径。<strong>只观察</strong>：handler 里不得再 <code>Install</code>/<code>Uninstall</code>/<code>Reload</code></td></tr><tr><td><code>TMulticastEvent&lt;void()&gt; OnClosing</code></td><td>收集器翻进「关闭」那一刻广播一次（此后 <code>Install</code>/<code>Reload</code> 一律拒绝）</td></tr></tbody></table></div>
+<p>事件派发是<strong>隔离</strong>的：某个 handler 抛异常 → <code>ReportError</code> 并吞掉（同一广播里其后的 handler 被跳过），收集器自身状态不受影响——<code>EmitStatus</code> 是在卸载循环中间调的，不能让订阅者把 teardown 打断在半途。</p>
+<h4 id="状态类型">状态类型</h4>
+<div class="table-wrap"><table><thead><tr><th>类型</th><th>说明</th></tr></thead><tbody><tr><td><code>enum class ELayerStatus</code></td><td>12 态：<code>InstallQueued / InstallRefused / InstallCompileFailed / Installed / InstallCancelled / UninstallQueued / UninstallNotFound / UninstallRefused / UninstallCompileFailed / Uninstalled / ReloadQueued / ReloadRefused</code></td></tr><tr><td><code>FLayerStatusInfo { Status, Name, Path, Detail }</code></td><td>事件载荷；字段全是<strong>拷贝</strong>（模块可能随即被卸）</td></tr><tr><td><code>FInstallSummary { Requested, Queued, Refused }</code></td><td><code>InstallChildrenOf</code> 的返回摘要</td></tr><tr><td><code>FLayerStats { Active, PendingAdds, PendingRemoves, PendingReloads, Modules }</code></td><td><code>GetStats()</code> 返回</td></tr></tbody></table></div>
+<h4 id="接口-2">接口</h4>
+<div class="table-wrap"><table><thead><tr><th>签名</th><th>说明</th></tr></thead><tbody><tr><td><code>template&lt;T&gt; bool Install()</code></td><td>按类型安装（<code>T::GetModulePath()</code> 解析 DLL 名）；等价于 <code>Install(dll)</code></td></tr><tr><td><code>bool Install(string_view DllPath, const char* FactorySymbol = "CreateLayer")</code></td><td><strong>唯一安装入口</strong>（匿名加载，无指针安装）。经 <code>FAssembly</code> 装载 + 建实例 + 名字查重；失败原因经 <code>InstallRefused</code> 报出（关闭中 / 模块加载失败 / 无工厂符号 / 工厂抛异常 / 工厂返回 null / 重名）。<strong>不做依赖前置检查</strong>：跨 stage 的合法互依赖无法按名判环，交给图 <code>Compile</code> 校验</td></tr><tr><td><code>FInstallSummary InstallChildrenOf(string_view ParentLayer)</code></td><td>按安装树装<strong>直系子插件</strong>（<code>GetChildren</code> 顺序），父层与收集器层共用同一个调用</td></tr><tr><td><code>void Reload(string_view LayerName)</code></td><td><strong>热重载</strong>：下个安全点卸旧层（依赖安全，被依赖则拒绝并报出）、随后装回同 DLL 新副本。仅对<strong>活动层</strong>有效；仍在 pending 的层给出明确拒绝原因</td></tr><tr><td><code>void TryUninstall(string_view Query)</code></td><td>匿名卸载：按<strong>层名</strong>或<strong>DLL 路径</strong>匹配第一命中（活动层与 pending 层都可按名命中）；命中即入 pending，未命中广播 <code>UninstallNotFound</code></td></tr><tr><td><code>template&lt;TInitStages, TShutdownStages&gt; void FlushPendingUpdatePipelines()</code></td><td>应用挂起更新：先处理「装载被同窗口的卸载请求取消」，再 Init 批（<code>TInitStages</code>），最后卸载（<code>TShutdownStages</code>）。有变化则广播 <code>OnLayersChanged</code>。<strong>重入被拒绝</strong>；内部 <code>try/catch</code>：插件代码抛异常时 pending 集保持原样，下次重试</td></tr><tr><td><code>void DropPendingInstalls()</code></td><td>丢弃未生效的装载：实例与模块一起释放（<code>Install</code> 是即时装载，只延后 Init）</td></tr><tr><td><code>void CloseForLoads()</code> / <code>bool IsClosing()</code></td><td>关闭闸门：幂等置位并广播 <code>OnClosing</code>；置位后 <code>Install</code>/<code>Reload</code> 拒绝</td></tr><tr><td><code>FLayerStats GetStats()</code></td><td>当前规模（工具/测试/面板用查询，不要每帧轮询）</td></tr></tbody></table></div>
+<h4 id="失败与终态的语义">失败与终态的语义</h4>
+<ul><li><strong>装载</strong>：<code>Compile</code> 失败 ⇒ 报错 + 广播 <code>InstallCompileFailed</code>，该批<strong>被释放</strong>（不自动重试：留 pending 会每帧重编重报，只留实例会让下次 <code>Install</code> 造出第二个）。调用者修好次序/依赖后再 <code>Install</code> 一次即可。</li><li><strong>卸载</strong>：贪心拿不下的层<strong>报出并带上依赖者</strong>（<code>UninstallRefused</code>）；卸载图 <code>Compile</code> 失败 ⇒ 报错 + <code>UninstallCompileFailed</code>，这些层<strong>保持存活</strong>（绝不在 Shutdown 阶段没跑的情况下析构）。</li><li>卸载算法：<code>RebuildReverseDeps</code> 重建反向依赖计数（层名 → 被依赖次数），<code>FlushUnload</code> 用<strong>最小堆贪心</strong>——被依赖的层拒绝卸载，依赖者先弹出并链式卸载。</li></ul>
+<h2 id="engine-h">Engine.h</h2>
+<h3 id="阶段接口-ipreinit-iinit-ipostinit-ipreshutdown-ishutdown-ipostshutdown-ibeginframe-itick-iendframe-iexit-class">阶段接口：IPreInit / IInit / IPostInit / IPreShutdown / IShutdown / IPostShutdown / IBeginFrame / ITick / IEndFrame / IExit &lt;class&gt;</h3>
+<p>引擎的 <strong>10 个 stage 能力接口</strong>，每个只有一个纯虚方法，签名统一为 <code>void Xxx(FEngineBase&amp;)</code>：</p>
+<div class="table-wrap"><table><thead><tr><th>接口</th><th>方法</th></tr></thead><tbody><tr><td><code>IPreInit</code></td><td><code>void PreInitialize(FEngineBase&amp;)</code></td></tr><tr><td><code>IInit</code></td><td><code>void Initialize(FEngineBase&amp;)</code></td></tr><tr><td><code>IPostInit</code></td><td><code>void PostInitialize(FEngineBase&amp;)</code></td></tr><tr><td><code>IPreShutdown</code></td><td><code>void PreShutdown(FEngineBase&amp;)</code></td></tr><tr><td><code>IShutdown</code></td><td><code>void Shutdown(FEngineBase&amp;)</code></td></tr><tr><td><code>IPostShutdown</code></td><td><code>void PostShutdown(FEngineBase&amp;)</code></td></tr><tr><td><code>IBeginFrame</code></td><td><code>void BeginFrame(FEngineBase&amp;)</code></td></tr><tr><td><code>ITick</code></td><td><code>void Tick(FEngineBase&amp;)</code></td></tr><tr><td><code>IEndFrame</code></td><td><code>void EndFrame(FEngineBase&amp;)</code></td></tr><tr><td><code>IExit</code></td><td><code>void RequestExit(FEngineBase&amp;)</code></td></tr></tbody></table></div>
+<p>主循环把它们分三组驱动：Init 组 <code>TTypeList&lt;IPreInit, IInit, IPostInit&gt;</code>（<code>PreMain</code> 里跑）、Tick 组 <code>TTypeList&lt;IBeginFrame, ITick, IEndFrame, IExit&gt;</code>（每帧）、Shutdown 组 <code>TTypeList&lt;IPreShutdown, IShutdown, IPostShutdown&gt;</code>（<code>PostMain</code> 里跑）。<code>Engine.h</code> 为每组定义了 <code>MAHO_DECLARE_STAGE_DISPATCH(FEngineBase, ...)</code> 全特化。</p>
+<h3 id="fenginebase-class-flayercollector-fenginebase">FEngineBase &lt;class : FLayerCollector&lt;FEngineBase&gt;&gt;</h3>
+<p>引擎基类——命令行 KV + 主循环 + feature 所有权（<code>FLayerCollector</code>）。入口插件继承它并导出 <code>CreateEngine()</code>；它是唯一宿主。</p>
+<h4 id="接口-3">接口</h4>
+<div class="table-wrap"><table><thead><tr><th>签名</th><th>说明</th></tr></thead><tbody><tr><td><code>FEngineBase()</code> / <code>virtual ~FEngineBase()</code></td><td>构造 / 析构</td></tr><tr><td><code>virtual void ParseCommandLine(int Argc, char** Argv)</code></td><td>解析 <code>-key</code>/<code>--key=value</code> 等命令行</td></tr><tr><td><code>virtual void PreMain() = 0</code></td><td>入口钩子（<strong>纯虚</strong>）：宿主在此装载并初始化服务层（<code>Install</code> + <code>InstallChildrenOf(GetName())</code> + <code>FlushPendingUpdatePipelines</code>）</td></tr><tr><td><code>virtual int Main()</code></td><td>主循环：只调度的 Tick 环——帧边界应用挂起更新（拓扑变更先 <code>WaitAll</code>）、<code>bLayersDirty</code> 时重展开并 <code>Compile</code>、<code>EngineGraph.SubmitFrame()</code>、读 <code>ShouldExit()</code>；退出前 <code>WaitAll + Pool.Flush</code></td></tr><tr><td><code>virtual void PostMain()</code></td><td>出口钩子：关闭闸门、丢弃未生效装载、卸载所有活层并循环 flush 到静、<code>Pool.Flush</code>、残留层报出</td></tr><tr><td><code>bool Has/Get/GetBool/GetInt/GetAll</code></td><td>命令行 KV 读取</td></tr><tr><td><code>void RequestExit()</code></td><td>请求主循环下一帧边界退出（置收集器的关闭闸门，任意线程可调）</td></tr><tr><td><code>bool ShouldExit() const</code></td><td>是否已请求退出（宿主对同一闸门的措辞）</td></tr></tbody></table></div>
+<p><strong>帧语义</strong>：<code>SubmitFrame</code> 只等自己要复用的环槽（<code>MAHO_FRAMES_IN_FLIGHT</code> 深），帧之间<strong>会重叠</strong>；跨帧安全由每层 gate 保证（同层下一帧等上一帧整层跑完），不同层之间跨帧并行。</p>
+<h3 id="maho_declare_engine-enginetype-宏">MAHO_DECLARE_ENGINE(EngineType) &lt;宏&gt;</h3>
+<p>引擎类声明糖——生成 <code>CreateEngine()</code> 工厂 + <code>GetModulePath()</code> + <code>StaticName()</code> + <code>GetName()</code>；同样只收一个参数（DLL 名由类型名 + 平台后缀推出）：</p>
+<pre><code class="language-cpp">class FExampleEngine : public FEngineBase { MAHO_DECLARE_ENGINE(FExampleEngine); ... };</code></pre>
+<h2 id="entrypoint-h">EntryPoint.h</h2>
+<h3 id="maho-main-int-argc-char-argv-function">Maho::Main(int Argc, char** Argv) &lt;function&gt;</h3>
+<p>统一应用驱动——安装引擎 DLL 并执行其根实例：</p>
+<pre><code class="language-text">main()/WinMain() -&gt; Maho::Main(Argc, Argv)
+  InstallFatalHandlers()
+  FAssembly Load(argv[1] ?? MAHO_ENGINE_NAME + 平台后缀)   // 安装
+  GetProcAs&lt;CreateFunction&gt;("CreateEngine") -&gt; FEngineBase*  // 创建根实例（匿名）
+  ParseCommandLine -&gt; PreMain -&gt; Main -&gt; PostMain            // 对称生命周期
+  delete App</code></pre>
+<p>平台入口（Windows WinMain/main、Android <code>android_main</code>、iOS/Linux/Xbox main）都收敛到这里。</p>
+<ul><li><a href="EngineDoc.html">EngineDoc.md</a> — 概念 · <a href="../../Private/Engine/EngineAPI.html">实现字典</a> — 算法 · <a href="../Core/CoreAPI.html">Core API</a> — 基建</li></ul>
+<footer class="page">
+<div><a href="CoreDoc.html">&larr; CoreDoc</a></div>
+<div class="spacer"></div>
+<div><a href="EngineDoc.html">&rarr; EngineDoc</a></div>
+</footer>
+</main>
+</div>
+</body>
+</html>
