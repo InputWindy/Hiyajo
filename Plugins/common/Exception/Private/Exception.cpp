@@ -35,7 +35,7 @@ void FException::ReportException(const std::exception& Error)
 } // namespace Maho::Exception
 
 // The C export the host looks up BY SYMBOL NAME for dynamic install.
-extern "C" MAHO_EXCEPTION_API Maho::FLayerBase* CreateLayer()
+extern "C" MAHO_EXCEPTION_API Maho::FFrameExtension* CreateFrame()
 {
-	return Maho::Exception::FException::CreateLayer();
+	return Maho::Exception::FException::CreateFrame();
 }

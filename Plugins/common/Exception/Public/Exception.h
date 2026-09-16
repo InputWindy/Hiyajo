@@ -32,10 +32,10 @@ MAHO_EXCEPTION_API FException* GetExceptionCenter();
  *   });
  *   Exception::GetExceptionCenter()->ReportException("failed to load texture");
  */
-class FException : public FLayer<IPreInit, IInit, IPostInit, IPreShutdown, IShutdown, IPostShutdown>
+class FException : public FFrameExtension, public IPipeline<IPreInit, IInit, IPostInit, IPreShutdown, IShutdown, IPostShutdown>
 {
 public:
-	MAHO_DECLARE_LAYER(FException);
+	MAHO_DECLARE_FRAME(FException);
 
 	/** Report a non-fatal exception (broadcasts to OnException). */
 	void ReportException(std::string_view Message);

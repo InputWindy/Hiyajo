@@ -386,7 +386,7 @@ MAIN_CPP = """// ═════════════════════
 //    - 项目默认插件：Extension/<ProjectName>/
 //    - 手动创建的插件：Extension/<其他插件名>/
 //
-//  入口只负责：安装（加载）默认插件 DLL → CreateLayer → Main 执行。
+//  入口只负责：安装（加载）默认插件 DLL → CreateFrame → Main 执行。
 // ═══════════════════════════════════════════════════════════════════════
 #if defined(_WIN32)
 #	include <EntryPointWindows.h>
@@ -453,7 +453,7 @@ target_include_directories({name} PUBLIC
 	"${{CMAKE_CURRENT_SOURCE_DIR}}/Plugins/{name}/Public"
 {plugin_dirs}
 )
-# Export the extern "C" CreateLayer() bridge — the host's single entry.
+# Export the extern "C" CreateFrame() bridge — the host's single entry.
 set_target_properties({name} PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 target_compile_definitions({name} PRIVATE MAHO_{NAME_UPPER}_MODULE_EXPORTS)
 target_link_libraries({name} PUBLIC Maho)
@@ -620,15 +620,15 @@ exit /b 0
 
 
 _MODULE_MACRO_RE = re.compile(
-	r"MAHO_DECLARE_(?:LAYER|ENGINE)\s*\(\s*([A-Za-z_]\w*)"
+	r"MAHO_DECLARE_(?:FRAME|LAYER|ENGINE)\s*\(\s*([A-Za-z_]\w*)"
 )
 
 
 def _layer_type_from_plugin(plugin_dir: Path) -> str:
-	"""Scan a plugin's Public/*.h for the MAHO_DECLARE_LAYER/ENGINE macro's first
-	argument and return the layer type name (e.g. FScene, FNamePool) or empty.
+	"""Scan a plugin's Public/*.h for the MAHO_DECLARE_FRAME/LAYER/ENGINE macro's first
+	argument and return the frame type name (e.g. FScene, FNamePool) or empty.
 	This is the single source of truth for the module base name -- the DLL always
-	compiles to  <layer type> + platform suffix, so codegen sets OUTPUT_NAME from
+	compiles to  <frame type> + platform suffix, so codegen sets OUTPUT_NAME from
 	it (a plugin whose directory name differs, e.g. Name -> FNamePool, is covered
 	automatically; no .cplugin field needed)."""
 	public_dir = plugin_dir / "Public"
@@ -710,7 +710,7 @@ def _all_plugin_infos(
 			# the plugin's own self-contained .cmake build block.
 			"disk_dir": str(plugin_dir),
 			"dir_name": dir_name,
-			# Module base name = the layer type (MAHO_DECLARE_LAYER/ENGINE first arg),
+			# Module base name = the frame type (MAHO_DECLARE_FRAME/ENGINE first arg),
 			# so the compiled DLL is <layer type> + platform suffix. Empty for
 			# pure-library plugins (no layer macro) — their output keeps dir_name.
 			"layer_type": _layer_type_from_plugin(plugin_dir),
@@ -999,9 +999,9 @@ def _plugin_targets(
 			f"target_link_libraries({name} PUBLIC Maho)",
 			f'set_property(TARGET {name} PROPERTY RUNTIME_OUTPUT_DIRECTORY "${{CMAKE_BINARY_DIR}}/Binaries/$<CONFIG>")',
 		]
-		# Module naming protocol: the DLL output name = the layer type
-		# (MAHO_DECLARE_LAYER first arg), so GetModulePath()'s #LayerType +
-		# platform suffix resolves. Pure-library plugins (no layer macro) keep
+		# Module naming protocol: the DLL output name = the frame type
+		# (MAHO_DECLARE_FRAME first arg), so GetModulePath()'s #FrameType +
+		# platform suffix resolves. Pure-library plugins (no frame macro) keep
 		# their directory-name output. PREFIX "" stops CMake's `lib` prepend
 		# on Unix — the module name is the exact base name.
 		layer_type = info.get("layer_type")
@@ -1359,9 +1359,9 @@ def create_plugin(
 ) -> Path:
 	"""
 	Scaffold a new self-contained plugin under plugins_dir (default
-	<engine>/Extension). Generates a bare FLayer<> skeleton (no stages mounted) +
+	<engine>/Extension). Generates a bare FFrameExtension skeleton (no stages mounted) +
 	.cplugin + .cmake + settings.json + AGENTS.md + docs. The user hand-writes
-	the stage interfaces they want by editing the FLayer<...> template list.
+	the stage interfaces they want by editing the IPipeline<...> template list.
 	"""
 	if not is_valid_project_name(plugin_name):
 		raise ValueError(
@@ -1451,8 +1451,8 @@ def create_plugin(
 	(dst / "API.md").write_text(
 		f"# {plugin_name} — API 文档\n\n"
 		f"{description or '空插件骨架——挂载 stage 接口后补全。'}\n\n"
-		f"## F{plugin_name} <class : FLayer<...>>\n\n"
-		f"插件骨架。把要实现的 stage 接口（IInit/ITick/...）填进 `FLayer<...>` 模板列表并覆写，\n"
+		f"## F{plugin_name} <class : FFrameExtension, IPipeline<...>>\n\n"
+		f"插件骨架。把要实现的 stage 接口（IInit/ITick/...）填进 `IPipeline<...>` 模板列表并覆写，\n"
 		f"然后在 `.cplugin` 的 `Dependencies` 手填依赖插件。\n\n"
 		f"- [{plugin_name}.md]({plugin_name}.md) — 概念\n",
 		encoding="utf-8", newline="\n",
@@ -1483,21 +1483,22 @@ def create_plugin(
 
 	child_includes = "".join(f'#include <{_child_header(c)}.h>\n' for c in (children or []))
 
-	# ── class skeleton: a bare layer (no stages mounted) ─────────────────────
+	# ── class skeleton: a bare frame (no stages mounted) ─────────────────────
 	header_body = (
 		f"#pragma once\n\n"
 		f'#include "{plugin_name}Api.h"\n'
 		f"#include <Maho.h>\n"
-		f"#include <Engine/Layer.h>\n"
+		f"#include <Engine/Frame.h>\n"
 		f"{child_includes}\n"
 		f"namespace Maho\n{{\n\n"
-		f"// {plugin_name} - an engine layer. Add the stage interfaces you implement\n"
-		f"// to the FLayer<...> template list, e.g. FLayer<IInit, IShutdown> or\n"
-		f"// FLayer<IBeginFrame, ITick, IEndFrame, IExit>. Each mounted stage must be\n"
-		f"// overridden in this class.\n"
-		f"class F{plugin_name} : public FLayer<>\n"
+		f"// {plugin_name} - an engine frame. Add the stage interfaces you implement to the\n"
+		f"// IPipeline<...> list, e.g. IPipeline<IInit, IShutdown> or\n"
+		f"// IPipeline<IBeginFrame, ITick, IEndFrame, IExit>. Each mounted stage must be\n"
+		f"// overridden in this class. A frame is FFrameExtension (identity + the edges it declares)\n"
+		f"// plus the ordered stage sequence it runs.\n"
+		f"class F{plugin_name} : public FFrameExtension, public IPipeline<>\n"
 		f"{{\n"
-		f"MAHO_DECLARE_LAYER(F{plugin_name});\n"
+		f"MAHO_DECLARE_FRAME(F{plugin_name});\n"
 		f"}};\n\n"
 		f"}} // namespace Maho\n"
 	)
@@ -1507,9 +1508,9 @@ def create_plugin(
 		f"// {plugin_name} - implementation. Override your mounted stages here.\n\n"
 		f"}} // namespace Maho\n\n"
 		f"// The C export the host looks up BY SYMBOL NAME for dynamic install.\n"
-		f'extern "C" MAHO_{export}_API Maho::FLayerBase* CreateLayer()\n'
+		f'extern "C" MAHO_{export}_API Maho::FFrameExtension* CreateFrame()\n'
 		f"{{\n"
-		f"\treturn Maho::F{plugin_name}::CreateLayer();\n"
+		f"\treturn Maho::F{plugin_name}::CreateFrame();\n"
 		f"}}\n"
 	)
 
@@ -1744,6 +1745,16 @@ def generate_from_cproject(
 	# include/link fixes are needed. Per-plugin customization (e.g. output name)
 	# lives in the plugin's .cmake, included below — never in the top-level file.
 	_write_cmake_lists(project_dir, project_name, engine_root, data)
+
+	# Code-gen files that live under Intermediate/ must be (re)emitted HERE, not only in
+	# create_project. Intermediate is gitignored and its name says "intermediate", so
+	# deleting it looks harmless -- but CMakeLists references Intermediate/Main.cpp, which
+	# only create_project ever wrote, so a cleaned project failed to generate with
+	# "Cannot find source file: Intermediate/Main.cpp" pointing nowhere near the cause.
+	# Writing it unconditionally (it is code-gen, never hand-edited) makes
+	# "delete Intermediate -> double-click the .cproject" work.
+	intermediate.mkdir(parents=True, exist_ok=True)
+	(intermediate / "Main.cpp").write_text(MAIN_CPP, encoding="utf-8", newline="\n")
 
 	lock = _GenerateLock(intermediate)
 	lock.acquire()

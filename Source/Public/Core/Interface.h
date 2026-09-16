@@ -34,7 +34,9 @@ public:
  * stages to method calls). IPipeline itself only carries the stage list.
  *
  *   using FEnginePipeline = IPipeline<IInit, IMain, IShutdown>;
- *   class FWorld : public FLayer<FEnginePipeline> {};
+ *   class FWorld : public FFrameExtension, public FEnginePipeline {};
+ *   // FFrameExtension (Core/FrameGraph.h) carries identity + the declared edges; the engine
+ *   // side adds the declaration macro and the Invoke dispatch on top (Engine/Frame.h).
  */
 template <typename... TStageTypes>
 class MAHO_API IPipeline : public virtual TStageTypes...

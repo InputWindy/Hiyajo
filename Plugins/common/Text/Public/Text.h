@@ -73,10 +73,10 @@ MAHO_TEXT_API FTextManager* GetTextManager();
 
 /** Localization manager: current culture + translation catalog (engine layer). */
 class FTextManager
-	: public FLayer<IPreInit, IInit, IPostInit, IPreShutdown, IShutdown, IPostShutdown>
+	: public FFrameExtension, public IPipeline<IPreInit, IInit, IPostInit, IPreShutdown, IShutdown, IPostShutdown>
 {
 public:
-	MAHO_DECLARE_LAYER(FTextManager);
+	MAHO_DECLARE_FRAME(FTextManager);
 
 	[[nodiscard]] std::string_view GetCulture() const;
 	void SetCulture(std::string InCulture);

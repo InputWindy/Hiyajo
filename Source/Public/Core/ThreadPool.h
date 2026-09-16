@@ -5,6 +5,7 @@
 #include <atomic>
 #include <condition_variable>
 #include <cstdint>
+#include <cstdlib>
 #include <deque>
 #include <functional>
 #include <mutex>
@@ -74,6 +75,21 @@ inline FThreadPool::FThreadPool(std::uint32_t InNumThreads)
 		NumThreads = 1;
 	}
 	// Zero workers at construction -- lazily started on first Submit.
+	// Diagnostic override (default-constructed pools only, so an explicitly sized
+	// pool such as RHI's serial recording pool keeps its width): MAHO_PARALLELISM=1
+	// reproduces the serial execution the graph was historically run under, which
+	// makes a parallel failure directly comparable against a known-good baseline.
+	if (InNumThreads == 0)
+	{
+		if (const char* Override = std::getenv("MAHO_PARALLELISM"))
+		{
+			const long Requested = std::strtol(Override, nullptr, 10);
+			if (Requested > 0)
+			{
+				NumThreads = static_cast<std::uint32_t>(Requested);
+			}
+		}
+	}
 	Workers.reserve(NumThreads);
 }
 
@@ -110,7 +126,7 @@ inline void FThreadPool::EnsureThreads(std::uint32_t Required)
 
 inline void FThreadPool::Submit(std::function<void()> Task)
 {
-	EnsureThreads(1);   // lazy-start: at least one worker must exist to consume
+	EnsureThreads(NumThreads);   // lazy-start: bring the whole pool up on first use
 	{
 		std::lock_guard Lock(Mutex);
 		Queue.push_back(std::move(Task));

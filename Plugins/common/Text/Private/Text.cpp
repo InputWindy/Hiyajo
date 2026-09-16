@@ -104,7 +104,7 @@ const std::string* FTextManager::FindTranslation(std::string_view InNamespace, s
 } // namespace Maho::Text
 
 // The C export the host looks up BY SYMBOL NAME for dynamic install.
-extern "C" MAHO_TEXT_API Maho::FLayerBase* CreateLayer()
+extern "C" MAHO_TEXT_API Maho::FFrameExtension* CreateFrame()
 {
-	return Maho::Text::FTextManager::CreateLayer();
+	return Maho::Text::FTextManager::CreateFrame();
 }

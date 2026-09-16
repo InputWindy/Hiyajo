@@ -19,8 +19,8 @@
 // interface predicates (dynamic_cast on the erased base). Used when the layer
 // set is dynamic (unknown at compile time).
 //
-//   std::vector<FLayerBase*> Layers = ...;
-//   auto Tickable = FQuery<FLayerBase>(Layers).Select<IEngineTickPipeline>().Data;
+//   std::vector<FFrameExtension*> Layers = ...;
+//   auto Tickable = FQuery<FFrameExtension>(Layers).Select<ITick>().Data;
 #include <Core/Fatal.h>
 #include <Core/TypeList.h>
 
@@ -259,8 +259,8 @@ private:
  * Not filter by interface predicates (dynamic_cast) and return value-type
  * FQueryResult instances.
  *
- *   // FEngineBase inherits FQuery<FLayerBase>; inside the engine:
- *   auto Tickable = Select<IEngineTickPipeline>();   // FQueryResult<FLayerBase>
+ *   // FEngineBase inherits FQuery<FFrameExtension>; inside the engine:
+ *   auto Tickable = Select<ITick>();   // FQueryResult<FFrameExtension>
  *   TickGraph.Init(Tickable);                        // implicit conversion to vector
  */
 template <typename TBase>

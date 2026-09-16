@@ -2,7 +2,7 @@
 
 #include "ExampleEditorApi.h"
 #include <Engine/Layer.h>
-#include <Engine/LayerCollector.h>
+#include <Engine/FrameBuilder.h>
 #include <Render.h>
 #include <RDG.h>
 #include <RenderDrawList.h>
@@ -42,7 +42,7 @@ struct FEditorContext
 /**
  * Editor component stage interfaces. A component plugin derives from any subset
  * of these (via FLayer<...>). Init/Shutdown are driven by the host's own
- * FLayerCollector install/uninstall graph; Update is driven by the host's frame
+ * FFrameBuilder install/uninstall graph; Update is driven by the host's frame
  * loop BEFORE `ImGui::NewFrame()` (Select<IEditorPanel>() -> for over Update), and
  * the host then translates the registered views. The context is the host
  * FExampleEditor&, so a component reads shared UI state and reaches FRender
@@ -76,7 +76,7 @@ public:
 	virtual void Shutdown(FExampleEditor&) = 0;
 };
 
-// Stage dispatch specializations so the host's FLayerCollector install/uninstall
+// Stage dispatch specializations so the host's FFrameBuilder install/uninstall
 // graph can drive component Init/Shutdown (Invoke<IEditorInit, FExampleEditor>).
 MAHO_DECLARE_STAGE_DISPATCH(FExampleEditor, IEditorInit, IEditorInit, Init)
 MAHO_DECLARE_STAGE_DISPATCH(FExampleEditor, IEditorShutdown, IEditorShutdown, Shutdown)
@@ -103,7 +103,7 @@ struct FEditorShader
  * editor's OWN ImGui context, the EditorRT composite target, the font upload and
  * the final present. It is the ONLY place the editor touches RHI.
  *
-	 * As a sub-collector it derives FLayerCollector<FExampleEditor> and installs the
+	 * As a sub-collector it derives FFrameBuilder<FExampleEditor> and installs the
 	 * editor COMPONENT plugins (EditorViewport / EditorConsole / ContentBrowser /
 	 * EditorTheme) as DLLs.
 	 * Each component is an anonymous FLayer mounting the IEditor* stage interfaces.
@@ -124,7 +124,7 @@ struct FEditorShader
 	 */
 class MAHO_EXAMPLEEDITOR_API FExampleEditor
 	: public FLayer<IOnInstalled, IEditorInput, IEditorCompose, IPreUnInstall>
-	, public FLayerCollector<FExampleEditor>
+	, public FFrameBuilder<FExampleEditor>
 {
 	MAHO_DECLARE_LAYER(FExampleEditor);
 

@@ -34,10 +34,10 @@ MAHO_TIMER_API FTimer* GetTimer();
  *   Timer::GetTimer()->DumpToString();   // "Render: 1.23 ms (n calls, avg, max)"
  */
 class FTimer
-	: public FLayer<IPreInit, IInit, IPostInit, IPreShutdown, IShutdown, IPostShutdown>
+	: public FFrameExtension, public IPipeline<IPreInit, IInit, IPostInit, IPreShutdown, IShutdown, IPostShutdown>
 {
 public:
-	MAHO_DECLARE_LAYER(FTimer);
+	MAHO_DECLARE_FRAME(FTimer);
 
 	/** Push a scope (must be balanced with EndScope / FScopedTimer). */
 	void BeginScope(std::string_view Name);

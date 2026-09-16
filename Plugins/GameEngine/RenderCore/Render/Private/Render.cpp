@@ -391,6 +391,22 @@ void FRender::EndFrame(FEngineBase&)
 	}
 	if (IRHI* RHIp = RHI.get())
 	{
+		// Issue the present primitive HERE, on the host frame chain, alongside
+		// BeginFrame/EndFrame. FFrameRenderFeature::IPresent only decides the target and
+		// acts as the ordering anchor: it lives in the render COLLECTOR graph, whereas
+		// IBeginFrame/IEndFrame are nodes in the host graph, so letting it call into the
+		// RHI split the three frame primitives across two graphs that have no dependency
+		// edge between them. RHI.cpp:134 puts the "keep the frame path serial" burden on
+		// the caller and the caller could not honour it; on one chain the per-layer gate
+		// does it for free.
+		//
+		// The render graph was drained above, so reading the target here is also what
+		// makes "last writer wins" deterministic.
+		const FRDGTextureRef Target = GetPresentTarget();
+		if (Target.IsValid())
+		{
+			PresentTexture(Target);
+		}
 		RHIp->EndFrame();
 	}
 }

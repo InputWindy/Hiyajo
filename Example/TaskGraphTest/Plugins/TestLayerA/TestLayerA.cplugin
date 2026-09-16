@@ -1,0 +1,15 @@
+{
+  "FileVersion": 1,
+  "Name": "TestLayerA",
+  "Description": "test layer for the TaskGraph sandbox",
+  "Dependencies": [
+    "TaskGraphTest",
+    "Config",
+    "Paths",
+    "Name",
+    "Timer",
+    "Text",
+    "Exception",
+    "Log"
+  ]
+}

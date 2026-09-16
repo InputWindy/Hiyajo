@@ -2,7 +2,7 @@
 
 #include "ConfigApi.h"
 #include <Maho.h>
-#include <Engine/Layer.h>
+#include <Engine/Frame.h>
 
 #include <cstdint>
 #include <map>
@@ -21,9 +21,9 @@ namespace Config
  *   GetConfig()->GetString("/Script/Engine.Engine", "GameName");
  */
 class FConfig
-	: public FLayer<IPreInit, IInit, IPostInit, IPreShutdown, IShutdown, IPostShutdown>
+	: public FFrameExtension, public IPipeline<IPreInit, IInit, IPostInit, IPreShutdown, IShutdown, IPostShutdown>
 {
-	MAHO_DECLARE_LAYER(FConfig);
+	MAHO_DECLARE_FRAME(FConfig);
 
 private:
 	// -- engine layer stages (scheduler-only) --

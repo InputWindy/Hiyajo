@@ -5,7 +5,7 @@
 #include "ComponentPool.h"
 #include <Maho.h>
 #include <Engine/Layer.h>
-#include <Engine/LayerCollector.h>
+#include <Engine/FrameBuilder.h>
 #include <Engine/LayerTaskGraph.h>
 #include <Engine/Engine.h>
 #include <Core/TypeList.h>
@@ -98,7 +98,7 @@ public:
  */
 class MAHO_GAMEWORLD_API FGameWorld
 	: public FLayer<IPreInit, IInit, IPostInit, IBeginFrame, ITick, IEndFrame, IExit, IPreShutdown, IShutdown, IPostShutdown>
-	, public FLayerCollector<FGameWorld>
+	, public FFrameBuilder<FGameWorld>
 {
 	MAHO_DECLARE_LAYER(FGameWorld);
 

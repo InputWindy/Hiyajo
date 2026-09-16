@@ -58,10 +58,10 @@ struct FLogMessage
  *
  *   Engine.Install<FLog>();   // install early in PreMain   (or Install(ApplyModuleExtension("FLog")))
  */
-class FLog : public FLayer<IInit, IShutdown>
+class FLog : public FFrameExtension, public IPipeline<IInit, IShutdown>
 {
 public:
-	MAHO_DECLARE_LAYER(FLog);
+	MAHO_DECLARE_FRAME(FLog);
 
 	FLog();
 	~FLog() override;

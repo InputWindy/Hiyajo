@@ -6,7 +6,58 @@
 #include <fstream>   // TEMP
 #include <functional>
 #include <sstream>
+#include <thread>
 #include <utility>
+
+#ifndef NDEBUG
+namespace
+{
+	// Stall forensics ONLY -- debug builds only, no behaviour, no scheduling change.
+	//
+	// The per-node Pending counter cannot separate "the stage body is still running" from
+	// "dispatched, but no worker picked it up yet": both read 0, and that difference
+	// decides whether a stall is a blocked body or a starved pool. Each worker claims a
+	// slot for the duration of the node it is running.
+	struct FActiveNode
+	{
+		std::atomic<const void*>   Graph{ nullptr };
+		std::atomic<std::uint64_t> Thread{ 0 };
+		std::atomic<std::size_t>   Index{ 0 };
+		std::atomic<std::uint64_t> Frame{ 0 };
+	};
+	constexpr std::size_t kMaxActiveNodes = 256;
+	FActiveNode GActiveNodes[kMaxActiveNodes];
+	thread_local std::size_t GActiveSlot = kMaxActiveNodes;
+
+	void PushActiveNode(const void* Graph, std::size_t Index, std::uint64_t Frame)
+	{
+		std::uint64_t Tid = static_cast<std::uint64_t>(
+			std::hash<std::thread::id>{}(std::this_thread::get_id()));
+		if (Tid == 0) { Tid = 1; }
+		GActiveSlot = kMaxActiveNodes;
+		for (std::size_t I = 0; I < kMaxActiveNodes; ++I)
+		{
+			std::uint64_t Expected = 0;
+			if (GActiveNodes[I].Thread.compare_exchange_strong(Expected, Tid, std::memory_order_acq_rel))
+			{
+				GActiveNodes[I].Graph.store(Graph, std::memory_order_relaxed);
+				GActiveNodes[I].Index.store(Index, std::memory_order_relaxed);
+				GActiveNodes[I].Frame.store(Frame, std::memory_order_relaxed);
+				GActiveSlot = I;
+				return;
+			}
+		}
+	}
+
+	void PopActiveNode()
+	{
+		if (GActiveSlot < kMaxActiveNodes)
+		{
+			GActiveNodes[GActiveSlot].Thread.store(0, std::memory_order_release);
+		}
+	}
+} // namespace
+#endif
 
 namespace Maho
 {
@@ -464,6 +515,32 @@ void FTaskGraph::ReportStall(std::uint64_t Frame, const FFrameSlot& Slot)
 			}
 		}
 	}
+#ifndef NDEBUG
+	// Which nodes are executing RIGHT NOW. A node listed here is blocked INSIDE its own
+	// stage body; a node that is neither finished nor listed was dispatched but never
+	// picked up (a starved pool). The two need different fixes, and the pendings above
+	// cannot tell them apart.
+	for (std::size_t A = 0; A < kMaxActiveNodes; ++A)
+	{
+		if (GActiveNodes[A].Graph.load(std::memory_order_relaxed) != this
+			|| GActiveNodes[A].Thread.load(std::memory_order_acquire) == 0)
+		{
+			continue;
+		}
+		const std::size_t Idx = GActiveNodes[A].Index.load(std::memory_order_relaxed);
+		Out << "\n  EXECUTING t=" << GActiveNodes[A].Thread.load(std::memory_order_relaxed)
+			<< " frame=" << GActiveNodes[A].Frame.load(std::memory_order_relaxed)
+			<< " [" << Idx << "]";
+		if (Idx < Tasks.size())
+		{
+			Out << Tasks[Idx]->Node->Name << "::" << Tasks[Idx]->Node->Stage.name();
+		}
+		else
+		{
+			Out << "?";
+		}
+	}
+#endif
 	ReportError(Out.str().c_str());
 	// The log is buffered and a stalled process is usually killed: land the report on
 	// disk too so the evidence survives.
@@ -490,6 +567,10 @@ void FTaskGraph::SubmitTaskFor(std::size_t Index, std::uint64_t Frame)
 	Pool.Submit([this, Index, Frame]()
 	{
 		FTask& Task = *Tasks[Index];
+
+#ifndef NDEBUG
+		PushActiveNode(this, Index, Frame);
+#endif
 
 		// Execute the node. A throwing stage method must not kill the host: report
 		// it (non-fatal) and still release downstreams so the graph never hangs.
@@ -544,6 +625,10 @@ void FTaskGraph::SubmitTaskFor(std::size_t Index, std::uint64_t Frame)
 		// Stall audit support: mark the node finished so a dump can tell "still
 		// waiting" (pending > 0) from "dispatched but never came back" (pending == 0).
 		Slot.Pending[Index].store(0xFFFFFFFFu, std::memory_order_relaxed);
+#endif
+
+#ifndef NDEBUG
+		PopActiveNode();
 #endif
 	});
 }

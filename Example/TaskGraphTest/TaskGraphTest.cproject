@@ -1,0 +1,67 @@
+{
+  "FileVersion": 1,
+  "ProjectName": "TaskGraphTest",
+  "EngineDirectory": "../..",
+  "Plugins": [
+    {
+      "Name": "ConsoleVariable",
+      "Enabled": true
+    },
+    {
+      "Name": "Config",
+      "Enabled": true
+    },
+    {
+      "Name": "Exception",
+      "Enabled": true
+    },
+    {
+      "Name": "Log",
+      "Enabled": true
+    },
+    {
+      "Name": "Name",
+      "Enabled": true
+    },
+    {
+      "Name": "Paths",
+      "Enabled": true
+    },
+    {
+      "Name": "Text",
+      "Enabled": true
+    },
+    {
+      "Name": "Timer",
+      "Enabled": true
+    },
+    {
+      "Name": "Archive",
+      "Enabled": true
+    },
+    {
+      "Name": "Compress",
+      "Enabled": true
+    },
+    {
+      "Name": "Reflect",
+      "Enabled": true
+    },
+    {
+      "Name": "Unicode",
+      "Enabled": true
+    },
+    {
+      "Name": "TaskGraphTest",
+      "Enabled": true
+    },
+    {
+      "Name": "TestLayerA",
+      "Enabled": true
+    },
+    {
+      "Name": "TestLayerB",
+      "Enabled": true
+    }
+  ]
+}

@@ -114,110 +114,59 @@ void FEngineBase::PostMain()
 	// A load/reload queued by the last frame is dropped: release the instance AND the
 	// module it already loaded (the load itself happened back in Install()).
 	DropPendingInstalls();
-	PendingReloads.clear();
+	CancelPendingReloads();
 
-	// Uninstall EVERY live layer -- not just the catalog's TopLevel list: sub-plugins
-	// come and go at runtime, and a layer left behind keeps its DLL loaded, which the
-	// process teardown would then free under a live module. (The catalog is still
-	// loaded from PreMain, and the sub-plugin lookup below needs it.)
-	for (FLayerBase* Layer : Pipelines)
+	// Uninstall EVERY live frame -- not just the catalog's TopLevel list: sub-plugins come and
+	// go at runtime, and a frame left behind keeps its DLL loaded, which the process teardown
+	// would then free under a live module. (The catalog is still loaded from PreMain, and the
+	// sub-plugin lookup below needs it.) By NAME, because that is what survives a module.
+	UninstallAll();
+
+	// Apply the shutdown stages, then repeat while they request more (a parent's Shutdown
+	// uninstalls its sub-plugins). Bounded: a dependency cycle must not spin.
+	for (int Pass = 0; Pass < 8 && GetStats().PendingRemoves != 0; ++Pass)
 	{
-		TryUninstall(Layer->GetName());
+		FlushPendingUpdates<FInitStages, FShutdownStages>();
 	}
 
-	// Apply the shutdown stages, then repeat while they request more (a parent's
-	// Shutdown uninstalls its sub-plugins). Bounded: a dependency cycle must not spin.
-	for (int Pass = 0; Pass < 8 && !PendingRemoveRequests.empty(); ++Pass)
+	const FFrameStats Stats = GetStats();
+	if (Stats.PendingRemoves != 0 || Stats.Active != 0)
 	{
-		FlushPendingUpdatePipelines<
-			TTypeList<IPreInit, IInit, IPostInit>,
-			TTypeList<IPreShutdown, IShutdown, IPostShutdown>
-		>();
-	}
-
-	// No plugin code may still be running when the host frees the DLLs: stage methods
-	// (the shutdown stages included) may have submitted work to the pool themselves.
-	Pool.Flush();
-
-	if (!PendingRemoveRequests.empty() || !Pipelines.empty())
-	{
-		ReportError((std::string("PostMain: layers left alive after teardown (pending=")
-			+ std::to_string(PendingRemoveRequests.size())
-			+ ", active=" + std::to_string(Pipelines.size())
+		ReportError((std::string("PostMain: frames left alive after teardown (pending=")
+			+ std::to_string(Stats.PendingRemoves)
+			+ ", active=" + std::to_string(Stats.Active)
 			+ ") -- a shutdown dependency edge is missing").c_str());
 	}
 }
 
 int FEngineBase::Main()
 {
-	// PreMain already installed AND initialized every layer (its
-	// FlushPendingUpdatePipelines drives the init stages), so Main only schedules the
-	// tick pipeline -- an init graph here would Initialize every layer twice.
+	// PreMain already installed AND initialized every frame (its
+	// FlushPendingUpdates drives the init stages), so the loop only runs frames. The host's
+	// whole loop is Execute() + FlushPendingUpdates() + its own exit check: the scheduler, the
+	// batch builder and the stage dispatch are FFrameBuilder's private implementation.
 	//
-	// The tick graph is CACHED across frames (re-expanded only when OnLayersChanged
-	// fires) and frames PIPELINE: SubmitFrame overlaps up to MAHO_FRAMES_IN_FLIGHT
-	// frames instead of draining the pool every frame.
-	using FTickStages = TTypeList<IBeginFrame, ITick, IEndFrame, IExit>;
-	FLayerTaskGraph<FTickStages, FEngineBase> EngineGraph(Pool, *this);
-	std::string LastCompileErrorNode;
-	OnLayersChanged.Bind([this]() { bLayersDirty = true; });
-	while (true)
+	// FRAMES PIPELINE: nothing here drains a frame. That is safe because the batch builder emits
+	// the two STRUCTURAL edges a stage sequence implies -- a frame's own stages in order, and
+	// each stage against its OWN previous frame (same extension, same stage). The second one is
+	// what used to be the per-layer gate, now derived from the node identity instead of enforced
+	// by a scheduler mechanism, and it is strictly finer: it orders a stage against itself, not a
+	// whole frame against itself, so different frames overlap wherever they do not share a stage.
+	//
+	// What is NOT covered by that edge: two DIFFERENT stages of one frame that share per-frame
+	// state across a frame boundary (S1 of frame N+1 vs S3 of frame N). Those need an explicit
+	// `MyStage<S1>().IsWaiting<T>().LastFrame()` (or the reverse) -- the per-frame resource audit.
+	while (!ShouldExit())
 	{
-		// Frame submission is NOT a barrier: SubmitFrame waits only for the ring slot it
-		// is about to reuse, so up to MAHO_FRAMES_IN_FLIGHT frames are in flight. Cross-
-		// frame safety comes from the per-layer gate in the graph (a layer never overlaps
-		// its own previous frame), which also tolerates a stray sink report by advancing
-		// the chain instead of wedging the layer.
-
-		// A queued install/uninstall/reload is a TOPOLOGY change: the rebuild below
-		// replaces the graph's node storage, so it may only run with the graph idle.
-		if (!PendingAdded.empty() || !PendingRemoveRequests.empty() || !PendingReloads.empty())
-		{
-			FlushPendingUpdatePipelines<TTypeList<IPreInit, IInit, IPostInit>, TTypeList<IPreShutdown, IShutdown, IPostShutdown>>();
-		}
-
-		if (bLayersDirty)
-		{
-			bLayersDirty = false;
-			EngineGraph.WaitAll();   // the rebuild replaces the node storage
-			EngineGraph.Init(Select<IBeginFrame, ITick, IEndFrame, IExit>());
-			if (!EngineGraph.Compile())
-			{
-				// Report ONCE per distinct breakage (no per-frame spam) and leave a
-				// known-empty graph so SubmitFrame() is a no-op. The broken layer is not
-				// scheduled until the topology changes (retried then).
-				const std::string Bad = EngineGraph.GetCompileErrorNode();
-				if (Bad != LastCompileErrorNode)
-				{
-					LastCompileErrorNode = Bad;
-					ReportError((std::string("layer graph compile failed (missing dependency or cycle); "
-						"layer '") + Bad + "' is not scheduled until the topology is fixed").c_str());
-				}
-				EngineGraph.Init({});   // empty graph -> SubmitFrame() is a no-op
-			}
-		}
-
-		// NOT a barrier: it waits only for the ring slot it is about to reuse, so up to
-		// K frames are in flight. Cross-frame safety comes from the per-layer gate in
-		// the graph (a layer never overlaps its own previous frame), not from here.
-		EngineGraph.SubmitFrame();
-
-		// An input layer (e.g. GameInputLayer) calls RequestExit inside Tick. The
-		// current frame may still be executing -- the tail WaitAll() drains it.
-		if (ShouldExit())
-		{
-			break;
-		}
+		FlushPendingUpdates<FInitStages, FShutdownStages>();
+		Execute<FTickStages>();
 	}
 
-	// Quiescence before teardown, and it has to cover BOTH:
-	//  - the graph: every in-flight frame must finish (PostMain uninstalls layers,
-	//    which must not race a stage method still executing);
-	//  - the pool: stage methods submit their own async work (nested graph work,
-	//    asset/RHI helpers) that no frame fence tracks. PostMain is about to free
-	//    plugin DLLs -- a module must never be unloaded under running code.
-	EngineGraph.WaitAll();
-	Pool.Flush();
+	// Quiescence before teardown, and it has to cover BOTH the frames and the pool: stage methods
+	// submit their own async work (nested graph work, asset/RHI helpers) that no frame fence
+	// tracks, and PostMain is about to free plugin DLLs -- a module must never be unloaded under
+	// running code.
+	Wait();
 
 	return 0;
 }

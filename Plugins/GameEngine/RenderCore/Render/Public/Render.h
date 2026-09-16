@@ -3,7 +3,7 @@
 #include "RenderApi.h"
 #include <Maho.h>
 #include <Engine/Layer.h>
-#include <Engine/LayerCollector.h>
+#include <Engine/FrameBuilder.h>
 #include <Engine/LayerTaskGraph.h>
 #include <Engine/Engine.h>
 #include <RHI/RHIServer.h>
@@ -198,7 +198,7 @@ MAHO_DECLARE_STAGE_DISPATCH(FRender, IPreUnInstall, IPreUnInstall, PreUnInstall)
  */
 class MAHO_RENDER_API FRender
 	: public FLayer<IPreInit, IInit, IPostInit, IBeginFrame, ITick, IEndFrame, IExit, IPreShutdown, IShutdown, IPostShutdown>
-	, public FLayerCollector<FRender>
+	, public FFrameBuilder<FRender>
 {
 MAHO_DECLARE_LAYER(FRender);
 

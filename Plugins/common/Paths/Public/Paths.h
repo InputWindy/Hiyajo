@@ -2,7 +2,7 @@
 
 #include "PathsApi.h"
 #include <Maho.h>
-#include <Engine/Layer.h>
+#include <Engine/Frame.h>
 
 #include <filesystem>
 #include <map>
@@ -16,9 +16,9 @@ namespace Paths
 
 /** Path resolution engine layer - engine/project root aliases -> physical paths. */
 class FPaths
-	: public FLayer<IPreInit, IInit, IPostInit, IPreShutdown, IShutdown, IPostShutdown>
+	: public FFrameExtension, public IPipeline<IPreInit, IInit, IPostInit, IPreShutdown, IShutdown, IPostShutdown>
 {
-	MAHO_DECLARE_LAYER(FPaths);
+	MAHO_DECLARE_FRAME(FPaths);
 
 private:
 	// -- engine layer stages (scheduler-only) --

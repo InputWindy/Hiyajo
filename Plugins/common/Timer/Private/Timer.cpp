@@ -94,7 +94,7 @@ FScopedTimer::~FScopedTimer()
 } // namespace Maho::Timer
 
 // The C export the host looks up BY SYMBOL NAME for dynamic install.
-extern "C" MAHO_TIMER_API Maho::FLayerBase* CreateLayer()
+extern "C" MAHO_TIMER_API Maho::FFrameExtension* CreateFrame()
 {
-	return Maho::Timer::FTimer::CreateLayer();
+	return Maho::Timer::FTimer::CreateFrame();
 }

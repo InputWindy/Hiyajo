@@ -151,8 +151,8 @@ bool FPaths::HasRoot(std::string_view Alias) const
 } // namespace Maho::Paths
 
 // The C export the host looks up BY SYMBOL NAME for dynamic install.
-extern "C" MAHO_PATHS_API Maho::FLayerBase* CreateLayer()
+extern "C" MAHO_PATHS_API Maho::FFrameExtension* CreateFrame()
 {
-	return Maho::Paths::FPaths::CreateLayer();
+	return Maho::Paths::FPaths::CreateFrame();
 }
 

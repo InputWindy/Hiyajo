@@ -183,8 +183,8 @@ bool FConfig::HasKey(std::string_view Section, std::string_view Key) const
 } // namespace Maho::Config
 
 // The C export the host looks up BY SYMBOL NAME for dynamic install.
-extern "C" MAHO_CONFIG_API Maho::FLayerBase* CreateLayer()
+extern "C" MAHO_CONFIG_API Maho::FFrameExtension* CreateFrame()
 {
-	return Maho::Config::FConfig::CreateLayer();
+	return Maho::Config::FConfig::CreateFrame();
 }
 

@@ -211,6 +211,21 @@ namespace Maho
 
 FExampleEditor::FExampleEditor()
 {
+	// CONFLICT #1 -- a missing dependency edge: both UI features write PROCESS-GLOBAL
+	// ImGui state at install.
+	//
+	// Both OnInstalled bodies run ImGui::CreateContext / GetIO / the theme-font atlas
+	// bake, all of which read and write the ONE global "current context", and
+	// ImGuiFrameMutex is a PER-FEATURE member -- it excludes nothing across two features.
+	// With no edge between the two install roots they run concurrently in the render
+	// feature install graph and corrupt that global: the game feature's InitViews then
+	// trips IM_ASSERT(g.Initialized) inside ImGui::NewFrame(), and both install nodes
+	// fail to return -- which parks every later frame of FRender's chain and, through
+	// FRender::ITick, the host graph too.
+	//
+	// The per-frame edges below order the two features' FRAMES; this one orders their
+	// INSTALLS.
+	MyStage<IOnInstalled>().IsWaiting<FUIFeature>().ForStage<IOnInstalled>();
 	// Pass0 INPUT takeover: the editor re-bases the Win32 cursor to the viewport panel and
 	// feeds the game-UI context (SetEditorInput) BEFORE the game feature's IInitViews feeds
 	// + NewFrame()s its IO. Without this edge the game UI could run its feed/NewFrame first

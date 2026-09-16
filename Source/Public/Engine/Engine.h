@@ -3,9 +3,8 @@
 #include <Core/Assembly.h>
 #include <Core/Interface.h>
 #include <Engine/Query.h>
-#include <Engine/Layer.h>
-#include <Engine/LayerCollector.h>
-#include <Engine/LayerTaskGraph.h>
+#include <Engine/Frame.h>
+#include <Engine/FrameBuilder.h>
 
 #include <algorithm>
 #include <atomic>
@@ -38,7 +37,7 @@ public:                                                      \
 
 /**
  * Stage dispatch specializations - the primary template + specialization sugar
- * are declared in Layer.h. Here each engine stage interface gets a full
+ * are declared in Frame.h. Here each engine stage interface gets a full
  * specialization for the FEngineBase context.
  */
 
@@ -131,8 +130,12 @@ MAHO_DECLARE_STAGE_DISPATCH(FEngineBase, ITick,        ITick,        Tick)
 MAHO_DECLARE_STAGE_DISPATCH(FEngineBase, IEndFrame,    IEndFrame,    EndFrame)
 MAHO_DECLARE_STAGE_DISPATCH(FEngineBase, IExit,        IExit,        RequestExit)
 
+using FInitStages = TTypeList<IPreInit, IInit, IPostInit>;
+using FTickStages = TTypeList<IBeginFrame, ITick, IEndFrame, IExit>;
+using FShutdownStages = TTypeList<IPreShutdown, IShutdown, IPostShutdown>;
+
 // Engine base class
-class MAHO_API FEngineBase : public FLayerCollector<FEngineBase>
+class MAHO_API FEngineBase : public FFrameBuilder<FEngineBase>
 {
 public:
 	FEngineBase();
@@ -164,13 +167,9 @@ public:
 	/** Request the main loop to exit at the next frame boundary. */
 	void RequestExit();
 
-	/** True once RequestExit was called: the host's own vocabulary for the collector's
+	/** True once RequestExit was called: the host's own vocabulary for the builder's
 	 *  "closing" state (the same flag also refuses Install / Reload there). */
 	[[nodiscard]] bool ShouldExit() const noexcept { return IsClosing(); }
-
-private:
-	// The "going down" flag lives in FLayerCollector (it also gates Install/Reload).
-	bool bLayersDirty = true;                    // set when OnLayersChanged fires; Main re-expands the cached graph
 
 private:
 	// command lines parsing

@@ -75,8 +75,8 @@ FName FNamePool::Intern(std::string_view Str)
 } // namespace Maho::Name
 
 // The C export the host looks up BY SYMBOL NAME for dynamic install.
-extern "C" MAHO_NAME_API Maho::FLayerBase* CreateLayer()
+extern "C" MAHO_NAME_API Maho::FFrameExtension* CreateFrame()
 {
-	return Maho::Name::FNamePool::CreateLayer();
+	return Maho::Name::FNamePool::CreateFrame();
 }
 
