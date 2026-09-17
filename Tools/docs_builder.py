@@ -357,7 +357,12 @@ body{margin:0;background:var(--bg);color:var(--txt);
 #side{width:340px;min-width:340px;border-right:1px solid var(--line);background:var(--panel);
       display:flex;flex-direction:column}
 #side h1{font-size:15px;margin:0;padding:14px 16px;border-bottom:1px solid var(--line);color:#fff}
-#side .meta{font-size:11.5px;color:var(--sub);padding:8px 16px;border-bottom:1px solid var(--line)}
+#side .search{padding:10px 12px;border-bottom:1px solid var(--line)}
+#side .search input{width:100%;background:#121a2a;border:1px solid var(--line);border-radius:6px;
+     color:var(--txt);padding:6px 9px;font-size:12.5px;font-family:inherit}
+#side .search input::placeholder{color:#5b7bab}
+#side .search input:focus{outline:none;border-color:var(--accent)}
+#tree li.hidden{display:none}
 #tree{overflow:auto;padding:8px 6px 24px;font-size:12.5px;flex:1}
 #tree ul{list-style:none;margin:0;padding-left:12px}
 #tree > ul{padding-left:6px}
@@ -422,6 +427,23 @@ JS = """
   for (var k=0;k<labels.length;k++){
     labels[k].addEventListener('click', function(){ this.parentElement.classList.toggle('collapsed'); });
   }
+  var Query = document.getElementById('q');
+  if (Query) {
+    Query.addEventListener('input', function(){
+      var Needle = this.value.trim().toLowerCase();
+      var Files = document.querySelectorAll('#tree li.file');
+      for (var f=0; f<Files.length; f++){
+        var Hit = !Needle || Files[f].textContent.toLowerCase().indexOf(Needle) >= 0;
+        Files[f].classList.toggle('hidden', !Hit);
+      }
+      var Dirs = document.querySelectorAll('#tree li.dir');
+      for (var d=0; d<Dirs.length; d++){
+        var Any = Dirs[d].querySelector('li.file:not(.hidden)');
+        Dirs[d].classList.toggle('hidden', !Any);
+        if (Needle && Any) { Dirs[d].classList.remove('collapsed'); }
+      }
+    });
+  }
   var first = links.length ? links[0].dataset.file : null;
   if (location.hash && location.hash.length > 1) { show(location.hash.slice(1)); }
   else if (first) { show(first); }
@@ -440,7 +462,9 @@ PAGE = """<!DOCTYPE html>
 <div id="app">
   <div id="side">
     <h1>Maho 引擎源码</h1>
-    <div class="meta">{meta}</div>
+    <div class="search" title="{meta}">
+      <input id="q" type="search" placeholder="搜索头文件…  （如 Frame、Core、Entry）" autocomplete="off">
+    </div>
     <div id="tree">{tree}</div>
   </div>
   <div id="main">{panes}</div>
@@ -481,7 +505,8 @@ def Build(Out: str | Path = "Source/Docs.html",
 			Panes.append('<div class="empty">' + Hint + "</div>")
 		else:
 			Panes.append(f'<h2 class="file-title">{html.escape(Declared_.Title)}</h2>')
-			Panes.append(RenderDesc(Declared_.Desc))
+			if Declared_.Desc:
+				Panes.append('<div class="card">' + RenderDesc(Declared_.Desc) + "</div>")
 			for CardNode in Declared_.Cards:
 				Panes.append(RenderCard(CardNode))
 			if not Declared_.Entities and not Declared_.Cards:
@@ -493,7 +518,7 @@ def Build(Out: str | Path = "Source/Docs.html",
 		Panes.append("</div>")
 
 	Meta = (f"左侧扫描 Source/**/*.h：{len(Paths)} 个头文件 · 已声明 {len(Declared)} 个 · "
-	        f"{Entities} 个实体 / {Members} 个成员<br>内容在 Tools/docs_content.py 里逐条声明")
+	        f"{Entities} 个实体 / {Members} 个成员 ｜ 内容在 Tools/docs_content.py 里逐条声明")
 	Text = PAGE.format(css=CSS, js=JS, meta=Meta, tree=RenderTree(Paths),
 	                   panes="\n".join(Panes))
 	OutPath = Path(Out)

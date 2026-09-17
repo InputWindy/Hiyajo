@@ -17,7 +17,12 @@ body{margin:0;background:var(--bg);color:var(--txt);
 #side{width:340px;min-width:340px;border-right:1px solid var(--line);background:var(--panel);
       display:flex;flex-direction:column}
 #side h1{font-size:15px;margin:0;padding:14px 16px;border-bottom:1px solid var(--line);color:#fff}
-#side .meta{font-size:11.5px;color:var(--sub);padding:8px 16px;border-bottom:1px solid var(--line)}
+#side .search{padding:10px 12px;border-bottom:1px solid var(--line)}
+#side .search input{width:100%;background:#121a2a;border:1px solid var(--line);border-radius:6px;
+     color:var(--txt);padding:6px 9px;font-size:12.5px;font-family:inherit}
+#side .search input::placeholder{color:#5b7bab}
+#side .search input:focus{outline:none;border-color:var(--accent)}
+#tree li.hidden{display:none}
 #tree{overflow:auto;padding:8px 6px 24px;font-size:12.5px;flex:1}
 #tree ul{list-style:none;margin:0;padding-left:12px}
 #tree > ul{padding-left:6px}
@@ -67,7 +72,9 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div id="app">
   <div id="side">
     <h1>Maho 引擎源码</h1>
-    <div class="meta">左侧扫描 Source/**/*.h：22 个头文件 · 已声明 1 个 · 0 个实体 / 0 个成员<br>内容在 Tools/docs_content.py 里逐条声明</div>
+    <div class="search" title="左侧扫描 Source/**/*.h：22 个头文件 · 已声明 1 个 · 0 个实体 / 0 个成员 ｜ 内容在 Tools/docs_content.py 里逐条声明">
+      <input id="q" type="search" placeholder="搜索头文件…  （如 Frame、Core、Entry）" autocomplete="off">
+    </div>
     <div id="tree"><ul>
 <li class="dir"><span class="dir-label" data-dir="Public">Public</span>
 <ul>
@@ -213,9 +220,9 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div class="pane" id="pane-Public__Maho_h">
 <div class="hdr">Public/Maho.h</div>
 <h2 class="file-title">Maho.h —— 引擎聚合头</h2>
-<div class="doc">
+<div class="card"><div class="doc">
 <p>插件只需 `#include &lt;Maho.h&gt;`，就同时拿到 Core 基建与引擎帧系统。它是**唯一的聚合点**（原先的 Core.h 已折进来：一个聚合头只被另一个聚合头包含，就是纯间接）。下面这张表就是它带进来的东西。</p>
-</div>
+</div></div>
 <div class="card">
 <h3 class="card-title">包含的模块</h3>
 
@@ -254,6 +261,23 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
   var labels = document.querySelectorAll('#tree .dir-label');
   for (var k=0;k<labels.length;k++){
     labels[k].addEventListener('click', function(){ this.parentElement.classList.toggle('collapsed'); });
+  }
+  var Query = document.getElementById('q');
+  if (Query) {
+    Query.addEventListener('input', function(){
+      var Needle = this.value.trim().toLowerCase();
+      var Files = document.querySelectorAll('#tree li.file');
+      for (var f=0; f<Files.length; f++){
+        var Hit = !Needle || Files[f].textContent.toLowerCase().indexOf(Needle) >= 0;
+        Files[f].classList.toggle('hidden', !Hit);
+      }
+      var Dirs = document.querySelectorAll('#tree li.dir');
+      for (var d=0; d<Dirs.length; d++){
+        var Any = Dirs[d].querySelector('li.file:not(.hidden)');
+        Dirs[d].classList.toggle('hidden', !Any);
+        if (Needle && Any) { Dirs[d].classList.remove('collapsed'); }
+      }
+    });
   }
   var first = links.length ? links[0].dataset.file : null;
   if (location.hash && location.hash.length > 1) { show(location.hash.slice(1)); }
