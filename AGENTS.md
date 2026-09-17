@@ -113,4 +113,4 @@ When extending project-side code, follow these three rules:
 
 ## Docs
 
-- [Source/Docs.html](Source/Docs.html) - 引擎源码文档（`Tools/gen_source_docs.py` 生成）：左侧 Source 树（叶子 = `.h`），右侧逐类展示字段 / 接口签名 / 功能描述。**改完头文件请重新生成**（见该脚本的 usage）
+- [Source/Docs.html](Source/Docs.html) - 引擎源码文档：左侧 Source 树（叶子 = `.h`），右侧逐类展示字段 / 接口签名 / 功能描述。**内容在 `Tools/docs_content.py` 里一条一条手工声明**（`Tools/docs_builder.py` 提供原子接口：`Header` / `Class` / `Interface` / `Field` / `Nested` …，**不扫描源码**）；渲染：`Tools\maho_python.bat Tools\docs_content.py`
