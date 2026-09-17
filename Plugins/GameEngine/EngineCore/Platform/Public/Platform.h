@@ -4,6 +4,7 @@
 #include <Engine/Engine.h>
 #include <Maho.h>
 
+#include <atomic>
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -173,6 +174,14 @@ public:
 	 *  delta. */
 	void ReadInput(MInputContext& Out) const;
 
+	/** Copy the most recently PUBLISHED input frame (see the ring in the private section).
+	 *  This is the one a reader in a DIFFERENT frame graph must use. The UI stages are children
+	 *  of the render collector, so no dependency edge can ever order them against Tick() -- and
+	 *  reading ReadInput() would race the pump's live working copy. A published slot is complete
+	 *  and never mutated again, so a reader lagging by up to MAHO_FRAMES_IN_FLIGHT frames still
+	 *  gets a coherent snapshot instead of a torn one. */
+	void ReadFrameInput(MInputContext& Out) const;
+
 	/** Drain the full raw input event stream accumulated since the last call (edges,
 	 *  char, cursor/button/key/scroll events, cursor-enter, window-focus). Appends to
 	 *  Out and clears the platform buffer. This is the INCREMENTAL counterpart to
@@ -215,8 +224,17 @@ private:
 	// -- input snapshot written by the GLFW callbacks (window-loop thread) and read by
 	//    the UI features (render thread). Protected by InputMutex.
 	mutable std::mutex InputMutex;
-	MInputContext Input;
+	MInputContext Input;   // the pump's LIVE working copy (written by the GLFW callbacks)
 	mutable std::vector<MInputEvent> InputEvents;
+
+	/** Published input ring -- one slot per in-flight frame. Tick() copies the live working copy
+	 *  into the next slot and publishes it, so the pump never writes a slot a reader can still be
+	 *  holding. Slot count mirrors MAHO_FRAMES_IN_FLIGHT: that is the maximum lag between a reader
+	 *  living in a child collector and this stage. */
+	static constexpr std::uint32_t kInputRingSlots = MAHO_FRAMES_IN_FLIGHT;
+	MInputContext InputRing[kInputRingSlots];
+	std::uint32_t InputRingWrite = 0;
+	std::atomic<std::uint32_t> InputRingPublished{ 0 };
 	// Dropped file paths (OS drag & drop), same producer/consumer split as InputEvents.
 	mutable std::vector<std::string> DroppedFiles;
 

@@ -246,6 +246,13 @@ FExampleEditor::FExampleEditor()
 	// in both build types, but this feature only exists in an editor build.
 	MyStage<IEditorCompose>().IsWaiting<Scene::FScene>().ForStage<IEndRender>();
 	MyStage<IEditorCompose>().IsBlocking<FFrameRenderFeature>().OnStage<IPresent>();
+	// Pass0 -> pass3 hand-off crosses a FRAME boundary, and the render graph pipelines frames
+	// (FRender::Tick's Execute does not drain): InitEditorViews@N reads the input cache
+	// (EditorInputEvents / EditorWheelX / bEditorInputCached) while EditorInput@N+1 may already
+	// be clearing it. That race silently drops a frame's keys/wheel -- and it is invisible from
+	// either stage alone. Pin the intra-layer cross-frame edge; same shape as FRender's own
+	// frame-isolation edge (IBeginFrame@N+1 waits for IEndFrame@N).
+	MyStage<IEditorInput>().WaitFor<FExampleEditor>().OnLastFrameStage<IEditorCompose>();
 	// Teardown serialization, mirroring the frame edges above: FRender::Shutdown runs every
 	// feature's IPreUnInstall as one batch, and my body releases the editor target + destroys
 	// the editor's own ImGui context while the other two features release theirs. Pin my
@@ -292,7 +299,7 @@ void FExampleEditor::EditorInput(FRender& R)
 	// window-loop thread). The cursor is already relative to the window content-area
 	// top-left -- the editor display space (whole window) maps to it 1:1.
 	Platform::MInputContext In;
-	P->ReadInput(In);
+	P->ReadFrameInput(In);
 
 	// The editor is the ONE drain + wheel-consume consumer of the frame (pass0 runs first).
 	// Cache the drained event batch + the exchanged-to-zero wheel delta here so
@@ -501,6 +508,14 @@ void FExampleEditor::InitEditorViews(FRender& R)
 	// against the wrong one. UIFeature does the same for its own context.
 	ImGui::SetCurrentContext(m_Context);
 
+	// Same reasoning as FUIFeature's InitViews: our input is a per-frame SNAPSHOT (one MousePos
+	// + one button state), not an event stream, so event trickling only defers state to the next
+	// frame -- which reads as stickiness when a button is released mid-motion.
+	{
+		ImGuiIO& FrameIO = ImGui::GetIO();
+		FrameIO.ConfigInputTrickleEventQueue = false;
+	}
+
 	std::lock_guard<std::mutex> FrameLock(ImGuiFrameMutex);
 
 	// Record the frame render target the components reach through this host.
@@ -569,7 +584,7 @@ void FExampleEditor::InitEditorViews(FRender& R)
 	// callbacks. The editor context's DisplaySize is the whole window; the snapshot
 	// cursor is content-area relative (same space), so it feeds 1:1.
 	Platform::MInputContext In;
-	P->ReadInput(In);
+	P->ReadFrameInput(In);
 	IO.AddMousePosEvent(In.MouseX, In.MouseY);
 	IO.AddMouseButtonEvent(0, In.MouseButtons[0]);
 	IO.AddMouseButtonEvent(1, In.MouseButtons[1]);

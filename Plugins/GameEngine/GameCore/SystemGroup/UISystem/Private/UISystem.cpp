@@ -3,6 +3,8 @@
 #include <UIViewRegistry.h>
 #include <Widgets/FUIText.h>
 
+#include <cstdio>
+
 namespace Maho
 {
 namespace GameWorld
@@ -69,6 +71,14 @@ void FUISystem::BuildDemoTree(UI::FUIBuilder& Root)
 	Root.Layout().SetSpacing(4.f);
 
 	// 节点 Id 稳定：同 Id 同类型重声明 = 复用（运行期状态跨帧存活）。
+	{
+		// 帧率读数：FPS + 帧时间（ms）。没有 profiler 时，这一行就是"是不是帧率低"的答案。
+		char Line[64];
+		std::snprintf(Line, sizeof(Line), "FPS %.1f   (%.2f ms)",
+			static_cast<double>(SmoothedFps),
+			SmoothedFps > 0.f ? 1000.0 / static_cast<double>(SmoothedFps) : 0.0);
+		Root.AddItem<UI::FUIText>(UI::FUIName("GameUI.Fps")).SetText(Line);
+	}
 	Root.AddItem<UI::FUIText>(UI::FUIName("GameUI.Label")).SetText("Game UI placeholder");
 
 	Root.AddItem<UI::FUIText>(UI::FUIName("GameUI.Hint"))
@@ -82,6 +92,14 @@ void FUISystem::Update(FGameWorld& World)
 	if (View == nullptr)
 	{
 		return;   // 注册表/上下文未就位，下一帧再试
+	}
+
+	// 帧率读数：世界自己的帧时（固定步进用的同一份 delta）。指数平滑，否则读数会跳。
+	const float Delta = World.GetDeltaSeconds();
+	if (Delta > 0.f)
+	{
+		const float Instant = 1.f / Delta;
+		SmoothedFps = (SmoothedFps <= 0.f) ? Instant : (SmoothedFps * 0.9f + Instant * 0.1f);
 	}
 
 	// 交互事件先回传：翻译线程只入队，真正的回调在所有者线程（此处）执行，回调内可再次 Edit()。

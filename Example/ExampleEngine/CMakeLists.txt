@@ -115,10 +115,6 @@ set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/GameEngine/RenderCore/Render")
 include("${ENGINE_DIR}/Plugins/GameEngine/RenderCore/Render/Render.cmake")
 unset(_MOD_PLUGIN_DIR)
 
-set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/GameEngine/RenderCore/RenderFeature/FrameRenderFeature")
-include("${ENGINE_DIR}/Plugins/GameEngine/RenderCore/RenderFeature/FrameRenderFeature/FrameRenderFeature.cmake")
-unset(_MOD_PLUGIN_DIR)
-
 set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/GameEngine/RenderCore/RenderFeature/Scene")
 include("${ENGINE_DIR}/Plugins/GameEngine/RenderCore/RenderFeature/Scene/Scene.cmake")
 unset(_MOD_PLUGIN_DIR)
@@ -131,8 +127,8 @@ set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/GameEngine/EditorCore/ExampleEditor")
 include("${ENGINE_DIR}/Plugins/GameEngine/EditorCore/ExampleEditor/ExampleEditor.cmake")
 unset(_MOD_PLUGIN_DIR)
 
-set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/GameEngine/EditorCore/EditorUI/EditorTheme")
-include("${ENGINE_DIR}/Plugins/GameEngine/EditorCore/EditorUI/EditorTheme/EditorTheme.cmake")
+set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/GameEngine/EditorCore/EditorUI/ContentBrowser")
+include("${ENGINE_DIR}/Plugins/GameEngine/EditorCore/EditorUI/ContentBrowser/ContentBrowser.cmake")
 unset(_MOD_PLUGIN_DIR)
 
 set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/GameEngine/EditorCore/EditorUI/EditorConsole")
@@ -143,16 +139,20 @@ set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/GameEngine/GameCore/SystemGroup/UISys
 include("${ENGINE_DIR}/Plugins/GameEngine/GameCore/SystemGroup/UISystem/UISystem.cmake")
 unset(_MOD_PLUGIN_DIR)
 
-set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/GameEngine/EditorCore/EditorUI/EditorViewport")
-include("${ENGINE_DIR}/Plugins/GameEngine/EditorCore/EditorUI/EditorViewport/EditorViewport.cmake")
+set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/GameEngine/RenderCore/RenderFeature/FrameRenderFeature")
+include("${ENGINE_DIR}/Plugins/GameEngine/RenderCore/RenderFeature/FrameRenderFeature/FrameRenderFeature.cmake")
+unset(_MOD_PLUGIN_DIR)
+
+set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/GameEngine/EditorCore/EditorUI/EditorTheme")
+include("${ENGINE_DIR}/Plugins/GameEngine/EditorCore/EditorUI/EditorTheme/EditorTheme.cmake")
 unset(_MOD_PLUGIN_DIR)
 
 set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/GameEngine/RenderCore/RenderFeature/DrawTriangleFeature")
 include("${ENGINE_DIR}/Plugins/GameEngine/RenderCore/RenderFeature/DrawTriangleFeature/DrawTriangleFeature.cmake")
 unset(_MOD_PLUGIN_DIR)
 
-set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/GameEngine/EditorCore/EditorUI/ContentBrowser")
-include("${ENGINE_DIR}/Plugins/GameEngine/EditorCore/EditorUI/ContentBrowser/ContentBrowser.cmake")
+set(_MOD_PLUGIN_DIR "${ENGINE_DIR}/Plugins/GameEngine/EditorCore/EditorUI/EditorViewport")
+include("${ENGINE_DIR}/Plugins/GameEngine/EditorCore/EditorUI/EditorViewport/EditorViewport.cmake")
 unset(_MOD_PLUGIN_DIR)
 
 # The project root — the entry plugin (under Plugins/, Public headers + Private impl).
@@ -197,23 +197,23 @@ target_include_directories(ExampleEngine PUBLIC
 	"${ENGINE_DIR}/Plugins/Common/Unicode/Public"
 	"${ENGINE_DIR}/Plugins/GameEngine/GameCore/GameWorld/Public"
 	"${ENGINE_DIR}/Plugins/GameEngine/RenderCore/Render/Public"
-	"${ENGINE_DIR}/Plugins/GameEngine/RenderCore/RenderFeature/FrameRenderFeature/Public"
 	"${ENGINE_DIR}/Plugins/GameEngine/RenderCore/RenderFeature/Scene/Public"
 	"${ENGINE_DIR}/Plugins/GameEngine/RenderCore/RenderFeature/UIFeature/Public"
 	"${ENGINE_DIR}/Plugins/GameEngine/EditorCore/ExampleEditor/Public"
-	"${ENGINE_DIR}/Plugins/GameEngine/EditorCore/EditorUI/EditorTheme/Public"
+	"${ENGINE_DIR}/Plugins/GameEngine/EditorCore/EditorUI/ContentBrowser/Public"
 	"${ENGINE_DIR}/Plugins/GameEngine/EditorCore/EditorUI/EditorConsole/Public"
 	"${ENGINE_DIR}/Plugins/GameEngine/GameCore/SystemGroup/UISystem/Public"
-	"${ENGINE_DIR}/Plugins/GameEngine/EditorCore/EditorUI/EditorViewport/Public"
+	"${ENGINE_DIR}/Plugins/GameEngine/RenderCore/RenderFeature/FrameRenderFeature/Public"
+	"${ENGINE_DIR}/Plugins/GameEngine/EditorCore/EditorUI/EditorTheme/Public"
 	"${ENGINE_DIR}/Plugins/GameEngine/RenderCore/RenderFeature/DrawTriangleFeature/Public"
-	"${ENGINE_DIR}/Plugins/GameEngine/EditorCore/EditorUI/ContentBrowser/Public"
+	"${ENGINE_DIR}/Plugins/GameEngine/EditorCore/EditorUI/EditorViewport/Public"
 )
 # Export the extern "C" CreateFrame() bridge — the host's single entry.
 set_target_properties(ExampleEngine PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 target_compile_definitions(ExampleEngine PRIVATE MAHO_EXAMPLEENGINE_MODULE_EXPORTS)
 target_link_libraries(ExampleEngine PUBLIC Maho)
-add_dependencies(ExampleEngine Archive Compress ConsoleVariable Config Exception Log Name UI Paths Platform RHI Reflect Resource Asset Script Text Timer Unicode GameWorld Render FrameRenderFeature Scene UIFeature ExampleEditor EditorTheme EditorConsole UISystem EditorViewport DrawTriangleFeature ContentBrowser)
-target_link_libraries(ExampleEngine PUBLIC Archive Compress ConsoleVariable Config Exception Log Name UI Paths Platform RHI Reflect Resource Asset Script Text Timer Unicode GameWorld Render FrameRenderFeature Scene UIFeature ExampleEditor EditorTheme EditorConsole UISystem EditorViewport DrawTriangleFeature ContentBrowser)
+add_dependencies(ExampleEngine Archive Compress ConsoleVariable Config Exception Log Name UI Paths Platform RHI Reflect Resource Asset Script Text Timer Unicode GameWorld Render Scene UIFeature ExampleEditor ContentBrowser EditorConsole UISystem FrameRenderFeature EditorTheme DrawTriangleFeature EditorViewport)
+target_link_libraries(ExampleEngine PUBLIC Archive Compress ConsoleVariable Config Exception Log Name UI Paths Platform RHI Reflect Resource Asset Script Text Timer Unicode GameWorld Render Scene UIFeature ExampleEditor ContentBrowser EditorConsole UISystem FrameRenderFeature EditorTheme DrawTriangleFeature EditorViewport)
 # Plugin DLLs co-locate with Maho.dll + EntryPoint so relative DLL deps resolve.
 set_property(TARGET ExampleEngine PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>")
 # Module naming protocol: the host engine DLL output name = the engine layer
@@ -314,7 +314,7 @@ endforeach()
 set_target_properties(EntryPoint PROPERTIES VS_DEBUGGER_WORKING_DIRECTORY "${_MAHO_BIN}/$<CONFIG>")
 # The sln startup project is EntryPoint (the app host), not ZERO_CHECK.
 set_property(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" PROPERTY VS_STARTUP_PROJECT EntryPoint)
-add_dependencies(EntryPoint ExampleEngine Archive Compress ConsoleVariable Config Exception Log Name UI Paths Platform RHI Reflect Resource Asset Script Text Timer Unicode GameWorld Render FrameRenderFeature Scene UIFeature ExampleEditor EditorTheme EditorConsole UISystem EditorViewport DrawTriangleFeature ContentBrowser MahoCheckCycle)
+add_dependencies(EntryPoint ExampleEngine Archive Compress ConsoleVariable Config Exception Log Name UI Paths Platform RHI Reflect Resource Asset Script Text Timer Unicode GameWorld Render Scene UIFeature ExampleEditor ContentBrowser EditorConsole UISystem FrameRenderFeature EditorTheme DrawTriangleFeature EditorViewport MahoCheckCycle)
 
 # Solution folders: EntryPoint at the ROOT; Maho (engine), Project, ThirdParty.
 # The project root sits at Project/ itself; project plugin DLLs under

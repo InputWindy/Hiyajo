@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
 #include <exception>
 #include <functional>
@@ -276,6 +277,13 @@ FUIFeature::FUIFeature()
 	// one (still COLOR_ATTACHMENT) -> vkCmdDraw layout-mismatch validation error. Pin the
 	// data-flow edge so the reader always sees the current target.
 	MyStage<IInitViews>().IsWaiting<Scene::FScene>().ForStage<IBeginRender>();
+	// NOTE: do NOT try to order this stage against FPlatform::ITick with an edge -- it cannot
+	// work. This frame lives in the RENDER COLLECTOR's graph while FPlatform::ITick lives in the
+	// ENGINE's (they are separate FFrameGraph instances), so a declaration here would never bind:
+	// it is a silent no-op, which is why adding it changed nothing. Input is consumed as a
+	// PUBLISHED FRAME instead (FPlatform::ReadFrameInput): the platform freezes each frame into a
+	// k-slot ring (k = MAHO_FRAMES_IN_FLIGHT), so a reader lagging by up to k frames still sees a
+	// coherent snapshot instead of racing the pump's live copy.
 	// This feature is OFF-SCREEN ONLY now: it draws the ImGui list into its own
 	// composite target and sets it as FRender's present target. It no longer owns
 	// the present blit -- the frame feature does. Declare the reverse edge so the
@@ -424,6 +432,17 @@ void FUIFeature::InitViews(FRender& R)
 	// editor's context and this frame would be built against the wrong one.
 	ImGui::SetCurrentContext(m_Context);
 
+	// Input is fed as a per-frame SNAPSHOT (one MousePos + one button state), never as an event
+	// stream -- so ImGui's event TRICKLING buys nothing and costs a frame of latency: with it on,
+	// a frame that enqueues both a position and a button change applies only ONE of them and
+	// defers the rest. That shows up as stickiness: release the button mid-flick and the window
+	// keeps following for another frame or two, which at speed is tens of pixels. Off, every
+	// queued event is applied in the frame it arrives -- which is what snapshot input needs.
+	{
+		ImGuiIO& FrameIO = ImGui::GetIO();
+		FrameIO.ConfigInputTrickleEventQueue = false;
+	}
+
 	// -- Final on-screen composite target. This feature owns its own off-screen RT per
 	//    the design (the UI is the last surface; the scene is sampled INto it via the
 	//    game's imgui::image SceneColor control). Sized to the swapchain canvas + format
@@ -508,8 +527,12 @@ void FUIFeature::InitViews(FRender& R)
 		// cursor is already relative to the window content-area top-left -- the same
 		// space as IO.DisplaySize (whole window) -- so it feeds 1:1. No Win32 global
 		// state any more; the IOContext is the single source of truth.
+		// Read the PUBLISHED frame, not the live working copy. The platform's Tick lives in a
+		// different frame graph (engine stages) than this render-collector child, so no edge can
+		// ever order the two -- pulling the live copy would race the pump, and reading a frame
+		// whose state is still being written is exactly how a click lands against stale UI state.
 		Platform::MInputContext In;
-		P->ReadInput(In);
+		P->ReadFrameInput(In);
 		IO.AddMousePosEvent(In.MouseX, In.MouseY);
 		IO.AddMouseButtonEvent(0, In.MouseButtons[0]);
 		IO.AddMouseButtonEvent(1, In.MouseButtons[1]);

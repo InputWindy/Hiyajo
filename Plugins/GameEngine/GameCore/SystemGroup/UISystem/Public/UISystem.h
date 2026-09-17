@@ -71,6 +71,9 @@ private:
 	 *  注册表里直到它关闭（实测：`注册表关闭时仍有 1 个视图在册`）。持有 `shared_ptr` 还保证
 	 *  对象活到注销完成（池被清后引用计数仍 >= 1）。 */
 	std::shared_ptr<UI::FUIView> DemoView;
+
+	/** 平滑后的帧率（`Update` 每帧从 `World.GetDeltaSeconds()` 采样）。仅用于演示读数。 */
+	float SmoothedFps = 0.f;
 };
 
 /** Global accessor to the UI system (cross-DLL, mirrors Resource::GetResourceSystem()).

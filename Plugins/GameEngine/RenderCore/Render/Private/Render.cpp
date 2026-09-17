@@ -40,6 +40,17 @@ FRender::FRender()
 	MyStage<IPostInit>().IsWaiting<Paths::FPaths>().ForStage<IPostInit>();
 	MyStage<IPostInit>().IsWaiting<Name::FNamePool>().ForStage<IPostInit>();
 
+	// The platform's ITick is what PUMPS the OS message queue (FPlatform::Tick -> PollEvents),
+	// and that pump is what refreshes the input snapshot every consumer reads. With no edge, my
+	// ITick -- and therefore every render stage inside it, including the UI features' input feed
+	// (FUIFeature::InitViews, FExampleEditor::InitEditorViews) -- runs CONCURRENTLY with that
+	// pump, so a given frame reads the snapshot from either before or after this frame's poll.
+	// The ordering then jitters frame to frame: the cursor follows, then stalls, and an ImGui
+	// window drag loses its grip because the button state was read a frame stale. Initialization
+	// already declares this dependency (IInit waits for FPlatform::IPostInit); the per-frame path
+	// needs it just as much.
+	MyStage<ITick>().IsWaiting<Platform::FPlatform>().ForStage<ITick>();
+
 	// Shutdown: my teardown drains render tasks that may log, and I hold the RHI
 	// surface created from Platform's window -- so Log and Platform must run
 	// their Shutdown AFTER mine. Declared here (I know them), not by them.
@@ -109,6 +120,20 @@ FRender::FRender()
 	// The general form -- the RHI holding MAHO_FRAMES_IN_FLIGHT copies of that state, so that
 	// frames may overlap -- is the follow-up; until then this edge IS the frame isolation.
 	MyStage<IBeginFrame>().WaitFor<FRender>().OnLastFrameStage<IEndFrame>();
+
+	// Frame isolation against the PLATFORM, not merely against ourselves. The input snapshot is
+	// written by FPlatform::ITick (the pump) and read by the render stages that build a UI frame.
+	// Render frames PIPELINE (up to MAHO_FRAMES_IN_FLIGHT), so without this edge a render frame
+	// can be reading that snapshot while a LATER platform frame has already overwritten it.
+	// Declared here, from the side that knows the platform; the platform never learns about render.
+	//
+	// NOTE: do NOT also block FPlatform::ITick behind our IEndFrame -- a UI stage waits on
+	// FPlatform::ITick (FUIFeature::IInitViews), so a SAME-frame reverse edge closes a cycle
+	// (pump@N -> end@N -> read@N -> pump@N) and deadlocks the frame loop outright: a white
+	// screen with no diagnostics. And there is no "+1 frame" selector to offset it with either --
+	// FEdge::FrameOffset is only ever 0 or -1. Closing the remaining window is therefore NOT an
+	// edge problem: the reader has to stop sharing the mutable snapshot with the writer.
+	MyStage<IBeginFrame>().WaitFor<Platform::FPlatform>().OnLastFrameStage<IEndFrame>();
 }
 
 FRender::~FRender() = default;

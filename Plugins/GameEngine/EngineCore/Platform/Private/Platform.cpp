@@ -4,6 +4,8 @@
 #include <ConsoleVariable.h>
 #include <Log.h>
 
+#include <cstdio>
+
 #if !defined(MAHO_HEADLESS)
 #	if defined(_WIN32)
 #		define GLFW_EXPOSE_NATIVE_WIN32
@@ -512,6 +514,22 @@ bool FPlatform::CreateWindow(int Width, int Height, std::string_view Title)
 		{
 			std::lock_guard<std::mutex> L(InputMutex);
 			Input.WindowFocused = Focused;
+
+			// Keyboard follows FOCUS, not the pointer -- so it does not suffer the bug the mouse
+			// had (a drag leaving the window keeps its key events, because the window keeps focus).
+			// Its failure mode is the transition instead: once focus is gone the OS delivers the
+			// KEYUP to whoever took it, so a key held at that moment stays "down" forever in the
+			// snapshot. Clear the down-state on the transition -- "nothing is held while we are
+			// not focused" is the truth, and it makes the stuck-key state unreachable.
+			if (!Focused)
+			{
+				for (bool& Down : Input.KeyDown)
+				{
+					Down = false;
+				}
+				Input.Mods = 0;
+			}
+
 			MInputEvent Ev;
 			Ev.Type = MInputEventType::WindowFocus;
 			Ev.Bool = Focused;
@@ -568,6 +586,38 @@ void FPlatform::PollEvents()
 	{
 		PollEventsFn();
 	}
+
+#if defined(_WIN32)
+	// Pull the pointer position AND the button state straight from the OS, bypassing the window.
+	//
+	// GLFW's callbacks only fire for events DELIVERED TO THIS WINDOW, so a drag that leaves the
+	// client area loses whatever the window no longer receives -- most visibly the RELEASE. With
+	// the button stuck "down" in the snapshot, ImGui keeps its MovingWindow alive and the window
+	// keeps following the cursor after the user let go. The asymmetry is the signature: the
+	// position kept tracking (it already had a global source) while the button did not.
+	//
+	// GetCursorPos / GetAsyncKeyState are GLOBAL queries -- they report the real state no matter
+	// which window is under the pointer or has focus. Inside the window they agree with the
+	// callbacks, so this only fills the gap the callbacks cannot cover.
+	if (GLFWwindow* ToolkitWindow = GetToolkitWindowHandle())
+	{
+		if (HWND Hwnd = glfwGetWin32Window(ToolkitWindow))
+		{
+			std::lock_guard<std::mutex> L(InputMutex);
+
+			POINT P{};
+			if (::GetCursorPos(&P) != 0 && ::ScreenToClient(Hwnd, &P) != 0)
+			{
+				Input.MouseX = static_cast<float>(P.x);
+				Input.MouseY = static_cast<float>(P.y);
+			}
+
+			Input.MouseButtons[0] = (::GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0;
+			Input.MouseButtons[1] = (::GetAsyncKeyState(VK_MBUTTON) & 0x8000) != 0;
+			Input.MouseButtons[2] = (::GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0;
+		}
+	}
+#endif
 }
 
 // -- engine loop stages (FEngineLayer) --
@@ -578,11 +628,40 @@ void FPlatform::BeginFrame(FEngineBase&)
 
 void FPlatform::Tick(FEngineBase& Engine)
 {
-	PollEvents();
+	PollEvents();   // the pump writes the LIVE copy (Input) and appends edge events
+
+	// Freeze this frame's input into the ring, then drop whatever nobody took.
+	//
+	// Publishing HERE -- instead of leaving readers to pull the live copy -- is what makes the
+	// input consumable from ANOTHER frame graph. The UI stages are children of the render
+	// collector, so no dependency edge can ever order them against this stage: a pull races the
+	// pump. A published slot is immutable, so a reader lagging by up to k frames still sees a
+	// coherent snapshot instead of a torn one.
+	//
+	// Draining the event stream in the same breath bounds it to one frame. An un-drained stream
+	// would prepend itself to the next frame's and grow without limit, making every later frame
+	// pay a bigger DrainInputEvents copy -- input falling progressively behind the frame loop.
+	// The price is that a frame with no consumer loses that frame's key edges, which is the right
+	// trade against unbounded growth.
+	{
+		std::lock_guard<std::mutex> L(InputMutex);
+		InputRingWrite = (InputRingWrite + 1) % kInputRingSlots;
+		InputRing[InputRingWrite] = Input;
+		InputRingPublished.store(InputRingWrite, std::memory_order_release);
+		InputEvents.clear();
+	}
+}
+
+void FPlatform::ReadFrameInput(MInputContext& Out) const
+{
+	std::lock_guard<std::mutex> L(InputMutex);
+	Out = InputRing[InputRingPublished.load(std::memory_order_acquire)];
 }
 
 void FPlatform::EndFrame(FEngineBase&)
 {
+	// Nothing to do: Tick() publishes the frame's input into the ring and drains the event
+	// stream, so the state a reader observes is already frozen at that point.
 }
 
 void FPlatform::RequestExit(FEngineBase& Engine)

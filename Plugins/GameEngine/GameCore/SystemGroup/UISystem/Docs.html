@@ -79,7 +79,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div id="app">
   <div id="side">
     <h1>Maho 引擎源码</h1>
-    <div class="search" title="左侧扫描 Source/**/*.h：2 个头文件 · 已声明 2 个 · 3 个实体 / 9 个成员 ｜ 内容在 Tools/docs_content.py 里逐条声明">
+    <div class="search" title="左侧扫描 Source/**/*.h：2 个头文件 · 已声明 2 个 · 3 个实体 / 10 个成员 ｜ 内容在 Tools/docs_content.py 里逐条声明">
       <input id="q" type="search" placeholder="搜索头文件…  （如 Frame、Core、Entry）" autocomplete="off">
     </div>
     <div id="tree"><ul>
@@ -153,6 +153,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
 <tr><td><span class="acc a-private">private</span></td><td>FEntity DemoWidget</td><td>演示控件的实体句柄（无效 = 尚未建立）；卸出时先查 `IsValid` 再销毁</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">float</span> SmoothedFps = 0.f</td><td>平滑后的帧率（`Update` 每帧从 `World.GetDeltaSeconds()` 采样），仅供 `GameUI.Fps` 的读数显示</td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>std::shared_ptr&lt;UI::FUIView&gt; DemoView</td><td>本系统自持的视图所有权（与组件里的 `shared_ptr` 共享）。注销必须只靠它 —— 见 `PreUnInstall`</td></tr>
 </tbody></table></div>
 <div class="sect">
@@ -160,10 +161,10 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> OnInstalled(FGameWorld&amp; World) <span class="kw">override</span></td><td>装入安全点：登记全局访问器（跨 DLL 走函数，避免每模块一份静态变量）。**不在这里建视图** —— 此刻 UI 注册表可能还没就位（游戏世界与渲染特性的初始化顺序不固定），视图延到第一帧 `Update` 里建</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> ProcessInput(FGameWorld&amp; World) <span class="kw">override</span></td><td>空的已声明 stage：UI 输入由**翻译层**直接投递给树（上下文归渲染侧所有），游戏侧没有要轮询的东西；保留这个 stage 是为了让能力列表完整可读</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Update(FGameWorld&amp; World) <span class="kw">override</span></td><td>一帧的全部工作量：① `EnsureDemoView`（未就位就返回，**下一帧再试**）；② `DrainEvents()` —— 交互事件先回传，翻译线程只入队、真正的回调在所有者线程（这里）执行，回调内可以再次 `Edit()`；③ 在 `Edit()` 独占写作用域里重新声明整棵树（同 id 同类型 = 复用）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Update(FGameWorld&amp; World) <span class="kw">override</span></td><td>一帧的全部工作量：① `EnsureDemoView`（未就位就返回，**下一帧再试**）；② 采样帧率（`World.GetDeltaSeconds()`，指数平滑 —— 纯读数）；③ `DrainEvents()` —— 交互事件先回传，翻译线程只入队、真正的回调在所有者线程（这里）执行，回调内可以再次 `Edit()`；④ 在 `Edit()` 独占写作用域里重新声明整棵树（同 id 同类型 = 复用）</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> PreUnInstall(FGameWorld&amp; World) <span class="kw">override</span></td><td>卸出安全点：**先把视图从注册表注销，再让它被销毁** —— 注册表只持裸指针，顺序反了就是悬垂指针。顺序本身由 `FGameWorld` 声明（它才是驱动本阶段的层）：世界把 `IShutdown` 阻塞在 `FUIViewRegistry` 上，本系统的 `PreUnInstall` 才有「注册表还活着」这个前提。**注销只靠本系统自持的 `DemoView`，不查组件池** —— `FGameWorld::Shutdown` 为防跨模块析构，在驱动本阶段之前就清空了组件池，那时从组件取视图必然取不到，注销会静默丢失、视图残留到注册表关闭。随后销毁演示实体、清全局访问器</td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>UI::FUIView* EnsureDemoView(FGameWorld&amp; World)</td><td>建立（只一次）演示控件的实体 + 组件 + 持久视图，声明它的翻译作用域并注册进注册表。注册表未就位就返回 <span class="kw">nullptr</span>、由调用方下一帧重试 —— 因为游戏世界与渲染特性的初始化顺序**不是**固定的（声明前向依赖反而会让图编译失败）</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> BuildDemoTree(UI::FUIBuilder&amp; Root)</td><td>重新声明演示树（只在活的 `Edit()` 作用域内调用）。节点 id 稳定（`UI::FUIName(<span class="st">"..."</span>)`）⇒ 同 id 同类型重新声明即复用，运行期状态跨帧存活</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> BuildDemoTree(UI::FUIBuilder&amp; Root)</td><td>重新声明演示树（只在活的 `Edit()` 作用域内调用）。节点 id 稳定（`UI::FUIName(<span class="st">"..."</span>)`）⇒ 同 id 同类型重新声明即复用，运行期状态跨帧存活。节点 `GameUI.Fps` 是帧率读数（FPS + 帧时间 ms）—— 没有 profiler 时，它就是「是不是帧率低」的答案</td></tr>
 </tbody></table></div>
 </div>
 </div>
