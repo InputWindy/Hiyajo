@@ -81,9 +81,9 @@ std::uint32_t TranslateRegisteredViews(const FUIViewFrameDesc& Desc)
 	{
 		if (View == nullptr) { continue; }
 		if (!Desc.OnlyView.IsNone() && View->GetId() != Desc.OnlyView) { continue; }
-		// 上下文筛选：视图登记了自己的目标上下文（编辑器 / 游戏各一个），只翻译匹配的那些。
-		// 未登记（nullptr）= 与任何上下文兼容（无竞争的单一 UI 场景）。
-		if (View->GetRenderContext() != nullptr && View->GetRenderContext() != Desc.ImGuiContext) { continue; }
+		// 作用域筛选：视图登记了自己归哪个翻译循环，只翻译匹配的那些。未登记（空）= 与任何
+		// 作用域兼容（无竞争的单一 UI 场景）。比较的是名字 id —— 与真实 ImGui 上下文无关。
+		if (!View->GetRenderScope().IsNone() && View->GetRenderScope() != Desc.RenderScope) { continue; }
 
 		const FUIViewShell& Shell = View->GetWindowShell();
 		const std::string Name = WindowNameOf(*View, Shell);

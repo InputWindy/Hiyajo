@@ -54,6 +54,13 @@ FRender::FRender()
 	// live objects.
 	MyStage<IShutdown>().IsBlocking<Resource::FResourceSystem>().OnStage<IShutdown>();
 	MyStage<IShutdown>().IsBlocking<GameWorld::FGameWorld>().OnStage<IShutdown>();
+	// The name pool is the same kind of environment, and it was the one missing: my teardown
+	// path reaches FResourceSystem::DestroyResource, whose FIRST act is to intern a name
+	// (Name::FName(AssetPath)). FNamePool::Shutdown retracts the pool, so without this edge it
+	// runs BEFORE mine and the interning reads freed pool storage -- validated crash:
+	// FScene::PreUnInstall -> DestroyResource -> FName ctor, inside my own IShutdown batch.
+	// Declared here (I know it), not by them -- a producer never enumerates its consumers.
+	MyStage<IShutdown>().IsBlocking<Name::FNamePool>().OnStage<IShutdown>();
 	// The UI view registry is the same kind of environment: the editor panels this layer
 	// tears down below (FExampleEditor::PreUnInstall -> try-uninstall -> each panel's
 	// IEditorShutdown) unregister their views there, so the registry's IShutdown must run

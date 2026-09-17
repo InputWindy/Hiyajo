@@ -34,6 +34,6 @@ source_group(TREE "${CMAKE_CURRENT_LIST_DIR}" FILES ${UISystem_PUBLIC_HEADERS} $
 # UISystem owns the GAME-side UI: it declares a persistent view tree per widget entity
 # and registers the view in the UI plugin's registry (MAHO_UI). It therefore NEVER
 # links or includes ImGui -- only the translation layer (UIFeature) speaks the backend.
-# The game context is fetched through UI::GetUIGameRenderContext() (published by
+# The game context is fetched through FUIViewRegistry::GetGameRenderContext() (published by
 # UIFeature), so UISystem does not depend on UIFeature either: the game never
 # perceives Render.

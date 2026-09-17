@@ -17,7 +17,7 @@ set_source_files_properties(	"${CMAKE_CURRENT_LIST_DIR}/Text.cplugin"
 target_include_directories(Text PUBLIC
 	"${ENGINE_DIR}/Source/Public"
 	"${CMAKE_CURRENT_LIST_DIR}/Public"
-	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/TaskGraphTest/Public"
+	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEngine/Public"
 )
 set_target_properties(Text PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 target_compile_definitions(Text PRIVATE MAHO_TEXT_MODULE_EXPORTS)

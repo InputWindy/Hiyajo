@@ -116,9 +116,9 @@ struct FEmptyContext
  * how to run one. Deliberately the ONLY thing in the codebase that knows a stage list -- Core's
  * FFrameBridge takes it as an opaque, ordered span of type_indices.
  *
- * The dispatch object must OUTLIVE every batch it produced (its closures capture it, and the
- * frame's reference), which the host's lifetime rules already guarantee: it lives on the stack
- * of whatever drives the batch, which then waits for the batch to drain.
+ * The closures it hands out are SELF-CONTAINED: they capture the frame's and the context's
+ * addresses, never the dispatch object. That is load bearing, not tidiness -- a host that pipelines
+ * frames outlives this stack local by a whole frame (see MakeClosureImpl).
  */
 template <typename TStages, typename TContext = FEmptyContext>
 class TFrameDispatch : public FFrameBridge::IDispatch
@@ -177,7 +177,21 @@ private:
 	{
 		if (Stage == std::type_index(typeid(TCurrent)))
 		{
-			return [this, &Frame]() { Invoke<TCurrent, TContext>(&Frame, Context); };
+			// Capture ADDRESSES, never `this`. A host PIPELINES frames -- FFrameBuilder::Execute
+			// does not drain the batch it submits -- so a node routinely runs one whole frame
+			// after the dispatch object that built it went out of scope. `this` would then be a
+			// reused stack slot, and reading the Context member out of it hands the stage a
+			// garbage context pointer (measured: FRender* arriving as 0x490).
+			//
+			// Both captured addresses are stable for the node's whole life: the frame lives in
+			// the builder's owned set (freed only after a drained uninstall batch), the context is
+			// the host object itself.
+			FFrameExtension* TargetFrame = &Frame;
+			TContext* TargetContext = &Context;
+			return [TargetFrame, TargetContext]()
+			{
+				Invoke<TCurrent, TContext>(TargetFrame, *TargetContext);
+			};
 		}
 		if constexpr (sizeof...(TRest) > 0)
 		{

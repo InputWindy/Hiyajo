@@ -161,15 +161,14 @@ public:
 
 	/** Shared component state (selected entity, scene-ready flag). */
 	FEditorContext& GetEditorContext() { return EditorContext; }
-	/** The FRender the host frame is driven from (set each InitViews). */
-	FRender& GetRender() { return *RenderRef; }
 	/** The host's main docking-space node id (owner of the frame shell). A component
 	 *  calls DockBuilder/SetNextWindowDockID against it to land inside the shared space. */
 	std::uint32_t GetEditorDockSpaceId() const { return EditorDockSpaceId; }
 
-	/** 编辑器 ImGui 上下文的 opaque 句柄。面板建视图时用它登记
-	 *  `FUIView::SetRenderContext` —— 通用翻译循环按上下文筛选视图，两套上下文互不串扰。 */
-	void* GetUIRenderContext() const { return m_Context; }
+	/** 编辑器视图的翻译作用域名（`UI.Scope.Editor`）。**集中一处**：4 个面板建视图时用它声明
+	 *  `FUIView::SetRenderScope`，本宿主的翻译入口与抽干循环声明同一个 —— 「同名字 = 同作用域」
+	 *  是这套筛选的全部依据，5 份字面量各自漂移就会静默丢视图。 */
+	static UI::FUIName EditorRenderScope();
 	/** ImTextureID for the live present target (the game composite UIRenderTarget in an
 	 *  editor build, resolved to EditorRT only at the very end of the frame). The host's
 	 *  translate step resolves THIS id to R.GetPresentTarget() instead of a name-keyed
@@ -212,6 +211,12 @@ private:
 	bool bUIInit = false;
 	bool bFontUploaded = false;
 
+	/** UI 能力注册凭据（`BindUIResourceResolver` / `BindUIClipboardHandlers` 的返回值），
+	 *  在 PreUnInstall 里交还。槽挂在 UI 层（FUIViewRegistry）而不是文件级 static，所以槽的
+	 *  析构时刻由 FrameGraph 驱动；本模块一旦先卸载，UI 层的 IShutdown 会清掉槽并记名报错。 */
+	FSubscriptionID ResolverToken = 0;
+	FSubscriptionID ClipboardToken = 0;
+
 	// Single-frame input cache. EditorInput (pass0, runs FIRST this frame) is the ONE
 	// drain + wheel-consume consumer of the frame. It stores the drained event batch and
 	// the exchanged-to-zero wheel delta here so InitEditorViews (pass3, later in the SAME
@@ -240,7 +245,6 @@ private:
 	/** The translated ImDrawData -> FDrawList for the current frame. */
 	FDrawList DrawList;
 
-	FRender* RenderRef = nullptr;        // current frame render (for component use)
 	FEditorContext EditorContext;        // shared component state
 	std::uint32_t EditorDockSpaceId = 0; // host DockSpace node id, set each DrawEditorPanels
 	/** Viewport panel rect (client pixels) the game UI is displayed into, published by the

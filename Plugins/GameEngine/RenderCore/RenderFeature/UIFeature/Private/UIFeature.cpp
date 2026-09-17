@@ -18,6 +18,7 @@
 #include <UITranslate.h>
 #include <UIResource.h>
 #include <UIViewRegistry.h>
+#include <Core/Fatal.h>
 #include <RHI/RHICommandList.h>
 #include <RHI/RHIEnums.h>
 #include <RHI/RHIResources.h>
@@ -261,10 +262,12 @@ FUIFeature* GetUI()
 
 FUIFeature::FUIFeature()
 {
-	// UI draws + submits LAST -- after every scene render feature's IEndRender
-	// (their submits reach the queue first), so the UI composites over the scene.
+	// UI draws + submits LAST -- after the scene's IEndRender (whose submit reaches the
+	// queue first), so the UI composites over the scene. FDrawTriangleFeature needs no edge
+	// here: it implements only IRender, and the stage sequence itself already puts IRender
+	// before IRenderUI -- an IEndRender edge against it could never bind (the bridge reported
+	// it on every start until the declaration was dropped).
 	MyStage<IRenderUI>().IsWaiting<Scene::FScene>().ForStage<IEndRender>();
-	MyStage<IRenderUI>().IsWaiting<FDrawTriangleFeature>().ForStage<IEndRender>();
 	// The composite base (InitViews) resolves the SceneColor mirror by name and the
 	// compose pass (RenderUI) samples that SAME texture. On a (re)size the scene's
 	// IBeginRender -> EnsureTargets destroys + recreates SceneColor. Without a declared
@@ -280,6 +283,12 @@ FUIFeature::FUIFeature()
 	// feature's IRenderUI, and consumes the target it set. FFrameRenderFeature is
 	// always installed, so this edges its IPresent behind us.
 	MyStage<IRenderUI>().IsBlocking<FFrameRenderFeature>().OnStage<IPresent>();
+	// Teardown serialization. FRender::Shutdown drives every feature's IPreUnInstall as ONE
+	// graph batch, so without an edge the teardown bodies of Scene / UIFeature / ExampleEditor
+	// run CONCURRENTLY and race on the resources they release (pool entries, scene-color mirrors,
+	// the UI context). Serialize them with the same dependency discipline the frame stages use.
+	// Reverse direction: FScene::IPreUnInstall is blocked by ours, so it runs AFTER us.
+	MyStage<IPreUnInstall>().IsBlocking<Scene::FScene>().OnStage<IPreUnInstall>();
 }
 
 void FUIFeature::OnInstalled(FRender& R)
@@ -330,9 +339,10 @@ void FUIFeature::OnInstalled(FRender& R)
 
 	// Publish the cross-DLL accessor so the editor feature can reach this context.
 	GUIFeature = this;
-	// Publish the GAME context through the UI plugin, so a game-side view owner (FUISystem)
-	// can tag its views for THIS context without a UISystem -> UIFeature build dependency.
-	UI::SetUIGameRenderContext(m_Context);
+	// (No context publish any more: the game side never needed this feature's ImGui context,
+	// only a way to say "this view belongs to the game's translate loop". That is now
+	// `FUIView::SetRenderScope` -- a NAME both sides declare independently -- so neither holds
+	// the other's context and no registry hand-off is involved.)
 }
 
 void FUIFeature::SetEditorInput(
@@ -606,6 +616,9 @@ void FUIFeature::InitViews(FRender& R)
 	// input feed above used.
 	UI::FUIViewFrameDesc FrameDesc;
 	FrameDesc.ImGuiContext = m_Context;
+	// 只翻游戏作用域的视图。编辑器侧声明的是另一个名字，双方各自声明、互不需要对方的头 ——
+	// 游戏视图因此不必知道本 feature 的上下文地址（同一个字面量 = 同一个作用域）。
+	FrameDesc.RenderScope = UI::FUIName("UI.Scope.Game");
 	FrameDesc.DisplayWidth = IO.DisplaySize.x;
 	FrameDesc.DisplayHeight = IO.DisplaySize.y;
 	const std::uint32_t Translated = UI::TranslateRegisteredViews(FrameDesc);
@@ -979,10 +992,8 @@ void FUIFeature::PreUnInstall(FRender& R)
 		R.ReleaseTexture(UIRenderTarget);
 		UIRenderTarget.Reset();
 	}
-	// This feature owns the ImGui context, so it tears it down here. Unpublish first:
-	// a view owner that registers between now and its own teardown must not adopt a dead
-	// context (`GetUIGameRenderContext()` returning null makes it retry, never crash).
-	UI::SetUIGameRenderContext(nullptr);
+	// This feature owns the ImGui context, so it tears it down here. Nothing to unpublish:
+	// the context never left this feature (see the note at the publish site in InitViews).
 	if (bContextCreated)
 	{
 		// Drop this context's baked font entries BEFORE the atlas dies: the registry stores

@@ -433,8 +433,10 @@ private:
 //     that is merely at another PHASE is NOT reported -- that is what every cross-frame edge
 //     looks like. Reporting it would fire on every frame of every pipeline.
 //
-// LIFETIME -- IDispatch::MakeClosure may capture the FFrameExtension by reference, so every FFrameExtension passed
-// to Build must outlive the nodes it produced (the host owns them, like everything else).
+// LIFETIME -- a closure from IDispatch::MakeClosure may capture the FFrameExtension (by address) and the
+// context (by pointer), so both must outlive the nodes they produced -- the host owns the frame, and the
+// context IS the host. The IDispatch OBJECT itself need NOT: it is a per-batch stack local whose closures
+// are self-contained (see TFrameDispatch), which is what lets a host pipeline frames.
 //
 // INVARIANT I3 -- FFrameExtension::GetName() feeds FTaskKey::Name, so it must return STATIC storage
 // (MAHO_DECLARE_FRAME's StaticName() is a string literal, which satisfies it).

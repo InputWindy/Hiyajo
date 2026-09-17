@@ -50,6 +50,9 @@ public:
 	void Update(FGameWorld& World) override;
 	void PreUnInstall(FGameWorld& World) override;
 
+public:
+	static UI::FUIName GameRenderScope();
+
 private:
 	/** Create (once) the demo widget's entity + component + persistent view, bind it to
 	 *  the game render context and register it. Returns nullptr while the UI registry or
@@ -61,6 +64,13 @@ private:
 	void BuildDemoTree(UI::FUIBuilder& Root);
 
 	FEntity DemoWidget;
+
+	/** 本系统也是视图的所有者（与组件里的 `shared_ptr` 共享所有权）。注销必须只靠它：
+	 *  `FGameWorld::Shutdown` 为了防跨模块析构，在跑系统的 `IPreUnInstall` 之前就清空了组件池
+	 *  （GameWorld.cpp:126），所以那时从组件里取视图必然取不到 —— 注销会静默丢失，视图残留在
+	 *  注册表里直到它关闭（实测：`注册表关闭时仍有 1 个视图在册`）。持有 `shared_ptr` 还保证
+	 *  对象活到注销完成（池被清后引用计数仍 >= 1）。 */
+	std::shared_ptr<UI::FUIView> DemoView;
 };
 
 /** Global accessor to the UI system (cross-DLL, mirrors Resource::GetResourceSystem()).

@@ -1,42 +1,44 @@
 #include <UIClipboard.h>
 
-#include <mutex>
+#include <UIViewRegistry.h>
+
 #include <utility>
 
 namespace Maho { namespace UI {
 
-namespace
-{
-std::mutex GClipboardMutex;
-FUIClipboardGetHandler GClipboardGet;
-FUIClipboardSetHandler GClipboardSet;
-} // namespace
+// 同 UIResource.cpp：槽是 UI 层的成员（`FUIViewRegistry::ClipboardGet/Set`），不是文件级 static。
+// 这里只转发 —— 理由见 UIViewRegistry.h 的能力槽注释。
 
-void SetUIClipboardHandlers(FUIClipboardGetHandler Get, FUIClipboardSetHandler Set)
+FSubscriptionID BindUIClipboardHandlers(std::string_view Owner,
+	FUIClipboardGetHandler Get, FUIClipboardSetHandler Set)
 {
-	std::scoped_lock Lock(GClipboardMutex);
-	GClipboardGet = std::move(Get);
-	GClipboardSet = std::move(Set);
+	FUIViewRegistry* Registry = GetUIViewRegistry();
+	return Registry != nullptr
+		? Registry->BindClipboardHandlers(Owner, std::move(Get), std::move(Set))
+		: FSubscriptionID{ 0 };
+}
+
+void UnbindUIClipboardHandlers(FSubscriptionID Token)
+{
+	// 注册表已关（它在 Shutdown 里已经清过槽并报过错）时无需再交还。
+	if (FUIViewRegistry* Registry = GetUIViewRegistry())
+	{
+		Registry->UnbindClipboardHandlers(Token);
+	}
 }
 
 std::string GetUIClipboardText()
 {
-	FUIClipboardGetHandler Get;
-	{
-		std::scoped_lock Lock(GClipboardMutex);
-		Get = GClipboardGet;          // 拷贝后在锁外调用（处理器可能回头进 UI API）
-	}
-	return Get ? Get() : std::string{};
+	FUIViewRegistry* Registry = GetUIViewRegistry();
+	return Registry != nullptr ? Registry->ReadClipboard() : std::string{};
 }
 
 void SetUIClipboardText(std::string_view Text)
 {
-	FUIClipboardSetHandler Set;
+	if (FUIViewRegistry* Registry = GetUIViewRegistry())
 	{
-		std::scoped_lock Lock(GClipboardMutex);
-		Set = GClipboardSet;
+		Registry->WriteClipboard(Text);
 	}
-	if (Set) { Set(Text); }
 }
 
 }} // namespace Maho::UI

@@ -147,7 +147,7 @@ UI::FUIView* FContentBrowser::EnsureView(FExampleEditor& Editor)
 	// 外壳开窗（含宿主自己的 dockspace id）由宿主通用循环做；标题即旧窗口名。
 	// 关闭框归宿主所有：旧版也没有绑定关闭语义，故这里不订阅 `WindowClosed`。
 	NewView->SetWindowShell(true, "Content Browser", UI::FUIVector2{}, UI::FUIVector2{}, UI::EUIShellFlags::NoCollapse);
-	NewView->SetRenderContext(Editor.GetUIRenderContext());
+	NewView->SetRenderScope(FExampleEditor::EditorRenderScope());
 	Registry->RegisterView(*NewView);
 	View = std::move(NewView);
 	return View.get();

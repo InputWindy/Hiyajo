@@ -35,14 +35,9 @@ UI::FUIView* FUISystem::EnsureDemoView(FGameWorld& World)
 		}
 	}
 
-	// 注册表与游戏上下文都由 UI 插件/渲染特性发布；任一未就位就下一帧再试。
+	// 注册表由 UI 层发布（层 Init 后非空）；未就位就下一帧再试。
 	UI::FUIViewRegistry* Registry = UI::GetUIViewRegistry();
 	if (Registry == nullptr)
-	{
-		return nullptr;
-	}
-	void* Context = UI::GetUIGameRenderContext();
-	if (Context == nullptr)
 	{
 		return nullptr;
 	}
@@ -53,8 +48,11 @@ UI::FUIView* FUISystem::EnsureDemoView(FGameWorld& World)
 	// （位置只在首次生效，之后可由标题栏拖动 —— 与旧 `FUIWidget` 锚点语义一致）。
 	View->SetWindowShell(true, "Game UI", {}, {}, UI::EUIShellFlags::NoResize);
 	View->SetShellFractions(UI::FUIVector2{ 0.05f, 0.05f }, UI::FUIVector2{ 0.30f, 0.25f });
-	View->SetRenderContext(Context);
+	// 声明本视图归游戏的翻译循环：与 `FUIFeature` 的翻译入口是同一个名字（同一个字面量 =
+	// 同一个作用域）。本系统因此不必知道任何 ImGui 上下文 —— 游戏侧不感知渲染侧。
+	View->SetRenderScope(FUISystem::GameRenderScope());
 	Registry->RegisterView(*View);
+	DemoView = View;   // 本系统自持一份（见 UISystem.h：注销时组件池可能已被清空）
 
 	FEntity E = World.CreateEntity();
 	FUIWidget Component;
@@ -62,7 +60,7 @@ UI::FUIView* FUISystem::EnsureDemoView(FGameWorld& World)
 	World.AddComponent<FUIWidget>(E, std::move(Component));
 	DemoWidget = E;
 
-	return World.GetComponent<FUIWidget>(E)->View.get();
+	return DemoView.get();
 }
 
 void FUISystem::BuildDemoTree(UI::FUIBuilder& Root)
@@ -102,25 +100,30 @@ void FUISystem::PreUnInstall(FGameWorld& World)
 	// 顺序由 FGameWorld 声明（它才是驱动本阶段的层）：`BlockOn("FUIViewRegistry", IShutdown)`
 	// 让注册表的 IShutdown 排在本层 IShutdown（→ 本系统的 PreUnInstall）之后。此处判空只是
 	// 防御左值（注册表未安装时本系统也拿不到它）。
+	//
+	// 用 DemoView 而不是从组件取：FGameWorld::Shutdown 在驱动本阶段之前已经清空了组件池，
+	// 那时 GetComponent 必然返回 null，视图就会残留在注册表里（详见 UISystem.h 的 DemoView）。
 	if (UI::FUIViewRegistry* Registry = UI::GetUIViewRegistry())
 	{
-		if (DemoWidget.IsValid())
+		if (DemoView != nullptr)
 		{
-			if (const FUIWidget* Widget = World.GetComponent<FUIWidget>(DemoWidget))
-			{
-				if (Widget->View != nullptr)
-				{
-					Registry->UnregisterView(*Widget->View);
-				}
-			}
+			Registry->UnregisterView(*DemoView);
 		}
 	}
+	DemoView.reset();
 	if (DemoWidget.IsValid())
 	{
 		World.DestroyEntity(DemoWidget);
 		DemoWidget = FEntity{};
 	}
 	GUISystem = nullptr;
+}
+
+UI::FUIName FUISystem::GameRenderScope()
+{
+	// 名字只解析一次：名字池的 intern 带锁，不值得每次比较都做。
+	static const UI::FUIName Scope("UI.Scope.Game");
+	return Scope;
 }
 
 FUISystem* GetUISystem()

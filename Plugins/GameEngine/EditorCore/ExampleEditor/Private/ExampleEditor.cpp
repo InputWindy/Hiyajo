@@ -246,6 +246,12 @@ FExampleEditor::FExampleEditor()
 	// in both build types, but this feature only exists in an editor build.
 	MyStage<IEditorCompose>().IsWaiting<Scene::FScene>().ForStage<IEndRender>();
 	MyStage<IEditorCompose>().IsBlocking<FFrameRenderFeature>().OnStage<IPresent>();
+	// Teardown serialization, mirroring the frame edges above: FRender::Shutdown runs every
+	// feature's IPreUnInstall as one batch, and my body releases the editor target + destroys
+	// the editor's own ImGui context while the other two features release theirs. Pin my
+	// teardown AFTER the scene's (which the game UI feature's is pinned after) so the batch
+	// never executes two teardown bodies at once.
+	MyStage<IPreUnInstall>().IsWaiting<Scene::FScene>().ForStage<IPreUnInstall>();
 }
 
 void FExampleEditor::EditorInput(FRender& R)
@@ -426,7 +432,9 @@ void FExampleEditor::OnInstalled(FRender& R)
 		// present target -- so a panel can `FUIImage` the live surface; every other reference
 		// (icons, thumbnails) stays unresolved and the backend draws its placeholder. The UI
 		// plugin never links Render, so the mapping lives here (the side that owns the RHI).
-		UI::SetUIResourceResolver([](const UI::FUIName& Resource, bool bIsFont)
+		// This is a REGISTRATION, not a bare set: the slot lives on the UI frame while the
+		// closure's code lives in THIS module, so the token is handed back in PreUnInstall.
+		ResolverToken = UI::BindUIResourceResolver(GetName(), [](const UI::FUIName& Resource, bool bIsFont)
 		{
 			UI::FUIResolvedResource Out;
 			Out.Name = Resource;
@@ -442,7 +450,8 @@ void FExampleEditor::OnInstalled(FRender& R)
 #if defined(_WIN32)
 		// Text clipboard: the host owns the window, so it injects the platform capability
 		// into the UI plugin (which has no Platform dependency).
-		UI::SetUIClipboardHandlers(nullptr,
+		ClipboardToken = UI::BindUIClipboardHandlers(GetName(),
+			nullptr,
 			[](std::string_view Text)
 			{
 				const std::string Owned(Text);   // 立刻拷贝进系统剪贴板，不留悬垂指针
@@ -495,7 +504,6 @@ void FExampleEditor::InitEditorViews(FRender& R)
 	std::lock_guard<std::mutex> FrameLock(ImGuiFrameMutex);
 
 	// Record the frame render target the components reach through this host.
-	RenderRef = &R;
 	EditorContext.bSceneReady = (Scene::GetScene() != nullptr);
 
 	// Rebuild the editor composite target (EditorRT) to the current canvas.
@@ -800,26 +808,35 @@ void FExampleEditor::DrawEditorPanels()
 	ImGui::DockSpace(EditorDockSpaceId, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_PassthruCentralNode);
 	ImGui::End();
 
-	// 声明式视图：通用循环 —— 宿主只提供上下文/显示区/停靠 id，开窗与翻译由视图库统一做。
+	// 声明式视图：通用循环 —— 宿主只提供上下文/作用域/显示区/停靠 id，开窗与翻译由视图库统一做。
 	UI::FUIViewFrameDesc Desc;
 	Desc.ImGuiContext = m_Context;
+	// 只翻编辑器作用域的视图（与面板登记处同一个名字 —— 见 `EditorRenderScope()`）。
+	Desc.RenderScope = EditorRenderScope();
 	Desc.DisplayWidth = ImGui::GetIO().DisplaySize.x;
 	Desc.DisplayHeight = ImGui::GetIO().DisplaySize.y;
 	Desc.DockSpaceId = EditorDockSpaceId;
 	UI::TranslateRegisteredViews(Desc);
 }
 
+UI::FUIName FExampleEditor::EditorRenderScope()
+{
+	// 名字只解析一次：名字池的 intern 带锁，不值得每次比较都做。
+	static const UI::FUIName Scope("UI.Scope.Editor");
+	return Scope;
+}
+
 void FExampleEditor::UpdateEditorPanels()
 {
 	// 先抽干：上一帧翻译线程入队的交互事件交回各自所有者线程（回调内可再次 Edit()）。
-	// 只抽本编辑器上下文（m_Context）的视图：注册表是全进程共享的，游戏侧视图属于游戏
-	// 自己的上下文，其所有者（UISystem）在自己的更新期抽干 —— 越上下文抽干会把事件投递
-	// 到别的所有者线程上。
+	// 只抽本编辑器作用域的视图：注册表是全进程共享的，游戏侧视图归游戏自己的翻译循环，由它的
+	// 所有者（UISystem）在自己的更新期抽干 —— 越作用域抽干会把事件投递到别的所有者线程上。
+	const UI::FUIName EditorScope = EditorRenderScope();
 	if (UI::FUIViewRegistry* Registry = UI::GetUIViewRegistry())
 	{
 		for (UI::FUIView* View : Registry->SnapshotViews())
 		{
-			if (View->GetRenderContext() != m_Context)
+			if (View->GetRenderScope() != EditorScope)
 			{
 				continue;
 			}
@@ -948,6 +965,17 @@ bool FExampleEditor::ConsumeDroppedFiles(std::vector<std::string>& Out)
 
 void FExampleEditor::PreUnInstall(FRender& R)
 {
+	// Hand back the two capability tokens this module registered into the UI layer. The slots
+	// live on FUIViewRegistry -- a frame, not a file-scope static -- so their destruction is
+	// driven by the graph; but the FUNCTIONS they hold are lambdas whose code lives in THIS
+	// module. Left registered, those would be torn down after this DLL is unloaded. Symmetric
+	// with the Bind calls in InitUI; and if this were forgotten, the registry's own IShutdown
+	// now clears the slot AND names the owner in the log instead of crashing at process exit.
+	UI::UnbindUIResourceResolver(ResolverToken);
+	UI::UnbindUIClipboardHandlers(ClipboardToken);
+	ResolverToken = 0;
+	ClipboardToken = 0;
+
 	// Uninstall the editor components first -- their Shutdown graph runs (and the layer
 	// instances + DLLs are freed) before the host tears down the surface/font/context it
 	// owns. The editor as a whole is a self-consistent module: it drains its components.

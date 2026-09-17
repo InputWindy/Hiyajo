@@ -1,6 +1,7 @@
 #include <UIResource.h>
 
 #include <UITheme.h>
+#include <UIViewRegistry.h>
 
 #include <iterator>
 #include <mutex>
@@ -9,38 +10,44 @@
 
 namespace Maho { namespace UI {
 
-namespace
+// 解析能力的槽**不在本 TU**：它是 UI 层的成员（`FUIViewRegistry::Resolver`），生命期由图驱动。
+// 这里的自由函数只做转发。为什么必须是转发而不是文件级 static —— 见 UIViewRegistry.h 的能力槽
+// 注释：注册者死在别的 collector 的子树里（FExampleEditor 在 FRender 下），槽若挂在 CRT 的
+// atexit 上，两个时刻毫无关联，析构时就会调用已卸载模块的闭包。
+
+FSubscriptionID BindUIResourceResolver(std::string_view Owner, FUIResourceResolver Resolver)
 {
-std::mutex GResolverMutex;
-FUIResourceResolver GResolver;   // 渲染侧注入；空 = 未注入（按缺省外观绘）
+	FUIViewRegistry* Registry = GetUIViewRegistry();
+	return Registry != nullptr
+		? Registry->BindResourceResolver(Owner, std::move(Resolver))
+		: FSubscriptionID{ 0 };
 }
 
-void SetUIResourceResolver(FUIResourceResolver Resolver)
+void UnbindUIResourceResolver(FSubscriptionID Token)
 {
-	std::scoped_lock Lock(GResolverMutex);
-	GResolver = std::move(Resolver);
+	// 注册表已关（它在 Shutdown 里已经清过槽并报过错）时无需再交还。
+	if (FUIViewRegistry* Registry = GetUIViewRegistry())
+	{
+		Registry->UnbindResourceResolver(Token);
+	}
 }
 
 bool HasUIResourceResolver()
 {
-	std::scoped_lock Lock(GResolverMutex);
-	return static_cast<bool>(GResolver);
+	FUIViewRegistry* Registry = GetUIViewRegistry();
+	return Registry != nullptr && Registry->HasResourceResolver();
 }
 
 FUIResolvedResource ResolveUIResource(const FUIName& Resource, bool bIsFont)
 {
-	FUIResourceResolver Resolver;
-	{
-		std::scoped_lock Lock(GResolverMutex);
-		Resolver = GResolver;             // 拷贝后在锁外调用（解析器可能回头进 UI API）
-	}
-	if (!Resolver)
+	FUIViewRegistry* Registry = GetUIViewRegistry();
+	if (Registry == nullptr)
 	{
 		FUIResolvedResource Out;
 		Out.Name = Resource;
 		return Out;
 	}
-	return Resolver(Resource, bIsFont);
+	return Registry->ResolveResource(Resource, bIsFont);
 }
 
 // -- 字体图集登记 -------------------------------------------------------------------------

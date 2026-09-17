@@ -52,8 +52,8 @@ struct FUIShader
  * feature does). FRender is completely UI-agnostic -- it holds no ImGui state, never links
  * or references ImGui.
  *
- * It also publishes the GAME ImGui context through the UI plugin
- * (UI::SetUIGameRenderContext) so a game-side view owner (FUISystem) can tag its
+ * It also publishes the GAME ImGui context through the UI registry
+ * (FUIViewRegistry::SetGameRenderContext) so a game-side view owner (FUISystem) can tag its
  * views with THIS context without a UISystem -> UIFeature build dependency.
  *
  * Stateless draw feature: the UI shader goes through FRender::TryGetShader<FUIShader>

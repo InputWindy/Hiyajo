@@ -97,7 +97,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div class="card"><div class="doc">
 <p>ImGui 渲染特性 —— **UI 的 CPU 侧 ImGui 上下文与整个帧生命期的所有者**。它在 `OnInstalled` / `PreUnInstall` 建 / 毁 ImGui 上下文，并在 `InitViews` 里驱动整帧：喂输入 → `NewFrame` → 通用注册视图循环（UI 插件把本上下文注册过的视图逐个打开并翻译，游戏侧只声明持久组件树、不写 ImGui 调用）→ `Render` → `GetDrawData` → 把绘制数据翻译成 GPU 缓冲（就在 `InitViews` 里上传）+ 一张持有引用的 `FDrawList`。`RenderUI` 把这张列表画进**本特性自己的**离屏合成目标（`UIRenderTarget`，按交换链画布尺寸 + 格式建）并把它设为 `FRender` 的上屏目标；帧特性的 `IPresent` 再负责 blit 上屏 —— **UI 是最终屏幕表面**，场景是经游戏侧的 `imgui::image SceneColor` 控件**采样进**它里面的。</p>
 <p>本特性**只做离屏合成**：它不再拥有上屏点（那归帧特性）。`FRender` 因此完全与 UI 无关 —— 它不持有任何 ImGui 状态、也不链接 / 引用 ImGui。</p>
-<p>它还把**游戏** ImGui 上下文经 UI 插件发布出去（`UI::SetUIGameRenderContext`），于是游戏侧的视图所有者（`FUISystem`）能给自己的视图打上这个上下文的标记，**而不需要一条 UISystem → UIFeature 的构建依赖**。</p>
+<p>游戏侧的视图**不**需要知道本特性的 ImGui 上下文：它只声明自己的翻译**作用域**（`FUIView::SetRenderScope`，一个名字），本特性的翻译入口声明同一个名字 —— 双方各自声明、互不需要对方的头，于是**不需要一条 UISystem → UIFeature 的构建依赖**。</p>
 <p>**无状态绘制特性**：UI 着色器走 `FRender::TryGetShader&lt;FUIShader&gt;`（异步编译 + 按类型缓存）；字体后端**只持有** RDG 字体纹理句柄。这里**没有裸 RHI 指针**：描述符 set 布局、描述符 set、采样器都是按需从资源池重新解析出来的（内容可寻址 get-or-create，键就是产生它们的那组 PassParameter 绑定值）。池拥有所有原生的生命期，所以本特性既不拥有也不拆解任何资源；它只持有翻译出的 `FDrawList`（成员，跨帧复用容量）。</p>
 </div></div>
 <div class="card">

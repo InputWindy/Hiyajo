@@ -107,7 +107,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tbody>
 <tr><td>EditorViewportApi.h</td><td>`MAHO_EDITORVIEWPORT_API`：导出开关</td></tr>
 <tr><td>Engine/Frame.h</td><td>`MAHO_DECLARE_FRAME` / `FFrameExtension` / `IPipeline` —— 身份与 stage 列表</td></tr>
-<tr><td>ExampleEditor.h</td><td>`FExampleEditor`（宿主上下文：`GetUIRenderContext` / `PresentTargetName` / `ReportViewportRect`）与 `IEditorPanel` / `IEditorShutdown`</td></tr>
+<tr><td>ExampleEditor.h</td><td>`FExampleEditor`（宿主：`EditorRenderScope` / `PresentTargetName` / `ReportViewportRect`）与 `IEditorPanel` / `IEditorShutdown`</td></tr>
 <tr><td>UIView.h</td><td>`UI::FUIView`（持久树 + `Edit()`）与 `UI::FUIBuilder`（声明入口）</td></tr>
 <tr><td>memory</td><td>`std::unique_ptr&lt;UI::FUIView&gt; View`：面板拥有自己的树</td></tr>
 </tbody></table>
@@ -137,7 +137,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Update(FExampleEditor&amp; Editor) <span class="kw">override</span></td><td>声明期（宿主 `NewFrame` **之前**）：① `EnsureView`（UI 插件未就位则返回 <span class="kw">nullptr</span>、下一帧重试）；② 在 `Edit()` 里重建树 —— 根容器 Fill + **去掉主题内边距**（取景区要贴边铺满），唯一子节点是 Fill 的图片，引用 present target 的名字 + `Stretch` 缩放（只在新建那一帧播种：资源引用与缩放模式是「用户/别人可能改过」的配置，逐帧重写会把它们覆盖掉）；③ 读图片节点的屏幕矩形（翻译期后端写回，故是**上一帧**的值）并在尺寸为正时 `ReportViewportRect` 发布给宿主</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Shutdown(FExampleEditor&amp; Editor) <span class="kw">override</span></td><td>注销视图并释放。**注册表只持裸指针、从不删除** —— 漏掉注销，下一次翻译就会遍历到已销毁的树。先取注册表再 `UnregisterView`，注册表不存在（UI 插件已走）时跳过判空即可</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td>UI::FUIView* EnsureView(FExampleEditor&amp; Editor)</td><td>惰性建视图 + 注册：**UI 插件在 install 时可能还没起来**，注册表为空就返回 <span class="kw">nullptr</span>、由调用方下一帧重试。外壳开窗（含宿主的 dockspace id）由宿主通用循环做；标题即旧窗口名，`NoCollapse | NoMove` 保留「取景区不可折叠不可拖动」的旧语义；渲染上下文用 `Editor.GetUIRenderContext()` 登记 ⇒ 通用翻译循环按上下文筛视图</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>UI::FUIView* EnsureView(FExampleEditor&amp; Editor)</td><td>惰性建视图 + 注册：**UI 插件在 install 时可能还没起来**，注册表为空就返回 <span class="kw">nullptr</span>、由调用方下一帧重试。外壳开窗（含宿主的 dockspace id）由宿主通用循环做；标题即旧窗口名，`NoCollapse | NoMove` 保留「取景区不可折叠不可拖动」的旧语义；渲染作用域用 `FExampleEditor::EditorRenderScope()` 登记 ⇒ 通用翻译循环按作用域筛视图</td></tr>
 </tbody></table></div>
 </div>
 </div>

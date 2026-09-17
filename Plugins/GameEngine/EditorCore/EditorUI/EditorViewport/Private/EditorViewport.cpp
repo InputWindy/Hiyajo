@@ -39,7 +39,7 @@ UI::FUIView* FEditorViewport::EnsureView(FExampleEditor& Editor)
 	// 外壳开窗由宿主通用循环做（含它自己的 dockspace id）；标题即旧窗口名。
 	NewView->SetWindowShell(true, "Viewport", UI::FUIVector2{}, UI::FUIVector2{},
 							UI::EUIShellFlags::NoCollapse | UI::EUIShellFlags::NoMove);
-	NewView->SetRenderContext(Editor.GetUIRenderContext());
+	NewView->SetRenderScope(FExampleEditor::EditorRenderScope());
 	Registry->RegisterView(*NewView);
 	View = std::move(NewView);
 	return View.get();

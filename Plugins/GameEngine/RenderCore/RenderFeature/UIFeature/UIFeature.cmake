@@ -68,6 +68,6 @@ if(NOT TARGET maho_imgui)
 endif()
 
 # The feature links the ImGui symbols (NewFrame/Render/GetDrawData). The game-side UI is
-# reached through the UI plugin (UI::GetUIViewRegistry / UI::GetUIGameRenderContext), which
+# reached through the UI registry (UI::GetUIViewRegistry -> GetGameRenderContext), which
 # the generated block above already links -- no UISystem include or link is needed.
 target_link_libraries(UIFeature PUBLIC maho_imgui)

@@ -61,14 +61,14 @@ FUIVector2 FUIView::GetDisplaySize() const
 	return DisplaySize;
 }
 
-void FUIView::SetRenderContext(void* InContext)
+void FUIView::SetRenderScope(FUIName InScope)
 {
-	RenderContext = InContext;
+	RenderScope = InScope;
 }
 
-void* FUIView::GetRenderContext() const
+FUIName FUIView::GetRenderScope() const
 {
-	return RenderContext;
+	return RenderScope;
 }
 
 void FUIView::SetWindowShell(bool bEnabled, std::string Title,

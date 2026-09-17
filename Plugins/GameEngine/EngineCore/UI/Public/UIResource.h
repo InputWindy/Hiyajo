@@ -3,8 +3,11 @@
 #include "UIApi.h"
 #include "UITypes.h"
 
+#include <Core/Delegate.h>
+
 #include <cstdint>
 #include <functional>
+#include <string_view>
 
 namespace Maho { namespace UI {
 
@@ -24,9 +27,18 @@ struct FUIResolvedResource
  *  bValid=false 表示暂未就绪（加载中 / 不存在）：后端按缺省外观绘，不阻塞帧。 */
 using FUIResourceResolver = std::function<FUIResolvedResource(const FUIName& Resource, bool bIsFont)>;
 
-/** 渲染侧注入解析能力（先例：`FResourceSystem::SetReadback`）。
- *  UI 插件因此**不依赖** `Resource`/`Render`：引用进树，能力由拥有者注入。 */
-MAHO_UI_API void SetUIResourceResolver(FUIResourceResolver Resolver);
+/** 注册解析能力（先例：`FResourceSystem::SetReadback`）。
+ *  UI 插件因此**不依赖** `Resource`/`Render`：引用进树，能力由拥有者注入。
+ *
+ *  **返回的 token 必须由注册者在自己的 teardown 里交还**（`UnbindUIResourceResolver`）。
+ *  槽挂在 UI 层（`FUIViewRegistry`）上，而注册者死在别的 collector 的子树里 —— 若注册者先死
+ *  而槽还非空，槽里就是已卸载模块的闭包。`FUIViewRegistry::IShutdown` 会清掉它并**记名报错**：
+ *  不交还不会崩，但那次注入的能力会丢，且日志里能看到是谁漏了。 */
+MAHO_UI_API FSubscriptionID BindUIResourceResolver(std::string_view Owner, FUIResourceResolver Resolver);
+
+/** 交还一个注册凭据。token 不匹配（已被覆盖 / 已交还）时是 no-op —— 旧 token 不会误撤销新注册者。 */
+MAHO_UI_API void UnbindUIResourceResolver(FSubscriptionID Token);
+
 MAHO_UI_API bool HasUIResourceResolver();
 
 /** 统一解析入口（后端调用）：未注入解析器时返回 `bValid=false` 的结果，不抛不崩。

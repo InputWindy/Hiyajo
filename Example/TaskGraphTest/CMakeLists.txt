@@ -7,8 +7,13 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # MSVC: source files are UTF-8 (comments contain em-dash etc.).
+# /FS serializes writes to ONE project's .pdb across cl.exe processes. The *_SubPlugins
+# POST_BUILD step can nest an msbuild run beside the outer one (see
+# Tools/build_subplugins.cmake), which otherwise puts two compilers on the same .pdb and
+# dies with C1041 -- and leaves half-built DLLs in Binaries/<Config>.
 if(MSVC)
 	add_compile_options(/utf-8)
+	add_compile_options(/FS)
 endif()
 
 # Enable VS solution folders (FOLDER property groups targets under virtual dirs).

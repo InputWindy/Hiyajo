@@ -143,7 +143,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td>ExampleEditorApi.h</td><td>`MAHO_EXAMPLEEDITOR_API`：本头所有类型都跨 DLL</td></tr>
 <tr><td>Engine/Frame.h</td><td>`MAHO_DECLARE_FRAME` / `MAHO_DECLARE_STAGE_DISPATCH` —— 身份与 stage 分派</td></tr>
 <tr><td>Engine/FrameBuilder.h</td><td>`FFrameBuilder&lt;FExampleEditor&gt;`：作为子收集器装载编辑器组件</td></tr>
-<tr><td>Render.h</td><td>`FRender` —— 本特性挂载的宿主；同时是 `GetRender()` 的返回类型</td></tr>
+<tr><td>Render.h</td><td>`FRender` —— 本特性挂载的宿主（`Render.cplugin` 的 Plugins 把它装进本 DLL 的收藏器）</td></tr>
 <tr><td>RDG.h</td><td>`FRDGTextureRef`：EditorRT 与字体纹理的句柄类型</td></tr>
 <tr><td>RenderDrawList.h</td><td>`FDrawList`：翻译后的 ImDrawData 落点（编辑器 UI 的渲染输入）</td></tr>
 <tr><td>UITypes.h</td><td>`UI::FUIName`（`PresentTargetName()` 的返回类型）</td></tr>
@@ -255,6 +255,8 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-private">private</span></td><td>ImGuiContext* m_Context = <span class="kw">nullptr</span></td><td>**自己的** ImGui 上下文（与游戏那套完全独立）。在 InitViews 里 `SetCurrentContext` 切进来，保证两套帧永不混；PreUnInstall 里 `DestroyContext`</td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">bool</span> bUIInit = <span class="kw">false</span></td><td>后端是否已初始化（配合 `EnsureUIBackend` 幂等）</td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">bool</span> bFontUploaded = <span class="kw">false</span></td><td>字体图集是否已上传（一次性）</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>FSubscriptionID ResolverToken = 0</td><td>解析器的注册凭据（`BindUIResourceResolver` 的返回值），在 `PreUnInstall` 里交还</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>FSubscriptionID ClipboardToken = 0</td><td>剪贴板的注册凭据（`BindUIClipboardHandlers` 的返回值），在 `PreUnInstall` 里交还</td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>std::vector&lt;Platform::MInputEvent&gt; EditorInputEvents</td><td>单帧输入缓存：`EditorInput`（pass0，本帧最先跑）是**唯一**的排空 + 消费滚轮者，把排空到的事件批存在这里，好让 `InitEditorViews`（pass3，同一帧更晚）喂给编辑器上下文时**不必再排空一次平台** —— 这些是单消费者资源，第二次排空只会拿到空</td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">float</span> EditorWheelX = 0.f</td><td>缓存下来的滚轮 X（已换成 0 的那份，见上面的注释）</td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">float</span> EditorWheelY = 0.f</td><td>缓存下来的滚轮 Y</td></tr>
@@ -264,7 +266,6 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-private">private</span></td><td>FRDGTextureRef EditorRT</td><td>编辑器的离屏合成目标：尺寸/格式跟随 swapchain canvas。RenderUI 把编辑器 ImGui 列表（含 SceneColor 视口图）画进去，然后它成为 present 目标</td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>FRDGTextureRef FontTexture</td><td>编辑器自有的字体纹理（池持有的持久资源）</td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>FDrawList DrawList</td><td>本帧翻译后的 ImDrawData → 渲染列表</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td>FRender* RenderRef = <span class="kw">nullptr</span></td><td>当前帧的渲染上下文（供组件使用），每次 InitViews 更新</td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>FEditorContext EditorContext</td><td>共享的组件状态本体</td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>std::uint32_t EditorDockSpaceId = 0</td><td>宿主 DockSpace 节点 id，每次 `DrawEditorPanels` 重新取</td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">float</span> VpX = 0.f, VpY = 0.f, VpW = 0.f, VpH = 0.f</td><td>游戏 UI 被显示到的视口面板矩形（客户区像素），由视口组件 `ReportViewportRect` 发布；`EditorInput` 用它把游戏光标重定位回面板</td></tr>
@@ -277,14 +278,13 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> OnInstalled(FRender&amp;) <span class="kw">override</span></td><td>装入安全点：建自己的 ImGui 上下文 + 字体后端，然后 `InstallEditorComponents()` 把组件 DLL 装进自己的子收集器（下个安全点跑它们的 Init 图）</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> EditorInput(FRender&amp;) <span class="kw">override</span></td><td>**Pass0：编辑器输入接管**，跑在最前面（早于游戏 UI 特性的 `IInitViews` 喂 IO）。只看 Win32 光标、把它重定位到视口面板矩形内（并 clamp 到面板局部），再经 `FUIFeature::GetUI()-&gt;SetEditorInput` 喂给游戏上下文 —— 于是游戏 UI 只在面板内响应，且它的布局与显示出来的面板一致。**构造里就 BlockOn 在 `FUIFeature::IRenderUI` 之前**，把这个次序钉死</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> EditorCompose(FRender&amp;) <span class="kw">override</span></td><td>**Pass3：合成**，在单个 `IEditorCompose` stage 里依次跑「编辑器自己的 InitViews + Render」（位置在游戏 UI 的合成 `IRenderUI` 之后、帧的 `IPresent` 拷贝之前），并用 EditorRT 接管本帧的 present 目标</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> PreUnInstall(FRender&amp;) <span class="kw">override</span></td><td>卸出安全点：先 `ShutdownEditorComponents()`（**跑组件的 Shutdown 图**，再释放实例与模块），然后销毁自己的 ImGui 上下文 —— 顺序反了就是在已卸载的组件模块里跑代码</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> PreUnInstall(FRender&amp;) <span class="kw">override</span></td><td>卸出安全点：**先交还注册进 UI 层的两个能力凭据**（解析器 / 剪贴板 —— 槽挂在 UI 层那个 frame 上，而闭包的代码在本 DLL 里；漏交还，UI 层析构时就会调用已卸载模块的闭包，实测表现为进程退出时的读访问冲突），然后 `ShutdownEditorComponents()`（**跑组件的 Shutdown 图**，再释放实例与模块），最后销毁自己的 ImGui 上下文 —— 顺序反了就是在已卸载的组件模块里跑代码</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> ReportViewportRect(<span class="kw">float</span> X, <span class="kw">float</span> Y, <span class="kw">float</span> W, <span class="kw">float</span> H)</td><td>视口组件在 `Update` 里回调：发布游戏 UI 被显示到的屏幕矩形（客户区像素）。`EditorInput` 用它把游戏光标重定位回面板内。宽或高 ≤ 0 即 `bVpValid = <span class="kw">false</span>`</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] std::span&lt;<span class="kw">const</span> std::string&gt; GetDroppedFiles() <span class="kw">const</span></td><td>本帧拖到窗口上的文件路径（来自 OS 文件管理器的物理绝对路径）。批次**只活一帧**：`EditorInput` 填、面板绘制时读、`EditorCompose` 清掉残余。返回 span 不生拷贝，**消费方自己判断这个 drop 是不是自己的**（例如「我的窗口被 hover 了吗」）</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">bool</span> ConsumeDroppedFiles(std::vector&lt;std::string&gt;&amp; Out)</td><td>消费本帧的拖入文件：**先到先得**（后到的面板看到空批次，所以两个 drop 目标不可能导入同一个文件）。没有待处理项时返回 <span class="kw">false</span>（此时 `Out` 不被修改）</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>FEditorContext&amp; GetEditorContext()</td><td>共享的组件状态（选中实体 / 场景就绪标志）</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>FRender&amp; GetRender()</td><td>本帧驱动的那个 `FRender`（每次 `InitViews` 重新登记）—— 组件靠它够到渲染后端，而**不需要**自己声明对渲染的依赖</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>std::uint32_t GetEditorDockSpaceId() <span class="kw">const</span></td><td>宿主主 dockspace 的节点 id（帧壳的拥有者）。组件对它调 DockBuilder / `SetNextWindowDockID` 就能落进共享空间，不必自己知道任何 dock id</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span>* GetUIRenderContext() <span class="kw">const</span></td><td>编辑器 ImGui 上下文的 **opaque 句柄**：面板建视图时用它登记 `FUIView::SetRenderContext`。通用翻译循环**按上下文筛选**视图，所以游戏上下文与编辑器上下文的视图永不串扰</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">static</span> UI::FUIName EditorRenderScope()</td><td>编辑器视图的翻译作用域名（`UI.Scope.Editor`），**集中一处**：面板建视图时用它声明 `FUIView::SetRenderScope`，本宿主的翻译入口与抽干循环声明同一个。「同名字 = 同作用域」是这套筛选的全部依据 —— 几份字面量各自漂移就会静默丢视图</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">static</span> std::uint32_t PresentTargetTextureId()</td><td>本帧 live present 目标的 ImTextureID（编辑器构建里游戏合成的 UIRenderTarget，只在帧末解析到 EditorRT）。宿主的翻译步把这个 id 解析到 `R.GetPresentTarget()`，**而不是**按名字查镜像（该目标没有镜像/名字项）—— 于是组件用一个稳定 id 就能 `imgui::image` 当前屏幕表面</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">static</span> UI::FUIName PresentTargetName()</td><td>present 目标作为 UI 树**资源引用**的名字。声明式面板只需声明一个带此名字的 `FUIImage`，宿主注入的解析器把名字映射回 `PresentTargetTextureId()` ⇒ 面板永远看不到 ImTextureID</td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> InstallEditorComponents()</td><td>装入编辑器组件 DLL 并跑它们的 Init 图（安全点）。装的是「匿名 frame 扩展」—— 组件不暴露自己的身份，只挂 `IEditor*` stage</td></tr>

@@ -96,9 +96,15 @@ public:
 	void SetDisplaySize(float W, float H);
 	[[nodiscard]] FUIVector2 GetDisplaySize() const;
 
-	/** 翻译目标 ImGui 上下文（编辑器 / 游戏各一个）；翻译入口按它筛选视图。 */
-	void SetRenderContext(void* InContext);
-	[[nodiscard]] void* GetRenderContext() const;
+	/** 翻译作用域：本视图归哪个翻译循环翻（游戏 / 编辑器各一个）。空 = 任何翻译都能翻它
+	 *  （无竞争的单一 UI 场景）。翻译入口按它筛选视图。
+	 *
+	 *  它是一个**名字**，不是 ImGui 上下文的地址 —— 视图因此不必知道任何后端的地址：
+	 *  注册方声明「我属于哪个作用域」，翻译方声明「我翻哪个作用域」，**同一个字符串字面量
+	 *  就是同一个作用域**（名字池保证 id 相同），双方互不需要对方的头文件。
+	 *  真实的 `ImGuiContext*` 只由翻译方自己持有，只用于 `SetCurrentContext`。 */
+	void SetRenderScope(FUIName InScope);
+	[[nodiscard]] FUIName GetRenderScope() const;
 
 	void SetWindowShell(bool bEnabled, std::string Title,
 						FUIVector2 DefaultPos = {}, FUIVector2 DefaultSize = {},
@@ -139,7 +145,7 @@ private:
 	mutable std::shared_mutex TreeMutex;
 
 	FUIVector2   DisplaySize{ 1280.f, 720.f };
-	void*        RenderContext = nullptr;
+	FUIName      RenderScope{};
 	FUIViewShell WindowShell;
 
 	mutable std::mutex EventMutex;

@@ -14,7 +14,10 @@ namespace Maho { namespace UI {
  *    2) 游戏叠加层：`UIFeature` 在 NewFrame 与 Render 之间调 `TranslateRegisteredViews(Desc)` */
 struct FUIViewFrameDesc
 {
-	void*   ImGuiContext = nullptr;   // 目标上下文（opaque，编辑器与游戏各一个）
+	void*   ImGuiContext = nullptr;   // 目标上下文（opaque，编辑器与游戏各一个）—— 只用于翻译
+	/** 只翻译这个作用域的视图（空 = 不筛选）。与 `FUIView::SetRenderScope` 是同一个名字空间：
+	 *  登记方与翻译方各自声明自己的那一个，互不需要对方的头文件。 */
+	FUIName RenderScope{};
 	float   DisplayWidth = 0.f;       // 无外壳路径的显示区尺寸
 	float   DisplayHeight = 0.f;
 	bool    bDrawDebug = false;       // 绘制节点矩形与状态（调试用）

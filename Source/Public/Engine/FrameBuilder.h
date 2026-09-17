@@ -899,6 +899,18 @@ private:
 				(void)Stage;
 				for (const auto& Dep : Deps)
 				{
+					// A layer's declaration against ITSELF is intra-layer ordering, never a
+					// reason to wait for another layer: `WaitFor<Self>().OnLastFrameStage<...>()`
+					// reads as "my next frame waits for my previous frame" (FRender's frame
+					// isolation). Counting it made the layer depend on itself, so the greedy
+					// below could never take it -- FRender stayed alive, its IShutdown never ran
+					// and teardown fell back to the destructor path (measured: "uninstall
+					// refused: layer 'FRender' (still depended on by: FRender)", active=7, then a
+					// VMA leak assert under ~FRHI).
+					if (Dep.TargetName == StoredName(L))
+					{
+						continue;
+					}
 					ReverseDepCount[std::string(Dep.TargetName)] += 1;
 				}
 			}
@@ -910,6 +922,10 @@ private:
 				(void)Stage;
 				for (const auto& Dep : Deps)
 				{
+					if (Dep.TargetName == StoredName(L))   // self-dependency: see above
+					{
+						continue;
+					}
 					ReverseDepCount[std::string(Dep.TargetName)] += 1;
 				}
 			}
@@ -994,6 +1010,10 @@ private:
 				std::set<std::string> Dependents;
 				for (FFrameExtension* Other : Pipelines)
 				{
+					if (Other == L)
+					{
+						continue;   // a layer's own declaration is not "someone else still needs it"
+					}
 					for (const auto& [Stage, Deps] : Other->GetDependencies())
 					{
 						(void)Stage;
