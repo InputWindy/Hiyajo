@@ -319,6 +319,12 @@ def parse_header(Path: Path, Rel: str) -> FHeader:
 # -- rendering ------------------------------------------------------------------
 
 
+KIND_LABELS = {
+	"class": "类", "struct": "结构体", "enum": "枚举", "namespace": "命名空间",
+	"function": "函数", "macro": "宏", "alias": "别名", "field": "字段", "raw": "源码",
+}
+
+
 def render_entity(Entity: FEntity, Anchor: str) -> str:
 	Parts: list[str] = []
 	KindClass = {"class": "e-class", "struct": "e-struct", "enum": "e-enum", "function": "e-fn",
@@ -326,7 +332,8 @@ def render_entity(Entity: FEntity, Anchor: str) -> str:
 		Entity.Kind, "e-raw")
 	Title = Entity.Name or (Entity.Lines[0].strip() if Entity.Lines else Entity.Kind)
 	Parts.append(f'<div class="ent {KindClass}" id="{Anchor}">')
-	Parts.append(f'<h3><span class="kind">{Entity.Kind}</span> {html.escape(Title)}</h3>')
+	Parts.append(f'<h3><span class="kind">{KIND_LABELS.get(Entity.Kind, Entity.Kind)}</span> '
+	             f"{html.escape(Title)}</h3>")
 
 	if Entity.Doc:
 		Parts.append('<div class="doc">')
@@ -505,13 +512,13 @@ PAGE = """<!DOCTYPE html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Maho · Source</title>
+<title>Maho 引擎源码文档</title>
 <style>{css}</style>
 </head>
 <body>
 <div id="app">
   <div id="side">
-    <h1>Maho · Source</h1>
+    <h1>Maho 引擎源码</h1>
     <div class="meta">{meta}</div>
     <div id="tree">{tree}</div>
   </div>

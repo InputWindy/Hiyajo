@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Maho · Source</title>
+<title>Maho 引擎源码文档</title>
 <style>
 :root{
   --bg:#0f1420; --panel:#1a2234; --panel2:#182238; --line:#2a3550; --txt:#e6ecf5; --sub:#9fb0c8;
@@ -62,7 +62,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <body>
 <div id="app">
   <div id="side">
-    <h1>Maho · Source</h1>
+    <h1>Maho 引擎源码</h1>
     <div class="meta">22 个头文件 · 109 个顶层实体 · 150 个成员<br>生成：Tools/gen_source_docs.py（扫描 Source/**/*.h）</div>
     <div id="tree"><ul>
 <li class="dir"><span class="dir-label" data-dir="Public">Public</span>
@@ -105,7 +105,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div class="hdr">Public/Core/Assembly.h · 91 行</div>
 <h2 class="file-title">Assembly.h</h2>
 <div class="ent e-fn" id="Public__Core__Assembly_h-0">
-<h3><span class="kind">function</span> ApplyModuleExtension</h3>
+<h3><span class="kind">函数</span> ApplyModuleExtension</h3>
 <div class="doc">
 <p>Append the host platform's dynamic-library suffix to a module base name.</p>
 <p>&nbsp;</p>
@@ -122,7 +122,7 @@ MAHO_API std::string ApplyModuleExtension(std::string_view BaseName);
 </pre>
 </div>
 <div class="ent e-struct" id="Public__Core__Assembly_h-1">
-<h3><span class="kind">struct</span> MAHO_API</h3>
+<h3><span class="kind">结构体</span> MAHO_API</h3>
 <div class="doc">
 <p>Custom deleter <span class="kw">for</span> the OS module handle -- a DLL is released with</p>
 <p>FreeLibrary/dlclose, not `<span class="kw">delete</span>`. FAssembly owns the handle and releases it</p>
@@ -136,7 +136,7 @@ MAHO_API std::string ApplyModuleExtension(std::string_view BaseName);
 </div>
 </div>
 <div class="ent e-class" id="Public__Core__Assembly_h-2">
-<h3><span class="kind">class</span> MAHO_API</h3>
+<h3><span class="kind">类</span> MAHO_API</h3>
 <div class="doc">
 <p>A dynamically-loaded code unit -- the OS module handle + symbol lookup.</p>
 <p>&nbsp;</p>
@@ -185,7 +185,7 @@ MAHO_API std::string ApplyModuleExtension(std::string_view BaseName);
 <div class="hdr">Public/Core/Delegate.h · 99 行</div>
 <h2 class="file-title">Delegate.h</h2>
 <div class="ent e-alias" id="Public__Core__Delegate_h-0">
-<h3><span class="kind">alias</span> FSubscriptionID</h3>
+<h3><span class="kind">别名</span> FSubscriptionID</h3>
 <div class="doc">
 <p> Opaque subscription id returned by TMulticastEvent::Bind, consumed by Unbind.</p>
 </div>
@@ -194,7 +194,7 @@ MAHO_API std::string ApplyModuleExtension(std::string_view BaseName);
 </pre>
 </div>
 <div class="ent e-raw" id="Public__Core__Delegate_h-1">
-<h3><span class="kind">field</span> TMulticastEvent</h3>
+<h3><span class="kind">字段</span> TMulticastEvent</h3>
 <div class="doc">
 <p> Thread-safe multicast event (bind + broadcast). Any thread may bind /</p>
 <p> unbind / broadcast. Broadcast copies the handler set under the lock and</p>
@@ -206,7 +206,7 @@ MAHO_API std::string ApplyModuleExtension(std::string_view BaseName);
 </pre>
 </div>
 <div class="ent e-raw" id="Public__Core__Delegate_h-2">
-<h3><span class="kind">field</span> FHandler</h3>
+<h3><span class="kind">字段</span> FHandler</h3>
 <pre class="src">
 <span class="kw">template</span> &lt;<span class="kw">typename</span>... Args&gt;
 <span class="kw">class</span> TMulticastEvent&lt;<span class="kw">void</span>(Args...)&gt;
@@ -276,7 +276,7 @@ MAHO_API std::string ApplyModuleExtension(std::string_view BaseName);
 <div class="hdr">Public/Core/Export.h · 51 行</div>
 <h2 class="file-title">Export.h</h2>
 <div class="ent e-macro" id="Public__Core__Export_h-0">
-<h3><span class="kind">macro</span> MAHO_EXPORT</h3>
+<h3><span class="kind">宏</span> MAHO_EXPORT</h3>
 <div class="doc">
 <p>DLL <span class="kw">export</span> / import (UE-style module boundary).</p>
 <p>&nbsp;</p>
@@ -289,61 +289,61 @@ MAHO_API std::string ApplyModuleExtension(std::string_view BaseName);
 </pre>
 </div>
 <div class="ent e-macro" id="Public__Core__Export_h-1">
-<h3><span class="kind">macro</span> MAHO_IMPORT</h3>
+<h3><span class="kind">宏</span> MAHO_IMPORT</h3>
 <pre class="src">
 #		define MAHO_IMPORT __declspec(dllimport)
 </pre>
 </div>
 <div class="ent e-macro" id="Public__Core__Export_h-2">
-<h3><span class="kind">macro</span> MAHO_API</h3>
+<h3><span class="kind">宏</span> MAHO_API</h3>
 <pre class="src">
 #			define MAHO_API MAHO_EXPORT
 </pre>
 </div>
 <div class="ent e-macro" id="Public__Core__Export_h-3">
-<h3><span class="kind">macro</span> MAHO_API</h3>
+<h3><span class="kind">宏</span> MAHO_API</h3>
 <pre class="src">
 #			define MAHO_API MAHO_IMPORT
 </pre>
 </div>
 <div class="ent e-macro" id="Public__Core__Export_h-4">
-<h3><span class="kind">macro</span> MAHO_EXPORT</h3>
+<h3><span class="kind">宏</span> MAHO_EXPORT</h3>
 <pre class="src">
 #		define MAHO_EXPORT __attribute__((visibility(<span class="st">"default"</span>)))
 </pre>
 </div>
 <div class="ent e-macro" id="Public__Core__Export_h-5">
-<h3><span class="kind">macro</span> MAHO_IMPORT</h3>
+<h3><span class="kind">宏</span> MAHO_IMPORT</h3>
 <pre class="src">
 #		define MAHO_IMPORT __attribute__((visibility(<span class="st">"default"</span>)))
 </pre>
 </div>
 <div class="ent e-macro" id="Public__Core__Export_h-6">
-<h3><span class="kind">macro</span> MAHO_API</h3>
+<h3><span class="kind">宏</span> MAHO_API</h3>
 <pre class="src">
 #		define MAHO_API MAHO_EXPORT
 </pre>
 </div>
 <div class="ent e-macro" id="Public__Core__Export_h-7">
-<h3><span class="kind">macro</span> MAHO_EXPORT</h3>
+<h3><span class="kind">宏</span> MAHO_EXPORT</h3>
 <pre class="src">
 #	define MAHO_EXPORT
 </pre>
 </div>
 <div class="ent e-macro" id="Public__Core__Export_h-8">
-<h3><span class="kind">macro</span> MAHO_IMPORT</h3>
+<h3><span class="kind">宏</span> MAHO_IMPORT</h3>
 <pre class="src">
 #	define MAHO_IMPORT
 </pre>
 </div>
 <div class="ent e-macro" id="Public__Core__Export_h-9">
-<h3><span class="kind">macro</span> MAHO_API</h3>
+<h3><span class="kind">宏</span> MAHO_API</h3>
 <pre class="src">
 #	define MAHO_API
 </pre>
 </div>
 <div class="ent e-raw" id="Public__Core__Export_h-10">
-<h3><span class="kind">field</span> // Norm: a type whose instances outlive </h3>
+<h3><span class="kind">字段</span> // Norm: a type whose instances outlive </h3>
 <div class="doc">
 <p>STL members in exported classes (unique_ptr, string, ...) -- safe with matching CRT (/MD).</p>
 </div>
@@ -367,7 +367,7 @@ MAHO_API std::string ApplyModuleExtension(std::string_view BaseName);
 </pre>
 </div>
 <div class="ent e-raw" id="Public__Core__Export_h-11">
-<h3><span class="kind">field</span> Name</h3>
+<h3><span class="kind">字段</span> Name</h3>
 <pre class="src">
  */
 #define MAHO_IF_NOT_NULL(PtrExpr, Name)                                  \
@@ -379,7 +379,7 @@ MAHO_API std::string ApplyModuleExtension(std::string_view BaseName);
 <div class="hdr">Public/Core/Fatal.h · 71 行</div>
 <h2 class="file-title">Fatal.h</h2>
 <div class="ent e-raw" id="Public__Core__Fatal_h-0">
-<h3><span class="kind">field</span> [[noreturn]] MAHO_API void ReportFatal(c</h3>
+<h3><span class="kind">字段</span> [[noreturn]] MAHO_API void ReportFatal(c</h3>
 <div class="doc">
 <p> Unified fatal path: stderr + Saved/Logs/Fatal.log, then abort.</p>
 </div>
@@ -388,7 +388,7 @@ MAHO_API std::string ApplyModuleExtension(std::string_view BaseName);
 </pre>
 </div>
 <div class="ent e-fn" id="Public__Core__Fatal_h-1">
-<h3><span class="kind">function</span> ReportError</h3>
+<h3><span class="kind">函数</span> ReportError</h3>
 <div class="doc">
 <p> Non-fatal error report: stderr + Saved/Logs/Fatal.log, no abort.</p>
 </div>
@@ -397,7 +397,7 @@ MAHO_API <span class="kw">void</span> ReportError(<span class="kw">const</span> 
 </pre>
 </div>
 <div class="ent e-fn" id="Public__Core__Fatal_h-2">
-<h3><span class="kind">function</span> InstallFatalHandlers</h3>
+<h3><span class="kind">函数</span> InstallFatalHandlers</h3>
 <div class="doc">
 <p> Install std::terminate handler once (call from process entry before anything <span class="kw">else</span>).</p>
 </div>
@@ -406,7 +406,7 @@ MAHO_API <span class="kw">void</span> InstallFatalHandlers();
 </pre>
 </div>
 <div class="ent e-macro" id="Public__Core__Fatal_h-3">
-<h3><span class="kind">macro</span> MAHO_CHECK</h3>
+<h3><span class="kind">宏</span> MAHO_CHECK</h3>
 <div class="doc">
 <p>MAHO_CHECK -- hard invariant. False -&gt; ReportFatal (crash). The expression is</p>
 <p>compiled out in Shipping (use MAHO_VERIFY to keep side effects).</p>
@@ -421,7 +421,7 @@ MAHO_API <span class="kw">void</span> InstallFatalHandlers();
 </pre>
 </div>
 <div class="ent e-macro" id="Public__Core__Fatal_h-4">
-<h3><span class="kind">macro</span> MAHO_CHECKF</h3>
+<h3><span class="kind">宏</span> MAHO_CHECKF</h3>
 <div class="doc">
 <p> MAHO_CHECKF -- hard invariant with a formatted message.</p>
 </div>
@@ -437,7 +437,7 @@ MAHO_API <span class="kw">void</span> InstallFatalHandlers();
 </pre>
 </div>
 <div class="ent e-macro" id="Public__Core__Fatal_h-5">
-<h3><span class="kind">macro</span> MAHO_VERIFY</h3>
+<h3><span class="kind">宏</span> MAHO_VERIFY</h3>
 <div class="doc">
 <p>MAHO_VERIFY -- like MAHO_CHECK but the expression is ALWAYS evaluated (side</p>
 <p>effects preserved even when assertions are off).</p>
@@ -452,7 +452,7 @@ MAHO_API <span class="kw">void</span> InstallFatalHandlers();
 </pre>
 </div>
 <div class="ent e-macro" id="Public__Core__Fatal_h-6">
-<h3><span class="kind">macro</span> MAHO_ENSURE</h3>
+<h3><span class="kind">宏</span> MAHO_ENSURE</h3>
 <div class="doc">
 <p>MAHO_ENSURE -- soft invariant. False -&gt; report ONCE (no crash), then <span class="kw">continue</span>.</p>
 <p>Use <span class="kw">for</span> <span class="st">"shouldn't happen but not fatal"</span> -- e.g. a service not yet initialized.</p>
@@ -469,7 +469,7 @@ MAHO_API <span class="kw">void</span> InstallFatalHandlers();
 </pre>
 </div>
 <div class="ent e-macro" id="Public__Core__Fatal_h-7">
-<h3><span class="kind">macro</span> MAHO_ENSURE_NOT_NULL</h3>
+<h3><span class="kind">宏</span> MAHO_ENSURE_NOT_NULL</h3>
 <div class="doc">
 <p> MAHO_ENSURE_NOT_NULL -- soft null guard: report once when null, then skip.</p>
 </div>
@@ -484,13 +484,13 @@ MAHO_API <span class="kw">void</span> InstallFatalHandlers();
 <div class="hdr">Public/Core/FrameGraph.h · 671 行</div>
 <h2 class="file-title">FrameGraph.h</h2>
 <div class="ent e-macro" id="Public__Core__FrameGraph_h-0">
-<h3><span class="kind">macro</span> MAHO_FRAMES_IN_FLIGHT</h3>
+<h3><span class="kind">宏</span> MAHO_FRAMES_IN_FLIGHT</h3>
 <pre class="src">
 #	define MAHO_FRAMES_IN_FLIGHT 3
 </pre>
 </div>
 <div class="ent e-raw" id="Public__Core__FrameGraph_h-1">
-<h3><span class="kind">field</span> kPhaseCount</h3>
+<h3><span class="kind">字段</span> kPhaseCount</h3>
 <div class="doc">
 <p>── phase index space ─────────────────────────────────────────────────────────</p>
 <p>&nbsp;</p>
@@ -511,7 +511,7 @@ MAHO_API <span class="kw">void</span> InstallFatalHandlers();
 </pre>
 </div>
 <div class="ent e-fn" id="Public__Core__FrameGraph_h-2">
-<h3><span class="kind">function</span> IsValidPhase</h3>
+<h3><span class="kind">函数</span> IsValidPhase</h3>
 <pre class="src">
 <span class="kw">inline</span> <span class="kw">bool</span> IsValidPhase(std::int32_t Phase) <span class="kw">noexcept</span>
 {
@@ -520,7 +520,7 @@ MAHO_API <span class="kw">void</span> InstallFatalHandlers();
 </pre>
 </div>
 <div class="ent e-alias" id="Public__Core__FrameGraph_h-3">
-<h3><span class="kind">alias</span> FEvent</h3>
+<h3><span class="kind">别名</span> FEvent</h3>
 <div class="doc">
 <p> An event is an INDEX into the atomic flag table -- not an object.</p>
 </div>
@@ -529,13 +529,13 @@ MAHO_API <span class="kw">void</span> InstallFatalHandlers();
 </pre>
 </div>
 <div class="ent e-raw" id="Public__Core__FrameGraph_h-4">
-<h3><span class="kind">field</span> InvalidEvent</h3>
+<h3><span class="kind">字段</span> InvalidEvent</h3>
 <pre class="src">
 <span class="kw">constexpr</span> FEvent InvalidEvent = 0xFFFFFFFFu;
 </pre>
 </div>
 <div class="ent e-alias" id="Public__Core__FrameGraph_h-5">
-<h3><span class="kind">alias</span> FNodeId</h3>
+<h3><span class="kind">别名</span> FNodeId</h3>
 <div class="doc">
 <p> A node instance is an INDEX into the node table.</p>
 </div>
@@ -544,13 +544,13 @@ MAHO_API <span class="kw">void</span> InstallFatalHandlers();
 </pre>
 </div>
 <div class="ent e-raw" id="Public__Core__FrameGraph_h-6">
-<h3><span class="kind">field</span> InvalidNodeId</h3>
+<h3><span class="kind">字段</span> InvalidNodeId</h3>
 <pre class="src">
 <span class="kw">constexpr</span> FNodeId InvalidNodeId = 0xFFFFFFFFu;
 </pre>
 </div>
 <div class="ent e-fn" id="Public__Core__FrameGraph_h-7">
-<h3><span class="kind">function</span> EventOf</h3>
+<h3><span class="kind">函数</span> EventOf</h3>
 <div class="doc">
 <p> Event index <span class="kw">for</span> (Id, phase). Computed, never allocated.</p>
 </div>
@@ -563,7 +563,7 @@ MAHO_API <span class="kw">void</span> InstallFatalHandlers();
 </pre>
 </div>
 <div class="ent e-struct" id="Public__Core__FrameGraph_h-8">
-<h3><span class="kind">struct</span> FTaskKey</h3>
+<h3><span class="kind">结构体</span> FTaskKey</h3>
 <div class="doc">
 <p>A node instance's identity: the triple. This is also what a dependency points at --</p>
 <p>a dependency IS the identity of its target, so there is no ring offset, no delta, and no</p>
@@ -578,14 +578,14 @@ MAHO_API <span class="kw">void</span> InstallFatalHandlers();
 </div>
 </div>
 <div class="ent e-struct" id="Public__Core__FrameGraph_h-9">
-<h3><span class="kind">struct</span> FTaskKeyHash</h3>
+<h3><span class="kind">结构体</span> FTaskKeyHash</h3>
 <div class="members">
 <h4>接口</h4>
 <div class="sig"><span class="acc a-public">public</span> <code>std::size_t <span class="kw">operator</span>()(<span class="kw">const</span> FTaskKey&amp; Key) <span class="kw">const</span> <span class="kw">noexcept</span>;</code></div>
 </div>
 </div>
 <div class="ent e-struct" id="Public__Core__FrameGraph_h-10">
-<h3><span class="kind">struct</span> FDependency</h3>
+<h3><span class="kind">结构体</span> FDependency</h3>
 <div class="doc">
 <p> A dependency / block reference: the identity of the target instance.</p>
 </div>
@@ -595,7 +595,7 @@ MAHO_API <span class="kw">void</span> InstallFatalHandlers();
 </div>
 </div>
 <div class="ent e-struct" id="Public__Core__FrameGraph_h-11">
-<h3><span class="kind">struct</span> FTask</h3>
+<h3><span class="kind">结构体</span> FTask</h3>
 <div class="doc">
 <p> A node declaration. The phase travels here, so the scheduler holds no phase state.</p>
 </div>
@@ -608,7 +608,7 @@ MAHO_API <span class="kw">void</span> InstallFatalHandlers();
 </div>
 </div>
 <div class="ent e-class" id="Public__Core__FrameGraph_h-12">
-<h3><span class="kind">class</span> FFrameExtension</h3>
+<h3><span class="kind">类</span> FFrameExtension</h3>
 <div class="doc">
 <p>── FFrameExtension: the named thing that DECLARES edges ────────────────────────────────</p>
 <p>&nbsp;</p>
@@ -658,7 +658,7 @@ MAHO_API <span class="kw">void</span> InstallFatalHandlers();
 </div>
 </div>
 <div class="ent e-class" id="Public__Core__FrameGraph_h-13">
-<h3><span class="kind">class</span> FFrameBridge</h3>
+<h3><span class="kind">类</span> FFrameBridge</h3>
 <div class="doc">
 <p>── the bridge: FFrameExtension declarations -&gt; ONE batch of FTask ──────────────────────</p>
 <p>&nbsp;</p>
@@ -744,7 +744,7 @@ MAHO_API <span class="kw">void</span> InstallFatalHandlers();
 </div>
 </div>
 <div class="ent e-raw" id="Public__Core__FrameGraph_h-14">
-<h3><span class="kind">field</span> return</h3>
+<h3><span class="kind">字段</span> return</h3>
 <div class="doc">
 <p> Expand a stage TTypeList into the runtime view Build() consumes -- the one-line seam between</p>
 <p> the engine<span class="st">'s compile-time stage sequence and the bridge'</span>s span.</p>
@@ -758,7 +758,7 @@ MAHO_API <span class="kw">void</span> InstallFatalHandlers();
 </pre>
 </div>
 <div class="ent e-struct" id="Public__Core__FrameGraph_h-15">
-<h3><span class="kind">struct</span> FTaskNode</h3>
+<h3><span class="kind">结构体</span> FTaskNode</h3>
 <div class="doc">
 <p>Runtime node instance. Persistent per identity:</p>
 <p>  - bDispatched == <span class="kw">false</span>                -&gt; fresh, or reaped</p>
@@ -785,7 +785,7 @@ MAHO_API <span class="kw">void</span> InstallFatalHandlers();
 </div>
 </div>
 <div class="ent e-class" id="Public__Core__FrameGraph_h-16">
-<h3><span class="kind">class</span> FFrameGraph</h3>
+<h3><span class="kind">类</span> FFrameGraph</h3>
 <div class="doc">
 <p>The scheduler.</p>
 <p>&nbsp;</p>
@@ -924,7 +924,7 @@ MAHO_API <span class="kw">void</span> InstallFatalHandlers();
 <div class="hdr">Public/Core/Interface.h · 51 行</div>
 <h2 class="file-title">Interface.h</h2>
 <div class="ent e-raw" id="Public__Core__Interface_h-0">
-<h3><span class="kind">field</span> default</h3>
+<h3><span class="kind">字段</span> default</h3>
 <div class="doc">
 <p>Capability composer -- an UNORDERED set of capability traits a <span class="kw">class</span> promises.</p>
 <p>No stage ordering is implied; used <span class="kw">for</span> capability query (dynamic_cast) and</p>
@@ -942,7 +942,7 @@ MAHO_API <span class="kw">void</span> InstallFatalHandlers();
 </pre>
 </div>
 <div class="ent e-raw" id="Public__Core__Interface_h-1">
-<h3><span class="kind">field</span> default</h3>
+<h3><span class="kind">字段</span> default</h3>
 <div class="doc">
 <p>Stage pipeline composer -- an ORDERED pipeline of lifecycle stages. Argument</p>
 <p>order is the layer's own node order: IPipeline&lt;IInit, IMain, IShutdown&gt;</p>
@@ -976,7 +976,7 @@ MAHO_API <span class="kw">void</span> InstallFatalHandlers();
 <div class="hdr">Public/Core/Singleton.h · 29 行</div>
 <h2 class="file-title">Singleton.h</h2>
 <div class="ent e-raw" id="Public__Core__Singleton_h-0">
-<h3><span class="kind">field</span> TSingleton</h3>
+<h3><span class="kind">字段</span> TSingleton</h3>
 <div class="doc">
 <p>CRTP singleton -- the process-wide single instance of T. **Identity/flag base</p>
 <p>only**: no <span class="kw">inline</span> Meyers, no forced lifecycle. Each derived singleton declares</p>
@@ -1006,7 +1006,7 @@ MAHO_API <span class="kw">void</span> InstallFatalHandlers();
 <div class="hdr">Public/Core/ThreadedServer.h · 83 行</div>
 <h2 class="file-title">ThreadedServer.h</h2>
 <div class="ent e-class" id="Public__Core__ThreadedServer_h-0">
-<h3><span class="kind">class</span> MAHO_API</h3>
+<h3><span class="kind">类</span> MAHO_API</h3>
 <div class="doc">
 <p>Dedicated resident worker. Subclass + <span class="kw">override</span> OnInitialize / OnShutdown /</p>
 <p>GetThreadName <span class="kw">for</span> role-specific setup (e.g. the resource system resolves its</p>
@@ -1056,7 +1056,7 @@ MAHO_API <span class="kw">void</span> InstallFatalHandlers();
 <div class="hdr">Public/Core/ThreadPool.h · 74 行</div>
 <h2 class="file-title">ThreadPool.h</h2>
 <div class="ent e-class" id="Public__Core__ThreadPool_h-0">
-<h3><span class="kind">class</span> MAHO_API</h3>
+<h3><span class="kind">类</span> MAHO_API</h3>
 <div class="doc">
 <p>Fixed-size thread pool (persistent workers + FIFO task queue).</p>
 <p>&nbsp;</p>
@@ -1103,7 +1103,7 @@ MAHO_API <span class="kw">void</span> InstallFatalHandlers();
 <div class="hdr">Public/Core/TypeList.h · 111 行</div>
 <h2 class="file-title">TypeList.h</h2>
 <div class="ent e-raw" id="Public__Core__TypeList_h-0">
-<h3><span class="kind">field</span> TTypeList</h3>
+<h3><span class="kind">字段</span> TTypeList</h3>
 <div class="doc">
 <p>Compile-time ordered list of types (a <span class="st">"type array"</span>).</p>
 <p>Order matters: TTypeList&lt;A, B&gt; is a different type from TTypeList&lt;B, A&gt;.</p>
@@ -1118,7 +1118,7 @@ MAHO_API <span class="kw">void</span> InstallFatalHandlers();
 </pre>
 </div>
 <div class="ent e-raw" id="Public__Core__TypeList_h-1">
-<h3><span class="kind">field</span> TCons</h3>
+<h3><span class="kind">字段</span> TCons</h3>
 <div class="doc">
 <p> Prepend T to the front of a TTypeList.</p>
 </div>
@@ -1128,7 +1128,7 @@ MAHO_API <span class="kw">void</span> InstallFatalHandlers();
 </pre>
 </div>
 <div class="ent e-raw" id="Public__Core__TypeList_h-2">
-<h3><span class="kind">field</span> Type</h3>
+<h3><span class="kind">字段</span> Type</h3>
 <pre class="src">
 <span class="kw">template</span> &lt;<span class="kw">typename</span> T, <span class="kw">typename</span>... Ts&gt;
 <span class="kw">struct</span> TCons&lt;T, TTypeList&lt;Ts...&gt;&gt;
@@ -1138,7 +1138,7 @@ MAHO_API <span class="kw">void</span> InstallFatalHandlers();
 </pre>
 </div>
 <div class="ent e-raw" id="Public__Core__TypeList_h-3">
-<h3><span class="kind">field</span> TAppend</h3>
+<h3><span class="kind">字段</span> TAppend</h3>
 <div class="doc">
 <p> Append T to the end of a TTypeList.</p>
 </div>
@@ -1148,7 +1148,7 @@ MAHO_API <span class="kw">void</span> InstallFatalHandlers();
 </pre>
 </div>
 <div class="ent e-raw" id="Public__Core__TypeList_h-4">
-<h3><span class="kind">field</span> Type</h3>
+<h3><span class="kind">字段</span> Type</h3>
 <pre class="src">
 <span class="kw">template</span> &lt;<span class="kw">typename</span>... Ts, <span class="kw">typename</span> TValue&gt;
 <span class="kw">struct</span> TAppend&lt;TTypeList&lt;Ts...&gt;, TValue&gt;
@@ -1158,14 +1158,14 @@ MAHO_API <span class="kw">void</span> InstallFatalHandlers();
 </pre>
 </div>
 <div class="ent e-raw" id="Public__Core__TypeList_h-5">
-<h3><span class="kind">field</span> TAppend_t</h3>
+<h3><span class="kind">字段</span> TAppend_t</h3>
 <pre class="src">
 <span class="kw">template</span> &lt;<span class="kw">typename</span> TList, <span class="kw">typename</span> TValue&gt;
 <span class="kw">using</span> TAppend_t = <span class="kw">typename</span> TAppend&lt;TList, TValue&gt;::Type;
 </pre>
 </div>
 <div class="ent e-raw" id="Public__Core__TypeList_h-6">
-<h3><span class="kind">field</span> false_type</h3>
+<h3><span class="kind">字段</span> false_type</h3>
 <div class="doc">
 <p> Membership: is T an element of TList?</p>
 </div>
@@ -1177,7 +1177,7 @@ MAHO_API <span class="kw">void</span> InstallFatalHandlers();
 </pre>
 </div>
 <div class="ent e-raw" id="Public__Core__TypeList_h-7">
-<h3><span class="kind">field</span> true_type</h3>
+<h3><span class="kind">字段</span> true_type</h3>
 <pre class="src">
 <span class="kw">template</span> &lt;<span class="kw">typename</span> T, <span class="kw">typename</span>... TRest&gt;
 <span class="kw">struct</span> TContains&lt;TTypeList&lt;T, TRest...&gt;, T&gt; : std::true_type
@@ -1186,7 +1186,7 @@ MAHO_API <span class="kw">void</span> InstallFatalHandlers();
 </pre>
 </div>
 <div class="ent e-raw" id="Public__Core__TypeList_h-8">
-<h3><span class="kind">field</span> template &lt;typename THead, typename... TR</h3>
+<h3><span class="kind">字段</span> template &lt;typename THead, typename... TR</h3>
 <pre class="src">
 <span class="kw">template</span> &lt;<span class="kw">typename</span> THead, <span class="kw">typename</span>... TRest, <span class="kw">typename</span> T&gt;
 <span class="kw">struct</span> TContains&lt;TTypeList&lt;THead, TRest...&gt;, T&gt; : TContains&lt;TTypeList&lt;TRest...&gt;, T&gt;
@@ -1195,14 +1195,14 @@ MAHO_API <span class="kw">void</span> InstallFatalHandlers();
 </pre>
 </div>
 <div class="ent e-raw" id="Public__Core__TypeList_h-9">
-<h3><span class="kind">field</span> TContains_v</h3>
+<h3><span class="kind">字段</span> TContains_v</h3>
 <pre class="src">
 <span class="kw">template</span> &lt;<span class="kw">typename</span> TList, <span class="kw">typename</span> T&gt;
 <span class="kw">inline</span> <span class="kw">constexpr</span> <span class="kw">bool</span> TContains_v = TContains&lt;TList, T&gt;::value;
 </pre>
 </div>
 <div class="ent e-raw" id="Public__Core__TypeList_h-10">
-<h3><span class="kind">field</span> TCatch</h3>
+<h3><span class="kind">字段</span> TCatch</h3>
 <div class="doc">
 <p>Concatenate multiple TTypeLists into one, in order.</p>
 <p>&nbsp;</p>
@@ -1214,7 +1214,7 @@ MAHO_API <span class="kw">void</span> InstallFatalHandlers();
 </pre>
 </div>
 <div class="ent e-raw" id="Public__Core__TypeList_h-11">
-<h3><span class="kind">field</span> Type</h3>
+<h3><span class="kind">字段</span> Type</h3>
 <pre class="src">
 <span class="kw">template</span> &lt;<span class="kw">typename</span>... T&gt;
 <span class="kw">struct</span> TCatch&lt;TTypeList&lt;T...&gt;&gt;
@@ -1224,7 +1224,7 @@ MAHO_API <span class="kw">void</span> InstallFatalHandlers();
 </pre>
 </div>
 <div class="ent e-raw" id="Public__Core__TypeList_h-12">
-<h3><span class="kind">field</span> Type</h3>
+<h3><span class="kind">字段</span> Type</h3>
 <pre class="src">
 <span class="kw">template</span> &lt;<span class="kw">typename</span>... T1, <span class="kw">typename</span>... T2, <span class="kw">typename</span>... TRest&gt;
 <span class="kw">struct</span> TCatch&lt;TTypeList&lt;T1...&gt;, TTypeList&lt;T2...&gt;, TRest...&gt;
@@ -1234,14 +1234,14 @@ MAHO_API <span class="kw">void</span> InstallFatalHandlers();
 </pre>
 </div>
 <div class="ent e-raw" id="Public__Core__TypeList_h-13">
-<h3><span class="kind">field</span> TFold</h3>
+<h3><span class="kind">字段</span> TFold</h3>
 <pre class="src">
 	<span class="kw">template</span> &lt;<span class="kw">typename</span> TAcc, <span class="kw">typename</span> TList&gt;
 	<span class="kw">struct</span> TFold;
 </pre>
 </div>
 <div class="ent e-raw" id="Public__Core__TypeList_h-14">
-<h3><span class="kind">field</span> Type</h3>
+<h3><span class="kind">字段</span> Type</h3>
 <pre class="src">
 	<span class="kw">template</span> &lt;<span class="kw">typename</span> TAcc&gt;
 	<span class="kw">struct</span> TFold&lt;TAcc, TTypeList&lt;&gt;&gt;
@@ -1251,7 +1251,7 @@ MAHO_API <span class="kw">void</span> InstallFatalHandlers();
 </pre>
 </div>
 <div class="ent e-raw" id="Public__Core__TypeList_h-15">
-<h3><span class="kind">field</span> FAcc</h3>
+<h3><span class="kind">字段</span> FAcc</h3>
 <pre class="src">
 	<span class="kw">template</span> &lt;<span class="kw">typename</span> TAcc, <span class="kw">typename</span> THead, <span class="kw">typename</span>... TRest&gt;
 	<span class="kw">struct</span> TFold&lt;TAcc, TTypeList&lt;THead, TRest...&gt;&gt;
@@ -1263,7 +1263,7 @@ MAHO_API <span class="kw">void</span> InstallFatalHandlers();
 </pre>
 </div>
 <div class="ent e-raw" id="Public__Core__TypeList_h-16">
-<h3><span class="kind">field</span> TUnionList_t</h3>
+<h3><span class="kind">字段</span> TUnionList_t</h3>
 <div class="doc">
 <p> Union of two TTypeLists (order-preserving, deduplicated).</p>
 </div>
@@ -1278,7 +1278,7 @@ MAHO_API <span class="kw">void</span> InstallFatalHandlers();
 <div class="hdr">Public/Engine/Engine.h · 179 行</div>
 <h2 class="file-title">Engine.h</h2>
 <div class="ent e-macro" id="Public__Engine__Engine_h-0">
-<h3><span class="kind">macro</span> MAHO_DECLARE_ENGINE</h3>
+<h3><span class="kind">宏</span> MAHO_DECLARE_ENGINE</h3>
 <pre class="src">
 #define MAHO_DECLARE_ENGINE(EngineType)                     \
 <span class="kw">public</span>:                                                      \
@@ -1301,13 +1301,13 @@ MAHO_API <span class="kw">void</span> InstallFatalHandlers();
 </pre>
 </div>
 <div class="ent e-class" id="Public__Engine__Engine_h-1">
-<h3><span class="kind">class</span> FEngineBase</h3>
+<h3><span class="kind">类</span> FEngineBase</h3>
 <pre class="src">
 <span class="kw">class</span> FEngineBase;
 </pre>
 </div>
 <div class="ent e-class" id="Public__Engine__Engine_h-2">
-<h3><span class="kind">class</span> MAHO_API</h3>
+<h3><span class="kind">类</span> MAHO_API</h3>
 <div class="members">
 <h4>字段</h4>
 <div class="sig"><span class="acc a-public">public</span> <code><span class="kw">public</span>: <span class="kw">virtual</span> ~IPreInit() = <span class="kw">default</span>;</code></div>
@@ -1316,7 +1316,7 @@ MAHO_API <span class="kw">void</span> InstallFatalHandlers();
 </div>
 </div>
 <div class="ent e-class" id="Public__Engine__Engine_h-3">
-<h3><span class="kind">class</span> MAHO_API</h3>
+<h3><span class="kind">类</span> MAHO_API</h3>
 <div class="members">
 <h4>字段</h4>
 <div class="sig"><span class="acc a-public">public</span> <code><span class="kw">public</span>: <span class="kw">virtual</span> ~IInit() = <span class="kw">default</span>;</code></div>
@@ -1325,7 +1325,7 @@ MAHO_API <span class="kw">void</span> InstallFatalHandlers();
 </div>
 </div>
 <div class="ent e-class" id="Public__Engine__Engine_h-4">
-<h3><span class="kind">class</span> MAHO_API</h3>
+<h3><span class="kind">类</span> MAHO_API</h3>
 <div class="members">
 <h4>字段</h4>
 <div class="sig"><span class="acc a-public">public</span> <code><span class="kw">public</span>: <span class="kw">virtual</span> ~IPostInit() = <span class="kw">default</span>;</code></div>
@@ -1334,7 +1334,7 @@ MAHO_API <span class="kw">void</span> InstallFatalHandlers();
 </div>
 </div>
 <div class="ent e-class" id="Public__Engine__Engine_h-5">
-<h3><span class="kind">class</span> MAHO_API</h3>
+<h3><span class="kind">类</span> MAHO_API</h3>
 <div class="members">
 <h4>字段</h4>
 <div class="sig"><span class="acc a-public">public</span> <code><span class="kw">public</span>: <span class="kw">virtual</span> ~IPreShutdown() = <span class="kw">default</span>;</code></div>
@@ -1343,7 +1343,7 @@ MAHO_API <span class="kw">void</span> InstallFatalHandlers();
 </div>
 </div>
 <div class="ent e-class" id="Public__Engine__Engine_h-6">
-<h3><span class="kind">class</span> MAHO_API</h3>
+<h3><span class="kind">类</span> MAHO_API</h3>
 <div class="members">
 <h4>字段</h4>
 <div class="sig"><span class="acc a-public">public</span> <code><span class="kw">public</span>: <span class="kw">virtual</span> ~IShutdown() = <span class="kw">default</span>;</code></div>
@@ -1352,7 +1352,7 @@ MAHO_API <span class="kw">void</span> InstallFatalHandlers();
 </div>
 </div>
 <div class="ent e-class" id="Public__Engine__Engine_h-7">
-<h3><span class="kind">class</span> MAHO_API</h3>
+<h3><span class="kind">类</span> MAHO_API</h3>
 <div class="members">
 <h4>字段</h4>
 <div class="sig"><span class="acc a-public">public</span> <code><span class="kw">public</span>: <span class="kw">virtual</span> ~IPostShutdown() = <span class="kw">default</span>;</code></div>
@@ -1361,7 +1361,7 @@ MAHO_API <span class="kw">void</span> InstallFatalHandlers();
 </div>
 </div>
 <div class="ent e-class" id="Public__Engine__Engine_h-8">
-<h3><span class="kind">class</span> MAHO_API</h3>
+<h3><span class="kind">类</span> MAHO_API</h3>
 <div class="doc">
 <p> Begin-frame capability.</p>
 </div>
@@ -1373,7 +1373,7 @@ MAHO_API <span class="kw">void</span> InstallFatalHandlers();
 </div>
 </div>
 <div class="ent e-class" id="Public__Engine__Engine_h-9">
-<h3><span class="kind">class</span> MAHO_API</h3>
+<h3><span class="kind">类</span> MAHO_API</h3>
 <div class="doc">
 <p> Tick capability.</p>
 </div>
@@ -1385,7 +1385,7 @@ MAHO_API <span class="kw">void</span> InstallFatalHandlers();
 </div>
 </div>
 <div class="ent e-class" id="Public__Engine__Engine_h-10">
-<h3><span class="kind">class</span> MAHO_API</h3>
+<h3><span class="kind">类</span> MAHO_API</h3>
 <div class="doc">
 <p> End-frame capability.</p>
 </div>
@@ -1397,7 +1397,7 @@ MAHO_API <span class="kw">void</span> InstallFatalHandlers();
 </div>
 </div>
 <div class="ent e-class" id="Public__Engine__Engine_h-11">
-<h3><span class="kind">class</span> MAHO_API</h3>
+<h3><span class="kind">类</span> MAHO_API</h3>
 <div class="doc">
 <p> Exit capability -- request a running loop (IMain) to stop.</p>
 </div>
@@ -1409,7 +1409,7 @@ MAHO_API <span class="kw">void</span> InstallFatalHandlers();
 </div>
 </div>
 <div class="ent e-raw" id="Public__Engine__Engine_h-12">
-<h3><span class="kind">field</span> FInitStages</h3>
+<h3><span class="kind">字段</span> FInitStages</h3>
 <pre class="src">
 MAHO_DECLARE_STAGE_DISPATCH(FEngineBase, IPreInit,     IPreInit,     PreInitialize)
 MAHO_DECLARE_STAGE_DISPATCH(FEngineBase, IInit,        IInit,        Initialize)
@@ -1426,19 +1426,19 @@ MAHO_DECLARE_STAGE_DISPATCH(FEngineBase, IExit,        IExit,        RequestExit
 </pre>
 </div>
 <div class="ent e-alias" id="Public__Engine__Engine_h-13">
-<h3><span class="kind">alias</span> FTickStages</h3>
+<h3><span class="kind">别名</span> FTickStages</h3>
 <pre class="src">
 <span class="kw">using</span> FTickStages = TTypeList&lt;IBeginFrame, ITick, IEndFrame, IExit&gt;;
 </pre>
 </div>
 <div class="ent e-alias" id="Public__Engine__Engine_h-14">
-<h3><span class="kind">alias</span> FShutdownStages</h3>
+<h3><span class="kind">别名</span> FShutdownStages</h3>
 <pre class="src">
 <span class="kw">using</span> FShutdownStages = TTypeList&lt;IPreShutdown, IShutdown, IPostShutdown&gt;;
 </pre>
 </div>
 <div class="ent e-class" id="Public__Engine__Engine_h-15">
-<h3><span class="kind">class</span> MAHO_API</h3>
+<h3><span class="kind">类</span> MAHO_API</h3>
 <div class="doc">
 <p>Engine base <span class="kw">class</span></p>
 </div>
@@ -1480,7 +1480,7 @@ MAHO_DECLARE_STAGE_DISPATCH(FEngineBase, IExit,        IExit,        RequestExit
 <div class="hdr">Public/Engine/Frame.h · 198 行</div>
 <h2 class="file-title">Frame.h</h2>
 <div class="ent e-macro" id="Public__Engine__Frame_h-0">
-<h3><span class="kind">macro</span> MAHO_DECLARE_FRAME</h3>
+<h3><span class="kind">宏</span> MAHO_DECLARE_FRAME</h3>
 <div class="doc">
 <p>Frame declaration sugar -- generates StaticName() + GetName() + CreateFrame() +</p>
 <p>GetModulePath(). CreateFrame/GetModulePath are NOT engine-frame-specific: every</p>
@@ -1515,7 +1515,7 @@ MAHO_DECLARE_STAGE_DISPATCH(FEngineBase, IExit,        IExit,        RequestExit
 </pre>
 </div>
 <div class="ent e-raw" id="Public__Engine__Frame_h-1">
-<h3><span class="kind">field</span> template &lt;typename TStage, typename TCon</h3>
+<h3><span class="kind">字段</span> template &lt;typename TStage, typename TCon</h3>
 <div class="doc">
 <p>Stage dispatch - a free function <span class="kw">template</span> specialized per (stage, context) pair. The bridge's</p>
 <p>closure calls Invoke&lt;TStage&gt;(Frame, Context) at run time; each stage interface gets full</p>
@@ -1529,7 +1529,7 @@ MAHO_DECLARE_STAGE_DISPATCH(FEngineBase, IExit,        IExit,        RequestExit
 </pre>
 </div>
 <div class="ent e-macro" id="Public__Engine__Frame_h-2">
-<h3><span class="kind">macro</span> MAHO_DECLARE_STAGE_DISPATCH</h3>
+<h3><span class="kind">宏</span> MAHO_DECLARE_STAGE_DISPATCH</h3>
 <div class="doc">
 <p>Stage dispatch specialization sugar - full-specializes Invoke&lt;TStage, TContext&gt; to</p>
 <p>dynamic_cast the frame to CastType and call Method(Context). Each context type (FEngineBase,</p>
@@ -1554,7 +1554,7 @@ MAHO_DECLARE_STAGE_DISPATCH(FEngineBase, IExit,        IExit,        RequestExit
 </pre>
 </div>
 <div class="ent e-struct" id="Public__Engine__Frame_h-3">
-<h3><span class="kind">struct</span> FEmptyContext</h3>
+<h3><span class="kind">结构体</span> FEmptyContext</h3>
 <div class="doc">
 <p> Context placeholder <span class="kw">for</span> stage sequences that need none.</p>
 </div>
@@ -1565,7 +1565,7 @@ MAHO_DECLARE_STAGE_DISPATCH(FEngineBase, IExit,        IExit,        RequestExit
 </pre>
 </div>
 <div class="ent e-raw" id="Public__Engine__Frame_h-4">
-<h3><span class="kind">field</span> TContext</h3>
+<h3><span class="kind">字段</span> TContext</h3>
 <div class="doc">
 <p>The bridge policy <span class="kw">for</span> one stage sequence + one context: which stages a frame implements, and</p>
 <p>how to run one. Deliberately the ONLY thing in the codebase that knows a stage list -- Core's</p>
@@ -1657,7 +1657,7 @@ MAHO_DECLARE_STAGE_DISPATCH(FEngineBase, IExit,        IExit,        RequestExit
 <div class="hdr">Public/Engine/FrameBuilder.h · 1195 行</div>
 <h2 class="file-title">FrameBuilder.h</h2>
 <div class="ent e-fn" id="Public__Engine__FrameBuilder_h-0">
-<h3><span class="kind">function</span> ReportBridgeDiagnostics</h3>
+<h3><span class="kind">函数</span> ReportBridgeDiagnostics</h3>
 <div class="doc">
 <p>Format + report the declarations the bridge could not resolve. Free rather than a member</p>
 <p>because it is STATELESS: every collection member that is not a <span class="kw">template</span> still reads the</p>
@@ -1670,7 +1670,7 @@ MAHO_DECLARE_STAGE_DISPATCH(FEngineBase, IExit,        IExit,        RequestExit
 </pre>
 </div>
 <div class="ent e-raw" id="Public__Engine__FrameBuilder_h-1">
-<h3><span class="kind">field</span> template &lt;typename TContext&gt; class FFram</h3>
+<h3><span class="kind">字段</span> template &lt;typename TContext&gt; class FFram</h3>
 <div class="doc">
 <p>Owns + schedules a set of anonymous FFrameExtension instances. Install/Uninstall</p>
 <p>are recorded into pending sets and applied at the FlushPendingUpdates</p>
@@ -2833,7 +2833,7 @@ MAHO_DECLARE_STAGE_DISPATCH(FEngineBase, IExit,        IExit,        RequestExit
 <div class="hdr">Public/Engine/PluginManager.h · 68 行</div>
 <h2 class="file-title">PluginManager.h</h2>
 <div class="ent e-class" id="Public__Engine__PluginManager_h-0">
-<h3><span class="kind">class</span> MAHO_API</h3>
+<h3><span class="kind">类</span> MAHO_API</h3>
 <div class="doc">
 <p>Runtime plugin-install TREE, loaded from PluginManager.json (staged next to the</p>
 <p>binary by codegen's EntryPoint POST_BUILD). The manifest is a tree of layer types:</p>
@@ -2883,7 +2883,7 @@ MAHO_DECLARE_STAGE_DISPATCH(FEngineBase, IExit,        IExit,        RequestExit
 <div class="hdr">Public/Engine/Query.h · 322 行</div>
 <h2 class="file-title">Query.h</h2>
 <div class="ent e-raw" id="Public__Engine__Query_h-0">
-<h3><span class="kind">field</span> TKeep</h3>
+<h3><span class="kind">字段</span> TKeep</h3>
 <div class="doc">
 <p> Keep elements of TList deriving ANY of TBase... (OR).</p>
 </div>
@@ -2893,14 +2893,14 @@ MAHO_DECLARE_STAGE_DISPATCH(FEngineBase, IExit,        IExit,        RequestExit
 </pre>
 </div>
 <div class="ent e-raw" id="Public__Engine__Query_h-1">
-<h3><span class="kind">field</span> Type</h3>
+<h3><span class="kind">字段</span> Type</h3>
 <pre class="src">
 	<span class="kw">template</span> &lt;<span class="kw">typename</span>... TBase&gt;
 	<span class="kw">struct</span> TKeep&lt;TTypeList&lt;&gt;, TBase...&gt; { <span class="kw">using</span> Type = TTypeList&lt;&gt;; };
 </pre>
 </div>
 <div class="ent e-raw" id="Public__Engine__Query_h-2">
-<h3><span class="kind">field</span> bAny</h3>
+<h3><span class="kind">字段</span> bAny</h3>
 <pre class="src">
 	<span class="kw">template</span> &lt;<span class="kw">typename</span> THead, <span class="kw">typename</span>... TRest, <span class="kw">typename</span>... TBase&gt;
 	<span class="kw">struct</span> TKeep&lt;TTypeList&lt;THead, TRest...&gt;, TBase...&gt;
@@ -2913,7 +2913,7 @@ MAHO_DECLARE_STAGE_DISPATCH(FEngineBase, IExit,        IExit,        RequestExit
 </pre>
 </div>
 <div class="ent e-raw" id="Public__Engine__Query_h-3">
-<h3><span class="kind">field</span> TKeepAll</h3>
+<h3><span class="kind">字段</span> TKeepAll</h3>
 <div class="doc">
 <p> Keep elements of TList deriving ALL of TBase... (AND).</p>
 </div>
@@ -2923,14 +2923,14 @@ MAHO_DECLARE_STAGE_DISPATCH(FEngineBase, IExit,        IExit,        RequestExit
 </pre>
 </div>
 <div class="ent e-raw" id="Public__Engine__Query_h-4">
-<h3><span class="kind">field</span> Type</h3>
+<h3><span class="kind">字段</span> Type</h3>
 <pre class="src">
 	<span class="kw">template</span> &lt;<span class="kw">typename</span>... TBase&gt;
 	<span class="kw">struct</span> TKeepAll&lt;TTypeList&lt;&gt;, TBase...&gt; { <span class="kw">using</span> Type = TTypeList&lt;&gt;; };
 </pre>
 </div>
 <div class="ent e-raw" id="Public__Engine__Query_h-5">
-<h3><span class="kind">field</span> bAll</h3>
+<h3><span class="kind">字段</span> bAll</h3>
 <pre class="src">
 	<span class="kw">template</span> &lt;<span class="kw">typename</span> THead, <span class="kw">typename</span>... TRest, <span class="kw">typename</span>... TBase&gt;
 	<span class="kw">struct</span> TKeepAll&lt;TTypeList&lt;THead, TRest...&gt;, TBase...&gt;
@@ -2943,7 +2943,7 @@ MAHO_DECLARE_STAGE_DISPATCH(FEngineBase, IExit,        IExit,        RequestExit
 </pre>
 </div>
 <div class="ent e-raw" id="Public__Engine__Query_h-6">
-<h3><span class="kind">field</span> TDrop</h3>
+<h3><span class="kind">字段</span> TDrop</h3>
 <div class="doc">
 <p> Drop elements of TList deriving ANY of TBase... (NOR / subtraction).</p>
 </div>
@@ -2953,14 +2953,14 @@ MAHO_DECLARE_STAGE_DISPATCH(FEngineBase, IExit,        IExit,        RequestExit
 </pre>
 </div>
 <div class="ent e-raw" id="Public__Engine__Query_h-7">
-<h3><span class="kind">field</span> Type</h3>
+<h3><span class="kind">字段</span> Type</h3>
 <pre class="src">
 	<span class="kw">template</span> &lt;<span class="kw">typename</span>... TBase&gt;
 	<span class="kw">struct</span> TDrop&lt;TTypeList&lt;&gt;, TBase...&gt; { <span class="kw">using</span> Type = TTypeList&lt;&gt;; };
 </pre>
 </div>
 <div class="ent e-raw" id="Public__Engine__Query_h-8">
-<h3><span class="kind">field</span> bAny</h3>
+<h3><span class="kind">字段</span> bAny</h3>
 <pre class="src">
 	<span class="kw">template</span> &lt;<span class="kw">typename</span> THead, <span class="kw">typename</span>... TRest, <span class="kw">typename</span>... TBase&gt;
 	<span class="kw">struct</span> TDrop&lt;TTypeList&lt;THead, TRest...&gt;, TBase...&gt;
@@ -2973,7 +2973,7 @@ MAHO_DECLARE_STAGE_DISPATCH(FEngineBase, IExit,        IExit,        RequestExit
 </pre>
 </div>
 <div class="ent e-raw" id="Public__Engine__Query_h-9">
-<h3><span class="kind">field</span> TQuery</h3>
+<h3><span class="kind">字段</span> TQuery</h3>
 <div class="doc">
 <p>Type-agnostic compile-time query over a type table.</p>
 <p>&nbsp;</p>
@@ -3016,7 +3016,7 @@ MAHO_DECLARE_STAGE_DISPATCH(FEngineBase, IExit,        IExit,        RequestExit
 </pre>
 </div>
 <div class="ent e-raw" id="Public__Engine__Query_h-10">
-<h3><span class="kind">field</span> FQueryResult</h3>
+<h3><span class="kind">字段</span> FQueryResult</h3>
 <div class="doc">
 <p>Runtime instance query result -- owns a filtered vector and is usable as a</p>
 <p>vector via implicit conversion. Select/With/Not <span class="kw">continue</span> the chain on the</p>
@@ -3153,7 +3153,7 @@ MAHO_DECLARE_STAGE_DISPATCH(FEngineBase, IExit,        IExit,        RequestExit
 </pre>
 </div>
 <div class="ent e-raw" id="Public__Engine__Query_h-11">
-<h3><span class="kind">field</span> FQuery</h3>
+<h3><span class="kind">字段</span> FQuery</h3>
 <div class="doc">
 <p>Runtime instance query -- an abstract query source over a vector of</p>
 <p>erased-base pointers. The data source is supplied by the subclass via</p>
@@ -3228,7 +3228,7 @@ MAHO_DECLARE_STAGE_DISPATCH(FEngineBase, IExit,        IExit,        RequestExit
 <div class="hdr">Public/EntryPoint.h · 88 行</div>
 <h2 class="file-title">EntryPoint.h</h2>
 <div class="ent e-fn" id="Public__EntryPoint_h-0">
-<h3><span class="kind">function</span> Main</h3>
+<h3><span class="kind">函数</span> Main</h3>
 <div class="doc">
 <p>Unified app driver -- install an engine DLL and execute its root instance.</p>
 <p>&nbsp;</p>
@@ -3312,7 +3312,7 @@ MAHO_DECLARE_STAGE_DISPATCH(FEngineBase, IExit,        IExit,        RequestExit
 <div class="hdr">Public/EntryPointAndroid.h · 21 行</div>
 <h2 class="file-title">EntryPointAndroid.h</h2>
 <div class="ent e-fn" id="Public__EntryPointAndroid_h-0">
-<h3><span class="kind">function</span> android_main</h3>
+<h3><span class="kind">函数</span> android_main</h3>
 <div class="doc">
 <p>Android entry shim. Include in exactly one .cpp (the thin Main.cpp).</p>
 <p>android_main runs on the glue thread; Main blocks there <span class="kw">for</span> the</p>
@@ -3335,7 +3335,7 @@ MAHO_DECLARE_STAGE_DISPATCH(FEngineBase, IExit,        IExit,        RequestExit
 <div class="hdr">Public/EntryPointIOS.h · 13 行</div>
 <h2 class="file-title">EntryPointIOS.h</h2>
 <div class="ent e-fn" id="Public__EntryPointIOS_h-0">
-<h3><span class="kind">function</span> main</h3>
+<h3><span class="kind">函数</span> main</h3>
 <div class="doc">
 <p>iOS entry shim. Include in exactly one .cpp (the thin Main.cpp).</p>
 <p>A single main driving Maho::Main.</p>
@@ -3352,7 +3352,7 @@ MAHO_DECLARE_STAGE_DISPATCH(FEngineBase, IExit,        IExit,        RequestExit
 <div class="hdr">Public/EntryPointLinux.h · 13 行</div>
 <h2 class="file-title">EntryPointLinux.h</h2>
 <div class="ent e-fn" id="Public__EntryPointLinux_h-0">
-<h3><span class="kind">function</span> main</h3>
+<h3><span class="kind">函数</span> main</h3>
 <div class="doc">
 <p>Linux entry shim. Include in exactly one .cpp (the thin Main.cpp).</p>
 <p>A single main driving Maho::Main.</p>
@@ -3369,7 +3369,7 @@ MAHO_DECLARE_STAGE_DISPATCH(FEngineBase, IExit,        IExit,        RequestExit
 <div class="hdr">Public/EntryPointWindows.h · 27 行</div>
 <h2 class="file-title">EntryPointWindows.h</h2>
 <div class="ent e-macro" id="Public__EntryPointWindows_h-0">
-<h3><span class="kind">macro</span> NOMINMAX</h3>
+<h3><span class="kind">宏</span> NOMINMAX</h3>
 <div class="doc">
 <p>Windows entry shim. Include in exactly one .cpp (the thin Main.cpp).</p>
 <p>IDE: WinMain <span class="kw">for</span> the GUI subsystem (no console box) + main <span class="kw">for</span> the console</p>
@@ -3380,7 +3380,7 @@ MAHO_DECLARE_STAGE_DISPATCH(FEngineBase, IExit,        IExit,        RequestExit
 </pre>
 </div>
 <div class="ent e-fn" id="Public__EntryPointWindows_h-1">
-<h3><span class="kind">function</span> WinMain</h3>
+<h3><span class="kind">函数</span> WinMain</h3>
 <pre class="src">
 <span class="kw">int</span> WINAPI WinMain(HINSTANCE <span class="cm">/*Instance*/</span>, HINSTANCE <span class="cm">/*Prev*/</span>, LPSTR <span class="cm">/*CmdLine*/</span>, <span class="kw">int</span> <span class="cm">/*Show*/</span>)
 {
@@ -3392,7 +3392,7 @@ MAHO_DECLARE_STAGE_DISPATCH(FEngineBase, IExit,        IExit,        RequestExit
 </pre>
 </div>
 <div class="ent e-fn" id="Public__EntryPointWindows_h-2">
-<h3><span class="kind">function</span> main</h3>
+<h3><span class="kind">函数</span> main</h3>
 <pre class="src">
 <span class="kw">int</span> main(<span class="kw">int</span> Argc, <span class="kw">char</span>** Argv)
 {
@@ -3405,7 +3405,7 @@ MAHO_DECLARE_STAGE_DISPATCH(FEngineBase, IExit,        IExit,        RequestExit
 <div class="hdr">Public/EntryPointXbox.h · 13 行</div>
 <h2 class="file-title">EntryPointXbox.h</h2>
 <div class="ent e-fn" id="Public__EntryPointXbox_h-0">
-<h3><span class="kind">function</span> main</h3>
+<h3><span class="kind">函数</span> main</h3>
 <div class="doc">
 <p>Xbox entry shim. Include in exactly one .cpp (the thin Main.cpp).</p>
 <p>A single main driving Maho::Main.</p>
