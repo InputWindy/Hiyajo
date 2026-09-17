@@ -1427,16 +1427,9 @@ def create_plugin(
 		"Intermediate/\nBinaries/\nSaved/\nPackaged/\n", encoding="utf-8", newline="\n",
 	)
 
-	# AGENTS.md
-	(dst / "AGENTS.md").write_text(
-		f"# {plugin_name} — Agent 入口\n\n"
-		f"所有 AI Agent 进本插件前先读本文件。\n\n"
-		f"## 设计约束（强约束）\n\n"
-		f"- {description or 'TODO: 插件职责边界'}\n"
-		f"- 依赖只走 `.cplugin` `Dependencies`，include `<Name.h>`，不跨目录相对 include。\n"
-		f"- 遵循根 [AGENTS.md](../../../../AGENTS.md)。\n",
-		encoding="utf-8", newline="\n",
-	)
+	# (无 AGENTS.md：插件的文档统一收敛到 <plugin>/Docs.html —— 由 Tools/plugin_docs.py
+	#  扫描该插件的头文件结构生成，内容在 <plugin>/Docs.py 里逐条声明。agent 的通用约束
+	#  只有根 AGENTS.md 一份，不再每个插件复制一份（副本必然与代码漂移）。)
 
 	# Docs (Markdown — the repo's doc format; no API.html).
 	(dst / f"{plugin_name}.md").write_text(
