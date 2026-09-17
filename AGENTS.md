@@ -113,8 +113,4 @@ When extending project-side code, follow these three rules:
 
 ## Docs
 
-- [Docs.md](Docs.md) - full repository documentation index
-- [Source/SourceDoc.md](Source/SourceDoc.md) - source root (layers)
-- [Source/Public/Core/CoreDoc.md](Source/Public/Core/CoreDoc.md) - Core infrastructure concepts
-- [Source/Public/Engine/EngineDoc.md](Source/Public/Engine/EngineDoc.md) - the frame system (FFrameExtension / IPipeline / FFrameBuilder / main loop)
-- [Source/Public/PublicDoc.md](Source/Public/PublicDoc.md) - Public root
+- [Source/Docs.html](Source/Docs.html) - 引擎源码文档（`Tools/gen_source_docs.py` 生成）：左侧 Source 树（叶子 = `.h`），右侧逐类展示字段 / 接口签名 / 功能描述。**改完头文件请重新生成**（见该脚本的 usage）
