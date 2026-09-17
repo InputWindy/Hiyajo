@@ -9,10 +9,13 @@ rem Console tool: cmake/generate output must stay visible, so it pauses at the e
 
 call "%~dp0maho_python.bat" "%~dp0generateProject.py" %*
 set "ERR=%ERRORLEVEL%"
+rem Pause ONLY on failure: a double-click must show the error, while a scripted
+rem caller (CI, another tool) must not be blocked waiting for a keypress.
 if not "%ERR%"=="0" (
 	echo.
 	echo [ERROR] generateProject.py failed with exit code %ERR%
+	echo.
+	echo Press any key to close . . .
+	pause >nul
 )
-echo.
-pause
 exit /b %ERR%
