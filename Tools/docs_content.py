@@ -80,6 +80,34 @@ D.Row("Core/Fatal.h", "致命 / 错误上报路径 + `MAHO_CHECK` / `MAHO_VERIFY
 D.Row("Engine/Engine.h", "引擎侧：10 个 stage 能力接口 + `FEngineBase` + 引擎 stage 序列别名")
 
 # ══════════════════════════════════════════════════════════════════════════════
+# Source/Public/EntryPoint.h —— 统一应用入口驱动
+# ══════════════════════════════════════════════════════════════════════════════
+
+D.Header("Public/EntryPoint.h", Title="EntryPoint.h —— 统一应用入口驱动",
+         Desc="入口只做一件事：把引擎 DLL 装起来、把匿名根实例跑完、再对称地拆掉。"
+              "引擎没有任何工程 / 工具预设 —— 它就是一个自包含的 DLL，导出 `CreateEngine()` "
+              "返回 `FEngineBase*`。入口负责装载（`FAssembly` 按符号名查找）、驱动生命周期"
+              "（`PreMain` → `Main` → `PostMain`）、最后 `delete App`（虚析构，经由 DLL 释放"
+              "整个对象）。宿主因此永远不认识具体的引擎类型，只认识 `FEngineBase` 这个锚。")
+
+D.Card("包含的头文件")
+D.Table("头文件", "功能")
+D.Row("Core/Assembly.h", "`FAssembly` + `ApplyModuleExtension`：装载引擎 DLL、解析平台后缀")
+D.Row("Core/Fatal.h", "`InstallFatalHandlers` / `ReportFatal`：进程级崩溃与致命错误兜底")
+D.Row("Engine/Engine.h", "`FEngineBase` —— 入口认识的全部（生命周期钩子 + 主循环）")
+D.Row("exception", "标准库异常基类：顶层 `catch` 用 `std::exception` 收口")
+
+D.Card("Main 函数")
+D.Table("函数签名", "说明")
+D.Row("inline int Main(int Argc, char** Argv)",
+      "入口主函数，五步：① `InstallFatalHandlers()`；② 取引擎 DLL 路径 —— 第一个命令行参数，"
+      "否则 `ApplyModuleExtension(MAHO_ENGINE_NAME)`；③ `FAssembly` 装载 + "
+      "`GetProcAs(\"CreateEngine\")` 建根实例（失败即 `ReportFatal`）；④ 按序驱动 "
+      "`ParseCommandLine` → `PreMain` → `Main` → `PostMain`；⑤ `delete App`（虚析构经 DLL "
+      "释放整个对象）。任何逃出的异常落到顶层 `catch` ⇒ `ReportFatal`（写 stderr + Fatal.log 后 "
+      "abort，不尝试恢复，因为此时状态已不可信）。返回引擎 `Main` 的返回值。")
+
+# ══════════════════════════════════════════════════════════════════════════════
 # 下面继续按你的口述追加：再 Header(...) 换一个头，Class/Interface/Field 往下挂。
 # ══════════════════════════════════════════════════════════════════════════════
 

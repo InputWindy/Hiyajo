@@ -72,7 +72,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div id="app">
   <div id="side">
     <h1>Maho 引擎源码</h1>
-    <div class="search" title="左侧扫描 Source/**/*.h：22 个头文件 · 已声明 1 个 · 0 个实体 / 0 个成员 ｜ 内容在 Tools/docs_content.py 里逐条声明">
+    <div class="search" title="左侧扫描 Source/**/*.h：22 个头文件 · 已声明 2 个 · 0 个实体 / 0 个成员 ｜ 内容在 Tools/docs_content.py 里逐条声明">
       <input id="q" type="search" placeholder="搜索头文件…  （如 Frame、Core、Entry）" autocomplete="off">
     </div>
     <div id="tree"><ul>
@@ -189,8 +189,31 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </div>
 <div class="pane" id="pane-Public__EntryPoint_h">
 <div class="hdr">Public/EntryPoint.h</div>
-<h2 class="file-title">EntryPoint.h</h2>
-<div class="empty">（尚未声明内容 —— 在 Tools/docs_content.py 里加一条 Header(&quot;Public/EntryPoint.h&quot;)，再逐类声明 Class / Interface / Field）</div>
+<h2 class="file-title">EntryPoint.h —— 统一应用入口驱动</h2>
+<div class="card"><div class="doc">
+<p>入口只做一件事：把引擎 DLL 装起来、把匿名根实例跑完、再对称地拆掉。引擎没有任何工程 / 工具预设 —— 它就是一个自包含的 DLL，导出 `CreateEngine()` 返回 `FEngineBase*`。入口负责装载（`FAssembly` 按符号名查找）、驱动生命周期（`PreMain` → `Main` → `PostMain`）、最后 `<span class="kw">delete</span> App`（虚析构，经由 DLL 释放整个对象）。宿主因此永远不认识具体的引擎类型，只认识 `FEngineBase` 这个锚。</p>
+</div></div>
+<div class="card">
+<h3 class="card-title">包含的头文件</h3>
+
+<table>
+<thead><tr><th>头文件</th><th>功能</th></tr></thead>
+<tbody>
+<tr><td>Core/Assembly.h</td><td>`FAssembly` + `ApplyModuleExtension`：装载引擎 DLL、解析平台后缀</td></tr>
+<tr><td>Core/Fatal.h</td><td>`InstallFatalHandlers` / `ReportFatal`：进程级崩溃与致命错误兜底</td></tr>
+<tr><td>Engine/Engine.h</td><td>`FEngineBase` —— 入口认识的全部（生命周期钩子 + 主循环）</td></tr>
+<tr><td>exception</td><td>标准库异常基类：顶层 `<span class="kw">catch</span>` 用 `std::exception` 收口</td></tr>
+</tbody></table>
+</div>
+<div class="card">
+<h3 class="card-title">Main 函数</h3>
+
+<table>
+<thead><tr><th>函数签名</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td><span class="kw">inline</span> <span class="kw">int</span> Main(<span class="kw">int</span> Argc, <span class="kw">char</span>** Argv)</td><td>入口主函数，五步：① `InstallFatalHandlers()`；② 取引擎 DLL 路径 —— 第一个命令行参数，否则 `ApplyModuleExtension(MAHO_ENGINE_NAME)`；③ `FAssembly` 装载 + `GetProcAs(<span class="st">"CreateEngine"</span>)` 建根实例（失败即 `ReportFatal`）；④ 按序驱动 `ParseCommandLine` → `PreMain` → `Main` → `PostMain`；⑤ `<span class="kw">delete</span> App`（虚析构经 DLL 释放整个对象）。任何逃出的异常落到顶层 `<span class="kw">catch</span>` ⇒ `ReportFatal`（写 stderr + Fatal.log 后 abort，不尝试恢复，因为此时状态已不可信）。返回引擎 `Main` 的返回值。</td></tr>
+</tbody></table>
+</div>
 </div>
 <div class="pane" id="pane-Public__EntryPointAndroid_h">
 <div class="hdr">Public/EntryPointAndroid.h</div>
