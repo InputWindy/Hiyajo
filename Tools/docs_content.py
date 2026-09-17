@@ -705,6 +705,143 @@ D.Interface("ImplementsImpl / MakeClosureImpl", "沿 `TTypeList` 的递归展开
 D.Field("TContext& Context", "调度上下文（如 `FEngineBase&` / `FRender&`）")
 
 # ══════════════════════════════════════════════════════════════════════════════
+# Source/Public/Engine/FrameBuilder.h —— 帧集合 + 帧循环
+# ══════════════════════════════════════════════════════════════════════════════
+
+D.Header("Public/Engine/FrameBuilder.h", Title="FrameBuilder.h —— 帧集合 + 帧循环（宿主词汇）",
+         Desc="宿主只认这一页的词汇：装 / 卸 / 重载帧集合、驱动帧循环、收摊排空。\n"
+              "结构上分两层：**`FFrameBuilderBase`**（与 `TContext` 无关的「集合本身」：状态 + "
+              "安装/卸载/重载/清扫/身份查询）与 **`FFrameBuilder<TContext>`**（**驱动层**："
+              "stage 分派 `Execute` / `FlushPendingUpdates` / `FlushUnload` 与 LINQ 帧集展开）。\n"
+              "**为什么非要分两层**：类模板的成员天生都是模板，其函数体无法 out-of-line（那需要显式"
+              "实例化，而引擎模块不许 include 插件头、无法为插件上下文实例化）⇒ 把与 `TContext` "
+              "无关的部分下沉成非模板基类，实现就能进 `Private/Engine/FrameBuilder.cpp`。\n"
+              "**私有持有的三件**：`FFrameGraph`（图）、`FFrameBridge`（桥）、`TFrameDispatch`"
+              "（分派）—— 宿主全程看不见它们。")
+
+D.Card("包含的头文件")
+D.Table("头文件", "功能")
+D.Row("Core/FrameGraph.h", "`FFrameGraph` / `FFrameBridge` / `FFrameExtension`（私有实现类型）")
+D.Row("Core/Assembly.h", "`FAssembly`：模块句柄与符号查找（装载时用）")
+D.Row("Core/Delegate.h", "三个广播事件（`OnFramesChanged` / `OnFrameStatus` / `OnClosing`）")
+D.Row("Core/ThreadPool.h", "`FThreadPool Pool`：收集器自己的池（每个插件一个）")
+D.Row("Core/Fatal.h / Core/TypeList.h", "上报路径；`StageIndicesOf`")
+D.Row("Engine/Frame.h", "`TFrameDispatch`（驱动层用）")
+D.Row("Engine/Query.h", "`FQuery`：`GetQueryData()` 的数据源是 `Pipelines`")
+D.Row("algorithm / map / memory / set / string / string_view / typeindex / vector", "集合状态与并行槽位向量")
+
+D.Card("12 个终态（EFrameStatus）")
+D.Table("状态", "含义")
+D.Row("InstallQueued / Installed / InstallCancelled", "已入队（下个安全点跑 Init）/ Init 跑完已激活 / 先收到卸载请求，装载被取消（模块已释放、从未初始化）")
+D.Row("InstallRefused / InstallCompileFailed", "未接受（关闭中 / 加载失败 / 无工厂符号 / 工厂抛异常 / 重名）；init 批被**拒绝并释放**（实例 + 模块）")
+D.Row("UninstallQueued / Uninstalled / UninstallNotFound", "已记录 / Shutdown 跑完且实例与模块已释放 / 查询没命中任何活动帧")
+D.Row("UninstallRefused / UninstallCompileFailed", "仍被依赖（Detail 列出依赖者）/ shutdown 批被拒 ⇒ 这些帧**保持存活**（绝不跳过 teardown 就析构）")
+D.Row("ReloadQueued / ReloadRefused", "卸载 + 重新装载已入队 / 被拒（无模块路径 / 仍被依赖 / 不存在）")
+
+D.Class("FFrameBuilderBase", Base="FQuery<FFrameExtension>",
+        Desc="**集合本身**：与 `TContext` 无关，实现在 `Private/Engine/FrameBuilder.cpp`（类带 "
+             "`MAHO_API` —— 宿主是它的子类）。拥有全部状态，并实现「与调度上下文无关」的那部分逻辑。")
+D.SetAccess("public")
+D.Interface("virtual ~FFrameBuilderBase()", "析构先 `Wait()`（图 + 池），再用例析构：Graph → Pool → Features（跑插件析构）→ Modules（释放 DLL）")
+D.Interface("[[nodiscard]] FFrameStats GetStats() const", "当前规模（工具 / 面板查询用，勿每帧轮询）")
+D.Field("TMulticastEvent<void()> OnFramesChanged", "活动帧集在安全点变化时广播")
+D.Field("TMulticastEvent<void(const FFrameStatusInfo&)> OnFrameStatus", "**每个终态**都广播（12 态，无静默路径）")
+D.Field("TMulticastEvent<void()> OnClosing", "翻到「关闭」时广播一次（teardown 之前，帧都还活着）")
+D.Field("enum class EFrameStatus / struct FFrameStatusInfo / struct FFrameStats", "嵌套类型（见上面的状态表）")
+D.SetAccess("protected")
+D.Interface("void Wait()", "收摊静默：图的栅栏 + 池屏障。**循环不每帧调**（帧要流水）")
+D.Interface("[[nodiscard]] std::size_t UninstallAll()", "给每个活动帧发卸载请求（按名字；名字比模块活得久）")
+D.Interface("void ReleaseAll()", "收摊最后手段：**不跑 teardown 阶段**硬释放，但仍保持「在 Pipelines 即活着」不变量")
+D.Interface("void DropPendingInstalls() / void CancelPendingReloads()", "丢弃未生效的装载 / 重载")
+D.Interface("void CloseForLoads()", "翻到关闭（幂等）：之后 Install / Reload 一律拒绝")
+D.Interface("void ReportDiagnostics(const std::vector<FFrameBridge::FDiagnostic>&)",
+            "报出桥解不出的声明（**非致命**：悬空的边本来就该消失；这里只报「写错了」）")
+D.Interface("void RequestUninstall(FFrameExtension*) / void DeleteUnloaded(FFrameExtension*)",
+            "入卸载请求 / 释放实例 + 模块（连带清名字 / 路径 / 句柄槽）")
+D.Interface("void RebuildReverseDeps()", "重建反向依赖计数（名字 → 被依赖次数），卸载的最小堆贪心用")
+D.Interface("void EmitStatus(EFrameStatus, Name, Path, Detail = {})", "广播一个终态（负载里的字符串全是**拷贝**）")
+D.Interface("[[nodiscard]] std::string_view StoredName(const FFrameExtension*) const",
+            "装载时拷下的名字 ⇒ **不调用对方模块**就能命名它（槽位向量比模块活得久）")
+D.Interface("[[nodiscard]] std::size_t SlotOf(const FFrameExtension*) const", "实例在并行槽位里的下标（`NPos` = 未知）")
+D.Interface("[[nodiscard]] bool HasLayerName(std::string_view) / bool IsOwned(const FFrameExtension*) const",
+            "某名字是否活动 / 待装载（O(log n)）；该实例是否**仍归收集器所有**（唯一存活性判据 —— "
+            "卸载是「先移出 Pipelines 再释放」，所以外部拿到的指针可以查而不是盲解引用）")
+D.Interface("[[nodiscard]] std::string ModulePathOf(const FFrameExtension*) const", "装载它的 DLL 路径（同样不碰对方模块）")
+D.Interface("[[nodiscard]] bool HasPendingUpdates() const / bool IsClosing() const noexcept", "有没有待应用的变更 / 是否已关闸")
+D.Interface("FFrameGraph& GetGraph()", "唯一那张图（帧循环与一次性批次共用；靠「批次前后都排空」+「身份按 stage 区分」保证安全）")
+D.SetAccess("private")
+D.Field("std::vector<FFrameExtension*> Pipelines", "活动帧（不变量：**先移出这里再释放** ⇒ 在表里即活着）")
+D.Field("PendingAdded / PendingRemoveRequests / PendingReloads", "待装载 / 待卸载 / 待重载")
+D.Field("std::map<std::string, int> ReverseDepCount", "名字 → 被依赖次数（卸载拒绝的依据）")
+D.Field("Modules / ModulePaths / LayerNames", "三条并行向量：DLL 句柄保活 / DLL 路径 / 装载时拷下的名字")
+D.Field("std::map<std::string, std::size_t> NameToSlot", "名字 → 槽位（O(log n) 的唯一查表）")
+D.Field("std::vector<std::unique_ptr<FFrameExtension>> Features", "实例所有权（析构顺序的关键一环）")
+D.Field("FThreadPool Pool", "收集器自己的池")
+D.Field("std::unique_ptr<FFrameGraph> Graph", "那张图（声明在 Pool 之后 ⇒ 先于 Pool 析构）")
+D.Field("LoopFrames / LoopFrameNumbers / bLoopDirty / bLoopJustExpanded / LastLoopRejectReason",
+        "帧集缓存 + 每序列一个生成计数器 + 两个「只报一次」守卫")
+D.Field("std::atomic<bool> bClosing", "关闭标志（阶段里可能从任意线程置位，故原子）")
+D.Field("bool bFlushing", "flush 重入守卫（RAII 管理）")
+
+D.Class("FFrameBuilder<TContext>", Base="FFrameBuilderBase",
+        Desc="**驱动层**：只保留真正需要 `TContext` 或 stage 列表的东西 —— 三个 stage 分派入口、"
+             "LINQ 帧集展开、以及安装/重载/卸载入口。")
+D.SetAccess("protected")
+D.Interface("template <typename T> bool Install()", "按类型装载：`Install(T::GetModulePath())`")
+D.Interface("bool Install(std::string_view DllPath, const char* FactorySymbol = \"CreateFrame\")",
+            "按路径装载（下个安全点生效）：查符号 → 建实例 → 名字查重 → 入 pending。关闭中 / 重名一律拒绝并上报")
+D.Interface("void Reload(std::string_view Name)", "热重载：下个安全点卸旧（依赖安全）、随后装回同 DLL 新副本")
+D.Interface("void TryUninstall(std::string_view Query)", "按**名字或 DLL 路径**匹配第一命中，命中即入卸载 pending")
+D.Interface("template <TInitStages, TShutdownStages> void FlushPendingUpdates()",
+            "应用挂起变更（**函数内部就是安全点**）：先处理「装载被同窗口的卸载取消」→ init 批 → 卸载批。"
+            "重入被拒；插件异常被捕获上报、pending 保持原样等下次重试")
+D.Interface("template <TLoopStages> void Execute()",
+            "**跑一帧**：按 `TLoopStages` 重查帧集（脏时）→ 建批 → 提交。**不排空** ⇒ 帧会流水")
+D.Interface("FlushPendingUpdatesImpl / FlushUnload<TShutdownStages>",
+            "上两者的实现：建批（`TFrameDispatch` + `FFrameBridge::Build`）→ `Submit` → 排空 → 收割")
+D.Interface("template <TStages> void ExpandLoopFrames(TTypeList<TStages...>)",
+            "LINQ：`Select<TStages...>()` 重查帧集（脏标志由集合侧自己置位，宿主没有缓存要失效）")
+D.Interface("TContext& GetContext()", "把 `this` 取回 `TContext&`（宿主就是上下文）")
+D.Interface("template <TEvent, TArgs...> void BroadcastIsolated(TEvent&, const TArgs&...)",
+            "隔离广播：订阅者抛异常只报错，不影响收集器状态与 teardown")
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Source/Public/Engine/Query.h —— 编译期 / 运行期筛选
+# ══════════════════════════════════════════════════════════════════════════════
+
+D.Header("Public/Engine/Query.h", Title="Query.h —— 编译期类型筛选 + 运行期实例筛选",
+         Desc="两套筛选，都是纯查询、不改任何东西：\n"
+              "**`TQuery<TList>`** —— 纯类型运算（不引用实例）：`Select`(OR) / `With`(AND) / "
+              "`Not`(NOR) → `FResult`。用来在编译期把一串 stage 接口折成帧集类型。\n"
+              "**`FQuery<TBase>` / `FQueryResult<TBase>`** —— 运行期按接口谓词筛实例"
+              "（`dynamic_cast`），结果**可当 `vector` 用但不能直接 range-for**（先赋给 vector）。"
+              "结果内部向量私有（外部注入不了裸指针），并记住来源集合做 Debug 活性审计："
+              "指针已不在来源里（帧已卸载）就丢弃并报错 —— 因为卸载是「先移出集合再释放模块」，"
+              "对已卸载对象做 `dynamic_cast` 会解引用悬垂 vptr。")
+
+D.Card("包含的头文件")
+D.Table("头文件", "功能")
+D.Row("Core/TypeList.h", "`TQuery` 的全部类型运算基于 `TTypeList`")
+D.Row("algorithm / typeindex / vector", "运行期筛选与结果容器")
+
+D.Struct("TQuery<TList>", Desc="**编译期**筛选：只操作类型列表，零运行期开销。")
+D.Interface("Select<...>() / With<...>() / Not<...>()", "按 OR / AND / NOR 过滤元素")
+D.Field("using FResult = ...", "筛完的类型列表（交给上层做容器／遍历）")
+
+D.Class("FQuery<TBase>", Desc="**运行期**筛选的基类：派生类给出数据源（`GetQueryData()`），"
+        "本类提供按接口谓词筛选与 Debug 活性审计。")
+D.Interface("virtual std::vector<TBase*>& GetQueryData()", "数据源（收集器里就是 `Pipelines`）")
+D.Interface("[[nodiscard]] FQueryResult<TBase> Select<...>() const",
+            "按 stage 接口筛：命中任一接口即入选（`dynamic_cast` 判定）")
+D.Interface("[[nodiscard]] FQueryResult<TBase> With<...>() / Not<...>() const", "AND / NOR 变体")
+D.Field("std::vector<TBase*> Source", "来源集合（私有；审计时用来判断指针是否已失效）")
+
+D.Class("FQueryResult<TBase>", Desc="筛选结果：**隐式转换为 `std::vector<TBase*>`**（赋给 vector 即可用），"
+        "但它本身**不能直接 `range-for`**（`begin/end` 找不到）—— 这一点是实测：在 `Engine.cpp` 上"
+        "直接范围 for 会被编译器顶回来。结果内部向量私有，外部注入不了裸指针。")
+D.Interface("std::vector<TBase*> Data", "结果容器（public：只读使用；外部无法注入）")
+
+# ══════════════════════════════════════════════════════════════════════════════
 # 下面继续按你的口述追加：再 Header(...) 换一个头，Class/Interface/Field 往下挂。
 
 
