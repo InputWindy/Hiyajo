@@ -48,10 +48,17 @@ h2.file-title{font-size:20px;margin:0 0 18px;color:#fff}
 .card{background:#182238;border:1px solid var(--line);border-radius:8px;padding:14px 16px;
       margin:0 0 16px}
 .card-title{font-size:14px;margin:0 0 8px;color:#fff}
-.card table{border-collapse:collapse;width:100%;font-size:12.5px}
-.card th{background:#202b42;color:var(--sub);font-weight:600;text-align:left}
-.card th,.card td{border:1px solid var(--line);padding:6px 9px;vertical-align:top}
+.card table,.ent table{border-collapse:collapse;width:100%;font-size:12.5px}
+.card th,.ent th{background:#202b42;color:var(--sub);font-weight:600;text-align:left}
+.card th,.card td,.ent th,.ent td{border:1px solid var(--line);padding:6px 9px;vertical-align:top}
 .card td:first-child{white-space:nowrap;font-family:Consolas,monospace;color:#9fe0a0}
+.ent table td:nth-child(2){font-family:Consolas,monospace;color:#dbe7f7}
+.ent table td:nth-child(1){width:74px}
+/* 类 card 内的分区：描述 / 字段 / 接口 / 嵌套 各成一个有边框的块，边界一眼可见 */
+.sect{border:1px solid var(--line);border-radius:6px;padding:10px 12px;margin:10px 0;
+      background:#141c2c}
+.sect > h4{margin:0 0 8px;color:#cfe0ff;font-size:12px;letter-spacing:.06em}
+.sect .doc{margin:0}
 .doc{font-size:12.5px;color:#cfe0ff;margin:0 0 10px}
 .doc p{margin:2px 0}
 .doc.small{font-size:11.5px;color:var(--sub);margin:2px 0 0 46px}
@@ -142,58 +149,36 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </div>
 <div class="ent e-struct" id="Public__Core__Assembly_h-0">
 <h3><span class="kind">结构体</span> FModuleDeleter</h3>
-<div class="doc">
+<div class="sect"><div class="doc">
 <p>自定义删除器：模块句柄用 `FreeLibrary` / `dlclose` 释放，**不是** `<span class="kw">delete</span>`。`FAssembly` 用它以 RAII 持有句柄，宿主只需持有 `FAssembly` 值。</p>
-</div>
-<div class="members">
+</div></div>
+<div class="sect">
 <h4>接口</h4>
-<div class="sig"><span class="acc a-public">public</span> <code><span class="kw">void</span> <span class="kw">operator</span>()(<span class="kw">void</span>* Handle) <span class="kw">const</span> <span class="kw">noexcept</span></code></div>
-<div class="doc small">
-<p>释放句柄（空句柄直接返回）。**已导出**：谁销毁 `FAssembly`，这段代码就在谁的模块里跑。</p>
-</div>
-</div>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> <span class="kw">operator</span>()(<span class="kw">void</span>* Handle) <span class="kw">const</span> <span class="kw">noexcept</span></td><td>释放句柄（空句柄直接返回）。**已导出**：谁销毁 `FAssembly`，这段代码就在谁的模块里跑。</td></tr>
+</tbody></table></div>
 </div>
 <div class="ent e-class" id="Public__Core__Assembly_h-1">
 <h3><span class="kind">类</span> FAssembly</h3>
-<div class="doc">
+<div class="sect"><div class="doc">
 <p>一个已装载的代码单元：OS 模块句柄 + 符号查找。纯装载原语 —— 不认插件 / 清单 / 工厂，怎么解释这个模块完全由消费者决定。句柄唯一持有（move-only）：只要还有从它构造出来的实例活着，就必须让它也活着，否则先卸载再用就是 use-after-free。</p>
-</div>
-<div class="members">
+</div></div>
+<div class="sect">
 <h4>字段</h4>
-<div class="sig"><span class="acc a-private">private</span> <code>std::unique_ptr&lt;<span class="kw">void</span>, FModuleDeleter&gt; Module</code></div>
-<div class="doc small">
-<p>模块句柄的唯一持有者：析构即 `FreeLibrary` / `dlclose`。空 = 未装载。</p>
-</div>
+<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-private">private</span></td><td>std::unique_ptr&lt;<span class="kw">void</span>, FModuleDeleter&gt; Module</td><td>模块句柄的唯一持有者：析构即 `FreeLibrary` / `dlclose`。空 = 未装载。</td></tr>
+</tbody></table></div>
+<div class="sect">
 <h4>接口</h4>
-<div class="sig"><span class="acc a-public">public</span> <code><span class="kw">explicit</span> FAssembly(std::string_view Path)</code></div>
-<div class="doc small">
-<p>从路径构造：立即 `Load()`；失败时对象处于未装载状态（`IsLoaded()` 为假）。</p>
-</div>
-<div class="sig"><span class="acc a-public">public</span> <code>FAssembly(FAssembly&amp;&amp;) <span class="kw">noexcept</span> = <span class="kw">default</span></code></div>
-<div class="doc small">
-<p>可移动（句柄转移）。拷贝被删除：`FAssembly(<span class="kw">const</span> FAssembly&amp;) = <span class="kw">delete</span>` / `<span class="kw">operator</span>=(<span class="kw">const</span> FAssembly&amp;) = <span class="kw">delete</span>`。</p>
-</div>
-<div class="sig"><span class="acc a-public">public</span> <code><span class="kw">bool</span> Load(std::string_view Path)</code></div>
-<div class="doc small">
-<p>装载模块（先 `Unload()` 掉旧句柄）；文件缺失或装载失败返回 `<span class="kw">false</span>`。</p>
-</div>
-<div class="sig"><span class="acc a-public">public</span> <code><span class="kw">void</span> Unload()</code></div>
-<div class="doc small">
-<p>释放句柄；可重复调用。之后 `IsLoaded()` 为假、`GetProcAddress()` 返回 <span class="kw">nullptr</span>。</p>
-</div>
-<div class="sig"><span class="acc a-public">public</span> <code><span class="kw">bool</span> IsLoaded() <span class="kw">const</span></code></div>
-<div class="doc small">
-<p>是否持有有效的模块句柄。</p>
-</div>
-<div class="sig"><span class="acc a-public">public</span> <code><span class="kw">void</span>* GetProcAddress(<span class="kw">const</span> <span class="kw">char</span>* Name) <span class="kw">const</span></code></div>
-<div class="doc small">
-<p>原始符号查找（`GetProcAddress` / `dlsym`）；未装载或符号不存在则返回 <span class="kw">nullptr</span>。</p>
-</div>
-<div class="sig"><span class="acc a-public">public</span> <code><span class="kw">template</span> &lt;<span class="kw">typename</span> TFunction&gt; TFunction GetProcAs(<span class="kw">const</span> <span class="kw">char</span>* Name) <span class="kw">const</span></code></div>
-<div class="doc small">
-<p>把原始符号转成**函数指针**类型再返回 —— 调用方写 `GetProcAs&lt;CreateFn&gt;(<span class="st">"CreateEngine"</span>)` 即可，无需自己 `reinterpret_cast`。</p>
-</div>
-</div>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">explicit</span> FAssembly(std::string_view Path)</td><td>从路径构造：立即 `Load()`；失败时对象处于未装载状态（`IsLoaded()` 为假）。</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>FAssembly(FAssembly&amp;&amp;) <span class="kw">noexcept</span> = <span class="kw">default</span></td><td>可移动（句柄转移）。拷贝被删除：`FAssembly(<span class="kw">const</span> FAssembly&amp;) = <span class="kw">delete</span>` / `<span class="kw">operator</span>=(<span class="kw">const</span> FAssembly&amp;) = <span class="kw">delete</span>`。</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">bool</span> Load(std::string_view Path)</td><td>装载模块（先 `Unload()` 掉旧句柄）；文件缺失或装载失败返回 `<span class="kw">false</span>`。</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Unload()</td><td>释放句柄；可重复调用。之后 `IsLoaded()` 为假、`GetProcAddress()` 返回 <span class="kw">nullptr</span>。</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">bool</span> IsLoaded() <span class="kw">const</span></td><td>是否持有有效的模块句柄。</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span>* GetProcAddress(<span class="kw">const</span> <span class="kw">char</span>* Name) <span class="kw">const</span></td><td>原始符号查找（`GetProcAddress` / `dlsym`）；未装载或符号不存在则返回 <span class="kw">nullptr</span>。</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">template</span> &lt;<span class="kw">typename</span> TFunction&gt; TFunction GetProcAs(<span class="kw">const</span> <span class="kw">char</span>* Name) <span class="kw">const</span></td><td>把原始符号转成**函数指针**类型再返回 —— 调用方写 `GetProcAs&lt;CreateFn&gt;(<span class="st">"CreateEngine"</span>)` 即可，无需自己 `reinterpret_cast`。</td></tr>
+</tbody></table></div>
 </div>
 </div>
 <div class="pane" id="pane-Public__Core__Delegate_h">

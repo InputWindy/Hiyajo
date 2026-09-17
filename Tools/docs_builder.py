@@ -276,8 +276,9 @@ def RenderEntity(Entity: FEntity, Anchor: str) -> str:
 	Out = [f'<div class="ent e-{Entity.Kind}" id="{Anchor}">',
 	       f'<h3><span class="kind">{Label}</span> {html.escape(Entity.Name)}'
 	       + (f' <span class="base">: {Highlight(Entity.Base)}</span>' if Entity.Base else "")
-	       + "</h3>",
-	       RenderDesc(Entity.Desc)]
+	       + "</h3>"]
+	if Entity.Desc:
+		Out.append('<div class="sect">' + RenderDesc(Entity.Desc) + "</div>")
 	Groups = {"fields": [], "interface": [], "nested": []}
 	for Member in Entity.Members:
 		if Member.Kind == "function":
@@ -286,13 +287,21 @@ def RenderEntity(Entity: FEntity, Anchor: str) -> str:
 			Groups["fields"].append(Member)
 		else:
 			Groups["nested"].append(Member)
-	if any(Groups.values()):
-		Out.append('<div class="members">')
-		for Key, Title in (("fields", "字段"), ("interface", "接口"), ("nested", "嵌套")):
-			if Groups[Key]:
-				Out.append(f"<h4>{Title}</h4>")
-				Out.extend(RenderMember(M) for M in Groups[Key])
-		Out.append("</div>")
+	for Key, Title, Columns in (("fields", "字段", ("访问域", "字段", "说明")),
+	                            ("interface", "接口", ("访问域", "接口签名", "说明")),
+	                            ("nested", "嵌套", ("访问域", "名称", "说明"))):
+		if not Groups[Key]:
+			continue
+		Out.append('<div class="sect">')
+		Out.append(f"<h4>{Title}</h4>")
+		Out.append("<table><thead><tr>"
+		           + "".join(f"<th>{C}</th>" for C in Columns)
+		           + "</tr></thead><tbody>")
+		for Member in Groups[Key]:
+			Detail = "<br>".join(Highlight(Line) for Line in Member.Desc)
+			Out.append(f'<tr><td><span class="acc a-{Member.Access}">{Member.Access}</span></td>'
+			           f"<td>{Highlight(Member.Signature)}</td><td>{Detail}</td></tr>")
+		Out.append("</tbody></table></div>")
 	Out.append("</div>")
 	return "\n".join(Out)
 
@@ -388,10 +397,17 @@ h2.file-title{font-size:20px;margin:0 0 18px;color:#fff}
 .card{background:#182238;border:1px solid var(--line);border-radius:8px;padding:14px 16px;
       margin:0 0 16px}
 .card-title{font-size:14px;margin:0 0 8px;color:#fff}
-.card table{border-collapse:collapse;width:100%;font-size:12.5px}
-.card th{background:#202b42;color:var(--sub);font-weight:600;text-align:left}
-.card th,.card td{border:1px solid var(--line);padding:6px 9px;vertical-align:top}
+.card table,.ent table{border-collapse:collapse;width:100%;font-size:12.5px}
+.card th,.ent th{background:#202b42;color:var(--sub);font-weight:600;text-align:left}
+.card th,.card td,.ent th,.ent td{border:1px solid var(--line);padding:6px 9px;vertical-align:top}
 .card td:first-child{white-space:nowrap;font-family:Consolas,monospace;color:#9fe0a0}
+.ent table td:nth-child(2){font-family:Consolas,monospace;color:#dbe7f7}
+.ent table td:nth-child(1){width:74px}
+/* 类 card 内的分区：描述 / 字段 / 接口 / 嵌套 各成一个有边框的块，边界一眼可见 */
+.sect{border:1px solid var(--line);border-radius:6px;padding:10px 12px;margin:10px 0;
+      background:#141c2c}
+.sect > h4{margin:0 0 8px;color:#cfe0ff;font-size:12px;letter-spacing:.06em}
+.sect .doc{margin:0}
 .doc{font-size:12.5px;color:#cfe0ff;margin:0 0 10px}
 .doc p{margin:2px 0}
 .doc.small{font-size:11.5px;color:var(--sub);margin:2px 0 0 46px}
