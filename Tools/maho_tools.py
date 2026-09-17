@@ -1431,23 +1431,23 @@ def create_plugin(
 	#  扫描该插件的头文件结构生成，内容在 <plugin>/Docs.py 里逐条声明。agent 的通用约束
 	#  只有根 AGENTS.md 一份，不再每个插件复制一份（副本必然与代码漂移）。)
 
-	# Docs (Markdown — the repo's doc format; no API.html).
-	(dst / f"{plugin_name}.md").write_text(
-		f"# {plugin_name}\n\n{description or '待补'}\n\n"
-		f"## Code files\n"
-		f"- [Public/{plugin_name}.h](Public/{plugin_name}.h) — 层声明（挂载 stage 接口）\n"
-		f"- [Private/{plugin_name}.cpp](Private/{plugin_name}.cpp) — 实现\n\n"
-		f"## Related docs\n"
-		f"- [API.md](API.md) - API documentation\n",
-		encoding="utf-8", newline="\n",
-	)
-	(dst / "API.md").write_text(
-		f"# {plugin_name} — API 文档\n\n"
-		f"{description or '空插件骨架——挂载 stage 接口后补全。'}\n\n"
-		f"## F{plugin_name} <class : FFrameExtension, IPipeline<...>>\n\n"
-		f"插件骨架。把要实现的 stage 接口（IInit/ITick/...）填进 `IPipeline<...>` 模板列表并覆写，\n"
-		f"然后在 `.cplugin` 的 `Dependencies` 手填依赖插件。\n\n"
-		f"- [{plugin_name}.md]({plugin_name}.md) — 概念\n",
+	# Docs —— 单一入口 <plugin>/Docs.html：
+	#   <plugin>/Docs.py 是**内容源**（用 Tools/docs_builder.py 的原子接口逐条声明，不扫描源码），
+	#   Tools/plugin_docs.py 扫描本插件的头文件结构并渲染 <plugin>/Docs.html。
+	#   不再生成 <Name>.md / API.md：文档只有一个入口，且内容由人声明而不是猜注释。
+	(dst / "Docs.py").write_text(
+		f"# {plugin_name} —— 文档内容（由 Tools/plugin_docs.py 执行；D 已注入，无需 import）\n"
+		f"#\n"
+		f"# 渲染：Tools\\maho_python.bat Tools\\plugin_docs.py --filter {plugin_name}\n"
+		f"# 原子接口：D.Header / D.Class / D.Struct / D.Enum / D.Macro / D.Alias /\n"
+		f"#           D.Interface / D.Field / D.Nested / D.SetAccess / D.Card / D.Table / D.Row\n"
+		f"# 范式参考 Source/Docs.html 里 Public/Core/FrameBuilder.h 那一页。\n\n"
+		f'D.Header("Public/{plugin_name}.h", Title="{plugin_name}.h",\n'
+		f'         Desc="TODO：这个头是什么、为什么这样设计。")\n\n'
+		f'# D.Class("F{plugin_name}", Base="FFrameExtension + IPipeline<...>", Desc="…")\n'
+		f'# D.SetAccess("public")\n'
+		f'# D.Interface("void Initialize(FEngineBase&) override", "…")\n'
+		f'# D.Field("…", "…")\n',
 		encoding="utf-8", newline="\n",
 	)
 
