@@ -22,6 +22,9 @@ body{margin:0;background:var(--bg);color:var(--txt);
      color:var(--txt);padding:6px 9px;font-size:12.5px;font-family:inherit}
 #side .search input::placeholder{color:#5b7bab}
 #side .search input:focus{outline:none;border-color:var(--accent)}
+#tree a.hdr{color:var(--txt)}
+#tree a.src{color:#7f93ad}
+#tree a.src:hover{color:var(--txt)}
 #tree li.hidden{display:none}
 #tree{overflow:auto;padding:8px 6px 24px;font-size:12.5px;flex:1}
 #tree ul{list-style:none;margin:0;padding-left:12px}
@@ -79,47 +82,107 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div id="app">
   <div id="side">
     <h1>Maho 引擎源码</h1>
-    <div class="search" title="左侧扫描 Source/**/*.h：22 个头文件 · 已声明 17 个 · 23 个实体 / 90 个成员 ｜ 内容在 Tools/docs_content.py 里逐条声明">
+    <div class="search" title="左侧扫描 Source/ 下的 *.h 与 *.cpp：30 个文件 · 已声明 17 个 · 23 个实体 / 90 个成员 ｜ 内容在 Tools/docs_content.py 里逐条声明">
       <input id="q" type="search" placeholder="搜索头文件…  （如 Frame、Core、Entry）" autocomplete="off">
     </div>
     <div id="tree"><ul>
+<li class="dir"><span class="dir-label" data-dir="Private">Private</span>
+<ul>
+<li class="dir"><span class="dir-label" data-dir="Private/Core">Core</span>
+<ul>
+<li class="file"><a class="src" href="#Private__Core__Assembly_cpp" data-file="Private__Core__Assembly_cpp">Assembly.cpp</a></li>
+<li class="file"><a class="src" href="#Private__Core__Fatal_cpp" data-file="Private__Core__Fatal_cpp">Fatal.cpp</a></li>
+<li class="file"><a class="src" href="#Private__Core__FrameGraph_cpp" data-file="Private__Core__FrameGraph_cpp">FrameGraph.cpp</a></li>
+<li class="file"><a class="src" href="#Private__Core__ThreadedServer_cpp" data-file="Private__Core__ThreadedServer_cpp">ThreadedServer.cpp</a></li>
+<li class="file"><a class="src" href="#Private__Core__ThreadPool_cpp" data-file="Private__Core__ThreadPool_cpp">ThreadPool.cpp</a></li>
+</ul>
+</li>
+<li class="dir"><span class="dir-label" data-dir="Private/Engine">Engine</span>
+<ul>
+<li class="file"><a class="src" href="#Private__Engine__Engine_cpp" data-file="Private__Engine__Engine_cpp">Engine.cpp</a></li>
+<li class="file"><a class="src" href="#Private__Engine__FrameBuilder_cpp" data-file="Private__Engine__FrameBuilder_cpp">FrameBuilder.cpp</a></li>
+<li class="file"><a class="src" href="#Private__Engine__PluginManager_cpp" data-file="Private__Engine__PluginManager_cpp">PluginManager.cpp</a></li>
+</ul>
+</li>
+</ul>
+</li>
 <li class="dir"><span class="dir-label" data-dir="Public">Public</span>
 <ul>
 <li class="dir"><span class="dir-label" data-dir="Public/Core">Core</span>
 <ul>
-<li class="file"><a href="#Public__Core__Assembly_h" data-file="Public__Core__Assembly_h">Assembly.h</a></li>
-<li class="file"><a href="#Public__Core__Delegate_h" data-file="Public__Core__Delegate_h">Delegate.h</a></li>
-<li class="file"><a href="#Public__Core__Export_h" data-file="Public__Core__Export_h">Export.h</a></li>
-<li class="file"><a href="#Public__Core__Fatal_h" data-file="Public__Core__Fatal_h">Fatal.h</a></li>
-<li class="file"><a href="#Public__Core__FrameGraph_h" data-file="Public__Core__FrameGraph_h">FrameGraph.h</a></li>
-<li class="file"><a href="#Public__Core__Interface_h" data-file="Public__Core__Interface_h">Interface.h</a></li>
-<li class="file"><a href="#Public__Core__Singleton_h" data-file="Public__Core__Singleton_h">Singleton.h</a></li>
-<li class="file"><a href="#Public__Core__ThreadedServer_h" data-file="Public__Core__ThreadedServer_h">ThreadedServer.h</a></li>
-<li class="file"><a href="#Public__Core__ThreadPool_h" data-file="Public__Core__ThreadPool_h">ThreadPool.h</a></li>
-<li class="file"><a href="#Public__Core__TypeList_h" data-file="Public__Core__TypeList_h">TypeList.h</a></li>
+<li class="file"><a class="hdr" href="#Public__Core__Assembly_h" data-file="Public__Core__Assembly_h">Assembly.h</a></li>
+<li class="file"><a class="hdr" href="#Public__Core__Delegate_h" data-file="Public__Core__Delegate_h">Delegate.h</a></li>
+<li class="file"><a class="hdr" href="#Public__Core__Export_h" data-file="Public__Core__Export_h">Export.h</a></li>
+<li class="file"><a class="hdr" href="#Public__Core__Fatal_h" data-file="Public__Core__Fatal_h">Fatal.h</a></li>
+<li class="file"><a class="hdr" href="#Public__Core__FrameGraph_h" data-file="Public__Core__FrameGraph_h">FrameGraph.h</a></li>
+<li class="file"><a class="hdr" href="#Public__Core__Interface_h" data-file="Public__Core__Interface_h">Interface.h</a></li>
+<li class="file"><a class="hdr" href="#Public__Core__Singleton_h" data-file="Public__Core__Singleton_h">Singleton.h</a></li>
+<li class="file"><a class="hdr" href="#Public__Core__ThreadedServer_h" data-file="Public__Core__ThreadedServer_h">ThreadedServer.h</a></li>
+<li class="file"><a class="hdr" href="#Public__Core__ThreadPool_h" data-file="Public__Core__ThreadPool_h">ThreadPool.h</a></li>
+<li class="file"><a class="hdr" href="#Public__Core__TypeList_h" data-file="Public__Core__TypeList_h">TypeList.h</a></li>
 </ul>
 </li>
 <li class="dir"><span class="dir-label" data-dir="Public/Engine">Engine</span>
 <ul>
-<li class="file"><a href="#Public__Engine__Engine_h" data-file="Public__Engine__Engine_h">Engine.h</a></li>
-<li class="file"><a href="#Public__Engine__Frame_h" data-file="Public__Engine__Frame_h">Frame.h</a></li>
-<li class="file"><a href="#Public__Engine__FrameBuilder_h" data-file="Public__Engine__FrameBuilder_h">FrameBuilder.h</a></li>
-<li class="file"><a href="#Public__Engine__PluginManager_h" data-file="Public__Engine__PluginManager_h">PluginManager.h</a></li>
-<li class="file"><a href="#Public__Engine__Query_h" data-file="Public__Engine__Query_h">Query.h</a></li>
+<li class="file"><a class="hdr" href="#Public__Engine__Engine_h" data-file="Public__Engine__Engine_h">Engine.h</a></li>
+<li class="file"><a class="hdr" href="#Public__Engine__Frame_h" data-file="Public__Engine__Frame_h">Frame.h</a></li>
+<li class="file"><a class="hdr" href="#Public__Engine__FrameBuilder_h" data-file="Public__Engine__FrameBuilder_h">FrameBuilder.h</a></li>
+<li class="file"><a class="hdr" href="#Public__Engine__PluginManager_h" data-file="Public__Engine__PluginManager_h">PluginManager.h</a></li>
+<li class="file"><a class="hdr" href="#Public__Engine__Query_h" data-file="Public__Engine__Query_h">Query.h</a></li>
 </ul>
 </li>
-<li class="file"><a href="#Public__EntryPoint_h" data-file="Public__EntryPoint_h">EntryPoint.h</a></li>
-<li class="file"><a href="#Public__EntryPointAndroid_h" data-file="Public__EntryPointAndroid_h">EntryPointAndroid.h</a></li>
-<li class="file"><a href="#Public__EntryPointIOS_h" data-file="Public__EntryPointIOS_h">EntryPointIOS.h</a></li>
-<li class="file"><a href="#Public__EntryPointLinux_h" data-file="Public__EntryPointLinux_h">EntryPointLinux.h</a></li>
-<li class="file"><a href="#Public__EntryPointWindows_h" data-file="Public__EntryPointWindows_h">EntryPointWindows.h</a></li>
-<li class="file"><a href="#Public__EntryPointXbox_h" data-file="Public__EntryPointXbox_h">EntryPointXbox.h</a></li>
-<li class="file"><a href="#Public__Maho_h" data-file="Public__Maho_h">Maho.h</a></li>
+<li class="file"><a class="hdr" href="#Public__EntryPoint_h" data-file="Public__EntryPoint_h">EntryPoint.h</a></li>
+<li class="file"><a class="hdr" href="#Public__EntryPointAndroid_h" data-file="Public__EntryPointAndroid_h">EntryPointAndroid.h</a></li>
+<li class="file"><a class="hdr" href="#Public__EntryPointIOS_h" data-file="Public__EntryPointIOS_h">EntryPointIOS.h</a></li>
+<li class="file"><a class="hdr" href="#Public__EntryPointLinux_h" data-file="Public__EntryPointLinux_h">EntryPointLinux.h</a></li>
+<li class="file"><a class="hdr" href="#Public__EntryPointWindows_h" data-file="Public__EntryPointWindows_h">EntryPointWindows.h</a></li>
+<li class="file"><a class="hdr" href="#Public__EntryPointXbox_h" data-file="Public__EntryPointXbox_h">EntryPointXbox.h</a></li>
+<li class="file"><a class="hdr" href="#Public__Maho_h" data-file="Public__Maho_h">Maho.h</a></li>
 </ul>
 </li>
 </ul></div>
   </div>
-  <div id="main"><div class="pane" id="pane-Public__Core__Assembly_h">
+  <div id="main"><div class="pane" id="pane-Private__Core__Assembly_cpp">
+<div class="hdr">Private/Core/Assembly.cpp</div>
+<h2 class="file-title">Assembly.cpp</h2>
+<div class="empty">（尚未声明内容 —— 在 Tools/docs_content.py 里加一条 Header(&quot;Private/Core/Assembly.cpp&quot;)，再逐类声明 Class / Interface / Field）</div>
+</div>
+<div class="pane" id="pane-Private__Core__Fatal_cpp">
+<div class="hdr">Private/Core/Fatal.cpp</div>
+<h2 class="file-title">Fatal.cpp</h2>
+<div class="empty">（尚未声明内容 —— 在 Tools/docs_content.py 里加一条 Header(&quot;Private/Core/Fatal.cpp&quot;)，再逐类声明 Class / Interface / Field）</div>
+</div>
+<div class="pane" id="pane-Private__Core__FrameGraph_cpp">
+<div class="hdr">Private/Core/FrameGraph.cpp</div>
+<h2 class="file-title">FrameGraph.cpp</h2>
+<div class="empty">（尚未声明内容 —— 在 Tools/docs_content.py 里加一条 Header(&quot;Private/Core/FrameGraph.cpp&quot;)，再逐类声明 Class / Interface / Field）</div>
+</div>
+<div class="pane" id="pane-Private__Core__ThreadedServer_cpp">
+<div class="hdr">Private/Core/ThreadedServer.cpp</div>
+<h2 class="file-title">ThreadedServer.cpp</h2>
+<div class="empty">（尚未声明内容 —— 在 Tools/docs_content.py 里加一条 Header(&quot;Private/Core/ThreadedServer.cpp&quot;)，再逐类声明 Class / Interface / Field）</div>
+</div>
+<div class="pane" id="pane-Private__Core__ThreadPool_cpp">
+<div class="hdr">Private/Core/ThreadPool.cpp</div>
+<h2 class="file-title">ThreadPool.cpp</h2>
+<div class="empty">（尚未声明内容 —— 在 Tools/docs_content.py 里加一条 Header(&quot;Private/Core/ThreadPool.cpp&quot;)，再逐类声明 Class / Interface / Field）</div>
+</div>
+<div class="pane" id="pane-Private__Engine__Engine_cpp">
+<div class="hdr">Private/Engine/Engine.cpp</div>
+<h2 class="file-title">Engine.cpp</h2>
+<div class="empty">（尚未声明内容 —— 在 Tools/docs_content.py 里加一条 Header(&quot;Private/Engine/Engine.cpp&quot;)，再逐类声明 Class / Interface / Field）</div>
+</div>
+<div class="pane" id="pane-Private__Engine__FrameBuilder_cpp">
+<div class="hdr">Private/Engine/FrameBuilder.cpp</div>
+<h2 class="file-title">FrameBuilder.cpp</h2>
+<div class="empty">（尚未声明内容 —— 在 Tools/docs_content.py 里加一条 Header(&quot;Private/Engine/FrameBuilder.cpp&quot;)，再逐类声明 Class / Interface / Field）</div>
+</div>
+<div class="pane" id="pane-Private__Engine__PluginManager_cpp">
+<div class="hdr">Private/Engine/PluginManager.cpp</div>
+<h2 class="file-title">PluginManager.cpp</h2>
+<div class="empty">（尚未声明内容 —— 在 Tools/docs_content.py 里加一条 Header(&quot;Private/Engine/PluginManager.cpp&quot;)，再逐类声明 Class / Interface / Field）</div>
+</div>
+<div class="pane" id="pane-Public__Core__Assembly_h">
 <div class="hdr">Public/Core/Assembly.h</div>
 <h2 class="file-title">Assembly.h —— 动态库装载原语</h2>
 <div class="card"><div class="doc">
