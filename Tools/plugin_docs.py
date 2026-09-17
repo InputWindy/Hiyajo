@@ -40,15 +40,28 @@ def main() -> int:
 
 	Dirs = [P for P in PluginDirs(Root) if Args.filter.lower() in P.as_posix().lower()]
 	Count = 0
+	WithContent = 0
 	TotalHeaders = 0
 	for Dir in Dirs:
-		D.Reset()                       # 每个插件一份空的声明集 ⇒ 右侧留白
-		Headers, _, _ = D.Build(Out=Dir / "Docs.html", Root=Dir)
+		D.Reset()                       # 每个插件一份声明集
+		# 插件自己的内容脚本（可选）：<plugin>/Docs.py，用与 Source 相同的原子接口。
+		# 只声明、不需要 import —— 运行器把 docs_builder 作为 D 注入。
+		ContentScript = Dir / "Docs.py"
+		if ContentScript.is_file():
+			try:
+				Code = compile(ContentScript.read_text(encoding="utf-8"), str(ContentScript), "exec")
+				exec(Code, {"__file__": str(ContentScript), "__name__": "plugin_docs_content", "D": D})
+				WithContent += 1
+			except Exception as Error:   # 一个插件的内容坏了，不影响其它插件
+				print(f"[plugin_docs] {Dir.as_posix()}/Docs.py 出错（只留树）："
+				      f"{type(Error).__name__}: {Error}")
+				D.Reset()
+		Headers, Declared, Members = D.Build(Out=Dir / "Docs.html", Root=Dir)
 		TotalHeaders += Headers
 		Count += 1
-		print(f"[plugin_docs] {Dir.as_posix()}/Docs.html   {Headers} 个头（内容留白）")
+		print(f"[plugin_docs] {Dir.as_posix()}/Docs.html   {Headers} 个头 · 已声明 {Declared} · {Members} 个成员")
 
-	print(f"[plugin_docs] {Count} 个插件 · {TotalHeaders} 个头文件")
+	print(f"[plugin_docs] {Count} 个插件 · {TotalHeaders} 个头文件 · {WithContent} 个带内容脚本")
 	return 0
 
 

@@ -79,7 +79,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div id="app">
   <div id="side">
     <h1>Maho 引擎源码</h1>
-    <div class="search" title="左侧扫描 Source/**/*.h：2 个头文件 · 已声明 0 个 · 0 个实体 / 0 个成员 ｜ 内容在 Tools/docs_content.py 里逐条声明">
+    <div class="search" title="左侧扫描 Source/**/*.h：2 个头文件 · 已声明 2 个 · 1 个实体 / 2 个成员 ｜ 内容在 Tools/docs_content.py 里逐条声明">
       <input id="q" type="search" placeholder="搜索头文件…  （如 Frame、Core、Entry）" autocomplete="off">
     </div>
     <div id="tree"><ul>
@@ -93,13 +93,72 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
   </div>
   <div id="main"><div class="pane" id="pane-Public__FrameRenderFeature_h">
 <div class="hdr">Public/FrameRenderFeature.h</div>
-<h2 class="file-title">FrameRenderFeature.h</h2>
-<div class="empty">（尚未声明内容 —— 在 Tools/docs_content.py 里加一条 Header(&quot;Public/FrameRenderFeature.h&quot;)，再逐类声明 Class / Interface / Field）</div>
+<h2 class="file-title">FrameRenderFeature.h —— 引擎唯一的上屏点（排序锚）</h2>
+<div class="card"><div class="doc">
+<p>帧上屏特性 —— **引擎唯一的上屏点**，并且与任何单个 UI 特性的离屏合成解耦。它**不拥有任何 ImGui 状态、也不画任何东西**：只读本帧的上屏目标（`FRender::GetPresentTarget()`，任何 UI 特性在自己的 `RenderUI` 末尾写的那个槽），再把它 blit 到交换链。</p>
+<p>**这种解耦的价值**：编辑器构建里编辑器 UI 特性可以把 `EditorRT` 设成上屏目标，而运行时构建仍然呈现游戏 UI 的合成结果 —— **上屏点固定，目标可切换**。</p>
+<p>`IPresent` 是 `FRenderStages` 的**最后一个** stage。它靠各生产者自己声明**反向边**来保证「总是在生产者的最终合成之后跑」；某个生产者没装时该边根本不存在（优雅降级，不需要本特性去枚举谁装了谁没装）。</p>
+</div></div>
+<div class="card">
+<h3 class="card-title">包含的头文件</h3>
+
+<table>
+<thead><tr><th>头文件</th><th>功能</th></tr></thead>
+<tbody>
+<tr><td>FrameRenderFeatureApi.h</td><td>`MAHO_FRAMERENDERFEATURE_API`</td></tr>
+<tr><td>Engine/Frame.h</td><td>`FFrameExtension` / `MAHO_DECLARE_FRAME` / `IPipeline`</td></tr>
+<tr><td>Render.h</td><td>`FRender` / `IPresent`（本特性唯一实现的 stage）</td></tr>
+<tr><td>RDG.h</td><td>`FRDGTextureRef`（上屏目标的类型；存在 `FRender::GetPresentTarget` 里）</td></tr>
+</tbody></table>
+</div>
+<div class="card">
+<h3 class="card-title">生产者的反向边（读各特性的构造函数）</h3>
+<div class="doc">
+<p>「反向声明」是这套解耦的关键：**依赖方向由消费者声明**，而这里消费者其实是「被排序的一方」。生产者知道自己必须在上屏之前完成，所以由它把边挂到上屏点上。</p>
+</div>
+<table>
+<thead><tr><th>生产者</th><th>声明</th><th>含义</th></tr></thead>
+<tbody>
+<tr><td>FUIFeature</td><td>`MyStage&lt;IRenderUI&gt;().IsBlocking&lt;FFrameRenderFeature&gt;().OnStage&lt;IPresent&gt;()`</td><td>UI 合成必须在上屏之前：它的 `RenderUI` 写 `UIRenderTarget` 并 `SetPresentTarget`，上屏点随后读它。`FFrameRenderFeature` 总是装着，所以这条边总能钉住</td></tr>
+</tbody></table>
+</div>
+<div class="ent e-class" id="Public__FrameRenderFeature_h-0">
+<h3><span class="kind">类</span> FFrameRenderFeature <span class="base">: FFrameExtension, IPipeline&lt;IPresent&gt;</span></h3>
+<div class="sect"><div class="doc">
+<p>上屏特性：**只挂 `IPresent`**。它同时是「排序锚」—— 别的特性把反向边挂到它的 `IPresent` 上，从而保证自己「先于上屏」完成合成。它自己**不发上屏原语**（那条被移回 `FRender::EndFrame`，见下）。</p>
+</div></div>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td>FFrameRenderFeature()</td><td>构造：**刻意不声明任何正向等待**。上屏点必须是最后一个 stage，但它**无法枚举**生产者（它是通用的，而且编辑器特性在运行时构建里可能根本不存在）。所以顺序由生产者在自己的构造函数里**反向声明**：写上屏目标的 UI 特性声明 `MyStage&lt;IRenderUI&gt;().IsBlocking&lt;FFrameRenderFeature&gt;().OnStage&lt;IPresent&gt;()`；没装的生产者根本不会产生这条边</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Present(FRender&amp; R) <span class="kw">override</span></td><td>**只作排序锚**：上屏原语已由 `FRender::EndFrame` 发出，这里不做实际工作。历史原因值得记下来：这个 stage 以前也调 `R.PresentTexture()`，把两件事混在一起 —— ①「呈现**哪个**目标」（渲染序列内部的排序决策，生产者把反向边挂在这里）与 ②「发出上屏原语」（帧边界操作，必须与 BeginFrame / EndFrame **串行**）。坏的是第二半：这个 stage 活在 FRender 的**收集器图**里，而 `FRender::IBeginFrame` / `IEndFrame` 是**宿主图**里的节点 —— 两张图之间没有依赖边，没有任何东西能给它们排序，尽管 RHI 早就写明帧原语必须由调用方保持串行。把调用移进 `EndFrame` 后，三个帧原语落在同一条链上，由每层自带的准入闸跨帧串行化。「最后写者胜」依然确定：`EndFrame` 在渲染图**排空之后**才读那个目标</td></tr>
+</tbody></table></div>
+</div>
 </div>
 <div class="pane" id="pane-Public__FrameRenderFeatureApi_h">
 <div class="hdr">Public/FrameRenderFeatureApi.h</div>
-<h2 class="file-title">FrameRenderFeatureApi.h</h2>
-<div class="empty">（尚未声明内容 —— 在 Tools/docs_content.py 里加一条 Header(&quot;Public/FrameRenderFeatureApi.h&quot;)，再逐类声明 Class / Interface / Field）</div>
+<h2 class="file-title">FrameRenderFeatureApi.h —— 模块导出标签</h2>
+<div class="card"><div class="doc">
+<p>本特性的 DLL 导出标签：导出 `CreateFrame()` 这个 C 符号与特性类型本身，让引擎侧能经基类指针安全地销毁本 DLL 构造的实例。</p>
+</div></div>
+<div class="card">
+<h3 class="card-title">包含的头文件</h3>
+
+<table>
+<thead><tr><th>头文件</th><th>功能</th></tr></thead>
+<tbody>
+<tr><td>Core/Export.h</td><td>`MAHO_EXPORT` / `MAHO_IMPORT`</td></tr>
+</tbody></table>
+</div>
+<div class="card">
+<h3 class="card-title">导出标签</h3>
+
+<table>
+<thead><tr><th>宏</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td>MAHO_FRAMERENDERFEATURE_API</td><td>编译本模块时 codegen 定义 `MAHO_FRAMERENDERFEATURE_MODULE_EXPORTS` ⇒ `MAHO_EXPORT`，消费方 `MAHO_IMPORT`。**为什么：**别的特性要声明「我在 `FFrameRenderFeature` 的 IPresent 之前」（反向边），它们引用的是本 DLL 的类型 —— 类型标识必须跨模块一致</td></tr>
+</tbody></table>
+</div>
 </div></div>
 </div>
 <script>

@@ -79,7 +79,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div id="app">
   <div id="side">
     <h1>Maho 引擎源码</h1>
-    <div class="search" title="左侧扫描 Source/**/*.h：2 个头文件 · 已声明 0 个 · 0 个实体 / 0 个成员 ｜ 内容在 Tools/docs_content.py 里逐条声明">
+    <div class="search" title="左侧扫描 Source/**/*.h：2 个头文件 · 已声明 2 个 · 2 个实体 / 11 个成员 ｜ 内容在 Tools/docs_content.py 里逐条声明">
       <input id="q" type="search" placeholder="搜索头文件…  （如 Frame、Core、Entry）" autocomplete="off">
     </div>
     <div id="tree"><ul>
@@ -93,13 +93,85 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
   </div>
   <div id="main"><div class="pane" id="pane-Public__Paths_h">
 <div class="hdr">Public/Paths.h</div>
-<h2 class="file-title">Paths.h</h2>
-<div class="empty">（尚未声明内容 —— 在 Tools/docs_content.py 里加一条 Header(&quot;Public/Paths.h&quot;)，再逐类声明 Class / Interface / Field）</div>
+<h2 class="file-title">Paths.h —— 虚拟路径 → 物理路径（服务层）</h2>
+<div class="card"><div class="doc">
+<p>路径解析层：先把根**别名**登记进来（例如 `<span class="st">"Engine"</span>` → 引擎目录、`<span class="st">"Project"</span>` → 项目目录），再用 `Resolve(<span class="st">"Engine/Config/Default.ini"</span>)` 换出物理路径。</p>
+<p>**为什么要有这一层**：物理路径一旦散落在代码里，「换一台机器 / 换个打包目录 / 编辑器与运行时布局不同」就会变成满地改字符串。把**根**集中登记一次，之后代码里只有虚拟路径，物理布局自由变化。</p>
+<p>**为什么同时接受 `Alias/Sub/Path` 与 `Alias:Sub/Path`**：前者读起来像目录结构，后者在配置里更醒目、也不会和真实子目录混淆 —— 两种写法都在 `Resolve` 里归一到同一套解析。</p>
+<p>**并发**：不持锁 —— `SetRoot` 与 `Resolve` 都应在初始化阶段单线程完成（它是「启动时把根扎好、之后只读」的典型用法）。</p>
+</div></div>
+<div class="card">
+<h3 class="card-title">包含的头文件</h3>
+
+<table>
+<thead><tr><th>头文件</th><th>功能</th></tr></thead>
+<tbody>
+<tr><td>PathsApi.h</td><td>`MAHO_PATHS_API` —— 本模块的导出标签</td></tr>
+<tr><td>&lt;Maho.h&gt;</td><td>引擎聚合头（`FFrameExtension` / `IPipeline` 等）</td></tr>
+<tr><td>&lt;Engine/Frame.h&gt;</td><td>`MAHO_DECLARE_FRAME` / stage 接口 —— 帧的声明词汇</td></tr>
+<tr><td>&lt;filesystem&gt;</td><td>`std::filesystem::path` —— **路径的表示**：分隔符、宽窄字符与拼接规则交给标准库，插件里不出现任何手写拼接</td></tr>
+<tr><td>&lt;map&gt;</td><td>别名表：`别名 → 物理根`（有序 ⇒ 调试打印时的枚举顺序稳定）</td></tr>
+<tr><td>&lt;string&gt; / &lt;string_view&gt;</td><td>别名由 `map` 拥有字符串；查询入口用 `string_view`（零拷贝）</td></tr>
+</tbody></table>
+</div>
+<div class="card">
+<h3 class="card-title">自由函数</h3>
+
+<table>
+<thead><tr><th>签名</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td>MAHO_PATHS_API FPaths* GetPaths()</td><td>全局访问点：`Initialize` 里发布、`Shutdown` 里清除（未上线时为 `<span class="kw">nullptr</span>`）。函数而非导出裸变量：跨 DLL 才能拿到同一个解析表</td></tr>
+</tbody></table>
+</div>
+<div class="ent e-class" id="Public__Paths_h-0">
+<h3><span class="kind">类</span> FPaths <span class="base">: FFrameExtension, IPipeline&lt;IPreInit, IInit, IPostInit, IPreShutdown, IShutdown, IPostShutdown&gt;</span></h3>
+<div class="sect"><div class="doc">
+<p>路径解析器本体 —— **一个帧**（挂 6 个 stage）：根别名由宿主的启动流程在它 `Initialize` 之后登记，而所有 `Resolve` 都发生在根就绪之后、`Shutdown` 之前。</p>
+<p>**为什么不做成纯静态函数**：解析结果取决于「谁把哪些根登记进来了」这份运行期状态，它不是编译期常量；做成帧就能让它参与依赖排序（例如资源层要求「路径已就绪」）。</p>
+</div></div>
+<div class="sect">
+<h4>字段</h4>
+<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-private">private</span></td><td>std::map&lt;std::string, std::filesystem::path&gt; Roots</td><td>别名 → 物理根。**为什么是 `map` 而不是 `unordered_map`**：根的个数是个位数，有序容器在打印 / 比较配置时给出的稳定顺序更有价值</td></tr>
+</tbody></table></div>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-private">private</span></td><td>MAHO_DECLARE_FRAME(FPaths)</td><td>声明帧身份（稳定字面量名字 + `CreateFrame` 工厂）—— 使别处能按名字声明「我在路径就绪之后才解析」（typed 形式不可用时用名字寻址）</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> PreInitialize(FEngineBase&amp;) <span class="kw">override</span></td><td>空：本帧不需要更早的时钟点</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> Initialize(FEngineBase&amp;) <span class="kw">override</span></td><td>发布全局访问点（`GetPaths()` 从这里开始非空）</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> PostInitialize(FEngineBase&amp;) <span class="kw">override</span></td><td>空</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> PreShutdown(FEngineBase&amp;) <span class="kw">override</span></td><td>空</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> Shutdown(FEngineBase&amp;) <span class="kw">override</span></td><td>撤销全局访问点 —— 此时已没有使用者（依赖图保证），因此可以直接清掉解析表</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> PostShutdown(FEngineBase&amp;) <span class="kw">override</span></td><td>空</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> SetRoot(std::string_view Alias, std::filesystem::path Path)</td><td>登记一个根别名（如 `<span class="st">"Engine"</span>` → 引擎目录）。`Path` 按值收 —— 它要被存进表里，按值传让调用方可以 `std::move` 进来</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] std::filesystem::path Resolve(std::string_view VirtualPath) <span class="kw">const</span></td><td>把 `Alias/Sub/Path` 或 `Alias:Sub/Path` 解析成物理路径。**未知别名**的语义由实现决定（当前是按字面路径回退），因此需要区分「别名拼错」与「文件不存在」时应先用 `HasRoot` 探一下</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">bool</span> HasRoot(std::string_view Alias) <span class="kw">const</span></td><td>别名是否已登记 —— 用来在**进入解析之前**区分「根没配」与「路径不对」，这两种失败的处理完全不同（一个要报配置错误，一个是正常的文件缺失）</td></tr>
+</tbody></table></div>
+</div>
 </div>
 <div class="pane" id="pane-Public__PathsApi_h">
 <div class="hdr">Public/PathsApi.h</div>
-<h2 class="file-title">PathsApi.h</h2>
-<div class="empty">（尚未声明内容 —— 在 Tools/docs_content.py 里加一条 Header(&quot;Public/PathsApi.h&quot;)，再逐类声明 Class / Interface / Field）</div>
+<h2 class="file-title">PathsApi.h —— 模块导出标签</h2>
+<div class="card"><div class="doc">
+<p>本模块的 DLL 导出标签，独立成头 —— 只要「路径访问器」声明的模块不必引入 `Paths.h`。</p>
+</div></div>
+<div class="card">
+<h3 class="card-title">包含的头文件</h3>
+
+<table>
+<thead><tr><th>头文件</th><th>功能</th></tr></thead>
+<tbody>
+<tr><td>Core/Export.h</td><td>`MAHO_EXPORT` / `MAHO_IMPORT`（引擎核心提供）</td></tr>
+</tbody></table>
+</div>
+<div class="ent e-macro" id="Public__PathsApi_h-0">
+<h3><span class="kind">宏</span> MAHO_PATHS_API <span class="base">: MAHO_EXPORT / MAHO_IMPORT（随构建开关切换）</span></h3>
+<div class="sect"><div class="doc">
+<p>编译 `Paths.dll` 时构建系统定义 `MAHO_PATHS_MODULE_EXPORTS` ⇒ `MAHO_EXPORT`；消费方为 `MAHO_IMPORT`。</p>
+<p>**为什么必须有**：`FPaths* GetPaths()` 跨 DLL 返回类型，`FPaths` 的虚表与删除析构符只能在本模块生成；`dllimport` 把「消费方各生成一份」变成编译错误，避免卸载后 `<span class="kw">delete</span>` 静默崩。</p>
+</div></div>
+</div>
 </div></div>
 </div>
 <script>

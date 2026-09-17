@@ -79,7 +79,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div id="app">
   <div id="side">
     <h1>Maho 引擎源码</h1>
-    <div class="search" title="左侧扫描 Source/**/*.h：2 个头文件 · 已声明 0 个 · 0 个实体 / 0 个成员 ｜ 内容在 Tools/docs_content.py 里逐条声明">
+    <div class="search" title="左侧扫描 Source/**/*.h：2 个头文件 · 已声明 2 个 · 3 个实体 / 19 个成员 ｜ 内容在 Tools/docs_content.py 里逐条声明">
       <input id="q" type="search" placeholder="搜索头文件…  （如 Frame、Core、Entry）" autocomplete="off">
     </div>
     <div id="tree"><ul>
@@ -93,13 +93,129 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
   </div>
   <div id="main"><div class="pane" id="pane-Public__Timer_h">
 <div class="hdr">Public/Timer.h</div>
-<h2 class="file-title">Timer.h</h2>
-<div class="empty">（尚未声明内容 —— 在 Tools/docs_content.py 里加一条 Header(&quot;Public/Timer.h&quot;)，再逐类声明 Class / Interface / Field）</div>
+<h2 class="file-title">Timer.h —— 分层作用域计时（服务层）</h2>
+<div class="card"><div class="doc">
+<p>基于**栈**的作用域性能剖析：`FScopedTimer` 在构造时 `BeginScope`、析构时 `EndScope`，`FTimer` 把每次弹出累加进一棵按名字分层的计时树，`DumpToString()` 输出文本报告。</p>
+<p>**为什么用 RAII 作用域而不是手工开始 / 结束**：热路径上最怕的是「提前 <span class="kw">return</span> / 抛异常导致 EndScope 被跳过」，那会让计时栈永久错位。把一对调用绑在对象生命周期上，正确性由语言保证，调用点也短到可以随手插进任何函数。</p>
+<p>**为什么是树而不是打平的表**：`Render → Scene → Cull` 这种嵌套关系本身就有信息量（父层耗时包含子层），打平后会丢掉「谁被谁包含」，而树可以既打印自身又打印包含关系。</p>
+<p>**为什么用单调钟**：`std::chrono::steady_clock` 不受系统时间调整影响 —— 用 `system_clock` 的话，一次 NTP 校时就能造出负耗时或巨大尖峰。</p>
+</div></div>
+<div class="card">
+<h3 class="card-title">包含的头文件</h3>
+
+<table>
+<thead><tr><th>头文件</th><th>功能</th></tr></thead>
+<tbody>
+<tr><td>&lt;Maho.h&gt;</td><td>引擎聚合头（`FFrameExtension` / `IPipeline` 等）</td></tr>
+<tr><td>TimerApi.h</td><td>`MAHO_TIMER_API` —— 本模块的导出标签</td></tr>
+<tr><td>&lt;chrono&gt;</td><td>`steady_clock::time_point` —— **单调**时间点（不受系统时间调整影响）</td></tr>
+<tr><td>&lt;cstdint&gt;</td><td>`std::uint32_t Count` —— 调用次数的定宽表示</td></tr>
+<tr><td>&lt;map&gt;</td><td>子节点表：`名字 → FNode`（有序 ⇒ 报告输出顺序稳定，两次 dump 可 diff）</td></tr>
+<tr><td>&lt;string&gt; / &lt;string_view&gt;</td><td>节点拥有名字；`BeginScope` 入参用 `string_view`（零拷贝）</td></tr>
+</tbody></table>
+</div>
+<div class="card">
+<h3 class="card-title">自由函数</h3>
+
+<table>
+<thead><tr><th>签名</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td>MAHO_TIMER_API FTimer* GetTimer()</td><td>全局计时器访问点：`Initialize` 里发布、`Shutdown` 里清除（未上线时为 `<span class="kw">nullptr</span>`）。函数而非导出裸变量 —— 跨 DLL 才能保证累加到同一棵树</td></tr>
+</tbody></table>
+</div>
+<div class="card">
+<h3 class="card-title">计时节点字段（FTimer::FNode）</h3>
+<div class="doc">
+<p>节点是**聚合**类型（无自定义构造），全部字段公开给本帧自己使用；这里列出它们是为了说明每棵计时树到底记住了什么。</p>
+</div>
+<table>
+<thead><tr><th>字段</th><th>含义</th></tr></thead>
+<tbody>
+<tr><td>std::string Name</td><td>节点名（作用域名；同名作用域复用同一节点，于是「调用一次」变成「累加一次」）</td></tr>
+<tr><td><span class="kw">double</span> TotalSeconds</td><td>累计自身耗时（**不含子节点**的净值，便于看清本层开销）</td></tr>
+<tr><td><span class="kw">double</span> MaxSeconds</td><td>单次最大耗时 —— 平均值会掩盖偶发尖峰，它不会</td></tr>
+<tr><td>std::uint32_t Count</td><td>调用次数（与 Total 一起才能得到平均值）</td></tr>
+<tr><td>std::chrono::steady_clock::time_point Start</td><td>本次进入的时间点（弹出时用它算差值）</td></tr>
+<tr><td>FNode* Parent</td><td>父节点 —— **裸指针**：树由 `Root` 唯一拥有，`Parent` 只是回溯链，不参与所有权</td></tr>
+<tr><td>std::map&lt;std::string, FNode&gt; Children</td><td>子节点表（按值持有 ⇒ 整棵树随 `Root` 一次析构；`map` 保证遍历顺序稳定）</td></tr>
+</tbody></table>
+</div>
+<div class="ent e-class" id="Public__Timer_h-0">
+<h3><span class="kind">类</span> FTimer <span class="base">: FFrameExtension, IPipeline&lt;IPreInit, IInit, IPostInit, IPreShutdown, IShutdown, IPostShutdown&gt;</span></h3>
+<div class="sect"><div class="doc">
+<p>计时器本体 —— **一个帧**（挂 6 个 stage）：`Initialize` 发布全局访问点，`Shutdown` 撤销。</p>
+<p>**为什么是帧而不是纯静态**：计时树对当前作用域栈（`Current`）有状态，而这份状态必须只有一份、且有明确的生命周期；交给有依赖排序的帧持有，「谁在谁之前计时」才有确定性。</p>
+<p>**为什么要 `Reset`**：计时数据是「一段区间」的采样，看一帧 / 一段加载的耗时必须能清零 —— 否则累计值随时间单调增长，读不出局部热点。</p>
+<p>**公平契约**：`BeginScope` 与 `EndScope` 必须配对（用 `FScopedTimer` 就没这个问题），不配对会让 `Current` 指针错位，之后的计时全部挂到错的父节点下。</p>
+</div></div>
+<div class="sect">
+<h4>字段</h4>
+<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-protected">protected</span></td><td>FNode Root{<span class="st">"Root"</span>}</td><td>树的根（固定叫 `Root`）。**为什么根是值成员**：它是零成本的哨兵节点，让「顶层作用域」不必写特例分支（`Current` 永远非空）</td></tr>
+<tr><td><span class="acc a-protected">protected</span></td><td>FNode* Current = &amp;Root</td><td>当前作用域指针（初始指向根）。**为什么用裸指针**：它指向整棵树里的某个节点，不拥有任何东西；用 `unique_ptr` / 共享指针反而会让「树的所有权唯一」这件事变得模糊</td></tr>
+</tbody></table></div>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td>MAHO_DECLARE_FRAME(FTimer)</td><td>声明帧身份（稳定字面量名字 + `CreateFrame` 工厂）—— 让别处能按名字声明「我在计时器就绪之后才计时」</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> BeginScope(std::string_view Name)</td><td>压入一个作用域：在 `Current` 的子表里按名字取（或新建）节点，把 `Current` 挪到它并把 `Start` 记为现在</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> EndScope()</td><td>弹出当前作用域：累计本次耗时到 `TotalSeconds`、更新 `MaxSeconds` 与 `Count`，再把 `Current` 退回 `Parent`</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Reset()</td><td>清空全部累计数据（回到只有根节点的初始状态）—— 采样的起点由调用方决定</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] std::string DumpToString() <span class="kw">const</span></td><td>把计时树格式化成文本（毫秒），形如 `Render: 1.23 ms (n calls, avg, max)`。**为什么返回字符串而不是直接打印**：输出目的地由调用方决定（日志、编辑器面板、控制台），计时器不替它们选 sink</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> PreInitialize(FEngineBase&amp;) <span class="kw">override</span></td><td>空：本帧不需要更早的时钟点</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> Initialize(FEngineBase&amp; Engine) <span class="kw">override</span></td><td>发布全局访问点（`GetTimer()` 从这里开始非空）</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> PostInitialize(FEngineBase&amp;) <span class="kw">override</span></td><td>空</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> PreShutdown(FEngineBase&amp;) <span class="kw">override</span></td><td>空</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> Shutdown(FEngineBase&amp; Engine) <span class="kw">override</span></td><td>撤销全局访问点 —— 在所有计时使用者结束之后（依赖图保证）</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> PostShutdown(FEngineBase&amp;) <span class="kw">override</span></td><td>空</td></tr>
+<tr><td><span class="acc a-protected">protected</span></td><td>FTimer() = <span class="kw">default</span></td><td><span class="kw">protected</span> 构造：实例只由本模块的帧工厂 / 宿主流程创建，外部只能经 `GetTimer()` 取用</td></tr>
+</tbody></table></div>
+<div class="sect">
+<h4>嵌套</h4>
+<table><thead><tr><th>访问域</th><th>名称</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">struct</span> FNode</td><td>计时树节点（聚合类型）：名字、累计 / 最大耗时、调用次数、进入时间点、父指针、子表。**为什么按值持有子节点（`map&lt;string, FNode&gt;`）**：整棵树因此是「一个 `Root` 就拥有一切」的所有权结构，析构不需要递归 <span class="kw">delete</span>；`Parent` 只作回溯用，是裸指针。</td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-class" id="Public__Timer_h-1">
+<h3><span class="kind">类</span> FScopedTimer</h3>
+<div class="sect"><div class="doc">
+<p>RAII 作用域计时器：构造即 `BeginScope(Name)`，析构即 `EndScope()`：</p>
+<p>`<span class="kw">void</span> Render() { Timer::FScopedTimer Scope(<span class="st">"Render"</span>); <span class="cm">/* 工作 */</span> }` —— 进入即开始，离开自动结束。</p>
+<p>**为什么禁止拷贝与赋值**：两个对象对应一次 `BeginScope` / `EndScope`，拷贝会让「构造 / 析构」的次数与实际的进入 / 离开次数脱钩（多出或少掉一次弹出），计时栈随即错位 —— 因此直接在类型层面禁掉，而不是靠注释提醒。</p>
+<p>**为什么它自己不含数据**：所有状态都在 `FTimer` 那一棵树里，这个对象只是「进入 / 离开」这对动作的载体 ⇒ 它的大小可以忽略，放进热路径也不必担心额外开销。</p>
+</div></div>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">explicit</span> FScopedTimer(std::string_view Name)</td><td>构造：`GetTimer()-&gt;BeginScope(Name)`。**`<span class="kw">explicit</span>`**：避免从 `<span class="kw">const</span> <span class="kw">char</span>*` 隐式造出一个临时作用域计时器（那会立刻析构、等于什么都没测）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>~FScopedTimer()</td><td>析构：`GetTimer()-&gt;EndScope()`。**这是关键的一半** —— 即便函数提前 <span class="kw">return</span> 或抛异常，栈展开也一定会走析构，弹出不会丢</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>FScopedTimer(<span class="kw">const</span> FScopedTimer&amp;) = <span class="kw">delete</span></td><td>禁拷贝构造：拷贝会产生「两个对象、一次进入」的失衡（见类说明）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>FScopedTimer&amp; <span class="kw">operator</span>=(<span class="kw">const</span> FScopedTimer&amp;) = <span class="kw">delete</span></td><td>禁赋值：赋值更是把两个不同生命期的对象混成一个，必须禁</td></tr>
+</tbody></table></div>
+</div>
 </div>
 <div class="pane" id="pane-Public__TimerApi_h">
 <div class="hdr">Public/TimerApi.h</div>
-<h2 class="file-title">TimerApi.h</h2>
-<div class="empty">（尚未声明内容 —— 在 Tools/docs_content.py 里加一条 Header(&quot;Public/TimerApi.h&quot;)，再逐类声明 Class / Interface / Field）</div>
+<h2 class="file-title">TimerApi.h —— 模块导出标签</h2>
+<div class="card"><div class="doc">
+<p>本模块的 DLL 导出标签。独立成头：只要「计时器访问器」声明的模块不必引入 `Timer.h`。</p>
+</div></div>
+<div class="card">
+<h3 class="card-title">包含的头文件</h3>
+
+<table>
+<thead><tr><th>头文件</th><th>功能</th></tr></thead>
+<tbody>
+<tr><td>Core/Export.h</td><td>`MAHO_EXPORT` / `MAHO_IMPORT`（引擎核心提供）</td></tr>
+</tbody></table>
+</div>
+<div class="ent e-macro" id="Public__TimerApi_h-0">
+<h3><span class="kind">宏</span> MAHO_TIMER_API <span class="base">: MAHO_EXPORT / MAHO_IMPORT（随构建开关切换）</span></h3>
+<div class="sect"><div class="doc">
+<p>编译 `Timer.dll` 时构建系统定义 `MAHO_TIMER_MODULE_EXPORTS` ⇒ `MAHO_EXPORT`；消费方为 `MAHO_IMPORT`。</p>
+<p>**为什么必须有**：`FTimer* GetTimer()` 跨 DLL 返回类型，`FTimer` 的虚表与删除析构符必须只在本模块生成；`dllimport` 把「消费方各生成一份」变成编译错误，避免卸载后 `<span class="kw">delete</span>` 静默崩。</p>
+</div></div>
+</div>
 </div></div>
 </div>
 <script>

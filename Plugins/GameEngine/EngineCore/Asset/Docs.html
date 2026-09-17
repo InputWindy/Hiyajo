@@ -79,7 +79,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div id="app">
   <div id="side">
     <h1>Maho 引擎源码</h1>
-    <div class="search" title="左侧扫描 Source/**/*.h：3 个头文件 · 已声明 0 个 · 0 个实体 / 0 个成员 ｜ 内容在 Tools/docs_content.py 里逐条声明">
+    <div class="search" title="左侧扫描 Source/**/*.h：3 个头文件 · 已声明 3 个 · 26 个实体 / 191 个成员 ｜ 内容在 Tools/docs_content.py 里逐条声明">
       <input id="q" type="search" placeholder="搜索头文件…  （如 Frame、Core、Entry）" autocomplete="off">
     </div>
     <div id="tree"><ul>
@@ -98,18 +98,591 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
   </div>
   <div id="main"><div class="pane" id="pane-Private__TextureImageCodec_h">
 <div class="hdr">Private/TextureImageCodec.h</div>
-<h2 class="file-title">TextureImageCodec.h</h2>
-<div class="empty">（尚未声明内容 —— 在 Tools/docs_content.py 里加一条 Header(&quot;Private/TextureImageCodec.h&quot;)，再逐类声明 Class / Interface / Field）</div>
+<h2 class="file-title">TextureImageCodec.h —— CPU 图像解码（插件私有）</h2>
+<div class="card"><div class="doc">
+<p>把磁盘字节解成 CPU 像素。它放在 **Private/** 而不是 Public/，因为它是纯实现细节：只有本插件自己的贴图 importer 调它，外部（含项目侧）永远拿不到「解码器」这个符号 —— 于是换掉 WIC、以后加 KTX2 都不算接口变更。</p>
+<p>入口刻意是 `DecodeFromMemory`（内存 + 字节数）而不是「给个路径」：读取磁盘是 Resource 那条 IO 线程的职责，解码只认字节。路径只当**格式提示**（按扩展名嗅探），所以同一个解码器可以喂给任何来源的字节。</p>
+</div></div>
+<div class="card">
+<h3 class="card-title">包含的头文件</h3>
+
+<table>
+<thead><tr><th>头文件</th><th>功能</th></tr></thead>
+<tbody>
+<tr><td>AssetTypes.h</td><td>解码结果 `FDecodedImage` 的字段（维度 / 像素格式 / bSRGB）直接复用资产侧那套枚举 —— 避免在解码器和资产类型之间维护两份会各自漂移的定义</td></tr>
+<tr><td>&lt;cstddef&gt; / &lt;cstdint&gt;</td><td>`std::size_t` 字节数与定宽整型（像素字段要与磁盘布局逐位一致）</td></tr>
+<tr><td>&lt;string&gt; / &lt;string_view&gt;</td><td>返回小写扩展名；入参路径用 `string_view` 以免为格式提示复制一份字符串</td></tr>
+<tr><td>&lt;vector&gt;</td><td>解码后的像素缓冲</td></tr>
+</tbody></table>
+</div>
+<div class="card">
+<h3 class="card-title">自由函数（namespace TextureImageCodec）</h3>
+
+<table>
+<thead><tr><th>签名</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td><span class="kw">bool</span> DecodeFromMemory(<span class="kw">const</span> std::uint8_t* Bytes, std::size_t ByteCount, std::string_view SourcePath, FDecodedImage&amp; Out)</td><td>把内存里的栅格图（PNG/JPG…）解成 RGBA8 写入 `Out`。成功才返回 <span class="kw">true</span>；失败时 `Out` 不保证可用。`SourcePath` 只用于扩展名嗅探（决定走哪条编解码路径），不读盘 —— 这也是它能被别的来源（打包后的字节、测试里的内存数据）复用的原因。</td></tr>
+<tr><td>std::string GetExtensionLower(std::string_view Path)</td><td>取小写扩展名（含点，如 `.png`）；没有扩展名返回空串。单独拎出来是因为「按扩展名分流」在解码与解码之外都要用，集中一处就只有一个大小写处理口径</td></tr>
+<tr><td><span class="kw">bool</span> IsRasterExtension(std::string_view Ext)</td><td>该扩展名是否属于 WIC 能解的栅格格式。importer 用它决定「交给图像解码」还是「当作原生容器拒绝」，使格式清单只此一份</td></tr>
+</tbody></table>
+</div>
+<div class="ent e-struct" id="Private__TextureImageCodec_h-0">
+<h3><span class="kind">结构体</span> FDecodedImage</h3>
+<div class="sect"><div class="doc">
+<p>一次解码的 CPU 图像载荷。它是个**中转记录**：importer 把它的字段抄进 FTexture 的 payload 构造函数，抄完即弃 —— 所以它不需要虚函数、不需要导出标记，也不可能被跨 DLL 持有。</p>
+</div></div>
+<div class="sect">
+<h4>字段</h4>
+<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td>ETextureDimension Dimension = ETextureDimension::Tex2D</td><td>维度/2D/3D/Cube/数组）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>ETexturePixelFormat Format = ETexturePixelFormat::RGBA8</td><td>解码后的像素格式（当前恒为 RGBA8）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>std::uint32_t Width = 0</td><td>宽（像素）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>std::uint32_t Height = 0</td><td>高（像素）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>std::uint32_t Depth = 1</td><td>3D 贴图深度；其余维度恒为 1</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>std::uint32_t ArrayLayers = 1</td><td>数组层数 / Cube 的 6 面</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>std::uint32_t MipCount = 1</td><td>mip 级数</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">bool</span> bSRGB = <span class="kw">true</span></td><td>像素是否按 sRGB 解释（决定 GPU 侧采样是否做线性化）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>std::vector&lt;std::uint8_t&gt; Pixels</td><td>解码后的像素字节（RGBA8，行优先）</td></tr>
+</tbody></table></div>
+</div>
 </div>
 <div class="pane" id="pane-Public__AssetApi_h">
 <div class="hdr">Public/AssetApi.h</div>
-<h2 class="file-title">AssetApi.h</h2>
-<div class="empty">（尚未声明内容 —— 在 Tools/docs_content.py 里加一条 Header(&quot;Public/AssetApi.h&quot;)，再逐类声明 Class / Interface / Field）</div>
+<h2 class="file-title">AssetApi.h —— 插件导出标记</h2>
+<div class="card"><div class="doc">
+<p>这个头只有一条内容：导出标记 `MAHO_ASSET_API`。它存在的理由和资产类型本身一样 —— `FAssetsResource` 及其子类的实例在 Asset.dll 里构造，却由 Resource 的目录销毁，而触发导入的调用方可能是**早于目录被卸载的子插件**。把类型标成 DLL 接口后，每个消费者都必须通过导入表引用该类型的 vftable 与删除析构，编译器就无法把「即将被释放的模块」的 vptr 烙进实例。拿掉这个标记，失败不是编译错误，而是 `<span class="kw">delete</span>` 里的静默 0xC0000005。</p>
+</div></div>
+<div class="card">
+<h3 class="card-title">包含的头文件</h3>
+
+<table>
+<thead><tr><th>头文件</th><th>功能</th></tr></thead>
+<tbody>
+<tr><td>Core/Export.h</td><td>`MAHO_EXPORT` / `MAHO_IMPORT` 原语。引擎 core 是插件唯一的下层依赖方向，本插件不 include 任何上层头</td></tr>
+</tbody></table>
+</div>
+<div class="ent e-macro" id="Public__AssetApi_h-0">
+<h3><span class="kind">宏</span> MAHO_ASSET_API <span class="base">: MAHO_EXPORT / MAHO_IMPORT</span></h3>
+<div class="sect"><div class="doc">
+<p>构建 Asset.dll 时（`MAHO_ASSET_MODULE_EXPORTS` 由本插件的构建定义）取 `MAHO_EXPORT`，其余消费者取 `MAHO_IMPORT` —— 同一份头在「我导出」与「我导入」两侧各自成立，无需维护两套声明，也不会有一份 header-<span class="kw">inline</span> 的副本被编进每个 DLL。</p>
+</div></div>
+</div>
 </div>
 <div class="pane" id="pane-Public__AssetTypes_h">
 <div class="hdr">Public/AssetTypes.h</div>
-<h2 class="file-title">AssetTypes.h</h2>
-<div class="empty">（尚未声明内容 —— 在 Tools/docs_content.py 里加一条 Header(&quot;Public/AssetTypes.h&quot;)，再逐类声明 Class / Interface / Field）</div>
+<h2 class="file-title">AssetTypes.h —— 具体资产类型（casset 容器 + 各 codec）</h2>
+<div class="card"><div class="doc">
+<p>Resource 插件只认识 `FResource` 基类、`FResourceSystem` 框架（IO 线程 + FName 目录）以及三个模板钩子（`TResourceImporter` / `TResourceExporter` / `TResourceCreator`）；**具体的资产类型全部落在本插件**：枚举（资产类型 / 像素格式 / 采样参数）、casset 容器`FAssetsResource`、以及贴图 / 静态网格 / 骨骼 / 动画 / 材质 / 文档型资产的类。</p>
+<p>分层的意图是让 Resource 保持类型无关（它只搬运字节），而「资产是什么」这件事只在这里定义。容器层与业务层的写入顺序也由此固定：子类 `Serialize` **先**调基类写容器头（magic + version + type + 依赖表），**再**追加自身字段 —— 顺序不能换，读回时容器头是定位业务字段的唯一起点。</p>
+<p>**每个具体类型都带 `MAHO_ASSET_API`**：实例在 Asset.dll 里构造、由目录销毁，触发导入的调用方可能先被卸载。导出标记把 vtable 与删除析构钉在本模块，使任何消费者都无法把自己（即将释放）的 vptr 烙进实例。</p>
+</div></div>
+<div class="card">
+<h3 class="card-title">包含的头文件</h3>
+
+<table>
+<thead><tr><th>头文件</th><th>功能</th></tr></thead>
+<tbody>
+<tr><td>AssetApi.h</td><td>本插件的导出标记 `MAHO_ASSET_API`（决定下面每个类型是导出还是导入）</td></tr>
+<tr><td>Resource.h</td><td>`FResource` 基类、`FResourceSystem`、以及三个要特化的模板钩子</td></tr>
+<tr><td>&lt;Archive.h&gt;</td><td>`Archive::ISerialize` / `FArchive`：casset 的序列化接口与字节流</td></tr>
+<tr><td>&lt;cstdint&gt; / &lt;span&gt;</td><td>枚举底层类型；`PeekCassetAssetType` 以 `std::span&lt;<span class="kw">const</span> std::uint8_t&gt;` 接收「还不确定是不是容器」的字节（只读、不拷贝、不做所有权假设）</td></tr>
+<tr><td>&lt;string&gt; / &lt;utility&gt; / &lt;vector&gt;</td><td>路径与字段名；`std::move` 转发构造参数；像素 / 顶点等载荷缓冲</td></tr>
+</tbody></table>
+</div>
+<div class="card">
+<h3 class="card-title">自由函数</h3>
+
+<table>
+<thead><tr><th>签名</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td>EAssetType PeekCassetAssetType(std::span&lt;<span class="kw">const</span> std::uint8_t&gt; Bytes)</td><td>只读固定容器头，返回其中记录的资产类型；字节不是可识别的容器（magic 不对 / 太短 / 版本不支持）时返回 `EAssetType::Unknown`。**不解码、不分配、不抛异常** —— 目的就是让调用方能在把文件交给资源系统之前挑对 `TResourceImporter&lt;T&gt;`。不认识的类型字节原样返回，由调用方判定为不支持。</td></tr>
+</tbody></table>
+</div>
+<div class="card">
+<h3 class="card-title">模板特化：TResourceCreator&lt;T&gt; —— 实例工厂（定义在类型自己的模块里）</h3>
+
+<table>
+<thead><tr><th>特化</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td>TResourceCreator&lt;FTexture1D / FTexture2D / FTexture3D / FTextureCube / FTexture2DArray / FTextureCubeArray&gt;</td><td>`Create(std::string_view Path)`：out-of-line 在 AssetTypes.cpp（Asset.dll）里构造实例</td></tr>
+<tr><td>TResourceCreator&lt;FTexture2D&gt;（第二重载）</td><td>`Create(std::string_view Path, <span class="kw">const</span> TResourceCreateDesc&lt;FTexture2D&gt;::FConfig&amp; Config)`：运行期建资源的那条路，用描述符填好维度 / 格式 / 采样参数</td></tr>
+<tr><td>TResourceCreator&lt;FMaterial / FStaticMesh / FSkeleton / FAnimation / FAnimationGraph / FPrefab&gt;</td><td>`Create(std::string_view Path)`：同上。**这里必须 out-of-line 定义、绝不能 <span class="kw">inline</span> 在头里**，否则 `Import&lt;T&gt;` / `CreateResource&lt;T&gt;` 会在调用方模块里实例化，vtable 又落回调用方</td></tr>
+</tbody></table>
+</div>
+<div class="card">
+<h3 class="card-title">模板特化：TResourceImporter&lt;T&gt; / TResourceExporter&lt;T&gt;（codec 只搬字节）</h3>
+
+<table>
+<thead><tr><th>特化</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td>TResourceImporter&lt;FTexture1D / 2D / 3D / Cube / 2DArray / CubeArray&gt;</td><td>`Import(<span class="kw">const</span> FImportConfig&amp;, std::span&lt;<span class="kw">const</span> std::uint8_t&gt;, T&amp;, FResourceSystem&amp;)`：所有维度共用一条解码路径（维度只是 payload 字段），各自转发到同一个私有 helper；函数体在私有 .cpp 里</td></tr>
+<tr><td>TResourceExporter&lt;贴图六类&gt;</td><td>`Export(<span class="kw">const</span> FExportConfig&amp;, <span class="kw">const</span> T&amp;, std::vector&lt;std::uint8_t&gt;&amp;)`：把 CPU 像素编码回磁盘字节</td></tr>
+<tr><td>TResourceImporter / TResourceExporter&lt;FMaterial / FStaticMesh / FSkeleton / FAnimation / FAnimationGraph / FPrefab&gt;</td><td>紧凑二进制往返（这些类型没有独立的外部文件格式，codec 与字段布局一一对应）</td></tr>
+<tr><td>`<span class="kw">using</span> FConfig = FImportConfig;`（importer）/ `FExportConfig`（exporter）</td><td>每个特化都要暴露 FConfig —— 因为 `FResourceSystem::Import&lt;T&gt;` 的形参就是 `TResourceImporter&lt;T&gt;::FConfig`，它必须在调用点可见</td></tr>
+</tbody></table>
+</div>
+<div class="ent e-enum" id="Public__AssetTypes_h-0">
+<h3><span class="kind">枚举</span> EAssetType <span class="base">: std::uint8_t</span></h3>
+<div class="sect"><div class="doc">
+<p>资产类型，从磁盘扩展名推断并记录进 casset 头。留一个 `UserBase` 给项目侧扩展 —— 引擎不预设某个具体编号，项目类型从它往上排，就不会和引擎类型撞号。</p>
+</div></div>
+<div class="sect">
+<h4>字段</h4>
+<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td>Unknown = 0</td><td>未知 / 无法识别（`PeekCassetAssetType` 的失败返回值）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>Material</td><td>材质</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>Texture</td><td>贴图</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>StaticMesh</td><td>静态网格</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>Skeleton</td><td>骨骼</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>Animation</td><td>动画</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>AnimationGraph</td><td>动画图</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>Prefab</td><td>预制体</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>UserBase</td><td>用户自定义类型的起点：项目类型从这里往上扩展，引擎永不占用</td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-enum" id="Public__AssetTypes_h-1">
+<h3><span class="kind">枚举</span> ETexturePixelFormat <span class="base">: std::uint8_t</span></h3>
+<div class="sect"><div class="doc">
+<p>像素格式。贴图侧的概念（不是 RHI 枚举），由 FRender 在建设 GPU 镜像时映射到 RHI 格式 —— 资产层因此不必 include 任何图形后端头。</p>
+</div></div>
+<div class="sect">
+<h4>字段</h4>
+<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td>Unknown = 0</td><td>未知（默认值，importer 必须覆盖它）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>RGBA8</td><td>8 位四通道（解码路径的默认输出）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>RGBA16F / RGBA32F</td><td>半精度 / 单精度浮点四通道</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>R8 / RG8 / RGB8</td><td>单 / 双 / 三通道 8 位</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>BlockCompressed</td><td>块压缩（具体 BC 格式见后几项）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>R16F</td><td>半精度单通道</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>DXT1 / DXT5 / BC7</td><td>常见块压缩格式</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>D32Sfloat</td><td>单通道深度</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>Count</td><td>枚举计数哨兵（便于校验与遍历）</td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-enum" id="Public__AssetTypes_h-2">
+<h3><span class="kind">枚举</span> ETextureDimension <span class="base">: std::uint8_t</span></h3>
+<div class="sect"><div class="doc">
+<p>贴图维度。Cube 与 CubeArray 各有一个短别名（`Cube` / `CubeArray`），因为调用点两种叫法都自然。</p>
+</div></div>
+<div class="sect">
+<h4>字段</h4>
+<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td>Unknown = 0</td><td>未知</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>Tex1D</td><td>一维</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>Tex2D</td><td>二维（默认）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>Tex3D</td><td>三维</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>TexCube</td><td>立方体贴图（6 面）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>Cube = TexCube</td><td>`TexCube` 的别名</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>TexCubeArray</td><td>立方体贴图数组</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>Tex2DArray</td><td>二维数组</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>CubeArray = TexCubeArray</td><td>`TexCubeArray` 的别名</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>Count</td><td>枚举计数哨兵（便于校验与遍历）</td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-enum" id="Public__AssetTypes_h-3">
+<h3><span class="kind">枚举</span> ETextureMirrorUsage <span class="base">: std::uint8_t</span></h3>
+<div class="sect"><div class="doc">
+<p>以 `CreateResource` 路径**程序化创建**的贴图，其 GPU 镜像的用途：FRender 据此设置Persistent 镜像的 RHI usage。资产层抽象 —— FRender 负责映射到 `ERHITextureUsage`。</p>
+</div></div>
+<div class="sect">
+<h4>字段</h4>
+<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td>Sampled = 0</td><td>普通采样贴图（默认）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>ColorTarget</td><td>作为颜色渲染目标（镜像带 attachment usage）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>DepthTarget</td><td>作为深度渲染目标</td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-enum" id="Public__AssetTypes_h-4">
+<h3><span class="kind">枚举</span> ETextureSamplerMode <span class="base">: std::uint8_t</span></h3>
+<div class="sect"><div class="doc">
+<p>采样过滤模式（GPU sampler 状态）。资产层抽象，FRender 映射到 `ERHIFilter`。</p>
+</div></div>
+<div class="sect">
+<h4>字段</h4>
+<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td>Nearest = 0</td><td>最近邻（像素风 / 数据贴图）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>Linear</td><td>线性（默认，平滑）</td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-enum" id="Public__AssetTypes_h-5">
+<h3><span class="kind">枚举</span> ETextureAddressMode <span class="base">: std::uint8_t</span></h3>
+<div class="sect"><div class="doc">
+<p>各轴环绕模式（GPU sampler 状态）。资产层抽象，FRender 映射到 `ERHIAddressMode`。U / V / W 三轴各存一份，所以平铺与夹取可以逐轴不同。</p>
+</div></div>
+<div class="sect">
+<h4>字段</h4>
+<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td>Repeat = 0</td><td>重复平铺（默认）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>MirroredRepeat</td><td>镜像重复</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>ClampToEdge</td><td>夹取到边界（UI / 图集常用）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>ClampToBorder</td><td>夹取到边界颜色</td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-struct" id="Public__AssetTypes_h-6">
+<h3><span class="kind">结构体</span> FAnimationKey</h3>
+<div class="sect"><div class="doc">
+<p>动画关键帧（值语义的小记录）。时间 + TRS 四元数/平移/缩放，按 Hiyajo 参考形态逐字段对齐 —— 编码布局与它一一对应。</p>
+</div></div>
+<div class="sect">
+<h4>字段</h4>
+<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">float</span> Time = 0.f</td><td>关键帧时间（秒）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">float</span> Translation[3] = {0, 0, 0}</td><td>平移</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">float</span> Rotation[4] = {0, 0, 0, 1}</td><td>旋转四元数，xyzw 顺序（注意不是常见文档的 wxyz）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">float</span> Scale[3] = {1, 1, 1}</td><td>缩放</td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-struct" id="Public__AssetTypes_h-7">
+<h3><span class="kind">结构体</span> FSkeletonBone</h3>
+<div class="sect"><div class="doc">
+<p>骨骼记录：名字 + 父索引 + 绑定姿态的局部矩阵。父索引用 `-1` 表示根（不是 0，因为 0 是合法骨骼下标）。</p>
+</div></div>
+<div class="sect">
+<h4>字段</h4>
+<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td>std::string Name</td><td>骨骼名（动画轨道按名字绑定，因此重命名骨骼不会破坏编号）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>std::int32_t ParentIndex = -1</td><td>父骨骼下标；`-1` = 根</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">float</span> BindLocal[16] = {单位矩阵}</td><td>绑定姿态的局部矩阵（列主序 4x4，行内直接展开）</td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-struct" id="Public__AssetTypes_h-8">
+<h3><span class="kind">结构体</span> FAnimationTrack</h3>
+<div class="sect"><div class="doc">
+<p>一条轨道 = 目标骨骼名 + 该骨骼的关键帧序列。先按名字再按索引绑定，是文档型动画的常见做法。</p>
+</div></div>
+<div class="sect">
+<h4>字段</h4>
+<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td>std::string TargetBoneName</td><td>目标骨骼名</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>std::vector&lt;FAnimationKey&gt; Keys</td><td>关键帧（按 Time 递增）</td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-class" id="Public__AssetTypes_h-9">
+<h3><span class="kind">类</span> FAssetsResource <span class="base">: FResource + Archive::ISerialize</span></h3>
+<div class="sect"><div class="doc">
+<p>casset 容器资源：磁盘上一个 casset 文件对应一个实例，持有容器头（type / version）与依赖表（引用表），并实现容器层 codec。**它是所有具体资产的共同基类**，把「容器怎么读写」这件事只声明一次；子类 `Serialize` 先调它写容器头，再追加业务字段。ResourceManager 只把磁盘字节读进 bulkdata 交给 importer，不关心具体引擎类型。</p>
+</div></div>
+<div class="sect">
+<h4>字段</h4>
+<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-protected">protected</span></td><td>EAssetType Type</td><td>资产类型（写进容器头）</td></tr>
+<tr><td><span class="acc a-protected">protected</span></td><td>std::uint32_t Version = 1</td><td>容器格式版本（字段布局变更时递增，读回据此分支）</td></tr>
+<tr><td><span class="acc a-protected">protected</span></td><td>std::vector&lt;std::string&gt; Dependencies</td><td>依赖表：本资产引用到的其它资产路径</td></tr>
+</tbody></table></div>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td>FAssetsResource(std::string InPath, EAssetType InType)</td><td>以路径 + 资产类型构造（类型会被写进容器头）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] EAssetType GetAssetType() <span class="kw">const</span></td><td>读容器头记录的资产类型</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] std::uint32_t GetCassetVersion() <span class="kw">const</span></td><td>读容器格式版本（读回时用于兼容分支）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">const</span> std::vector&lt;std::string&gt;&amp; GetDependencies() <span class="kw">const</span></td><td>读依赖表（引用到的其它资产路径）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> SetDependencies(std::vector&lt;std::string&gt; In)</td><td>整体写依赖表（引用表由导出方一次算好）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Serialize(Archive::FArchive&amp; Ar) <span class="kw">override</span></td><td>容器层 codec：magic + version + type + 依赖表。**不写任何业务字段** —— 业务字段是子类的责任</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>FAssetsResource(<span class="kw">const</span> FAssetsResource&amp;) / <span class="kw">operator</span>= —— 隐式删除</td><td>基类 `FResource` 只声明了移动而不声明拷贝，派生出的拷贝构造 / 拷贝赋值随之隐式删除。资源被 `unique_ptr` 持有，本来也不该按值复制（像素 / 顶点载荷复制代价高，且目录靠唯一性寻址）</td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-class" id="Public__AssetTypes_h-10">
+<h3><span class="kind">类</span> FTexture <span class="base">: FAssetsResource</span></h3>
+<div class="sect"><div class="doc">
+<p>CPU 像素容器（**不是** GPU 句柄）。所有贴图维度类型共用它，维度只是它内部的一个字段；各维度再派生出自己的类型，以便 `Import&lt;T&gt;` 有类型可依。它同时承载 GPU 镜像的构建参数（usage / 滤波 / 环绕 / lod bias）—— 因为镜像由 FRender 在 `OnAssetCreated` / `OnAssetImported` 里创建，参数必须随资源一起走到那里，而资产层不认识任何 RHI 类型。</p>
+</div></div>
+<div class="sect">
+<h4>字段</h4>
+<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-protected">protected</span></td><td>ETextureDimension Dimension = ETextureDimension::Tex2D</td><td>维度</td></tr>
+<tr><td><span class="acc a-protected">protected</span></td><td>ETexturePixelFormat PixelFormat = ETexturePixelFormat::Unknown</td><td>像素格式</td></tr>
+<tr><td><span class="acc a-protected">protected</span></td><td>std::uint32_t Width = 0</td><td>宽</td></tr>
+<tr><td><span class="acc a-protected">protected</span></td><td>std::uint32_t Height = 0</td><td>高</td></tr>
+<tr><td><span class="acc a-protected">protected</span></td><td>std::uint32_t Depth = 1</td><td>深度</td></tr>
+<tr><td><span class="acc a-protected">protected</span></td><td>std::uint32_t ArrayLayers = 1</td><td>数组层数</td></tr>
+<tr><td><span class="acc a-protected">protected</span></td><td>std::uint32_t MipCount = 1</td><td>mip 级数</td></tr>
+<tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">bool</span> bSRGB = <span class="kw">true</span></td><td>是否 sRGB</td></tr>
+<tr><td><span class="acc a-protected">protected</span></td><td>std::vector&lt;std::uint8_t&gt; Pixels</td><td>像素字节（镜像取走后被 `ReleaseBulk` 清空）</td></tr>
+<tr><td><span class="acc a-protected">protected</span></td><td>ETextureMirrorUsage MirrorUsage = ETextureMirrorUsage::Sampled</td><td>镜像用途</td></tr>
+<tr><td><span class="acc a-protected">protected</span></td><td>ETextureSamplerMode FilterMode = ETextureSamplerMode::Linear</td><td>滤波模式</td></tr>
+<tr><td><span class="acc a-protected">protected</span></td><td>ETextureAddressMode AddressU = ETextureAddressMode::Repeat</td><td>U 环绕</td></tr>
+<tr><td><span class="acc a-protected">protected</span></td><td>ETextureAddressMode AddressV = ETextureAddressMode::Repeat</td><td>V 环绕</td></tr>
+<tr><td><span class="acc a-protected">protected</span></td><td>ETextureAddressMode AddressW = ETextureAddressMode::Repeat</td><td>W 环绕</td></tr>
+<tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">float</span> LodBias = 0.0f</td><td>lod 偏移</td></tr>
+</tbody></table></div>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">explicit</span> FTexture(std::string InPath)</td><td>以路径构造空贴图（导入路径：codec 随后填字段）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Serialize(Archive::FArchive&amp; Ar) <span class="kw">override</span></td><td>casset payload：容器头 + 像素快照（解码后的 CPU 数据）。字段布局只在这里声明一次，构造与持久化共用同一份布局</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] ETextureDimension GetDimension() <span class="kw">const</span></td><td>读维度</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] ETexturePixelFormat GetPixelFormat() <span class="kw">const</span></td><td>读像素格式</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] std::uint32_t GetWidth() <span class="kw">const</span></td><td>宽</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] std::uint32_t GetHeight() <span class="kw">const</span></td><td>高</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] std::uint32_t GetDepth() <span class="kw">const</span></td><td>3D 深度</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] std::uint32_t GetArrayLayers() <span class="kw">const</span></td><td>数组层数 / Cube 面数</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] std::uint32_t GetMipCount() <span class="kw">const</span></td><td>mip 级数</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">bool</span> IsSRGB() <span class="kw">const</span></td><td>是否按 sRGB 解释</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">const</span> std::vector&lt;std::uint8_t&gt;&amp; GetPixels() <span class="kw">const</span></td><td>读像素（不可变）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] std::vector&lt;std::uint8_t&gt;&amp; GetPixelsMutable()</td><td>写像素（导出前的 fill-back 路径用）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] ETextureMirrorUsage GetMirrorUsage() <span class="kw">const</span></td><td>镜像用途（默认 Sampled）；由 `TResourceCreateDesc::Make` 设置，FRender 据此建 Persistent attachment</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> SetMirrorUsage(ETextureMirrorUsage Usage)</td><td>设置镜像用途</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] ETextureSamplerMode GetFilterMode() <span class="kw">const</span></td><td>镜像 sampler 的滤波模式（由描述符设置，或保持导入默认）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> SetFilterMode(ETextureSamplerMode Mode)</td><td>设置滤波模式</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] ETextureAddressMode GetAddressU() <span class="kw">const</span></td><td>U 轴环绕</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> SetAddressU(ETextureAddressMode Mode)</td><td>设置 U 轴环绕</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] ETextureAddressMode GetAddressV() <span class="kw">const</span></td><td>V 轴环绕</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> SetAddressV(ETextureAddressMode Mode)</td><td>设置 V 轴环绕</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] ETextureAddressMode GetAddressW() <span class="kw">const</span></td><td>W 轴环绕</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> SetAddressW(ETextureAddressMode Mode)</td><td>设置 W 轴环绕</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">float</span> GetLodBias() <span class="kw">const</span></td><td>mip lod 偏移</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> SetLodBias(<span class="kw">float</span> Bias)</td><td>设置 lod 偏移</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> ReleaseBulk() <span class="kw">override</span></td><td>渲染镜像取走像素后丢掉 CPU 载荷以回收内存（`clear` + `shrink_to_fit`，后者是必须的 —— 只 clear 不会把大缓冲还给分配器）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">bool</span> HasBulk() <span class="kw">const</span> <span class="kw">override</span></td><td>CPU 载荷是否还在（导出时会据此触发 GPU fill-back）</td></tr>
+<tr><td><span class="acc a-protected">protected</span></td><td>FTexture(std::string InPath, ETextureDimension InDimension, ETexturePixelFormat InFormat, std::uint32_t InWidth, std::uint32_t InHeight, std::uint32_t InDepth, std::uint32_t InArrayLayers, std::uint32_t InMipCount, <span class="kw">bool</span> bInSRGB, std::vector&lt;std::uint8_t&gt; InPixels)</td><td>像素 payload 构造：各维度子类以自身参数转发到它，字段布局仍然只有一处</td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-class" id="Public__AssetTypes_h-11">
+<h3><span class="kind">类</span> FTexture1D <span class="base">: FTexture</span></h3>
+<div class="sect"><div class="doc">
+<p>一维贴图的具体类型。存在理由不是「多态」（载荷全在基类）而是**类型**：`Import&lt;FTexture1D&gt;` / `CreateResource&lt;FTexture1D&gt;` 需要一个确定类型来选特化，维度差异则收敛在那个维度专用的 payload 构造函数里。</p>
+</div></div>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">explicit</span> FTexture1D(std::string InPath)</td><td>以路径构造（导入路径）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>FTexture1D(std::string InPath, ETexturePixelFormat InFormat, std::uint32_t InWidth, std::uint32_t InArrayLayers, std::uint32_t InMipCount, <span class="kw">bool</span> bInSRGB, std::vector&lt;std::uint8_t&gt; InPixels)</td><td>维度专用 payload 构造：高 / 深固定为 1，调用方无法给出矛盾的维度组合</td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-class" id="Public__AssetTypes_h-12">
+<h3><span class="kind">类</span> FTexture2D <span class="base">: FTexture</span></h3>
+<div class="sect"><div class="doc">
+<p>二维贴图的类型（最常用的一类，也是唯一有 `TResourceCreateDesc` 特化的 —— 运行期程序化建贴图目前只走 2D，其余维度按需再加描述符特化）。</p>
+</div></div>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">explicit</span> FTexture2D(std::string InPath)</td><td>以路径构造（导入路径）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>FTexture2D(std::string InPath, ETexturePixelFormat InFormat, std::uint32_t InWidth, std::uint32_t InHeight, std::uint32_t InMipCount, <span class="kw">bool</span> bInSRGB, std::vector&lt;std::uint8_t&gt; InPixels)</td><td>维度专用 payload 构造：深度 / 层数固定为 1</td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-class" id="Public__AssetTypes_h-13">
+<h3><span class="kind">类</span> FTexture3D <span class="base">: FTexture</span></h3>
+<div class="sect"><div class="doc">
+<p>三维贴图类型（体积数据）。</p>
+</div></div>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">explicit</span> FTexture3D(std::string InPath)</td><td>以路径构造（导入路径）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>FTexture3D(std::string InPath, ETexturePixelFormat InFormat, std::uint32_t InWidth, std::uint32_t InHeight, std::uint32_t InDepth, std::uint32_t InMipCount, <span class="kw">bool</span> bInSRGB, std::vector&lt;std::uint8_t&gt; InPixels)</td><td>维度专用 payload 构造：这里才需要深度</td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-class" id="Public__AssetTypes_h-14">
+<h3><span class="kind">类</span> FTextureCube <span class="base">: FTexture</span></h3>
+<div class="sect"><div class="doc">
+<p>立方体贴图类型。**面数 6 由构造函数写死**（`ArrayLayers = 6`）—— 调用方给不出「立方体却有 5 层」这种矛盾状态。</p>
+</div></div>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">explicit</span> FTextureCube(std::string InPath)</td><td>以路径构造（导入路径）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>FTextureCube(std::string InPath, ETexturePixelFormat InFormat, std::uint32_t InSize, std::uint32_t InMipCount, <span class="kw">bool</span> bInSRGB, std::vector&lt;std::uint8_t&gt; InPixels)</td><td>维度专用 payload 构造：只收边长，宽 = 高 = Size，层数恒为 6</td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-class" id="Public__AssetTypes_h-15">
+<h3><span class="kind">类</span> FTexture2DArray <span class="base">: FTexture</span></h3>
+<div class="sect"><div class="doc">
+<p>二维数组贴图类型（同尺寸的多层 2D，层数可变）。</p>
+</div></div>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">explicit</span> FTexture2DArray(std::string InPath)</td><td>以路径构造（导入路径）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>FTexture2DArray(std::string InPath, ETexturePixelFormat InFormat, std::uint32_t InWidth, std::uint32_t InHeight, std::uint32_t InArrayLayers, std::uint32_t InMipCount, <span class="kw">bool</span> bInSRGB, std::vector&lt;std::uint8_t&gt; InPixels)</td><td>维度专用 payload 构造：深度固定为 1，层数由调用方给出</td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-class" id="Public__AssetTypes_h-16">
+<h3><span class="kind">类</span> FTextureCubeArray <span class="base">: FTexture</span></h3>
+<div class="sect"><div class="doc">
+<p>立方体数组贴图类型（6 x N 面，常用于环境探针集合）。</p>
+</div></div>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">explicit</span> FTextureCubeArray(std::string InPath)</td><td>以路径构造（导入路径）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>FTextureCubeArray(std::string InPath, ETexturePixelFormat InFormat, std::uint32_t InSize, std::uint32_t InArrayLayers, std::uint32_t InMipCount, <span class="kw">bool</span> bInSRGB, std::vector&lt;std::uint8_t&gt; InPixels)</td><td>维度专用 payload 构造：边长 + 层数</td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-struct" id="Public__AssetTypes_h-17">
+<h3><span class="kind">结构体</span> TResourceCreateDesc&lt;FTexture2D&gt; <span class="base">: 模板特化（描述符 → 已填好的资源）</span></h3>
+<div class="sect"><div class="doc">
+<p>`FResourceSystem::CreateResource&lt;FTexture2D&gt;` 的描述符：携带建成一张 GPU 贴图所需的全部参数，由 `Make` 填进资源实例。`Pixels` 为空表示「只建镜像、不上传内容」。描述符是值语义的小记录，`Make` 负责把里面的参数分发到资源的 setter 上（含镜像 usage / 采样参数），这样镜像的创建参数与资源实例不会各说各话。</p>
+</div></div>
+<div class="sect">
+<h4>字段</h4>
+<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td>ETexturePixelFormat Format = ETexturePixelFormat::RGBA8</td><td>像素格式</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>std::uint32_t Width = 0 / Height = 0</td><td>尺寸（须由调用方给出）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>std::uint32_t ArrayLayers = 1</td><td>层数</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>std::uint32_t MipCount = 1</td><td>mip 级数</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">bool</span> bSRGB = <span class="kw">true</span></td><td>是否 sRGB</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>ETextureMirrorUsage Usage = ETextureMirrorUsage::Sampled</td><td>镜像用途</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>ETextureSamplerMode FilterMode = ETextureSamplerMode::Linear</td><td>镜像 sampler 滤波</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>ETextureAddressMode AddressU / AddressV / AddressW = ETextureAddressMode::Repeat</td><td>镜像 sampler 三轴环绕</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">float</span> LodBias = 0.0f</td><td>镜像 sampler lod 偏移</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>std::vector&lt;std::uint8_t&gt; Pixels</td><td>像素内容；空表示只建镜像、不上传</td></tr>
+</tbody></table></div>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">static</span> FTexture2D Make(std::string_view Path, <span class="kw">const</span> FConfig&amp; Config)</td><td>按描述符造出资源：先构造 `FTexture2D`（维度 / 格式 / 尺寸 / mip / sRGB / 像素），再把镜像 usage、滤波、三轴环绕、lod bias 逐个写进资源，供 FRender 的 `OnAssetMirrorCreated` 建 Persistent 镜像时读取</td></tr>
+</tbody></table></div>
+<div class="sect">
+<h4>嵌套</h4>
+<table><thead><tr><th>访问域</th><th>名称</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td>FConfig</td><td>创建参数集，默认值即「一张默认的 2D 采样贴图」</td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-class" id="Public__AssetTypes_h-18">
+<h3><span class="kind">类</span> FStaticMesh <span class="base">: FAssetsResource</span></h3>
+<div class="sect"><div class="doc">
+<p>静态网格资产：顶点位置 / 法线 / UV + 索引 + 材质引用。几何数据以扁平的 `std::vector&lt;<span class="kw">float</span>&gt;` 存放（而不是顶点结构体数组）—— 这样磁盘布局与内存布局都是「同一个 <span class="kw">float</span> 序列」，codec 不需要处理结构体 padding。</p>
+</div></div>
+<div class="sect">
+<h4>字段</h4>
+<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-protected">protected</span></td><td>std::string MaterialPath</td><td>材质资产路径（软引用：按路径在目录里解析，不做指针绑定）</td></tr>
+<tr><td><span class="acc a-protected">protected</span></td><td>std::vector&lt;<span class="kw">float</span>&gt; Positions</td><td>顶点位置</td></tr>
+<tr><td><span class="acc a-protected">protected</span></td><td>std::vector&lt;<span class="kw">float</span>&gt; Normals</td><td>顶点法线</td></tr>
+<tr><td><span class="acc a-protected">protected</span></td><td>std::vector&lt;<span class="kw">float</span>&gt; UVs</td><td>顶点 UV</td></tr>
+<tr><td><span class="acc a-protected">protected</span></td><td>std::vector&lt;std::uint32_t&gt; Indices</td><td>三角形索引</td></tr>
+</tbody></table></div>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">explicit</span> FStaticMesh(std::string InPath)</td><td>以路径构造（类型标记为 StaticMesh）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Serialize(Archive::FArchive&amp; Ar) <span class="kw">override</span></td><td>casset payload：容器头 + 几何数据</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">const</span> std::string&amp; GetMaterial() <span class="kw">const</span></td><td>读材质资产路径</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">const</span> std::vector&lt;<span class="kw">float</span>&gt;&amp; GetPositions() <span class="kw">const</span></td><td>读顶点位置（每顶点 3 <span class="kw">float</span>）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">const</span> std::vector&lt;<span class="kw">float</span>&gt;&amp; GetNormals() <span class="kw">const</span></td><td>读法线（每顶点 3 <span class="kw">float</span>）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">const</span> std::vector&lt;<span class="kw">float</span>&gt;&amp; GetUVs() <span class="kw">const</span></td><td>读 UV（每顶点 2 <span class="kw">float</span>）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">const</span> std::vector&lt;std::uint32_t&gt;&amp; GetIndices() <span class="kw">const</span></td><td>读索引</td></tr>
+<tr><td><span class="acc a-protected">protected</span></td><td>FStaticMesh(std::string InPath, std::string InMaterial, std::vector&lt;<span class="kw">float</span>&gt; InPositions, std::vector&lt;<span class="kw">float</span>&gt; InNormals, std::vector&lt;<span class="kw">float</span>&gt; InUVs, std::vector&lt;std::uint32_t&gt; InIndices)</td><td>几何 payload 构造：字段布局只在 `Serialize` 声明一次（构造与持久化共用）</td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-class" id="Public__AssetTypes_h-19">
+<h3><span class="kind">类</span> FSkeleton <span class="base">: FAssetsResource</span></h3>
+<div class="sect"><div class="doc">
+<p>骨骼资产：一列骨骼记录（名字 + 父索引 + 绑定矩阵）。</p>
+</div></div>
+<div class="sect">
+<h4>字段</h4>
+<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-protected">protected</span></td><td>std::vector&lt;FSkeletonBone&gt; Bones</td><td>骨骼表（按父先子后的顺序存放，读回即可直接建层级）</td></tr>
+</tbody></table></div>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">explicit</span> FSkeleton(std::string InPath)</td><td>以路径构造（类型标记为 Skeleton）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Serialize(Archive::FArchive&amp; Ar) <span class="kw">override</span></td><td>casset payload：容器头 + 骨骼表</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">const</span> std::vector&lt;FSkeletonBone&gt;&amp; GetBones() <span class="kw">const</span></td><td>读骨骼表</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> SetBones(std::vector&lt;FSkeletonBone&gt; InBones)</td><td>整体替换骨骼表（解码后一次写入）</td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-class" id="Public__AssetTypes_h-20">
+<h3><span class="kind">类</span> FAnimation <span class="base">: FAssetsResource</span></h3>
+<div class="sect"><div class="doc">
+<p>动画资产：指向骨骼资产的软引用 + 时长 + 轨道表。骨骼用**路径**引用而不是指针 —— 资产之间靠路径解析，加载顺序因此不受约束。</p>
+</div></div>
+<div class="sect">
+<h4>字段</h4>
+<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-protected">protected</span></td><td>std::string SkeletonPath</td><td>骨骼资产路径（软引用）</td></tr>
+<tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">float</span> DurationSeconds = 0.f</td><td>时长（秒）</td></tr>
+<tr><td><span class="acc a-protected">protected</span></td><td>std::vector&lt;FAnimationTrack&gt; Tracks</td><td>轨道表</td></tr>
+</tbody></table></div>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">explicit</span> FAnimation(std::string InPath)</td><td>以路径构造（类型标记为 Animation）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Serialize(Archive::FArchive&amp; Ar) <span class="kw">override</span></td><td>casset payload：容器头 + 骨骼引用 + 时长 + 轨道</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">const</span> std::string&amp; GetSkeleton() <span class="kw">const</span></td><td>读骨骼资产路径</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> SetSkeleton(std::string Path)</td><td>设置骨骼资产路径</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">float</span> GetDurationSeconds() <span class="kw">const</span></td><td>动画时长（秒）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> SetDurationSeconds(<span class="kw">float</span> Seconds)</td><td>设置时长</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">const</span> std::vector&lt;FAnimationTrack&gt;&amp; GetTracks() <span class="kw">const</span></td><td>读轨道表</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> SetTracks(std::vector&lt;FAnimationTrack&gt; InTracks)</td><td>整体替换轨道表</td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-class" id="Public__AssetTypes_h-21">
+<h3><span class="kind">类</span> FMaterial <span class="base">: FAssetsResource</span></h3>
+<div class="sect"><div class="doc">
+<p>材质资产：五张贴图引用 + 颜色 / 金属度 / 粗糙度 / 自发光因子。**注意它的因子字段是 <span class="kw">public</span>、路径字段是 <span class="kw">protected</span>** —— 因子是渲染与编辑面板都要频繁读写的标量，路径则只应通过 getter/setter 成对访问（保证引用表的维护口径一致）。它的 `Serialize` 直接内联在头里，因为字段全是 POD，无需隐藏实现。</p>
+</div></div>
+<div class="sect">
+<h4>字段</h4>
+<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">float</span> BaseColorFactor[4] = {1, 1, 1, 1}</td><td>基础色因子（RGBA）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">float</span> MetallicFactor = 0.f</td><td>金属度</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">float</span> RoughnessFactor = 1.f</td><td>粗糙度</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">float</span> EmissiveFactor[3] = {0, 0, 0}</td><td>自发光颜色</td></tr>
+<tr><td><span class="acc a-protected">protected</span></td><td>std::string BaseColorPath</td><td>基础色贴图路径（软引用）</td></tr>
+<tr><td><span class="acc a-protected">protected</span></td><td>std::string NormalPath</td><td>法线贴图路径</td></tr>
+<tr><td><span class="acc a-protected">protected</span></td><td>std::string MetallicRoughnessPath</td><td>金属度-粗糙度贴图路径</td></tr>
+<tr><td><span class="acc a-protected">protected</span></td><td>std::string OcclusionPath</td><td>遮蔽贴图路径</td></tr>
+<tr><td><span class="acc a-protected">protected</span></td><td>std::string EmissivePath</td><td>自发光贴图路径</td></tr>
+</tbody></table></div>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">explicit</span> FMaterial(std::string InPath)</td><td>以路径构造（类型标记为 Material）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">const</span> std::string&amp; GetBaseColorTexture() <span class="kw">const</span></td><td>读基础色贴图路径</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> SetBaseColorTexture(std::string Path)</td><td>设置基础色贴图路径</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">const</span> std::string&amp; GetNormalTexture() <span class="kw">const</span></td><td>读法线贴图路径</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> SetNormalTexture(std::string Path)</td><td>设置法线贴图路径</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">const</span> std::string&amp; GetMetallicRoughnessTexture() <span class="kw">const</span></td><td>读金属度-粗糙度贴图路径</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> SetMetallicRoughnessTexture(std::string Path)</td><td>设置金属度-粗糙度贴图路径</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">const</span> std::string&amp; GetOcclusionTexture() <span class="kw">const</span></td><td>读遮蔽贴图路径</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> SetOcclusionTexture(std::string Path)</td><td>设置遮蔽贴图路径</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">const</span> std::string&amp; GetEmissiveTexture() <span class="kw">const</span></td><td>读自发光贴图路径</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> SetEmissiveTexture(std::string Path)</td><td>设置自发光贴图路径</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Serialize(Archive::FArchive&amp; Ar) <span class="kw">override</span></td><td>casset payload：**先** `FAssetsResource::Serialize` 写容器头，**再**追加材质业务字段（五条路径 + 四个基础色分量 + 金属度/粗糙度 + 三个自发光分量）。顺序与读回时一致</td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-class" id="Public__AssetTypes_h-22">
+<h3><span class="kind">类</span> FAnimationGraph <span class="base">: FAssetsResource</span></h3>
+<div class="sect"><div class="doc">
+<p>动画图的**文档型**持有者：内容是一段 JSON，引擎 core 不解释它。引擎只负责把文档存下来、按路径取用 —— 图的结构归上层（编辑器 / 运行时那侧）定义，所以升级图格式不需要动引擎核心的 codec。</p>
+</div></div>
+<div class="sect">
+<h4>字段</h4>
+<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-protected">protected</span></td><td>std::string DocumentJson</td><td>文档内容（引擎不解析）</td></tr>
+</tbody></table></div>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">explicit</span> FAnimationGraph(std::string InPath)</td><td>以路径构造（类型标记为 AnimationGraph）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">const</span> std::string&amp; GetDocumentJson() <span class="kw">const</span></td><td>读文档 JSON</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> SetDocumentJson(std::string Json)</td><td>整体写入文档 JSON</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Serialize(Archive::FArchive&amp; Ar) <span class="kw">override</span></td><td>casset payload：先写容器头，再追加文档字段（一个字符串，故格式演化只影响文档自身）</td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-class" id="Public__AssetTypes_h-23">
+<h3><span class="kind">类</span> FPrefab <span class="base">: FAssetsResource</span></h3>
+<div class="sect"><div class="doc">
+<p>预制体：同样是文档型持有者（JSON 正文），与 `FAnimationGraph` 结构一致但资产类型不同 —— 类型不同意味着 importer / exporter / creator 各走自己的特化，在目录里也不会互相覆盖。</p>
+</div></div>
+<div class="sect">
+<h4>字段</h4>
+<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-protected">protected</span></td><td>std::string DocumentJson</td><td>文档内容（引擎不解析）</td></tr>
+</tbody></table></div>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">explicit</span> FPrefab(std::string InPath)</td><td>以路径构造（类型标记为 Prefab）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">const</span> std::string&amp; GetDocumentJson() <span class="kw">const</span></td><td>读文档 JSON</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> SetDocumentJson(std::string Json)</td><td>整体写入文档 JSON</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Serialize(Archive::FArchive&amp; Ar) <span class="kw">override</span></td><td>casset payload：先写容器头，再追加文档字段</td></tr>
+</tbody></table></div>
+</div>
 </div></div>
 </div>
 <script>

@@ -79,7 +79,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div id="app">
   <div id="side">
     <h1>Maho 引擎源码</h1>
-    <div class="search" title="左侧扫描 Source/**/*.h：2 个头文件 · 已声明 0 个 · 0 个实体 / 0 个成员 ｜ 内容在 Tools/docs_content.py 里逐条声明">
+    <div class="search" title="左侧扫描 Source/**/*.h：2 个头文件 · 已声明 2 个 · 2 个实体 / 10 个成员 ｜ 内容在 Tools/docs_content.py 里逐条声明">
       <input id="q" type="search" placeholder="搜索头文件…  （如 Frame、Core、Entry）" autocomplete="off">
     </div>
     <div id="tree"><ul>
@@ -93,13 +93,85 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
   </div>
   <div id="main"><div class="pane" id="pane-Public__Exception_h">
 <div class="hdr">Public/Exception.h</div>
-<h2 class="file-title">Exception.h</h2>
-<div class="empty">（尚未声明内容 —— 在 Tools/docs_content.py 里加一条 Header(&quot;Public/Exception.h&quot;)，再逐类声明 Class / Interface / Field）</div>
+<h2 class="file-title">Exception.h —— 非致命异常广播中心（服务层）</h2>
+<div class="card"><div class="doc">
+<p>**非致命**异常的中央分发点：业务代码捕获到一个可恢复的错误后调 `ReportException`，它同步广播给所有 `OnException` 订阅者（日志、遥测、崩溃上报各自订阅自己关心的）。</p>
+<p>**为什么这里永不 abort**：致命错误有另一条路（`Core/Fatal`）。把两者分开是刻意的 —— 「报告一个问题」和「终止进程」是两种完全不同的策略，混在一个接口里会让上层无法在不中止程序的前提下上报。</p>
+<p>**为什么带 `std::exception` 的重载**：绝大多数 `<span class="kw">catch</span>` 抓到的是标准异常，这个重载把 `what()` 取出来转发，省掉每个调用点重复写 `e.what()`。</p>
+<p>**为什么广播是同步的**：上报点常常紧接着就要用日志的顺序定位问题，异步投递会让日志与崩溃现场错位；广播本身只做转发，不应该有昂贵工作。</p>
+</div></div>
+<div class="card">
+<h3 class="card-title">包含的头文件</h3>
+
+<table>
+<thead><tr><th>头文件</th><th>功能</th></tr></thead>
+<tbody>
+<tr><td>Core/Delegate.h</td><td>`TMulticastEvent` —— 订阅点（**关键积木**：广播语义、线程安全与解绑都在它内部）</td></tr>
+<tr><td>&lt;Maho.h&gt;</td><td>引擎聚合头（`FFrameExtension` / `IPipeline` / `Core/Export.h` 等）</td></tr>
+<tr><td>&lt;Engine/Engine.h&gt;</td><td>`FEngineBase` 与 10 个 stage 接口（本帧挂载 Init / Shutdown 那 6 个）</td></tr>
+<tr><td>ExceptionApi.h</td><td>`MAHO_EXCEPTION_API` —— 本模块的导出标签</td></tr>
+<tr><td>&lt;exception&gt;</td><td>`std::exception` 重载的形参类型</td></tr>
+<tr><td>&lt;string&gt; / &lt;string_view&gt;</td><td>消息的拥有者与观察者：订阅回调收到的是 `<span class="kw">const</span> std::string&amp;`，上报入口用 `string_view` 零拷贝接住</td></tr>
+</tbody></table>
+</div>
+<div class="card">
+<h3 class="card-title">自由函数</h3>
+
+<table>
+<thead><tr><th>签名</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td>MAHO_EXCEPTION_API FException* GetExceptionCenter()</td><td>全局访问中心：`Initialize` 里发布、`Shutdown` 里清除；未上线时返回 `<span class="kw">nullptr</span>`（**调用方必须先判空** —— 上报路径不该依赖「中心一定在」这个假设）。返回函数而非导出裸变量：跨 DLL 的裸变量在很多编译组合下拿不到同一份实例</td></tr>
+</tbody></table>
+</div>
+<div class="ent e-class" id="Public__Exception_h-0">
+<h3><span class="kind">类</span> FException <span class="base">: FFrameExtension, IPipeline&lt;IPreInit, IInit, IPostInit, IPreShutdown, IShutdown, IPostShutdown&gt;</span></h3>
+<div class="sect"><div class="doc">
+<p>异常中心本体 —— **一个帧**（挂 6 个 stage），建立与拆除由调度图排序。</p>
+<p>**为什么是帧而不是全局对象**：订阅者要在自己的 `IShutdown` 里解绑，而「先解绑再释放」这件事只有依赖图能保证；全局对象的销毁顺序是无序的，那会让广播撞上已销毁的订阅者。</p>
+<p>当前 4 个 stage 是空实现：把它们列进 `IPipeline` 是为了保留完整的时钟点，将来把工作挪到更早 / 更晚都不必改 stage 列表（改列表会让所有声明相对顺序的帧重新对表）。</p>
+</div></div>
+<div class="sect">
+<h4>字段</h4>
+<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td>TMulticastEvent&lt;<span class="kw">void</span>(<span class="kw">const</span> std::string&amp;)&gt; OnException</td><td>订阅点：**按值传 `<span class="kw">const</span> std::string&amp;`** 而不是 `string_view`，因为广播是同步的、订阅者可能在上报者返回前就持有它；`TMulticastEvent` 自带锁，因此可以在任意线程上报</td></tr>
+</tbody></table></div>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td>MAHO_DECLARE_FRAME(FException)</td><td>声明帧身份：稳定的字符串字面量名字 + `CreateFrame` 工厂 —— **名字是字面量**才让「按名字引用」这件事在模块卸载后依然安全</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> ReportException(std::string_view Message)</td><td>上报一条非致命异常（广播给 `OnException`）。`Message` 是视图 ⇒ 实现内部会拷成 `std::string` 再广播，因为订阅者可能把消息留存到本帧之后</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> ReportException(<span class="kw">const</span> std::exception&amp; Error)</td><td>从标准异常上报：转发 `what()`。**为什么值得单独一个重载**：`<span class="kw">catch</span>` 现场几乎总能拿到一个 `std::exception`，有这个重载就不必到处手写 `e.what()`，也避免了「忘了取 what() 只报类型名」这种信息量极低的上报</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> PreInitialize(FEngineBase&amp;) <span class="kw">override</span></td><td>空：本帧不需要更早的时钟点</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> Initialize(FEngineBase&amp; Engine) <span class="kw">override</span></td><td>发布全局访问中心（`GetExceptionCenter()` 从这里开始非空）</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> PostInitialize(FEngineBase&amp;) <span class="kw">override</span></td><td>空</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> PreShutdown(FEngineBase&amp;) <span class="kw">override</span></td><td>空</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> Shutdown(FEngineBase&amp; Engine) <span class="kw">override</span></td><td>清除全局访问中心 —— 对称于 `Initialize`；此后 `GetExceptionCenter()` 返回 `<span class="kw">nullptr</span>`，调用方的判空分支因此是**必需的**，而不是防御性写法</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> PostShutdown(FEngineBase&amp;) <span class="kw">override</span></td><td>空</td></tr>
+</tbody></table></div>
+</div>
 </div>
 <div class="pane" id="pane-Public__ExceptionApi_h">
 <div class="hdr">Public/ExceptionApi.h</div>
-<h2 class="file-title">ExceptionApi.h</h2>
-<div class="empty">（尚未声明内容 —— 在 Tools/docs_content.py 里加一条 Header(&quot;Public/ExceptionApi.h&quot;)，再逐类声明 Class / Interface / Field）</div>
+<h2 class="file-title">ExceptionApi.h —— 模块导出标签</h2>
+<div class="card"><div class="doc">
+<p>本模块的 DLL 导出标签。独立成头，让「只想上报一次异常」的消费方只需包含这个极小的头拿到符号可见性约定。</p>
+</div></div>
+<div class="card">
+<h3 class="card-title">包含的头文件</h3>
+
+<table>
+<thead><tr><th>头文件</th><th>功能</th></tr></thead>
+<tbody>
+<tr><td>Core/Export.h</td><td>`MAHO_EXPORT` / `MAHO_IMPORT`（引擎核心提供，插件侧不自定义宏本体）</td></tr>
+</tbody></table>
+</div>
+<div class="ent e-macro" id="Public__ExceptionApi_h-0">
+<h3><span class="kind">宏</span> MAHO_EXCEPTION_API <span class="base">: MAHO_EXPORT / MAHO_IMPORT（随构建开关切换）</span></h3>
+<div class="sect"><div class="doc">
+<p>编译 `Exception.dll` 时构建系统定义 `MAHO_EXCEPTION_MODULE_EXPORTS` ⇒ `MAHO_EXPORT`；消费方展开成 `MAHO_IMPORT`。</p>
+<p>**为什么必须有**：`FException* GetExceptionCenter()` 的值要跨 DLL 使用，`FException` 的虚表与删除析构符只能在本模块生成 —— `dllimport` 禁止消费方各自生成一份，否则销毁时可能跳进已卸载的镜像（静默访问冲突）。</p>
+</div></div>
+</div>
 </div></div>
 </div>
 <script>

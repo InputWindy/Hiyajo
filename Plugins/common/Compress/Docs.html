@@ -79,7 +79,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div id="app">
   <div id="side">
     <h1>Maho 引擎源码</h1>
-    <div class="search" title="左侧扫描 Source/**/*.h：1 个头文件 · 已声明 0 个 · 0 个实体 / 0 个成员 ｜ 内容在 Tools/docs_content.py 里逐条声明">
+    <div class="search" title="左侧扫描 Source/**/*.h：1 个头文件 · 已声明 1 个 · 0 个实体 / 0 个成员 ｜ 内容在 Tools/docs_content.py 里逐条声明">
       <input id="q" type="search" placeholder="搜索头文件…  （如 Frame、Core、Entry）" autocomplete="off">
     </div>
     <div id="tree"><ul>
@@ -92,8 +92,36 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
   </div>
   <div id="main"><div class="pane" id="pane-Public__Compress_h">
 <div class="hdr">Public/Compress.h</div>
-<h2 class="file-title">Compress.h</h2>
-<div class="empty">（尚未声明内容 —— 在 Tools/docs_content.py 里加一条 Header(&quot;Public/Compress.h&quot;)，再逐类声明 Class / Interface / Field）</div>
+<h2 class="file-title">Compress.h —— zstd 压缩 / 解压（纯库）</h2>
+<div class="card"><div class="doc">
+<p>字节缓冲的压缩积木：三个**自由函数**，没有任何状态、单例或生命周期。</p>
+<p>**为什么是纯库而不是服务层**：压缩是「给一段字节、还一段字节」的纯计算，不持有跨帧状态；做成服务层只会逼调用方去等一个 stage，而它既不初始化什么、也不需要在关闭时排空什么。</p>
+<p>**为什么没有暴露 zstd 的 API**：`Private/Compress.cpp` 是唯一的 zstd 边界 —— 头文件只认 `std::vector&lt;std::uint8_t&gt;`，将来换实现（换库 / 换算法）不需要动任何调用点。</p>
+<p>**为什么失败返回 `nullopt` 而不抛异常**：压缩数据可能来自磁盘或网络（损坏、截断都属常态），调用方必须显式处理坏数据 —— 返回值风格把「可能失败」写在签名里，而不是藏在异常里让人忘记接。</p>
+</div></div>
+<div class="card">
+<h3 class="card-title">包含的头文件</h3>
+
+<table>
+<thead><tr><th>头文件</th><th>功能</th></tr></thead>
+<tbody>
+<tr><td>&lt;cstddef&gt;</td><td>`std::size_t` —— `GetDecompressedSize` 的返回类型</td></tr>
+<tr><td>&lt;cstdint&gt;</td><td>`std::uint8_t` —— **字节**的规范表示，避免 `<span class="kw">char</span>` 的符号性歧义</td></tr>
+<tr><td>&lt;optional&gt;</td><td>`std::optional` —— 把「失败」编码进返回类型（无异常）</td></tr>
+<tr><td>&lt;vector&gt;</td><td>输入 / 输出都用连续字节缓冲（可直接对接文件与网络包）</td></tr>
+</tbody></table>
+</div>
+<div class="card">
+<h3 class="card-title">自由函数</h3>
+
+<table>
+<thead><tr><th>签名</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td>std::optional&lt;std::vector&lt;std::uint8_t&gt;&gt; Compress(<span class="kw">const</span> std::vector&lt;std::uint8_t&gt;&amp; Data, <span class="kw">int</span> Level = 0)</td><td>用 zstd 压缩。`Level` 是 zstd 的 1..22（0 = 用默认档；负档 / fast 模式不支持）。失败（编码器报错 / 目标缓冲不足）返回 `nullopt` —— **不抛异常**，坏输入不该打断主循环</td></tr>
+<tr><td>std::optional&lt;std::vector&lt;std::uint8_t&gt;&gt; Decompress(<span class="kw">const</span> std::vector&lt;std::uint8_t&gt;&amp; Data)</td><td>解压一个 zstd 载荷。输入不是合法 zstd、或解压后长度不可信 / 算不出来时返回 `nullopt`。**为什么必须先拿到长度再分配**：zstd 帧头里带解压后大小，先取值就能一次分配到位，不必用「猜一个大小、不够再翻倍」的循环</td></tr>
+<tr><td>std::optional&lt;std::size_t&gt; GetDecompressedSize(<span class="kw">const</span> std::vector&lt;std::uint8_t&gt;&amp; Data)</td><td>只读帧头，不真解压：用来预知解压后大小（损坏输入返回 `nullopt`）。存放压缩数据时把长度一并记下，读取端就能一次性分配</td></tr>
+</tbody></table>
+</div>
 </div></div>
 </div>
 <script>

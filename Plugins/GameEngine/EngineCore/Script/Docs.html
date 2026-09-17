@@ -79,7 +79,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div id="app">
   <div id="side">
     <h1>Maho 引擎源码</h1>
-    <div class="search" title="左侧扫描 Source/**/*.h：2 个头文件 · 已声明 0 个 · 0 个实体 / 0 个成员 ｜ 内容在 Tools/docs_content.py 里逐条声明">
+    <div class="search" title="左侧扫描 Source/**/*.h：2 个头文件 · 已声明 2 个 · 12 个实体 / 38 个成员 ｜ 内容在 Tools/docs_content.py 里逐条声明">
       <input id="q" type="search" placeholder="搜索头文件…  （如 Frame、Core、Entry）" autocomplete="off">
     </div>
     <div id="tree"><ul>
@@ -93,13 +93,175 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
   </div>
   <div id="main"><div class="pane" id="pane-Public__Script_h">
 <div class="hdr">Public/Script.h</div>
-<h2 class="file-title">Script.h</h2>
-<div class="empty">（尚未声明内容 —— 在 Tools/docs_content.py 里加一条 Header(&quot;Public/Script.h&quot;)，再逐类声明 Class / Interface / Field）</div>
+<h2 class="file-title">Script.h —— 脚本宿主 + 语言后端接口</h2>
+<div class="card"><div class="doc">
+<p>分两层：**接口** `IScriptLanguage`（每种语言一个实现）与**宿主** `FScriptSystem`（管多个后端、把调用转给当前活动的那一个）。宿主**只通过接口**驱动语言，所以 VM 细节、类型绑定、每语言的状态全部关在后端内部 —— 加一门语言不需要动宿主。</p>
+<p>语言中立是靠**不透明 `<span class="kw">void</span>*`** 实现的：所有跨界值都是裸指针，调用方在「已知语言类型」的上下文里自己转回去（例如 Lua 侧 `sol::state*`）。代价是这里没有类型安全，收益是引擎 core 不必认识 sol2 / CPython / .NET，也解释了为什么 `LoadScript&lt;&gt;` / `Call&lt;&gt;` 是**模板**：类型转换发生在调用点，而调用点是唯一能包含 `&lt;sol/sol.hpp&gt;` 的地方。</p>
+<p>另外两条边界约定：脚本文件相对**后端的 scripts 目录**解析（不由引擎拼路径），而每帧调用（`Call`）在缺函数时**返回 <span class="kw">false</span> 而不是报错** —— 可选回调是脚本的常态，把它当异常会逼每个脚本都写空函数。</p>
+</div></div>
+<div class="card">
+<h3 class="card-title">包含的头文件</h3>
+
+<table>
+<thead><tr><th>头文件</th><th>功能</th></tr></thead>
+<tbody>
+<tr><td>Core/Delegate.h</td><td>`TMulticastEvent`：语言就绪广播</td></tr>
+<tr><td>Core/Interface.h</td><td>`IPipeline` —— `FScriptSystem` 的阶段序列靠它</td></tr>
+<tr><td>&lt;Maho.h&gt;</td><td>`FFrameExtension` + `MAHO_DECLARE_FRAME`（帧身份）</td></tr>
+<tr><td>Engine/Engine.h</td><td>stage 接口与 `FEngineBase`</td></tr>
+<tr><td>ScriptApi.h</td><td>本插件的导出标记（`MAHO_SCRIPT_API`）</td></tr>
+<tr><td>&lt;memory&gt; / &lt;string&gt; / &lt;vector&gt;</td><td>后端所有权（`unique_ptr`）与集合容器。**刻意不包含 sol2 / 任何具体语言的头** —— 这正是接口能保持中立的原因</td></tr>
+</tbody></table>
+</div>
+<div class="card">
+<h3 class="card-title">自由函数</h3>
+
+<table>
+<thead><tr><th>签名</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td>MAHO_SCRIPT_API FScriptSystem* GetScriptSystem()</td><td>全局脚本系统访问器。**跨 DLL 走函数**：头里只有声明，定义在 `Private/Script.cpp` —— 否则每个包含本头的 DLL 都会自带一份，出现「两个脚本系统」。返回指针而非引用，是为了「尚未就绪」也能合法表达</td></tr>
+</tbody></table>
+</div>
+<div class="ent e-class" id="Public__Script_h-0">
+<h3><span class="kind">类</span> IScriptLanguage</h3>
+<div class="sect"><div class="doc">
+<p>语言后端接口：一门语言一个实现（Lua / Python / C#）。**全部成员都是纯虚**，宿主因此可以完全中立地驱动它：不认识的只有实现，不认识的没有接口。</p>
+<p>两种调用粒度刻意分开：`CallGlobal` 打全局作用域，`CallHandle` 打在任意不透明句柄上（实体脚本表、命名空间表…）—— 游戏对象要挂自己的脚本实例，只打全局作用域是不够的。</p>
+</div></div>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> ~IScriptLanguage() = <span class="kw">default</span></td><td>虚析构：宿主用 `unique_ptr&lt;IScriptLanguage&gt;` 持有后端（注册即接管所有权）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> <span class="kw">const</span> <span class="kw">char</span>* GetName() <span class="kw">const</span> = 0</td><td>语言名（`<span class="st">"Lua"</span>` / `<span class="st">"Python"</span>` / `<span class="st">"CSharp"</span>`）。用于注册、按名查找与日志 —— **返回裸 `<span class="kw">const</span> <span class="kw">char</span>*` 而不是 `std::string`**：跨 DLL 边界返回 STL 字符串会带上分配器与析构归属的麻烦，而语言名是静态字面量，本来就不需要所有权</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">bool</span> Initialize(<span class="kw">int</span> Argc, <span class="kw">char</span>** Argv, <span class="kw">const</span> <span class="kw">char</span>* ScriptsDirectory) = 0</td><td>初始化 VM：`Argc`/`Argv` 透传给脚本运行时（脚本可以看命令行），`ScriptsDirectory` 是脚本文件的解析基准。成功与否由返回值给出，不抛异常</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> Shutdown() = 0</td><td>拆掉 VM（与 `Initialize` 对称）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> <span class="kw">bool</span> IsInitialized() <span class="kw">const</span> = 0</td><td>是否已初始化。宿主据此决定「类型绑定排队等初始化」还是「立刻执行」</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">bool</span> DoFile(<span class="kw">const</span> <span class="kw">char</span>* FilePath) = 0</td><td>执行一个脚本文件（顶层代码）。路径相对后端的 scripts 目录</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span>* LoadScriptRaw(<span class="kw">const</span> <span class="kw">char</span>* FilePath) = 0</td><td>执行文件并把**顶层返回值**以 `<span class="kw">new</span> TSolObject`（堆分配、后端语言类型的对象）交出去；失败返回 <span class="kw">nullptr</span>。所有权交给调用方（`LoadScript&lt;&gt;` 拷走内容后 <span class="kw">delete</span>）—— 用裸指针是因为「语言类型」在接口层不可知，只能约定「新分配的对象」</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">bool</span> CallGlobal(<span class="kw">const</span> <span class="kw">char</span>* FunctionName) = 0</td><td>调全局函数（无参）。函数不存在返回 <span class="kw">false</span>，**且不报错**（可选回调是常态）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">bool</span> CallGlobal(<span class="kw">const</span> <span class="kw">char</span>* FunctionName, <span class="kw">float</span> Arg0) = 0</td><td>调全局函数（一个 <span class="kw">float</span> 参数）—— 最常见的逐帧回调形态（`OnUpdate(dt)`），所以为它准备了不带模板的重载</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">bool</span> CallHandle(<span class="kw">void</span>* Handle, <span class="kw">const</span> <span class="kw">char</span>* FunctionName) = 0</td><td>在不透明句柄上（如实体脚本表）调函数（无参）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">bool</span> CallHandle(<span class="kw">void</span>* Handle, <span class="kw">const</span> <span class="kw">char</span>* FunctionName, <span class="kw">float</span> Arg0) = 0</td><td>在不透明句柄上调函数（一个 <span class="kw">float</span> 参数）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> <span class="kw">void</span>* GetState() = 0</td><td>语言状态的不透明指针（`sol::state*` / `PyObject*` / …）。**它是绑定代码的入口**：有了它，绑定侧可以包含语言头并在自己的上下文里转回真实类型</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">using</span> FTypeBinder = <span class="kw">void</span> (*)(<span class="kw">void</span>* LanguageState)</td><td>类型绑定函数指针。**用裸函数指针而不是 `std::function`**：绑定注册发生在静态初始化期（宏展开处），此时不该依赖任何堆分配或跨模块的 std::function 布局</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> RegisterTypeBinder(FTypeBinder Binder) = 0</td><td>注册一个类型级绑定器：未初始化时入队（等 `Initialize` 后批量跑），已初始化则立即执行 —— 这让「宏写在任何文件里」都能正确工作，而不依赖静态初始化顺序</td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-class" id="Public__Script_h-1">
+<h3><span class="kind">类</span> FScriptSystem <span class="base">: FFrameExtension + IPipeline&lt;IPreInit, IInit, IPostInit, IPreShutdown, IShutdown, IPostShutdown&gt;</span></h3>
+<div class="sect"><div class="doc">
+<p>脚本宿主：管多个语言后端，并把便利接口转发给**活动语言**（第一个注册的）。**它只挂初始化/关闭这几个阶段，没有 Tick** —— 因为脚本不会被引擎自动调用：是谁想调（游戏逻辑、编辑器面板）谁就调 `Call` / `DoFile`，这使脚本的调用时机由调用方掌握，而不是被帧循环强加一遍。</p>
+<p>后端所有权在宿主：`RegisterLanguage` 即接管 `unique_ptr`，`Shutdown` 时按相反顺序逐个拆 —— 语言之间的依赖（如 Python 里嵌 Lua 表）于是有一个确定的拆除次序，而不是随静态析构乱序。</p>
+</div></div>
+<div class="sect">
+<h4>字段</h4>
+<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-private">private</span></td><td>std::vector&lt;std::unique_ptr&lt;IScriptLanguage&gt;&gt; Languages</td><td>后端表，**宿主拥有**（注册即接管）。`vector` 保持注册顺序 —— 「第一个即活动语言」这条规则靠的就是它</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>IScriptLanguage* Active = <span class="kw">nullptr</span></td><td>活动语言（第一个注册的）的裸观察指针；所有权在 `Languages` 里</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>FOnLanguageReady OnLanguageReady</td><td>语言就绪广播（`GetOnLanguageReady` 返回它的引用）</td></tr>
+</tbody></table></div>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td>MAHO_DECLARE_FRAME(FScriptSystem)</td><td>帧身份与工厂符号：`FFrameBuilder` 按 DLL 路径装载它的凭据</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>FScriptSystem()</td><td>构造：空的语言表。后端是靠 `RegisterLanguage` 逐个装进来的 —— 宿主本身不认识任何具体语言</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">using</span> FOnLanguageReady = TMulticastEvent&lt;<span class="kw">void</span>(IScriptLanguage&amp;)&gt;</td><td>「某语言已就绪」事件类型。载体会拿到后端引用（不是指针）—— 语言在后端表里不会中途消失，直到 `Shutdown`</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> RegisterLanguage(IScriptLanguage* Language)</td><td>装入一个语言后端（**宿主接管所有权**）；按名字幂等 —— 重复注册同名语言不会出现两个活动后端</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] IScriptLanguage* GetLanguage(<span class="kw">const</span> <span class="kw">char</span>* Name) <span class="kw">const</span></td><td>按名字查后端；未注册返回 <span class="kw">nullptr</span></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] IScriptLanguage* GetActive() <span class="kw">const</span></td><td>当前活动后端（第一个注册的）；一个都没有时 <span class="kw">nullptr</span>。「第一个注册的」是刻意的简单规则：多语言共存时语义可预测，切换活动语言不必引入一套优先级配置</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> RegisterTypeBinder(<span class="kw">const</span> <span class="kw">char</span>* LanguageName, IScriptLanguage::FTypeBinder Binder)</td><td>把绑定器注册到**指定名字**的后端上（`MAHO_*_BIND_REGISTER` 展开到这里）。按名字而不是按指针，所以宏在静态初始化期运行也安全</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FOnLanguageReady&amp; GetOnLanguageReady()</td><td>取就绪事件以挂订阅者（返回引用以便 `+=` 绑定）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">template</span> &lt;<span class="kw">typename</span> TSolObject&gt; [[nodiscard]] TSolObject LoadScript(<span class="kw">const</span> <span class="kw">char</span>* FilePath)</td><td>加载脚本文件并返回顶层值（通常是表）。**调用方给出语言类型** —— 调用点必须包含 `&lt;sol/sol.hpp&gt;`；类型转换因此发生在唯一知道类型的那个模块里。活动语言为空或后端没返回值时给出空构造值。实现按值返回：`LoadScriptRaw` 交出的堆对象被拷走、随即 <span class="kw">delete</span> —— 语言对象跨 DLL 传递时不留下跨模块的 <span class="kw">delete</span></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">template</span> &lt;<span class="kw">typename</span> TSolHandle&gt; <span class="kw">bool</span> Call(TSolHandle&amp; Handle, <span class="kw">const</span> <span class="kw">char</span>* FunctionName)</td><td>在任意句柄（实体脚本实例、命名空间表…）上调用函数：转给活动语言的 `CallHandle`。句柄类型由调用方给出，理由与 `LoadScript` 相同</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">template</span> &lt;<span class="kw">typename</span> TSolHandle&gt; <span class="kw">bool</span> Call(TSolHandle&amp; Handle, <span class="kw">const</span> <span class="kw">char</span>* FunctionName, <span class="kw">float</span> Arg0)</td><td>同上，带一个 <span class="kw">float</span> 参数（逐帧回调的常用形态）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">bool</span> Call(<span class="kw">const</span> <span class="kw">char</span>* FunctionName)</td><td>在活动语言上调用全局函数（无参）。**非模板重载** —— 这条路径不需要语言类型，所以不包含 sol2 的代码也能用它</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">bool</span> Call(<span class="kw">const</span> <span class="kw">char</span>* FunctionName, <span class="kw">float</span> Arg0)</td><td>在活动语言上调用全局函数（一个 <span class="kw">float</span> 参数）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">bool</span> DoFile(<span class="kw">const</span> <span class="kw">char</span>* FilePath)</td><td>在活动语言上执行脚本文件</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">void</span>* TryGetState()</td><td>活动语言的不透明状态（`sol::state*` / `PyObject*` / …）；用于绑定代码。名字里的 `Try` 是在提示「可能没有活动语言」</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> PreInitialize(FEngineBase&amp;) <span class="kw">override</span> {}</td><td>阶段入口（空实现）</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> Initialize(FEngineBase&amp; Engine) <span class="kw">override</span></td><td>阶段入口：把每个已注册后端带起来（含把排队的类型绑定器跑完）</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> PostInitialize(FEngineBase&amp;) <span class="kw">override</span> {}</td><td>阶段入口（空实现）</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> PreShutdown(FEngineBase&amp;) <span class="kw">override</span> {}</td><td>阶段入口（空实现）</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> Shutdown(FEngineBase&amp; Engine) <span class="kw">override</span></td><td>阶段入口：逐个 `Shutdown` 后端并释放（与初始化对称）。顺序在这里由宿主单点决定，避免「谁先析构」变成静态初始化顺序问题</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> PostShutdown(FEngineBase&amp;) <span class="kw">override</span> {}</td><td>阶段入口（空实现）</td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-macro" id="Public__Script_h-2">
+<h3><span class="kind">宏</span> MAHO_LUA_METHOD <span class="base">: (Table).set_function(#Method, &amp;Class::Method)</span></h3>
+<div class="sect"><div class="doc">
+<p>把 C++ 成员函数绑到 Lua 表上（sol2 的 `set_function`，自动转 snake_case）。写成员函数名一次即可，名字由 `#Method` 串化 —— 不会出现「改名后 Lua 侧名字没跟着改」</p>
+</div></div>
+</div>
+<div class="ent e-macro" id="Public__Script_h-3">
+<h3><span class="kind">宏</span> MAHO_LUA_FUNCTION <span class="base">: (Table).set_function(Name, Fn)</span></h3>
+<div class="sect"><div class="doc">
+<p>绑一个自由函数 / lambda 到 Lua 表上（名字由调用方显式给出）</p>
+</div></div>
+</div>
+<div class="ent e-macro" id="Public__Script_h-4">
+<h3><span class="kind">宏</span> MAHO_LUA_PROPERTY <span class="base">: (Table).set_property(Name, Getter, __VA_ARGS__)</span></h3>
+<div class="sect"><div class="doc">
+<p>绑 getter/setter 属性；**省略 setter 即只读** —— 省略是语法层面的，不需要「只读标志」这种运行期约定</p>
+</div></div>
+</div>
+<div class="ent e-macro" id="Public__Script_h-5">
+<h3><span class="kind">宏</span> MAHO_LUA_BIND_BEGIN <span class="base">: <span class="kw">static</span> <span class="kw">void</span> LuaBind(sol::state&amp; _Lua) { sol::usertype&lt;Type&gt; _Meta = _Lua.new_usertype&lt;Type&gt;(#Type); (<span class="kw">void</span>)_Meta; {</span></h3>
+<div class="sect"><div class="doc">
+<p>类内绑定的开始：建 usertype 并把 `_Lua` / `_Meta` 放进作用域，供下面几条宏使用。**展开成一个 <span class="kw">static</span> 成员函数**，因此名字只写一次、绑定代码就贴在类体里，不会和成员声明分家</p>
+</div></div>
+</div>
+<div class="ent e-macro" id="Public__Script_h-6">
+<h3><span class="kind">宏</span> MAHO_LUA_FIELD <span class="base">: _Meta[#Field] = &amp;Type::Field;</span></h3>
+<div class="sect"><div class="doc">
+<p>直接暴露成员字段：Lua 侧 `unit.field` 读写。仅适用于公开字段</p>
+</div></div>
+</div>
+<div class="ent e-macro" id="Public__Script_h-7">
+<h3><span class="kind">宏</span> MAHO_LUA_PROPERTY_MEMBER <span class="base">: _Meta[Name] = sol::property(&amp;Type::Getter, &amp;Type::Setter);</span></h3>
+<div class="sect"><div class="doc">
+<p>暴露 getter/setter 对：Lua 侧 `unit.name` 读写。这是包住私有字段的正确方式 —— 字段本身不出现在绑定里</p>
+</div></div>
+</div>
+<div class="ent e-macro" id="Public__Script_h-8">
+<h3><span class="kind">宏</span> MAHO_LUA_METHOD_FN <span class="base">: _Meta[#Method] = &amp;Type::Method;</span></h3>
+<div class="sect"><div class="doc">
+<p>暴露成员函数：Lua 侧 `unit:Method()`。**与字段访问的区别就在这个冒号**（`_Meta[#Method]` 是函数槽）</p>
+</div></div>
+</div>
+<div class="ent e-macro" id="Public__Script_h-9">
+<h3><span class="kind">宏</span> MAHO_LUA_BIND_END <span class="base">: } }</span></h3>
+<div class="sect"><div class="doc">
+<p>类内绑定的结束：关掉内层作用域与函数体</p>
+</div></div>
+</div>
+<div class="ent e-macro" id="Public__Script_h-10">
+<h3><span class="kind">宏</span> MAHO_LUA_BIND_REGISTER <span class="base">: Maho::Script::GetScriptSystem()-&gt;RegisterTypeBinder(<span class="st">"Lua"</span>, [](<span class="kw">void</span>* _LuaState) { Type::LuaBind(*static_cast&lt;sol::state*&gt;(_LuaState)); })</span></h3>
+<div class="sect"><div class="doc">
+<p>把类的 `LuaBind` 注册到 Lua 后端（在任意一处调用一次，例如 main 的 Initialize）。**两种时机都覆盖**：Lua 已初始化则立刻执行，否则入队等初始化后批量跑 —— 所以注册点在静态初始化期也不会失效</p>
+</div></div>
+</div>
 </div>
 <div class="pane" id="pane-Public__ScriptApi_h">
 <div class="hdr">Public/ScriptApi.h</div>
-<h2 class="file-title">ScriptApi.h</h2>
-<div class="empty">（尚未声明内容 —— 在 Tools/docs_content.py 里加一条 Header(&quot;Public/ScriptApi.h&quot;)，再逐类声明 Class / Interface / Field）</div>
+<h2 class="file-title">ScriptApi.h —— 插件导出标记</h2>
+<div class="card"><div class="doc">
+<p>只有导出标记 `MAHO_SCRIPT_API`。当前只有 `GetScriptSystem()` 这一个符号用到它 —— 但那一个就足够重要：全局访问器必须**跨 DLL 唯一**，所以它按「头里声明、cpp 里定义」导出，而不是 header-<span class="kw">inline</span>（那只会在每个 DLL 里各留一份）。</p>
+</div></div>
+<div class="card">
+<h3 class="card-title">包含的头文件</h3>
+
+<table>
+<thead><tr><th>头文件</th><th>功能</th></tr></thead>
+<tbody>
+<tr><td>Core/Export.h</td><td>`MAHO_EXPORT` / `MAHO_IMPORT` 原语；引擎 core 是插件唯一的下层依赖</td></tr>
+</tbody></table>
+</div>
+<div class="ent e-macro" id="Public__ScriptApi_h-0">
+<h3><span class="kind">宏</span> MAHO_SCRIPT_API <span class="base">: MAHO_EXPORT / MAHO_IMPORT</span></h3>
+<div class="sect"><div class="doc">
+<p>构建 Script.dll 时（`MAHO_SCRIPT_MODULE_EXPORTS`）取导出，其余消费者取导入</p>
+</div></div>
+</div>
 </div></div>
 </div>
 <script>

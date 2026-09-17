@@ -79,7 +79,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div id="app">
   <div id="side">
     <h1>Maho 引擎源码</h1>
-    <div class="search" title="左侧扫描 Source/**/*.h：2 个头文件 · 已声明 0 个 · 0 个实体 / 0 个成员 ｜ 内容在 Tools/docs_content.py 里逐条声明">
+    <div class="search" title="左侧扫描 Source/**/*.h：2 个头文件 · 已声明 2 个 · 2 个实体 / 4 个成员 ｜ 内容在 Tools/docs_content.py 里逐条声明">
       <input id="q" type="search" placeholder="搜索头文件…  （如 Frame、Core、Entry）" autocomplete="off">
     </div>
     <div id="tree"><ul>
@@ -93,13 +93,76 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
   </div>
   <div id="main"><div class="pane" id="pane-Public__EditorViewport_h">
 <div class="hdr">Public/EditorViewport.h</div>
-<h2 class="file-title">EditorViewport.h</h2>
-<div class="empty">（尚未声明内容 —— 在 Tools/docs_content.py 里加一条 Header(&quot;Public/EditorViewport.h&quot;)，再逐类声明 Class / Interface / Field）</div>
+<h2 class="file-title">EditorViewport.h —— 取景区面板</h2>
+<div class="card"><div class="doc">
+<p>`FEditorViewport` 是最小的编辑器组件：挂 `IEditorPanel`（加 `IEditorShutdown` 收摊），由宿主 `FExampleEditor` 每帧驱动。它拥有一棵持久声明式 UI 树：`Update`（宿主 `NewFrame` **之前**的声明期）重建它，宿主在帧内翻译。</p>
+<p>整棵树就是**一张铺满面板的图片**，按**名字**引用 live present 目标（`FExampleEditor::PresentTargetName()`）；宿主注入的解析器把那个名字映射到 RHI 纹理 —— 所以这个组件**永远看不到 ImTextureID**，也不持有任何 ImGui / RHI 资源。</p>
+<p>**它同时是「游戏光标重定位」的信息源**：声明完树后把图片的屏幕矩形发布给宿主（`ReportViewportRect`），宿主的 `IEditorInput`（pass0）据此把游戏光标重定位进面板。</p>
+</div></div>
+<div class="card">
+<h3 class="card-title">包含的头文件</h3>
+
+<table>
+<thead><tr><th>头文件</th><th>功能</th></tr></thead>
+<tbody>
+<tr><td>EditorViewportApi.h</td><td>`MAHO_EDITORVIEWPORT_API`：导出开关</td></tr>
+<tr><td>Engine/Frame.h</td><td>`MAHO_DECLARE_FRAME` / `FFrameExtension` / `IPipeline` —— 身份与 stage 列表</td></tr>
+<tr><td>ExampleEditor.h</td><td>`FExampleEditor`（宿主上下文：`GetUIRenderContext` / `PresentTargetName` / `ReportViewportRect`）与 `IEditorPanel` / `IEditorShutdown`</td></tr>
+<tr><td>UIView.h</td><td>`UI::FUIView`（持久树 + `Edit()`）与 `UI::FUIBuilder`（声明入口）</td></tr>
+<tr><td>memory</td><td>`std::unique_ptr&lt;UI::FUIView&gt; View`：面板拥有自己的树</td></tr>
+</tbody></table>
+</div>
+<div class="card">
+<h3 class="card-title">跨 DLL 边界</h3>
+
+<table>
+<thead><tr><th>符号</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td>CreateFrame()（`Private/EditorViewport.cpp`）</td><td>宿主子收集器按符号名装载的 C 导出</td></tr>
+<tr><td>present target 的名字引用</td><td>组件只给名字（`UI::FUIName`），原生句柄由宿主解析 —— 这条「不导出 ImGui 类型」的边界正是它不需要导出宏的原因</td></tr>
+</tbody></table>
+</div>
+<div class="ent e-class" id="Public__EditorViewport_h-0">
+<h3><span class="kind">类</span> FEditorViewport <span class="base">: FFrameExtension + IPipeline&lt;IEditorPanel, IEditorShutdown&gt;</span></h3>
+<div class="sect"><div class="doc">
+<p>取景区面板本体：最干净的一个编辑器组件 —— 没有缓冲、没有订阅、没有状态位，只有一棵「一张图」的树。**它只挂两个 stage**：它没有 `Init` 要做的事，也没有需要额外顺序保证的初始化；多挂一个只会让宿主多派发一个空节点。</p>
+</div></div>
+<div class="sect">
+<h4>字段</h4>
+<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-private">private</span></td><td>std::unique_ptr&lt;UI::FUIView&gt; View</td><td>持久 UI 树（一图铺满），归本面板所有并登记在 UI 视图注册表里</td></tr>
+</tbody></table></div>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Update(FExampleEditor&amp; Editor) <span class="kw">override</span></td><td>声明期（宿主 `NewFrame` **之前**）：① `EnsureView`（UI 插件未就位则返回 <span class="kw">nullptr</span>、下一帧重试）；② 在 `Edit()` 里重建树 —— 根容器 Fill + **去掉主题内边距**（取景区要贴边铺满），唯一子节点是 Fill 的图片，引用 present target 的名字 + `Stretch` 缩放（只在新建那一帧播种：资源引用与缩放模式是「用户/别人可能改过」的配置，逐帧重写会把它们覆盖掉）；③ 读图片节点的屏幕矩形（翻译期后端写回，故是**上一帧**的值）并在尺寸为正时 `ReportViewportRect` 发布给宿主</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Shutdown(FExampleEditor&amp; Editor) <span class="kw">override</span></td><td>注销视图并释放。**注册表只持裸指针、从不删除** —— 漏掉注销，下一次翻译就会遍历到已销毁的树。先取注册表再 `UnregisterView`，注册表不存在（UI 插件已走）时跳过判空即可</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>UI::FUIView* EnsureView(FExampleEditor&amp; Editor)</td><td>惰性建视图 + 注册：**UI 插件在 install 时可能还没起来**，注册表为空就返回 <span class="kw">nullptr</span>、由调用方下一帧重试。外壳开窗（含宿主的 dockspace id）由宿主通用循环做；标题即旧窗口名，`NoCollapse | NoMove` 保留「取景区不可折叠不可拖动」的旧语义；渲染上下文用 `Editor.GetUIRenderContext()` 登记 ⇒ 通用翻译循环按上下文筛视图</td></tr>
+</tbody></table></div>
+</div>
 </div>
 <div class="pane" id="pane-Public__EditorViewportApi_h">
 <div class="hdr">Public/EditorViewportApi.h</div>
-<h2 class="file-title">EditorViewportApi.h</h2>
-<div class="empty">（尚未声明内容 —— 在 Tools/docs_content.py 里加一条 Header(&quot;Public/EditorViewportApi.h&quot;)，再逐类声明 Class / Interface / Field）</div>
+<h2 class="file-title">EditorViewportApi.h —— 导出宏</h2>
+<div class="card"><div class="doc">
+<p>本插件的导出开关：`MAHO_EDITORVIEWPORT_API` 按 `MAHO_EDITORVIEWPORT_MODULE_EXPORTS` 在 `MAHO_EXPORT` / `MAHO_IMPORT` 之间切换。</p>
+<p>**当前没有类型挂它**：取景区面板只经 DLL 工厂 `CreateFrame()` 按符号名被构造，没有别的模块 include 它的类型，所以它不需要导出标记。宏按惯例保留。</p>
+</div></div>
+<div class="card">
+<h3 class="card-title">包含的头文件</h3>
+
+<table>
+<thead><tr><th>头文件</th><th>功能</th></tr></thead>
+<tbody>
+<tr><td>Core/Export.h</td><td>`MAHO_EXPORT` / `MAHO_IMPORT` 两个底层标记</td></tr>
+</tbody></table>
+</div>
+<div class="ent e-macro" id="Public__EditorViewportApi_h-0">
+<h3><span class="kind">宏</span> MAHO_EDITORVIEWPORT_API <span class="base">: MAHO_EXPORT / MAHO_IMPORT（按 MAHO_EDITORVIEWPORT_MODULE_EXPORTS 切换）</span></h3>
+<div class="sect"><div class="doc">
+<p>面板类当前不带它（它只作 DLL 工厂的产物存在）。</p>
+</div></div>
+</div>
 </div></div>
 </div>
 <script>

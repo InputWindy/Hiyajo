@@ -79,7 +79,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div id="app">
   <div id="side">
     <h1>Maho 引擎源码</h1>
-    <div class="search" title="左侧扫描 Source/**/*.h：2 个头文件 · 已声明 0 个 · 0 个实体 / 0 个成员 ｜ 内容在 Tools/docs_content.py 里逐条声明">
+    <div class="search" title="左侧扫描 Source/**/*.h：2 个头文件 · 已声明 2 个 · 2 个实体 / 39 个成员 ｜ 内容在 Tools/docs_content.py 里逐条声明">
       <input id="q" type="search" placeholder="搜索头文件…  （如 Frame、Core、Entry）" autocomplete="off">
     </div>
     <div id="tree"><ul>
@@ -93,13 +93,135 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
   </div>
   <div id="main"><div class="pane" id="pane-Public__EditorConsole_h">
 <div class="hdr">Public/EditorConsole.h</div>
-<h2 class="file-title">EditorConsole.h</h2>
-<div class="empty">（尚未声明内容 —— 在 Tools/docs_content.py 里加一条 Header(&quot;Public/EditorConsole.h&quot;)，再逐类声明 Class / Interface / Field）</div>
+<h2 class="file-title">EditorConsole.h —— 编辑器控制台面板</h2>
+<div class="card"><div class="doc">
+<p>`FEditorConsole` 把引擎**活的日志流**镜像进一个由宿主停靠的面板。面板拥有一棵持久声明式 UI 树（`UI::FUIView`）：`Update`（宿主开帧 UI **之前**的声明期）重建这棵树，宿主随后在帧内翻译它。**插件从不碰后端**。</p>
+<p>它挂 `IEditorInit` / `IEditorPanel` / `IEditorShutdown`：`Init` 订阅日志层的监听流（生产者线程往一把 mutex 保护的 `deque` 推，所以 `LogLine` 在**任意**发射线程上跑都是安全的）；每帧 `Update` 把 `deque` 排空成「每个可见行一个按等级着色的 `FUISelectable`」——点选 / Shift 点或拖拽扩选 / `Ctrl+C` 复制选区（`Ctrl+A` 先全选）、工具栏一个实时字符串过滤框，底部一条 **CVar 命令行**（回车提交；框里收键盘时浮出一列补全；`↑`/`↓` 在列表里走并把高亮名填回框；没有可补全项时 `↑` 重开同一浮层显示**最近 10 条**执行过的命令，`↑`/`↓` 改走它们；框未聚焦时箭头留给视图导航）。右键日志区在指针处开上下文菜单，第一项是 Clear（取代了旧的工具栏 Clear 按钮）。`Shutdown` 在日志层消失**之前**解绑。与每个编辑器组件一样，它不持有任何后端 / RHI 资源 —— UI 上下文归宿主。</p>
+<p>**控件值住在树节点上**：后端在翻译期原地改写它们，所以 `Update` 在声明之前先把它们回读进 `FilterBuffer` / `CvarBuffer`（建议行点选或命令执行那一帧例外：那时**缓冲**才是权威值）。</p>
+</div></div>
+<div class="card">
+<h3 class="card-title">包含的头文件</h3>
+
+<table>
+<thead><tr><th>头文件</th><th>功能</th></tr></thead>
+<tbody>
+<tr><td>EditorConsoleApi.h</td><td>`MAHO_EDITORCONSOLE_API`：导出开关</td></tr>
+<tr><td>Engine/Frame.h</td><td>`MAHO_DECLARE_FRAME` / `FFrameExtension` / `IPipeline` —— 身份与 stage 列表</td></tr>
+<tr><td>ExampleEditor.h</td><td>`FExampleEditor`（宿主上下文）与 `IEditorInit` / `IEditorPanel` / `IEditorShutdown` 三个 stage 接口</td></tr>
+<tr><td>Log.h</td><td>`GetLog()` / `FLogMessage` / `FSubscriptionID` / `ELogLevel` —— 订阅与行数据来源</td></tr>
+<tr><td>UIView.h</td><td>`UI::FUIView`（持久树 + `Edit()`）与 `UI::FUIBuilder`（声明入口）</td></tr>
+<tr><td>deque</td><td>`Lines`（生产者推尾、满则丢头）与 `History`（最近命令，尾最新）</td></tr>
+<tr><td>memory</td><td>`std::unique_ptr&lt;UI::FUIView&gt; View`：面板拥有自己的树</td></tr>
+<tr><td>mutex</td><td>`LinesMutex`：保护 `Lines` 免受生产者（`LogLine`）并发写的竞态</td></tr>
+<tr><td>string</td><td>行文本、命令历史、候选名、过滤器/命令行缓冲</td></tr>
+<tr><td>vector</td><td>`LineIds`（稳定的逐行节点 Id）与候选匹配结果</td></tr>
+</tbody></table>
+</div>
+<div class="card">
+<h3 class="card-title">本面板的原理约定（为什么这么写）</h3>
+
+<table>
+<thead><tr><th>约定</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td>生产者 vs 帧线程</td><td>`Init` 注册的回调在**任意发射线程**上跑，它只做「加锁 + 推/丢」，不碰 UI；唯一读 UI 的地方是帧线程的 `Update`。所以日志洪流只会撑大 `deque`（上限 `MaxLines`），**绝不会**在渲染线程上做分配式重活</td></tr>
+<tr><td>头丢弃要补偿滚动</td><td>`MaxLines` 触发丢头时累加 `DroppedCount`，帧线程在快照时结清它 —— 于是「已经向上滚在读旧日志」的用户不会被每次丢头往上顶（旧版靠 `ImGui` 的自动滚动，语义相同）</td></tr>
+<tr><td>读上一帧的命中状态</td><td>树的事件不携带指针位置，所以「拖拽扩选」「悬停归属」「滚动是否贴底」全都按**上一帧翻译写回**的节点状态判定；这与旧版在 `BeginChild` 之后读 `IsItemHovered` / `GetScrollY` 的时序等价</td></tr>
+<tr><td>两个列表互斥</td><td>补全列表与历史列表复用同一个浮层：补全开着时 `↑` 走候选，否则 `↑` 重开历史 —— 所以「点一行」「回车执行」「失焦」都要显式关掉另一个，否则两个列表会同时想占同一个浮层</td></tr>
+<tr><td>`↑` 的候选过滤词要钉住</td><td>走动会把**整条候选名**填回命令框；若继续拿框里的文本当过滤词，候选立刻只剩它自己、再被「已经是完整名字」的规则清空 —— 列表当场塌掉。故进入走动时把过滤词钉进 `SuggestNeedle`</td></tr>
+<tr><td>提交后要把焦点要回来</td><td>后端提交会让输入框退出编辑态（回车即离开），此后 `↑`/`↓`（声明作用域 `NodeActive`）与继续打字都不再轮到它。所以提交/点选后置 `CvarPendingFocus`，下一帧翻译时把键盘交回命令行</td></tr>
+</tbody></table>
+</div>
+<div class="card">
+<h3 class="card-title">跨 DLL 边界</h3>
+
+<table>
+<thead><tr><th>符号</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td>CreateFrame()（`Private/EditorConsole.cpp`）</td><td>宿主子收集器按符号名装载的 C 导出</td></tr>
+<tr><td>日志层订阅（`ListenerId`）</td><td>订阅表里存着指向本对象的回调 ⇒ 卸载期必须先解绑（见 `Shutdown`）</td></tr>
+</tbody></table>
+</div>
+<div class="ent e-class" id="Public__EditorConsole_h-0">
+<h3><span class="kind">类</span> FEditorConsole <span class="base">: FFrameExtension + IPipeline&lt;IEditorInit, IEditorPanel, IEditorShutdown&gt;</span></h3>
+<div class="sect"><div class="doc">
+<p>控制台面板本体：`FFrameExtension` 声明层 + 按源码顺序挂三个 stage 的有序列表。**`IEditorInit` 是它的必需品**（不是可选装饰）：订阅必须在图形装载安全点建立、在卸载安全点解除 —— 否则日志层先走，回调就成了跨模块的悬垂订阅。</p>
+<p>它不持有任何后端 / RHI 资源：一棵树 + 一个受锁保护的日志缓冲 + 一堆单帧/跨帧的交互位。</p>
+</div></div>
+<div class="sect">
+<h4>字段</h4>
+<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">static</span> <span class="kw">constexpr</span> std::size_t MaxLines = 4096</td><td>行缓冲上限；满了丢头（并累加 `DroppedCount` 供滚动补偿）</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">static</span> <span class="kw">constexpr</span> std::size_t MaxHistory = 10</td><td>命令历史上限（`deque` 尾最新；执行新命令时从头裁）</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>std::unique_ptr&lt;UI::FUIView&gt; View</td><td>持久 UI 树，归本面板所有并登记在 UI 视图注册表里</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>std::vector&lt;UI::FUIName&gt; LineIds</td><td>稳定的逐行节点 Id（按行号建一次，之后复用）：行数变化不改变既有行的身份</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>std::mutex LinesMutex</td><td>保护 `Lines`，避免生产者（`LogLine`）与帧线程的快照发生竞态</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>std::deque&lt;FLogEntry&gt; Lines</td><td>日志行环形缓冲（推尾、满丢头），上限 `MaxLines`</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>FSubscriptionID ListenerId = 0</td><td>日志层订阅句柄；0 = 未订阅（`Init` 幂等靠它）</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">int</span> SelAnchor = -1</td><td>选区起点行（锚），-1 = 无选区</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">int</span> SelEnd = -1</td><td>选区终点行，-1 = 无选区。行选中用「锚 + 终点」表达区间：点选一行设锚=终点；Shift 点或拖拽只移动终点</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>std::size_t DroppedCount = 0</td><td>自上一帧快照以来因 `MaxLines` 被丢掉的头部行数。帧线程在锁下消费它来把滚动视图往下挪，于是向上滚着读旧日志的人不会被每次丢头往上顶。**由生产者写**</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">char</span> FilterBuffer[256] = { 0 }</td><td>工具栏实时过滤框文本（大小写无关的子串匹配；空 = 全显示）。每次声明前从过滤节点回读</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">char</span> CvarBuffer[256] = { 0 }</td><td>底部 CVar 命令行文本。执行会对 ConsoleVariable 注册表跑 `<span class="st">"name [value]"</span>` 并把结果回显进日志面板。每次声明前从命令节点回读（建议行点选那一帧除外）</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">bool</span> CvarAuthoritative = <span class="kw">false</span></td><td>建议行被点选时置位：本帧**缓冲**（而非节点）是真值 —— 所以既不回读节点的陈旧文本，又必须把缓冲写进节点</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">char</span> CvarPickedName[256] = { 0 }</td><td>最后一次从补全列表选中的名字。框里正好是这个文本时列表**不得自动重开**：点选后框仍持有键盘焦点（后端也还记得活跃项），单凭「活跃 + 非空文本」下一帧就会重开列表，用户永远离不开它（点哪行都重开，看起来像卡死）。改动文本即自动作废；点另一行则覆盖它</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">bool</span> CvarRunRequested = <span class="kw">false</span></td><td>命令框回车提交时置位。宿主在 `Update` **之前**抽干事件，回调那一刻缓冲还没同步 —— 所以命令在 `Update` 里、紧跟回读之后执行</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">bool</span> CvarEditing = <span class="kw">false</span></td><td>命令行当前是否握着键盘（命令节点的活跃位，每帧回读）。命令框上的 `↑`/`↓` 是默认作用域 `NodeActive`，引擎已经会在框不活跃时拒绝派发（那时箭头属于视图导航）；这一位是让两个列表老实：补全按它开合、历史在它掉下时关闭</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">bool</span> FilterEditing = <span class="kw">false</span></td><td>工具栏过滤框的同一个活跃位。`NodeActive` 之外的**第二道闸**：过滤框活跃时命令框的 `↑` 本来也不会触发，但显式守卫让 `StepHistory` 的意图一眼可读</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">bool</span> CvarPendingFocus = <span class="kw">false</span></td><td>建议行点选或回车提交时置位：命令节点下次翻译会向后端要键盘焦点（`RequestKeyboardFocus()`），于是光标留在命令行、可以接着打字。没有它，提交会把框踢出编辑态，而声明作用域为 `NodeActive` 的 `↑`/`↓` 也随之失效，用户得再点一下框</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">bool</span> CopyRequested = <span class="kw">false</span></td><td>日志面板 `Ctrl+C` 快捷键置位；`Ctrl+A` 只把选中区间拉到全部可见行，所以「复制全部」= `Ctrl+A` 之后 `Ctrl+C`。真正的工作在 `Update` 里做 —— 只有那里才有本帧的可见行快照</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">bool</span> SelectAllRequested = <span class="kw">false</span></td><td>`Ctrl+A` 快捷键置位：把选中区间拉到全部可见行</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">bool</span> CvarDropdownOpen = <span class="kw">false</span></td><td>是否该显示补全列表。它会跨越「点击落在」的那一帧（点击会在事件被抽干**之前**让框失活），只在框被清空、输入了完整名字、或失去焦点时才关闭</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>std::deque&lt;std::string&gt; History</td><td>命令历史：最近 `MaxHistory` 条执行过的行，**尾最新**</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">int</span> HistoryIndex = -1</td><td>`↑` 列表的高亮行，-1 = 列表关着。行复用补全浮层（二者互斥）；最新一条在最下面，于是 `↑` 是「往回走、离开命令框」的方向</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">int</span> SuggestIndex = -1</td><td>补全列表被 `↑`/`↓` 走动时的高亮行，-1 = 未在走动</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">char</span> SuggestNeedle[256] = { 0 }</td><td>走动进入补全列表时**钉住**的过滤词（见上面「过滤词要钉住」一条）。空 = 未在走动</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">int</span> SuggestOffset = 0</td><td>走动时候选列表的窗口原点（最上可见行的下标），**故意跨帧保留**。每帧按「把高亮钉在窗口边缘」重算：若让内容跟着按键滑动，`↑`（行 -1）会拖着窗口走，屏幕上整列表反而**下移**，`↑` 与 `↓` 看起来一模一样。保留它则高亮在窗口内移动、只在要离开窗口时窗口才挪一行。随走动状态一起复位</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">int</span> PendingStep = 0</td><td>`↑`/`↓` 快捷键回调记下的步子。回调在事件抽干期跑、**早于** `Update` 收集候选，所以这一步属于哪个列表（补全还是历史）由 `Update` 决定</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">bool</span> bContextMenuOpen = <span class="kw">false</span></td><td>日志区的上下文菜单（取代旧的工具栏 Clear 按钮）：右键日志面板即打开。后端在右键发生的那一帧把右键与指针位置写进面板运行期状态（`EUIInputFlags::ContextMenu`），`Update` 在**下一帧**读到，与上面那些命中状态的读法完全一致</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>UI::FUIVector2 ContextMenuAnchor{}</td><td>上下文菜单的锚点（后端写回的指针位置）</td></tr>
+</tbody></table></div>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Init(FExampleEditor&amp; Editor) <span class="kw">override</span></td><td>订阅日志层的监听流（幂等：已有订阅直接返回）。回调只做「加锁 → 满则丢头并累加 `DroppedCount` → 推尾」，所以 `LogLine` 在任何线程上都是安全的。日志层未起来时不订阅（不报错）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Update(FExampleEditor&amp; Editor) <span class="kw">override</span></td><td>声明期（宿主 `NewFrame` **之前**）：只重建本视图的树，不碰后端。这一帧的全部工作顺序：① `EnsureView`；② 回读过滤框 / 命令行文本 + 两个**活跃位**；③ 算大小写无关的过滤词；④ 在锁下快照可见（过滤后）的行并结清 `DroppedCount`；⑤ 跑挂起的动作（回车提交的 CVar 命令 / `Ctrl+C` 复制 / `Ctrl+A` 全选）；⑥ 读上一帧的行高、滚动是否贴底、拖拽扩选、候选匹配；⑦ 在 `Edit()` 里重建整棵树（工具栏 + 日志区 + 命令行 + 浮层 + 上下文菜单）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Shutdown(FExampleEditor&amp; Editor) <span class="kw">override</span></td><td>解绑日志监听 + 注销视图。顺序不能反、也不能省：注册表只持裸指针（**从不删除**），日志层的监听表同样持有本对象的回调 —— 任何一个漏解都是跨模块悬垂</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>UI::FUIView* EnsureView(FExampleEditor&amp; Editor)</td><td>惰性建视图 + 注册：**UI 插件在 Init 时可能还没起来**，注册表为空就返回 <span class="kw">nullptr</span>、下一帧重试。外壳开窗（含宿主 dockspace id）由宿主通用循环做；渲染上下文用 `Editor.GetUIRenderContext()` 登记</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> ExecuteCvarLine()</td><td>跑命令行：把 `<span class="st">"name [value]"</span>` 拿去查 ConsoleVariable 注册表 —— 只有名字就打印当前值、带值就设置。结果**回显进日志缓冲本身**（`Category = <span class="st">"CVar"</span>`），与日志层同一条数据流，下一帧可见。顺带把执行行记进 `History`（与上一条相同不重复记），并把补全走动状态整体作废</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> FillFromList(<span class="kw">const</span> std::string&amp; Text)</td><td>把一行文本写回命令行：缓冲变成**本帧的权威值**（挡住节点陈旧文本的回读）、该文本记成「刚选过的名字」（避免补全列表压在自己那一行上重开）、并让命令框把键盘要回去。历史行点选与候选行点选、以及 `↑`/`↓` 的走动都走它</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> FillFromHistory()</td><td>用 `History[HistoryIndex]` 填命令行（`↑`/`↓` 与行点选共用）；同时关掉补全列表 —— 两个列表互斥</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> StepHistory(<span class="kw">int</span> Step)</td><td>按 `Step`（-1 = 更旧、+1 = 更新）走命令历史。**关着的列表（-1）被「更旧」的一步打开**，落在最新一条上；两端夹住。只在「过滤框正在收键盘」或「历史为空」时拒绝 —— 命令框自己有没有在收键盘，引擎已在派发前挡掉（两条 `↑`/`↓` 快捷键声明在命令框上，默认作用域 `NodeActive`），所以命令框闲置时箭头绝不会翻历史</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> StepSuggest(<span class="kw">int</span> Step, <span class="kw">const</span> std::vector&lt;std::string&gt;&amp; Matches)</td><td>在候选 `Matches` 里按 `Step` 走动：进入时**钉住过滤词**并落在最后一行（`↑`）或第一行（`↓`），两端夹住，每走一步把高亮名填回命令框。**列表保持开着** —— 走动不是挑选</td></tr>
+</tbody></table></div>
+<div class="sect">
+<h4>嵌套</h4>
+<table><thead><tr><th>访问域</th><th>名称</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-private">private</span></td><td>FLogEntry</td><td>一条被缓冲的控制台日志。字段：`ELogLevel Level`、`std::string Category`、`std::string Message`。**时间戳在入队时本地捕获**（如果将来要显示）—— `FLogMessage` 本身只带 Level/Category/Message，缓冲必须自给自足</td></tr>
+</tbody></table></div>
+</div>
 </div>
 <div class="pane" id="pane-Public__EditorConsoleApi_h">
 <div class="hdr">Public/EditorConsoleApi.h</div>
-<h2 class="file-title">EditorConsoleApi.h</h2>
-<div class="empty">（尚未声明内容 —— 在 Tools/docs_content.py 里加一条 Header(&quot;Public/EditorConsoleApi.h&quot;)，再逐类声明 Class / Interface / Field）</div>
+<h2 class="file-title">EditorConsoleApi.h —— 导出宏</h2>
+<div class="card"><div class="doc">
+<p>本插件的导出开关：`MAHO_EDITORCONSOLE_API` 按 `MAHO_EDITORCONSOLE_MODULE_EXPORTS` 在 `MAHO_EXPORT` / `MAHO_IMPORT` 之间切换。</p>
+<p>**当前没有类型挂它**：控制台面板只经 DLL 工厂 `CreateFrame()` 按符号名被构造，没有别的模块 include 它的类型，所以它不需要导出标记。宏按惯例保留。</p>
+</div></div>
+<div class="card">
+<h3 class="card-title">包含的头文件</h3>
+
+<table>
+<thead><tr><th>头文件</th><th>功能</th></tr></thead>
+<tbody>
+<tr><td>Core/Export.h</td><td>`MAHO_EXPORT` / `MAHO_IMPORT` 两个底层标记</td></tr>
+</tbody></table>
+</div>
+<div class="ent e-macro" id="Public__EditorConsoleApi_h-0">
+<h3><span class="kind">宏</span> MAHO_EDITORCONSOLE_API <span class="base">: MAHO_EXPORT / MAHO_IMPORT（按 MAHO_EDITORCONSOLE_MODULE_EXPORTS 切换）</span></h3>
+<div class="sect"><div class="doc">
+<p>面板类当前不带它（它只作 DLL 工厂的产物存在）。</p>
+</div></div>
+</div>
 </div></div>
 </div>
 <script>

@@ -79,7 +79,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div id="app">
   <div id="side">
     <h1>Maho 引擎源码</h1>
-    <div class="search" title="左侧扫描 Source/**/*.h：1 个头文件 · 已声明 0 个 · 0 个实体 / 0 个成员 ｜ 内容在 Tools/docs_content.py 里逐条声明">
+    <div class="search" title="左侧扫描 Source/**/*.h：1 个头文件 · 已声明 1 个 · 5 个实体 / 0 个成员 ｜ 内容在 Tools/docs_content.py 里逐条声明">
       <input id="q" type="search" placeholder="搜索头文件…  （如 Frame、Core、Entry）" autocomplete="off">
     </div>
     <div id="tree"><ul>
@@ -92,8 +92,82 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
   </div>
   <div id="main"><div class="pane" id="pane-Public__Reflect_h">
 <div class="hdr">Public/Reflect.h</div>
-<h2 class="file-title">Reflect.h</h2>
-<div class="empty">（尚未声明内容 —— 在 Tools/docs_content.py 里加一条 Header(&quot;Public/Reflect.h&quot;)，再逐类声明 Class / Interface / Field）</div>
+<h2 class="file-title">Reflect.h —— 编译期反射（第三方库 + 语法糖，纯库）</h2>
+<div class="card"><div class="doc">
+<p>把 `refl-cpp`（header-only、MIT）连同少量语法糖一起打包：消费方 `#include &lt;Reflect.h&gt;` 就能用 `refl::*` 与本插件的 `MAHO_*` 宏。</p>
+<p>**为什么由一个插件来打包第三方库**：引擎核心按设计**零第三方依赖**，而反射又是若干上层功能（序列化、编辑器属性面板）的共同需要；把它做成一个可安装的插件，谁需要谁依赖 —— 不需要的模块既不多此一次编译，也不在链接里多背一份。</p>
+<p>**为什么外层还要包一层宏**：`refl-cpp` 的名字与用法细节属于库的内部约定，包一层后引擎侧只依赖 `MAHO_*` 这一小组语义化名字，将来换库 / 升级只改这一处。</p>
+<p>**本插件没有单例、没有状态、没有生命周期**：纯函数式模板，给成服务层只会凭空制造一个需要等待的 stage。</p>
+</div></div>
+<div class="card">
+<h3 class="card-title">包含的头文件</h3>
+
+<table>
+<thead><tr><th>头文件</th><th>功能</th></tr></thead>
+<tbody>
+<tr><td>&lt;refl.hpp&gt;</td><td>`refl-cpp` 本体（header-only）。**为什么随插件打包而不是让项目自己装**：反射的产品形态决定了「版本必须一致」—— 元数据特化的布局一旦不同版本混用，报错会出现在很远的地方；打包成一个可安装单元就把版本钉死在一处</td></tr>
+<tr><td>&lt;cstddef&gt;</td><td>`std::size_t` —— 成员遍历时回调的**编译期索引**类型</td></tr>
+</tbody></table>
+</div>
+<div class="card">
+<h3 class="card-title">使用须知（为什么这么用）</h3>
+<div class="doc">
+<p>`refl-cpp` 靠**全局作用域的元数据特化**工作，这决定了两条必须遵守的用法约束 —— 违反它们时编译器给出的错误（如 `does not support reflection`）离真正原因很远，所以在这里显式写明：</p>
+</div>
+<table>
+<thead><tr><th>约束</th><th>原因</th></tr></thead>
+<tbody>
+<tr><td>`MAHO_REFLECT` 必须在**全局命名空间**展开</td><td>库会在全局作用域注入 `<span class="kw">namespace</span> refl_impl::metadata`；写在某个 <span class="kw">namespace</span> 里就会在错误的地方做特化，编译直接失败</td></tr>
+<tr><td>被反射的类型需先有完整定义</td><td>`field(x)` 要取成员指针，必须能看到类型的完整布局（前向声明不够）</td></tr>
+</tbody></table>
+</div>
+<div class="card">
+<h3 class="card-title">宏一览</h3>
+
+<table>
+<thead><tr><th>宏</th><th>签名 → 展开</th></tr></thead>
+<tbody>
+<tr><td>MAHO_REFLECT(Type, ...)</td><td>`REFL_AUTO(type(Type), __VA_ARGS__)` —— 声明一个可反射类型；`...` 是 `field(成员), field(成员), ...` 列表，也可以加 `bases&lt;基类&gt;`（如 `MAHO_REFLECT(FUnit, bases&lt;FEntity&gt;, field(hp));`）</td></tr>
+<tr><td>MAHO_FOR_EACH_MEMBER(Type, Visitor)</td><td>`refl::util::for_each(refl::reflect&lt;Type&gt;().members, Visitor)` —— 遍历**全部**成员（含成员函数）</td></tr>
+<tr><td>MAHO_MEMBER_COUNT(Type)</td><td>`refl::reflect&lt;Type&gt;().members.size` —— 成员个数（**编译期**常量）</td></tr>
+<tr><td>MAHO_MEMBER_DESCRIPTOR(Type)</td><td>`refl::reflect&lt;Type&gt;().members` —— 成员描述符集合本身</td></tr>
+<tr><td>MAHO_FOR_EACH_FIELD(Type, Visitor)</td><td>`refl::for_each(refl::reflect&lt;Type&gt;().readable_members, Visitor)` —— 只遍历**可读字段**（跳过成员函数）</td></tr>
+</tbody></table>
+</div>
+<div class="ent e-macro" id="Public__Reflect_h-0">
+<h3><span class="kind">宏</span> MAHO_REFLECT <span class="base">: REFL_AUTO(type(Type), __VA_ARGS__)</span></h3>
+<div class="sect"><div class="doc">
+<p>为一个类型声明反射元数据（`refl-cpp` 的 `REFL_AUTO` 包装）。</p>
+<p>`Type` 之后的参数是成员描述列表：`field(名字)` 描述数据成员、`bases&lt;...&gt;` 声明基类（基类成员也会被纳入）。</p>
+<p>**必须在全局命名空间展开**（见上表）—— 这是最容易踩、且报错信息最不直观的一条。</p>
+</div></div>
+</div>
+<div class="ent e-macro" id="Public__Reflect_h-1">
+<h3><span class="kind">宏</span> MAHO_FOR_EACH_MEMBER <span class="base">: refl::util::for_each(refl::reflect&lt;Type&gt;().members, Visitor)</span></h3>
+<div class="sect"><div class="doc">
+<p>遍历一个可反射类型的**全体成员**。回调用 `[](<span class="kw">auto</span> member, <span class="kw">auto</span> index)` 接：`member.name`（`<span class="kw">const</span> <span class="kw">char</span>*`）、`member.value`、`member.is_readable()` / `is_writable()`（成员函数用 `callable()`）。</p>
+<p>**为什么遍历用回调而不是返回容器**：成员描述符是编译期生成的异构集合，没有一个运行期容器能装下它们；回调是唯一能对内联展开的形态（零运行期开销）。</p>
+</div></div>
+</div>
+<div class="ent e-macro" id="Public__Reflect_h-2">
+<h3><span class="kind">宏</span> MAHO_MEMBER_COUNT <span class="base">: refl::reflect&lt;Type&gt;().members.size</span></h3>
+<div class="sect"><div class="doc">
+<p>成员个数（编译期常量）。**用在哪儿**：静态断言、数组大小、以及「按索引生成字段」的展开 —— 都是需要常量表达式的位置。</p>
+</div></div>
+</div>
+<div class="ent e-macro" id="Public__Reflect_h-3">
+<h3><span class="kind">宏</span> MAHO_MEMBER_DESCRIPTOR <span class="base">: refl::reflect&lt;Type&gt;().members</span></h3>
+<div class="sect"><div class="doc">
+<p>成员描述符集合本身（不遍历）。需要把「成员列表」当对象继续传给别的模板时用它，例如再套一层 `refl::util::for_each` 或做编译期筛选。</p>
+</div></div>
+</div>
+<div class="ent e-macro" id="Public__Reflect_h-4">
+<h3><span class="kind">宏</span> MAHO_FOR_EACH_FIELD <span class="base">: refl::for_each(refl::reflect&lt;Type&gt;().readable_members, Visitor)</span></h3>
+<div class="sect"><div class="doc">
+<p>只遍历**可读字段**（成员函数被自动跳过）。</p>
+<p>**为什么与 `FOR_EACH_MEMBER` 并存**：序列化 / 属性面板这类场景只关心数据成员，如果遍历含成员函数，每个调用点都要自己 `<span class="kw">if</span>` 一次 —— 把这个判断下沉成「取 readable_members」，调用点就不再重复同一段过滤。</p>
+</div></div>
+</div>
 </div></div>
 </div>
 <script>

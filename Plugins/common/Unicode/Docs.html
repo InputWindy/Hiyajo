@@ -79,7 +79,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div id="app">
   <div id="side">
     <h1>Maho 引擎源码</h1>
-    <div class="search" title="左侧扫描 Source/**/*.h：1 个头文件 · 已声明 0 个 · 0 个实体 / 0 个成员 ｜ 内容在 Tools/docs_content.py 里逐条声明">
+    <div class="search" title="左侧扫描 Source/**/*.h：1 个头文件 · 已声明 1 个 · 2 个实体 / 0 个成员 ｜ 内容在 Tools/docs_content.py 里逐条声明">
       <input id="q" type="search" placeholder="搜索头文件…  （如 Frame、Core、Entry）" autocomplete="off">
     </div>
     <div id="tree"><ul>
@@ -92,8 +92,65 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
   </div>
   <div id="main"><div class="pane" id="pane-Public__Unicode_h">
 <div class="hdr">Public/Unicode.h</div>
-<h2 class="file-title">Unicode.h</h2>
-<div class="empty">（尚未声明内容 —— 在 Tools/docs_content.py 里加一条 Header(&quot;Public/Unicode.h&quot;)，再逐类声明 Class / Interface / Field）</div>
+<h2 class="file-title">Unicode.h —— UTF-8/16/32 + 平台原生字符串转换（纯库）</h2>
+<div class="card"><div class="doc">
+<p>编码转换的积木：校验 + UTF-8 / UTF-16 / UTF-32 互转 + 平台原生字符串转换。**零第三方、零状态、零单例** —— 全是自由函数。</p>
+<p>**核心约定：引擎内部一律 UTF-8 `std::string`**。这条约定是本插件存在的理由：如果每个模块各自决定用 UTF-16 还是本地代码页，那么每个跨模块的字符串参数都要重新谈一次编码。统一成 UTF-8 之后，转换只发生在**平台边界**（Windows API、文件路径），而不是到处采样。</p>
+<p>**为什么要 `ToNative` / `FromNative` 这对函数**：Windows 的 WinAPI 需要 UTF-16，其它平台基本是 UTF-8 passthrough；把「平台差异」收进这两个函数，调用点就只写一次而与平台无关（在非 Windows 上它们是零拷贝的转发）。</p>
+<p>**为什么要 `IsValidUtf8`**：外部来的字节（配置文件、网络、被别的工具写坏的文件）不保证合法；先校验再使用，可以把「非法编码」变成一个明确的返回值，而不是让下游在遍历字符时越界。</p>
+</div></div>
+<div class="card">
+<h3 class="card-title">包含的头文件</h3>
+
+<table>
+<thead><tr><th>头文件</th><th>功能</th></tr></thead>
+<tbody>
+<tr><td>&lt;string&gt;</td><td>`std::string` / `std::wstring` / `std::u16string` / `std::u32string` —— 各编码的载体</td></tr>
+<tr><td>&lt;string_view&gt;</td><td>入参一律视图（**转换是只读操作**，不需要夺走调用方的字符串所有权）</td></tr>
+</tbody></table>
+</div>
+<div class="card">
+<h3 class="card-title">平台原生字符串别名</h3>
+<div class="doc">
+<p>两个别名把「平台原生」这个词变成**类型**：调用 WinAPI / 文件系统时用 `FNativeString`，其余代码只认 `std::string`。于是「哪里需要转换」在编译期就能看出来（类型不同编译不过），而不是靠文档提醒</p>
+</div>
+<table>
+<thead><tr><th>别名</th><th>取值</th></tr></thead>
+<tbody>
+<tr><td>FNativeString</td><td>Windows：`std::wstring`（UTF-16，WinAPI 的 `W` 版接口）；其它平台：`std::string`（UTF-8）</td></tr>
+<tr><td>FNativeStringView</td><td>对应视图：Windows `std::wstring_view`；其它平台 `std::string_view`</td></tr>
+</tbody></table>
+</div>
+<div class="card">
+<h3 class="card-title">自由函数</h3>
+
+<table>
+<thead><tr><th>签名</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td><span class="kw">bool</span> IsValidUtf8(std::string_view In)</td><td>是否是**良构** UTF-8（拒绝孤立代理项与超长编码）。返回 `<span class="kw">bool</span>` 而不是抛异常：「这段字节不合法」是可以正常处理的分支，不是程序错误</td></tr>
+<tr><td>std::u16string Utf8ToUtf16(std::string_view In)</td><td>UTF-8 → UTF-16（`std::u16string`，与 Windows 原生宽字符串同布局但**不等于** `std::wstring`，跨平台时别直接互换）</td></tr>
+<tr><td>std::string Utf16ToUtf8(std::u16string_view In)</td><td>UTF-16 → UTF-8（从平台边界收回来的方向）</td></tr>
+<tr><td>std::u32string Utf8ToUtf32(std::string_view In)</td><td>UTF-8 → UTF-32 —— 每个元素**恰好一个码点**，做逐字符处理（如排版、字形选择）时比 UTF-8 直接遍历安全</td></tr>
+<tr><td>std::string Utf32ToUtf8(std::u32string_view In)</td><td>UTF-32 → UTF-8（处理完收回标准表示）</td></tr>
+<tr><td>FNativeString ToNative(std::string_view Utf8)</td><td>UTF-8 → 平台原生（Windows 走 WinAPI 转 UTF-16；其它平台是 **passthrough，无拷贝语义**）。**只在真正的平台边界用**：把它当通用类型转换会制造无谓的宽窄串摆动</td></tr>
+<tr><td>std::string FromNative(FNativeStringView Native)</td><td>平台原生 → UTF-8（`ToNative` 的逆；Windows 上同时抹平了「WinAPI 返回的是原生串」这件事）</td></tr>
+<tr><td><span class="kw">void</span> EnsureConsoleUtf8()</td><td>保证控制台按 UTF-8 输出（Windows：`SetConsoleOutputCP(CP_UTF8)`；其它平台空操作）。**为什么需要**：不设这一步，中文日志在 Windows 控制台会变成乱码 —— 而这是开发期最常看的输出通道</td></tr>
+</tbody></table>
+</div>
+<div class="ent e-alias" id="Public__Unicode_h-0">
+<h3><span class="kind">别名</span> FNativeString <span class="base">: Windows: std::wstring ｜ 其它平台: std::string</span></h3>
+<div class="sect"><div class="doc">
+<p>平台原生字符串类型（用 `#<span class="kw">if</span> defined(_WIN32)` 切换）。</p>
+<p>**为什么要这个别名而不是到处写 `std::wstring`**：调用点从此与平台无关，「这里需要原生串」这件事由类型名表达；将来若某平台需要别的表示，只改这一处。</p>
+<p>**注意 `std::wstring` 的宽度是实现定义的**：Windows 上是 2 字节（UTF-16），Linux 上常见 4 字节 —— 因此**跨平台代码不要用 `wstring` 当 UTF-16 的载体**，要 UTF-16 就用 `std::u16string`</p>
+</div></div>
+</div>
+<div class="ent e-alias" id="Public__Unicode_h-1">
+<h3><span class="kind">别名</span> FNativeStringView <span class="base">: Windows: std::wstring_view ｜ 其它平台: std::string_view</span></h3>
+<div class="sect"><div class="doc">
+<p>`FNativeString` 对应的只读视图 —— 传给 WinAPI / 文件系统 API 时不复制、不分配。**入参收视图**是这套转换函数的统一风格：转换本来就是「读源、产新」，没有理由要求调用方把源所有权交出来</p>
+</div></div>
+</div>
 </div></div>
 </div>
 <script>

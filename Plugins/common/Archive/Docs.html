@@ -79,7 +79,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div id="app">
   <div id="side">
     <h1>Maho 引擎源码</h1>
-    <div class="search" title="左侧扫描 Source/**/*.h：1 个头文件 · 已声明 0 个 · 0 个实体 / 0 个成员 ｜ 内容在 Tools/docs_content.py 里逐条声明">
+    <div class="search" title="左侧扫描 Source/**/*.h：1 个头文件 · 已声明 1 个 · 5 个实体 / 32 个成员 ｜ 内容在 Tools/docs_content.py 里逐条声明">
       <input id="q" type="search" placeholder="搜索头文件…  （如 Frame、Core、Entry）" autocomplete="off">
     </div>
     <div id="tree"><ul>
@@ -92,8 +92,135 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
   </div>
   <div id="main"><div class="pane" id="pane-Public__Archive_h">
 <div class="hdr">Public/Archive.h</div>
-<h2 class="file-title">Archive.h</h2>
-<div class="empty">（尚未声明内容 —— 在 Tools/docs_content.py 里加一条 Header(&quot;Public/Archive.h&quot;)，再逐类声明 Class / Interface / Field）</div>
+<h2 class="file-title">Archive.h —— 二进制序列化原语（纯库 / header-only）</h2>
+<div class="card"><div class="doc">
+<p>二进制序列化的**积木**，不是某个具体文件格式：一个抽象字节流 `FArchive`，两个实现（`FMemoryReader` 读外部缓冲、`FMemoryWriter` 写自有缓冲），外加自序列化接口 `ISerialize`。</p>
+<p>**为什么做成纯库（没有生命周期、没有单例）**：序列化是「对一段字节做变换」的纯计算，不持有跨帧状态；把它做成服务层只会逼每个使用者去等一个 stage，而它其实什么都不等。</p>
+<p>**为什么 header-only**：`<span class="kw">operator</span>&lt;&lt;` 的 POD 重载是模板（要看到类型的完整性才能 `<span class="kw">sizeof</span>`），模板无法 out-of-line 到别的模块 —— 全放头里就没有「模板实现藏在 DLL 里、消费方实例化不出来」的坑。`Private/Archive.cpp` 只放非模板成员。</p>
+<p>**为什么零第三方**：读写端可能同时存在于引擎与项目插件里，格式一旦绑死某个库，版本差异就会变成字节级不兼容；这里只认 `memcpy` 语义与显式字节序约定。</p>
+</div></div>
+<div class="card">
+<h3 class="card-title">包含的头文件</h3>
+
+<table>
+<thead><tr><th>头文件</th><th>功能</th></tr></thead>
+<tbody>
+<tr><td>&lt;cstddef&gt;</td><td>`std::size_t` —— `Serialize` / `Seek` / `Tell` 的长度与偏移都用它</td></tr>
+<tr><td>&lt;cstdint&gt;</td><td>`std::int32_t` / `std::uint64_t` 等定宽整型 + `std::uint8_t` 字节：**定宽是跨平台二进制兼容的前提**（`<span class="kw">int</span>` 在 32/64 位下不保证一样）</td></tr>
+<tr><td>&lt;span&gt;</td><td>`std::span&lt;<span class="kw">const</span> std::uint8_t&gt;`：`FMemoryReader` **引用**外部缓冲而不拷贝，span 正好表达「视图而非所有者」</td></tr>
+<tr><td>&lt;string&gt;</td><td>`std::string` 的按值序列化重载与序列化缓冲</td></tr>
+<tr><td>&lt;type_traits&gt;</td><td>`std::is_trivially_copyable_v&lt;T&gt;` —— 把「拿非 POD 走 memcpy」变成**编译错误**</td></tr>
+<tr><td>&lt;vector&gt;</td><td>`FMemoryWriter` 的自有字节缓冲与 `TakeBytes()` 的返回类型</td></tr>
+</tbody></table>
+</div>
+<div class="card">
+<h3 class="card-title">序列化模式（EArchiveMode）</h3>
+
+<table>
+<thead><tr><th>取值</th><th>含义</th></tr></thead>
+<tbody>
+<tr><td>Read = 0</td><td>读模式：`IsReading()` 为真，`<span class="kw">operator</span>&lt;&lt;` 从流里**取**数据填进变量</td></tr>
+<tr><td>Write = 1</td><td>写模式：`IsWriting()` 为真，`<span class="kw">operator</span>&lt;&lt;` 把变量**推**进流</td></tr>
+</tbody></table>
+</div>
+<div class="ent e-enum" id="Public__Archive_h-0">
+<h3><span class="kind">枚举</span> EArchiveMode <span class="base">: std::uint8_t</span></h3>
+<div class="sect"><div class="doc">
+<p>把「方向」编码进**同一个** `<span class="kw">operator</span>&lt;&lt;` 里 —— 读写共用一套调用点，业务类型的 `Serialize(FArchive&amp;)` 只需要写一遍。基点显式写成 `std::uint8_t` 是为了让它只占一个字节（序列化结构体里常见）。</p>
+</div></div>
+</div>
+<div class="ent e-class" id="Public__Archive_h-1">
+<h3><span class="kind">类</span> FArchive</h3>
+<div class="sect"><div class="doc">
+<p>抽象二进制流 —— 原始字节与有类型数据之间的桥。</p>
+<p>设计要点：**原始字节是唯一的虚接口**（`Serialize`），所有类型化读写都建在它上面 ⇒ 新增一个后端（文件 / 网络 / 内存）只需实现三个虚函数。</p>
+<p>用 `<span class="kw">operator</span>&lt;&lt;` 而不是 `Read/Write` 分名：读写两端调用点长得一样，`Ar &lt;&lt; A &lt;&lt; B;` 在两种模式下都成立。</p>
+</div></div>
+<div class="sect">
+<h4>字段</h4>
+<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-private">private</span></td><td>EArchiveMode Mode</td><td>方向标志（唯一状态）。**为什么放基类**：方向是「我是什么」而不是「我记得什么」，两个实现都不需要各自维护一份，`IsReading/IsWriting` 也就无需虚调用</td></tr>
+</tbody></table></div>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> ~FArchive() = <span class="kw">default</span></td><td>虚析构 —— 消费方常按 `FArchive&amp;`（基类引用）持有，多态删除必须安全</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">bool</span> IsReading() <span class="kw">const</span></td><td>当前是否读模式（`Mode == Read`）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">bool</span> IsWriting() <span class="kw">const</span></td><td>当前是否写模式（`Mode == Write`）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> Serialize(<span class="kw">void</span>* Data, std::size_t Size) = 0</td><td>**唯一的原始字节入口**（memcpy 语义）：`Data` 在写模式是源、读模式是目标</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> Seek(std::size_t Pos) = 0</td><td>把流位置挪到绝对偏移（随机访问；顺序读写的实现各自解释）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> std::size_t Tell() <span class="kw">const</span> = 0</td><td>当前流位置（与 `Seek` 配对，用于回填长度之类的两遍写法）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>FArchive&amp; <span class="kw">operator</span>&lt;&lt;(std::int32_t&amp; V)</td><td>定宽整型重载；**取引用**：读模式要写回变量，写模式只读它</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>FArchive&amp; <span class="kw">operator</span>&lt;&lt;(std::uint32_t&amp; V)</td><td>同上（无符号 32 位）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>FArchive&amp; <span class="kw">operator</span>&lt;&lt;(std::int64_t&amp; V)</td><td>同上（有符号 64 位）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>FArchive&amp; <span class="kw">operator</span>&lt;&lt;(std::uint64_t&amp; V)</td><td>同上（无符号 64 位）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>FArchive&amp; <span class="kw">operator</span>&lt;&lt;(<span class="kw">float</span>&amp; V)</td><td>同上（IEEE-754 单精度）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>FArchive&amp; <span class="kw">operator</span>&lt;&lt;(<span class="kw">double</span>&amp; V)</td><td>同上（IEEE-754 双精度）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>FArchive&amp; <span class="kw">operator</span>&lt;&lt;(<span class="kw">bool</span>&amp; V)</td><td>单独重载：`<span class="kw">bool</span>` 的 `<span class="kw">sizeof</span>` 与表示是实现定义的，必须走**规范化**的 0/1 字节，不能靠 memcpy 直接倾倒</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>FArchive&amp; <span class="kw">operator</span>&lt;&lt;(std::string&amp; V)</td><td>字符串：长度 + 字节，不依赖 `\0` 结尾（可承载内嵌空字节）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">template</span> &lt;<span class="kw">typename</span> T&gt; FArchive&amp; <span class="kw">operator</span>&lt;&lt;(T&amp; Value)</td><td>泛型 POD 重载：`static_assert(std::is_trivially_copyable_v&lt;T&gt;)` 后按 `<span class="kw">sizeof</span>(T)` 整块 memcpy —— 例如 `glm::vec3`。**断言是刻意的门禁**：非 POD（有指针 / 虚表 / 需要逐字段控制）必须走 `ISerialize`，否则二进制里会出现悬空指针。</td></tr>
+<tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">explicit</span> FArchive(EArchiveMode InMode)</td><td><span class="kw">protected</span> 构造：流是抽象层，只能由具体后端构造并声明自己的方向</td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-class" id="Public__Archive_h-2">
+<h3><span class="kind">类</span> ISerialize</h3>
+<div class="sect"><div class="doc">
+<p>自序列化接口 —— 让**类型自己**知道怎么把自己摊成字节。</p>
+<p>**为什么要它**：`FArchive` 只认识 POD 与字符串，组合类型（材质、存档结构体）的字段布局只有它自己知道；把它写成成员函数，读写两端共用同一份布局描述，不会出现「写端改了字段、读端忘了同步」的静默错位。</p>
+<p>约定：读端与写端**同一个函数**（靠 `FArchive` 的模式区分方向），因此它必须对两种模式都正确。</p>
+</div></div>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> ~ISerialize() = <span class="kw">default</span></td><td>虚析构 —— 常按接口指针删除</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> Serialize(FArchive&amp; Ar) = 0</td><td>把本类型的全部字段过一遍归档（读或写由 `Ar` 的模式决定）</td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-class" id="Public__Archive_h-3">
+<h3><span class="kind">类</span> FMemoryReader <span class="base">: FArchive</span></h3>
+<div class="sect"><div class="doc">
+<p>外部字节缓冲上的读取器 —— **不拷贝**，只是视图 + 一个游标。</p>
+<p>`FMemoryReader(Bytes)` 之后 `Reader &lt;&lt; X` 就是「从缓冲区取一个 X」。</p>
+<p>**生命周期须注意**：缓冲必须活得比读取器长（`std::span` 明确表达这层借用关系，而不是让人以为进来了就安全）。</p>
+</div></div>
+<div class="sect">
+<h4>字段</h4>
+<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-private">private</span></td><td>std::span&lt;<span class="kw">const</span> std::uint8_t&gt; Data</td><td>被借用的缓冲视图（`<span class="kw">const</span>`：读取器永不写它）</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>std::size_t Pos = 0</td><td>读游标；初始 0 ⇒ 从缓冲头开始</td></tr>
+</tbody></table></div>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">explicit</span> FMemoryReader(std::span&lt;<span class="kw">const</span> std::uint8_t&gt; InData)</td><td>绑定一段只读字节（借用，无拷贝）；方向固定为读</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Serialize(<span class="kw">void</span>* Data, std::size_t Size) <span class="kw">override</span></td><td>从缓冲拷出 `Size` 字节到 `Data`，并推进游标</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Seek(std::size_t Pos) <span class="kw">override</span></td><td>把绝对游标设到 `Pos`（读模式下唯一的随机访问入口）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] std::size_t Tell() <span class="kw">const</span> <span class="kw">override</span></td><td>当前游标（相对缓冲起点）</td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-class" id="Public__Archive_h-4">
+<h3><span class="kind">类</span> FMemoryWriter <span class="base">: FArchive</span></h3>
+<div class="sect"><div class="doc">
+<p>写进自有缓冲的写入器 —— 与读取器对称，但**拥有**数据。</p>
+<p>`Writer &lt;&lt; A &lt;&lt; B;` 之后用 `GetBytes()`（看一眼）或 `TakeBytes()`（搬走）取结果。</p>
+<p>**为什么同时给两个取法**：只 `GetBytes` 会逼调用方再拷一次（往上层传成本高）；只 `TakeBytes` 会拿走内部状态、之后这写端就废了。两个都给，由调用方声明意图。</p>
+</div></div>
+<div class="sect">
+<h4>字段</h4>
+<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-private">private</span></td><td>std::vector&lt;std::uint8_t&gt; Buffer</td><td>自有的字节缓冲（连续存储 ⇒ 可直接当 `span` / 网络包发送）</td></tr>
+</tbody></table></div>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td>FMemoryWriter()</td><td>构造空缓冲（方向固定为写）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Serialize(<span class="kw">void</span>* Data, std::size_t Size) <span class="kw">override</span></td><td>把 `Size` 字节追加到缓冲并推进游标</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Seek(std::size_t Pos) <span class="kw">override</span></td><td>把写游标设到绝对偏移 —— 用于回填先前不知道的长度字段（两遍写法）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] std::size_t Tell() <span class="kw">const</span> <span class="kw">override</span></td><td>当前写游标 = 已产出的字节数</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">const</span> std::vector&lt;std::uint8_t&gt;&amp; GetBytes() <span class="kw">const</span></td><td>零拷贝查看已写字节（写端保持可用）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] std::vector&lt;std::uint8_t&gt; TakeBytes()</td><td>搬走字节（移动返回，写端内容随之清空）</td></tr>
+</tbody></table></div>
+</div>
 </div></div>
 </div>
 <script>

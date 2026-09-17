@@ -79,7 +79,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div id="app">
   <div id="side">
     <h1>Maho 引擎源码</h1>
-    <div class="search" title="左侧扫描 Source/**/*.h：2 个头文件 · 已声明 0 个 · 0 个实体 / 0 个成员 ｜ 内容在 Tools/docs_content.py 里逐条声明">
+    <div class="search" title="左侧扫描 Source/**/*.h：2 个头文件 · 已声明 2 个 · 4 个实体 / 26 个成员 ｜ 内容在 Tools/docs_content.py 里逐条声明">
       <input id="q" type="search" placeholder="搜索头文件…  （如 Frame、Core、Entry）" autocomplete="off">
     </div>
     <div id="tree"><ul>
@@ -93,13 +93,132 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
   </div>
   <div id="main"><div class="pane" id="pane-Public__Name_h">
 <div class="hdr">Public/Name.h</div>
-<h2 class="file-title">Name.h</h2>
-<div class="empty">（尚未声明内容 —— 在 Tools/docs_content.py 里加一条 Header(&quot;Public/Name.h&quot;)，再逐类声明 Class / Interface / Field）</div>
+<h2 class="file-title">Name.h —— 字符串驻留池 + FName（服务层）</h2>
+<div class="card"><div class="doc">
+<p>**驻留**（interning）出来的不可变字符串标识符：`FName` 只存一个池内 id，相同文本共享同一条池记录，因此比较退化成整数比较。</p>
+<p>**为什么需要它**：资源键、骨骼名、参数名这类「反复比较、很少新建」的字符串，用 `std::string` 每次比较都要走一遍字节；换成 id 后 `==` 是 O(1)，而构造 / 析构也不再各带一次堆分配。</p>
+<p>**为什么不无脑用 `FName`**：驻留是**永久**的（本设计里池只增不减），一次性字符串用它反而在池里留下永不回收的垃圾 —— 短命文本请直接用 `std::string`。</p>
+<p>**为什么 id 是 `std::uint32_t` 且 0 表示 None**：默认构造必须是一个「零成本、可判断」的无效值，0 天然满足；定宽 32 位让 id 可以安全地序列化 / 跨模块传递。</p>
+<p>**线程安全**：`Intern` 内部持互斥量；`FName` 自身是纯值类型（无锁）。</p>
+</div></div>
+<div class="card">
+<h3 class="card-title">包含的头文件</h3>
+
+<table>
+<thead><tr><th>头文件</th><th>功能</th></tr></thead>
+<tbody>
+<tr><td>NameApi.h</td><td>`MAHO_NAME_API` —— 本模块的导出标签</td></tr>
+<tr><td>&lt;Maho.h&gt;</td><td>引擎聚合头（`FFrameExtension` / `IPipeline` 等基础设施）</td></tr>
+<tr><td>&lt;Engine/Frame.h&gt;</td><td>`MAHO_DECLARE_FRAME` / stage 接口 —— 帧的声明词汇</td></tr>
+<tr><td>&lt;cstdint&gt;</td><td>`std::uint32_t` —— id 的定宽表示（跨模块 / 序列化都靠它）</td></tr>
+<tr><td>&lt;functional&gt;</td><td>底部 `std::hash&lt;FName&gt;` 特化所需（把 `FName` 用作哈希键）</td></tr>
+<tr><td>&lt;mutex&gt;</td><td>`Intern` 的互斥量 —— 池是共享可变状态，必须串行化**写入**</td></tr>
+<tr><td>&lt;string&gt; / &lt;string_view&gt;</td><td>池拥有 `std::string`；`Intern` 入参用 `string_view`（零拷贝观察）</td></tr>
+<tr><td>&lt;unordered_map&gt;</td><td>`文本 → id` 的查找表 —— 键是字符串，恰好是哈希容器的主场</td></tr>
+<tr><td>&lt;vector&gt;</td><td>id → 文本的反查表：**id 就是下标**，反查是 O(1) 数组索引</td></tr>
+</tbody></table>
+</div>
+<div class="card">
+<h3 class="card-title">自由函数</h3>
+
+<table>
+<thead><tr><th>签名</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td>MAHO_NAME_API FNamePool* GetNamePool()</td><td>全局池访问点：`Initialize` 里发布、`Shutdown` 里清除（未上线时为 `<span class="kw">nullptr</span>`）。返回函数而非导出裸变量 —— 跨 DLL 的裸变量拿不到同一份实例的风险太大</td></tr>
+</tbody></table>
+</div>
+<div class="ent e-class" id="Public__Name_h-0">
+<h3><span class="kind">类</span> FName</h3>
+<div class="sect"><div class="doc">
+<p>驻留字符串的**值句柄**（32 位 id）。默认构造即 `None`（id == 0）。</p>
+<p>**为什么是值类型而不是指针 / 引用**：id 可以自由拷贝、按值传参、当作 map 键、写进存档 —— 池自身的生命周期因此不会泄漏到 API 表面（只要求池在 `Intern` 时活着）。</p>
+<p>`ToString()` 需要回池查一次（O(1) 数组索引）；正因如此「比大小」用 id、「要文本」才付出那次查表。</p>
+</div></div>
+<div class="sect">
+<h4>字段</h4>
+<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-private">private</span></td><td>std::uint32_t Id = 0</td><td>池内 id（0 = None）。**类只有这一个成员** ⇒ 拷贝廉价、可当 POD 用</td></tr>
+</tbody></table></div>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td>FName() = <span class="kw">default</span></td><td>默认构造 = `None`（id 0）—— **不需要访问池**，因此 `FName` 可以用在静态存储期 / 不需要初始化顺序保证的场合</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">explicit</span> FName(std::string_view Str)</td><td>构造即驻留：向全局池登记文本并取得 id。**`<span class="kw">explicit</span>`**：避免字面量被隐式转换，让「这里要付一次驻留成本」在调用点可见</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] std::string_view ToString() <span class="kw">const</span></td><td>反查文本（池内 O(1) 索引）。**为什么返回视图**：池里的文本是稳定地址且池只增不减，所以视图安全；返回 `std::string` 会白送一次拷贝</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">bool</span> IsNone() <span class="kw">const</span></td><td>是否为 `None`（id == 0）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] std::uint32_t GetId() <span class="kw">const</span></td><td>取 id —— 序列化 / 跨模块传递用</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">static</span> FName FromId(std::uint32_t InId)</td><td>从 id 零成本重建 `FName`（**不做查表、不做驻留**）：id 本身就是池内的规范条目。只对来自 `GetId()` 的 id 有意义（0 即 None）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">bool</span> <span class="kw">operator</span>==(<span class="kw">const</span> FName&amp; O) <span class="kw">const</span></td><td>O(1) 比较 —— **这就是驻留的全部收益**：两个同文本的名字必得同一 id</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">bool</span> <span class="kw">operator</span>!=(<span class="kw">const</span> FName&amp; O) <span class="kw">const</span></td><td>同上（不等）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">bool</span> <span class="kw">operator</span>&lt;(<span class="kw">const</span> FName&amp; O) <span class="kw">const</span></td><td>按 id 排序：给 `std::map&lt;FName, ...&gt;` 之类提供稳定但**与字典序无关**的次序（只在需要「一致的任一顺序」时使用）</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">friend</span> <span class="kw">class</span> FNamePool</td><td>只许池用 id 直接构造（外部必须经 `FromId`）</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">explicit</span> FName(std::uint32_t InId)</td><td>私有 id 构造：把「已有 id」与「需要驻留的文本」在类型层面区分开</td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-class" id="Public__Name_h-1">
+<h3><span class="kind">类</span> FNamePool <span class="base">: FFrameExtension, IPipeline&lt;IPreInit, IInit, IPostInit, IPreShutdown, IShutdown, IPostShutdown&gt;</span></h3>
+<div class="sect"><div class="doc">
+<p>全局驻留池 —— **一个帧**（挂 6 个 stage），因此上线 / 下线由调度图排序：所有 `Intern` 都发生在它 `Initialize` 之后、`Shutdown` 之前。</p>
+<p>**为什么「只增不减」**：释放驻留记录会和 `FName` 的值语义直接冲突 —— id 可以活得比一次回收更久（它已被拷进别的对象 / 写进存档）。因此本设计的取舍是：池在生命期内只增长，换来 id 永久有效。</p>
+<p>**为什么用互斥量**：`Intern` 是写入共享结构的操作，必须串行化；读取走 `FName` 的 id，不碰池。</p>
+</div></div>
+<div class="sect">
+<h4>字段</h4>
+<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-private">private</span></td><td>std::mutex Mutex</td><td>保护下面两份容器的**写**路径（`Intern` 可能从多个线程来）</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>std::vector&lt;std::string&gt; Pool</td><td>id → 文本（**id 即下标** ⇒ 反查 O(1)，且 `id == 0` 天然对应「空 / None」）</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>std::unordered_map&lt;std::string, std::uint32_t&gt; Lookup</td><td>文本 → id（`Intern` 的去重查找表）</td></tr>
+</tbody></table></div>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-private">private</span></td><td>MAHO_DECLARE_FRAME(FNamePool)</td><td>声明帧身份（稳定字面量名字 + `CreateFrame` 工厂），宿主可断言它先于使用者就绪</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> PreInitialize(FEngineBase&amp;) <span class="kw">override</span></td><td>空：本帧不需要更早的时钟点</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> Initialize(FEngineBase&amp;) <span class="kw">override</span></td><td>发布全局池访问点（`GetNamePool()` 从这里开始非空）</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> PostInitialize(FEngineBase&amp;) <span class="kw">override</span></td><td>空</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> PreShutdown(FEngineBase&amp;) <span class="kw">override</span></td><td>空</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> Shutdown(FEngineBase&amp;) <span class="kw">override</span></td><td>清空并撤销全局访问点。**注意顺序**：池的释放发生在所有使用者之后（依赖图保证），因为 `FName` 的 `ToString()` 需要池还在</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> PostShutdown(FEngineBase&amp;) <span class="kw">override</span></td><td>空</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>FName Intern(std::string_view Str)</td><td>驻留一个字符串并返回其规范 `FName`（线程安全）。已存在则直接返回旧 id —— **同一个文本永远映射到同一个 id**，这是 `==` 能 O(1) 的前提</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] std::string_view StringForId(std::uint32_t Id) <span class="kw">const</span></td><td>`Intern` 的逆：取该 id 对应的文本。**只增不减**的设计让返回值可以安全地做成视图</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> free()</td><td>释放池内容（被 `Shutdown` 调用）：清两份容器，保证再次 `Initialize` 从空开始</td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-struct" id="Public__Name_h-2">
+<h3><span class="kind">结构体</span> std::hash&lt;Maho::Name::FName&gt; <span class="base">: 特化</span></h3>
+<div class="sect"><div class="doc">
+<p>为 `FName` 提供标准哈希 —— 让它可以当 `unordered_map` / `unordered_set` 的键。</p>
+<p>**为什么直接哈希 id**：id 本身就是池内的唯一编号，对 `std::uint32_t` 取哈希既稳定又便宜（不必再碰字符串）</p>
+</div></div>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td>std::size_t <span class="kw">operator</span>()(<span class="kw">const</span> Maho::Name::FName&amp; N) <span class="kw">const</span> <span class="kw">noexcept</span></td><td>返回 `std::hash&lt;std::uint32_t&gt;{}(N.GetId())`；`<span class="kw">noexcept</span>` 是哈希容器要求的契约</td></tr>
+</tbody></table></div>
+</div>
 </div>
 <div class="pane" id="pane-Public__NameApi_h">
 <div class="hdr">Public/NameApi.h</div>
-<h2 class="file-title">NameApi.h</h2>
-<div class="empty">（尚未声明内容 —— 在 Tools/docs_content.py 里加一条 Header(&quot;Public/NameApi.h&quot;)，再逐类声明 Class / Interface / Field）</div>
+<h2 class="file-title">NameApi.h —— 模块导出标签</h2>
+<div class="card"><div class="doc">
+<p>本模块的 DLL 导出标签。独立成头：只需要「名字池访问器」声明的模块不必连带引入 `Name.h` 的全部内容。</p>
+</div></div>
+<div class="card">
+<h3 class="card-title">包含的头文件</h3>
+
+<table>
+<thead><tr><th>头文件</th><th>功能</th></tr></thead>
+<tbody>
+<tr><td>Core/Export.h</td><td>`MAHO_EXPORT` / `MAHO_IMPORT`（引擎核心提供）</td></tr>
+</tbody></table>
+</div>
+<div class="ent e-macro" id="Public__NameApi_h-0">
+<h3><span class="kind">宏</span> MAHO_NAME_API <span class="base">: MAHO_EXPORT / MAHO_IMPORT（随构建开关切换）</span></h3>
+<div class="sect"><div class="doc">
+<p>编译 `Name.dll` 时构建系统定义 `MAHO_NAME_MODULE_EXPORTS` ⇒ `MAHO_EXPORT`；消费方为 `MAHO_IMPORT`。</p>
+<p>**为什么必须有**：`FNamePool* GetNamePool()` 跨 DLL 返回类型，而池对象的虚表与删除析构符必须只在本模块生成 —— `dllimport` 让「消费方自己生成一份」变成编译错误，而不是卸载后 `<span class="kw">delete</span>` 静默崩。</p>
+</div></div>
+</div>
 </div></div>
 </div>
 <script>

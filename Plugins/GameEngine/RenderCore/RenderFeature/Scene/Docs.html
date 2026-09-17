@@ -79,7 +79,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div id="app">
   <div id="side">
     <h1>Maho 引擎源码</h1>
-    <div class="search" title="左侧扫描 Source/**/*.h：2 个头文件 · 已声明 0 个 · 0 个实体 / 0 个成员 ｜ 内容在 Tools/docs_content.py 里逐条声明">
+    <div class="search" title="左侧扫描 Source/**/*.h：2 个头文件 · 已声明 2 个 · 1 个实体 / 23 个成员 ｜ 内容在 Tools/docs_content.py 里逐条声明">
       <input id="q" type="search" placeholder="搜索头文件…  （如 Frame、Core、Entry）" autocomplete="off">
     </div>
     <div id="tree"><ul>
@@ -93,13 +93,126 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
   </div>
   <div id="main"><div class="pane" id="pane-Public__Scene_h">
 <div class="hdr">Public/Scene.h</div>
-<h2 class="file-title">Scene.h</h2>
-<div class="empty">（尚未声明内容 —— 在 Tools/docs_content.py 里加一条 Header(&quot;Public/Scene.h&quot;)，再逐类声明 Class / Interface / Field）</div>
+<h2 class="file-title">Scene.h —— 全局渲染资源特性（共享场景目标）</h2>
+<div class="card"><div class="doc">
+<p>`Scene::FScene` 是**全局渲染资源特性**（对齐 UE 的做法）：它挂渲染录制阶段的 stage，**跨帧拥有共享的场景目标**（`SceneColor` / `SceneDepth`）。别的特性经 `Scene::GetScene()` 读它们 —— **不在 `FRender` 里开命名槽位**：要共享的东西提供者是明确的一个，用访问器比用「按名字查表」更直接（名字查表还会把共享变成隐式依赖）。目标在交换链尺寸变化时重建。</p>
+<p>它同时是**绘制协议的生产者**（硬编码的全屏三角形），也是「布局切换」的负责人（见下面的卡片）。</p>
+</div></div>
+<div class="card">
+<h3 class="card-title">包含的头文件</h3>
+
+<table>
+<thead><tr><th>头文件</th><th>功能</th></tr></thead>
+<tbody>
+<tr><td>SceneApi.h</td><td>`MAHO_SCENE_API`</td></tr>
+<tr><td>Maho.h</td><td>引擎聚合头（日志 / 断言）</td></tr>
+<tr><td>Engine/Frame.h</td><td>`FFrameExtension` / `MAHO_DECLARE_FRAME` / 依赖声明</td></tr>
+<tr><td>Render.h</td><td>`FRender` / stage 接口（`IBeginRender` / `IRender` / `IEndRender` / `IPreUnInstall`）</td></tr>
+<tr><td>RDG.h</td><td>`FRDGTextureRef`（共享目标的引用类型）</td></tr>
+<tr><td>RenderDrawList.h</td><td>`FDrawList` / `FDrawBatch`（本特性作为绘制生产者）</td></tr>
+<tr><td>cstdint</td><td>定宽整数（缓存的宽高）</td></tr>
+</tbody></table>
+</div>
+<div class="card">
+<h3 class="card-title">自由函数</h3>
+
+<table>
+<thead><tr><th>签名</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td>MAHO_SCENE_API FScene* GetScene()</td><td>全局访问器（Scene.dll）。返回 <span class="kw">nullptr</span> = 场景特性还没装或已卸载 —— **消费方必须先判空**：特性装载顺序不该成为隐藏的加载期依赖</td></tr>
+</tbody></table>
+</div>
+<div class="card">
+<h3 class="card-title">为什么 SceneColor 要显式切布局</h3>
+<div class="doc">
+<p>这是这个头里最值得记住的一条约束：**同一个目标，两种用途，两种布局，而且 RHI 不会自动转换**。</p>
+</div>
+<table>
+<thead><tr><th>环节</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td>渲染目标侧</td><td>场景自己拥有：`Render()` 写入之前确保 `COLOR_ATTACHMENT_OPTIMAL`</td></tr>
+<tr><td>采样源侧</td><td>编辑器视口把 SceneColor 当镜像读，需要 `SHADER_READ_ONLY_OPTIMAL`</td></tr>
+<tr><td>切换责任</td><td>渲染目标侧由场景自己负责；采样侧由采样方调 `TransitionSceneColorForSampling` / `TransitionSceneColorForRendering` 来回切</td></tr>
+<tr><td>漏切的后果</td><td>RHI 的描述符写入写死 `SHADER_READ_ONLY`，而图像还在 `COLOR_ATTACHMENT_OPTIMAL`（或 `UNDEFINED`）⇒ 校验层报布局不匹配</td></tr>
+</tbody></table>
+</div>
+<div class="card">
+<h3 class="card-title">本特性与别的特性的依赖边（读各特性的构造函数）</h3>
+
+<table>
+<thead><tr><th>消费者</th><th>声明</th><th>含义</th></tr></thead>
+<tbody>
+<tr><td>FDrawTriangleFeature</td><td>`MyStage&lt;IRender&gt;().IsWaiting&lt;Scene::FScene&gt;().ForStage&lt;IEndRender&gt;()`</td><td>在场景那批提交之后画三角形（叠在清理之上）</td></tr>
+<tr><td>FUIFeature</td><td>`MyStage&lt;IRenderUI&gt;().IsWaiting&lt;Scene::FScene&gt;().ForStage&lt;IEndRender&gt;()`</td><td>UI 合成在场景之后（合成在场景之上）</td></tr>
+<tr><td>FUIFeature</td><td>`MyStage&lt;IInitViews&gt;().IsWaiting&lt;Scene::FScene&gt;().ForStage&lt;IBeginRender&gt;()`</td><td>**数据流边**：视口镜像的解析必须看到**当前**目标 —— 尺寸变化时 `EnsureTargets` 会销毁并重建 SceneColor，没有这条边，并行 worker 上的 `IInitViews` 可能解析到重建前的陈旧镜像，`RenderUI` 于是把**新** SceneColor 切到 SR 却画**旧**的（还在 `COLOR_ATTACHMENT_OPTIMAL`）⇒ `vkCmdDraw` 布局不匹配校验错</td></tr>
+</tbody></table>
+</div>
+<div class="ent e-class" id="Public__Scene_h-0">
+<h3><span class="kind">类</span> FScene <span class="base">: FFrameExtension, IPipeline&lt;IBeginRender, IRender, IEndRender, IPreUnInstall&gt;</span></h3>
+<div class="sect"><div class="doc">
+<p>共享场景目标 + 场景绘制阶段的所有者。它挂四个 stage：`IBeginRender`（建 / 重建目标）、`IRender`（录场景清理 / 绘制）、`IEndRender`（收尾 —— **别人等的是这个**）、`IPreUnInstall`（卸载前释放共享目标）。</p>
+</div></div>
+<div class="sect">
+<h4>字段</h4>
+<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-private">private</span></td><td>FRDGTextureRef SceneColor</td><td>共享场景颜色目标（池拥有原生，跨帧存活）</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>FRDGTextureRef SceneDepth</td><td>共享场景深度目标</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>FDrawList TriangleDrawList</td><td>硬编码三角形的绘制协议数据（测试生产者）</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>std::uint32_t CachedWidth = 0</td><td>上次建目标时的画布宽（0 = 还没建）</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>std::uint32_t CachedHeight = 0</td><td>上次建目标时的画布高</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">bool</span> bTargetsNeedTransition = <span class="kw">true</span></td><td>新目标需要一次 `Common → RenderTarget` 的初始转换</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>ESceneColorLayout SceneColorLayout = ESceneColorLayout::Undefined</td><td>SceneColor 当前（最后已知）布局 —— 布局切换的去重依据</td></tr>
+</tbody></table></div>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td>FScene()</td><td>构造：① 把自己登记为全局单例（`GScene = <span class="kw">this</span>`，给 `GetScene()`）；② 预置绘制协议的测试数据 —— 硬编码全屏三角形（`VertexCount = 3`，**没有顶点缓冲**，顶点着色器用 `gl_VertexIndex` 现场生成三个位置，所以 `AddPass` 录成 `Draw(3)`）。**为什么 `IBeginRender` 取列表不会与回收抢：**宿主 `FRender::BeginFrame`（引擎 stage）已经等过上一帧栅栏、回收过上一帧列表并开好了帧缓冲</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>~FScene() <span class="kw">override</span></td><td>析构：清空全局单例（`GScene = <span class="kw">nullptr</span>`）—— 之后 `GetScene()` 返回空</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FRDGTextureRef GetSceneColor() <span class="kw">const</span></td><td>共享场景颜色目标（**双重身份**：既是渲染目标，也是被采样源 —— 见下面的布局卡片）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FRDGTextureRef GetSceneDepth() <span class="kw">const</span></td><td>共享场景深度目标</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">const</span> FDrawList&amp; GetTriangleDrawList() <span class="kw">const</span></td><td>绘制协议的**测试生产者**：硬编码的全屏三角形列表。`AddPass` 原样消费它，**永远不知道它来自这里** —— 以后换成真正的场景渲染器时消费方一行不改</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> BeginRender(FRender&amp; R) <span class="kw">override</span></td><td>帧首：`EnsureTargets(R)` 按画布尺寸建 / 重建目标。清理**不在这里录** —— 它在 `Render` 里经 `AddPass` 录制并提交，本特性不持有命令列表</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Render(FRender&amp; R) <span class="kw">override</span></td><td>录场景 pass（清理 + 绘制），在调用点提交</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> EndRender(FRender&amp; R) <span class="kw">override</span></td><td>收尾 stage —— **它是别的特性的排序锚**：`AddPass` 在调用点提交，所以「我的 IRender 要在场景之后」等价于「等 FScene 的 IEndRender」</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> PreUnInstall(FRender&amp; R) <span class="kw">override</span></td><td>**在本模块卸载之前**释放共享目标。FScene 是 FRender 的子插件（在 FRender 关闭期间被卸载），而 `SceneColor` / `SceneDepth` 是登记在**资源系统**里的 —— 资源系统比它活得久。留着不管就会出「资源系统销毁一个所属模块已经没了的对象」这类已验证过的崩溃（子插件比 `FResourceSystem::Shutdown` 先卸载）。实现是 `RS-&gt;DestroyResource(<span class="st">"SceneColor"</span>/<span class="st">"SceneDepth"</span>)` + 清引用 / 布局 / 尺寸缓存</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> TransitionSceneColorForSampling(FRender&amp; R)</td><td>把 SceneColor 切到 `ShaderResource`（供下游按纹理采样）。**何时调用：**采样方（典型是编辑器合成 pass）在它采样之前调，否则 RHI 的描述符写入写死 `SHADER_READ_ONLY`、而图像还在 `COLOR_ATTACHMENT_OPTIMAL`（或从未转换过的新目标还在 `UNDEFINED`），校验层直接报错</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> TransitionSceneColorForRendering(FRender&amp; R)</td><td>把 SceneColor 切回渲染目标布局（采样方用完必须切回；场景自己在 `Render` 里、写入之前也会确保是渲染目标布局）</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>Undefined</td><td>从未转换过（新目标 / 第一次 Render 之前）</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>RenderTarget</td><td>上次离开时是 `COLOR_ATTACHMENT_OPTIMAL`</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>ShaderResource</td><td>上次离开时是 `SHADER_READ_ONLY_OPTIMAL`</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> EnsureTargets(FRender&amp; R)</td><td>按 `R.GetCanvasWidth()/GetCanvasHeight()` 建 / 重建 SceneColor + SceneDepth；尺寸变化（或首次）时重建并置 `bTargetsNeedTransition = <span class="kw">true</span>`（新目标需要一次 `Common → RenderTarget`）</td></tr>
+</tbody></table></div>
+<div class="sect">
+<h4>嵌套</h4>
+<table><thead><tr><th>访问域</th><th>名称</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-private">private</span></td><td>ESceneColorLayout</td><td>SceneColor 的**最后已知布局**追踪器。RHI 不会自动转换布局，而同一个目标一会儿当附件、一会儿当采样源，所以必须自己记账：没记账就会重复转换（浪费屏障）或漏转换（校验层报错）。</td></tr>
+</tbody></table></div>
+</div>
 </div>
 <div class="pane" id="pane-Public__SceneApi_h">
 <div class="hdr">Public/SceneApi.h</div>
-<h2 class="file-title">SceneApi.h</h2>
-<div class="empty">（尚未声明内容 —— 在 Tools/docs_content.py 里加一条 Header(&quot;Public/SceneApi.h&quot;)，再逐类声明 Class / Interface / Field）</div>
+<h2 class="file-title">SceneApi.h —— 模块导出标签</h2>
+<div class="card"><div class="doc">
+<p>本特性的 DLL 导出标签：`GetScene()` 访问器与 `FScene` 类型都跨模块使用（别的特性经 `Scene::GetScene()` 读共享目标），所以两者都要导出。</p>
+</div></div>
+<div class="card">
+<h3 class="card-title">包含的头文件</h3>
+
+<table>
+<thead><tr><th>头文件</th><th>功能</th></tr></thead>
+<tbody>
+<tr><td>Core/Export.h</td><td>`MAHO_EXPORT` / `MAHO_IMPORT`</td></tr>
+</tbody></table>
+</div>
+<div class="card">
+<h3 class="card-title">导出标签</h3>
+
+<table>
+<thead><tr><th>宏</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td>MAHO_SCENE_API</td><td>编译本模块时 codegen 定义 `MAHO_SCENE_MODULE_EXPORTS` ⇒ `MAHO_EXPORT`。**为什么必须导出 `FScene` 本身：**别的特性只是读它的目标（引用 / 指针），但它的实例由引擎侧经基类指针销毁（卸载时），跨模块 `<span class="kw">delete</span>` 需要 vftable 归属明确</td></tr>
+</tbody></table>
+</div>
 </div></div>
 </div>
 <script>

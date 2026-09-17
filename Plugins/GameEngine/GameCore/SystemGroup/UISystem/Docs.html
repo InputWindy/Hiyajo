@@ -79,7 +79,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div id="app">
   <div id="side">
     <h1>Maho 引擎源码</h1>
-    <div class="search" title="左侧扫描 Source/**/*.h：2 个头文件 · 已声明 0 个 · 0 个实体 / 0 个成员 ｜ 内容在 Tools/docs_content.py 里逐条声明">
+    <div class="search" title="左侧扫描 Source/**/*.h：2 个头文件 · 已声明 2 个 · 3 个实体 / 8 个成员 ｜ 内容在 Tools/docs_content.py 里逐条声明">
       <input id="q" type="search" placeholder="搜索头文件…  （如 Frame、Core、Entry）" autocomplete="off">
     </div>
     <div id="tree"><ul>
@@ -93,13 +93,101 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
   </div>
   <div id="main"><div class="pane" id="pane-Public__UISystem_h">
 <div class="hdr">Public/UISystem.h</div>
-<h2 class="file-title">UISystem.h</h2>
-<div class="empty">（尚未声明内容 —— 在 Tools/docs_content.py 里加一条 Header(&quot;Public/UISystem.h&quot;)，再逐类声明 Class / Interface / Field）</div>
+<h2 class="file-title">UISystem.h —— 世界系统：游戏侧 UI 的所有者</h2>
+<div class="card"><div class="doc">
+<p>`FUISystem` 是一个**世界系统**：它不挂引擎 stage，而是挂世界的 ECS 子 stage（`IOnInstalled` / `IProcessInput` / `IUpdate` / `IPreUnInstall`），由 `FGameWorld` 在自己的 `Tick` 里调度（装入安全点 → 输入 → 更新 → 卸出安全点）。</p>
+<p>它拥有游戏侧 UI：每个 `FUIWidget` 实体持有一棵**持久的声明式 UI 树**（`UI::FUIView`）。树**就是**那个控件 —— 跨帧存活、保留运行期状态（文本缓冲、开关、滚动位置）；系统每次 `Update` 在 `Edit()` 里**重新声明**本帧内容，同 id 同类型重新声明 = **复用**该节点。</p>
+<p>**游戏侧一个 ImGui 调用都没有**：声明走 UI 插件的 builder API，翻译成 ImGui 是渲染特性（`UIFeature`）的事，本系统只持树。</p>
+<p>**跨线程契约 = 独占写 / 共享读**：本系统的 `Edit()` 是独占写，翻译线程遍历树时是共享读（树的 `std::shared_mutex`）；两边都不跨边界持树。</p>
+</div></div>
+<div class="card">
+<h3 class="card-title">包含的头文件</h3>
+
+<table>
+<thead><tr><th>头文件</th><th>功能</th></tr></thead>
+<tbody>
+<tr><td>UISystemApi.h</td><td>`MAHO_UISYSTEM_API`：本头里的类型要跨 DLL</td></tr>
+<tr><td>GameWorld.h</td><td>`FGameWorld` / `FEntity` / `FEntity` 的组件 API —— 本系统嵌在那个世界上下文里</td></tr>
+<tr><td>UIView.h</td><td>`UI::FUIView`（持久树 + `Edit()` 独占写作用域）与 `UI::FUIBuilder`（声明入口）</td></tr>
+<tr><td>memory</td><td>`std::shared_ptr&lt;UI::FUIView&gt;`：组件按值 move，共享指针让这条路径保持可平凡拷贝</td></tr>
+</tbody></table>
+</div>
+<div class="card">
+<h3 class="card-title">自由函数</h3>
+
+<table>
+<thead><tr><th>签名</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td>MAHO_UISYSTEM_API FUISystem* GetUISystem()</td><td>全局访问器（跨 DLL 走函数，与 `Resource::GetResourceSystem()` 同一模式）。`OnInstalled` 置位、`PreUnInstall` 清回 <span class="kw">nullptr</span> ⇒ **系统未安装或已卸出时为 <span class="kw">nullptr</span>**；调用方每次都要判空，不能缓存过卸出点</td></tr>
+</tbody></table>
+</div>
+<div class="card">
+<h3 class="card-title">跨 DLL 导出面</h3>
+
+<table>
+<thead><tr><th>符号</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td>Maho::GameWorld::FUISystem</td><td>把 `Install&lt;FUISystem&gt;()` 交给世界的子收集器 ⇒ 世界构造/析构它，必须导出</td></tr>
+<tr><td>Maho::GameWorld::FUIWidget</td><td>组件被按值放进池、跨模块取用 ⇒ 必须导出</td></tr>
+<tr><td>CreateFrame()（`Private/UISystem.cpp`）</td><td>子收集器按符号名查找的 C 导出，转发到 `FUISystem::CreateFrame()`</td></tr>
+</tbody></table>
+</div>
+<div class="ent e-struct" id="Public__UISystem_h-0">
+<h3><span class="kind">结构体</span> FUIWidget</h3>
+<div class="sect"><div class="doc">
+<p>ECS 侧的 UI 控件：**一棵持久声明式 UI 树的持有者**。它是组件，所以必须可按值搬移（组件池扩容时整池元素被 move）—— 这就是这里用 `shared_ptr` 而不是 `unique_ptr` 的原因：拷贝语义让「池增长」这条最热的路径保持平凡有效。</p>
+</div></div>
+<div class="sect">
+<h4>字段</h4>
+<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td>std::shared_ptr&lt;UI::FUIView&gt; View</td><td>树的所有权（可能为空 = 视图尚未建立）</td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-class" id="Public__UISystem_h-1">
+<h3><span class="kind">类</span> FUISystem <span class="base">: FFrameExtension + IPipeline&lt;IOnInstalled, IProcessInput, IUpdate, IPreUnInstall&gt;</span></h3>
+<div class="sect"><div class="doc">
+<p>世界系统本身：两个基类（`FFrameExtension` 声明层 + `IPipeline&lt;...&gt;` 有序子 stage 列表）。它只挂世界真正会派发的那四个子 stage —— stage 列表就是它的能力声明，多挂一个（比如 `IFixedUpdate`）会让世界的固定步进序列给它派发节点，而它并没有固定步进的语义。</p>
+<p>**四个 stage 里的实际内容**：`OnInstalled` 发布全局访问器；`Update` 是唯一有逻辑的（建立/复用视图 → 回传事件 → 独占写重新声明树）；`ProcessInput` 是声明出来但空的能力（UI 输入由翻译层直接投递给树，游戏侧没有可轮询的东西）；`PreUnInstall` 注销视图。</p>
+</div></div>
+<div class="sect">
+<h4>字段</h4>
+<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-private">private</span></td><td>FEntity DemoWidget</td><td>演示控件的实体句柄（无效 = 尚未建立）；卸出时先查 `IsValid` 再销毁</td></tr>
+</tbody></table></div>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> OnInstalled(FGameWorld&amp; World) <span class="kw">override</span></td><td>装入安全点：登记全局访问器（跨 DLL 走函数，避免每模块一份静态变量）。**不在这里建视图** —— 此刻 UI 注册表与渲染上下文可能还没就位（游戏世界与渲染特性的初始化顺序不固定），视图延到第一帧 `Update` 里建</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> ProcessInput(FGameWorld&amp; World) <span class="kw">override</span></td><td>空的已声明 stage：UI 输入由**翻译层**直接投递给树（上下文归渲染侧所有），游戏侧没有要轮询的东西；保留这个 stage 是为了让能力列表完整可读</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Update(FGameWorld&amp; World) <span class="kw">override</span></td><td>一帧的全部工作量：① `EnsureDemoView`（未就位就返回，**下一帧再试**）；② `DrainEvents()` —— 交互事件先回传，翻译线程只入队、真正的回调在所有者线程（这里）执行，回调内可以再次 `Edit()`；③ 在 `Edit()` 独占写作用域里重新声明整棵树（同 id 同类型 = 复用）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> PreUnInstall(FGameWorld&amp; World) <span class="kw">override</span></td><td>卸出安全点：**先把视图从注册表注销，再让它被销毁** —— 注册表只持裸指针，顺序反了就是悬垂指针。顺序本身由 `FGameWorld` 声明（它才是驱动本阶段的层）：世界把 `IShutdown` 阻塞在 `FUIViewRegistry` 上，本系统的 `PreUnInstall` 才有「注册表还活着」这个前提。随后销毁演示实体、清全局访问器</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>UI::FUIView* EnsureDemoView(FGameWorld&amp; World)</td><td>建立（只一次）演示控件的实体 + 组件 + 持久视图，绑定到游戏渲染上下文并注册进注册表。注册表或上下文任一未就位就返回 <span class="kw">nullptr</span>、由调用方下一帧重试 —— 因为游戏世界与渲染特性的初始化顺序**不是**固定的（声明前向依赖反而会让图编译失败）</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> BuildDemoTree(UI::FUIBuilder&amp; Root)</td><td>重新声明演示树（只在活的 `Edit()` 作用域内调用）。节点 id 稳定（`UI::FUIName(<span class="st">"..."</span>)`）⇒ 同 id 同类型重新声明即复用，运行期状态跨帧存活</td></tr>
+</tbody></table></div>
+</div>
 </div>
 <div class="pane" id="pane-Public__UISystemApi_h">
 <div class="hdr">Public/UISystemApi.h</div>
-<h2 class="file-title">UISystemApi.h</h2>
-<div class="empty">（尚未声明内容 —— 在 Tools/docs_content.py 里加一条 Header(&quot;Public/UISystemApi.h&quot;)，再逐类声明 Class / Interface / Field）</div>
+<h2 class="file-title">UISystemApi.h —— 导出宏</h2>
+<div class="card"><div class="doc">
+<p>本插件的导出开关：`MAHO_UISYSTEM_API` 按 `MAHO_UISYSTEM_MODULE_EXPORTS` 在 `MAHO_EXPORT` / `MAHO_IMPORT` 之间切换。</p>
+<p>**为什么这个小系统也需要它**：`FUISystem` 由世界（另一个模块）构造、由子收集器析构，并且 `GetUISystem()` 要从别的 DLL 调用 —— 三者都跨模块边界。类不带导出标记时 vftable 会每个模块各生成一份，析构就落到已卸载的映像里。</p>
+</div></div>
+<div class="card">
+<h3 class="card-title">包含的头文件</h3>
+
+<table>
+<thead><tr><th>头文件</th><th>功能</th></tr></thead>
+<tbody>
+<tr><td>Core/Export.h</td><td>`MAHO_EXPORT` / `MAHO_IMPORT` 两个底层标记</td></tr>
+</tbody></table>
+</div>
+<div class="ent e-macro" id="Public__UISystemApi_h-0">
+<h3><span class="kind">宏</span> MAHO_UISYSTEM_API <span class="base">: MAHO_EXPORT / MAHO_IMPORT（按 MAHO_UISYSTEM_MODULE_EXPORTS 切换）</span></h3>
+<div class="sect"><div class="doc">
+<p>挂在 `FUISystem`、`GetUISystem()` 与 cpp 里的 `CreateFrame()` 上。</p>
+</div></div>
+</div>
 </div></div>
 </div>
 <script>
