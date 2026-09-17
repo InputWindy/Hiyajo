@@ -72,7 +72,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div id="app">
   <div id="side">
     <h1>Maho 引擎源码</h1>
-    <div class="search" title="左侧扫描 Source/**/*.h：22 个头文件 · 已声明 7 个 · 0 个实体 / 0 个成员 ｜ 内容在 Tools/docs_content.py 里逐条声明">
+    <div class="search" title="左侧扫描 Source/**/*.h：22 个头文件 · 已声明 8 个 · 0 个实体 / 0 个成员 ｜ 内容在 Tools/docs_content.py 里逐条声明">
       <input id="q" type="search" placeholder="搜索头文件…  （如 Frame、Core、Entry）" autocomplete="off">
     </div>
     <div id="tree"><ul>
@@ -114,8 +114,38 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
   </div>
   <div id="main"><div class="pane" id="pane-Public__Core__Assembly_h">
 <div class="hdr">Public/Core/Assembly.h</div>
-<h2 class="file-title">Assembly.h</h2>
-<div class="empty">（尚未声明内容 —— 在 Tools/docs_content.py 里加一条 Header(&quot;Public/Core/Assembly.h&quot;)，再逐类声明 Class / Interface / Field）</div>
+<h2 class="file-title">Assembly.h —— 动态库装载原语</h2>
+<div class="card"><div class="doc">
+<p>只回答两个问题：**怎么把一个动态库装进来**，以及**怎么按符号名取函数**。它不知道模块里是什么 —— 不认插件、清单、工厂；怎么解释一个已装载的模块完全由消费者决定（插件管理器 / 极薄的启动器 / 工程自己的加载器）。实现与平台分支都在 `Private/Core/Assembly.cpp`，所以这个头是**平台无关**的（不引入 `Windows.h` / `dlfcn.h`）。</p>
+<p>**所有权契约**：`FAssembly` 是模块句柄的唯一持有者（move-only）。只要还有从它构造出来的实例活着，宿主就必须让这个 `FAssembly` 也活着 —— vtable 与析构函数都在那个模块里，先卸载再用就是 use-after-free。</p>
+</div></div>
+<div class="card">
+<h3 class="card-title">包含的头文件</h3>
+
+<table>
+<thead><tr><th>头文件</th><th>功能</th></tr></thead>
+<tbody>
+<tr><td>Core/Export.h</td><td>`MAHO_API` 导出 / 导入宏 —— 这里的类型要跨 DLL（插件的 `GetModulePath()` 就直接调 `ApplyModuleExtension`）</td></tr>
+<tr><td>memory</td><td>`std::unique_ptr&lt;<span class="kw">void</span>, FModuleDeleter&gt;`：句柄的 RAII 持有</td></tr>
+<tr><td>string</td><td>路径与返回串</td></tr>
+<tr><td>string_view</td><td>入参：不拷贝调用方给的路径</td></tr>
+</tbody></table>
+</div>
+<div class="card">
+<h3 class="card-title">接口</h3>
+
+<table>
+<thead><tr><th>函数签名</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td>std::string ApplyModuleExtension(std::string_view BaseName)</td><td>给模块基名补上宿主平台的动态库后缀：Windows `.dll` / Android、Linux `.so` / macOS `.dylib`；无动态库的运行时（iOS）原样透传。全仓因此不硬编码任何 `.dll` 字符串。**已导出**：每个插件由 `MAHO_DECLARE_FRAME` 生成的 `GetModulePath()` 都从自己的 DLL 调它。</td></tr>
+<tr><td><span class="kw">void</span> FModuleDeleter::<span class="kw">operator</span>()(<span class="kw">void</span>* Handle) <span class="kw">const</span> <span class="kw">noexcept</span></td><td>用 `FreeLibrary` / `dlclose` 释放 OS 模块句柄（而不是 `<span class="kw">delete</span>`），空句柄直接返回。**已导出**：谁销毁 `FAssembly`，这段代码就在谁的模块里跑。</td></tr>
+<tr><td><span class="kw">bool</span> FAssembly::Load(std::string_view Path)</td><td>装载模块（先 `Unload()` 掉旧句柄）；文件缺失或装载失败返回 `<span class="kw">false</span>`。</td></tr>
+<tr><td><span class="kw">void</span> FAssembly::Unload()</td><td>释放句柄；可重复调用。之后 `IsLoaded()` 为假、`GetProcAddress()` 返回 <span class="kw">nullptr</span>。</td></tr>
+<tr><td><span class="kw">bool</span> FAssembly::IsLoaded() <span class="kw">const</span></td><td>是否持有有效的模块句柄。</td></tr>
+<tr><td><span class="kw">void</span>* FAssembly::GetProcAddress(<span class="kw">const</span> <span class="kw">char</span>* Name) <span class="kw">const</span></td><td>原始符号查找（`GetProcAddress` / `dlsym`）；未装载或符号不存在则返回 <span class="kw">nullptr</span>。</td></tr>
+<tr><td><span class="kw">template</span> &lt;<span class="kw">typename</span> TFunction&gt; TFunction GetProcAs(<span class="kw">const</span> <span class="kw">char</span>* Name) <span class="kw">const</span></td><td>把原始符号转成**函数指针**类型再返回 —— 调用方写 `GetProcAs&lt;CreateFn&gt;(<span class="st">"CreateEngine"</span>)` 即可，无需自己 `reinterpret_cast`。</td></tr>
+</tbody></table>
+</div>
 </div>
 <div class="pane" id="pane-Public__Core__Delegate_h">
 <div class="hdr">Public/Core/Delegate.h</div>

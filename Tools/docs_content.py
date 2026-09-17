@@ -169,6 +169,48 @@ D.Table("函数签名", "说明")
 D.Row("int main(int Argc, char** Argv)", "`return Maho::Main(Argc, Argv)` —— 引擎返回值原样透传。")
 
 # ══════════════════════════════════════════════════════════════════════════════
+# Source/Public/Core/Assembly.h —— 动态库装载原语
+# ══════════════════════════════════════════════════════════════════════════════
+
+D.Header("Public/Core/Assembly.h", Title="Assembly.h —— 动态库装载原语",
+         Desc="只回答两个问题：**怎么把一个动态库装进来**，以及**怎么按符号名取函数**。"
+              "它不知道模块里是什么 —— 不认插件、清单、工厂；怎么解释一个已装载的模块完全由"
+              "消费者决定（插件管理器 / 极薄的启动器 / 工程自己的加载器）。"
+              "实现与平台分支都在 `Private/Core/Assembly.cpp`，所以这个头是**平台无关**的"
+              "（不引入 `Windows.h` / `dlfcn.h`）。\n"
+              "**所有权契约**：`FAssembly` 是模块句柄的唯一持有者（move-only）。只要还有从它"
+              "构造出来的实例活着，宿主就必须让这个 `FAssembly` 也活着 —— vtable 与析构函数"
+              "都在那个模块里，先卸载再用就是 use-after-free。")
+
+D.Card("包含的头文件")
+D.Table("头文件", "功能")
+D.Row("Core/Export.h", "`MAHO_API` 导出 / 导入宏 —— 这里的类型要跨 DLL（插件的 "
+                       "`GetModulePath()` 就直接调 `ApplyModuleExtension`）")
+D.Row("memory", "`std::unique_ptr<void, FModuleDeleter>`：句柄的 RAII 持有")
+D.Row("string", "路径与返回串")
+D.Row("string_view", "入参：不拷贝调用方给的路径")
+
+D.Card("接口")
+D.Table("函数签名", "说明")
+D.Row("std::string ApplyModuleExtension(std::string_view BaseName)",
+      "给模块基名补上宿主平台的动态库后缀：Windows `.dll` / Android、Linux `.so` / macOS "
+      "`.dylib`；无动态库的运行时（iOS）原样透传。全仓因此不硬编码任何 `.dll` 字符串。"
+      "**已导出**：每个插件由 `MAHO_DECLARE_FRAME` 生成的 `GetModulePath()` 都从自己的 DLL 调它。")
+D.Row("void FModuleDeleter::operator()(void* Handle) const noexcept",
+      "用 `FreeLibrary` / `dlclose` 释放 OS 模块句柄（而不是 `delete`），空句柄直接返回。"
+      "**已导出**：谁销毁 `FAssembly`，这段代码就在谁的模块里跑。")
+D.Row("bool FAssembly::Load(std::string_view Path)",
+      "装载模块（先 `Unload()` 掉旧句柄）；文件缺失或装载失败返回 `false`。")
+D.Row("void FAssembly::Unload()",
+      "释放句柄；可重复调用。之后 `IsLoaded()` 为假、`GetProcAddress()` 返回 nullptr。")
+D.Row("bool FAssembly::IsLoaded() const", "是否持有有效的模块句柄。")
+D.Row("void* FAssembly::GetProcAddress(const char* Name) const",
+      "原始符号查找（`GetProcAddress` / `dlsym`）；未装载或符号不存在则返回 nullptr。")
+D.Row("template <typename TFunction> TFunction GetProcAs(const char* Name) const",
+      "把原始符号转成**函数指针**类型再返回 —— 调用方写 `GetProcAs<CreateFn>(\"CreateEngine\")` "
+      "即可，无需自己 `reinterpret_cast`。")
+
+# ══════════════════════════════════════════════════════════════════════════════
 # 下面继续按你的口述追加：再 Header(...) 换一个头，Class/Interface/Field 往下挂。
 # ══════════════════════════════════════════════════════════════════════════════
 
