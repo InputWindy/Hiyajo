@@ -52,25 +52,37 @@ class FEntity:
 
 
 @dataclass
+class FCard:
+	"""一个卡片：标题 + 说明 + 一张表（列标题 + 若干行）。"""
+	Title: str = ""
+	Desc: list[str] = field(default_factory=list)
+	Columns: list[str] = field(default_factory=list)
+	Rows: list[list[str]] = field(default_factory=list)
+
+
+@dataclass
 class FHeader:
 	Rel: str = ""                  # 相对 Source/ 的路径，例如 Public/Core/FrameGraph.h
 	Title: str = ""
 	Desc: list[str] = field(default_factory=list)
+	Cards: list[FCard] = field(default_factory=list)      # 头级卡片（表格等），排在实体之前
 	Entities: list[FEntity] = field(default_factory=list)
 
 
 _HEADERS: list[FHeader] = []
 _CURRENT_HEADER: FHeader | None = None
 _CURRENT_ENTITY: FEntity | None = None
+_CURRENT_CARD: FCard | None = None
 _CURRENT_ACCESS = "public"
 
 
 def Reset() -> None:
 	"""清空已声明的全部内容（重新构建一份文档时用）。"""
-	global _HEADERS, _CURRENT_HEADER, _CURRENT_ENTITY, _CURRENT_ACCESS
+	global _HEADERS, _CURRENT_HEADER, _CURRENT_ENTITY, _CURRENT_CARD, _CURRENT_ACCESS
 	_HEADERS = []
 	_CURRENT_HEADER = None
 	_CURRENT_ENTITY = None
+	_CURRENT_CARD = None
 	_CURRENT_ACCESS = "public"
 
 
@@ -128,6 +140,51 @@ def Macro(Name: str, Body: str = "", Desc: Any = "") -> FEntity:
 
 def Alias(Name: str, Target: str = "", Desc: Any = "") -> FEntity:
 	return _entity("alias", Name, Target, Desc)
+
+
+def Card(Title: str, Desc: Any = "") -> FCard:
+	"""在当前头里加一个卡片（排在实体之前）。之后的 Table / Row 都挂到它下面。"""
+	global _CURRENT_CARD
+	if _CURRENT_HEADER is None:
+		raise RuntimeError("先调用 Header(...) 才能加卡片")
+	Node = FCard(Title=Title, Desc=_lines(Desc))
+	_CURRENT_HEADER.Cards.append(Node)
+	_CURRENT_CARD = Node
+	return Node
+
+
+def Table(*Columns: str) -> FCard:
+	"""给当前卡片声明表头（列名）。"""
+	if _CURRENT_CARD is None:
+		raise RuntimeError("先调用 Card(...) 才能加表格")
+	_CURRENT_CARD.Columns = [str(C) for C in Columns]
+	return _CURRENT_CARD
+
+
+def Row(*Cells: Any) -> FCard:
+	"""给当前卡片加一行（单元格按顺序对应表头）。"""
+	if _CURRENT_CARD is None:
+		raise RuntimeError("先调用 Card(...) 才能加行")
+	_CURRENT_CARD.Rows.append([str(C) for C in Cells])
+	return _CURRENT_CARD
+
+
+def RenderCard(CardNode: FCard) -> str:
+	Out = ['<div class="card">']
+	if CardNode.Title:
+		Out.append(f'<h3 class="card-title">{html.escape(CardNode.Title)}</h3>')
+	Out.append(RenderDesc(CardNode.Desc))
+	if CardNode.Columns:
+		Out.append("<table>")
+		Out.append("<thead><tr>"
+		           + "".join(f"<th>{Highlight(C)}</th>" for C in CardNode.Columns)
+		           + "</tr></thead>")
+		Out.append("<tbody>")
+		for Row_ in CardNode.Rows:
+			Out.append("<tr>" + "".join(f"<td>{Highlight(C)}</td>" for C in Row_) + "</tr>")
+		Out.append("</tbody></table>")
+	Out.append("</div>")
+	return "\n".join(Out)
 
 
 def SetAccess(Level: str) -> None:
@@ -323,6 +380,13 @@ h2.file-title{font-size:20px;margin:0 0 18px;color:#fff}
            padding:1px 6px;margin-right:8px;vertical-align:middle}
 .e-struct .kind{background:#7de8d8} .e-enum .kind{background:var(--warn)}
 .e-macro .kind{background:#c58fff} .e-alias .kind{background:#9fb0c8}
+.card{background:#182238;border:1px solid var(--line);border-radius:8px;padding:14px 16px;
+      margin:0 0 16px}
+.card-title{font-size:14px;margin:0 0 8px;color:#fff}
+.card table{border-collapse:collapse;width:100%;font-size:12.5px}
+.card th{background:#202b42;color:var(--sub);font-weight:600;text-align:left}
+.card th,.card td{border:1px solid var(--line);padding:6px 9px;vertical-align:top}
+.card td:first-child{white-space:nowrap;font-family:Consolas,monospace;color:#9fe0a0}
 .doc{font-size:12.5px;color:#cfe0ff;margin:0 0 10px}
 .doc p{margin:2px 0}
 .doc.small{font-size:11.5px;color:var(--sub);margin:2px 0 0 46px}
@@ -415,6 +479,8 @@ def Build(Out: str | Path = "Source/Docs.html",
 		else:
 			Panes.append(f'<h2 class="file-title">{html.escape(Declared_.Title)}</h2>')
 			Panes.append(RenderDesc(Declared_.Desc))
+			for CardNode in Declared_.Cards:
+				Panes.append(RenderCard(CardNode))
 			if not Declared_.Entities:
 				Panes.append('<div class="empty">（这个头还没有声明内容）</div>')
 			for Index, Entity in enumerate(Declared_.Entities):

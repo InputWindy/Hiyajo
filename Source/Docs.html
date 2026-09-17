@@ -40,6 +40,13 @@ h2.file-title{font-size:20px;margin:0 0 18px;color:#fff}
            padding:1px 6px;margin-right:8px;vertical-align:middle}
 .e-struct .kind{background:#7de8d8} .e-enum .kind{background:var(--warn)}
 .e-macro .kind{background:#c58fff} .e-alias .kind{background:#9fb0c8}
+.card{background:#182238;border:1px solid var(--line);border-radius:8px;padding:14px 16px;
+      margin:0 0 16px}
+.card-title{font-size:14px;margin:0 0 8px;color:#fff}
+.card table{border-collapse:collapse;width:100%;font-size:12.5px}
+.card th{background:#202b42;color:var(--sub);font-weight:600;text-align:left}
+.card th,.card td{border:1px solid var(--line);padding:6px 9px;vertical-align:top}
+.card td:first-child{white-space:nowrap;font-family:Consolas,monospace;color:#9fe0a0}
 .doc{font-size:12.5px;color:#cfe0ff;margin:0 0 10px}
 .doc p{margin:2px 0}
 .doc.small{font-size:11.5px;color:var(--sub);margin:2px 0 0 46px}
@@ -60,7 +67,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div id="app">
   <div id="side">
     <h1>Maho 引擎源码</h1>
-    <div class="meta">左侧扫描 Source/**/*.h：22 个头文件 · 已声明 0 个 · 0 个实体 / 0 个成员<br>内容在 Tools/docs_content.py 里逐条声明</div>
+    <div class="meta">左侧扫描 Source/**/*.h：23 个头文件 · 已声明 1 个 · 0 个实体 / 0 个成员<br>内容在 Tools/docs_content.py 里逐条声明</div>
     <div id="tree"><ul>
 <li class="dir"><span class="dir-label" data-dir="Public">Public</span>
 <ul>
@@ -96,6 +103,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <li class="file"><a href="#Public__Maho_h" data-file="Public__Maho_h">Maho.h</a></li>
 </ul>
 </li>
+<li class="file"><a href="#Maho_h" data-file="Maho_h">Maho.h</a></li>
 </ul></div>
   </div>
   <div id="main"><div class="pane" id="pane-Public__Core__Assembly_h">
@@ -207,6 +215,32 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div class="hdr">Public/Maho.h</div>
 <h2 class="file-title">Maho.h</h2>
 <div class="empty">（尚未声明内容 —— 在 Tools/docs_content.py 里加一条 Header(&quot;Public/Maho.h&quot;)，再逐类声明 Class / Interface / Field）</div>
+</div>
+<div class="pane" id="pane-Maho_h">
+<div class="hdr">Maho.h</div>
+<h2 class="file-title">Maho.h —— 引擎聚合头</h2>
+<div class="doc">
+<p>插件只需 `#include &lt;Maho.h&gt;`，就同时拿到 Core 基建与引擎帧系统。它是**唯一的聚合点**（原先的 Core.h 已折进来：一个聚合头只被另一个聚合头包含，就是纯间接）。下面这张表就是它带进来的东西。</p>
+</div>
+<div class="card">
+<h3 class="card-title">包含的模块</h3>
+
+<table>
+<thead><tr><th>头文件</th><th>功能</th></tr></thead>
+<tbody>
+<tr><td>Core/TypeList.h</td><td>编译期有序类型列表 `TTypeList` 及运算（拼接 / 成员判断 / 保序去重并集）</td></tr>
+<tr><td>Core/Delegate.h</td><td>多播事件 `TMulticastEvent`：bind / broadcast / unbind，线程安全，无 DLL 边界</td></tr>
+<tr><td>Core/Singleton.h</td><td>CRTP 单例标识基类 `TSingleton`：纯标记，不强制生命周期</td></tr>
+<tr><td>Core/Interface.h</td><td>能力组合器 `IPlugin` / 有序阶段序列 `IPipeline`</td></tr>
+<tr><td>Core/FrameGraph.h</td><td>帧调度器 `FFrameGraph` + 声明层 `FFrameExtension` + 桥 `FFrameBridge`</td></tr>
+<tr><td>Core/ThreadPool.h</td><td>固定规模线程池 `FThreadPool`：`Submit` 入队即返，`Flush` 锁步屏障</td></tr>
+<tr><td>Core/ThreadedServer.h</td><td>常驻专用线程基类 `FThreadedServer`：单线程 + FIFO 串行队列</td></tr>
+<tr><td>Core/Assembly.h</td><td>DLL 加载原语 `FAssembly` + `ApplyModuleExtension`（平台后缀）</td></tr>
+<tr><td>Core/Fatal.h</td><td>致命 / 错误上报路径 + `MAHO_CHECK` / `MAHO_VERIFY` / `MAHO_ENSURE` 断言宏</td></tr>
+<tr><td>Engine/Engine.h</td><td>引擎侧：10 个 stage 能力接口 + `FEngineBase` + 引擎 stage 序列别名</td></tr>
+</tbody></table>
+</div>
+<div class="empty">（这个头还没有声明内容）</div>
 </div></div>
 </div>
 <script>

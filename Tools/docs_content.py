@@ -56,6 +56,30 @@ import docs_builder as D
 # D.Field("std::atomic<std::uint32_t> AwaitingCompletion", "待完成节点数（提交栅栏的计数）")
 
 # ══════════════════════════════════════════════════════════════════════════════
+# Source/Maho.h —— 引擎聚合头
+# ══════════════════════════════════════════════════════════════════════════════
+
+D.Reset()
+
+D.Header("Maho.h", Title="Maho.h —— 引擎聚合头",
+         Desc="插件只需 `#include <Maho.h>`，就同时拿到 Core 基建与引擎帧系统。"
+              "它是**唯一的聚合点**（原先的 Core.h 已折进来：一个聚合头只被另一个聚合头包含，"
+              "就是纯间接）。下面这张表就是它带进来的东西。")
+
+D.Card("包含的模块")
+D.Table("头文件", "功能")
+D.Row("Core/TypeList.h", "编译期有序类型列表 `TTypeList` 及运算（拼接 / 成员判断 / 保序去重并集）")
+D.Row("Core/Delegate.h", "多播事件 `TMulticastEvent`：bind / broadcast / unbind，线程安全，无 DLL 边界")
+D.Row("Core/Singleton.h", "CRTP 单例标识基类 `TSingleton`：纯标记，不强制生命周期")
+D.Row("Core/Interface.h", "能力组合器 `IPlugin` / 有序阶段序列 `IPipeline`")
+D.Row("Core/FrameGraph.h", "帧调度器 `FFrameGraph` + 声明层 `FFrameExtension` + 桥 `FFrameBridge`")
+D.Row("Core/ThreadPool.h", "固定规模线程池 `FThreadPool`：`Submit` 入队即返，`Flush` 锁步屏障")
+D.Row("Core/ThreadedServer.h", "常驻专用线程基类 `FThreadedServer`：单线程 + FIFO 串行队列")
+D.Row("Core/Assembly.h", "DLL 加载原语 `FAssembly` + `ApplyModuleExtension`（平台后缀）")
+D.Row("Core/Fatal.h", "致命 / 错误上报路径 + `MAHO_CHECK` / `MAHO_VERIFY` / `MAHO_ENSURE` 断言宏")
+D.Row("Engine/Engine.h", "引擎侧：10 个 stage 能力接口 + `FEngineBase` + 引擎 stage 序列别名")
+
+# ══════════════════════════════════════════════════════════════════════════════
 # 下面继续按你的口述追加：再 Header(...) 换一个头，Class/Interface/Field 往下挂。
 # ══════════════════════════════════════════════════════════════════════════════
 
