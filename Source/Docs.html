@@ -60,91 +60,153 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div id="app">
   <div id="side">
     <h1>Maho 引擎源码</h1>
-    <div class="meta">1 个头文件 · 3 个顶层实体 · 10 个成员<br>内容在 Tools/docs_content.py 里一条一条声明（不扫描源码）</div>
+    <div class="meta">左侧扫描 Source/**/*.h：22 个头文件 · 已声明 0 个 · 0 个实体 / 0 个成员<br>内容在 Tools/docs_content.py 里逐条声明</div>
     <div id="tree"><ul>
 <li class="dir"><span class="dir-label" data-dir="Public">Public</span>
 <ul>
 <li class="dir"><span class="dir-label" data-dir="Public/Core">Core</span>
 <ul>
+<li class="file"><a href="#Public__Core__Assembly_h" data-file="Public__Core__Assembly_h">Assembly.h</a></li>
+<li class="file"><a href="#Public__Core__Delegate_h" data-file="Public__Core__Delegate_h">Delegate.h</a></li>
+<li class="file"><a href="#Public__Core__Export_h" data-file="Public__Core__Export_h">Export.h</a></li>
+<li class="file"><a href="#Public__Core__Fatal_h" data-file="Public__Core__Fatal_h">Fatal.h</a></li>
 <li class="file"><a href="#Public__Core__FrameGraph_h" data-file="Public__Core__FrameGraph_h">FrameGraph.h</a></li>
+<li class="file"><a href="#Public__Core__Interface_h" data-file="Public__Core__Interface_h">Interface.h</a></li>
+<li class="file"><a href="#Public__Core__Singleton_h" data-file="Public__Core__Singleton_h">Singleton.h</a></li>
+<li class="file"><a href="#Public__Core__ThreadedServer_h" data-file="Public__Core__ThreadedServer_h">ThreadedServer.h</a></li>
+<li class="file"><a href="#Public__Core__ThreadPool_h" data-file="Public__Core__ThreadPool_h">ThreadPool.h</a></li>
+<li class="file"><a href="#Public__Core__TypeList_h" data-file="Public__Core__TypeList_h">TypeList.h</a></li>
 </ul>
 </li>
+<li class="dir"><span class="dir-label" data-dir="Public/Engine">Engine</span>
+<ul>
+<li class="file"><a href="#Public__Engine__Engine_h" data-file="Public__Engine__Engine_h">Engine.h</a></li>
+<li class="file"><a href="#Public__Engine__Frame_h" data-file="Public__Engine__Frame_h">Frame.h</a></li>
+<li class="file"><a href="#Public__Engine__FrameBuilder_h" data-file="Public__Engine__FrameBuilder_h">FrameBuilder.h</a></li>
+<li class="file"><a href="#Public__Engine__PluginManager_h" data-file="Public__Engine__PluginManager_h">PluginManager.h</a></li>
+<li class="file"><a href="#Public__Engine__Query_h" data-file="Public__Engine__Query_h">Query.h</a></li>
+</ul>
+</li>
+<li class="file"><a href="#Public__EntryPoint_h" data-file="Public__EntryPoint_h">EntryPoint.h</a></li>
+<li class="file"><a href="#Public__EntryPointAndroid_h" data-file="Public__EntryPointAndroid_h">EntryPointAndroid.h</a></li>
+<li class="file"><a href="#Public__EntryPointIOS_h" data-file="Public__EntryPointIOS_h">EntryPointIOS.h</a></li>
+<li class="file"><a href="#Public__EntryPointLinux_h" data-file="Public__EntryPointLinux_h">EntryPointLinux.h</a></li>
+<li class="file"><a href="#Public__EntryPointWindows_h" data-file="Public__EntryPointWindows_h">EntryPointWindows.h</a></li>
+<li class="file"><a href="#Public__EntryPointXbox_h" data-file="Public__EntryPointXbox_h">EntryPointXbox.h</a></li>
+<li class="file"><a href="#Public__Maho_h" data-file="Public__Maho_h">Maho.h</a></li>
 </ul>
 </li>
 </ul></div>
   </div>
-  <div id="main"><div class="pane" id="pane-Public__Core__FrameGraph_h">
+  <div id="main"><div class="pane" id="pane-Public__Core__Assembly_h">
+<div class="hdr">Public/Core/Assembly.h</div>
+<h2 class="file-title">Assembly.h</h2>
+<div class="empty">（尚未声明内容 —— 在 Tools/docs_content.py 里加一条 Header(&quot;Public/Core/Assembly.h&quot;)，再逐类声明 Class / Interface / Field）</div>
+</div>
+<div class="pane" id="pane-Public__Core__Delegate_h">
+<div class="hdr">Public/Core/Delegate.h</div>
+<h2 class="file-title">Delegate.h</h2>
+<div class="empty">（尚未声明内容 —— 在 Tools/docs_content.py 里加一条 Header(&quot;Public/Core/Delegate.h&quot;)，再逐类声明 Class / Interface / Field）</div>
+</div>
+<div class="pane" id="pane-Public__Core__Export_h">
+<div class="hdr">Public/Core/Export.h</div>
+<h2 class="file-title">Export.h</h2>
+<div class="empty">（尚未声明内容 —— 在 Tools/docs_content.py 里加一条 Header(&quot;Public/Core/Export.h&quot;)，再逐类声明 Class / Interface / Field）</div>
+</div>
+<div class="pane" id="pane-Public__Core__Fatal_h">
+<div class="hdr">Public/Core/Fatal.h</div>
+<h2 class="file-title">Fatal.h</h2>
+<div class="empty">（尚未声明内容 —— 在 Tools/docs_content.py 里加一条 Header(&quot;Public/Core/Fatal.h&quot;)，再逐类声明 Class / Interface / Field）</div>
+</div>
+<div class="pane" id="pane-Public__Core__FrameGraph_h">
 <div class="hdr">Public/Core/FrameGraph.h</div>
-<h2 class="file-title">FrameGraph —— 帧调度器 / 声明层 / 桥</h2>
-<div class="doc">
-<p>三件强绑定的东西放在同一个头里：节点调度器 FFrameGraph、声明层 FFrameExtension、把声明翻译成一批任务的 FFrameBridge。</p>
+<h2 class="file-title">FrameGraph.h</h2>
+<div class="empty">（尚未声明内容 —— 在 Tools/docs_content.py 里加一条 Header(&quot;Public/Core/FrameGraph.h&quot;)，再逐类声明 Class / Interface / Field）</div>
 </div>
-<div class="ent e-macro" id="Public__Core__FrameGraph_h-0">
-<h3><span class="kind">宏</span> MAHO_FRAMES_IN_FLIGHT <span class="base">: 3</span></h3>
-<div class="doc">
-<p>环深度：同时在飞的帧槽数。相位就是 [0, K) 的环索引。</p>
+<div class="pane" id="pane-Public__Core__Interface_h">
+<div class="hdr">Public/Core/Interface.h</div>
+<h2 class="file-title">Interface.h</h2>
+<div class="empty">（尚未声明内容 —— 在 Tools/docs_content.py 里加一条 Header(&quot;Public/Core/Interface.h&quot;)，再逐类声明 Class / Interface / Field）</div>
 </div>
+<div class="pane" id="pane-Public__Core__Singleton_h">
+<div class="hdr">Public/Core/Singleton.h</div>
+<h2 class="file-title">Singleton.h</h2>
+<div class="empty">（尚未声明内容 —— 在 Tools/docs_content.py 里加一条 Header(&quot;Public/Core/Singleton.h&quot;)，再逐类声明 Class / Interface / Field）</div>
 </div>
-<div class="ent e-struct" id="Public__Core__FrameGraph_h-1">
-<h3><span class="kind">结构体</span> FTaskKey</h3>
-<div class="doc">
-<p>节点实例的身份三元组。依赖就是指向目标实例的身份。</p>
+<div class="pane" id="pane-Public__Core__ThreadedServer_h">
+<div class="hdr">Public/Core/ThreadedServer.h</div>
+<h2 class="file-title">ThreadedServer.h</h2>
+<div class="empty">（尚未声明内容 —— 在 Tools/docs_content.py 里加一条 Header(&quot;Public/Core/ThreadedServer.h&quot;)，再逐类声明 Class / Interface / Field）</div>
 </div>
-<div class="members">
-<h4>字段</h4>
-<div class="sig"><span class="acc a-public">public</span> <code>std::string_view Name</code></div>
-<div class="doc small">
-<p>稳定身份名（必须指向静态存储，即字符串字面量）</p>
+<div class="pane" id="pane-Public__Core__ThreadPool_h">
+<div class="hdr">Public/Core/ThreadPool.h</div>
+<h2 class="file-title">ThreadPool.h</h2>
+<div class="empty">（尚未声明内容 —— 在 Tools/docs_content.py 里加一条 Header(&quot;Public/Core/ThreadPool.h&quot;)，再逐类声明 Class / Interface / Field）</div>
 </div>
-<div class="sig"><span class="acc a-public">public</span> <code>std::type_index Stage</code></div>
-<div class="doc small">
-<p>阶段类型</p>
+<div class="pane" id="pane-Public__Core__TypeList_h">
+<div class="hdr">Public/Core/TypeList.h</div>
+<h2 class="file-title">TypeList.h</h2>
+<div class="empty">（尚未声明内容 —— 在 Tools/docs_content.py 里加一条 Header(&quot;Public/Core/TypeList.h&quot;)，再逐类声明 Class / Interface / Field）</div>
 </div>
-<div class="sig"><span class="acc a-public">public</span> <code>std::int32_t Phase</code></div>
-<div class="doc small">
-<p>相位 = 环索引，不是绝对帧号</p>
+<div class="pane" id="pane-Public__Engine__Engine_h">
+<div class="hdr">Public/Engine/Engine.h</div>
+<h2 class="file-title">Engine.h</h2>
+<div class="empty">（尚未声明内容 —— 在 Tools/docs_content.py 里加一条 Header(&quot;Public/Engine/Engine.h&quot;)，再逐类声明 Class / Interface / Field）</div>
 </div>
-<h4>接口</h4>
-<div class="sig"><span class="acc a-public">public</span> <code><span class="kw">bool</span> <span class="kw">operator</span>==(<span class="kw">const</span> FTaskKey&amp; Other) <span class="kw">const</span></code></div>
-<div class="doc small">
-<p>精确比较（注册表用精确键）</p>
+<div class="pane" id="pane-Public__Engine__Frame_h">
+<div class="hdr">Public/Engine/Frame.h</div>
+<h2 class="file-title">Frame.h</h2>
+<div class="empty">（尚未声明内容 —— 在 Tools/docs_content.py 里加一条 Header(&quot;Public/Engine/Frame.h&quot;)，再逐类声明 Class / Interface / Field）</div>
 </div>
+<div class="pane" id="pane-Public__Engine__FrameBuilder_h">
+<div class="hdr">Public/Engine/FrameBuilder.h</div>
+<h2 class="file-title">FrameBuilder.h</h2>
+<div class="empty">（尚未声明内容 —— 在 Tools/docs_content.py 里加一条 Header(&quot;Public/Engine/FrameBuilder.h&quot;)，再逐类声明 Class / Interface / Field）</div>
 </div>
+<div class="pane" id="pane-Public__Engine__PluginManager_h">
+<div class="hdr">Public/Engine/PluginManager.h</div>
+<h2 class="file-title">PluginManager.h</h2>
+<div class="empty">（尚未声明内容 —— 在 Tools/docs_content.py 里加一条 Header(&quot;Public/Engine/PluginManager.h&quot;)，再逐类声明 Class / Interface / Field）</div>
 </div>
-<div class="ent e-class" id="Public__Core__FrameGraph_h-2">
-<h3><span class="kind">类</span> FFrameGraph <span class="base">: FThreadedServer</span></h3>
-<div class="doc">
-<p>节点调度器。全部图状态只被调度线程触碰，所以没有图锁，且该线程绝不阻塞。</p>
+<div class="pane" id="pane-Public__Engine__Query_h">
+<div class="hdr">Public/Engine/Query.h</div>
+<h2 class="file-title">Query.h</h2>
+<div class="empty">（尚未声明内容 —— 在 Tools/docs_content.py 里加一条 Header(&quot;Public/Engine/Query.h&quot;)，再逐类声明 Class / Interface / Field）</div>
 </div>
-<div class="members">
-<h4>字段</h4>
-<div class="sig"><span class="acc a-private">private</span> <code>std::deque&lt;FTaskNode&gt; Nodes</code></div>
-<div class="doc small">
-<p>节点表，下标即 FNodeId（deque：元素含 atomic，不可移动）</p>
+<div class="pane" id="pane-Public__EntryPoint_h">
+<div class="hdr">Public/EntryPoint.h</div>
+<h2 class="file-title">EntryPoint.h</h2>
+<div class="empty">（尚未声明内容 —— 在 Tools/docs_content.py 里加一条 Header(&quot;Public/EntryPoint.h&quot;)，再逐类声明 Class / Interface / Field）</div>
 </div>
-<div class="sig"><span class="acc a-private">private</span> <code>std::unordered_map&lt;FTaskKey, FNodeId, FTaskKeyHash&gt; Registry</code></div>
-<div class="doc small">
-<p>身份 → 节点下标</p>
+<div class="pane" id="pane-Public__EntryPointAndroid_h">
+<div class="hdr">Public/EntryPointAndroid.h</div>
+<h2 class="file-title">EntryPointAndroid.h</h2>
+<div class="empty">（尚未声明内容 —— 在 Tools/docs_content.py 里加一条 Header(&quot;Public/EntryPointAndroid.h&quot;)，再逐类声明 Class / Interface / Field）</div>
 </div>
-<div class="sig"><span class="acc a-private">private</span> <code>std::array&lt;std::atomic&lt;std::uint32_t&gt;, kPhaseCount&gt; SlotInFlight</code></div>
-<div class="doc small">
-<p>每相位在飞计数：准入与 Wait 的依据</p>
+<div class="pane" id="pane-Public__EntryPointIOS_h">
+<div class="hdr">Public/EntryPointIOS.h</div>
+<h2 class="file-title">EntryPointIOS.h</h2>
+<div class="empty">（尚未声明内容 —— 在 Tools/docs_content.py 里加一条 Header(&quot;Public/EntryPointIOS.h&quot;)，再逐类声明 Class / Interface / Field）</div>
 </div>
-<div class="sig"><span class="acc a-private">private</span> <code>std::atomic&lt;std::uint32_t&gt; AwaitingCompletion</code></div>
-<div class="doc small">
-<p>待完成节点数（提交栅栏的计数）</p>
+<div class="pane" id="pane-Public__EntryPointLinux_h">
+<div class="hdr">Public/EntryPointLinux.h</div>
+<h2 class="file-title">EntryPointLinux.h</h2>
+<div class="empty">（尚未声明内容 —— 在 Tools/docs_content.py 里加一条 Header(&quot;Public/EntryPointLinux.h&quot;)，再逐类声明 Class / Interface / Field）</div>
 </div>
-<h4>接口</h4>
-<div class="sig"><span class="acc a-public">public</span> <code><span class="kw">bool</span> Submit(std::vector&lt;FTask&gt; Tasks, std::string* OutReason = <span class="kw">nullptr</span>)</code></div>
-<div class="doc small">
-<p>提交一批任务：校验（批内重复身份 / 相位越界 / 成环）→ 准入（阻塞调用方，直到这批点名的相位排空）→ 入队。提交即合并，没有重建。</p>
+<div class="pane" id="pane-Public__EntryPointWindows_h">
+<div class="hdr">Public/EntryPointWindows.h</div>
+<h2 class="file-title">EntryPointWindows.h</h2>
+<div class="empty">（尚未声明内容 —— 在 Tools/docs_content.py 里加一条 Header(&quot;Public/EntryPointWindows.h&quot;)，再逐类声明 Class / Interface / Field）</div>
 </div>
-<div class="sig"><span class="acc a-public">public</span> <code><span class="kw">void</span> Wait()</code></div>
-<div class="doc small">
-<p>提交栅栏：阻塞到「我提交过的都完成」。计数由调用方在入队前自增、调度线程完成时自减 —— 所以它不会漏掉自己的工作。</p>
+<div class="pane" id="pane-Public__EntryPointXbox_h">
+<div class="hdr">Public/EntryPointXbox.h</div>
+<h2 class="file-title">EntryPointXbox.h</h2>
+<div class="empty">（尚未声明内容 —— 在 Tools/docs_content.py 里加一条 Header(&quot;Public/EntryPointXbox.h&quot;)，再逐类声明 Class / Interface / Field）</div>
 </div>
-</div>
-</div>
+<div class="pane" id="pane-Public__Maho_h">
+<div class="hdr">Public/Maho.h</div>
+<h2 class="file-title">Maho.h</h2>
+<div class="empty">（尚未声明内容 —— 在 Tools/docs_content.py 里加一条 Header(&quot;Public/Maho.h&quot;)，再逐类声明 Class / Interface / Field）</div>
 </div></div>
 </div>
 <script>

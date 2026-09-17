@@ -240,13 +240,30 @@ def RenderEntity(Entity: FEntity, Anchor: str) -> str:
 	return "\n".join(Out)
 
 
-def RenderTree(Headers: list[FHeader]) -> str:
+def ScanTree(Root: str | Path = "Source") -> list[str]:
+	"""左树的数据源：扫描目录，列出 Root 下全部 .h（相对路径，排序）。
+
+	扫描只用于**导航**——它让"哪些头存在"永远和磁盘一致，不用手工维护一份文件清单。
+	右侧内容不来自扫描：只有 docs_content.py 里声明过的头才有内容，其余显示"尚未声明"。
+	"""
+	RootPath = Path(Root)
+	Out: list[str] = []
+	for Path_ in sorted(RootPath.rglob("*.h")):
+		if any(Part in {".vs", "Intermediate", "Binaries", "Packaged", "x64"}
+		       for Part in Path_.parts):
+			continue
+		Out.append(Path_.relative_to(RootPath).as_posix())
+	return Out
+
+
+def RenderTree(Paths: list[str]) -> str:
+	"""按文件夹嵌套渲染路径列表（叶子 = .h）。"""
 	Tree: dict = {}
-	for H in Headers:
+	for Rel in Paths:
 		Node = Tree
-		for Part in H.Rel.split("/")[:-1]:
+		for Part in Rel.split("/")[:-1]:
 			Node = Node.setdefault(Part, {})
-		Node.setdefault("__files__", []).append(H)
+		Node.setdefault("__files__", []).append(Rel)
 
 	def Emit(Node: dict, Prefix: str) -> str:
 		Out = ["<ul>"]
@@ -256,10 +273,10 @@ def RenderTree(Headers: list[FHeader]) -> str:
 			           f"{html.escape(Key)}</span>")
 			Out.append(Emit(Node[Key], Sub))
 			Out.append("</li>")
-		for H in Node.get("__files__", []):
-			Anchor = AnchorOf(H.Rel)
+		for Rel in Node.get("__files__", []):
+			Anchor = AnchorOf(Rel)
 			Out.append(f'<li class="file"><a href="#{Anchor}" data-file="{Anchor}">'
-			           f"{html.escape(Path(H.Rel).name)}</a></li>")
+			           f"{html.escape(Path(Rel).name)}</a></li>")
 		Out.append("</ul>")
 		return "\n".join(Out)
 
@@ -370,30 +387,47 @@ PAGE = """<!DOCTYPE html>
 """
 
 
-def Build(Out: str | Path = "Source/Docs.html") -> tuple[int, int, int]:
-	"""渲染。返回 (头数, 顶层实体数, 成员数)。"""
+def Build(Out: str | Path = "Source/Docs.html",
+          Root: str | Path = "Source") -> tuple[int, int, int]:
+	"""渲染。左树 = 扫描 Root 下的 .h；右侧 = 只渲染声明过的内容。
+
+	返回 (树里的头数, 已声明的头数, 成员数)。
+	"""
+	Declared = {H.Rel: H for H in _HEADERS}
+	Paths = ScanTree(Root)
+	for Rel in Declared:
+		if Rel not in Paths:
+			Paths.append(Rel)          # 声明了但磁盘上没有（拼写/尚未创建）也要能点开
+
 	Panes: list[str] = []
 	Entities = 0
 	Members = 0
-	for H in _HEADERS:
-		Anchor = AnchorOf(H.Rel)
+	for Rel in Paths:
+		Anchor = AnchorOf(Rel)
 		Panes.append(f'<div class="pane" id="pane-{Anchor}">')
-		Panes.append(f'<div class="hdr">{html.escape(H.Rel)}</div>')
-		Panes.append(f'<h2 class="file-title">{html.escape(H.Title)}</h2>')
-		Panes.append(RenderDesc(H.Desc))
-		if not H.Entities:
-			Panes.append('<div class="empty">（这个头还没有声明内容）</div>')
-		for Index, Entity in enumerate(H.Entities):
-			Entities += 1
-			Members += len(Entity.Members)
-			Panes.append(RenderEntity(Entity, f"{Anchor}-{Index}"))
+		Panes.append(f'<div class="hdr">{html.escape(Rel)}</div>')
+		Declared_ = Declared.get(Rel)
+		if Declared_ is None:
+			Panes.append(f'<h2 class="file-title">{html.escape(Path(Rel).name)}</h2>')
+			Hint = html.escape('（尚未声明内容 —— 在 Tools/docs_content.py 里加一条 Header("'
+			                   + Rel + '")，再逐类声明 Class / Interface / Field）')
+			Panes.append('<div class="empty">' + Hint + "</div>")
+		else:
+			Panes.append(f'<h2 class="file-title">{html.escape(Declared_.Title)}</h2>')
+			Panes.append(RenderDesc(Declared_.Desc))
+			if not Declared_.Entities:
+				Panes.append('<div class="empty">（这个头还没有声明内容）</div>')
+			for Index, Entity in enumerate(Declared_.Entities):
+				Entities += 1
+				Members += len(Entity.Members)
+				Panes.append(RenderEntity(Entity, f"{Anchor}-{Index}"))
 		Panes.append("</div>")
 
-	Meta = (f"{len(_HEADERS)} 个头文件 · {Entities} 个顶层实体 · {Members} 个成员"
-	        f"<br>内容在 Tools/docs_content.py 里一条一条声明（不扫描源码）")
-	Text = PAGE.format(css=CSS, js=JS, meta=Meta, tree=RenderTree(_HEADERS),
+	Meta = (f"左侧扫描 Source/**/*.h：{len(Paths)} 个头文件 · 已声明 {len(Declared)} 个 · "
+	        f"{Entities} 个实体 / {Members} 个成员<br>内容在 Tools/docs_content.py 里逐条声明")
+	Text = PAGE.format(css=CSS, js=JS, meta=Meta, tree=RenderTree(Paths),
 	                   panes="\n".join(Panes))
 	OutPath = Path(Out)
 	OutPath.parent.mkdir(parents=True, exist_ok=True)
 	OutPath.write_text(Text, encoding="utf-8", newline="\n")
-	return len(_HEADERS), Entities, Members
+	return len(Paths), len(Declared), Members
