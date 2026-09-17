@@ -14,3 +14,7 @@ Packaged/
 # Build/CMake/MahoDependencies.cmake above is real source; only the out/ output
 # tree is regenerated at build time.
 /Build/CMake/out/
+
+# Per-plugin doc source (Docs.py): a LOCAL draft. The artifact that ships is the rendered
+# <plugin>/Docs.html next to it, so the pages still build on a fresh clone.
+Docs.py
