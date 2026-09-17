@@ -307,15 +307,14 @@ def RenderEntity(Entity: FEntity, Anchor: str) -> str:
 
 
 def ScanTree(Root: str | Path = "Source") -> list[str]:
-	"""左树的数据源：扫描目录，列出 Root 下全部 `.h` **与 `.cpp`**（相对路径，排序）。
+	"""左树的数据源：扫描目录，列出 Root 下全部 `.h`（相对路径，排序）。
 
-	扫描只用于**导航** —— 它让"有哪些文件"永远和磁盘一致，不用手工维护清单。把 `.cpp` 也列进来，
-	`Private/` 那棵树（实现所在）才有得看：头是接口，实现在旁边，点开就能对照。
-	右侧内容不来自扫描：只有 docs_content.py 里声明过的文件才有内容，其余显示"尚未声明"。
+	扫描只用于**导航** —— 它让"哪些头存在"永远和磁盘一致，不用手工维护一份文件清单。
+	右侧内容不来自扫描：只有 docs_content.py 里声明过的头才有内容，其余显示"尚未声明"。
 	"""
 	RootPath = Path(Root)
 	Out: list[str] = []
-	for Path_ in sorted(list(RootPath.rglob("*.h")) + list(RootPath.rglob("*.cpp"))):
+	for Path_ in sorted(RootPath.rglob("*.h")):
 		if any(Part in {".vs", "Intermediate", "Binaries", "Packaged", "x64"}
 		       for Part in Path_.parts):
 			continue
@@ -324,7 +323,7 @@ def ScanTree(Root: str | Path = "Source") -> list[str]:
 
 
 def RenderTree(Paths: list[str]) -> str:
-	"""按文件夹嵌套渲染路径列表（叶子 = .h / .cpp；实现文件调暗以示区分）。"""
+	"""按文件夹嵌套渲染路径列表（叶子 = .h）。"""
 	Tree: dict = {}
 	for Rel in Paths:
 		Node = Tree
@@ -342,8 +341,7 @@ def RenderTree(Paths: list[str]) -> str:
 			Out.append("</li>")
 		for Rel in Node.get("__files__", []):
 			Anchor = AnchorOf(Rel)
-			Leaf = "hdr" if Rel.endswith(".h") else "src"
-			Out.append(f'<li class="file"><a class="{Leaf}" href="#{Anchor}" data-file="{Anchor}">'
+			Out.append(f'<li class="file"><a href="#{Anchor}" data-file="{Anchor}">'
 			           f"{html.escape(Path(Rel).name)}</a></li>")
 		Out.append("</ul>")
 		return "\n".join(Out)
@@ -373,9 +371,6 @@ body{margin:0;background:var(--bg);color:var(--txt);
      color:var(--txt);padding:6px 9px;font-size:12.5px;font-family:inherit}
 #side .search input::placeholder{color:#5b7bab}
 #side .search input:focus{outline:none;border-color:var(--accent)}
-#tree a.hdr{color:var(--txt)}
-#tree a.src{color:#7f93ad}
-#tree a.src:hover{color:var(--txt)}
 #tree li.hidden{display:none}
 #tree{overflow:auto;padding:8px 6px 24px;font-size:12.5px;flex:1}
 #tree ul{list-style:none;margin:0;padding-left:12px}
@@ -538,7 +533,7 @@ def Build(Out: str | Path = "Source/Docs.html",
 				Panes.append(RenderEntity(Entity, f"{Anchor}-{Index}"))
 		Panes.append("</div>")
 
-	Meta = (f"左侧扫描 Source/ 下的 *.h 与 *.cpp：{len(Paths)} 个文件 · 已声明 {len(Declared)} 个 · "
+	Meta = (f"左侧扫描 Source/**/*.h：{len(Paths)} 个头文件 · 已声明 {len(Declared)} 个 · "
 	        f"{Entities} 个实体 / {Members} 个成员 ｜ 内容在 Tools/docs_content.py 里逐条声明")
 	Text = PAGE.format(css=CSS, js=JS, meta=Meta, tree=RenderTree(Paths),
 	                   panes="\n".join(Panes))
