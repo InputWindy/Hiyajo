@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Maho 引擎源码文档</title>
+<style>
+:root{
+  --bg:#0f1420; --panel:#1a2234; --line:#2a3550; --txt:#e6ecf5; --sub:#9fb0c8;
+  --good:#2ecc71; --warn:#f1c40f; --accent:#4aa3ff; --sel:#22304a;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--txt);
+     font-family:"Microsoft YaHei","PingFang SC",Segoe UI,Roboto,sans-serif;line-height:1.55}
+#app{display:flex;height:100vh;overflow:hidden}
+#side{width:340px;min-width:340px;border-right:1px solid var(--line);background:var(--panel);
+      display:flex;flex-direction:column}
+#side h1{font-size:15px;margin:0;padding:14px 16px;border-bottom:1px solid var(--line);color:#fff}
+#side .search{padding:10px 12px;border-bottom:1px solid var(--line)}
+#side .search input{width:100%;background:#121a2a;border:1px solid var(--line);border-radius:6px;
+     color:var(--txt);padding:6px 9px;font-size:12.5px;font-family:inherit}
+#side .search input::placeholder{color:#5b7bab}
+#side .search input:focus{outline:none;border-color:var(--accent)}
+#tree li.hidden{display:none}
+#tree{overflow:auto;padding:8px 6px 24px;font-size:12.5px;flex:1}
+#tree ul{list-style:none;margin:0;padding-left:12px}
+#tree > ul{padding-left:6px}
+#tree li{margin:1px 0}
+#tree .dir-label{cursor:pointer;color:var(--sub);user-select:none}
+#tree .dir-label::before{content:"\25BE  ";color:#5b7bab}
+#tree li.collapsed > .dir-label::before{content:"\25B8  "}
+#tree li.collapsed > ul{display:none}
+#tree a{display:block;color:var(--txt);text-decoration:none;padding:2px 6px;border-radius:4px}
+#tree a:hover{background:#1f2a42}
+#tree a.active{background:var(--sel);color:#fff;font-weight:600}
+#main{flex:1;overflow:auto;padding:26px 34px 60px}
+.hdr{font-size:12px;color:var(--sub);margin-bottom:6px}
+h2.file-title{font-size:20px;margin:0 0 18px;color:#fff}
+.ent{background:var(--panel);border:1px solid var(--line);border-radius:8px;
+     padding:16px 18px;margin-bottom:16px}
+.ent h3{font-size:15px;margin:0 0 10px;color:#fff}
+.ent .base{font-size:12px;color:var(--sub);font-weight:400}
+.ent .kind{font-size:10.5px;color:#0f1420;background:var(--accent);border-radius:3px;
+           padding:1px 6px;margin-right:8px;vertical-align:middle}
+.e-struct .kind{background:#7de8d8} .e-enum .kind{background:var(--warn)}
+.e-macro .kind{background:#c58fff} .e-alias .kind{background:#9fb0c8}
+.card{background:#182238;border:1px solid var(--line);border-radius:8px;padding:14px 16px;
+      margin:0 0 16px}
+.card-title{font-size:14px;margin:0 0 8px;color:#fff}
+.card table,.ent table{border-collapse:collapse;width:100%;font-size:12.5px}
+.card th,.ent th{background:#202b42;color:var(--sub);font-weight:600;text-align:left}
+.card th,.card td,.ent th,.ent td{border:1px solid var(--line);padding:6px 9px;vertical-align:top}
+.card td:first-child{white-space:nowrap;font-family:Consolas,monospace;color:#9fe0a0}
+.ent table td:nth-child(2){font-family:Consolas,monospace;color:#dbe7f7}
+.ent table td:nth-child(1){width:74px}
+/* 类 card 内的分区：描述 / 字段 / 接口 / 嵌套 各成一个有边框的块，边界一眼可见 */
+.sect{border:1px solid var(--line);border-radius:6px;padding:10px 12px;margin:10px 0;
+      background:#141c2c}
+.sect > h4{margin:0 0 8px;color:#cfe0ff;font-size:12px;letter-spacing:.06em}
+.sect .doc{margin:0}
+.doc{font-size:12.5px;color:#cfe0ff;margin:0 0 10px}
+.doc p{margin:2px 0}
+.doc.small{font-size:11.5px;color:var(--sub);margin:2px 0 0 46px}
+h4{font-size:12px;margin:14px 0 6px;color:var(--sub);letter-spacing:.06em}
+.sig{font-size:12px;padding:3px 0;border-top:1px solid #202b42}
+.sig code{background:transparent;color:#dbe7f7;font-family:Consolas,monospace;font-size:12px}
+.acc{display:inline-block;min-width:40px;font-size:10px;border-radius:3px;padding:0 5px;
+     margin-right:6px;text-align:center}
+.a-public{background:#1d3326;color:#7de8a0} .a-protected{background:#33291a;color:#ffd479}
+.a-private{background:#36201f;color:#ff9d92}
+.kw{color:#ffd479} .cm{color:#6f8099;font-style:italic} .st{color:#9fe0a0}
+code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
+     font-family:Consolas,monospace;font-size:12px}
+.empty{color:var(--sub);font-size:13px;padding:8px 0}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="side">
+    <h1>Maho 引擎源码</h1>
+    <div class="search" title="左侧扫描 Source/**/*.h：2 个头文件 · 已声明 0 个 · 0 个实体 / 0 个成员 ｜ 内容在 Tools/docs_content.py 里逐条声明">
+      <input id="q" type="search" placeholder="搜索头文件…  （如 Frame、Core、Entry）" autocomplete="off">
+    </div>
+    <div id="tree"><ul>
+<li class="dir"><span class="dir-label" data-dir="Public">Public</span>
+<ul>
+<li class="file"><a href="#Public__TestLayerA_h" data-file="Public__TestLayerA_h">TestLayerA.h</a></li>
+<li class="file"><a href="#Public__TestLayerAApi_h" data-file="Public__TestLayerAApi_h">TestLayerAApi.h</a></li>
+</ul>
+</li>
+</ul></div>
+  </div>
+  <div id="main"><div class="pane" id="pane-Public__TestLayerA_h">
+<div class="hdr">Public/TestLayerA.h</div>
+<h2 class="file-title">TestLayerA.h</h2>
+<div class="empty">（尚未声明内容 —— 在 Tools/docs_content.py 里加一条 Header(&quot;Public/TestLayerA.h&quot;)，再逐类声明 Class / Interface / Field）</div>
+</div>
+<div class="pane" id="pane-Public__TestLayerAApi_h">
+<div class="hdr">Public/TestLayerAApi.h</div>
+<h2 class="file-title">TestLayerAApi.h</h2>
+<div class="empty">（尚未声明内容 —— 在 Tools/docs_content.py 里加一条 Header(&quot;Public/TestLayerAApi.h&quot;)，再逐类声明 Class / Interface / Field）</div>
+</div></div>
+</div>
+<script>
+(function(){
+  var links = document.querySelectorAll('#tree a[data-file]');
+  var panes = document.querySelectorAll('.pane');
+  function show(anchor){
+    for (var i=0;i<panes.length;i++){ panes[i].style.display = (panes[i].id === 'pane-' + anchor) ? '' : 'none'; }
+    for (var j=0;j<links.length;j++){ links[j].classList.toggle('active', links[j].dataset.file === anchor); }
+    document.getElementById('main').scrollTop = 0;
+  }
+  for (var i=0;i<links.length;i++){
+    links[i].addEventListener('click', function(ev){
+      ev.preventDefault(); show(this.dataset.file);
+      if (history.replaceState) { history.replaceState(null, '', '#' + this.dataset.file); }
+    });
+  }
+  var labels = document.querySelectorAll('#tree .dir-label');
+  for (var k=0;k<labels.length;k++){
+    labels[k].addEventListener('click', function(){ this.parentElement.classList.toggle('collapsed'); });
+  }
+  var Query = document.getElementById('q');
+  if (Query) {
+    Query.addEventListener('input', function(){
+      var Needle = this.value.trim().toLowerCase();
+      var Files = document.querySelectorAll('#tree li.file');
+      for (var f=0; f<Files.length; f++){
+        var Hit = !Needle || Files[f].textContent.toLowerCase().indexOf(Needle) >= 0;
+        Files[f].classList.toggle('hidden', !Hit);
+      }
+      var Dirs = document.querySelectorAll('#tree li.dir');
+      for (var d=0; d<Dirs.length; d++){
+        var Any = Dirs[d].querySelector('li.file:not(.hidden)');
+        Dirs[d].classList.toggle('hidden', !Any);
+        if (Needle && Any) { Dirs[d].classList.remove('collapsed'); }
+      }
+    });
+  }
+  var first = links.length ? links[0].dataset.file : null;
+  if (location.hash && location.hash.length > 1) { show(location.hash.slice(1)); }
+  else if (first) { show(first); }
+})();
+</script>
+</body>
+</html>

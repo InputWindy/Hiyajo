@@ -97,15 +97,13 @@ add_library(TaskGraphTest SHARED
 	Plugins/TaskGraphTest/TaskGraphTest.cplugin
 	Plugins/TaskGraphTest/TaskGraphTest.cmake
 	Plugins/TaskGraphTest/settings.json
-	Plugins/TaskGraphTest/TaskGraphTest.md
-	Plugins/TaskGraphTest/API.md
 )
 source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/Plugins/TaskGraphTest" FILES
 	${TaskGraphTest_PUBLIC_HEADERS}
 	${TaskGraphTest_PRIVATE_HEADERS}
 	${TaskGraphTest_PRIVATE_SOURCES}
 )
-set_source_files_properties(Plugins/TaskGraphTest/TaskGraphTest.cplugin, Plugins/TaskGraphTest/TaskGraphTest.cmake, Plugins/TaskGraphTest/settings.json, Plugins/TaskGraphTest/TaskGraphTest.md, Plugins/TaskGraphTest/API.md PROPERTIES HEADER_FILE_ONLY ON)
+set_source_files_properties(Plugins/TaskGraphTest/TaskGraphTest.cplugin, Plugins/TaskGraphTest/TaskGraphTest.cmake, Plugins/TaskGraphTest/settings.json PROPERTIES HEADER_FILE_ONLY ON)
 
 target_include_directories(TaskGraphTest PUBLIC
 	"${ENGINE_DIR}/Source/Public"

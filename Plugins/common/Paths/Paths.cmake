@@ -17,7 +17,7 @@ set_source_files_properties(	"${CMAKE_CURRENT_LIST_DIR}/Paths.cplugin"
 target_include_directories(Paths PUBLIC
 	"${ENGINE_DIR}/Source/Public"
 	"${CMAKE_CURRENT_LIST_DIR}/Public"
-	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEngine/Public"
+	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/TaskGraphTest/Public"
 )
 set_target_properties(Paths PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 target_compile_definitions(Paths PRIVATE MAHO_PATHS_MODULE_EXPORTS)
