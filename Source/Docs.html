@@ -79,7 +79,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div id="app">
   <div id="side">
     <h1>Maho 引擎源码</h1>
-    <div class="search" title="左侧扫描 Source/**/*.h：22 个头文件 · 已声明 17 个 · 23 个实体 / 90 个成员 ｜ 内容在 Tools/docs_content.py 里逐条声明">
+    <div class="search" title="左侧扫描 Source/**/*.h：22 个头文件 · 已声明 19 个 · 25 个实体 / 108 个成员 ｜ 内容在 Tools/docs_content.py 里逐条声明">
       <input id="q" type="search" placeholder="搜索头文件…  （如 Frame、Core、Entry）" autocomplete="off">
     </div>
     <div id="tree"><ul>
@@ -694,13 +694,135 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </div>
 <div class="pane" id="pane-Public__Engine__Engine_h">
 <div class="hdr">Public/Engine/Engine.h</div>
-<h2 class="file-title">Engine.h</h2>
-<div class="empty">（尚未声明内容 —— 在 Tools/docs_content.py 里加一条 Header(&quot;Public/Engine/Engine.h&quot;)，再逐类声明 Class / Interface / Field）</div>
+<h2 class="file-title">Engine.h —— 引擎层：10 个 stage 接口 + FEngineBase</h2>
+<div class="card"><div class="doc">
+<p>引擎侧对外的一页：**10 个 stage 能力接口**（一帧的生命周期）、宿主基类 `FEngineBase`、以及三个 stage 序列别名。本文件还给出每个引擎 stage 的 `Invoke&lt;Stage, FEngineBase&gt;` 全特化（`MAHO_DECLARE_STAGE_DISPATCH`）—— 「stage → 方法」的映射就落在这里。</p>
+</div></div>
+<div class="card">
+<h3 class="card-title">包含的头文件</h3>
+
+<table>
+<thead><tr><th>头文件</th><th>功能</th></tr></thead>
+<tbody>
+<tr><td>Core/Assembly.h</td><td>`ApplyModuleExtension`：`MAHO_DECLARE_ENGINE` 的 `GetModulePath()` 用</td></tr>
+<tr><td>Core/Interface.h</td><td>`IPipeline`：frame 挂载 stage 序列</td></tr>
+<tr><td>Engine/Query.h</td><td>`FQuery` 的 `Select&lt;...&gt;()`：按 stage 接口筛帧集</td></tr>
+<tr><td>Engine/Frame.h</td><td>`FFrameExtension` / `Invoke` / `TFrameDispatch`</td></tr>
+<tr><td>Engine/FrameBuilder.h</td><td>`FFrameBuilder` —— 引擎宿主的基类</td></tr>
+<tr><td>algorithm / atomic / map / memory / queue / set / string / vector</td><td>宿主自身的状态与命令行存储</td></tr>
+</tbody></table>
+</div>
+<div class="card">
+<h3 class="card-title">宏与别名</h3>
+
+<table>
+<thead><tr><th>签名</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td>MAHO_DECLARE_ENGINE(EngineType)</td><td>引擎类里生成：`CreateEngine()` 工厂 / `GetModulePath()`（DLL 名 = 类型名 + 平台后缀）/ `StaticName()` / `GetName()`。入口 `EntryPoint` 就是按 `CreateEngine` 这个符号名找引擎的</td></tr>
+<tr><td>FInitStages = TTypeList&lt;IPreInit, IInit, IPostInit&gt;</td><td>一次性 **init** 批次的 stage 序列</td></tr>
+<tr><td>FTickStages = TTypeList&lt;IBeginFrame, ITick, IEndFrame, IExit&gt;</td><td>帧循环的 stage 序列</td></tr>
+<tr><td>FShutdownStages = TTypeList&lt;IPreShutdown, IShutdown, IPostShutdown&gt;</td><td>一次性 **shutdown** 批次的 stage 序列</td></tr>
+</tbody></table>
+</div>
+<div class="card">
+<h3 class="card-title">10 个 stage 能力接口</h3>
+
+<table>
+<thead><tr><th>接口</th><th>方法</th><th>何时跑</th></tr></thead>
+<tbody>
+<tr><td>IPreInit</td><td>PreInitialize(FEngineBase&amp;)</td><td>init 批：最早</td></tr>
+<tr><td>IInit</td><td>Initialize(FEngineBase&amp;)</td><td>init 批：主体</td></tr>
+<tr><td>IPostInit</td><td>PostInitialize(FEngineBase&amp;)</td><td>init 批：最晚</td></tr>
+<tr><td>IPreShutdown</td><td>PreShutdown(FEngineBase&amp;)</td><td>shutdown 批：最早</td></tr>
+<tr><td>IShutdown</td><td>Shutdown(FEngineBase&amp;)</td><td>shutdown 批：主体</td></tr>
+<tr><td>IPostShutdown</td><td>PostShutdown(FEngineBase&amp;)</td><td>shutdown 批：最晚</td></tr>
+<tr><td>IBeginFrame</td><td>BeginFrame(FEngineBase&amp;)</td><td>每帧：开帧（换缓冲 / 取输入前的准备）</td></tr>
+<tr><td>ITick</td><td>Tick(FEngineBase&amp;)</td><td>每帧：主体</td></tr>
+<tr><td>IEndFrame</td><td>EndFrame(FEngineBase&amp;)</td><td>每帧：收帧</td></tr>
+<tr><td>IExit</td><td>RequestExit(FEngineBase&amp;)</td><td>每帧：退出闸门（调 `RequestExit()` 即关闸）</td></tr>
+</tbody></table>
+</div>
+<div class="ent e-class" id="Public__Engine__Engine_h-0">
+<h3><span class="kind">类</span> FEngineBase <span class="base">: FFrameBuilder&lt;FEngineBase&gt;</span></h3>
+<div class="sect"><div class="doc">
+<p>宿主基类。继承 `FFrameBuilder&lt;FEngineBase&gt;`（收集器 + 帧循环），把生命周期拆成两个钩子 + 一个纯调度主循环：`PreMain`（安装 + 初始化）→ `Main`（`<span class="kw">while</span> (!ShouldExit())`：`FlushPendingUpdates` + `Execute&lt;FTickStages&gt;`，末尾 `Wait`）→ `PostMain`（关闸门 → 扫尾卸载 → 排干）。入口 `EntryPoint` 只认识这个锚，不认识具体引擎类型。</p>
+</div></div>
+<div class="sect">
+<h4>字段</h4>
+<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-private">private</span></td><td>std::map&lt;std::string, std::string&gt; Store</td><td>命令行解析结果的 KV 表</td></tr>
+</tbody></table></div>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> ParseCommandLine(<span class="kw">int</span> Argc, <span class="kw">char</span>** Argv)</td><td>把 `-key` / `-key value` / `--key=value` 归一化后交给 CLI11 解析，结果进 KV 表</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> PreMain() = 0</td><td>纯虚：装载（`FPluginManager::Load` → `InstallChildrenOf`）并驱动一次 init 批次</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">int</span> Main()</td><td>主循环：`<span class="kw">while</span> (!ShouldExit()) { FlushPendingUpdates&lt;Init,Shutdown&gt;(); Execute&lt;Tick&gt;(); }` → `Wait()`。返回退出码</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> PostMain()</td><td>收摊：关闸门 → 丢弃未生效装载 → `UninstallAll` → 循环 flush 到静 → `Wait()` → 残留报出</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">bool</span> Has(std::string_view Key) <span class="kw">const</span></td><td>命令行里有这个键吗（带不带值都算）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] std::string Get(std::string_view Key) <span class="kw">const</span></td><td>取键的值；不存在为空串</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">bool</span> GetBool(std::string_view Key) <span class="kw">const</span></td><td>按布尔解释（<span class="kw">true</span>/1/yes/on）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">int</span> GetInt(std::string_view Key) <span class="kw">const</span></td><td>按整数解释；缺失 / 不可解析取 0 或回退值</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">const</span> std::map&lt;std::string, std::string&gt;&amp; GetAll() <span class="kw">const</span></td><td>全部 KV 对（只读）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> RequestExit()</td><td>请求主循环在本帧边界退出（幂等；同时让 Install/Reload 开始拒绝）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">bool</span> ShouldExit() <span class="kw">const</span> <span class="kw">noexcept</span></td><td>是否已请求退出 —— 宿主对收集器「关闭」状态的词汇（`IsClosing()`）</td></tr>
+</tbody></table></div>
+</div>
 </div>
 <div class="pane" id="pane-Public__Engine__Frame_h">
 <div class="hdr">Public/Engine/Frame.h</div>
-<h2 class="file-title">Frame.h</h2>
-<div class="empty">（尚未声明内容 —— 在 Tools/docs_content.py 里加一条 Header(&quot;Public/Engine/Frame.h&quot;)，再逐类声明 Class / Interface / Field）</div>
+<h2 class="file-title">Frame.h —— 引擎侧 stage 机器</h2>
+<div class="card"><div class="doc">
+<p>Core 的 `FFrameExtension` 是**声明层**（名字 + 它声明的边），它刻意不知道 stage 序列；这一页就是另一半：`MAHO_DECLARE_FRAME`（身份 + DLL 工厂）、`Invoke`（stage 分派协议）、以及 `TFrameDispatch`（**唯一**知道 stage 列表的地方）。</p>
+<p>于是「一个 frame」= `FFrameExtension` + `IPipeline&lt;...&gt;` 两个基类，二者无继承关系。</p>
+<p>frame 没实现的 stage **根本不产出节点**（桥先问 `TFrameDispatch::Implements`）—— 所以没有空节点、没有 no-op 要调度。</p>
+</div></div>
+<div class="card">
+<h3 class="card-title">包含的头文件</h3>
+
+<table>
+<thead><tr><th>头文件</th><th>功能</th></tr></thead>
+<tbody>
+<tr><td>Core/Assembly.h</td><td>`ApplyModuleExtension`：`CreateFrame` 的 `GetModulePath()` 用</td></tr>
+<tr><td>Core/FrameGraph.h</td><td>`FFrameExtension` / `FFrameBridge::IDispatch`</td></tr>
+<tr><td>Core/Interface.h</td><td>`IPipeline`（有序 stage 序列）</td></tr>
+<tr><td>Core/TypeList.h</td><td>`StageIndicesOf`：把 `TStages` 摊成运行期 `type_index` 数组</td></tr>
+<tr><td>functional / string / string_view / typeindex / type_traits</td><td>闭包、名字、阶段索引</td></tr>
+</tbody></table>
+</div>
+<div class="card">
+<h3 class="card-title">宏 / 类型</h3>
+
+<table>
+<thead><tr><th>签名</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td>MAHO_DECLARE_FRAME(FrameType)</td><td>frame 类里生成：`StaticName()`（`#FrameType` 字面量 ⇒ 静态存储 ⇒ `FTaskKey::Name` 安全）/ `GetName()` / `CreateFrame()`（DLL 工厂）/ `GetModulePath()`。名字同时决定 DLL 名 = 类型名 + 平台后缀</td></tr>
+<tr><td>MAHO_DECLARE_STAGE_DISPATCH(Context, Stage, Cast, Method)</td><td>生成 `Invoke&lt;Stage, Context&gt;` 全特化：`dynamic_cast&lt;Cast*&gt;(frame)` 成功才调用 `Method(Context)` —— 失败即静默跳过（未实现该 stage 是合法状态）</td></tr>
+<tr><td><span class="kw">template</span> &lt;TStage, TContext&gt; <span class="kw">void</span> Invoke(FFrameExtension*, TContext&amp;)</td><td>stage 分派协议：按 (stage, context) 对特化；`TFrameDispatch::MakeClosure` 就是把它包成闭包</td></tr>
+<tr><td><span class="kw">struct</span> FEmptyContext</td><td>不需要上下文的 stage 序列用的占位类型</td></tr>
+</tbody></table>
+</div>
+<div class="ent e-class" id="Public__Engine__Frame_h-0">
+<h3><span class="kind">类</span> TFrameDispatch&lt;TStages, TContext&gt; <span class="base">: FFrameBridge::IDispatch</span></h3>
+<div class="sect"><div class="doc">
+<p>桥的策略实现：**代码库里唯一知道 stage 列表的东西**。桥把它当不透明接口用 —— `Implements` 答「这个 frame 实现该 stage 吗」，`MakeClosure` 给出该 stage 的闭包。</p>
+<p>派发对象必须**活得比它产出的批次久**（闭包捕获了它和 frame 的引用）；宿主本来的栈寿命规则已经保证这一点（批次在当前栈帧退出前排空）。</p>
+</div></div>
+<div class="sect">
+<h4>字段</h4>
+<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-private">private</span></td><td>TContext&amp; Context</td><td>调度上下文（如 `FEngineBase&amp;` / `FRender&amp;`）</td></tr>
+</tbody></table></div>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">explicit</span> TFrameDispatch(TContext&amp; InContext)</td><td>绑定调度上下文（引用，不拷贝）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">bool</span> Implements(<span class="kw">const</span> FFrameExtension&amp;, std::type_index) <span class="kw">const</span> <span class="kw">override</span></td><td>沿 `TStages` 递归比对 `typeid`，命中则 `dynamic_cast` 判定是否真的实现</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] std::function&lt;<span class="kw">void</span>()&gt; MakeClosure(FFrameExtension&amp;, std::type_index) <span class="kw">override</span></td><td>命中的 stage ⇒ `[&amp;frame, <span class="kw">this</span>]{ Invoke&lt;Stage, TContext&gt;(&amp;frame, Context); }`</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">static</span> <span class="kw">constexpr</span> <span class="kw">auto</span> StageIndices() <span class="kw">noexcept</span></td><td>把 `TStages` 摊成 `std::array&lt;type_index, N&gt;` —— 直接喂给 `FFrameBridge::Build`</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>ImplementsImpl / MakeClosureImpl</td><td>沿 `TTypeList` 的递归展开（模板，空表为终点）</td></tr>
+</tbody></table></div>
+</div>
 </div>
 <div class="pane" id="pane-Public__Engine__FrameBuilder_h">
 <div class="hdr">Public/Engine/FrameBuilder.h</div>

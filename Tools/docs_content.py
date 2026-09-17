@@ -593,6 +593,118 @@ D.Field("std::atomic<bool> bRunning", "是否已启动")
 D.Field("bool bStopping = false", "停止标志（`Shutdown` 置位）")
 
 # ══════════════════════════════════════════════════════════════════════════════
+# Source/Public/Engine/Engine.h —— 引擎层：stage 接口 + 宿主基类
+# ══════════════════════════════════════════════════════════════════════════════
+
+D.Header("Public/Engine/Engine.h", Title="Engine.h —— 引擎层：10 个 stage 接口 + FEngineBase",
+         Desc="引擎侧对外的一页：**10 个 stage 能力接口**（一帧的生命周期）、宿主基类 "
+              "`FEngineBase`、以及三个 stage 序列别名。本文件还给出每个引擎 stage 的 "
+              "`Invoke<Stage, FEngineBase>` 全特化（`MAHO_DECLARE_STAGE_DISPATCH`）—— "
+              "「stage → 方法」的映射就落在这里。")
+
+D.Card("包含的头文件")
+D.Table("头文件", "功能")
+D.Row("Core/Assembly.h", "`ApplyModuleExtension`：`MAHO_DECLARE_ENGINE` 的 `GetModulePath()` 用")
+D.Row("Core/Interface.h", "`IPipeline`：frame 挂载 stage 序列")
+D.Row("Engine/Query.h", "`FQuery` 的 `Select<...>()`：按 stage 接口筛帧集")
+D.Row("Engine/Frame.h", "`FFrameExtension` / `Invoke` / `TFrameDispatch`")
+D.Row("Engine/FrameBuilder.h", "`FFrameBuilder` —— 引擎宿主的基类")
+D.Row("algorithm / atomic / map / memory / queue / set / string / vector", "宿主自身的状态与命令行存储")
+
+D.Card("宏与别名")
+D.Table("签名", "说明")
+D.Row("MAHO_DECLARE_ENGINE(EngineType)",
+      "引擎类里生成：`CreateEngine()` 工厂 / `GetModulePath()`（DLL 名 = 类型名 + 平台后缀）/ "
+      "`StaticName()` / `GetName()`。入口 `EntryPoint` 就是按 `CreateEngine` 这个符号名找引擎的")
+D.Row("FInitStages = TTypeList<IPreInit, IInit, IPostInit>", "一次性 **init** 批次的 stage 序列")
+D.Row("FTickStages = TTypeList<IBeginFrame, ITick, IEndFrame, IExit>", "帧循环的 stage 序列")
+D.Row("FShutdownStages = TTypeList<IPreShutdown, IShutdown, IPostShutdown>", "一次性 **shutdown** 批次的 stage 序列")
+
+D.Card("10 个 stage 能力接口")
+D.Table("接口", "方法", "何时跑")
+D.Row("IPreInit", "PreInitialize(FEngineBase&)", "init 批：最早")
+D.Row("IInit", "Initialize(FEngineBase&)", "init 批：主体")
+D.Row("IPostInit", "PostInitialize(FEngineBase&)", "init 批：最晚")
+D.Row("IPreShutdown", "PreShutdown(FEngineBase&)", "shutdown 批：最早")
+D.Row("IShutdown", "Shutdown(FEngineBase&)", "shutdown 批：主体")
+D.Row("IPostShutdown", "PostShutdown(FEngineBase&)", "shutdown 批：最晚")
+D.Row("IBeginFrame", "BeginFrame(FEngineBase&)", "每帧：开帧（换缓冲 / 取输入前的准备）")
+D.Row("ITick", "Tick(FEngineBase&)", "每帧：主体")
+D.Row("IEndFrame", "EndFrame(FEngineBase&)", "每帧：收帧")
+D.Row("IExit", "RequestExit(FEngineBase&)", "每帧：退出闸门（调 `RequestExit()` 即关闸）")
+
+D.Class("FEngineBase", Base="FFrameBuilder<FEngineBase>",
+        Desc="宿主基类。继承 `FFrameBuilder<FEngineBase>`（收集器 + 帧循环），把生命周期拆成两个"
+             "钩子 + 一个纯调度主循环：`PreMain`（安装 + 初始化）→ `Main`（`while (!ShouldExit())`："
+             "`FlushPendingUpdates` + `Execute<FTickStages>`，末尾 `Wait`）→ `PostMain`（关闸门 → "
+             "扫尾卸载 → 排干）。入口 `EntryPoint` 只认识这个锚，不认识具体引擎类型。")
+D.SetAccess("public")
+D.Interface("virtual void ParseCommandLine(int Argc, char** Argv)",
+            "把 `-key` / `-key value` / `--key=value` 归一化后交给 CLI11 解析，结果进 KV 表")
+D.Interface("virtual void PreMain() = 0", "纯虚：装载（`FPluginManager::Load` → `InstallChildrenOf`）并驱动一次 init 批次")
+D.Interface("virtual int Main()", "主循环：`while (!ShouldExit()) { FlushPendingUpdates<Init,Shutdown>(); Execute<Tick>(); }` → `Wait()`。返回退出码")
+D.Interface("virtual void PostMain()", "收摊：关闸门 → 丢弃未生效装载 → `UninstallAll` → 循环 flush 到静 → `Wait()` → 残留报出")
+D.Interface("[[nodiscard]] bool Has(std::string_view Key) const", "命令行里有这个键吗（带不带值都算）")
+D.Interface("[[nodiscard]] std::string Get(std::string_view Key) const", "取键的值；不存在为空串")
+D.Interface("[[nodiscard]] bool GetBool(std::string_view Key) const", "按布尔解释（true/1/yes/on）")
+D.Interface("[[nodiscard]] int GetInt(std::string_view Key) const", "按整数解释；缺失 / 不可解析取 0 或回退值")
+D.Interface("[[nodiscard]] const std::map<std::string, std::string>& GetAll() const", "全部 KV 对（只读）")
+D.Interface("void RequestExit()", "请求主循环在本帧边界退出（幂等；同时让 Install/Reload 开始拒绝）")
+D.Interface("[[nodiscard]] bool ShouldExit() const noexcept",
+            "是否已请求退出 —— 宿主对收集器「关闭」状态的词汇（`IsClosing()`）")
+D.SetAccess("private")
+D.Field("std::map<std::string, std::string> Store", "命令行解析结果的 KV 表")
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Source/Public/Engine/Frame.h —— 引擎侧 stage 机器
+# ══════════════════════════════════════════════════════════════════════════════
+
+D.Header("Public/Engine/Frame.h", Title="Frame.h —— 引擎侧 stage 机器",
+         Desc="Core 的 `FFrameExtension` 是**声明层**（名字 + 它声明的边），它刻意不知道 stage 序列；"
+              "这一页就是另一半：`MAHO_DECLARE_FRAME`（身份 + DLL 工厂）、`Invoke`（stage 分派协议）、"
+              "以及 `TFrameDispatch`（**唯一**知道 stage 列表的地方）。\n"
+              "于是「一个 frame」= `FFrameExtension` + `IPipeline<...>` 两个基类，二者无继承关系。\n"
+              "frame 没实现的 stage **根本不产出节点**（桥先问 `TFrameDispatch::Implements`）—— "
+              "所以没有空节点、没有 no-op 要调度。")
+
+D.Card("包含的头文件")
+D.Table("头文件", "功能")
+D.Row("Core/Assembly.h", "`ApplyModuleExtension`：`CreateFrame` 的 `GetModulePath()` 用")
+D.Row("Core/FrameGraph.h", "`FFrameExtension` / `FFrameBridge::IDispatch`")
+D.Row("Core/Interface.h", "`IPipeline`（有序 stage 序列）")
+D.Row("Core/TypeList.h", "`StageIndicesOf`：把 `TStages` 摊成运行期 `type_index` 数组")
+D.Row("functional / string / string_view / typeindex / type_traits", "闭包、名字、阶段索引")
+
+D.Card("宏 / 类型")
+D.Table("签名", "说明")
+D.Row("MAHO_DECLARE_FRAME(FrameType)",
+      "frame 类里生成：`StaticName()`（`#FrameType` 字面量 ⇒ 静态存储 ⇒ `FTaskKey::Name` 安全）/ "
+      "`GetName()` / `CreateFrame()`（DLL 工厂）/ `GetModulePath()`。名字同时决定 DLL 名 = 类型名 + 平台后缀")
+D.Row("MAHO_DECLARE_STAGE_DISPATCH(Context, Stage, Cast, Method)",
+      "生成 `Invoke<Stage, Context>` 全特化：`dynamic_cast<Cast*>(frame)` 成功才调用 "
+      "`Method(Context)` —— 失败即静默跳过（未实现该 stage 是合法状态）")
+D.Row("template <TStage, TContext> void Invoke(FFrameExtension*, TContext&)",
+      "stage 分派协议：按 (stage, context) 对特化；`TFrameDispatch::MakeClosure` 就是把它包成闭包")
+D.Row("struct FEmptyContext", "不需要上下文的 stage 序列用的占位类型")
+
+D.Class("TFrameDispatch<TStages, TContext>", Base="FFrameBridge::IDispatch",
+        Desc="桥的策略实现：**代码库里唯一知道 stage 列表的东西**。桥把它当不透明接口用 —— "
+             "`Implements` 答「这个 frame 实现该 stage 吗」，`MakeClosure` 给出该 stage 的闭包。\n"
+             "派发对象必须**活得比它产出的批次久**（闭包捕获了它和 frame 的引用）；宿主本来的栈"
+             "寿命规则已经保证这一点（批次在当前栈帧退出前排空）。")
+D.SetAccess("public")
+D.Interface("explicit TFrameDispatch(TContext& InContext)", "绑定调度上下文（引用，不拷贝）")
+D.Interface("[[nodiscard]] bool Implements(const FFrameExtension&, std::type_index) const override",
+            "沿 `TStages` 递归比对 `typeid`，命中则 `dynamic_cast` 判定是否真的实现")
+D.Interface("[[nodiscard]] std::function<void()> MakeClosure(FFrameExtension&, std::type_index) override",
+            "命中的 stage ⇒ `[&frame, this]{ Invoke<Stage, TContext>(&frame, Context); }`")
+D.Interface("[[nodiscard]] static constexpr auto StageIndices() noexcept",
+            "把 `TStages` 摊成 `std::array<type_index, N>` —— 直接喂给 `FFrameBridge::Build`")
+D.SetAccess("private")
+D.Interface("ImplementsImpl / MakeClosureImpl", "沿 `TTypeList` 的递归展开（模板，空表为终点）")
+D.Field("TContext& Context", "调度上下文（如 `FEngineBase&` / `FRender&`）")
+
+# ══════════════════════════════════════════════════════════════════════════════
 # 下面继续按你的口述追加：再 Header(...) 换一个头，Class/Interface/Field 往下挂。
 
 
