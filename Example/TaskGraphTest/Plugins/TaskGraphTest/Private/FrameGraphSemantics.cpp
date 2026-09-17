@@ -365,6 +365,160 @@ int RunFrameGraphSemanticsTest()
 		      && Blocks[1].second.TargetStage == typeid(FStageTwo));
 	}
 
+	// T15: the canonical sugar -- WaitFor/BlockOn with the FRAME in the stage selector
+	// (OnStage = this frame, OnLastFrameStage = the previous frame). The older
+	// IsWaiting/IsBlocking + LastFrame() + ForStage() spelling stays valid; this pins the new one.
+	{
+		struct IStageA {};
+		struct IStageB {};
+
+		struct FSugarTarget : FFrameExtension
+		{
+			static std::string_view StaticName() { return "SugarTarget"; }
+			std::string_view GetName() const override { return StaticName(); }
+		};
+		struct FSugar : FFrameExtension
+		{
+			static std::string_view StaticName() { return "SugarDeclarer"; }
+			std::string_view GetName() const override { return StaticName(); }
+		};
+
+		FSugar S;
+		S.MyStage<IStageA>().WaitFor<FSugarTarget>().OnStage<IStageB>();             // this frame
+		S.MyStage<IStageA>().WaitFor<FSugarTarget>().OnLastFrameStage<IStageB>();   // last frame
+		S.MyStage<IStageA>().WaitFor("SugarTarget").OnLastFrameStage<IStageB>();    // by NAME, last frame
+		S.MyStage<IStageA>().BlockOn<FSugarTarget>().OnStage<IStageB>();            // reverse, this frame
+		S.MyStage<IStageA>().BlockOn<FSugarTarget>().OnLastFrameStage<IStageB>();   // reverse, last frame
+		S.MyStage<IStageB>().WaitFor<FSugarTarget>().OnLastFrameStage<IStageB>();   // another stage
+
+		const auto& Deps = S.GetDependencies();
+		const auto& Blocks = S.GetDependents();
+		Check("T15 WaitFor().OnStage() records a same-frame edge",
+		      Deps.at(typeid(IStageA))[0].FrameOffset == 0
+		      && Deps.at(typeid(IStageA))[0].TargetName == "SugarTarget"
+		      && Deps.at(typeid(IStageA))[0].TargetStage == typeid(IStageB));
+		Check("T15 WaitFor().OnLastFrameStage() records a cross-frame edge",
+		      Deps.at(typeid(IStageA))[1].FrameOffset == -1
+		      && Deps.at(typeid(IStageA))[1].TargetStage == typeid(IStageB));
+		Check("T15 WaitFor(\"name\").OnLastFrameStage() works by name",
+		      Deps.at(typeid(IStageA))[2].FrameOffset == -1
+		      && Deps.at(typeid(IStageA))[2].TargetName == "SugarTarget");
+		Check("T15 BlockOn().OnStage() records a same-frame reverse edge",
+		      Blocks[0].first == typeid(IStageA) && Blocks[0].second.FrameOffset == 0
+		      && Blocks[0].second.TargetName == "SugarTarget");
+		Check("T15 BlockOn().OnLastFrameStage() records a cross-frame reverse edge",
+		      Blocks[1].first == typeid(IStageA) && Blocks[1].second.FrameOffset == -1);
+		Check("T15 the same selector works from another stage",
+		      Deps.at(typeid(IStageB)).size() == 1
+		      && Deps.at(typeid(IStageB))[0].FrameOffset == -1);
+	}
+
+
+	// exactly what makes it inspectable here: every resolution is checked as DATA before the
+	// graph ever sees it.
+	// T16: the sugar's cross-frame edge really BLOCKS. That is the whole point of OnLastFrameStage:
+	// the only cross-frame ordering a frame extension gets for free is the IMPLICIT self edge (a
+	// stage against ITSELF), so ordering stage Q of frame N+1 after stage P of frame N has to be
+	// explicit -- and "explicit" has to mean it waits, not just that it is recorded.
+	//
+	// Two consecutive frames, both built by the BRIDGE (so the sugar's resolution is exercised, not
+	// just FEdge's raw form): frame 10's P sleeps before setting a flag, and frame 11's Q declares
+	// `WaitFor<FPrev>().OnLastFrameStage<IStageP>()` -- so Q has to observe that flag.
+	{
+		struct IStageP {};
+		struct IStageQ {};
+		using FSugarStages = TTypeList<IStageP, IStageQ>;
+
+		struct FPrev : FFrameExtension
+		{
+			static std::string_view StaticName() { return "SugarPrev"; }
+			std::string_view GetName() const override { return StaticName(); }
+		};
+		struct FNext : FFrameExtension
+		{
+			static std::string_view StaticName() { return "SugarNext"; }
+			std::string_view GetName() const override { return StaticName(); }
+		};
+
+		FRendezvous R;
+		R.Expect(4);   // two frames x (P + Q)
+		std::atomic<bool> PrevDone{ false };
+		std::atomic<bool> SawPrev{ false };
+
+		struct FSugarDispatch : FFrameBridge::IDispatch
+		{
+			FRendezvous*       InR = nullptr;
+			std::atomic<bool>* InDone = nullptr;
+			std::atomic<bool>* InSaw = nullptr;
+
+			bool Implements(const FFrameExtension&, std::type_index Stage) const override
+			{
+				return Stage == typeid(IStageP) || Stage == typeid(IStageQ);
+			}
+			std::function<void()> MakeClosure(FFrameExtension& Frame, std::type_index Stage) override
+			{
+				if (Stage == typeid(IStageP))
+				{
+					return [Done = InDone, R = InR]()
+					{
+						std::this_thread::sleep_for(std::chrono::milliseconds(250));
+						Done->store(true);
+						R->Arrive();
+					};
+				}
+				return [Saw = InSaw, Done = InDone, R = InR]()
+				{
+					// Monotone: the flag says "some Q instance ran after a P completed", which is
+					// exactly what the explicit edge is supposed to guarantee.
+					if (Done->load()) { Saw->store(true); }
+					R->Arrive();
+				};
+			}
+		};
+		FSugarDispatch Dispatch;
+		Dispatch.InR = &R;
+		Dispatch.InDone = &PrevDone;
+		Dispatch.InSaw = &SawPrev;
+
+		FPrev Prev;
+		FNext Next;
+		// The declaring side names the PRODUCER's frame and stage -- and the previous frame.
+		Next.MyStage<IStageQ>().WaitFor<FPrev>().OnLastFrameStage<IStageP>();
+
+		std::vector<FFrameExtension*> Frames{ &Prev, &Next };
+		auto Frame10 = FFrameBridge::Build(Frames, StageIndicesOf(FSugarStages{}), 10, Dispatch);
+		auto Frame11 = FFrameBridge::Build(Frames, StageIndicesOf(FSugarStages{}), 11, Dispatch);
+		Check("T16 both frames expand into their stages", Frame11.Tasks.size() == 4);
+
+		// The resolution, asserted as data: frame 11's Q depends on frame 10's P -- i.e. the offset
+		// went to the PREVIOUS frame's phase, not to this one's.
+		bool bEdgeResolved = false;
+		for (const FTask& T : Frame11.Tasks)
+		{
+			if (T.Key.Name != "SugarNext" || T.Key.Stage != typeid(IStageQ))
+			{
+				continue;
+			}
+			for (const FDependency& D : T.Dependencies)
+			{
+				if (D.Target.Name == "SugarPrev" && D.Target.Stage == typeid(IStageP)
+					&& D.Target.Phase == FFrameBridge::PhaseOf(10))
+				{
+					bEdgeResolved = true;
+				}
+			}
+		}
+		Check("T16 the cross-frame edge resolved onto the PREVIOUS frame's phase", bEdgeResolved);
+
+		Check("T16 frame 10 accepted", Graph.Submit(std::move(Frame10.Tasks)));
+		Check("T16 frame 11 accepted", Graph.Submit(std::move(Frame11.Tasks)));
+		Check("T16 all four nodes ran", R.WaitFor(3000));
+		Check("T16 frame 11's Q really waited for frame 10's P", SawPrev.load());
+	}
+
+
+	// exactly what makes it inspectable here: every resolution is checked as DATA before the
+	// graph ever sees it.
 	// T13: FFrameBridge -- declarations to a batch of FTask. It BUILDS (never submits), which is
 	// exactly what makes it inspectable here: every resolution is checked as DATA before the
 	// graph ever sees it.
@@ -488,6 +642,9 @@ int RunFrameGraphSemanticsTest()
 			      && AOne->Blocks[0].Target.Phase == 1);
 			Check("T13 the stage chain links a frame's own stages",
 			      ATwo != nullptr && HasDepKey(ATwo, AOne->Key));
+			// The cross-frame edge is PER STAGE, not per frame: a mid-chain node still carries its
+			// own edge to the previous frame. (Serializing a whole frame against its previous one
+			// would hide a missing per-frame context in the render layer -- see FFrameBridge.)
 			Check("T13 a chained node carries its own cross-frame self edge too",
 			      HasDep(ATwo, "BridgeA", typeid(IStageTwo), 0));
 			Check("T13 the chained node declares no reverse edge of its own",
@@ -640,8 +797,8 @@ int RunFrameGraphSemanticsTest()
 			// A same-frame edge (resolvable inside the batch) and a cross-frame one (resolvable
 			// only if the previous frame's node exists). At frame 7 the latter names frame 6,
 			// which no Build call has produced -- so phase absence must NOT be reported.
-			C.MyStage<IStageOne>().IsWaiting<FFrameD>().ForStage<IStageTwo>();
-			C.MyStage<IStageOne>().IsWaiting<FFrameD>().LastFrame().ForStage<IStageTwo>();
+			C.MyStage<IStageOne>().WaitFor<FFrameD>().OnStage<IStageTwo>();
+			C.MyStage<IStageOne>().WaitFor<FFrameD>().OnLastFrameStage<IStageTwo>();
 
 			std::vector<FFrameExtension*> JustD{ &D };
 			const auto OnlyD = FFrameBridge::Build(JustD, Stages, 7, SoloDispatch);

@@ -101,7 +101,7 @@ void FEditorViewport::Update(FExampleEditor& Editor)
 
 } // namespace Maho
 
-extern "C" MAHO_EDITORVIEWPORT_API Maho::FLayerBase* CreateLayer()
+extern "C" MAHO_EDITORVIEWPORT_API Maho::FFrameExtension* CreateFrame()
 {
-	return Maho::FEditorViewport::CreateLayer();
+	return Maho::FEditorViewport::CreateFrame();
 }

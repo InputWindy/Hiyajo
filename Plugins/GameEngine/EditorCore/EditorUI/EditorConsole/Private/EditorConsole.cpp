@@ -855,7 +855,7 @@ void FEditorConsole::Shutdown(FExampleEditor& Editor)
 } // namespace Maho
 
 // The C export the host looks up BY SYMBOL NAME for dynamic install.
-extern "C" MAHO_EDITORCONSOLE_API Maho::FLayerBase* CreateLayer()
+extern "C" MAHO_EDITORCONSOLE_API Maho::FFrameExtension* CreateFrame()
 {
-	return Maho::FEditorConsole::CreateLayer();
+	return Maho::FEditorConsole::CreateFrame();
 }

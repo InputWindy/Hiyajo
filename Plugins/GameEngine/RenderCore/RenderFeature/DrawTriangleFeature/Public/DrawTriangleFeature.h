@@ -2,7 +2,7 @@
 
 #include "DrawTriangleFeatureApi.h"
 #include <Maho.h>
-#include <Engine/Layer.h>
+#include <Engine/Frame.h>
 #include <Render.h>
 
 namespace Maho
@@ -31,9 +31,9 @@ struct FTriangleShader
  * pipeline implicitly -- the feature owns no pipeline, layout, shader module or raw
  * RHI pointer.
  */
-class FDrawTriangleFeature : public FLayer<IRender>
+class FDrawTriangleFeature : public FFrameExtension, public IPipeline<IRender>
 {
-MAHO_DECLARE_LAYER(FDrawTriangleFeature);
+MAHO_DECLARE_FRAME(FDrawTriangleFeature);
 
 	FDrawTriangleFeature();
 	~FDrawTriangleFeature() override;

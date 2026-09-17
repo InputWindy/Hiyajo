@@ -1,7 +1,7 @@
 #pragma once
 
 #include "FrameRenderFeatureApi.h"
-#include <Engine/Layer.h>
+#include <Engine/Frame.h>
 #include <Render.h>
 #include <RDG.h>
 
@@ -24,9 +24,9 @@ namespace Maho
  * is skipped). See the design: the frame feature waits on every render feature's
  * IEndRender via the producers' own declarations.
  */
-class MAHO_FRAMERENDERFEATURE_API FFrameRenderFeature : public FLayer<IPresent>
+class MAHO_FRAMERENDERFEATURE_API FFrameRenderFeature : public FFrameExtension, public IPipeline<IPresent>
 {
-MAHO_DECLARE_LAYER(FFrameRenderFeature);
+MAHO_DECLARE_FRAME(FFrameRenderFeature);
 
 public:
 	FFrameRenderFeature();

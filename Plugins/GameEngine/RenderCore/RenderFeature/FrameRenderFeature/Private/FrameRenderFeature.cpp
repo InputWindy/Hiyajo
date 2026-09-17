@@ -9,11 +9,10 @@ FFrameRenderFeature::FFrameRenderFeature()
 	// render feature finished compositing -- but a frame feature cannot enumerate
 	// them (it is generic, and an editor feature may not exist in a runtime
 	// build). So the edge is declared INVERTED by each producer: a UI feature that
-	// writes the present target declares BlockOn<FFrameRenderFeature, IPresent,
-	// MyFinalStage> (reverse dep), and an absent producer is silently skipped by
-	// the graph -- see FLayerTaskGraph::Init / BlockOn.
+	// writes the present target declares IsBlocking<FFrameRenderFeature>().OnStage<IPresent>()
+	// (reverse dep), and a producer that is not installed simply never makes the edge exist.
 	//
-	// No forward WaitFor here: the ordering is producer-driven so this feature
+	// No forward wait here: the ordering is producer-driven so this feature
 	// stays decoupled from any specific UI/editor feature's existence.
 }
 
@@ -42,7 +41,7 @@ void FFrameRenderFeature::Present(FRender& R)
 } // namespace Maho
 
 // The C export FRender looks up BY SYMBOL NAME for dynamic install.
-extern "C" MAHO_FRAMERENDERFEATURE_API Maho::FLayerBase* CreateLayer()
+extern "C" MAHO_FRAMERENDERFEATURE_API Maho::FFrameExtension* CreateFrame()
 {
-	return Maho::FFrameRenderFeature::CreateLayer();
+	return Maho::FFrameRenderFeature::CreateFrame();
 }

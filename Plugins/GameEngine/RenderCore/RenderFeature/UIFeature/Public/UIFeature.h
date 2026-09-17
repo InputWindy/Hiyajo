@@ -1,7 +1,7 @@
 #pragma once
 
 #include "UIFeatureApi.h"
-#include <Engine/Layer.h>
+#include <Engine/Frame.h>
 #include <Render.h>
 #include <RDG.h>
 #include <RHI/RHIResources.h>
@@ -65,9 +65,9 @@ struct FUIShader
  * neither owns nor tears down a resource. Only the translated FDrawList is held
  * (a member, reused across frames).
  */
-class MAHO_UIFEATURE_API FUIFeature : public FLayer<IOnInstalled, IInitViews, IRenderUI, IPreUnInstall>
+class MAHO_UIFEATURE_API FUIFeature : public FFrameExtension, public IPipeline<IOnInstalled, IInitViews, IRenderUI, IPreUnInstall>
 {
-MAHO_DECLARE_LAYER(FUIFeature);
+MAHO_DECLARE_FRAME(FUIFeature);
 
 	FUIFeature();
 

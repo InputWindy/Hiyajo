@@ -276,7 +276,7 @@ void FScene::TransitionSceneColorForRendering(FRender& R)
 } // namespace Maho
 
 // The C export the host looks up BY SYMBOL NAME for dynamic install.
-extern "C" MAHO_SCENE_API Maho::FLayerBase* CreateLayer()
+extern "C" MAHO_SCENE_API Maho::FFrameExtension* CreateFrame()
 {
-	return Maho::Scene::FScene::CreateLayer();
+	return Maho::Scene::FScene::CreateFrame();
 }

@@ -188,7 +188,7 @@ public:
 	// -- sugar ---------------------------------------------------------------------
 	//
 	//   MyStage<IInitViews>().IsWaiting<FLog>().ForStage<IInit>();              // same frame
-	//   MyStage<IInitViews>().IsWaiting<FLog>().LastFrame().ForStage<IInit>();  // previous frame
+	//   MyStage<IInitViews>().WaitFor<FLog>().OnLastFrameStage<IInit>();        // previous frame
 	//   MyStage<IEditorInput>().IsBlocking<FUIFeature>().OnStage<IInitViews>(); // reverse
 	//
 	//   MyStage<IShutdown>().IsBlocking("FUIViewRegistry").OnStage<IShutdown>(); // by NAME
@@ -199,6 +199,17 @@ public:
 	// The NAME-addressed forms exist for a consumer that must not name the producer's TYPE
 	// (which would force a build dependency on an optional plugin). A name that matches no
 	// frame in the frame set simply does not bind -- the bridge reports it (see FDiagnostic).
+	//
+	// The CANONICAL spelling puts the frame into the stage selector, so a cross-frame dependency
+	// reads as one sentence and needs no LastFrame() step:
+	//
+	//   MyStage<IInitViews>().WaitFor<FLog>().OnStage<IInit>();            // FLog@IInit, THIS frame
+	//   MyStage<IInitViews>().WaitFor<FLog>().OnLastFrameStage<IInit>();   // FLog@IInit, LAST frame
+	//   MyStage<IEditorInput>().BlockOn<FUIFeature>().OnLastFrameStage<IInitViews>();
+	//   MyStage<IShutdown>().WaitFor("FUIViewRegistry").OnLastFrameStage<IShutdown>();
+	//
+	// `WaitFor`/`BlockOn` are the two directions; `OnStage`/`OnLastFrameStage` are the selector
+	// they share. IsWaiting/IsBlocking + LastFrame() + ForStage() remain as aliases.
 
 	template <typename TMyStage>
 	struct TWaitScope
@@ -223,6 +234,22 @@ public:
 					FEdge{ TTargetFrame::StaticName(), typeid(TTargetStage), Offset });
 				return *this;
 			}
+
+			/** The target's stage in THIS frame. */
+			template <typename TTargetStage>
+			TTarget& OnStage()
+			{
+				Offset = 0;
+				return ForStage<TTargetStage>();
+			}
+
+			/** The target's stage in the PREVIOUS frame -- the cross-frame dependency. */
+			template <typename TTargetStage>
+			TTarget& OnLastFrameStage()
+			{
+				Offset = -1;
+				return ForStage<TTargetStage>();
+			}
 		};
 
 		/** Name-addressed target: the frame NAMED at declaration time. */
@@ -242,6 +269,20 @@ public:
 					FEdge{ TargetName, typeid(TTargetStage), Offset });
 				return *this;
 			}
+
+			template <typename TTargetStage>
+			TNamedTarget& OnStage()
+			{
+				Offset = 0;
+				return ForStage<TTargetStage>();
+			}
+
+			template <typename TTargetStage>
+			TNamedTarget& OnLastFrameStage()
+			{
+				Offset = -1;
+				return ForStage<TTargetStage>();
+			}
 		};
 
 		template <typename TTargetFrame>
@@ -249,6 +290,16 @@ public:
 
 		/** Name-addressed: `TargetName` must point at STATIC storage (a string literal). */
 		TNamedTarget IsWaiting(std::string_view TargetName)
+		{
+			return TNamedTarget(Self, TargetName);
+		}
+
+		/** "My stage waits for this frame's stage" -- the canonical spelling of IsWaiting. */
+		template <typename TTargetFrame>
+		TTarget<TTargetFrame> WaitFor() { return TTarget<TTargetFrame>(Self); }
+
+		/** Name-addressed WaitFor: for a producer whose TYPE must not be named. */
+		TNamedTarget WaitFor(std::string_view TargetName)
 		{
 			return TNamedTarget(Self, TargetName);
 		}
@@ -279,6 +330,14 @@ public:
 					FEdge{ TTargetFrame::StaticName(), typeid(TTargetStage), Offset });
 				return *this;
 			}
+
+			/** The target's stage in the PREVIOUS frame (a cross-frame reverse declaration). */
+			template <typename TTargetStage>
+			TTarget& OnLastFrameStage()
+			{
+				Offset = -1;
+				return OnStage<TTargetStage>();
+			}
 		};
 
 		/** Name-addressed reverse target. */
@@ -298,6 +357,13 @@ public:
 					FEdge{ TargetName, typeid(TTargetStage), Offset });
 				return *this;
 			}
+
+			template <typename TTargetStage>
+			TNamedTarget& OnLastFrameStage()
+			{
+				Offset = -1;
+				return OnStage<TTargetStage>();
+			}
 		};
 
 		template <typename TTargetFrame>
@@ -305,6 +371,16 @@ public:
 
 		/** Name-addressed: `TargetName` must point at STATIC storage (a string literal). */
 		TNamedTarget IsBlocking(std::string_view TargetName)
+		{
+			return TNamedTarget(Self, TargetName);
+		}
+
+		/** "This frame's stage blocked by my stage" -- the canonical spelling of IsBlocking. */
+		template <typename TTargetFrame>
+		TTarget<TTargetFrame> BlockOn() { return TTarget<TTargetFrame>(Self); }
+
+		/** Name-addressed BlockOn: for a consumer whose TYPE must not be named. */
+		TNamedTarget BlockOn(std::string_view TargetName)
 		{
 			return TNamedTarget(Self, TargetName);
 		}
@@ -340,15 +416,18 @@ private:
 //   1. IN-FRAME CHAIN: each emitted node waits for the previously emitted node of the SAME frame.
 //      Chained over the EMITTED nodes, so a skipped (unimplemented) stage cannot cut one frame's
 //      chain into two independent halves.
-//   2. CROSS-FRAME SELF: each node also waits for ITSELF one frame earlier
-//      ({Name, Stage, PhaseOf(Frame - 1)}). The same stage of the same frame has the same job
-//      every frame, so two of its instances running at once are two writers of one stage's state.
-//      This is what makes "frame N+1 may overlap frame N" safe by construction -- without it a
-//      host would have to drain every frame, or hand-write this identical edge in every frame.
+//   2. CROSS-FRAME SELF EDGE: each node also waits for ITSELF one frame earlier. The same stage of
+//      the same frame has the same job every frame, so two of its instances at once are two
+//      writers of one stage's state. This is what makes "frame N+1 may overlap frame N" safe for
+//      the stages themselves.
 //
-// What the cross-frame self edge does NOT cover: two DIFFERENT stages of one frame that share
-// per-frame state across a frame boundary (S1 of frame N+1 vs S3 of frame N). Those still need an
-// explicit `MyStage<S1>().IsWaiting<T>().LastFrame()` -- the per-frame resource audit.
+// WHAT EDGE 2 DOES NOT COVER, and must not be made to cover: two DIFFERENT stages of one frame
+// extension that share state across a frame boundary (S1@N+1 while S3@N is still running). A frame
+// extension that owns per-frame state is expected to hold MAHO_FRAMES_IN_FLIGHT copies of it --
+// that is what makes the overlap legal, and serializing a whole frame against its previous frame
+// here would instead hide the missing copies inside the scheduler. The absence is measurable:
+// with a single frame fence / one acquired swapchain index, this is a VkFence "simultaneously used
+// in vkQueueSubmit and vkWaitForFences" from the validation layers -- the render layer's to fix.
 //
 // EDGE POLICY -- every DECLARED edge is EMITTED, and only a problem is REPORTED (FDiagnostic):
 //

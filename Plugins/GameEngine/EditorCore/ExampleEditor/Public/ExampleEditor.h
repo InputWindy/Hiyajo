@@ -1,7 +1,7 @@
 #pragma once
 
 #include "ExampleEditorApi.h"
-#include <Engine/Layer.h>
+#include <Engine/Frame.h>
 #include <Engine/FrameBuilder.h>
 #include <Render.h>
 #include <RDG.h>
@@ -123,10 +123,10 @@ struct FEditorShader
 	 * is an editor build (MAHO_EDITOR_BUILD).
 	 */
 class MAHO_EXAMPLEEDITOR_API FExampleEditor
-	: public FLayer<IOnInstalled, IEditorInput, IEditorCompose, IPreUnInstall>
+	: public FFrameExtension, public IPipeline<IOnInstalled, IEditorInput, IEditorCompose, IPreUnInstall>
 	, public FFrameBuilder<FExampleEditor>
 {
-	MAHO_DECLARE_LAYER(FExampleEditor);
+	MAHO_DECLARE_FRAME(FExampleEditor);
 
 	FExampleEditor();
 

@@ -40,9 +40,9 @@ struct FUIWidget
  * No ImGui here: the game declares trees through the UI plugin's builder API, and the
  * translation layer (owned by the render feature) maps them to ImGui.
  */
-class MAHO_UISYSTEM_API FUISystem : public FLayer<IOnInstalled, IProcessInput, IUpdate, IPreUnInstall>
+class MAHO_UISYSTEM_API FUISystem : public FFrameExtension, public IPipeline<IOnInstalled, IProcessInput, IUpdate, IPreUnInstall>
 {
-	MAHO_DECLARE_LAYER(FUISystem);
+	MAHO_DECLARE_FRAME(FUISystem);
 
 public:
 	void OnInstalled(FGameWorld& World) override;

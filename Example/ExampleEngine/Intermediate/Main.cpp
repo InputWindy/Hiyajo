@@ -5,7 +5,7 @@
 //    - 项目默认插件：Extension/<ProjectName>/
 //    - 手动创建的插件：Extension/<其他插件名>/
 //
-//  入口只负责：安装（加载）默认插件 DLL → CreateLayer → Main 执行。
+//  入口只负责：安装（加载）默认插件 DLL → CreateFrame → Main 执行。
 // ═══════════════════════════════════════════════════════════════════════
 #if defined(_WIN32)
 #	include <EntryPointWindows.h>

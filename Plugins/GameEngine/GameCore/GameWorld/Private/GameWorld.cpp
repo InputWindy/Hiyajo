@@ -45,36 +45,10 @@ FGameWorld::~FGameWorld()
 // the real work; the remaining stages are empty -- FGameWorld only hosts the world
 // and schedules its systems, the per-stage ECS frame runs in Tick.
 void FGameWorld::PreInitialize(FEngineBase&) {}
-void FGameWorld::PostInitialize(FEngineBase&) 
+void FGameWorld::PostInitialize(FEngineBase&)
 {
-	InputGraph = std::make_unique<FLayerTaskGraph<FInputStages, FGameWorld>>(Pool, *this);
-	FixedGraph = std::make_unique<FLayerTaskGraph<FFixedStages, FGameWorld>>(Pool, *this);
-	PostGraph = std::make_unique<FLayerTaskGraph<FPostStages, FGameWorld>>(Pool, *this);
-	bGraphsDirty = true;
-}
-
-void FGameWorld::RebuildGraphs()
-{
-	if (!InputGraph || !FixedGraph || !PostGraph)
-	{
-		return;
-	}
-	InputGraph->Init(Select<IProcessInput>());
-	if (!InputGraph->Compile())
-	{
-		ReportError("FGameWorld: input stage graph Compile failed");
-	}
-	FixedGraph->Init(Select<IFixedUpdate>());
-	if (!FixedGraph->Compile())
-	{
-		ReportError("FGameWorld: fixed-step stage graph Compile failed");
-	}
-	PostGraph->Init(Select<IUpdate, ILateUpdate>());
-	if (!PostGraph->Compile())
-	{
-		ReportError("FGameWorld: post-fixed stage graph Compile failed");
-	}
-	bGraphsDirty = false;
+	// Nothing to build: the stage sequences are compile-time (FInputStages / FFixedStages /
+	// FPostStages) and the collector's graph is created on first use. Tick drives them.
 }
 void FGameWorld::BeginFrame(FEngineBase&) {}
 void FGameWorld::EndFrame(FEngineBase&) {}
@@ -98,7 +72,7 @@ void FGameWorld::Initialize(FEngineBase&)
 	}
 
 	// Install the world systems (peer layers). Applied at the next Tick's
-	// FlushPendingUpdatePipelines safe point (IOnInstalled). UISystem owns the game-side
+	// FlushPendingUpdates safe point (IOnInstalled). UISystem owns the game-side
 	// UI: it declares the demo widget's persistent view tree (and the draggable text-box
 	// placeholder) and registers the view in the UI view registry, which the render
 	// feature translates once per frame.
@@ -107,30 +81,15 @@ void FGameWorld::Initialize(FEngineBase&)
 
 void FGameWorld::Tick(FEngineBase&)
 {
-	if (!InputGraph)
-	{
-		return;
-	}
-
-	// Frame-start barrier: the post-fixed group is dispatched un-flushed below, so it
-	// pipelines across frames into this wait -- cross-frame parallelism, same as the
-	// render graph. Must precede any rebuild (a rebuild under live tasks is a use of a
-	// freed node).
-	PostGraph->Flush();
+	// Frame-start barrier: the post-fixed group is dispatched un-waited below, so it pipelines
+	// across frames into this wait -- cross-frame parallelism, same as the render graph. Must
+	// precede any frame-set change (a change under live nodes is a use of a freed node).
+	Wait();
 
 	// Safe point for world-system install/uninstall (attach -> IOnInstalled, detach ->
-	// IPreUnInstall). A changed system set is the ONLY thing that rebuilds the graphs,
-	// and it happens right here, with nothing in flight.
-	const bool bSetChanged = !PendingAdded.empty() || !PendingRemoveRequests.empty();
-	FlushPendingUpdatePipelines<TTypeList<IOnInstalled>, TTypeList<IPreUnInstall>>();
-	if (bSetChanged)
-	{
-		bGraphsDirty = true;
-	}
-	if (bGraphsDirty)
-	{
-		RebuildGraphs();
-	}
+	// IPreUnInstall). A changed system set is the ONLY thing that changes the frame set, and it
+	// happens right here, with nothing in flight; the collector notices and re-queries.
+	FlushPendingUpdates<TTypeList<IOnInstalled>, TTypeList<IPreUnInstall>>();
 
 	// Delta time.
 	const auto Now = std::chrono::steady_clock::now();
@@ -138,48 +97,41 @@ void FGameWorld::Tick(FEngineBase&)
 	LastFrame = Now;
 
 	// Pre-fixed: resolve input once, synchronously -- simulation must read a
-	// settled input state, so flush immediately after dispatch.
-	InputGraph->Execute();
-	InputGraph->Flush();
+	// settled input state, so wait immediately after dispatch.
+	Execute<FInputStages>();
+	Wait();
 
 	// Fixed timestep: 0..N steps this frame, each strictly ordered (a step cannot
-	// overlap the next, so each is flushed before the next runs).
+	// overlap the next, so each is waited out before the next runs).
 	Accumulator += DeltaSeconds;
 	while (Accumulator >= FixedStepSeconds)
 	{
-		FixedGraph->Execute();
-		FixedGraph->Flush();
+		Execute<FFixedStages>();
+		Wait();
 		Accumulator -= FixedStepSeconds;
 	}
 
-	// Post-fixed: update + late update, dispatched WITHOUT a trailing flush so they
-	// pipeline across frames; the next Tick's leading Flush (above) waits them.
-	PostGraph->Execute();
+	// Post-fixed: update + late update, dispatched WITHOUT a trailing wait so they
+	// pipeline across frames; the next Tick's leading Wait (above) collects them.
+	Execute<FPostStages>();
 }
 
 void FGameWorld::Shutdown(FEngineBase&)
 {
 	// MY OWN state first, the world systems AFTER. The component pools hold objects
-	// whose destructors live in the systems' modules, and the graphs' nodes point at
+	// whose destructors live in the systems' modules, and the graph's nodes point at
 	// their instances -- freeing either of those once a system's DLL is unloaded runs
 	// code from an unmapped module (a hard AV, not a leak).
-	if (PostGraph) { PostGraph->Flush(); }
-	if (FixedGraph) { FixedGraph->Flush(); }
-	if (InputGraph) { InputGraph->Flush(); }
-	PostGraph.reset();
-	FixedGraph.reset();
-	InputGraph.reset();
+	Wait();
 	ComponentPools.clear();
 
 	// Now the systems: uninstall through the collector teardown pipeline so each one's
 	// IPreUnInstall runs BEFORE its instance is destroyed (a bare member destruction
 	// would skip that stage and leak cross-module subscriptions -- e.g. a system's
-	// std::function bound into another DLL's event).
-	for (FLayerBase* L : Pipelines)
-	{
-		TryUninstall(L->GetName());
-	}
-	FlushPendingUpdatePipelines<TTypeList<IOnInstalled>, TTypeList<IPreUnInstall>>();
+	// std::function bound into another DLL's event). By NAME, because a name is what
+	// survives a module.
+	UninstallAll();
+	FlushPendingUpdates<TTypeList<IOnInstalled>, TTypeList<IPreUnInstall>>();
 
 	GGameWorld = nullptr;
 }
@@ -212,7 +164,7 @@ bool FGameWorld::IsAlive(FEntity E) const
 } // namespace Maho
 
 // The C export the host looks up BY SYMBOL NAME for dynamic install.
-extern "C" MAHO_GAMEWORLD_API Maho::FLayerBase* CreateLayer()
+extern "C" MAHO_GAMEWORLD_API Maho::FFrameExtension* CreateFrame()
 {
-	return Maho::GameWorld::FGameWorld::CreateLayer();
+	return Maho::GameWorld::FGameWorld::CreateFrame();
 }

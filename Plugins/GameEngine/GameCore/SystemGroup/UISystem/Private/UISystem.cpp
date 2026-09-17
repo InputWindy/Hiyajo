@@ -132,7 +132,7 @@ FUISystem* GetUISystem()
 } // namespace Maho
 
 // The C export FGameWorld looks up BY SYMBOL NAME for dynamic install.
-extern "C" MAHO_UISYSTEM_API Maho::FLayerBase* CreateLayer()
+extern "C" MAHO_UISYSTEM_API Maho::FFrameExtension* CreateFrame()
 {
-	return Maho::GameWorld::FUISystem::CreateLayer();
+	return Maho::GameWorld::FUISystem::CreateFrame();
 }

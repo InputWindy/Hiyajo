@@ -1,7 +1,7 @@
 #pragma once
 
 #include "EditorThemeApi.h"
-#include <Engine/Layer.h>
+#include <Engine/Frame.h>
 #include <ExampleEditor.h>
 #include <UIView.h>
 
@@ -27,9 +27,9 @@ namespace Maho
  * before declaring (Reset/Load refresh the buffers first and mark them
  * authoritative for that frame instead).
  */
-class FEditorTheme : public FLayer<IEditorInit, IEditorPanel, IEditorShutdown>
+class FEditorTheme : public FFrameExtension, public IPipeline<IEditorInit, IEditorPanel, IEditorShutdown>
 {
-	MAHO_DECLARE_LAYER(FEditorTheme);
+	MAHO_DECLARE_FRAME(FEditorTheme);
 
 public:
 	void Init(FExampleEditor& Editor) override;

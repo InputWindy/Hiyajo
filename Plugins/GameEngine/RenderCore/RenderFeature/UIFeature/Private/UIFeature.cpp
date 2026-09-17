@@ -998,7 +998,7 @@ void FUIFeature::PreUnInstall(FRender& R)
 } // namespace Maho
 
 // The C export FRender looks up BY SYMBOL NAME for dynamic install.
-extern "C" MAHO_UIFEATURE_API Maho::FLayerBase* CreateLayer()
+extern "C" MAHO_UIFEATURE_API Maho::FFrameExtension* CreateFrame()
 {
-	return Maho::FUIFeature::CreateLayer();
+	return Maho::FUIFeature::CreateFrame();
 }

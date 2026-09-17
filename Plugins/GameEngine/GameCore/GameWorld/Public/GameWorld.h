@@ -4,9 +4,8 @@
 #include "Entity.h"
 #include "ComponentPool.h"
 #include <Maho.h>
-#include <Engine/Layer.h>
+#include <Engine/Frame.h>
 #include <Engine/FrameBuilder.h>
-#include <Engine/LayerTaskGraph.h>
 #include <Engine/Engine.h>
 #include <Core/TypeList.h>
 
@@ -97,10 +96,10 @@ public:
  * via Install<...>() and receive the world (FGameWorld&) at each stage.
  */
 class MAHO_GAMEWORLD_API FGameWorld
-	: public FLayer<IPreInit, IInit, IPostInit, IBeginFrame, ITick, IEndFrame, IExit, IPreShutdown, IShutdown, IPostShutdown>
+	: public FFrameExtension, public IPipeline<IPreInit, IInit, IPostInit, IBeginFrame, ITick, IEndFrame, IExit, IPreShutdown, IShutdown, IPostShutdown>
 	, public FFrameBuilder<FGameWorld>
 {
-	MAHO_DECLARE_LAYER(FGameWorld);
+	MAHO_DECLARE_FRAME(FGameWorld);
 
 public:
 	FGameWorld();
@@ -175,12 +174,6 @@ private:
 	void Shutdown(FEngineBase&) override;
 	void PostShutdown(FEngineBase&) override;
 
-	/** (Re)build the per-group world graphs. Called ONLY when the world-system set
-	 *  changed (at the safe point) and never with a frame in flight: a graph's node set
-	 *  is what the frame ring indexes into, so rebuilding it under live tasks is a
-	 *  use-after-free waiting to happen. */
-	void RebuildGraphs();
-
 	template <typename C>
 	TComponentPool<C>* GetOrAddPool()
 	{
@@ -210,18 +203,19 @@ private:
 		return nullptr;
 	}
 
-	// One graph per stage GROUP, each carrying exactly its own stages: a graph expands
-	// one node per stage in its list for every layer it is given, so a wider list would
-	// quietly run those stages too (IOnInstalled/IPreUnInstall belong to the collector's
-	// install/uninstall graphs, not to the frame). Init happens once per system-set
-	// change; every frame after that is Execute-only.
+	// One stage SEQUENCE per group, each carrying exactly its own stages: a batch expands one
+	// node per stage in its list for every frame it is given, so a wider list would quietly run
+	// those stages too (IOnInstalled/IPreUnInstall belong to the collector's install/uninstall
+	// batches, not to the frame).
+	//
+	// The graphs themselves belong to the collector (Execute<TStages>() below), and it keeps one
+	// generation counter PER SEQUENCE -- which is why this is three Execute<> calls rather than
+	// one: the cross-frame self edge binds generation N to N-1, so each sequence's counter must
+	// advance by one per dispatch of THAT sequence. A single shared counter would leave each
+	// sequence's previous generation at another group's offset.
 	using FInputStages = TTypeList<IProcessInput>;
 	using FFixedStages = TTypeList<IFixedUpdate>;
 	using FPostStages  = TTypeList<IUpdate, ILateUpdate>;
-	std::unique_ptr<FLayerTaskGraph<FInputStages, FGameWorld>> InputGraph;
-	std::unique_ptr<FLayerTaskGraph<FFixedStages, FGameWorld>> FixedGraph;
-	std::unique_ptr<FLayerTaskGraph<FPostStages, FGameWorld>>  PostGraph;
-	bool bGraphsDirty = true;
 
 	FEntityRegistry Registry;
 	std::vector<std::unique_ptr<IComponentPool>> ComponentPools;   // one TComponentPool<T> per component type

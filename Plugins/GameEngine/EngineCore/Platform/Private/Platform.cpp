@@ -647,7 +647,7 @@ float FPlatform::ConsumeMouseWheelY()
 } // namespace Maho::Platform
 
 // The C export the host looks up BY SYMBOL NAME for dynamic install.
-extern "C" MAHO_API Maho::FLayerBase* CreateLayer()
+extern "C" MAHO_API Maho::FFrameExtension* CreateFrame()
 {
-	return Maho::Platform::FPlatform::CreateLayer();
+	return Maho::Platform::FPlatform::CreateFrame();
 }

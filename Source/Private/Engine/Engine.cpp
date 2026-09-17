@@ -153,9 +153,12 @@ int FEngineBase::Main()
 	// by a scheduler mechanism, and it is strictly finer: it orders a stage against itself, not a
 	// whole frame against itself, so different frames overlap wherever they do not share a stage.
 	//
-	// What is NOT covered by that edge: two DIFFERENT stages of one frame that share per-frame
-	// state across a frame boundary (S1 of frame N+1 vs S3 of frame N). Those need an explicit
-	// `MyStage<S1>().IsWaiting<T>().LastFrame()` (or the reverse) -- the per-frame resource audit.
+	// What is NOT covered by that edge, and must NOT be "fixed" by serializing frames here: the two
+	// stages of one frame extension that share its frame state across a frame boundary (S1 of frame
+	// N+1 vs S3 of frame N). A frame extension that owns per-frame state is expected to hold
+	// MAHO_FRAMES_IN_FLIGHT copies of it -- that is the render layer's job, and doing it in the
+	// scheduler instead would hide the missing copies (measured: the Vulkan validation errors in
+	// design.md D9).
 	while (!ShouldExit())
 	{
 		FlushPendingUpdates<FInitStages, FShutdownStages>();

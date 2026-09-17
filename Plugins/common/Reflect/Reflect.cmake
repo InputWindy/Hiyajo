@@ -17,7 +17,7 @@ set_source_files_properties(	"${CMAKE_CURRENT_LIST_DIR}/Reflect.cplugin"
 target_include_directories(Reflect PUBLIC
 	"${ENGINE_DIR}/Source/Public"
 	"${CMAKE_CURRENT_LIST_DIR}/Public"
-	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/TaskGraphTest/Public"
+	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEngine/Public"
 )
 set_target_properties(Reflect PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 target_compile_definitions(Reflect PRIVATE MAHO_REFLECT_MODULE_EXPORTS)

@@ -3,7 +3,7 @@
 #include "SceneApi.h"
 
 #include <Maho.h>
-#include <Engine/Layer.h>
+#include <Engine/Frame.h>
 #include <Render.h>
 #include <RDG.h>
 #include <RenderDrawList.h>
@@ -27,9 +27,9 @@ MAHO_SCENE_API FScene* GetScene();
  * slots in FRender. Targets are rebuilt when the swapchain extent changes.
  * (The present/blit lives in the UI feature's IPresent, not here.)
  */
-class MAHO_SCENE_API FScene : public FLayer<IBeginRender, IRender, IEndRender, IPreUnInstall>
+class MAHO_SCENE_API FScene : public FFrameExtension, public IPipeline<IBeginRender, IRender, IEndRender, IPreUnInstall>
 {
-	MAHO_DECLARE_LAYER(FScene);
+	MAHO_DECLARE_FRAME(FScene);
 
 public:
 	FScene();

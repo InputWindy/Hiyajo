@@ -23,7 +23,7 @@ void FExampleEngine::PreMain()
 	// so nothing is installed twice and nobody needs a special "top level" list.
 	FPluginManager::Get().Load();
 	InstallChildrenOf(GetName());
-	FlushPendingUpdatePipelines<
+	FlushPendingUpdates<
 		TTypeList<IPreInit, IInit, IPostInit>,
 		TTypeList<IPreShutdown, IShutdown, IPostShutdown>
 	>();

@@ -468,6 +468,10 @@ protected:
 	 * TLoopStages is the frame sequence. The frame set is the frames implementing ANY of its
 	 * stages -- the LINQ query is DERIVED from that list, so the two cannot disagree.
 	 *
+	 * Each SEQUENCE has its own generation counter (see below), because a host may drive more
+	 * than one sequence from a single builder -- a world drives input, N fixed steps, and
+	 * post-update, all in one tick.
+	 *
 	 * Frames are NOT drained here: they PIPELINE. What makes that safe is the batch builder's two
 	 * STRUCTURAL edges -- a frame's own stages in order, and each stage against its OWN previous
 	 * frame (see FFrameBridge). A host that wants one frame in flight calls Wait() after this.
@@ -477,9 +481,17 @@ protected:
 	{
 		ExpandLoopFrames(TLoopStages{});
 
+		// One counter PER SEQUENCE, and that is load bearing rather than bookkeeping: the
+		// cross-frame self edge binds generation N to N-1, so the number handed to the graph must
+		// advance by exactly one per dispatch of THAT sequence. A single counter shared by several
+		// sequences would leave each sequence's previous generation at some other offset -- the
+		// self edge would then point at a node that does not exist (the edge disappears, and the
+		// sequence silently loses its cross-frame exclusion) or at an unrelated older generation.
+		std::int32_t& SequenceFrame = LoopFrameNumbers[std::type_index(typeid(TLoopStages))];
+
 		TFrameDispatch<TLoopStages, TContext> Dispatch(GetContext());
 		FFrameBridge::FResult Built = FFrameBridge::Build(LoopFrames,
-			TFrameDispatch<TLoopStages, TContext>::StageIndices(), LoopFrameNumber++, Dispatch);
+			TFrameDispatch<TLoopStages, TContext>::StageIndices(), SequenceFrame++, Dispatch);
 
 		// Report the declarations that cannot bind ONCE per frame set, not once per frame: the
 		// same typo would otherwise be logged on every single frame.
@@ -544,6 +556,33 @@ protected:
 	void CancelPendingReloads()
 	{
 		PendingReloads.clear();
+	}
+
+	/** Destroy EVERY instance still held, without driving teardown stages, and drop their
+	 *  modules: the host's last resort during teardown.
+	 *
+	 *  Why it is needed: the normal path (UninstallAll + FlushPendingUpdates) can legitimately
+	 *  REFUSE an uninstall -- a frame still depended on is kept alive on purpose -- yet a host may
+	 *  have to destroy the instances before some resource they depend on goes away (a GPU device,
+	 *  a context). Call it only after the stages were attempted: it runs no plugin stage.
+	 *
+	 *  It keeps the collector's invariants, which a bare instance-container clear() would not: an
+	 *  instance leaves the active set BEFORE it is freed, so "in Pipelines == alive" still holds,
+	 *  the per-slot name/module bookkeeping is cleared with it, and nothing dangles. */
+	void ReleaseAll()
+	{
+		std::vector<FFrameExtension*> All(Pipelines.begin(), Pipelines.end());
+		for (FFrameExtension* F : All)
+		{
+			if (F != nullptr)
+			{
+				Pipelines.erase(std::remove(Pipelines.begin(), Pipelines.end(), F), Pipelines.end());
+				DeleteUnloaded(F);
+			}
+		}
+		// Requests and pending installs also name instances; both are moot once nothing is alive.
+		PendingRemoveRequests.clear();
+		DropPendingInstalls();
 	}
 
 	/** The flush body (see the wrapper above for the guard + fatal-error handling). */
@@ -1149,7 +1188,7 @@ private:
 
 	/** The loop's cache and the two report-once guards. */
 	std::vector<FFrameExtension*>  LoopFrames;
-	std::int32_t                   LoopFrameNumber = 0;
+	std::map<std::type_index, std::int32_t> LoopFrameNumbers;  // one generation counter per sequence
 	bool                           bLoopDirty = true;         // the cached frame set is stale
 	bool                           bLoopJustExpanded = false; // report diagnostics once per set
 	std::string                    LastLoopRejectReason;

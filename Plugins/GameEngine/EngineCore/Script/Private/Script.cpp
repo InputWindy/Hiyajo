@@ -396,7 +396,7 @@ void* FScriptSystem::TryGetState()
 } // namespace Maho::Script
 
 // The C export the host looks up BY SYMBOL NAME for dynamic install.
-extern "C" MAHO_SCRIPT_API Maho::FLayerBase* CreateLayer()
+extern "C" MAHO_SCRIPT_API Maho::FFrameExtension* CreateFrame()
 {
-	return Maho::Script::FScriptSystem::CreateLayer();
+	return Maho::Script::FScriptSystem::CreateFrame();
 }

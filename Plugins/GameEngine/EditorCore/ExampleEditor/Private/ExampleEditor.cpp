@@ -474,10 +474,10 @@ void FExampleEditor::InstallEditorComponents()
 	// Editor components (viewport, console, theme) are declaratively listed in
 	// ExampleEditor.cplugin Plugins and installed into this host's collector by
 	// module base name at the next safe point (their IEditorInit graph runs on
-	// FlushPendingUpdatePipelines). A component with children of its own would
+	// FlushPendingUpdates). A component with children of its own would
 	// install them itself, into this same collector.
 	InstallChildrenOf(GetName());
-	FlushPendingUpdatePipelines<TTypeList<IEditorInit>, TTypeList<IEditorShutdown>>();
+	FlushPendingUpdates<TTypeList<IEditorInit>, TTypeList<IEditorShutdown>>();
 }
 
 void FExampleEditor::InitEditorViews(FRender& R)
@@ -992,13 +992,13 @@ void FExampleEditor::ShutdownEditorComponents()
 	TryUninstall(Maho::ApplyModuleExtension("FContentBrowser"));
 	TryUninstall(Maho::ApplyModuleExtension("FEditorViewport"));
 	TryUninstall(Maho::ApplyModuleExtension("FEditorTheme"));
-	FlushPendingUpdatePipelines<TTypeList<IEditorInit>, TTypeList<IEditorShutdown>>();
+	FlushPendingUpdates<TTypeList<IEditorInit>, TTypeList<IEditorShutdown>>();
 }
 
 } // namespace Maho
 
-// C export -- the host (FRender collector) loads this DLL and calls CreateLayer() by symbol name.
-extern "C" MAHO_EXAMPLEEDITOR_API Maho::FLayerBase* CreateLayer()
+// C export -- the host (FRender collector) loads this DLL and calls CreateFrame() by symbol name.
+extern "C" MAHO_EXAMPLEEDITOR_API Maho::FFrameExtension* CreateFrame()
 {
-	return Maho::FExampleEditor::CreateLayer();
+	return Maho::FExampleEditor::CreateFrame();
 }

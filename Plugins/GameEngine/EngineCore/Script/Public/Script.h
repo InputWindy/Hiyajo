@@ -79,10 +79,10 @@ public:
  *   Script::GetScriptSystem()->DoFile("main.lua");      // host loads scripts
  *   Script::GetScriptSystem()->Call("OnUpdate", dt);    // host drives per frame
  */
-class FScriptSystem : public FLayer<IPreInit, IInit, IPostInit, IPreShutdown, IShutdown, IPostShutdown>
+class FScriptSystem : public FFrameExtension, public IPipeline<IPreInit, IInit, IPostInit, IPreShutdown, IShutdown, IPostShutdown>
 {
 public:
-	MAHO_DECLARE_LAYER(FScriptSystem);
+	MAHO_DECLARE_FRAME(FScriptSystem);
 
 	FScriptSystem();
 

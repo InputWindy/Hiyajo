@@ -2,9 +2,8 @@
 
 #include "RenderApi.h"
 #include <Maho.h>
-#include <Engine/Layer.h>
+#include <Engine/Frame.h>
 #include <Engine/FrameBuilder.h>
-#include <Engine/LayerTaskGraph.h>
 #include <Engine/Engine.h>
 #include <RHI/RHIServer.h>
 #include "RDG.h"
@@ -197,10 +196,10 @@ MAHO_DECLARE_STAGE_DISPATCH(FRender, IPreUnInstall, IPreUnInstall, PreUnInstall)
  * on GetRHI()).
  */
 class MAHO_RENDER_API FRender
-	: public FLayer<IPreInit, IInit, IPostInit, IBeginFrame, ITick, IEndFrame, IExit, IPreShutdown, IShutdown, IPostShutdown>
+	: public FFrameExtension, public IPipeline<IPreInit, IInit, IPostInit, IBeginFrame, ITick, IEndFrame, IExit, IPreShutdown, IShutdown, IPostShutdown>
 	, public FFrameBuilder<FRender>
 {
-MAHO_DECLARE_LAYER(FRender);
+MAHO_DECLARE_FRAME(FRender);
 
 	FRender();
 	~FRender() override;
@@ -529,15 +528,16 @@ private:
 
 	// Render graph stages. The swapchain frame lifecycle (acquire / end + present)
 	// lives on the host FRender::BeginFrame/EndFrame (engine stages); the graph
-	// runs the draw passes + the present blit, and FRender::EndFrame drains it
-	// (Flush) before RHI->EndFrame so the present waits every submit.
-	// TaskGraph orders everything. FRender itself does no frame work.
+	// runs the draw passes + the present blit, and FRender::EndFrame waits it
+	// (Wait) before RHI->EndFrame so the present waits every submit.
+	// The graph itself belongs to the collector (FFrameBuilder): the stage SEQUENCE below is
+	// what FRender::Tick hands to Execute<FRenderStages>(). FRender itself does no frame work.
+	// A stage no installed feature implements is not emitted at all (no empty node).
 #ifdef MAHO_EDITOR_BUILD
 	using FRenderStages = TTypeList<IEditorInput, IInitViews, IBeginRender, IRender, IEndRender, IPostProcess, IRenderUI, IEditorCompose, IPresent>;
 #else
 	using FRenderStages = TTypeList<IInitViews, IBeginRender, IRender, IEndRender, IPostProcess, IRenderUI, IPresent>;
 #endif
-	std::unique_ptr<FLayerTaskGraph<FRenderStages, FRender>> RenderGraph;
 
 	// Per-pass submit serialization. AddPass records a pass then submits it immediately
 	// (un-fenced). A later pass reuses a resource the earlier, still-pending submit reads

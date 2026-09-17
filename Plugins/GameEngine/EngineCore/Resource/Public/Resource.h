@@ -142,11 +142,11 @@ private:
  * std::vector of raw bytes.
  */
 class FResourceSystem
-	: public FLayer<IPreInit, IInit, IPostInit, IBeginFrame, ITick, IEndFrame, IExit, IPreShutdown, IShutdown, IPostShutdown>
+	: public FFrameExtension, public IPipeline<IPreInit, IInit, IPostInit, IBeginFrame, ITick, IEndFrame, IExit, IPreShutdown, IShutdown, IPostShutdown>
 	, public FThreadedServer
 {
 public:
-	MAHO_DECLARE_LAYER(FResourceSystem);
+	MAHO_DECLARE_FRAME(FResourceSystem);
 
 	~FResourceSystem() override;
 

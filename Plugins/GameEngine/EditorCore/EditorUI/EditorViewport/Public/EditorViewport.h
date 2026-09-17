@@ -1,7 +1,7 @@
 #pragma once
 
 #include "EditorViewportApi.h"
-#include <Engine/Layer.h>
+#include <Engine/Frame.h>
 #include <ExampleEditor.h>
 #include <UIView.h>
 
@@ -19,9 +19,9 @@ namespace Maho
  * resolver maps that name to the RHI texture, so this component never sees an
  * ImTextureID and carries no ImGui/RHI resource ownership.
  */
-class FEditorViewport : public FLayer<IEditorPanel, IEditorShutdown>
+class FEditorViewport : public FFrameExtension, public IPipeline<IEditorPanel, IEditorShutdown>
 {
-	MAHO_DECLARE_LAYER(FEditorViewport);
+	MAHO_DECLARE_FRAME(FEditorViewport);
 
 public:
 	/** Declaration phase (host `NewFrame` before): rebuild this view's tree, then

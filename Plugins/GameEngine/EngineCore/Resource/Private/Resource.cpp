@@ -396,7 +396,7 @@ void FResourceSystem::ForEachResource(const std::function<void(const Name::FName
 } // namespace Maho::Resource
 
 // The C export the host looks up BY SYMBOL NAME for dynamic install.
-extern "C" MAHO_RESOURCE_API Maho::FLayerBase* CreateLayer()
+extern "C" MAHO_RESOURCE_API Maho::FFrameExtension* CreateFrame()
 {
-	return Maho::Resource::FResourceSystem::CreateLayer();
+	return Maho::Resource::FResourceSystem::CreateFrame();
 }

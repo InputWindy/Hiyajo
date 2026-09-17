@@ -81,6 +81,27 @@ FRender::FRender()
 	// taken from a descriptor the native no longer has.
 	MyStage<IBeginFrame>().IsBlocking<Resource::FResourceSystem>().OnStage<ITick>();
 	MyStage<ITick>().IsWaiting<Resource::FResourceSystem>().ForStage<ITick>();
+
+	// The swapchain frame lifecycle lives on MY OWN two host stages (IBeginFrame acquires the
+	// image + begins the frame buffer + recycles the finished frame's command lists; IEndFrame
+	// submits and presents), and the RHI keeps ONE copy of that frame state -- one fence, one
+	// frame command list, one acquired image index. So my next frame may not start until my
+	// previous frame has finished presenting:
+	//
+	//     IBeginFrame@N+1  waits for  IEndFrame@N
+	//
+	// The only cross-frame ordering the scheduler provides by itself is the implicit per-stage
+	// self edge (IBeginFrame@N+1 vs IBeginFrame@N), which is NOT enough here -- it would let
+	// IBeginFrame@N+1 wait on a fence / reset a command list / re-acquire an image while
+	// IEndFrame@N is still submitting. That is a measured failure: Vulkan validation reports
+	// VkFence "simultaneously used in current thread (vkQueueSubmit) and thread
+	// (vkWaitForFences)", layout transitions on an image "not acquired from the swapchain", and
+	// pSignalSemaphores "still in use". This one explicit edge is what removes all of it, because
+	// it is exactly the ordering the old per-layer gate used to impose.
+	//
+	// The general form -- the RHI holding MAHO_FRAMES_IN_FLIGHT copies of that state, so that
+	// frames may overlap -- is the follow-up; until then this edge IS the frame isolation.
+	MyStage<IBeginFrame>().WaitFor<FRender>().OnLastFrameStage<IEndFrame>();
 }
 
 FRender::~FRender() = default;
@@ -126,8 +147,8 @@ void FRender::Initialize(FEngineBase& Engine)
 	ShaderCompiler = std::make_unique<FShaderCompilerServer>();
 	ShaderCompiler->Initialize();
 
-	// Persistent render graph: Flush at frame start, Execute at frame end.
-	RenderGraph = std::make_unique<FLayerTaskGraph<FRenderStages, FRender>>(Pool, *this);
+	// The render graph lives INSIDE the collector (FFrameBuilder::Execute<FRenderStages>()):
+	// Flush at frame start, Execute at frame end (see Tick / EndFrame).
 
 	// (The render features are installed in PreInitialize -- they are MY declared
 	// sub-plugins; Initialize only sets up the services they will use.)
@@ -227,10 +248,9 @@ void FRender::Shutdown(FEngineBase&)
 	// FPlatform's Shutdown is ordered AFTER ours (it owns the window/surface the
 	// RHI was created from). The RHI stays a stateless task processor -- it
 	// never refuses work, it just runs what it is given.
-	if (RenderGraph)
-	{
-		RenderGraph->Flush();   // render feature graph pool (quiescence barrier)
-	}
+	// Quiescence for the render graph AND its pool: teardown may free feature modules below,
+	// and a stage body may have submitted work the graph's own fence does not cover.
+	Wait();
 	if (ShaderCompiler)
 	{
 		ShaderCompiler->Shutdown();   // compile thread: drain pending compiles, stop + join
@@ -239,7 +259,6 @@ void FRender::Shutdown(FEngineBase&)
 	{
 		RHI->Shutdown();   // render-server thread: drain + join (device teardown stays in ShutdownRHI)
 	}
-	RenderGraph.reset();
 
 	// All render work for the last frame was submitted (the graph drives the
 	// features synchronously); the GPU may still be executing it. Wait here so
@@ -258,18 +277,14 @@ void FRender::Shutdown(FEngineBase&)
 		// EditorConsole unregisters its live log listener); a bare Features.clear()
 		// would destroy the instances without driving those teardown stages and
 		// leak subscriptions (e.g. the console's FLog listener) into the Log layer.
-		for (FLayerBase* L : Pipelines)
-		{
-			TryUninstall(L->GetName());
-		}
-		FlushPendingUpdatePipelines<TTypeList<IOnInstalled>, TTypeList<IPreUnInstall>>();
+		UninstallAll();
+		FlushPendingUpdates<TTypeList<IOnInstalled>, TTypeList<IPreUnInstall>>();
 
-		// Destroy the render feature instances explicitly BEFORE the RHI goes
-		// away: their destructors free Vulkan objects (pipelines / shader
-		// modules) that must be released while the device exists. The collector
-		// would otherwise destroy them only when this FRender dies -- after the
-		// RHI.
-		Features.clear();
+		// Destroy whatever the uninstall path could not release (it REFUSES to unload a feature
+		// another one still depends on) -- their destructors free Vulkan objects (pipelines /
+		// shader modules) that must be released while the device exists. The collector would
+		// otherwise destroy them only when this FRender dies, which is after the RHI.
+		ReleaseAll();
 	}
 
 	// The compile server thread was already joined above; just release the server.
@@ -323,59 +338,39 @@ void FRender::BeginResourcePool()
 
 void FRender::Tick(FEngineBase&)
 {
-	if (!RenderGraph)
-	{
-		return;
-	}
-
-	// Frame-start barrier: wait the PREVIOUS frame's render-graph tasks before
-	// rebuilding the graph. The render CPU work runs during the interval and is
-	// collected here, so Init never races with in-flight Render() calls.
-	RenderGraph->Flush();
+	// Frame-start barrier: wait the PREVIOUS frame's render-graph tasks before the frame set
+	// can change. The render CPU work runs during the interval and is collected here, so the
+	// expansion never races in-flight Render() calls.
+	Wait();
 
 	// (The whole ImGui frame lifecycle -- feed / NewFrame / build / Render /
 	// GetDrawData -- moved into FUIFeature::InitViews inside the render graph below.
 	// FRender holds no ImGui state and only schedules.)
 
-	// Rebuild + drive the render feature graph. All frame work (swapchain begin,
-	// feature acquire/record/submit, present, swapchain end) is a scheduled stage --
-	// FRender only schedules; the frame feature + per-feature deps order it all.
-	FlushPendingUpdatePipelines<TTypeList<IOnInstalled>, TTypeList<IPreUnInstall>>();
-#ifdef MAHO_EDITOR_BUILD
-		// Editor build: pass0 (IEditorInput) feeds the game-UI context with re-based input
-		// BEFORE its IInitViews; pass3 (IEditorCompose) is a real graph stage inserted between
-		// the game-UI composite (IRenderUI) and the present blit (IPresent). With no editor
-		// feature installed either stage has no implementer and is skipped, so the game-UI
-		// target is still the present target -- runtime behaviour is unchanged. Installing an
-		// editor feature (Type=Editor) that implements these takes over the frame here.
-		RenderGraph->Init(Select<IEditorInput, IInitViews, IBeginRender, IRender, IEndRender, IPostProcess, IRenderUI, IEditorCompose, IPresent>());
-#else
-	RenderGraph->Init(Select<IInitViews, IBeginRender, IRender, IEndRender, IPostProcess, IRenderUI, IPresent>());
-#endif
-	if (!RenderGraph->Compile())
-	{
-		ReportFatal("FRender::Tick: render pipeline Compile failed");
-	}
+	// Apply feature install/uninstall, then dispatch this frame. There is no Init and no
+	// Compile: the batch builder re-queries the frame set when the system set changed and
+	// reports what it could not bind. All frame work (swapchain begin, feature
+	// acquire/record/submit, present, swapchain end) is a scheduled stage -- FRender only
+	// schedules; the frame feature + per-feature deps order it all.
+	FlushPendingUpdates<TTypeList<IOnInstalled>, TTypeList<IPreUnInstall>>();
 
-	RenderGraph->Execute();
-	// No trailing Flush: the render graph pipelines across frames -- the next
-	// Tick's leading Flush (above) waits this frame's tasks. At shutdown the
-	// leftover tasks are drained by FRender::Shutdown (render-pool Flush at its
-	// start) and FLog's Shutdown is ordered after FRender's, so any teardown
-	// logging lands in a live logger.
+	// The stage SEQUENCE is FRenderStages itself (see Render.h), so the editor-only stages
+	// (IEditorInput / IEditorCompose) are part of it in an editor build -- and a stage no
+	// installed feature implements is simply not emitted. One call either way.
+	Execute<FRenderStages>();
+	// No trailing wait: the render graph PIPELINES across frames. What keeps that safe is the
+	// structural self edge (a stage against its own previous frame); the next Tick's leading
+	// Wait() collects this frame's tasks. At shutdown the leftover tasks are drained by
+	// FRender::Shutdown (Wait at its start) and FLog's Shutdown is ordered after FRender's, so
+	// any teardown logging lands in a live logger.
 }
 
 void FRender::EndFrame(FEngineBase&)
 {
-	// RHI->EndFrame (end + submit the frame buffer, present the swapchain) must
-	// run after every feature submit, so drain the async render-graph tasks first.
-	// This serializes the present behind this frame's draws (the graph is no
-	// longer cross-frame pipelined across Tick -- a later auto-barrier pass can
-	// restore the overlap).
-	if (RenderGraph)
-	{
-		RenderGraph->Flush();
-	}
+	// RHI->EndFrame (end + submit the frame buffer, present the swapchain) must run after
+	// every feature submit, so drain the async render-graph tasks first: this serializes the
+	// present behind this frame's draws.
+	Wait();
 	// Retire any per-pass submit fence left pending by the last AddPass (and, by
 	// waiting, guarantee this frame's per-pass GPU work completed before the frame
 	// buffer's submit/present is queued behind it).
@@ -1239,7 +1234,7 @@ bool FRender::ReadbackMirror(const Name::FName& /*AssetName*/, Resource::FResour
 } // namespace Maho
 
 // The C export the host looks up BY SYMBOL NAME for dynamic install.
-extern "C" MAHO_RENDER_API Maho::FLayerBase* CreateLayer()
+extern "C" MAHO_RENDER_API Maho::FFrameExtension* CreateFrame()
 {
-	return Maho::FRender::CreateLayer();
+	return Maho::FRender::CreateFrame();
 }

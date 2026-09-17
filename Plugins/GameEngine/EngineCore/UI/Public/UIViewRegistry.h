@@ -32,10 +32,10 @@ MAHO_UI_API void* GetUIGameRenderContext();
  *
  *  所有权归各视图所有者（编辑器面板 / 游戏侧系统）：本表只持有裸指针，从不删除别人注册的视图。
  *  线程契约：注册/注销在宿主线程（安装/卸载期），读快照可来自翻译线程 —— 内部互斥保护。 */
-class FUIViewRegistry : public FLayer<IInit, IShutdown>
+class FUIViewRegistry : public FFrameExtension, public IPipeline<IInit, IShutdown>
 {
 public:
-	MAHO_DECLARE_LAYER(FUIViewRegistry);
+	MAHO_DECLARE_FRAME(FUIViewRegistry);
 
 	FUIViewRegistry();
 	~FUIViewRegistry() override;

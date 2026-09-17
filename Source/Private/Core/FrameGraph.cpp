@@ -540,25 +540,26 @@ FFrameBridge::FResult FFrameBridge::Build(std::span<FFrameExtension* const> Fram
 			Task.Key = FTaskKey{ F->GetName(), Stage, PhaseOf(Frame) };
 			Task.Closure = Dispatch.MakeClosure(*F, Stage);
 
-			// STRUCTURAL EDGE 1 -- the stage SEQUENCE: consecutively emitted stages of one frame
-			// are ordered. Chain over the EMITTED nodes, not the stage list: a skipped
-			// (unimplemented) stage must not cut one frame's chain into two halves.
+			// STRUCTURAL EDGE 1 -- the stage SEQUENCE within this frame: each emitted node waits
+			// for the previously emitted node. Chained over the EMITTED nodes, so a skipped
+			// (unimplemented) stage cannot cut one frame's chain in two.
 			if (Previous != NoNode)
 			{
 				Task.Dependencies.push_back(FDependency{ Result.Tasks[Previous].Key });
 			}
 
-			// STRUCTURAL EDGE 2 -- the stage IDENTITY over time: this stage's next frame waits
-			// for its previous frame.
+			// STRUCTURAL EDGE 2 -- the stage IDENTITY over time: this stage waits for ITSELF one
+			// frame earlier. The same stage of the same frame extension has the same job every
+			// frame, so two of its instances running at once are two writers of one stage's state.
 			//
-			// This is not an application data-flow claim, it is what the identity MEANS: the same
-			// stage of the same frame has the same job every frame, so two of its instances
-			// running at once are two writers of one stage's state. It is also what makes "frame
-			// N+1 may overlap frame N" safe BY CONSTRUCTION -- without it a host would have to
-			// drain every frame (one frame in flight) or hand-write this identical edge in every
-			// frame. Note what it does NOT claim: nothing is serialized ACROSS stages, so
-			// different frames still overlap freely elsewhere, and a frame that wants to pipeline
-			// two of ITS OWN stages does so by not being one of these nodes.
+			// It is deliberately PER STAGE, not per frame: a frame extension that owns per-frame
+			// state of its own is expected to keep MAHO_FRAMES_IN_FLIGHT copies of it, which is
+			// what lets frame N+1 overlap frame N. Serializing a whole frame against its previous
+			// frame here would hide the absence of those copies inside the scheduler instead of
+			// making it the render layer's job -- and that absence IS measurable: with a single
+			// frame fence / a single acquired swapchain index, per-stage edges let S1@N+1 run
+			// while S3@N is still submitting, and Vulkan validation reports exactly that
+			// (VkFence "simultaneously used in vkQueueSubmit and vkWaitForFences").
 			//
 			// The target may not exist (frame 0, or a phase never occupied) -- the graph then
 			// makes the edge disappear, exactly as it does for a declared one (R2).

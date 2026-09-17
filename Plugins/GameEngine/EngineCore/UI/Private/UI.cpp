@@ -2,7 +2,7 @@
 #include <UIViewRegistry.h>
 
 // The C export the host looks up BY SYMBOL NAME for dynamic install.
-extern "C" MAHO_UI_API Maho::FLayerBase* CreateLayer()
+extern "C" MAHO_UI_API Maho::FFrameExtension* CreateFrame()
 {
-	return Maho::UI::FUIViewRegistry::CreateLayer();
+	return Maho::UI::FUIViewRegistry::CreateFrame();
 }

@@ -155,7 +155,7 @@ void FDrawTriangleFeature::Render(FRender& R)
 } // namespace Maho
 
 // The C export the host looks up BY SYMBOL NAME for dynamic install.
-extern "C" MAHO_DRAWTRIANGLEFEATURE_API Maho::FLayerBase* CreateLayer()
+extern "C" MAHO_DRAWTRIANGLEFEATURE_API Maho::FFrameExtension* CreateFrame()
 {
-	return Maho::FDrawTriangleFeature::CreateLayer();
+	return Maho::FDrawTriangleFeature::CreateFrame();
 }

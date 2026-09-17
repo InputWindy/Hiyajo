@@ -1,7 +1,7 @@
 #pragma once
 
 #include "EditorConsoleApi.h"
-#include <Engine/Layer.h>
+#include <Engine/Frame.h>
 #include <ExampleEditor.h>
 #include <Log.h>
 #include <UIView.h>
@@ -43,9 +43,9 @@ namespace Maho
  * declaring (a suggestion pick or a command run refreshes the buffer first and marks
  * it authoritative for that frame instead).
  */
-class FEditorConsole : public FLayer<IEditorInit, IEditorPanel, IEditorShutdown>
+class FEditorConsole : public FFrameExtension, public IPipeline<IEditorInit, IEditorPanel, IEditorShutdown>
 {
-	MAHO_DECLARE_LAYER(FEditorConsole);
+	MAHO_DECLARE_FRAME(FEditorConsole);
 
 public:
 	void Init(FExampleEditor& Editor) override;

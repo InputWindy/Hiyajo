@@ -1,7 +1,7 @@
 #pragma once
 
 #include "ContentBrowserApi.h"
-#include <Engine/Layer.h>
+#include <Engine/Frame.h>
 #include <ExampleEditor.h>
 #include <UIView.h>
 
@@ -37,9 +37,9 @@ namespace Maho
  *
  * The panel carries no backend/RHI resource ownership: the host owns the UI context.
  */
-class FContentBrowser : public FLayer<IEditorPanel, IEditorShutdown>
+class FContentBrowser : public FFrameExtension, public IPipeline<IEditorPanel, IEditorShutdown>
 {
-	MAHO_DECLARE_LAYER(FContentBrowser);
+	MAHO_DECLARE_FRAME(FContentBrowser);
 
 public:
 	/** 声明期（宿主 `NewFrame` 之前）：只重建本视图的树，不碰后端。 */
