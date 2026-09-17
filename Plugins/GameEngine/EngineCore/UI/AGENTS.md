@@ -5,7 +5,7 @@
 ## 设计约束（强约束）
 
 - 声明式 UI 组件树：**持久化带状态的组件树**（树是唯一数据源）+ **每帧全量翻译成 ImGui**（翻译器对树只读）。
-- **一个模块一个层**：本 DLL 唯一的层是 `FUIViewRegistry`（`MAHO_DECLARE_LAYER`），codegen 由它推导模块名，产物为 `FUIViewRegistry.dll`；`Public/UI.h` 只是总览头，**不得**再放第二个 `MAHO_DECLARE_LAYER`。
+- **一个模块一个层**：本 DLL 唯一的层是 `FUIViewRegistry`（`MAHO_DECLARE_FRAME`），codegen 由它推导模块名，产物为 `FUIViewRegistry.dll`；`Public/UI.h` 只是总览头，**不得**再放第二个 `MAHO_DECLARE_FRAME`。
 - **公开头不得包含 `<imgui.h>`**。ImGui 只允许出现在 `Private/`（翻译器）。这个边界让 UI 的编译依赖不泄漏 ImGui，也让将来换后端只改翻译器。
 - **跨 DLL 访问走导出函数**：`GetUIViewRegistry()` 与 `GetLog()` 同形（`Plugins/Common/Log/Public/Log.h:28`），**没有 `static Get()`、没有 `TSingleton`**；层未安装或已关闭时返回 `nullptr`，取用前判空。
 - **线程契约**：宿主线程独占写树（`FUIView::Edit()`），翻译线程共享读；跨线程共享的矩形/样式/事件状态由 `std::shared_mutex` 保护。注册表内部自带互斥，只提供"注册/注销 + 锁内快照"，不持有视图所有权。

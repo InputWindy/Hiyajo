@@ -68,7 +68,7 @@ footer.page .spacer { flex:1 1 auto; }
 <nav class="side">
 <div class="crumbs">Public / Core / <span>CoreDoc.md</span></div>
 <h4>本页目录</h4>
-<ul><li><a class="lvl2" href="#code-files">Code Files</a></li><li><a class="lvl2" href="#concept-type-agnostic-infrastructure-building-blocks">Concept -- Type-Agnostic Infrastructure Building Blocks</a></li><li><a class="lvl3" href="#1-type-list-typelist">1. Type List (TypeList)</a></li><li><a class="lvl3" href="#2-delegate-delegate">2. Delegate (Delegate)</a></li><li><a class="lvl3" href="#3-capability-composition-interface">3. Capability Composition (Interface)</a></li><li><a class="lvl3" href="#4-singleton-singleton">4. Singleton (Singleton)</a></li><li><a class="lvl3" href="#5-dependency-graph-scheduling-taskgraph">5. Dependency-Graph Scheduling (TaskGraph)</a></li><li><a class="lvl3" href="#6-thread-pool-threadpool">6. Thread Pool (ThreadPool)</a></li><li><a class="lvl3" href="#7-threaded-server-threadedserver">7. Threaded Server (ThreadedServer)</a></li><li><a class="lvl3" href="#8-loading-and-fatal-errors-assembly-fatal">8. Loading and Fatal Errors (Assembly / Fatal)</a></li><li><a class="lvl2" href="#related-docs">Related Docs</a></li></ul>
+<ul><li><a class="lvl2" href="#code-files">Code Files</a></li><li><a class="lvl2" href="#concept-type-agnostic-infrastructure-building-blocks">Concept -- Type-Agnostic Infrastructure Building Blocks</a></li><li><a class="lvl3" href="#1-type-list-typelist">1. Type List (TypeList)</a></li><li><a class="lvl3" href="#2-delegate-delegate">2. Delegate (Delegate)</a></li><li><a class="lvl3" href="#3-capability-composition-interface">3. Capability Composition (Interface)</a></li><li><a class="lvl3" href="#4-singleton-singleton">4. Singleton (Singleton)</a></li><li><a class="lvl3" href="#5-帧调度-framegraph">5. 帧调度（FrameGraph）</a></li><li><a class="lvl3" href="#6-thread-pool-threadpool">6. Thread Pool (ThreadPool)</a></li><li><a class="lvl3" href="#7-threaded-server-threadedserver">7. Threaded Server (ThreadedServer)</a></li><li><a class="lvl3" href="#8-loading-and-fatal-errors-assembly-fatal">8. Loading and Fatal Errors (Assembly / Fatal)</a></li><li><a class="lvl2" href="#related-docs">Related Docs</a></li></ul>
 <h4>本目录</h4><ul><li><a class="" href="CoreAPI.html">CoreAPI</a></li><li><a class="here" href="CoreDoc.html">CoreDoc</a></li></ul>
 </nav>
 <main>
@@ -78,28 +78,30 @@ footer.page .spacer { flex:1 1 auto; }
 </header>
 <h1 id="core">Core</h1>
 <h2 id="code-files">Code Files</h2>
-<ul><li><a href="Assembly.h">Assembly.h</a> — DLL 加载原语（FAssembly）</li><li><a href="Core.h">Core.h</a> — Core 聚合头</li><li><a href="Delegate.h">Delegate.h</a> — 多播事件（TMulticastEvent）</li><li><a href="Export.h">Export.h</a> — DLL 导出/导入宏 + MAHO_IF_NOT_NULL</li><li><a href="Fatal.h">Fatal.h</a> — 致命路径 + 断言宏</li><li><a href="Interface.h">Interface.h</a> — 能力组合器 IPlugin / 阶段管线组合器 IPipeline</li><li><a href="Singleton.h">Singleton.h</a> — CRTP 单例标识基类 TSingleton</li><li><a href="TaskGraph.h">TaskGraph.h</a> — 依赖图调度器 FTaskGraph</li><li><a href="ThreadedServer.h">ThreadedServer.h</a> — 常驻专用线程 FThreadedServer</li><li><a href="ThreadPool.h">ThreadPool.h</a> — 固定规模线程池 FThreadPool</li><li><a href="TypeList.h">TypeList.h</a> — 编译期类型列表</li></ul>
+<ul><li><a href="Assembly.h">Assembly.h</a> — DLL 加载原语（FAssembly）</li><li><a href="Core.h">Core.h</a> — Core 聚合头</li><li><a href="Delegate.h">Delegate.h</a> — 多播事件（TMulticastEvent）</li><li><a href="Export.h">Export.h</a> — DLL 导出/导入宏 + MAHO_IF_NOT_NULL</li><li><a href="Fatal.h">Fatal.h</a> — 致命路径 + 断言宏</li><li><a href="FrameGraph.h">FrameGraph.h</a> — 帧调度器 <code>FFrameGraph</code> + 声明层 <code>FFrameExtension</code> + 桥 <code>FFrameBridge</code></li><li><a href="Interface.h">Interface.h</a> — 能力组合器 IPlugin / 阶段管线组合器 IPipeline</li><li><a href="Singleton.h">Singleton.h</a> — CRTP 单例标识基类 TSingleton</li><li><a href="ThreadedServer.h">ThreadedServer.h</a> — 常驻专用线程 FThreadedServer</li><li><a href="ThreadPool.h">ThreadPool.h</a> — 固定规模线程池 FThreadPool</li><li><a href="TypeList.h">TypeList.h</a> — 编译期类型列表</li></ul>
 <h2 id="concept-type-agnostic-infrastructure-building-blocks">Concept -- Type-Agnostic Infrastructure Building Blocks</h2>
-<p>Core 是一组类型无关的基础设施块，<strong>零 app 假设、零第三方依赖、零 stage 预设</strong>。每个组件不引用 FLayer/app 概念，可独立使用。</p>
+<p>Core 是一组类型无关的基础设施块，<strong>零 app 假设、零第三方依赖、零 stage 预设</strong>。每个组件不引用 <code>FFrameExtension</code>/app 概念，可独立使用。</p>
 <h3 id="1-type-list-typelist">1. Type List (TypeList)</h3>
 <p><code>TTypeList&lt;T...&gt;</code> 是编译期有序类型数组。运算：<code>TCons</code>（前插）/ <code>TAppend</code>（后插）/ <code>TContains</code>（成员判断）/ <code>TCatch</code>（拼接）/ <code>TUnionList_t</code>（保序去重并集）。顺序即语义，遍历顺序由调用方决定。</p>
 <h3 id="2-delegate-delegate">2. Delegate (Delegate)</h3>
 <p><code>TMulticastEvent&lt;Signature&gt;</code> 多播事件（bind + broadcast）。线程安全——任意线程可 bind/broadcast/unbind，Broadcast 在锁外回调处理器（处理器可安全再入）。Header-only、无 DLL 边界，可作插件公共 API 的成员类型。</p>
 <h3 id="3-capability-composition-interface">3. Capability Composition (Interface)</h3>
-<p><code>IPlugin&lt;TCapabilities...&gt;</code> 把能力 trait 作为虚基类安装（可选能力组合）；<code>IPipeline&lt;TStageTypes...&gt;</code> 定义有序阶段序列并暴露 <code>TStages</code>。stage→方法调用的 Invoke 协议由具体管线类实现，Core 本身不预设阶段。</p>
+<p><code>IPlugin&lt;TCapabilities...&gt;</code> 把能力 trait 作为虚基类安装（可选能力组合）；<code>IPipeline&lt;TStageTypes...&gt;</code> 定义有序阶段序列并暴露 <code>TStages</code>。stage→方法调用的 <code>Invoke</code> 协议由具体调度上下文实现，Core 本身不预设阶段。</p>
 <h3 id="4-singleton-singleton">4. Singleton (Singleton)</h3>
 <p><code>TSingleton&lt;T&gt;</code> 是<strong>纯身份/标志基类</strong>，无强制生命周期。派生单例自己声明 <code>static T&amp; Get()</code> 并在自己的 <code>.cpp</code>（编进其 DLL）定义——跨 DLL 进程唯一。</p>
-<h3 id="5-dependency-graph-scheduling-taskgraph">5. Dependency-Graph Scheduling (TaskGraph)</h3>
-<p><code>FTaskGraph</code> 依赖图调度器：节点 = (对象, 阶段) 对，边来自依赖元组。节点在全部直接依赖完成后立即就绪释放——<strong>无阶段屏障</strong>。生命周期 Init → Compile → Execute → Flush，执行协议经 <code>ExecuteNode</code> 委托给子类。</p>
-<ul><li>释放路径<strong>无锁</strong>（atomic_ref last-arrival-wins），无全局互斥锁。</li><li><code>Compile</code> 检测<strong>依赖环</strong>（DFS 回边）与缺失依赖；失败经 <code>GetCompileErrorNode()</code> 给肇事层名。</li><li>节点异常<strong>非致命</strong>（<code>ReportError</code>）且仍释放下游——坏 stage 不杀宿主、不挂图。</li></ul>
+<h3 id="5-帧调度-framegraph">5. 帧调度（FrameGraph）</h3>
+<p>三件东西在同一头文件里，因为强绑定：</p>
+<ul><li><strong><code>FFrameExtension</code></strong> = 声明层：名字（字符串字面量）+ 它声明的边。<strong>不知道 stage 序列</strong>。</li><li><strong><code>FFrameBridge</code></strong> = 桥：把「frame 集合 + stage 序列 + 帧号」建成一批 <code>FTask</code>；解析相对帧偏移；为<strong>实现的</strong> stage 产节点（未实现的不产节点）；产出两类结构边（帧内链 + 每 stage 跨帧自边）；报告绑不上的声明。</li><li><strong><code>FFrameGraph</code></strong> = 调度器：节点身份是三元组 <code>{名字, stage, 相位}</code>（相位 = 环索引 mod <code>MAHO_FRAMES_IN_FLIGHT</code>），只有两个驾驶动词 —— <code>Submit(batch)</code>（校验 + <strong>准入</strong>：阻塞调用方直到它点名的相位排空）与 <code>Wait()</code>（<strong>提交栅栏</strong>：等"我提交过的都完成"）。</li></ul>
+<p>要点：</p>
+<ul><li><strong>提交即合并</strong>，没有 <code>Init</code>/<code>Compile</code>/重建；在飞帧不受影响。</li><li><strong>悬空的边静默消解</strong>（边需要两端），不报告、不计数；诊断责任在桥。</li><li><strong>调度线程独占全部图状态</strong>（<code>FFrameGraph : FThreadedServer</code> 的串行命令队列）⇒ 无图锁，且<strong>绝不阻塞</strong>。</li><li>完成由<strong>调度器</strong>置位（不是执行体），异常也置位 ⇒ 下游永不被永久挂住。</li><li><strong>事件是标志表下标</strong>（<code>Using FEvent = uint32</code>，<code>EventOf(Id, Phase) = Id*K + Phase</code>），不是对象、不分配不回收。</li><li><code>MAHO_TRACE_STAGES=1</code> 打开 stage enter/exit 追踪（硬崩场景下唯一能指名肇事 stage 的手段）。</li></ul>
 <h3 id="6-thread-pool-threadpool">6. Thread Pool (ThreadPool)</h3>
 <p><code>FThreadPool</code> 固定规模线程池（常驻 worker + FIFO 队列）。<code>Submit</code> 入队即返，<code>Flush</code> 锁步 barrier（等真正"执行完"而非"出队"）。瞬时并行工作用它。</p>
 <h3 id="7-threaded-server-threadedserver">7. Threaded Server (ThreadedServer)</h3>
-<p><code>FThreadedServer</code> 专用常驻 worker：一个持久线程 + FIFO 串行任务队列。给需要私有常开线程 + 串行命令队列的长期角色用（渲染线程、IO 加载线程）——不是瞬时并行任务（那种用 FThreadPool）。</p>
+<p><code>FThreadedServer</code> 专用常驻 worker：一个持久线程 + FIFO 串行任务队列。给需要私有常开线程 + 串行命令队列的长期角色用（调度器、渲染线程、IO 加载线程）——不是瞬时并行任务（那种用 FThreadPool）。</p>
 <h3 id="8-loading-and-fatal-errors-assembly-fatal">8. Loading and Fatal Errors (Assembly / Fatal)</h3>
 <p><code>FAssembly</code> DLL 加载 RAII（LoadLibrary/dlclose + 符号查找，move-only）。<code>ReportFatal</code> / <code>ReportError</code> / <code>InstallFatalHandlers</code> 统一致命/错误路径 + 崩溃兜底；<code>MAHO_CHECK/VERIFY/ENSURE</code> 系列断言宏。</p>
 <h2 id="related-docs">Related Docs</h2>
-<ul><li><a href="CoreAPI.html">CoreAPI.md</a> — API 文档</li><li><a href="../Engine/EngineDoc.html">../Engine/EngineDoc.md</a> — 层架构</li><li><a href="../../SourceDoc.html">../../SourceDoc.md</a> — 源码根</li></ul>
+<ul><li><a href="CoreAPI.html">CoreAPI.md</a> — API 文档</li><li><a href="../Engine/EngineDoc.html">../Engine/EngineDoc.md</a> — 帧系统（引擎侧）</li><li><a href="../../SourceDoc.html">../../SourceDoc.md</a> — 源码根</li></ul>
 <footer class="page">
 <div><a href="CoreAPI.html">&larr; CoreAPI</a></div>
 <div class="spacer"></div>

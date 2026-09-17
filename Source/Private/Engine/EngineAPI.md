@@ -13,7 +13,7 @@ cpp 侧每个函数的算法伪代码解释。Public 侧 API 文档通过 `#fn-.
 
 ```text
 Main():
-1. 构造 Tick 图（缓存）并绑定 OnLayersChanged → bLayersDirty
+1. 构造 Tick 图（缓存）并绑定 OnFramesChanged → bLayersDirty
 2. Tick 循环：
    while true:
      if 有挂起安装/卸载/重载:                       // 拓扑变更要求图静止
@@ -55,11 +55,11 @@ ParseCommandLine(Argc, Argv):
 ← [公开 API](../../Public/Engine/EngineAPI.md) · `void`
 
 置收集器的"收摊"标志；主循环在本帧提交完成后读到并退出。同一个标志也让
-`FLayerCollector::Install` / `Reload` 拒绝（收摊后装载的模块永远等不到它的阶段跑）。
+`FFrameBuilder::Install` / `Reload` 拒绝（收摊后装载的模块永远等不到它的阶段跑）。
 
 ```text
 RequestExit():
-1. bClosing.store(true, memory_order_release)    // FLayerCollector::bClosing
+1. bClosing.store(true, memory_order_release)    // FFrameBuilder::bClosing
 2. 宿主侧读它用 ShouldExit()；收集器侧读它用 IsClosing()
 ```
 
@@ -79,23 +79,23 @@ GetInt(Key): 空 → 0; stoi(Get(Key)) 失败 → 0
 ## Layer.cpp
 
 <a id="fn-layer-dtor"></a>
-### FLayerBase::~FLayerBase() / GetDependencies()
+### FFrameExtension::~FFrameExtension() / GetDependencies()
 
 ← [公开 API](../../Public/Engine/EngineAPI.md) · `virtual` / `const FDependencyTable&`
 
 析构默认实现；`GetDependencies()` 返回内部 `Dependencies` 表（引用，不拷贝）。`GetDependents()` 是头里的内联实现，不在此处。
 
 ```text
-~FLayerBase() = default
+~FFrameExtension() = default
 GetDependencies(): return Dependencies
 ```
 
 <a id="fn-layer-adddep-runtime"></a>
-### FLayerBase::WaitFor(type_index, string_view, type_index) / BlockOn(string_view, type_index, type_index)
+### FFrameExtension::WaitFor(type_index, string_view, type_index) / BlockOn(string_view, type_index, type_index)
 
 ← [公开 API](../../Public/Engine/EngineAPI.md) · `void`（两成员均 `private`，只由 DSL builder 触达）
 
-**按名字寻址**的依赖落点：跨 DLL 的 feature 用层名点名依赖，从而不对可选插件建立构建依赖。头文件里只有声明，实现落在这里；唯一调用者是 `Layer.h` 的 `FWaitForNamedBuilder` / `FBlockOnNamedBuilder` 嵌套类（嵌套类可访问外层 `private`）。点类型的 `WaitFor<...>()` / `BlockOn<...>()` 是模板，内联在头里。
+**按名字寻址**的依赖落点：跨 DLL 的 feature 用层名点名依赖，从而不对可选插件建立构建依赖。头文件里只有声明，实现落在这里；唯一调用者是 `Frame.h` 的 `FWaitForNamedBuilder` / `FBlockOnNamedBuilder` 嵌套类（嵌套类可访问外层 `private`）。点类型的 `WaitFor<...>()` / `BlockOn<...>()` 是模板，内联在头里。
 
 ```text
 WaitFor(MyStage, OtherName, OtherStage):

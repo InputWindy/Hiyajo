@@ -4,7 +4,7 @@
 
 - [Timer.h](Public/Timer.h) — 分层作用域计时器（`FTimer` + `FScopedTimer`）
 - [TimerApi.h](Public/TimerApi.h) — `MAHO_TIMER_API` 导出宏
-- [Timer.cpp](Private/Timer.cpp) — 节点树实现 + `CreateLayer` 导出
+- [Timer.cpp](Private/Timer.cpp) — 节点树实现 + `CreateFrame` 导出
 
 ## Concept - Hierarchical Scope Profiler
 

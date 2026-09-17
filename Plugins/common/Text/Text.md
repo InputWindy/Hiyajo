@@ -4,7 +4,7 @@
 
 - [Text.h](Public/Text.h) — 本地化文本（`FText` 句柄 + `FTextManager` 目录 + `Culture` 常量）
 - [TextApi.h](Public/TextApi.h) — `MAHO_TEXT_API` 导出宏
-- [Text.cpp](Private/Text.cpp) — 目录实现 + `CreateLayer` 导出
+- [Text.cpp](Private/Text.cpp) — 目录实现 + `CreateFrame` 导出
 
 ## Concept - Localized Text
 
@@ -28,7 +28,7 @@ const std::string Shown = Title.Resolve();   // "主菜单"
 
 ### 2. FTextManager - 目录（服务层）
 
-`FTextManager : FLayer<IPreInit, IInit, IPostInit, IPreShutdown, IShutdown, IPostShutdown>`，6 个生命周期阶段。目录键 = `Namespace + 0x1f + Key + 0x1f + Culture`（单位分隔符避免 `"a"+"bc" == "ab"+"c"` 冲突）。
+`FTextManager : FFrameExtension + IPipeline<IPreInit, IInit, IPostInit, IPreShutdown, IShutdown, IPostShutdown>`，6 个生命周期阶段。目录键 = `Namespace + 0x1f + Key + 0x1f + Culture`（单位分隔符避免 `"a"+"bc" == "ab"+"c"` 冲突）。
 
 - **SetCulture**：切换当前文化，后续 Resolve 生效。
 - **AddTranslation**：注册单条翻译（线程安全）。

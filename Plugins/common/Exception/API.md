@@ -1,6 +1,6 @@
 # Exception — API 文档
 
-服务层：`FException` 是 `FLayer<IPreInit, IInit, IPostInit, IPreShutdown, IShutdown, IPostShutdown>`（`FException.dll`）。非致命异常中心——`ReportException` 把消息广播给所有 `OnException` 订阅者（日志、遥测、崩溃上报）；**没有任何东西在这里 abort**，致命错误走 `Core/Fatal` 的 `ReportFatal`。
+服务层：`FException` 是 `FFrameExtension + IPipeline<IPreInit, IInit, IPostInit, IPreShutdown, IShutdown, IPostShutdown>`（`FException.dll`）。非致命异常中心——`ReportException` 把消息广播给所有 `OnException` 订阅者（日志、遥测、崩溃上报）；**没有任何东西在这里 abort**，致命错误走 `Core/Fatal` 的 `ReportFatal`。
 
 ## Exception.h
 
@@ -12,7 +12,7 @@
 
 | 签名 | 说明 |
 |------|------|
-| `MAHO_DECLARE_LAYER(FException)` | 层声明宏（DLL 导出入口） |
+| `MAHO_DECLARE_FRAME(FException)` | 层声明宏（DLL 导出入口） |
 | `void ReportException(std::string_view Message)` | 上报一条非致命异常消息（广播给所有 `OnException` 订阅者） |
 | `void ReportException(const std::exception& Error)` | 从 `std::exception` 上报（转发 `what()`） |
 | `TMulticastEvent<void(const std::string&)> OnException` | 多播事件——订阅者注册处，收到每条上报消息 |
@@ -37,6 +37,6 @@ DLL 导出/导入宏——`MAHO_EXCEPTION_MODULE_EXPORTS` 定义时展开为 `MA
 
 | 签名 | 说明 |
 |------|------|
-| `MAHO_EXCEPTION_API` | 修饰本 DLL 导出的符号（`GetExceptionCenter`、`CreateLayer`） |
+| `MAHO_EXCEPTION_API` | 修饰本 DLL 导出的符号（`GetExceptionCenter`、`CreateFrame`） |
 
 - [Exception.md](Exception.md) — 概念 · [实现字典](ImplAPI.md) — 算法

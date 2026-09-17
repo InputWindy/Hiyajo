@@ -3,6 +3,8 @@
 #include <Core/Fatal.h>
 
 #include <algorithm>
+#include <cstdio>
+#include <cstdlib>
 #include <string>
 #include <utility>
 
@@ -13,6 +15,29 @@ namespace
 {
 	/** "no node" sentinel for a batch-local index. */
 	constexpr std::size_t NoNode = static_cast<std::size_t>(-1);
+
+	/**
+	 * Env-gated stage trace (MAHO_TRACE_STAGES=1). Read once, so it costs nothing when off and
+	 * can be switched on without a rebuild.
+	 *
+	 * It exists for ONE failure mode: a hard crash (0xC0000005) has no stack and raises nothing
+	 * C++ can catch, so the last stage ENTERED is the only thing that names the culprit. The
+	 * body is bracketed (enter/exit) rather than merely logged at dispatch, which makes "the
+	 * last enter with no exit" the answer. Note it is not a substitute for a stack -- it names
+	 * the stage, not the line -- but it narrows a 34-DLL program to one call site.
+	 */
+	bool StageTraceEnabled()
+	{
+		static const bool bOn = (std::getenv("MAHO_TRACE_STAGES") != nullptr);
+		return bOn;
+	}
+
+	void TraceStage(const char* What, const FTaskKey& Key)
+	{
+		std::fprintf(stderr, "[fg] %s %.*s::%s@%d\n", What,
+			static_cast<int>(Key.Name.size()), Key.Name.data(), Key.Stage.name(), Key.Phase);
+		std::fflush(stderr);
+	}
 
 	/** The phase index IS the slot index now: the space is exactly the ring [0, K). */
 	std::int32_t SlotIndexOf(std::int32_t Phase)
@@ -358,6 +383,15 @@ void FFrameGraph::Dispatch(FNodeId Id)
 
 	Pool.Submit([this, Id]()
 	{
+		// A hard crash (0xC0000005) has no stack and no exception to catch, so the last stage
+		// ENTERED is the only thing that names the culprit -- that is what this trace exists for,
+		// and why it brackets the body rather than merely logging the dispatch.
+		const bool bTrace = StageTraceEnabled();
+		if (bTrace)
+		{
+			TraceStage("enter", Nodes[Id].Key);
+		}
+
 		// Run the payload. A throwing body must NOT stop the graph: report it and still
 		// complete the node, or every waiter downstream waits forever.
 		try
@@ -371,6 +405,11 @@ void FFrameGraph::Dispatch(FNodeId Id)
 		catch (...)
 		{
 			ReportError("node threw unknown exception");
+		}
+
+		if (bTrace)
+		{
+			TraceStage("exit ", Nodes[Id].Key);
 		}
 
 		// Completion bookkeeping happens ON THE SCHEDULER THREAD (state is single-owned).

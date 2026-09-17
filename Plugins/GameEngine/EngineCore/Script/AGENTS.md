@@ -40,7 +40,7 @@ FScriptSystem (host, `FScriptSystem::Get()` process-unique)
 ### Python backend integration notes (for reference when restoring)
 
 - `ScriptPython.cmake`: cmodule (v2.3.0) -> `find_package(Scapix)` -> two target identities:
-  - `ScriptPython.dll` (host, exports `CreateLayer` to the engine, excludes bridge headers)
+  - `ScriptPython.dll` (host, exports `CreateFrame` to the engine, excludes bridge headers)
   - `ScriptPythonBridge.pyd` (Scapix `PYBIND11_MODULE`, `scapix_bridge_headers` as its own target)
 - MSVC Debug embedding CPython: `pyconfig.h` under `_DEBUG` pragma-links `pythonXXX_d.lib` (not in the official installer) -> use `target_link_options /NODEFAULTLIB:python<M><m>_d.lib` + temporary `#undef _DEBUG` before including Python.h.
 - Host `Initialize` imports the bridge module via `PyImport_ImportModule("ScriptPythonBridge")`; bridge classes land in the `testgame` namespace.

@@ -67,13 +67,13 @@ ReportException(Error):
 ```
 
 <a id="fn-exception-createlayer"></a>
-### CreateLayer()（extern "C"）
+### CreateFrame()（extern "C"）
 
-DLL 动态安装入口——宿主按符号名查找。委托静态 `FException::CreateLayer()`（`MAHO_DECLARE_LAYER` 生成）。
+DLL 动态安装入口——宿主按符号名查找。委托静态 `FException::CreateFrame()`（`MAHO_DECLARE_FRAME` 生成）。
 
 ```text
-CreateLayer():
-1. return Maho::Exception::FException::CreateLayer()
+CreateFrame():
+1. return Maho::Exception::FException::CreateFrame()
 ```
 
 - [Exception.md](Exception.md) — 概念 · [公开 API](API.md) — 签名入口

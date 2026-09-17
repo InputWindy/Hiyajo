@@ -69,13 +69,13 @@ LogLine(Level, Message):
 ```
 
 <a id="fn-log-createlayer"></a>
-### CreateLayer()（extern "C"）
+### CreateFrame()（extern "C"）
 
-DLL 动态安装入口——宿主按符号名查找。委托静态 `FLog::CreateLayer()`（`MAHO_DECLARE_LAYER` 生成）。
+DLL 动态安装入口——宿主按符号名查找。委托静态 `FLog::CreateFrame()`（`MAHO_DECLARE_FRAME` 生成）。
 
 ```text
-CreateLayer():
-1. return Maho::FLog::CreateLayer()
+CreateFrame():
+1. return Maho::FLog::CreateFrame()
 ```
 
 - [Log.md](Log.md) — 概念 · [公开 API](API.md) — 签名入口

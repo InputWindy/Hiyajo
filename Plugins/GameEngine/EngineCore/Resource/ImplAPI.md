@@ -156,11 +156,11 @@ FindLastDot(Path):
 ```
 
 <a id="fn-res-export"></a>
-### CreateLayer()（C 导出）
+### CreateFrame()（C 导出）
 
 ```text
-extern "C" CreateLayer():
-1. return Maho::Resource::FResourceSystem::CreateLayer()
+extern "C" CreateFrame():
+1. return Maho::Resource::FResourceSystem::CreateFrame()
 ```
 
 - [Resource.md](Resource.md) — 概念 · [公开 API](API.md) — 签名入口

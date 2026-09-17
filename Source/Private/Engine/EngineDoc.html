@@ -78,10 +78,10 @@ footer.page .spacer { flex:1 1 auto; }
 </header>
 <h1 id="engine-private">Engine（Private）</h1>
 <h2 id="code-files">Code Files</h2>
-<ul><li><a href="Engine.cpp">Engine.cpp</a> — FEngineBase 主循环 / 命令行解析 / PreMain·PostMain 生命周期 / 退出闸门</li><li><a href="Layer.cpp">Layer.cpp</a> — FLayerBase 虚析构 / <code>GetDependencies()</code> / 按名字寻址的依赖落点</li></ul>
+<ul><li><a href="Engine.cpp">Engine.cpp</a> — FEngineBase 主循环 / 命令行解析 / PreMain·PostMain 生命周期 / 退出闸门</li><li><a href="Layer.cpp">Layer.cpp</a> — FFrameExtension 虚析构 / <code>GetDependencies()</code> / 按名字寻址的依赖落点</li></ul>
 <h2 id="concept-implementation">Concept -- Implementation</h2>
-<p>Engine 层主体（<code>FLayerBase</code> / <code>FLayer</code> / <code>FLayerTaskGraph</code> / <code>LayerCollector</code>）是模板 + 内联实现，全在 <code>Source/Public/Engine/</code> 头文件里。Private 侧只有两个 cpp：</p>
-<ul><li><strong>Engine.cpp</strong>：<code>FEngineBase</code> 的非模板成员——命令行解析（CLI11）、<code>PreMain</code>（装载 + 初始化）/ <code>PostMain</code>（卸载 + 排干）、<code>Main()</code>（纯调度 Tick 环：帧边界应用挂起更新、拓扑变更时重展开、<code>SubmitFrame</code>、读 <code>ShouldExit()</code>）、<code>RequestExit()</code>、KV 读取。</li><li><strong>Layer.cpp</strong>：<code>FLayerBase</code> 的虚析构、<code>GetDependencies()</code>、以及按名字寻址的 <code>WaitFor</code> / <code>BlockOn</code> 落点（<code>private</code>，只由依赖 DSL 的 builder 调用）。</li></ul>
+<p>Engine 层主体（<code>FFrameExtension</code> / <code>FLayer</code> / <code>FLayerTaskGraph</code> / <code>LayerCollector</code>）是模板 + 内联实现，全在 <code>Source/Public/Engine/</code> 头文件里。Private 侧只有两个 cpp：</p>
+<ul><li><strong>Engine.cpp</strong>：<code>FEngineBase</code> 的非模板成员——命令行解析（CLI11）、<code>PreMain</code>（装载 + 初始化）/ <code>PostMain</code>（卸载 + 排干）、<code>Main()</code>（纯调度 Tick 环：帧边界应用挂起更新、拓扑变更时重展开、<code>SubmitFrame</code>、读 <code>ShouldExit()</code>）、<code>RequestExit()</code>、KV 读取。</li><li><strong>Layer.cpp</strong>：<code>FFrameExtension</code> 的虚析构、<code>GetDependencies()</code>、以及按名字寻址的 <code>WaitFor</code> / <code>BlockOn</code> 落点（<code>private</code>，只由依赖 DSL 的 builder 调用）。</li></ul>
 <p>逐函数伪代码见 <a href="EngineAPI.html">EngineAPI.md</a>。</p>
 <h2 id="related-docs">Related Docs</h2>
 <ul><li><a href="EngineAPI.html">EngineAPI.md</a> — 实现算法字典</li><li><a href="../../Public/Engine/EngineAPI.html">公开 API</a> — 签名入口</li><li><a href="../../Public/Engine/EngineDoc.html">EngineDoc.md</a> — 层架构</li></ul>

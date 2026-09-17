@@ -6,7 +6,7 @@
 - [RenderApi.h](Public/RenderApi.h) — `MAHO_RENDER_API` 导出宏
 - [RDG.h](Public/RDG.h) — RDG 资源句柄（`FRDGTextureRef` / `FRDGBufferRef` / `FRenderTarget`）
 - [ShaderCompiler.h](Public/ShaderCompiler.h) — 异步着色器编译器（`FShaderCompilerServer` + desc/result）
-- [Render.cpp](Private/Render.cpp) — FRender 生命周期 + 渲染图驱动 + `CreateLayer` 导出
+- [Render.cpp](Private/Render.cpp) — FRender 生命周期 + 渲染图驱动 + `CreateFrame` 导出
 - [RenderResourcePool.cpp](Private/RenderResourcePool.cpp) — RDG 资源池（按描述符复用 + transient 过期）
 
 ## Concept - Render Subsystem
@@ -16,7 +16,7 @@ Render 是渲染子系统：主引擎帧阶段层 + 渲染 feature 的 collector
 ### 1. 三个基类角色
 
 - **主引擎帧阶段层**：`FLayer<IPreInit..IPostShutdown>` 10 阶段，宿主引擎调度（Initialize / BeginFrame / Tick / EndFrame / Shutdown）。
-- **渲染 feature 的 collector**：`FLayerCollector<FRender>`——Install / RequestUninstall 渲染 feature，调度上下文是 `FRender`。
+- **渲染 feature 的 collector**：`FFrameBuilder<FRender>`——Install / RequestUninstall 渲染 feature，调度上下文是 `FRender`。
 - **渲染线程**：`FThreadedServer`——RHI 是渲染服务器（不是被调度的层），渲染线程就是它的服务器线程。
 
 ### 2. 渲染图（IBeginRender → IRender → IEndRender）

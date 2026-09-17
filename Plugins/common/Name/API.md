@@ -1,6 +1,6 @@
 # Name — API 文档
 
-服务层：`FNamePool` 是 `FLayer<IPreInit, IInit, IPostInit, IPreShutdown, IShutdown, IPostShutdown>`（`FNamePool.dll`）。**字符串驻留池**——`FName` 是不可变驻留字符串标识符，构造时把字符串 intern 进全局池，相同字符串共享同一条目，O(1) 比较。默认构造的 `FName` 是 None（空）。
+服务层：`FNamePool` 是 `FFrameExtension + IPipeline<IPreInit, IInit, IPostInit, IPreShutdown, IShutdown, IPostShutdown>`（`FNamePool.dll`）。**字符串驻留池**——`FName` 是不可变驻留字符串标识符，构造时把字符串 intern 进全局池，相同字符串共享同一条目，O(1) 比较。默认构造的 `FName` 是 None（空）。
 
 ## Name.h
 
@@ -40,7 +40,7 @@
 
 | 签名 | 说明 |
 |------|------|
-| `MAHO_DECLARE_LAYER(FNamePool)` | 层声明宏（DLL 导出入口） |
+| `MAHO_DECLARE_FRAME(FNamePool)` | 层声明宏（DLL 导出入口） |
 | `FName Intern(std::string_view Str)` | 驻留一个字符串，返回规范 `FName`（线程安全；空串返回 None，不驻留） |
 | `std::string_view StringForId(std::uint32_t Id) const` | `Id` 处存储的字符串（`Intern` 的逆操作；越界返回空串） |
 
@@ -64,6 +64,6 @@ DLL 导出/导入宏——`MAHO_NAME_MODULE_EXPORTS` 定义时展开为 `MAHO_EX
 
 | 签名 | 说明 |
 |------|------|
-| `MAHO_NAME_API` | 修饰本 DLL 导出的符号（`GetNamePool`、`CreateLayer`） |
+| `MAHO_NAME_API` | 修饰本 DLL 导出的符号（`GetNamePool`、`CreateFrame`） |
 
 - [Name.md](Name.md) — 概念 · [实现字典](ImplAPI.md) — 算法

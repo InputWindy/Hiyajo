@@ -3,7 +3,7 @@
 ## Code files
 
 - [Platform.h](Public/Platform.h) — 原生表面 + 事件服务层（`FPlatform` / `IPlatform` / `FNativeSurface`）
-- [Platform.cpp](Private/Platform.cpp) — GLFW / EGL 后端 + 生命周期实现 + `CreateLayer` 导出
+- [Platform.cpp](Private/Platform.cpp) — GLFW / EGL 后端 + 生命周期实现 + `CreateFrame` 导出
 
 ## Concept - Native Surface + Events
 
@@ -11,7 +11,7 @@ Platform 把"原生窗口/上下文句柄"与"事件泵"收敛成一个引擎层
 
 ### FPlatform - 服务层 + 帧阶段
 
-`FPlatform : FLayer<IPreInit, IInit, IPostInit, IBeginFrame, ITick, IEndFrame, IExit, IPreShutdown, IShutdown, IPostShutdown>`，不是单例——宿主引擎持有层实例，`GetPlatform()` 只是全局访问器。构造时声明 `IInit` 依赖 `"FConfig"` 的 `IInit`（窗口尺寸从 Config 层推入的 CVar 读，Config 必须先初始化）。
+`FPlatform : FFrameExtension + IPipeline<IPreInit, IInit, IPostInit, IBeginFrame, ITick, IEndFrame, IExit, IPreShutdown, IShutdown, IPostShutdown>`，不是单例——宿主引擎持有层实例，`GetPlatform()` 只是全局访问器。构造时声明 `IInit` 依赖 `"FConfig"` 的 `IInit`（窗口尺寸从 Config 层推入的 CVar 读，Config 必须先初始化）。
 
 - **Initialize**：从 `r.Window.Width/Height/Title` CVar 读配置；桌面平台 `CreateWindow`；发布 `GPlatform`。
 - **CreateWindow(W, H, Title)**：按当前平台选后端（桌面 GLFW 窗口），成功返回 true（Surface 和原生句柄都非空）。

@@ -1,6 +1,6 @@
 # Log — API 文档
 
-服务层：`FLog` 是 `FLayer<IPreInit, IInit, IPostInit, IPreShutdown, IShutdown, IPostShutdown>`（`FLog.dll`）——**不是单例**，实例由引擎层系统持有、经 `GetLog()` 发布。`Initialize` 拉起 spdlog 日志器（stdout 彩色 + 轮转文件，遵守 `--log-level`）并发布 `this`；`Shutdown` flush + 撤销。spdlog 藏在 `Logger` 不完整类型后面，调用方永远看不到 spdlog 类型。
+服务层：`FLog` 是 `FFrameExtension + IPipeline<IPreInit, IInit, IPostInit, IPreShutdown, IShutdown, IPostShutdown>`（`FLog.dll`）——**不是单例**，实例由引擎层系统持有、经 `GetLog()` 发布。`Initialize` 拉起 spdlog 日志器（stdout 彩色 + 轮转文件，遵守 `--log-level`）并发布 `this`；`Shutdown` flush + 撤销。spdlog 藏在 `Logger` 不完整类型后面，调用方永远看不到 spdlog 类型。
 
 ## Log.h
 
@@ -21,13 +21,13 @@
 
 ### FLog <class>
 
-日志服务层（`FLayer<IPreInit, IInit, IPostInit, IPreShutdown, IShutdown, IPostShutdown>`）。六档 `Trace/Debug/Info/Warn/Error/Critical` 模板方法做 perfect-forward + fmt 编译期格式化，统一落到私有 `LogLine`。`Logger` 是 `std::shared_ptr<spdlog::logger>` 不完整类型——析构在 `Log.cpp`（完整类型可见处）。
+日志服务层（`FFrameExtension + IPipeline<IPreInit, IInit, IPostInit, IPreShutdown, IShutdown, IPostShutdown>`）。六档 `Trace/Debug/Info/Warn/Error/Critical` 模板方法做 perfect-forward + fmt 编译期格式化，统一落到私有 `LogLine`。`Logger` 是 `std::shared_ptr<spdlog::logger>` 不完整类型——析构在 `Log.cpp`（完整类型可见处）。
 
 #### 接口
 
 | 签名 | 说明 |
 |------|------|
-| `MAHO_DECLARE_LAYER(FLog)` | 层声明宏（DLL 导出入口） |
+| `MAHO_DECLARE_FRAME(FLog)` | 层声明宏（DLL 导出入口） |
 | `FLog()` / `~FLog() override` | 默认构造 / 析构（析构处 `spdlog::logger` 完整类型可见） |
 | `template<typename... Args> void Trace(fmt::format_string<Args...> Fmt, Args&&... A)` | 记录 Trace 级（fmt 编译期检查） |
 | `template<typename... Args> void Debug(fmt::format_string<Args...> Fmt, Args&&... A)` | 记录 Debug 级 |
@@ -71,6 +71,6 @@ DLL 导出/导入宏——`MAHO_LOG_MODULE_EXPORTS` 定义时展开为 `MAHO_EXP
 
 | 签名 | 说明 |
 |------|------|
-| `MAHO_LOG_API` | 修饰本 DLL 导出的符号（`GetLog`、`CreateLayer`） |
+| `MAHO_LOG_API` | 修饰本 DLL 导出的符号（`GetLog`、`CreateFrame`） |
 
 - [Log.md](Log.md) — 概念 · [实现字典](ImplAPI.md) — 算法

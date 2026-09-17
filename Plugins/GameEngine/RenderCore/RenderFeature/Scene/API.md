@@ -2,7 +2,7 @@
 
 全局渲染资源 feature（`namespace Maho::Scene`）。跨帧持有共享离屏目标（SceneColor / SceneDepth），其他渲染 feature 经 `Scene::GetScene()` 读取。swapchain 尺寸变化时重建目标。
 
-## FScene <class : FLayer<IBeginRender, IRender, IEndRender, IPresent>>
+## FScene <class : FFrameExtension + IPipeline<IBeginRender, IRender, IEndRender, IPresent>>
 
 渲染场景 feature，挂载全部四个渲染阶段。
 

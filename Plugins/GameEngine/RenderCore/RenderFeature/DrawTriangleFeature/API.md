@@ -2,7 +2,7 @@
 
 渲染 feature（`namespace Maho`）：只在 `IRender` 阶段绘制一个全屏三角形，验证动态渲染 + 管线构建。
 
-## FDrawTriangleFeature <class : FLayer<IRender>>
+## FDrawTriangleFeature <class : FFrameExtension + IPipeline<IRender>>
 
 只挂载 `IRender` 阶段。构造函数声明跨 feature 依赖——**在 Scene 清屏之后绘制**：
 
@@ -24,12 +24,12 @@ FDrawTriangleFeature::FDrawTriangleFeature()
 2. 首次：用内嵌 GLSL（`#version 460`，`gl_VertexIndex` 全屏三角形）经 `FShaderCompilerServer::CompileStage` 编译 VS/FS，`RHI->CreateShaderModule` / `CreatePipelineLayout`（空布局）/ `CreateGraphicsPipeline`（dynamic rendering，`RenderPass = nullptr`）。
 3. 每帧：`R.GetFrameCommandList()`，从 Scene 取颜色/深度 attachment（LoadOp Load），`BeginRendering -> BindGraphicsPipeline -> SetViewport/SetScissor -> Draw(3) -> EndRendering`。
 
-## CreateLayer <导出函数>
+## CreateFrame <导出函数>
 
 ```cpp
-extern "C" MAHO_DRAWTRIANGLEFEATURE_API Maho::FLayerBase* CreateLayer()
+extern "C" MAHO_DRAWTRIANGLEFEATURE_API Maho::FFrameExtension* CreateFrame()
 {
-    return Maho::FDrawTriangleFeature::CreateLayer();
+    return Maho::FDrawTriangleFeature::CreateFrame();
 }
 ```
 

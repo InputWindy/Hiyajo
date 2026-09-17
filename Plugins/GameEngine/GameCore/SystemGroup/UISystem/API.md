@@ -2,7 +2,7 @@
 
 ## Exported surface
 
-- `FUISystem` (`MAHO_UISYSTEM_API`) -- the world system layer, `MAHO_DECLARE_LAYER(FUISystem)`.
+- `FUISystem` (`MAHO_UISYSTEM_API`) -- the world system layer, `MAHO_DECLARE_FRAME(FUISystem)`.
 - `UI::FUIWidget`-owning helper types are internal; the component struct itself is public:
 
 ```cpp
@@ -17,7 +17,7 @@ struct FUIWidget
 ## C export
 
 ```cpp
-extern "C" MAHO_UISYSTEM_API Maho::FLayerBase* CreateLayer();
+extern "C" MAHO_UISYSTEM_API Maho::FFrameExtension* CreateFrame();
 ```
 
 Looked up by symbol at dynamic install (`FAssembly`), so `FGameWorld` can load the

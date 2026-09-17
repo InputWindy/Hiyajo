@@ -84,7 +84,7 @@ footer.page .spacer { flex:1 1 auto; }
 <p>← <a href="../../Public/Engine/EngineAPI.html">公开 API</a> · <code>int</code></p>
 <p>主循环＝<strong>纯调度 Tick 环</strong>（不建 Init/Shutdown 图：装载与初始化归 <code>PreMain</code>，卸载与 Shutdown 归 <code>PostMain</code>）。帧之间会重叠——<code>SubmitFrame</code> 只等自己要复用的环槽，跨帧安全由图的每层 gate 保证。</p>
 <pre><code class="language-text">Main():
-1. 构造 Tick 图（缓存）并绑定 OnLayersChanged → bLayersDirty
+1. 构造 Tick 图（缓存）并绑定 OnFramesChanged → bLayersDirty
 2. Tick 循环：
    while true:
      if 有挂起安装/卸载/重载:                       // 拓扑变更要求图静止
@@ -115,9 +115,9 @@ footer.page .spacer { flex:1 1 auto; }
 <a id="fn-engine-requestexit"></a>
 ### FEngineBase::RequestExit()
 <p>← <a href="../../Public/Engine/EngineAPI.html">公开 API</a> · <code>void</code></p>
-<p>置收集器的"收摊"标志；主循环在本帧提交完成后读到并退出。同一个标志也让 <code>FLayerCollector::Install</code> / <code>Reload</code> 拒绝（收摊后装载的模块永远等不到它的阶段跑）。</p>
+<p>置收集器的"收摊"标志；主循环在本帧提交完成后读到并退出。同一个标志也让 <code>FFrameBuilder::Install</code> / <code>Reload</code> 拒绝（收摊后装载的模块永远等不到它的阶段跑）。</p>
 <pre><code class="language-text">RequestExit():
-1. bClosing.store(true, memory_order_release)    // FLayerCollector::bClosing
+1. bClosing.store(true, memory_order_release)    // FFrameBuilder::bClosing
 2. 宿主侧读它用 ShouldExit()；收集器侧读它用 IsClosing()</code></pre>
 <a id="fn-engine-kv"></a>
 ### Has / Get / GetBool / GetInt / GetAll
@@ -128,15 +128,15 @@ GetBool(Key): Get(Key) in {"true","1","yes","on"}
 GetInt(Key): 空 → 0; stoi(Get(Key)) 失败 → 0</code></pre>
 <h2 id="layer-cpp">Layer.cpp</h2>
 <a id="fn-layer-dtor"></a>
-### FLayerBase::~FLayerBase() / GetDependencies()
+### FFrameExtension::~FFrameExtension() / GetDependencies()
 <p>← <a href="../../Public/Engine/EngineAPI.html">公开 API</a> · <code>virtual</code> / <code>const FDependencyTable&amp;</code></p>
 <p>析构默认实现；<code>GetDependencies()</code> 返回内部 <code>Dependencies</code> 表（引用，不拷贝）。<code>GetDependents()</code> 是头里的内联实现，不在此处。</p>
-<pre><code class="language-text">~FLayerBase() = default
+<pre><code class="language-text">~FFrameExtension() = default
 GetDependencies(): return Dependencies</code></pre>
 <a id="fn-layer-adddep-runtime"></a>
-### FLayerBase::WaitFor(type_index, string_view, type_index) / BlockOn(string_view, type_index, type_index)
+### FFrameExtension::WaitFor(type_index, string_view, type_index) / BlockOn(string_view, type_index, type_index)
 <p>← <a href="../../Public/Engine/EngineAPI.html">公开 API</a> · <code>void</code>（两成员均 <code>private</code>，只由 DSL builder 触达）</p>
-<p><strong>按名字寻址</strong>的依赖落点：跨 DLL 的 feature 用层名点名依赖，从而不对可选插件建立构建依赖。头文件里只有声明，实现落在这里；唯一调用者是 <code>Layer.h</code> 的 <code>FWaitForNamedBuilder</code> / <code>FBlockOnNamedBuilder</code> 嵌套类（嵌套类可访问外层 <code>private</code>）。点类型的 <code>WaitFor&lt;...&gt;()</code> / <code>BlockOn&lt;...&gt;()</code> 是模板，内联在头里。</p>
+<p><strong>按名字寻址</strong>的依赖落点：跨 DLL 的 feature 用层名点名依赖，从而不对可选插件建立构建依赖。头文件里只有声明，实现落在这里；唯一调用者是 <code>Frame.h</code> 的 <code>FWaitForNamedBuilder</code> / <code>FBlockOnNamedBuilder</code> 嵌套类（嵌套类可访问外层 <code>private</code>）。点类型的 <code>WaitFor&lt;...&gt;()</code> / <code>BlockOn&lt;...&gt;()</code> 是模板，内联在头里。</p>
 <pre><code class="language-text">WaitFor(MyStage, OtherName, OtherStage):
 1. Dependencies[MyStage].push_back({ string(OtherName), OtherStage })
 

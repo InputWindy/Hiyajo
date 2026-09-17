@@ -18,7 +18,6 @@ Source/
     Engine/         层系统（FLayer / FLayerTaskGraph / FEngineBase）
   Private/          实现 cpp
     Core/           Assembly.cpp / Fatal.cpp / TaskGraph.cpp
-    Engine/         Engine.cpp / Layer.cpp
 ```
 
 引擎核心零第三方依赖、零应用假设；具体功能全在 `Plugins/`，核心只提供通用构件。

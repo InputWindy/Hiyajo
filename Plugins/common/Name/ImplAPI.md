@@ -109,13 +109,13 @@ Intern(Str):
 ```
 
 <a id="fn-name-createlayer"></a>
-### CreateLayer()（extern "C"）
+### CreateFrame()（extern "C"）
 
-DLL 动态安装入口——宿主按符号名查找。委托静态 `FNamePool::CreateLayer()`（`MAHO_DECLARE_LAYER` 生成）。
+DLL 动态安装入口——宿主按符号名查找。委托静态 `FNamePool::CreateFrame()`（`MAHO_DECLARE_FRAME` 生成）。
 
 ```text
-CreateLayer():
-1. return Maho::Name::FNamePool::CreateLayer()
+CreateFrame():
+1. return Maho::Name::FNamePool::CreateFrame()
 ```
 
 - [Name.md](Name.md) — 概念 · [公开 API](API.md) — 签名入口

@@ -17,7 +17,7 @@ FRender 自有的 4 个渲染 stage 能力接口——每个只有一个纯虚�
 
 ### FRender <class>
 
-渲染子系统——三合一：宿主引擎的 10 阶段帧层 + `FLayerCollector<FRender>`（渲染 feature 集合）+ `FThreadedServer`（渲染线程）。内部持有一个持久渲染图 `FLayerTaskGraph<FRenderStages, FRender>`，stage 集合 = `Select<IInitViews, IBeginRender, IRender, IEndRender, IPostProcess, IRenderUI, IPresent>`（编辑器构建另插 `IEditorInput` / `IEditorCompose`）；层没实现的 stage 是静默 no-op。`Tick` 的回合是：帧首 `Flush`（等上一帧图任务）→ 应用 feature 安装/卸载 → `Init` + `Compile` + `Execute`（**无尾 Flush**）；`EndFrame` 在 `RHI->EndFrame()`（end + submit + present）之前再 `Flush` 一次，保证每个 feature 的提交都完成后才提交帧缓冲——共享帧命令缓冲从不被并发录制。
+渲染子系统——三合一：宿主引擎的 10 阶段帧层 + `FFrameBuilder<FRender>`（渲染 feature 集合）+ `FThreadedServer`（渲染线程）。内部持有一个持久渲染图 `FLayerTaskGraph<FRenderStages, FRender>`，stage 集合 = `Select<IInitViews, IBeginRender, IRender, IEndRender, IPostProcess, IRenderUI, IPresent>`（编辑器构建另插 `IEditorInput` / `IEditorCompose`）；层没实现的 stage 是静默 no-op。`Tick` 的回合是：帧首 `Flush`（等上一帧图任务）→ 应用 feature 安装/卸载 → `Init` + `Compile` + `Execute`（**无尾 Flush**）；`EndFrame` 在 `RHI->EndFrame()`（end + submit + present）之前再 `Flush` 一次，保证每个 feature 的提交都完成后才提交帧缓冲——共享帧命令缓冲从不被并发录制。
 
 #### 接口
 

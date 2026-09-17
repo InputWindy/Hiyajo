@@ -106,11 +106,11 @@ FindTranslation(Namespace, Key, Culture):
 ```
 
 <a id="fn-text-export"></a>
-### CreateLayer()（C 导出）
+### CreateFrame()（C 导出）
 
 ```text
-extern "C" CreateLayer():
-1. return Maho::Text::FTextManager::CreateLayer()
+extern "C" CreateFrame():
+1. return Maho::Text::FTextManager::CreateFrame()
 ```
 
 - [Text.md](Text.md) — 概念 · [公开 API](API.md) — 签名入口

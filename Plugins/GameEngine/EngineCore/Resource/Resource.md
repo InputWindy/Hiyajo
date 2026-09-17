@@ -4,7 +4,7 @@
 
 - [Resource.h](Public/Resource.h) — 类型化异步资源系统（`FResourceSystem` / `FResource` / 导入导出模板）
 - [ResourceApi.h](Public/ResourceApi.h) — `MAHO_RESOURCE_API` 导出宏
-- [Resource.cpp](Private/Resource.cpp) — IO 线程 + 目录实现 + `CreateLayer` 导出
+- [Resource.cpp](Private/Resource.cpp) — IO 线程 + 目录实现 + `CreateFrame` 导出
 
 ## Concept - Typed Async Resource System
 

@@ -7,7 +7,7 @@
 编辑器宿主，两副身份合一：
 
 - **渲染特性**（`FRender` 的 `IOnInstalled / IEditorInput / IEditorCompose / IPreUnInstall`）：自持**编辑器自己的** ImGui 上下文、`EditorRT` 合成目标、字体上传与最终 present。它是编辑器侧唯一碰 RHI 的地方。
-- **子 collector**（`FLayerCollector<FExampleEditor>`）：安装编辑器组件插件（`EditorViewport` / `EditorConsole` / `ContentBrowser` / `EditorTheme`），驱动它们的 `IEditorInit` / `IEditorPanel::Update` / `IEditorShutdown` 图。
+- **子 collector**（`FFrameBuilder<FExampleEditor>`）：安装编辑器组件插件（`EditorViewport` / `EditorConsole` / `ContentBrowser` / `EditorTheme`），驱动它们的 `IEditorInit` / `IEditorPanel::Update` / `IEditorShutdown` 图。
 
 帧序：`Select<IEditorPanel>() -> Update`（声明期，`NewFrame` 之前）→ 宿主开 dock 主窗 → 通用视图循环（按编辑器上下文筛选注册表视图、按外壳声明 `Begin/End`、`TranslateView`）→ `Render`。
 

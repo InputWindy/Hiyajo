@@ -200,8 +200,8 @@ DoFile(FilePath)        = Active ? Active->DoFile(FilePath)          : false
 TryGetState()           = Active ? Active->GetState()                : nullptr
 ```
 
-### CreateLayer()（C 导出）
+### CreateFrame()（C 导出）
 
-`extern "C" MAHO_SCRIPT_API Maho::FLayerBase* CreateLayer()`——宿主按符号名查找的层工厂，经 `FScriptSystem::CreateLayer()` 返回层实例。
+`extern "C" MAHO_SCRIPT_API Maho::FFrameExtension* CreateFrame()`——宿主按符号名查找的层工厂，经 `FScriptSystem::CreateFrame()` 返回层实例。
 
 - [Script.md](Script.md) — 概念 · [公开 API](API.md) — 签名入口

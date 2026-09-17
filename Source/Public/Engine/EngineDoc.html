@@ -68,7 +68,7 @@ footer.page .spacer { flex:1 1 auto; }
 <nav class="side">
 <div class="crumbs">Public / Engine / <span>EngineDoc.md</span></div>
 <h4>本页目录</h4>
-<ul><li><a class="lvl2" href="#code-files">Code Files</a></li><li><a class="lvl2" href="#concept-anonymous-layer-ordered-stage-pipeline">Concept -- Anonymous Layer + Ordered Stage Pipeline</a></li><li><a class="lvl3" href="#1-匿名层-flayerbase">1. 匿名层（FLayerBase）</a></li><li><a class="lvl3" href="#2-有序阶段管线-ipipeline">2. 有序阶段管线（IPipeline）</a></li><li><a class="lvl3" href="#3-层展开-flayertaskgraph">3. 层展开（FLayerTaskGraph）</a></li><li><a class="lvl3" href="#4-依赖声明-dsl">4. 依赖声明（DSL）</a></li><li><a class="lvl3" href="#5-层集合-flayercollector">5. 层集合（FLayerCollector）</a></li><li><a class="lvl3" href="#6-筛选-query">6. 筛选（Query）</a></li><li><a class="lvl2" href="#engine-main-loop">Engine Main Loop</a></li><li><a class="lvl2" href="#plugin-macros">Plugin Macros</a></li><li><a class="lvl2" href="#dependency-linking-include-rules">Dependency / Linking / Include Rules</a></li><li><a class="lvl2" href="#lifecycle">Lifecycle</a></li><li><a class="lvl2" href="#related-docs">Related Docs</a></li></ul>
+<ul><li><a class="lvl2" href="#code-files">Code Files</a></li><li><a class="lvl2" href="#concept-frame-extension-ordered-stage-pipeline">Concept -- Frame Extension + Ordered Stage Pipeline</a></li><li><a class="lvl3" href="#1-声明层-fframeextension-core">1. 声明层（FFrameExtension，Core）</a></li><li><a class="lvl3" href="#2-有序阶段序列-ipipeline">2. 有序阶段序列（IPipeline）</a></li><li><a class="lvl3" href="#3-批次展开-fframebridge-build">3. 批次展开（FFrameBridge::Build）</a></li><li><a class="lvl3" href="#4-依赖声明-dsl">4. 依赖声明（DSL）</a></li><li><a class="lvl3" href="#5-帧集合-fframebuilder">5. 帧集合（FFrameBuilder）</a></li><li><a class="lvl3" href="#6-筛选-query">6. 筛选（Query）</a></li><li><a class="lvl2" href="#engine-main-loop">Engine Main Loop</a></li><li><a class="lvl2" href="#plugin-macros">Plugin Macros</a></li><li><a class="lvl2" href="#dependency-linking-include-rules">Dependency / Linking / Include Rules</a></li><li><a class="lvl2" href="#lifecycle">Lifecycle</a></li><li><a class="lvl2" href="#related-docs">Related Docs</a></li></ul>
 <h4>本目录</h4><ul><li><a class="" href="EngineAPI.html">EngineAPI</a></li><li><a class="here" href="EngineDoc.html">EngineDoc</a></li></ul>
 </nav>
 <main>
@@ -78,46 +78,51 @@ footer.page .spacer { flex:1 1 auto; }
 </header>
 <h1 id="engine">Engine</h1>
 <h2 id="code-files">Code Files</h2>
-<ul><li><a href="Engine.h">Engine.h</a> — 10 个 stage 能力接口 + FEngineBase + MAHO_DECLARE_ENGINE</li><li><a href="Layer.h">Layer.h</a> — FLayerBase / FLayer / Invoke 派发 / 依赖声明 DSL / MAHO_DECLARE_LAYER / MAHO_DECLARE_STAGE_DISPATCH</li><li><a href="LayerCollector.h">LayerCollector.h</a> — FLayerCollector（层集合：安装/卸载/重载、状态广播、依赖安全卸载）</li><li><a href="LayerTaskGraph.h">LayerTaskGraph.h</a> — FLayerTaskGraph（层 → 依赖图展开）</li><li><a href="Query.h">Query.h</a> — TQuery（编译期类型筛选）/ FQuery / FQueryResult（运行时实例筛选）</li></ul>
-<h2 id="concept-anonymous-layer-ordered-stage-pipeline">Concept -- Anonymous Layer + Ordered Stage Pipeline</h2>
-<p>Engine 层把应用拆成一组<strong>单职责匿名层</strong>，每层沿<strong>有序 stage 管线</strong>展开成任务图节点，由依赖图调度器自动编排——有依赖串行、无依赖并行，依赖边即隐式屏障。</p>
-<h3 id="1-匿名层-flayerbase">1. 匿名层（FLayerBase）</h3>
-<p>层只闭合自己：<code>GetName()</code>（稳定身份名 = 拓扑键，由 <code>MAHO_DECLARE_LAYER</code> 从类型名字符串化而来，是<strong>编译期字面量</strong>，不依赖 <code>Name</code> 池）+ <code>GetDependencies()</code> / <code>GetDependents()</code>（逐 stage 依赖表，引擎读，子类不访问）。<strong>不管理依赖生命周期</strong>——执行上下文完整性由 <code>FLayerTaskGraph</code> 保证。层可动态加载（DLL），宿主只持有 <code>FLayerBase*</code>。</p>
-<h3 id="2-有序阶段管线-ipipeline">2. 有序阶段管线（IPipeline）</h3>
-<p><code>IPipeline&lt;TStageTypes...&gt;</code> 定义有序阶段序列（<code>TStages</code>）；引擎提供 10 个 stage 能力接口（IPreInit/IInit/IPostInit/IBeginFrame/ITick/IEndFrame/IExit/IPreShutdown/IShutdown/IPostShutdown），stage→方法调用的 <code>Invoke</code> 协议按 (stage, context) 对特化。<strong>可选能力组合</strong>：层只继承自己要的阶段接口，没实现的 stage 在派发时 <code>dynamic_cast</code> 失败、静默跳过（合法状态）。</p>
-<h3 id="3-层展开-flayertaskgraph">3. 层展开（FLayerTaskGraph）</h3>
-<p>每层沿 <code>TStages</code> 展开成<strong>每阶段一个节点</strong>：自推进（阶段 N 依赖同层阶段 N-1）+ 跨对象依赖（层声明的正向元组）+ 反向依赖（层声明的 <code>BlockOn</code>，<code>Init</code> 时施加到对方节点，对方不在本图则跳过）。节点就绪即释放——<strong>无阶段屏障</strong>，跨阶段管线（A 的 Tick 依赖 B 的 BeginFrame）天然成立。</p>
-<p>推论→规则：<strong>层必须装进「挂载了它 stage 列表」的那个 collector</strong>（安装树保证这一点：层由驱动它的父层装进自己的收集器）。装错收集器的层仍有 no-op 节点，但永不被真正驱动，且它在外来 stage 上声明的依赖永远不成为边——<code>Compile</code> 看不到它们。</p>
+<ul><li><a href="Engine.h">Engine.h</a> — 10 个 stage 能力接口 + FEngineBase + MAHO_DECLARE_ENGINE（含引擎侧 stage 序列别名 <code>FInitStages</code>/<code>FTickStages</code>/<code>FShutdownStages</code>）</li><li><a href="Frame.h">Frame.h</a> — 引擎侧 stage 机器：<code>Invoke</code> 派发 + <code>TFrameDispatch&lt;TStages, TContext&gt;</code>（唯一知道 stage 列表的地方）+ <code>MAHO_DECLARE_FRAME</code> + <code>MAHO_DECLARE_STAGE_DISPATCH</code></li><li><a href="FrameBuilder.h">FrameBuilder.h</a> — <code>FFrameBuilder</code>：帧集合的安装/卸载/重载 + 帧循环，并<strong>私有持有</strong> <code>FFrameGraph</code>/<code>FFrameBridge</code>/<code>TFrameDispatch</code></li><li><a href="Query.h">Query.h</a> — TQuery（编译期类型筛选）/ FQuery / FQueryResult（运行时实例筛选）</li></ul>
+<blockquote><p>声明层在 Core：<code>FFrameExtension</code>（身份 + 它声明的边）在 <a href="../Core/FrameGraph.h"><code>Core/FrameGraph.h</code></a>。 调度器 <code>FFrameGraph</code> 与桥 <code>FFrameBridge</code> 也在那里。</p></blockquote>
+<h2 id="concept-frame-extension-ordered-stage-pipeline">Concept -- Frame Extension + Ordered Stage Pipeline</h2>
+<p>Engine 侧把应用拆成一组<strong>单职责 frame extension</strong>，每个沿<strong>有序 stage 序列</strong>被展开成一批节点，交给 <code>FFrameGraph</code> 调度——有依赖串行、无依赖并行，依赖边即排序。</p>
+<h3 id="1-声明层-fframeextension-core">1. 声明层（FFrameExtension，Core）</h3>
+<p>它只闭合自己：<code>GetName()</code>（稳定身份名 = 拓扑键，由 <code>MAHO_DECLARE_FRAME</code> 从类型名字符串化而来，是<strong>编译期字面量</strong>）+ 它声明的边（<code>AddDependency</code> / <code>AddDependent</code>，由 DSL 调用）。<strong>它不知道 stage 序列</strong> —— 那是引擎侧的事；<strong>也不管理依赖生命周期</strong>。frame 可动态加载（DLL），宿主只持有 <code>FFrameExtension*</code>。</p>
+<h3 id="2-有序阶段序列-ipipeline">2. 有序阶段序列（IPipeline）</h3>
+<p><code>IPipeline&lt;TStageTypes...&gt;</code> 定义有序序列（<code>TStages</code>）；引擎提供 10 个 stage 能力接口（IPreInit/IInit/IPostInit/IBeginFrame/ITick/IEndFrame/IExit/IPreShutdown/IShutdown/IPostShutdown）。stage→方法调用由 <code>TFrameDispatch::MakeClosure</code> 包成 <code>Invoke&lt;Stage, Context&gt;</code>（按 (stage, context) 对特化）。<strong>可选组合</strong>：frame 只继承自己要的 stage 接口，没实现的 stage 由 <code>TFrameDispatch::Implements</code> 判定，<strong>根本不产出节点</strong>（已经没有 no-op 空节点了）。</p>
+<h3 id="3-批次展开-fframebridge-build">3. 批次展开（FFrameBridge::Build）</h3>
+<p>桥把「frame 集合 + stage 序列 + 帧号」展开成一批 <code>FTask</code>。每个 frame 为它<strong>实现的</strong>每个 stage 产出一个节点，节点身份是三元组 <code>{名字, stage, 相位}</code>，相位 = <code>帧号 % MAHO_FRAMES_IN_FLIGHT</code>。</p>
+<p>桥另外产出两类<strong>结构边</strong>（都是「stage 序列」本身的语义，而序列只有桥知道）：</p>
+<ol><li><strong>帧内链</strong>：同一帧中相邻的已产出节点依次相连，中间被剪掉的 stage 不切断链；</li><li><strong>跨帧自边</strong>：每个节点再等<strong>它自己</strong>上一帧（同 stage、相位 <code>帧号−1</code>）。</li></ol>
+<p>声明的边在这里解析：相对帧偏移变成绝对身份，反向声明（<code>IsBlocking</code>）落在<strong>声明者</strong>的节点上、指向目标；绑不上的名字被<strong>报告</strong>（图对悬空的边是静默消解——见 <code>FFrameGraph</code> 的头注释）。</p>
 <h3 id="4-依赖声明-dsl">4. 依赖声明（DSL）</h3>
-<p>裸模板 <code>WaitFor&lt;...&gt;</code> / <code>BlockOn&lt;...&gt;</code> 与两张依赖表都是 <code>private</code>；声明只能经 <code>protected</code> 的 DSL。四种形式——点类型的正向/反向，与按名字的正向/反向：</p>
-<pre><code class="language-cpp">MyStage&lt;ITick&gt;().IsWaiting&lt;FLog&gt;().ForStage&lt;IBeginFrame&gt;();                      // 正向，点类型
-MyStage&lt;IShutdown&gt;().IsBlocking&lt;FResourceSystem&gt;().OnStage&lt;IShutdown&gt;();         // 反向，点类型
-MyStage&lt;ITick&gt;().IsWaiting("FLog").ForStage&lt;IBeginFrame&gt;();                      // 正向，按名字
-MyStage&lt;IShutdown&gt;().IsBlocking("FUIViewRegistry").OnStage&lt;IShutdown&gt;();         // 反向，按名字</code></pre>
-<p>按名字的形式给<strong>不能点名对方类型</strong>的消费者用（点名会强加对可选插件的构建依赖）。名字在实际安装进本图的层里解析，找不到就不绑边。</p>
-<h3 id="5-层集合-flayercollector">5. 层集合（FLayerCollector）</h3>
-<p><code>Install</code> / <code>TryUninstall</code> / <code>Reload</code> 记录进 pending 集，在安全点 <code>FlushPendingUpdatePipelines</code> 统一应用（同一窗口内「先取消被撤销的装载」→ 再 Init 批 → 最后卸载）。卸载用<strong>反向依赖计数最小堆贪心</strong>：被依赖的层拒绝卸载，依赖者先弹出、链式卸载。</p>
-<p><strong>每个终态都广播</strong>（<code>OnLayerStatus</code> + <code>ELayerStatus</code> 12 态）：装载排队/被拒/编译失败/完成/被取消，卸载排队/未命中/被拒/编译失败/完成，重载排队/被拒。没有静默路径；<code>InstallChildrenOf</code> 另有 <code>{Requested, Queued, Refused}</code> 摘要。事件派发隔离——订阅者抛异常只报错，不影响收集器状态与 teardown。</p>
-<p><strong>失败与门禁</strong>：<code>Install</code>/<code>Reload</code> 在收集器「关闭」后一律拒绝（<code>OnClosing</code> 广播一次）；装载批 <code>Compile</code> 失败 ⇒ 报错并<strong>释放该批</strong>（不自动重试，调用者修好后再装）；卸载图 <code>Compile</code> 失败 ⇒ 报错并让这些层<strong>保持存活</strong>（绝不在 Shutdown 没跑的情况下析构）。宿主侧的 <code>Install</code>/<code>TryUninstall</code> 与子收集器共用同一套代码。</p>
+<p>两张依赖表是 <code>private</code>；声明经公开的 DSL。<strong>规范拼写</strong>把「帧」并进 stage 选择器：</p>
+<pre><code class="language-cpp">MyStage&lt;IInitViews&gt;().WaitFor&lt;FLog&gt;().OnStage&lt;IInit&gt;();               // 正向，本帧
+MyStage&lt;IInitViews&gt;().WaitFor&lt;FLog&gt;().OnLastFrameStage&lt;IInit&gt;();      // 正向，上一帧（跨帧）
+MyStage&lt;IShutdown&gt;().BlockOn&lt;FResourceSystem&gt;().OnStage&lt;IShutdown&gt;(); // 反向，本帧
+MyStage&lt;IShutdown&gt;().BlockOn("FUIViewRegistry").OnLastFrameStage&lt;IShutdown&gt;();
+MyStage&lt;ITick&gt;().WaitFor("FLog").OnStage&lt;IBeginFrame&gt;();              // 按名字</code></pre>
+<ul><li>旧拼写 <code>IsWaiting</code> / <code>IsBlocking</code> + <code>LastFrame()</code> + <code>ForStage()</code> 是<strong>别名</strong>，行为相同。</li><li>按名字的形式给<strong>不能点名对方类型</strong>的消费者用（点名会强加对可选插件的构建依赖）。名字在实际进本批的 frame 里解析，找不到就不绑边（并由桥报告「写错」的那几类）。</li></ul>
+<h3 id="5-帧集合-fframebuilder">5. 帧集合（FFrameBuilder）</h3>
+<p><code>Install</code> / <code>TryUninstall</code> / <code>Reload</code> 记录进 pending 集，在安全点 <code>FlushPendingUpdates&lt;TInit, TShutdown&gt;</code> 统一应用（同一窗口内「先取消被撤销的装载」→ 再 Init 批 → 最后卸载）。卸载用<strong>反向依赖计数最小堆贪心</strong>：被依赖的 frame 拒绝卸载，依赖者先弹出、链式卸载。</p>
+<p>宿主可见的动词（其余全是 private）：</p>
+<div class="table-wrap"><table><thead><tr><th>动词</th><th>作用</th></tr></thead><tbody><tr><td><code>Install</code> / <code>TryUninstall</code> / <code>Reload</code> / <code>InstallChildrenOf</code></td><td>拓扑变更（下个安全点生效）</td></tr><tr><td><code>FlushPendingUpdates&lt;TInitStages, TShutdownStages&gt;()</code></td><td>应用挂起变更（内部即安全点）</td></tr><tr><td><code>Execute&lt;TLoopStages&gt;()</code></td><td>跑一帧（LINQ 查帧集 → 建批 → 提交；<strong>不排空</strong>，帧会流水）</td></tr><tr><td><code>Wait()</code></td><td>收摊静默：图 + 池都排空</td></tr><tr><td><code>UninstallAll()</code> / <code>ReleaseAll()</code> / <code>CancelPendingReloads()</code></td><td>收摊清扫（见下）</td></tr><tr><td><code>GetStats()</code></td><td>规模查询（工具/面板用，勿每帧轮询）</td></tr></tbody></table></div>
+<p><strong>每个终态都广播</strong>（<code>OnFrameStatus</code> + <code>EFrameStatus</code> 12 态）：装载排队/被拒/编译失败/完成/被取消，卸载排队/未命中/被拒/编译失败/完成，重载排队/被拒。没有静默路径；<code>InstallChildrenOf</code> 另有 <code>{Requested, Queued, Refused}</code> 摘要。事件派发隔离——订阅者抛异常只报错，不影响收集器状态与 teardown。</p>
+<p><strong>失败与门禁</strong>：</p>
+<ul><li><code>Install</code>/<code>Reload</code> 在收集器「关闭」后一律拒绝（<code>OnClosing</code> 广播一次）；</li><li>安装批被 <strong><code>Submit</code> 拒绝</strong>（结构性：批内身份重复 / 相位越界 / 成环）⇒ 报错并<strong>释放该批</strong>（不自动重试）；</li><li>卸载批被拒 ⇒ 报错并让这些 frame <strong>保持存活</strong>（绝不在 Shutdown 没跑的情况下析构）；</li><li><strong>缺依赖不再拒绝安装</strong>：目标不存在就是「这条边不存在」（帧照跑），由桥报告写错的那几类（名字不在帧集 / stage 不在序列 / 目标未实现该 stage）；</li><li><code>ReleaseAll()</code>：收摊的最后手段——<strong>不跑 teardown 阶段</strong>硬释放，但仍保持「在 <code>Pipelines</code> 里 == 活着」的不变量（渲染层必须在 RHI 死之前销毁 feature 实例时用它）。</li></ul>
 <h3 id="6-筛选-query">6. 筛选（Query）</h3>
-<ul><li><strong><code>TQuery&lt;TList&gt;</code></strong>：纯类型运算，<code>Select</code>(OR) / <code>With</code>(AND) / <code>Not</code>(NOR) → <code>FResult</code>，不引用实例。</li><li><strong><code>FQuery&lt;TBase&gt;</code> / <code>FQueryResult&lt;TBase&gt;</code></strong>：运行时按接口谓词筛实例（<code>dynamic_cast</code>），可当 <code>vector</code> 用。结果内部向量私有（外部不能注入裸指针），并记住来源集合做 Debug 活性审计：指针已不在来源里（层已卸载）就丢弃并报错——因为卸载是「先移出集合再释放模块」，对已卸载对象做 <code>dynamic_cast</code> 会解引用悬垂 vptr。</li></ul>
+<ul><li><strong><code>TQuery&lt;TList&gt;</code></strong>：纯类型运算，<code>Select</code>(OR) / <code>With</code>(AND) / <code>Not</code>(NOR) → <code>FResult</code>，不引用实例。</li><li><strong><code>FQuery&lt;TBase&gt;</code> / <code>FQueryResult&lt;TBase&gt;</code></strong>：运行时按接口谓词筛实例（<code>dynamic_cast</code>），可当 <code>vector</code> 用（但<strong>不能直接 range-for</strong>，先赋给 vector）。结果内部向量私有（外部不能注入裸指针），并记住来源集合做 Debug 活性审计：指针已不在来源里（frame 已卸载）就丢弃并报错——因为卸载是「先移出集合再释放模块」，对已卸载对象做 <code>dynamic_cast</code> 会解引用悬垂 vptr。</li></ul>
 <h2 id="engine-main-loop">Engine Main Loop</h2>
 <p><code>FEngineBase</code> 把生命周期拆成两个钩子和一个纯调度主循环（<code>EntryPoint</code> 驱动 <code>PreMain → Main → PostMain</code>）：</p>
-<pre><code class="language-text">PreMain  安装 + 初始化：Load 安装树 → InstallChildrenOf(GetName()) → FlushPendingUpdatePipelines&lt;Init, Shutdown&gt;
-Main     纯调度 Tick 环：
-           帧边界：挂起更新？→ WaitAll() → FlushPendingUpdatePipelines&lt;Init, Shutdown&gt;
-                   bLayersDirty？→ WaitAll() → 重展开 Tick 图 + Compile（失败报一次 + 退化成空图）
-                   SubmitFrame()   // 只等自己要复用的环槽，帧之间会重叠
-                   ShouldExit()？→ break
-           退出前：WaitAll() + Pool.Flush()
-PostMain 关闭闸门 → 丢弃未生效装载 → 卸载所有活层 → 循环 flush 到静 → Pool.Flush → 残留层报出</code></pre>
-<p><strong>帧重叠</strong>：<code>SubmitFrame</code> 只等「自己要复用的那一环槽」（<code>MAHO_FRAMES_IN_FLIGHT</code> 深，默认 3），不等上一帧跑完。跨帧安全由<strong>每层 gate</strong>保证：同层下一帧的 root 必须等上一帧整层（root→…→sink）跑完才被派发；不同层之间照常跨帧并行。gate 的交接是<strong>无计数</strong>的（抢闸或排队，实例的 sink 恰好 pop 一个等待者），不存在计数漂移。</p>
-<p><strong>缓存</strong>：Tick 图跨帧缓存并由 <code>OnLayersChanged</code>（push，非轮询）驱动重建——<code>FEngineBase::Main</code> 绑定它置 <code>bLayersDirty</code>。层集不变的普通帧只 <code>SubmitFrame</code>，不重建、不重连、不重新过滤。</p>
+<pre><code class="language-text">PreMain  安装 + 初始化：Load 安装树 → InstallChildrenOf(GetName()) → FlushPendingUpdates&lt;Init, Shutdown&gt;
+Main     while (!ShouldExit())
+           FlushPendingUpdates&lt;FInitStages, FShutdownStages&gt;()   // 应用挂起拓扑变更
+           Execute&lt;FTickStages&gt;()                                 // 建批 + 提交（不排空 ⇒ 帧流水）
+         Wait()                                                   // 收摊静默（图 + 池）
+PostMain 关闭闸门 → 丢弃未生效装载 → UninstallAll → 循环 flush 到静 → Wait() → 残留报出</code></pre>
+<p><strong>帧重叠</strong>：<code>Execute</code> 不排空，<code>Submit</code> 只做「按相位准入」（复用一个环槽前等它排空）⇒ 最多 <code>MAHO_FRAMES_IN_FLIGHT</code> 帧在飞（默认 3）。跨帧安全由<strong>桥的结构边</strong>保证（每个 stage 与自己的上一帧），不同 frame extension 之间照常跨帧并行。</p>
+<p><strong>帧集缓存</strong>：<code>bLoopDirty</code> 由收集器在 <code>FlushPendingUpdates</code> 变更有变化时<strong>自己置位</strong>，下一帧 LINQ 重查——宿主不持有缓存，也无从忘记失效。</p>
 <p><strong>失败隔离</strong>（坏插件不杀宿主）：</p>
-<ul><li>图编译失败（缺失依赖 / 依赖环）→ <code>ReportError</code>（每种破损<strong>报告一次</strong>，不刷屏）+ 坏层暂不调度（空图），拓扑修复后重试。</li><li>安装失败 → <code>ReportError</code> + <code>InstallRefused</code> 广播，不再静默。</li><li>节点/worker 抛异常 → <code>ReportError</code>（非致命），并<strong>仍释放下游</strong>，图不挂起。</li><li>卡死审计（Debug）：帧超过 <code>MAHO_TASKGRAPH_STALL_MS</code> 未排干 → 报出卡住的节点/门，并落盘 <code>TaskGraphStall.txt</code>（图的固有失败模式是「缺边=挂」，必须说出来）。</li></ul>
-<p><strong>热重载</strong>：<code>Reload("LayerName")</code> 下个安全点卸旧层（依赖安全，被依赖则拒绝）、随后装回同 DLL 新副本——旧模块先释放再装载，可用于迭代。</p>
+<ul><li>批被拒（环/重复/越界）→ <code>ReportError</code>（<strong>同因只报一次</strong>，不刷屏）；</li><li>安装被拒 → <code>ReportError</code> + <code>InstallRefused</code> 广播，不再静默；</li><li>节点/worker 抛异常 → <code>ReportError</code>（非致命），并<strong>仍置位完成事件</strong>，图不挂起；</li><li>绑不上的声明 → 桥报告一次（每帧集一次，不每帧刷屏）；</li><li><strong>stage 追踪（Debug）</strong>：<code>MAHO_TRACE_STAGES=1</code> 打出每个 stage 的 enter/exit —— 硬崩（0xC0000005）没有栈也没有异常，最后一条「enter 无 exit」是唯一能指名肇事 stage 的手段。</li></ul>
+<p><strong>热重载</strong>：<code>Reload("FName")</code> 下个安全点卸旧 frame（依赖安全，被依赖则拒绝）、随后装回同 DLL 新副本——旧模块先释放再装载，可用于迭代。</p>
 <h2 id="plugin-macros">Plugin Macros</h2>
-<div class="table-wrap"><table><thead><tr><th>宏</th><th>用途</th></tr></thead><tbody><tr><td><code>MAHO_DECLARE_LAYER(LayerType)</code></td><td>层类内生成 StaticName / GetName / CreateLayer / GetModulePath（DLL 名 = 类型名 + 平台后缀）</td></tr><tr><td><code>MAHO_DECLARE_ENGINE(EngineType)</code></td><td>引擎类内生成 CreateEngine 工厂 / GetModulePath / StaticName / GetName</td></tr><tr><td><code>MAHO_DECLARE_STAGE_DISPATCH(Context, Stage, Cast, Method)</code></td><td>生成 <code>Invoke&lt;Stage, Context&gt;</code> 全特化（dynamic_cast + 调用）</td></tr></tbody></table></div>
+<div class="table-wrap"><table><thead><tr><th>宏</th><th>用途</th></tr></thead><tbody><tr><td><code>MAHO_DECLARE_FRAME(FrameType)</code></td><td>frame 类内生成 StaticName / GetName / CreateFrame / GetModulePath（DLL 名 = 类型名 + 平台后缀）</td></tr><tr><td><code>MAHO_DECLARE_ENGINE(EngineType)</code></td><td>引擎类内生成 CreateEngine 工厂 / GetModulePath / StaticName / GetName</td></tr><tr><td><code>MAHO_DECLARE_STAGE_DISPATCH(Context, Stage, Cast, Method)</code></td><td>生成 <code>Invoke&lt;Stage, Context&gt;</code> 全特化（dynamic_cast + 调用）</td></tr></tbody></table></div>
 <h2 id="dependency-linking-include-rules">Dependency / Linking / Include Rules</h2>
 <p>链接方向分层单向（箭头 = 链接目标）：</p>
 <pre><code>engine core (Maho)  &lt;--  engine plugins（每个引擎插件链接 Maho）
@@ -125,9 +130,9 @@ engine core + engine plugins  &lt;--  project core（入口层，链接 Maho + �
 engine core + engine plugins + project core  &lt;--  project plugins（链接父层，经 .cplugin 传递获得 include）</code></pre>
 <p>Include 方向：<strong>引擎核心 ↔ 引擎插件</strong>单向（插件 include 核心，核心零应用假设）；<strong>项目核心 ↔ 项目插件</strong>双向（核心以编译期类型引用子类，无构建环）。构建依赖（.cplugin）保持分层单向，父层仅以编译期类型引用子层，不构成构建环。</p>
 <h2 id="lifecycle">Lifecycle</h2>
-<p>生命周期由宿主拥有：装载与初始化在 <code>PreMain</code>，卸载与 Shutdown 在 <code>PostMain</code>（<code>TryUninstall</code> 所有活层 + 循环 flush + <code>Pool.Flush</code>），之后 <code>EntryPoint</code> 才 <code>delete App</code>。feature 析构不静默 teardown；Shutdown 阶段由卸载图显式驱动。层必须自洽：自己的异步工作者、资源、视图订阅，都要在自己的 Shutdown / <code>PreUnInstall</code> 里收干净（否则 teardown 会报出残留层或资源）。</p>
+<p>生命周期由宿主拥有：装载与初始化在 <code>PreMain</code>，卸载与 Shutdown 在 <code>PostMain</code>（<code>UninstallAll</code> + 循环 flush）。<strong>排空点在两个地方</strong>：<code>FlushPendingUpdates</code> 内部（每个一次性批次前后各排空一次 ⇒ 它自身就是安全点），以及 <code>~FFrameBuilder → Wait()</code>（图 + 池，在实例与模块释放之前）。<code>EntryPoint</code> 随后才 <code>delete App</code>，再析构引擎 DLL。frame 析构不静默 teardown；Shutdown 阶段由卸载批显式驱动。frame 必须自洽：自己的异步工作者、资源、视图订阅，都要在自己的 Shutdown / <code>IPreUnInstall</code> 里收干净（否则 teardown 会报出残留 frame 或资源）。</p>
 <h2 id="related-docs">Related Docs</h2>
-<ul><li><a href="EngineAPI.html">EngineAPI.md</a> — API 文档</li><li><a href="../Core/CoreAPI.html">CoreAPI.md</a> — Core 基建</li><li><a href="../../../README.html">README.md</a> — 引擎总览</li></ul>
+<ul><li><a href="EngineAPI.html">EngineAPI.md</a> — API 文档</li><li><a href="../Core/CoreDoc.html">CoreDoc.md</a> — Core 基建（含调度器 <code>FFrameGraph</code>）</li><li><a href="../../../README.html">README.md</a> — 引擎总览</li></ul>
 <footer class="page">
 <div><a href="EngineAPI.html">&larr; EngineAPI</a></div>
 <div class="spacer"></div>

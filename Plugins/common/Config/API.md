@@ -1,6 +1,6 @@
 # Config — API 文档
 
-服务层：`FConfig` 是 `FLayer<IPreInit, IInit, IPostInit, IPreShutdown, IShutdown, IPostShutdown>`（产物 `FConfig.dll` —— DLL 名 = 层类型名 + 平台后缀）。UE `DefaultEngine.ini` 格式的 INI 配置引擎——`Load` 解析 INI 文件，`GetString/GetInt/GetFloat/GetBool` 读取，`SetString` 运行时覆盖。`Initialize` 自动加载默认 + 平台覆盖配置，并把 `[ConsoleVariables]` 段推进 CVar 注册表。
+服务层：`FConfig` 是 `FFrameExtension + IPipeline<IPreInit, IInit, IPostInit, IPreShutdown, IShutdown, IPostShutdown>`（产物 `FConfig.dll` —— DLL 名 = 层类型名 + 平台后缀）。UE `DefaultEngine.ini` 格式的 INI 配置引擎——`Load` 解析 INI 文件，`GetString/GetInt/GetFloat/GetBool` 读取，`SetString` 运行时覆盖。`Initialize` 自动加载默认 + 平台覆盖配置，并把 `[ConsoleVariables]` 段推进 CVar 注册表。
 
 ## Config.h
 
@@ -12,7 +12,7 @@ INI 风格配置层——按 **Section（段）** 组织键值对。内部 `Sect
 
 | 签名 | 说明 |
 |------|------|
-| `MAHO_DECLARE_LAYER(FConfig)` | 层声明宏（生成 `CreateLayer` 导出；DLL 名由类型名 + 平台后缀推出） |
+| `MAHO_DECLARE_FRAME(FConfig)` | 层声明宏（生成 `CreateFrame` 导出；DLL 名由类型名 + 平台后缀推出） |
 | `bool Load(std::string_view Path)` | 从路径解析一个 INI 文件，合并进现有配置（后加载的键覆盖）；文件打不开返回 `false` |
 | `std::optional<std::string> GetString(std::string_view Section, std::string_view Key) const` | 读字符串；缺段 / 缺键返回 `nullopt` |
 | `std::int64_t GetInt(std::string_view Section, std::string_view Key, std::int64_t Default = 0) const` | 读整数（`stoll`）；缺失或解析失败返回 `Default` |
@@ -42,6 +42,6 @@ DLL 导出/导入宏——`MAHO_CONFIG_MODULE_EXPORTS` 定义时展开为 `MAHO_
 
 | 签名 | 说明 |
 |------|------|
-| `MAHO_CONFIG_API` | 修饰本 DLL 导出的符号（`GetConfig`、`CreateLayer`） |
+| `MAHO_CONFIG_API` | 修饰本 DLL 导出的符号（`GetConfig`、`CreateFrame`） |
 
 - [Config.md](Config.md) — 概念 · [实现字典](ImplAPI.md) — 算法

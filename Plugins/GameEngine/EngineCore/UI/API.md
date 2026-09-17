@@ -17,10 +17,10 @@
 ```cpp
 MAHO_UI_API FUIViewRegistry* GetUIViewRegistry();   // 与 GetLog() 同形；未安装/已关闭 = nullptr
 
-class FUIViewRegistry : public FLayer<IInit, IShutdown>
+class FUIViewRegistry : public FFrameExtension + IPipeline<IInit, IShutdown>
 {
 public:
-	MAHO_DECLARE_LAYER(FUIViewRegistry);
+	MAHO_DECLARE_FRAME(FUIViewRegistry);
 
 	void RegisterView(FUIView& View);          // 宿主线程；表只存裸指针，不拥有
 	void UnregisterView(FUIView& View);        // 析构前必须调用

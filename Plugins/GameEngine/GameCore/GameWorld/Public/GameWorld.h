@@ -34,7 +34,7 @@ struct FTransform
 
 // -- ECS world sub-stage interfaces (implemented by the world's systems) ----------
 // FGameWorld is a sub-landlord (二房东): it schedules its INSTALLED systems through
-// its own FLayerTaskGraph, in the Unity ECS order below.
+// its own stage sequences, in the Unity ECS order below.
 
 /** Rows/layers attached to the world (arrived via Install at the safe point). */
 class MAHO_GAMEWORLD_API IOnInstalled

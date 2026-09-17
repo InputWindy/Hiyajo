@@ -139,13 +139,13 @@ CreateHeadlessBackend(Width, Height):
 ```
 
 <a id="fn-platform-export"></a>
-### CreateLayer()（C 导出）
+### CreateFrame()（C 导出）
 
-按符号名查找的动态安装导出——宿主加载 DLL 后经 `GetProcAs` 取 `CreateLayer` 实例化层。
+按符号名查找的动态安装导出——宿主加载 DLL 后经 `GetProcAs` 取 `CreateFrame` 实例化层。
 
 ```text
-extern "C" CreateLayer():
-1. return Maho::Platform::FPlatform::CreateLayer()
+extern "C" CreateFrame():
+1. return Maho::Platform::FPlatform::CreateFrame()
 ```
 
 - [Platform.md](Platform.md) — 概念 · [公开 API](API.md) — 签名入口

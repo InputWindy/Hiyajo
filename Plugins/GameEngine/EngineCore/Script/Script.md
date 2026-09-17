@@ -4,7 +4,7 @@
 
 - [Script.h](Public/Script.h) — 脚本宿主 `FScriptSystem` + 语言中立后端接口 `IScriptLanguage` + `MAHO_LUA_*` 绑定宏族
 - [ScriptApi.h](Public/ScriptApi.h) — DLL 导出宏（`MAHO_SCRIPT_API`）
-- [Script.cpp](Private/Script.cpp) — 默认 Lua 后端 `FLuaLanguage`（sol2）+ 宿主实现 + `CreateLayer` 导出
+- [Script.cpp](Private/Script.cpp) — 默认 Lua 后端 `FLuaLanguage`（sol2）+ 宿主实现 + `CreateFrame` 导出
 
 ## Concept — 多语言脚本宿主
 
@@ -12,7 +12,7 @@
 
 ### 生命周期（层管线）
 
-`FScriptSystem` 是 `FLayer<IPreInit, IInit, IPostInit, IPreShutdown, IShutdown, IPostShutdown>` 的层。`Initialize` 注册默认 Lua 后端并对每个语言调 `Initialize(0, nullptr, "Scripts")`；成功后广播 `OnLanguageReady`（此时类型绑定队列已跑完）。`Shutdown` 对称拆除并清空事件。构造期声明依赖 FLog 的 IInit——脚本在 Initialize 里打日志，Log 必须先就绪。
+`FScriptSystem` 是 `FFrameExtension + IPipeline<IPreInit, IInit, IPostInit, IPreShutdown, IShutdown, IPostShutdown>` 的层。`Initialize` 注册默认 Lua 后端并对每个语言调 `Initialize(0, nullptr, "Scripts")`；成功后广播 `OnLanguageReady`（此时类型绑定队列已跑完）。`Shutdown` 对称拆除并清空事件。构造期声明依赖 FLog 的 IInit——脚本在 Initialize 里打日志，Log 必须先就绪。
 
 ### 语言中立后端
 

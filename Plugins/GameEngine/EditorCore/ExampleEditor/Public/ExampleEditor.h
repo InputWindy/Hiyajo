@@ -41,7 +41,7 @@ struct FEditorContext
 
 /**
  * Editor component stage interfaces. A component plugin derives from any subset
- * of these (via FLayer<...>). Init/Shutdown are driven by the host's own
+ * of these (via FFrameExtension). Init/Shutdown are driven by the host's own
  * FFrameBuilder install/uninstall graph; Update is driven by the host's frame
  * loop BEFORE `ImGui::NewFrame()` (Select<IEditorPanel>() -> for over Update), and
  * the host then translates the registered views. The context is the host
@@ -106,7 +106,7 @@ struct FEditorShader
 	 * As a sub-collector it derives FFrameBuilder<FExampleEditor> and installs the
 	 * editor COMPONENT plugins (EditorViewport / EditorConsole / ContentBrowser /
 	 * EditorTheme) as DLLs.
-	 * Each component is an anonymous FLayer mounting the IEditor* stage interfaces.
+	 * Each component is an anonymous frame extension mounting the IEditor* stage interfaces.
 	 * The host installs them at OnInstalled (next safe point runs their Init graph),
 	 * rebuilds their UI trees every frame via Select<IEditorPanel>() -> for over Update
 	 * (before `NewFrame`), translates every registered view in-frame, and uninstalls

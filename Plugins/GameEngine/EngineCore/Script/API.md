@@ -50,7 +50,7 @@ Script::GetScriptSystem()->Call("OnUpdate", dt);    // 宿主逐帧驱动
 
 | 签名 | 说明 |
 |------|------|
-| `MAHO_DECLARE_LAYER(FScriptSystem)` | 层声明（`CreateLayer` 导出，宿主按符号名查找动态安装） |
+| `MAHO_DECLARE_FRAME(FScriptSystem)` | 层声明（`CreateFrame` 导出，宿主按符号名查找动态安装） |
 | `FScriptSystem()` | 构造（构造期声明依赖 FLog 的 IInit——日志必须先初始化） |
 | `using FOnLanguageReady = TMulticastEvent<void(IScriptLanguage&)>` | 每个语言 `Initialize` 成功后广播（绑定队列已跑完） |
 | `void RegisterLanguage(IScriptLanguage* Language)` | 安装语言后端（宿主接管所有权）；按 `GetName()` 幂等——重名丢弃新实例 |
@@ -68,7 +68,7 @@ Script::GetScriptSystem()->Call("OnUpdate", dt);    // 宿主逐帧驱动
 
 #### 约束（层管线阶段）
 
-`FScriptSystem : FLayer<IPreInit, IInit, IPostInit, IPreShutdown, IShutdown, IPostShutdown>`——仅 `Initialize` / `Shutdown` 实现（scheduler-only），其余阶段为空。
+`FScriptSystem : FFrameExtension + IPipeline<IPreInit, IInit, IPostInit, IPreShutdown, IShutdown, IPostShutdown>`——仅 `Initialize` / `Shutdown` 实现（scheduler-only），其余阶段为空。
 
 ### MAHO_LUA_* <宏族>
 

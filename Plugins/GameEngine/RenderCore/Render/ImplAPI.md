@@ -75,7 +75,7 @@ Tick(Engine):
 
 ```text
 Shutdown(Engine):
-1. RenderGraph.reset()                        // 先释放图（在 FLayerCollector 的池之前）
+1. RenderGraph.reset()                        // 先释放图（在 FFrameBuilder 的池之前）
 2. if ShaderCompiler: ShaderCompiler->FlushCompiles(); ShaderCompiler.reset()
 3. if ResourcePool: ResourcePool->Shutdown(); ResourcePool.reset()
 4. if RHI: RHI->ShutdownRHI(); RHI.reset()

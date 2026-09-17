@@ -32,10 +32,10 @@ ExampleEngine/
       ExampleEngine.cplugin
     RenderFeature/                render feature plugins
       Scene/                      2 scene feature (global render resources)
-        Public/Scene.h            FScene : FLayer<IBeginRender, IRender, IEndRender, IPresent>
+        Public/Scene.h            FScene : FFrameExtension + IPipeline<IBeginRender, IRender, IEndRender, IPresent>
         Private/Scene.cpp         owns SceneColor/SceneDepth; clears + presents
       DrawTriangleFeature/        3 triangle feature
-        Public/DrawTriangleFeature.h  FDrawTriangleFeature : FLayer<IRender>
+        Public/DrawTriangleFeature.h  FDrawTriangleFeature : FFrameExtension + IPipeline<IRender>
         Private/DrawTriangleFeature.cpp  compiles shaders, builds pipeline, draws 3 verts
 ```
 
@@ -87,9 +87,9 @@ extern "C" MAHO_EXAMPLEENGINE_API Maho::FEngineBase* CreateEngine()
 ```cpp
 namespace Maho::Scene
 {
-class FScene : public FLayer<IBeginRender, IRender, IEndRender, IPresent>
+class FScene : public FFrameExtension + IPipeline<IBeginRender, IRender, IEndRender, IPresent>
 {
-    MAHO_DECLARE_LAYER(FScene);
+    MAHO_DECLARE_FRAME(FScene);
 
 public:
     FRDGTextureRef GetSceneColor() const { return SceneColor; }
@@ -118,9 +118,9 @@ Stage behavior:
 **`Public/DrawTriangleFeature.h`** - a render feature that mounts only `IRender`:
 
 ```cpp
-class FDrawTriangleFeature : public FLayer<IRender>
+class FDrawTriangleFeature : public FFrameExtension + IPipeline<IRender>
 {
-    MAHO_DECLARE_LAYER(FDrawTriangleFeature);
+    MAHO_DECLARE_FRAME(FDrawTriangleFeature);
 public:
     void Render(FRender& R) override;
     ...
@@ -143,7 +143,7 @@ In `Render`, it lazily compiles embedded GLSL (`#version 460`, fullscreen triang
 `FRender` is the key recursive pattern:
 
 - to the **host engine** it is one ordinary layer (mounts `IInit`/`ITick`/... engine stages);
-- internally it is its own **`FLayerCollector<FRender>`** with a **dedicated render thread** (`FThreadedServer`);
+- internally it is its own **`FFrameBuilder<FRender>`** with a **dedicated render thread** (`FThreadedServer`);
 - it defines its **own stage interfaces** (`IBeginRender`/`IRender`/`IEndRender`/`IPresent`, all taking `FRender&`) and schedules render features with its own `FLayerTaskGraph`.
 
 The host engine only sees `FRender` as a layer; render features are installed and scheduled entirely inside it, pipelined across frames on the render thread.
@@ -158,12 +158,12 @@ The main DLL (`ExampleEngine.dll`) has **zero compile-time dependency** on the r
 InstallChildrenOf("FRender")             // 1 walk the tree; per child pass a name only
   `- Install("FScene.dll")               // 2 the main DLL still does not know the FScene type
        `- FAssembly("FScene.dll")        // 3 LoadLibrary
-            `- GetProcAddress("CreateLayer")  // 4 look up the C export by symbol name
-                 `- FScene::CreateLayer()     // 5 returns FLayerBase* (base pointer)
+            `- GetProcAddress("CreateFrame")  // 4 look up the C export by symbol name
+                 `- FScene::CreateFrame()     // 5 returns FFrameExtension* (base pointer)
                       `- owner records it     // 6 applied at next safe point
 ```
 
-The main DLL only ever sees the `FLayerBase*` base pointer; the concrete `FScene` type only exists inside `Scene.dll`. Features interact only through the `FLayerBase` base contract + the render stage interfaces.
+The main DLL only ever sees the `FFrameExtension*` base pointer; the concrete `FScene` type only exists inside `Scene.dll`. Features interact only through the `FFrameExtension` base contract + the render stage interfaces.
 
 ### Uninstall Is the Same
 
@@ -176,7 +176,7 @@ TryUninstall("FScene")                   // anonymous addressing by layer name (
 
 | Concept | How this project shows it |
 |------|-----------------|
-| **Anonymous layer** (FLayerBase) | each feature only exposes `GetName()` (class name) + dependency table |
+| **Anonymous layer** (FFrameExtension) | each feature only exposes `GetName()` (class name) + dependency table |
 | **stage pipeline** (IPipeline) | engine stages: `IBeginFrame -> ITick -> IEndFrame`; render stages: `IBeginRender -> IRender -> IEndRender -> IPresent` |
 | **dependency-graph scheduling** (FLayerTaskGraph) | `FEngineBase::Main` runs Init -> Compile -> Execute -> Flush each frame |
 | **dynamic install** | `Install("<LayerType>.dll")` (layer type + platform suffix) via FAssembly load + owner holds ownership |

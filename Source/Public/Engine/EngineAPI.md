@@ -2,7 +2,7 @@
 
 Engine 层 = 层系统：匿名层锚点 + 有序 stage 管线 + 依赖图调度。层只声明身份与逐 stage 依赖，全局调度由 `FLayerTaskGraph` 统一负责。全在 `Source/Public/Engine/` 头文件（模板 + 内联）。
 
-## Layer.h
+## Frame.h
 
 ### Invoke<TStage, TContext> <function（模板）>
 
@@ -17,7 +17,7 @@ MAHO_DECLARE_STAGE_DISPATCH(FEngineBase, IInit, IInit, Initialize)
 // => Invoke<IInit, FEngineBase>(Layer, Engine) -> cast IInit -> Initialize(Engine)
 ```
 
-### FLayerBase <class>
+### FFrameExtension <class>
 
 **匿名层锚点**——可能动态加载的 feature 的多态基类。携带身份 + 逐 stage 依赖声明。生命周期经 `IPipeline<TStages...>` 组合；层**永不管理依赖生命周期**——执行上下文完整性由 `FLayerTaskGraph` 保证。层只闭合自己。
 
@@ -25,7 +25,7 @@ MAHO_DECLARE_STAGE_DISPATCH(FEngineBase, IInit, IInit, Initialize)
 
 | 签名 | 说明 |
 |------|------|
-| `virtual ~FLayerBase()` | 虚析构（跨 DLL 删除经 DLL 自己的代码） |
+| `virtual ~FFrameExtension()` | 虚析构（跨 DLL 删除经 DLL 自己的代码） |
 | `virtual std::string_view GetName() const = 0` | 稳定身份名——TaskGraph 拓扑键；由声明宏从类型名字符串化而来（`#LayerType`，编译期字面量） |
 | `virtual const FDependencyTable& GetDependencies() const` | 逐 stage 依赖表（引擎读；子类不访问） |
 | `const std::vector<FDependent>& GetDependents() const` | 反向依赖表（引擎读；子类不访问） |
@@ -53,19 +53,19 @@ MAHO_DECLARE_STAGE_DISPATCH(FEngineBase, IInit, IInit, Initialize)
 
 ### FLayer<TPipelines...> <class>
 
-装配语法糖——把 `FLayerBase`（身份 + 依赖）与一个或多个 `IPipeline`（有序 stage）绑成一个层类型。`FLayerBase` 与 `TPipelines...` 无继承关系，调度时经 `dynamic_cast` 侧向转换。
+装配语法糖——把 `FFrameExtension`（身份 + 依赖）与一个或多个 `IPipeline`（有序 stage）绑成一个层类型。`FFrameExtension` 与 `TPipelines...` 无继承关系，调度时经 `dynamic_cast` 侧向转换。
 
 ```cpp
 class FWorld : public FLayer<IPipeline<IMain, IShutdown>> {};
-class FWorldMulti : public FLayer<IEngineTickPipeline, IEngineInitPipeline> {};
+class FWorldMulti : public FFrameExtension + IPipeline<IEngineTickPipeline, IEngineInitPipeline> {};
 ```
 
-### MAHO_DECLARE_LAYER(LayerType) <宏>
+### MAHO_DECLARE_FRAME(LayerType) <宏>
 
-层声明糖——生成 `StaticName()` + `GetName()` + `CreateLayer()` + `GetModulePath()`。名字来自类型名字符串化（`#LayerType`），依赖声明用同一类型推导，拓扑键自洽。DLL 名 = 类型名 + 平台后缀（`ApplyModuleExtension`），宏只收一个参数：
+层声明糖——生成 `StaticName()` + `GetName()` + `CreateFrame()` + `GetModulePath()`。名字来自类型名字符串化（`#LayerType`），依赖声明用同一类型推导，拓扑键自洽。DLL 名 = 类型名 + 平台后缀（`ApplyModuleExtension`），宏只收一个参数：
 
 ```cpp
-class FWorld : public FLayer<...> { MAHO_DECLARE_LAYER(FWorld); ... };
+class FWorld : public FFrameExtension + IPipeline<...> { MAHO_DECLARE_FRAME(FWorld); ... };
 // StaticName()/GetName() == "FWorld"；GetModulePath() == "FWorld.dll"（平台后缀在运行时拼接）
 ```
 
@@ -116,7 +116,7 @@ using FTickable = TQuery<FTable>::Select<ITick>::With<IShared>::FResult;
 - 结果记住**来源集合**，`Cast`/`Filter` 在 Debug 下先做**活性审计**（该指针是否仍在来源里）——不在就丢弃并 `ReportError`。原因：卸载是「先移出 `Pipelines` 再释放模块」，而 `dynamic_cast` 要解引用 vptr，对已卸载对象做就是崩。Release 下退化为非空判断（零成本）。
 - 契约：结果只在下一次集合变更前有效；跨帧保存裸指针请改用 `Cast<T>()` 并自行重查。
 
-## LayerTaskGraph.h
+## FrameGraph.h
 
 ### FLayerTaskGraph<TStages, TContext = FEmptyContext> <class : FTaskGraph>
 
@@ -131,7 +131,7 @@ using FTickable = TQuery<FTable>::Select<ITick>::With<IShared>::FResult;
 | 签名 | 说明 |
 |------|------|
 | `FLayerTaskGraph(FThreadPool&, TContext&)` | 绑定线程池 + 执行上下文（引用，不拷贝） |
-| `void Init(std::vector<FLayerBase*>)` | 重建节点集（可重复调用；须图静止） |
+| `void Init(std::vector<FFrameExtension*>)` | 重建节点集（可重复调用；须图静止） |
 | `bool Compile()` | 接线 + 环/缺依赖检测；失败时 `GetCompileErrorNode()` 给出坏层名 |
 | `void Execute()` | 提交一帧（内联转调 `SubmitFrame`，安装/卸载图沿用） |
 | `void SubmitFrame()` / `void WaitFence()` / `void WaitAll()` / `bool IsIdle()` | 继承自 `FTaskGraph` 的帧 API |
@@ -143,18 +143,18 @@ G.Init(Engine.Select<IBeginFrame, ITick, IEndFrame, IExit>());
 if (G.Compile()) { G.Execute(); G.WaitAll(); }
 ```
 
-## LayerCollector.h
+## FrameBuilder.h
 
-### FLayerCollector<TContext> <class : FQuery<FLayerBase>>
+### FFrameBuilder<TContext> <class : FQuery<FFrameExtension>>
 
-层集合管理基类——拥有 + 调度一组匿名 `FLayerBase`。安装/卸载/重载记录进 pending 集，在 `FlushPendingUpdatePipelines` 安全点应用；卸载依赖安全（反向计数最小堆贪心）。`TContext` 是每个 stage 方法收到的调度上下文（引擎是 `FEngineBase`，渲染子系统是 `FRender`），同时充当 `FQuery` 数据源。
+层集合管理基类——拥有 + 调度一组匿名 `FFrameExtension`。安装/卸载/重载记录进 pending 集，在 `FlushPendingUpdatePipelines` 安全点应用；卸载依赖安全（反向计数最小堆贪心）。`TContext` 是每个 stage 方法收到的调度上下文（引擎是 `FEngineBase`，渲染子系统是 `FRender`），同时充当 `FQuery` 数据源。
 
 #### 事件（`public`，每收集器一套）
 
 | 签名 | 说明 |
 |------|------|
-| `TMulticastEvent<void()> OnLayersChanged` | 层集在安全点发生变化；宿主绑定它重编缓存图（push 而非轮询） |
-| `TMulticastEvent<void(const FLayerStatusInfo&)> OnLayerStatus` | **每个终态**一条（见 `ELayerStatus`）——拒绝、取消、编译失败、装载完成、卸载完成……不再有静默路径。**只观察**：handler 里不得再 `Install`/`Uninstall`/`Reload` |
+| `TMulticastEvent<void()> OnFramesChanged` | 层集在安全点发生变化；宿主绑定它重编缓存图（push 而非轮询） |
+| `TMulticastEvent<void(const FFrameStatusInfo&)> OnFrameStatus` | **每个终态**一条（见 `EFrameStatus`）——拒绝、取消、编译失败、装载完成、卸载完成……不再有静默路径。**只观察**：handler 里不得再 `Install`/`Uninstall`/`Reload` |
 | `TMulticastEvent<void()> OnClosing` | 收集器翻进「关闭」那一刻广播一次（此后 `Install`/`Reload` 一律拒绝） |
 
 事件派发是**隔离**的：某个 handler 抛异常 → `ReportError` 并吞掉（同一广播里其后的 handler 被跳过），收集器自身状态不受影响——`EmitStatus` 是在卸载循环中间调的，不能让订阅者把 teardown 打断在半途。
@@ -163,24 +163,24 @@ if (G.Compile()) { G.Execute(); G.WaitAll(); }
 
 | 类型 | 说明 |
 |------|------|
-| `enum class ELayerStatus` | 12 态：`InstallQueued / InstallRefused / InstallCompileFailed / Installed / InstallCancelled / UninstallQueued / UninstallNotFound / UninstallRefused / UninstallCompileFailed / Uninstalled / ReloadQueued / ReloadRefused` |
-| `FLayerStatusInfo { Status, Name, Path, Detail }` | 事件载荷；字段全是**拷贝**（模块可能随即被卸） |
+| `enum class EFrameStatus` | 12 态：`InstallQueued / InstallRefused / InstallCompileFailed / Installed / InstallCancelled / UninstallQueued / UninstallNotFound / UninstallRefused / UninstallCompileFailed / Uninstalled / ReloadQueued / ReloadRefused` |
+| `FFrameStatusInfo { Status, Name, Path, Detail }` | 事件载荷；字段全是**拷贝**（模块可能随即被卸） |
 | `FInstallSummary { Requested, Queued, Refused }` | `InstallChildrenOf` 的返回摘要 |
-| `FLayerStats { Active, PendingAdds, PendingRemoves, PendingReloads, Modules }` | `GetStats()` 返回 |
+| `FFrameStats { Active, PendingAdds, PendingRemoves, PendingReloads, Modules }` | `GetStats()` 返回 |
 
 #### 接口
 
 | 签名 | 说明 |
 |------|------|
 | `template<T> bool Install()` | 按类型安装（`T::GetModulePath()` 解析 DLL 名）；等价于 `Install(dll)` |
-| `bool Install(string_view DllPath, const char* FactorySymbol = "CreateLayer")` | **唯一安装入口**（匿名加载，无指针安装）。经 `FAssembly` 装载 + 建实例 + 名字查重；失败原因经 `InstallRefused` 报出（关闭中 / 模块加载失败 / 无工厂符号 / 工厂抛异常 / 工厂返回 null / 重名）。**不做依赖前置检查**：跨 stage 的合法互依赖无法按名判环，交给图 `Compile` 校验 |
+| `bool Install(string_view DllPath, const char* FactorySymbol = "CreateFrame")` | **唯一安装入口**（匿名加载，无指针安装）。经 `FAssembly` 装载 + 建实例 + 名字查重；失败原因经 `InstallRefused` 报出（关闭中 / 模块加载失败 / 无工厂符号 / 工厂抛异常 / 工厂返回 null / 重名）。**不做依赖前置检查**：跨 stage 的合法互依赖无法按名判环，交给图 `Compile` 校验 |
 | `FInstallSummary InstallChildrenOf(string_view ParentLayer)` | 按安装树装**直系子插件**（`GetChildren` 顺序），父层与收集器层共用同一个调用 |
 | `void Reload(string_view LayerName)` | **热重载**：下个安全点卸旧层（依赖安全，被依赖则拒绝并报出）、随后装回同 DLL 新副本。仅对**活动层**有效；仍在 pending 的层给出明确拒绝原因 |
 | `void TryUninstall(string_view Query)` | 匿名卸载：按**层名**或**DLL 路径**匹配第一命中（活动层与 pending 层都可按名命中）；命中即入 pending，未命中广播 `UninstallNotFound` |
-| `template<TInitStages, TShutdownStages> void FlushPendingUpdatePipelines()` | 应用挂起更新：先处理「装载被同窗口的卸载请求取消」，再 Init 批（`TInitStages`），最后卸载（`TShutdownStages`）。有变化则广播 `OnLayersChanged`。**重入被拒绝**；内部 `try/catch`：插件代码抛异常时 pending 集保持原样，下次重试 |
+| `template<TInitStages, TShutdownStages> void FlushPendingUpdatePipelines()` | 应用挂起更新：先处理「装载被同窗口的卸载请求取消」，再 Init 批（`TInitStages`），最后卸载（`TShutdownStages`）。有变化则广播 `OnFramesChanged`。**重入被拒绝**；内部 `try/catch`：插件代码抛异常时 pending 集保持原样，下次重试 |
 | `void DropPendingInstalls()` | 丢弃未生效的装载：实例与模块一起释放（`Install` 是即时装载，只延后 Init） |
 | `void CloseForLoads()` / `bool IsClosing()` | 关闭闸门：幂等置位并广播 `OnClosing`；置位后 `Install`/`Reload` 拒绝 |
-| `FLayerStats GetStats()` | 当前规模（工具/测试/面板用查询，不要每帧轮询） |
+| `FFrameStats GetStats()` | 当前规模（工具/测试/面板用查询，不要每帧轮询） |
 
 #### 失败与终态的语义
 
@@ -209,9 +209,9 @@ if (G.Compile()) { G.Execute(); G.WaitAll(); }
 
 主循环把它们分三组驱动：Init 组 `TTypeList<IPreInit, IInit, IPostInit>`（`PreMain` 里跑）、Tick 组 `TTypeList<IBeginFrame, ITick, IEndFrame, IExit>`（每帧）、Shutdown 组 `TTypeList<IPreShutdown, IShutdown, IPostShutdown>`（`PostMain` 里跑）。`Engine.h` 为每组定义了 `MAHO_DECLARE_STAGE_DISPATCH(FEngineBase, ...)` 全特化。
 
-### FEngineBase <class : FLayerCollector<FEngineBase>>
+### FEngineBase <class : FFrameBuilder<FEngineBase>>
 
-引擎基类——命令行 KV + 主循环 + feature 所有权（`FLayerCollector`）。入口插件继承它并导出 `CreateEngine()`；它是唯一宿主。
+引擎基类——命令行 KV + 主循环 + feature 所有权（`FFrameBuilder`）。入口插件继承它并导出 `CreateEngine()`；它是唯一宿主。
 
 #### 接口
 

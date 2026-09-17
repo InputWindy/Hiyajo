@@ -8,7 +8,7 @@
 - [Public/UIApi.h](Public/UIApi.h) — `MAHO_UI_API` 导出宏（`MAHO_UI_MODULE_EXPORTS` 切换）
 - [Public/UITypes.h](Public/UITypes.h) — `FUIName` / 几何 / 五态 / 命中结果
 - [Public/UIViewRegistry.h](Public/UIViewRegistry.h) — 层 + 跨 DLL 视图注册表 + `GetUIViewRegistry()`
-- [Private/UI.cpp](Private/UI.cpp) — `CreateLayer()` 动态装载入口
+- [Private/UI.cpp](Private/UI.cpp) — `CreateFrame()` 动态装载入口
 - [Private/UIViewRegistry.cpp](Private/UIViewRegistry.cpp) — 注册表实现（发布/撤发布）
 
 ## 数据流（目标形态）
