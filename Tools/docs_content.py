@@ -190,25 +190,42 @@ D.Row("memory", "`std::unique_ptr<void, FModuleDeleter>`：句柄的 RAII 持有
 D.Row("string", "路径与返回串")
 D.Row("string_view", "入参：不拷贝调用方给的路径")
 
-D.Card("接口")
+D.Card("自由函数")
 D.Table("函数签名", "说明")
 D.Row("std::string ApplyModuleExtension(std::string_view BaseName)",
       "给模块基名补上宿主平台的动态库后缀：Windows `.dll` / Android、Linux `.so` / macOS "
       "`.dylib`；无动态库的运行时（iOS）原样透传。全仓因此不硬编码任何 `.dll` 字符串。"
       "**已导出**：每个插件由 `MAHO_DECLARE_FRAME` 生成的 `GetModulePath()` 都从自己的 DLL 调它。")
-D.Row("void FModuleDeleter::operator()(void* Handle) const noexcept",
-      "用 `FreeLibrary` / `dlclose` 释放 OS 模块句柄（而不是 `delete`），空句柄直接返回。"
-      "**已导出**：谁销毁 `FAssembly`，这段代码就在谁的模块里跑。")
-D.Row("bool FAssembly::Load(std::string_view Path)",
-      "装载模块（先 `Unload()` 掉旧句柄）；文件缺失或装载失败返回 `false`。")
-D.Row("void FAssembly::Unload()",
-      "释放句柄；可重复调用。之后 `IsLoaded()` 为假、`GetProcAddress()` 返回 nullptr。")
-D.Row("bool FAssembly::IsLoaded() const", "是否持有有效的模块句柄。")
-D.Row("void* FAssembly::GetProcAddress(const char* Name) const",
-      "原始符号查找（`GetProcAddress` / `dlsym`）；未装载或符号不存在则返回 nullptr。")
-D.Row("template <typename TFunction> TFunction GetProcAs(const char* Name) const",
-      "把原始符号转成**函数指针**类型再返回 —— 调用方写 `GetProcAs<CreateFn>(\"CreateEngine\")` "
-      "即可，无需自己 `reinterpret_cast`。")
+
+D.Struct("FModuleDeleter",
+         Desc="自定义删除器：模块句柄用 `FreeLibrary` / `dlclose` 释放，**不是** `delete`。"
+              "`FAssembly` 用它以 RAII 持有句柄，宿主只需持有 `FAssembly` 值。")
+D.Interface("void operator()(void* Handle) const noexcept",
+            "释放句柄（空句柄直接返回）。**已导出**：谁销毁 `FAssembly`，这段代码就在谁的模块里跑。")
+
+D.Class("FAssembly",
+        Desc="一个已装载的代码单元：OS 模块句柄 + 符号查找。纯装载原语 —— 不认插件 / 清单 / "
+             "工厂，怎么解释这个模块完全由消费者决定。句柄唯一持有（move-only）：只要还有从它"
+             "构造出来的实例活着，就必须让它也活着，否则先卸载再用就是 use-after-free。")
+D.SetAccess("public")
+D.Interface("explicit FAssembly(std::string_view Path)",
+            "从路径构造：立即 `Load()`；失败时对象处于未装载状态（`IsLoaded()` 为假）。")
+D.Interface("FAssembly(FAssembly&&) noexcept = default",
+            "可移动（句柄转移）。拷贝被删除：`FAssembly(const FAssembly&) = delete` / "
+            "`operator=(const FAssembly&) = delete`。")
+D.Interface("bool Load(std::string_view Path)",
+            "装载模块（先 `Unload()` 掉旧句柄）；文件缺失或装载失败返回 `false`。")
+D.Interface("void Unload()",
+            "释放句柄；可重复调用。之后 `IsLoaded()` 为假、`GetProcAddress()` 返回 nullptr。")
+D.Interface("bool IsLoaded() const", "是否持有有效的模块句柄。")
+D.Interface("void* GetProcAddress(const char* Name) const",
+            "原始符号查找（`GetProcAddress` / `dlsym`）；未装载或符号不存在则返回 nullptr。")
+D.Interface("template <typename TFunction> TFunction GetProcAs(const char* Name) const",
+            "把原始符号转成**函数指针**类型再返回 —— 调用方写 "
+            "`GetProcAs<CreateFn>(\"CreateEngine\")` 即可，无需自己 `reinterpret_cast`。")
+D.SetAccess("private")
+D.Field("std::unique_ptr<void, FModuleDeleter> Module",
+        "模块句柄的唯一持有者：析构即 `FreeLibrary` / `dlclose`。空 = 未装载。")
 
 # ══════════════════════════════════════════════════════════════════════════════
 # 下面继续按你的口述追加：再 Header(...) 换一个头，Class/Interface/Field 往下挂。
