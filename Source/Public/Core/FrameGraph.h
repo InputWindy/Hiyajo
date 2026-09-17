@@ -107,10 +107,7 @@ struct FTaskKey
 	std::type_index  Stage{ typeid(void) };
 	std::int32_t     Phase = 0;
 
-	bool operator==(const FTaskKey& Other) const
-	{
-		return Name == Other.Name && Stage == Other.Stage && Phase == Other.Phase;
-	}
+	bool operator==(const FTaskKey& Other) const;
 };
 
 struct FTaskKeyHash
@@ -167,17 +164,11 @@ public:
 	// -- the minimal ability: declare edges (the sugar below is just spelling) ------
 
 	/** Forward: my node at `MyStage` waits for these. */
-	void AddDependency(std::type_index MyStage, FEdge Edge)
-	{
-		Dependencies[MyStage].push_back(Edge);
-	}
+	void AddDependency(std::type_index MyStage, FEdge Edge);
 
 	/** Reverse: my node at `MyStage` blocks these. One-sided is enough -- the blocked
 	 *  node needs to know nothing. */
-	void AddDependent(std::type_index MyStage, FEdge Edge)
-	{
-		Dependents.emplace_back(MyStage, Edge);
-	}
+	void AddDependent(std::type_index MyStage, FEdge Edge);
 
 	[[nodiscard]] const std::unordered_map<std::type_index, std::vector<FEdge>>&
 	GetDependencies() const { return Dependencies; }

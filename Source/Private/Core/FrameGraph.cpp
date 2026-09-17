@@ -51,12 +51,27 @@ namespace
 	}
 }
 
+bool FTaskKey::operator==(const FTaskKey& Other) const
+{
+	return Name == Other.Name && Stage == Other.Stage && Phase == Other.Phase;
+}
+
 std::size_t FTaskKeyHash::operator()(const FTaskKey& Key) const noexcept
 {
 	std::size_t H = std::hash<std::string_view>{}(Key.Name);
 	H ^= std::hash<std::type_index>{}(Key.Stage) + 0x9e3779b9u + (H << 6) + (H >> 2);
 	H ^= std::hash<std::int32_t>{}(Key.Phase) + 0x9e3779b9u + (H << 6) + (H >> 2);
 	return H;
+}
+
+void FFrameExtension::AddDependency(std::type_index MyStage, FEdge Edge)
+{
+	Dependencies[MyStage].push_back(Edge);
+}
+
+void FFrameExtension::AddDependent(std::type_index MyStage, FEdge Edge)
+{
+	Dependents.emplace_back(MyStage, Edge);
 }
 
 FFrameGraph::FFrameGraph(FThreadPool& InPool)

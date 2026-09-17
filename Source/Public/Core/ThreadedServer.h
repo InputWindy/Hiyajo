@@ -12,7 +12,12 @@
 //   FResourceSystem::Get().Submit([...]{ /* runs on the worker */ });
 //   FResourceSystem::Get().Flush();        // barrier: drain everything before
 //   FResourceSystem::Get().Shutdown();     // stop + join
-#include <Core/Fatal.h>
+//
+// The implementation lives in Source/Private/Core/ThreadedServer.cpp -- including
+// the virtuals, so the class has a KEY FUNCTION in Maho.dll rather than a vtable
+// copy per module (see Core/Export.h).
+
+#include <Core/Export.h>
 
 #include <atomic>
 #include <condition_variable>
@@ -29,7 +34,7 @@ namespace Maho
  * GetThreadName for role-specific setup (e.g. the resource system resolves its
  * roots in OnInitialize). Flush() is a FIFO barrier.
  */
-class FThreadedServer
+class MAHO_API FThreadedServer
 {
 public:
 	FThreadedServer() = default;
@@ -57,20 +62,12 @@ public:
 
 protected:
 	/** Called before the thread starts; return false to abort. */
-	[[nodiscard]] virtual bool OnInitialize()
-	{
-		return true;
-	}
+	[[nodiscard]] virtual bool OnInitialize();
 
 	/** Called after the thread joins. */
-	virtual void OnShutdown()
-	{
-	}
+	virtual void OnShutdown();
 
-	[[nodiscard]] virtual const char* GetThreadName() const
-	{
-		return "ThreadedServer";
-	}
+	[[nodiscard]] virtual const char* GetThreadName() const;
 
 private:
 	void RunLoop();
@@ -82,101 +79,5 @@ private:
 	std::atomic<bool> bRunning{false};
 	bool bStopping = false;
 };
-
-inline FThreadedServer::~FThreadedServer()
-{
-	Shutdown();
-}
-
-inline bool FThreadedServer::Initialize()
-{
-	if (bRunning.load(std::memory_order_acquire))
-	{
-		return true;
-	}
-	if (!OnInitialize())
-	{
-		return false;
-	}
-	bStopping = false;
-	bRunning.store(true, std::memory_order_release);
-	Worker = std::thread(&FThreadedServer::RunLoop, this);
-	return true;
-}
-
-inline void FThreadedServer::Shutdown()
-{
-	if (!bRunning.load(std::memory_order_acquire))
-	{
-		return;
-	}
-	{
-		std::lock_guard Lock(Mutex);
-		bStopping = true;
-	}
-	CondVar.notify_all();
-	if (Worker.joinable())
-	{
-		Worker.join();
-	}
-	bRunning.store(false, std::memory_order_release);
-	OnShutdown();
-}
-
-inline void FThreadedServer::Submit(std::function<void()> Task)
-{
-	{
-		std::lock_guard Lock(Mutex);
-		Queue.push_back(std::move(Task));
-	}
-	CondVar.notify_one();
-}
-
-inline void FThreadedServer::Flush()
-{
-	std::mutex BarrierMutex;
-	std::condition_variable BarrierCv;
-	bool bDone = false;
-	Submit([&]
-	{
-		std::lock_guard Lock(BarrierMutex);
-		bDone = true;
-		BarrierCv.notify_all();
-	});
-	std::unique_lock Lock(BarrierMutex);
-	BarrierCv.wait(Lock, [&] { return bDone; });
-}
-
-inline void FThreadedServer::RunLoop()
-{
-	while (true)
-	{
-		std::function<void()> Task;
-		{
-			std::unique_lock Lock(Mutex);
-			CondVar.wait(Lock, [this] { return bStopping || !Queue.empty(); });
-			if (bStopping && Queue.empty())
-			{
-				return;
-			}
-			Task = std::move(Queue.front());
-			Queue.pop_front();
-		}
-		try
-		{
-			Task();
-		}
-		catch (const std::exception& E)
-		{
-			// A throwing task must not kill the host -- report (non-fatal) and
-			// keep serving.
-			ReportError(E.what());
-		}
-		catch (...)
-		{
-			ReportError("Unknown exception in threaded server");
-		}
-	}
-}
 
 } // namespace Maho
