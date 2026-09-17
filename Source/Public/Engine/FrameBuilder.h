@@ -23,6 +23,18 @@
 namespace Maho
 {
 
+namespace Detail
+{
+	/**
+	 * Format + report the declarations the bridge could not resolve. Free rather than a member
+	 * because it is STATELESS: every collection member that is not a template still reads the
+	 * collection's own state, so it cannot be defined out of line without the class template
+	 * being explicitly instantiated -- and that is impossible for plugin contexts, since the
+	 * engine module must not include plugin headers. Stateless ones move here instead.
+	 */
+	void ReportBridgeDiagnostics(const std::vector<FFrameBridge::FDiagnostic>& Diagnostics);
+}
+
 // ── FFrameBuilder: layer-collection management base ─────────────────────
 
 /**
@@ -821,26 +833,12 @@ private:
 protected:
 	void ReportDiagnostics(const std::vector<FFrameBridge::FDiagnostic>& Diagnostics)
 	{
-		for (const FFrameBridge::FDiagnostic& D : Diagnostics)
-		{
-			std::string Message = "frame declaration: '" + std::string(D.Frame) + "'";
-			if (!D.Target.empty())
-			{
-				Message += D.bReverse ? " blocks '" : " waits for '";
-				Message += std::string(D.Target) + "'";
-				if (D.TargetStage != std::type_index(typeid(void)))
-				{
-					Message += " at " + std::string(D.TargetStage.name());
-				}
-				if (D.FrameOffset != 0)
-				{
-					Message += " (frame offset " + std::to_string(D.FrameOffset) + ")";
-				}
-			}
-			Message += " at " + std::string(D.Stage.name());
-			Message += " -- " + std::string(D.Reason);
-			ReportError(Message.c_str());
-		}
+		// The implementation lives in Source/Private/Engine/FrameBuilder.cpp: this one is
+		// STATELESS (it only formats and reports), so it needs neither TContext nor the
+		// collection -- and a member of a class template cannot be defined out of line without
+		// an explicit instantiation, which the engine module cannot provide for plugin
+		// contexts (it must not include plugin headers).
+		Detail::ReportBridgeDiagnostics(Diagnostics);
 	}
 
 private:
