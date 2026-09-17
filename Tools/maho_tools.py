@@ -1,4 +1,4 @@
-# Shared helpers for create_project.py / generateProject.py / package.py
+# Shared helpers for create_project.py / generateProject.py / package_ui.py
 from __future__ import annotations
 
 import json
@@ -323,8 +323,8 @@ MAIN_CPP = """// ═════════════════════
 //  Maho 项目入口（code-gen，无需改动）
 //
 //  Source/ 文件夹里应该只有本文件。一切项目逻辑都是插件：
-//    - 项目默认插件：Extension/<ProjectName>/
-//    - 手动创建的插件：Extension/<其他插件名>/
+//    - 项目默认插件：Plugins/<ProjectName>/
+//    - 手动创建的插件：Plugins/<其他插件名>/
 //
 //  入口只负责：安装（加载）默认插件 DLL → CreateFrame → Main 执行。
 // ═══════════════════════════════════════════════════════════════════════
@@ -1295,7 +1295,7 @@ def create_plugin(
 ) -> Path:
 	"""
 	Scaffold a new self-contained plugin under plugins_dir (default
-	<engine>/Extension). Generates a bare FFrameExtension skeleton (no stages mounted) +
+	<engine>/Plugins). Generates a bare FFrameExtension skeleton (no stages mounted) +
 	.cplugin + .cmake + settings.json + docs. The user hand-writes
 	the stage interfaces they want by editing the IPipeline<...> template list.
 	"""
@@ -1304,7 +1304,7 @@ def create_plugin(
 			"Plugin name must start with a letter and contain only A-Z, a-z, 0-9, _, -"
 		)
 
-	plugins_dir = (plugins_dir or engine_root / "Extension").resolve()
+	plugins_dir = (plugins_dir or engine_root / "Plugins").resolve()
 	dst = plugins_dir / plugin_name
 	if dst.exists():
 		raise FileExistsError(f"Plugin already exists: {dst}")
@@ -1314,7 +1314,7 @@ def create_plugin(
 	# Project-side plugins (created under a project's Source/) automatically
 	# depend on the project's entry plugin (the anchor): the child includes the
 	# parent's Public/ interfaces and implements them in its own Private/.
-	# Engine-side plugins (under <engine>/Extension/) have no anchor.
+	# Engine-side plugins (under <engine>/Plugins/) have no anchor.
 	for candidate_cproject in list(plugins_dir.glob("*.cproject")) + list(plugins_dir.parent.glob("*.cproject")):
 		project_data = read_cproject(candidate_cproject)
 		anchor = str(project_data.get("ProjectName", ""))
@@ -2321,7 +2321,7 @@ def validate_plugin(cplugin_path: Path) -> list[tuple[str, str]]:
 
 	problems: list[tuple[str, str]] = []
 
-	# Dependency must exist somewhere in the engine's Extension/ tree.
+	# Dependency must exist somewhere in the engine's Plugins/ tree.
 	all_names = {
 		p.get("Name") or p.parent.name
 		for p in list_engine_plugins(ENGINE_ROOT)

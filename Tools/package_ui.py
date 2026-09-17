@@ -93,7 +93,7 @@ class PackageApp(tk.Tk):
 		btn_browse = ttk.Button(frm, text="Browse…", command=self._browse_cproject)
 		btn_browse.grid(row=1, column=2, sticky="e", **pad)
 
-		ttk.Label(frm, text="(Leave empty to package the engine workspace)", foreground="#666").grid(
+		ttk.Label(frm, text="(A .cproject is required — the engine is a catalog)", foreground="#666").grid(
 			row=2, column=1, columnspan=2, sticky="w", padx=12
 		)
 
@@ -178,7 +178,6 @@ class PackageApp(tk.Tk):
 		path = filedialog.askopenfilename(
 			title="Select .cproject",
 			filetypes=[("Maho Project", "*.cproject"), ("All", "*.*")],
-			initialdir=str(ENGINE_ROOT),
 		)
 		if path:
 			self.var_cproject.set(path)
@@ -232,9 +231,9 @@ class PackageApp(tk.Tk):
 			except Exception as ex:  # noqa: BLE001
 				lines.append(f"Error     : {ex}")
 		else:
-			lines.append("Mode      : Engine workspace")
-			lines.append(f"Engine    : {ENGINE_ROOT}")
-			lines.append(f"Output    : {ENGINE_ROOT / 'Packaged' / platform / config}")
+			# The engine is a catalog — there is no engine-workspace build any more.
+			lines.append("Mode      : (no .cproject selected)")
+			lines.append("           Pick a project's .cproject to package it.")
 
 		lines.append(f"Platform  : {platform}" + ("" if enabled else "  (not implemented yet)"))
 		lines.append(f"Config    : {config}")
