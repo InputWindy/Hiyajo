@@ -74,13 +74,8 @@ ensure_engine_python()
 
 
 def is_valid_project_name(name: str) -> bool:
-	# Folder / display name. Hyphen allowed; C++ idents use project_cpp_ident().
+	# Folder / display name (hyphen allowed).
 	return bool(re.fullmatch(r"[A-Za-z][A-Za-z0-9_-]*", name or ""))
-
-
-def project_cpp_ident(name: str) -> str:
-	"""Map project name to a C++ identifier (hyphen → underscore)."""
-	return (name or "").replace("-", "_")
 
 
 def find_cmake() -> str:
@@ -324,61 +319,6 @@ def set_cproject_engine(cproject_path: Path, engine_root: Path) -> str:
 	return stored
 
 
-def inheritance_problems(
-	engine_root: Path,
-	new_name: str,
-	parent_names: list[str],
-) -> list[str]:
-	"""
-	Check circular / redundant inheritance if a plugin `new_name` inherits
-	`parent_names`. Returns problem messages (empty = OK).
-
-	- Cycle: a parent (transitively) inherits `new_name` → new plugin would
-	  close a loop.
-	- Redundant: one selected parent already inherits another selected parent
-	  (diamond) → duplicate base, drop the redundant direct selection.
-	"""
-	plugins_dir = (engine_root / "Maho" / "Plugins").resolve()
-	graph: dict[str, set[str]] = {}
-	for cplugin_path in discover_cplugin_files([plugins_dir]):
-		data = read_cplugin(cplugin_path)
-		name = cplugin_path.parent.name
-		inherits = (data).get("Inherits", []) or []
-		if isinstance(inherits, str):
-			inherits = [inherits]
-		graph[name] = set(inherits)
-
-	# Transitive ancestors of `node` (everything node inherits, directly or not).
-	def ancestors_of(node: str) -> set[str]:
-		seen: set[str] = set()
-		stack: list[str] = list(graph.get(node, ()))
-		while stack:
-			cur = stack.pop()
-			if cur in seen:
-				continue
-			seen.add(cur)
-			stack.extend(graph.get(cur, ()))
-		return seen
-
-	problems: list[str] = []
-	for parent in parent_names:
-		if new_name in ancestors_of(parent):
-			problems.append(f"循环继承：{parent} 已（传递）继承 {new_name}")
-	for p in parent_names:
-		for q in parent_names:
-			if p != q and q in ancestors_of(p):
-				problems.append(f"冗余继承：{p} 已继承 {q}，无需再直接勾选 {q}")
-
-	# De-duplicate, keep order.
-	seen: set[str] = set()
-	uniq: list[str] = []
-	for msg in problems:
-		if msg not in seen:
-			seen.add(msg)
-			uniq.append(msg)
-	return uniq
-
-
 MAIN_CPP = """// ═══════════════════════════════════════════════════════════════════════
 //  Maho 项目入口（code-gen，无需改动）
 //
@@ -620,12 +560,12 @@ exit /b 0
 
 
 _MODULE_MACRO_RE = re.compile(
-	r"MAHO_DECLARE_(?:FRAME|LAYER|ENGINE)\s*\(\s*([A-Za-z_]\w*)"
+	r"MAHO_DECLARE_(?:FRAME|ENGINE)\s*\(\s*([A-Za-z_]\w*)"
 )
 
 
 def _layer_type_from_plugin(plugin_dir: Path) -> str:
-	"""Scan a plugin's Public/*.h for the MAHO_DECLARE_FRAME/LAYER/ENGINE macro's first
+	"""Scan a plugin's Public/*.h for the MAHO_DECLARE_FRAME/ENGINE macro's first
 	argument and return the frame type name (e.g. FScene, FNamePool) or empty.
 	This is the single source of truth for the module base name -- the DLL always
 	compiles to  <frame type> + platform suffix, so codegen sets OUTPUT_NAME from
@@ -687,8 +627,6 @@ def _all_plugin_infos(
 			cplugin.name,
 			f"{dir_name}.cmake",
 			"settings.json",
-			f"{name}Doc.md",
-			f"{name}API.html",
 		):
 			if (plugin_dir / fn).is_file():
 				aux.append(f"{prefix}/{cmake_dir}/{fn}")
@@ -1190,8 +1128,6 @@ def _write_cmake_lists(
 		f"{project_name}.cplugin",
 		f"{project_name}.cmake",
 		"settings.json",
-		f"{project_name}.md",
-		"API.md",
 	):
 		if (host_dir / fn).is_file():
 			host_aux.append(f"Plugins/{project_name}/{fn}")
@@ -1360,7 +1296,7 @@ def create_plugin(
 	"""
 	Scaffold a new self-contained plugin under plugins_dir (default
 	<engine>/Extension). Generates a bare FFrameExtension skeleton (no stages mounted) +
-	.cplugin + .cmake + settings.json + AGENTS.md + docs. The user hand-writes
+	.cplugin + .cmake + settings.json + docs. The user hand-writes
 	the stage interfaces they want by editing the IPipeline<...> template list.
 	"""
 	if not is_valid_project_name(plugin_name):
@@ -2232,7 +2168,6 @@ def install_cplugin_association(*, log: Any = print) -> None:
 # ---------------------------------------------------------------------------
 
 CPLUGIN_FILE_VERSION = 1
-DEFAULT_ENGINE_PLUGINS_DIR = ENGINE_ROOT / "Maho" / "Plugins"
 
 
 def discover_cplugin_files(plugin_roots: list[Path]) -> list[Path]:
@@ -2311,168 +2246,6 @@ def read_cplugin(path: Path) -> dict[str, Any]:
 	return data
 
 
-def _normalize_module_entry(raw: Any, *, cplugin_path: Path) -> dict[str, Any]:
-	if not isinstance(raw, dict):
-		raise ValueError(f"Invalid module entry in {cplugin_path}")
-	name = raw.get("Name")
-	if not isinstance(name, str) or not name.strip():
-		raise ValueError(f"Module missing Name in {cplugin_path}")
-	name = name.strip()
-	module_type = raw.get("Type", "Runtime")
-	if not isinstance(module_type, str) or not module_type.strip():
-		module_type = "Runtime"
-	deps_raw = raw.get("Dependencies", [])
-	if deps_raw is None:
-		deps_raw = []
-	# Optional / legacy: extension order is TDependsOn, not .cplugin Dependencies.
-	if not isinstance(deps_raw, list):
-		raise ValueError(f"Module '{name}' Dependencies must be an array in {cplugin_path}")
-	deps: list[str] = []
-	for dep in deps_raw:
-		if not isinstance(dep, str) or not dep.strip():
-			raise ValueError(f"Module '{name}' has invalid dependency in {cplugin_path}")
-		deps.append(dep.strip())
-
-	# Inherits implies a build dependency — the child C++-inherits the parent,
-	# so it links the parent's DLL (and gets its PUBLIC include dirs).
-	inherits_raw = raw.get("Inherits", [])
-	if inherits_raw is None:
-		inherits_raw = []
-	if isinstance(inherits_raw, str):
-		inherits_raw = [inherits_raw]
-	for inh in inherits_raw:
-		if isinstance(inh, str) and inh.strip() and inh.strip() not in deps:
-			deps.append(inh.strip())
-
-	extension = None
-	ext_raw = raw.get("Extension")
-	if ext_raw is not None:
-		if not isinstance(ext_raw, dict):
-			raise ValueError(f"Module '{name}' Extension must be an object in {cplugin_path}")
-		cls = ext_raw.get("Class")
-		header = ext_raw.get("Header")
-		priority = ext_raw.get("Priority")
-		stage = ext_raw.get("Stage", "EEngineStage")
-		if not isinstance(cls, str) or not cls.strip():
-			raise ValueError(f"Module '{name}' Extension.Class required in {cplugin_path}")
-		if not isinstance(header, str) or not header.strip():
-			raise ValueError(f"Module '{name}' Extension.Header required in {cplugin_path}")
-		if not isinstance(priority, str) or priority.strip() not in ("System", "Layer", "Overlay"):
-			raise ValueError(
-				f"Module '{name}' Extension.Priority must be System|Layer|Overlay in {cplugin_path}"
-			)
-		if not isinstance(stage, str) or stage.strip() not in ("EToolStage", "EEngineStage"):
-			raise ValueError(
-				f"Module '{name}' Extension.Stage must be EToolStage|EEngineStage in {cplugin_path}"
-			)
-		extension = {
-			"Class": cls.strip(),
-			"Header": header.strip(),
-			"Priority": priority.strip(),
-			"Stage": stage.strip(),
-		}
-
-	return {
-		"Name": name,
-		"Type": module_type.strip(),
-		"Dependencies": deps,
-		"Extension": extension,
-	}
-
-
-def topo_sort_modules(
-	modules_by_name: dict[str, dict[str, Any]],
-) -> tuple[list[str], list[str]]:
-	"""
-	Return (startup_order, shutdown_order).
-	Raises ValueError on missing dependency or cycle.
-	"""
-	in_degree: dict[str, int] = {name: 0 for name in modules_by_name}
-	adj: dict[str, list[str]] = {name: [] for name in modules_by_name}
-
-	for name, module in modules_by_name.items():
-		for dep in module["Dependencies"]:
-			if dep not in modules_by_name:
-				raise ValueError(
-					f"FATAL: Module '{name}' depends on missing module '{dep}'"
-				)
-			adj[dep].append(name)
-			in_degree[name] += 1
-
-	# Stable: among zero-degree nodes, preserve declaration order via sorted ready by first-seen index
-	order_index = {name: i for i, name in enumerate(modules_by_name.keys())}
-	ready = sorted(
-		[name for name, deg in in_degree.items() if deg == 0],
-		key=lambda n: order_index[n],
-	)
-	startup: list[str] = []
-	while ready:
-		name = ready.pop(0)
-		startup.append(name)
-		next_ready: list[str] = []
-		for nxt in adj[name]:
-			in_degree[nxt] -= 1
-			if in_degree[nxt] == 0:
-				next_ready.append(nxt)
-		next_ready.sort(key=lambda n: order_index[n])
-		ready.extend(next_ready)
-		ready.sort(key=lambda n: order_index[n])
-
-	if len(startup) != len(modules_by_name):
-		remaining = [n for n, d in in_degree.items() if d > 0]
-		raise ValueError(
-			"FATAL: Module dependency cycle involving: "
-			+ ", ".join(sorted(remaining))
-		)
-
-	shutdown = list(reversed(startup))
-	return startup, shutdown
-
-
-def parse_cproject_plugin_overrides(data: dict[str, Any]) -> dict[str, bool] | None:
-	"""
-	Read .cproject Plugins[] overrides (UE .uproject style).
-	Returns None when the field is absent (fall back to each .cplugin EnabledByDefault).
-	When the field is present (even empty), it is an EXPLICIT selection: listed
-	entries use their Enabled flag, unlisted plugins are disabled.
-	"""
-	raw = data.get("Plugins")
-	if raw is None:
-		return None
-	if not isinstance(raw, list):
-		raise ValueError(".cproject Plugins must be an array")
-	overrides: dict[str, bool] = {}
-	for entry in raw:
-		if isinstance(entry, str):
-			name = entry.strip()
-			if not name:
-				raise ValueError(".cproject Plugins entry is an empty string")
-			overrides[name] = True
-			continue
-		if not isinstance(entry, dict):
-			raise ValueError(".cproject Plugins entries must be objects or strings")
-		name = str(entry.get("Name", "")).strip()
-		if not name:
-			raise ValueError(".cproject Plugins entry missing Name")
-		overrides[name] = bool(entry.get("Enabled", True))
-	return overrides
-
-
-def default_engine_plugin_entries(engine_root: Path | None = None) -> list[dict[str, Any]]:
-	"""Seed .cproject Plugins from EnabledByDefault engine plugins (stable name order)."""
-	root = (engine_root or ENGINE_ROOT).resolve() / "Maho" / "Plugins"
-	if not root.is_dir():
-		return []
-	names: list[str] = []
-	for cplugin_path in discover_cplugin_files([root]):
-		data = read_cplugin(cplugin_path)
-		if not bool(data.get("EnabledByDefault", True)):
-			continue
-		names.append(cplugin_path.parent.name)
-	names.sort()
-	return [{"Name": name, "Enabled": True} for name in names]
-
-
 def list_engine_plugins(engine_root: Path | None = None) -> list[dict[str, Any]]:
 	"""
 	Enumerate engine plugins for the CreateProject UI.
@@ -2520,148 +2293,6 @@ def list_engine_plugins(engine_root: Path | None = None) -> list[dict[str, Any]]
 		)
 	out.sort(key=lambda p: p["Name"])
 	return out
-
-
-def list_engine_templates(engine_root: Path | None = None) -> list[str]:
-	"""Enumerate Engine plugin templates under Extension/Engine/ (names only)."""
-	root = (engine_root or ENGINE_ROOT).resolve() / "Extension" / "Engine"
-	if not root.is_dir():
-		return []
-	return sorted(p.parent.name for p in discover_cplugin_files([root]))
-
-
-def scan_plugin_modules(
-	plugin_roots: list[Path],
-	*,
-	include_disabled: bool = False,
-	enabled_overrides: dict[str, bool] | None = None,
-) -> dict[str, Any]:
-	"""
-	Scan .cplugin manifests and resolve a global module dependency DAG.
-
-	Returns a JSON-serializable dict with Plugins, Modules, BuildOrder, ShutdownOrder.
-	Raises ValueError on duplicate names, missing deps, or dependency cycles (FATAL).
-	"""
-	cplugin_files = discover_cplugin_files(plugin_roots)
-	plugins_out: list[dict[str, Any]] = []
-	modules_by_name: dict[str, dict[str, Any]] = {}
-
-	# Pre-pass: resolve transitive enablement — enabling a plugin also enables
-	# its Dependencies + Inherits parents (recursively) and its runtime
-	# sub-plugins (parent → child).
-	_name_to_deps: dict[str, set[str]] = {}
-	_name_to_default: dict[str, bool] = {}
-	_name_to_plugins: dict[str, set[str]] = {}
-	for cplugin_path in cplugin_files:
-		data = read_cplugin(cplugin_path)
-		plugin_name = cplugin_path.parent.name
-		_name_to_default[plugin_name] = bool(data.get("EnabledByDefault", True))
-		deps: set[str] = set()
-		for raw in [data]:
-			norm = _normalize_module_entry(raw, cplugin_path=cplugin_path)
-			deps.update(norm["Dependencies"])
-		_name_to_deps[plugin_name] = deps
-		_name_to_plugins[plugin_name] = set(data.get("Plugins", []) or [])
-
-	if enabled_overrides is not None:
-		enabled_set = {n for n, on in enabled_overrides.items() if on}
-	else:
-		enabled_set = {n for n, d in _name_to_default.items() if d}
-
-	changed = True
-	while changed:
-		changed = False
-		for n in list(enabled_set):
-			for dep in _name_to_deps.get(n, ()):
-				if dep in _name_to_deps and dep not in enabled_set:
-					enabled_set.add(dep)
-					changed = True
-			for child in _name_to_plugins.get(n, ()):
-				if child in _name_to_default and child not in enabled_set:
-					enabled_set.add(child)
-					changed = True
-
-	for cplugin_path in cplugin_files:
-		data = read_cplugin(cplugin_path)
-		default_enabled = data.get("EnabledByDefault", True)
-		if default_enabled is None:
-			default_enabled = True
-		plugin_dir = cplugin_path.parent
-		plugin_name = plugin_dir.name
-		enabled = plugin_name in enabled_set
-		if not include_disabled and not enabled:
-			continue
-
-		friendly = data.get("FriendlyName", plugin_name)
-
-		plugin_modules: list[dict[str, Any]] = []
-		for raw in [data]:
-			normalized = _normalize_module_entry(raw, cplugin_path=cplugin_path)
-			name = normalized["Name"]
-			if name in modules_by_name:
-				other = modules_by_name[name]["Cplugin"]
-				raise ValueError(
-					f"Duplicate module name '{name}' in:\n  {cplugin_path}\n  and\n  {other}"
-				)
-			entry = {
-				"Name": name,
-				"Type": normalized["Type"],
-				"Dependencies": list(normalized["Dependencies"]),
-				"Extension": normalized.get("Extension"),
-				"Plugin": plugin_name,
-				"PluginPath": str(plugin_dir.resolve()),
-				"Cplugin": str(cplugin_path.resolve()),
-				"SourceDir": str((plugin_dir / "Source" / name).resolve()),
-			}
-			modules_by_name[name] = entry
-			plugin_mod = {
-				"Name": name,
-				"Type": normalized["Type"],
-				"Dependencies": list(normalized["Dependencies"]),
-			}
-			if normalized.get("Extension") is not None:
-				plugin_mod["Extension"] = dict(normalized["Extension"])
-			plugin_modules.append(plugin_mod)
-
-		plugins_out.append(
-			{
-				"Name": plugin_name,
-				"FriendlyName": friendly,
-				"Path": str(plugin_dir.resolve()),
-				"Cplugin": str(cplugin_path.resolve()),
-				"EnabledByDefault": bool(default_enabled),
-				"Enabled": bool(enabled),
-				"Modules": plugin_modules,
-			}
-		)
-
-	startup, shutdown = topo_sort_modules(modules_by_name)
-
-	return {
-		"FileVersion": 1,
-		"PluginRoots": [str(p.resolve()) for p in plugin_roots if p.is_dir()],
-		"Plugins": plugins_out,
-		"Modules": [modules_by_name[name] for name in startup],
-		"BuildOrder": startup,
-		"ShutdownOrder": shutdown,
-	}
-
-
-def resolve_plugin_roots_for_cproject(cproject_path: Path) -> list[Path]:
-	"""Engine Maho/Plugins + Basic (infra) + game Project/Plugins when present."""
-	cproject_path = cproject_path.resolve()
-	data = read_cproject(cproject_path)
-	engine_root = resolve_engine_directory(cproject_path, data)
-	project_dir = cproject_path.parent
-	roots = [
-		engine_root / "Maho" / "Plugins",
-		engine_root / "Maho" / "Basic",
-	]
-	for candidate in (project_dir / "Plugins", project_dir / "Project" / "Plugins"):
-		if candidate.is_dir():
-			roots.append(candidate)
-			break
-	return roots
 
 
 # ───────────────────────────────────────────────────────────────────────

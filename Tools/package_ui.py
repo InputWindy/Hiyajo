@@ -4,7 +4,7 @@ Maho package UI — pick platform / config and ship to Packaged/<Platform>/.
 
 Logs go to the UI (no console). Launched by:
   - Engine: Tools/package.bat → launch_package.vbs → pythonw
-  - Game project: package.bat → invoke_engine.ps1 → same VBS
+  - Game project: <project>/package.bat → Tools/package_ui.py (pythonw)
 """
 
 from __future__ import annotations

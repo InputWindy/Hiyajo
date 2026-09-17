@@ -331,5 +331,5 @@ The entry plugin's `Public/` only holds interfaces (grouped in folders by functi
 
 ## Docs
 
-- [Source/Docs.html](Source/Docs.html) - 引擎源码文档（`Tools/gen_source_docs.py` 生成）：左侧 Source 树（叶子 = `.h`）+ 右侧逐类字段 / 接口签名 / 功能描述
+- [Source/Docs.html](Source/Docs.html) - 引擎源码文档（`Tools/docs_content.py` 生成；插件页由 `Tools/plugin_docs.py` + `<plugin>/Docs.py` 生成）：左侧 Source 树（叶子 = `.h`）+ 右侧逐类字段 / 接口签名 / 功能描述
 - [Example/ExampleEngine/README.md](Example/ExampleEngine/README.md) - sample project walkthrough
