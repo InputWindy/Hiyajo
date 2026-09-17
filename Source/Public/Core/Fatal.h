@@ -69,3 +69,20 @@ MAHO_API void InstallFatalHandlers();
 #define MAHO_ENSURE_NOT_NULL(PtrExpr, Name)                                           \
 	MAHO_ENSURE((PtrExpr) != nullptr);                                                \
 	for (auto* Name = (PtrExpr); Name != nullptr; Name = nullptr)
+
+/**
+ * MAHO_IF_NOT_NULL -- silent null guard: evaluate a possibly-null pointer expression
+ * ONCE and run the statement only when non-null. The bound name is a local, so the
+ * expression is never re-evaluated. Use it for optional services reached through a
+ * global accessor (e.g. GetLog()), where "not up yet" is expected rather than a bug.
+ *
+ *   MAHO_IF_NOT_NULL(::Maho::GetLog(), L)
+ *   {
+ *       L->Info("ready");
+ *   }
+ *
+ * Sits next to MAHO_ENSURE_NOT_NULL (its reporting sibling) rather than in Export.h:
+ * this is control flow, not a module-boundary concern.
+ */
+#define MAHO_IF_NOT_NULL(PtrExpr, Name)                                               \
+	for (auto* Name = (PtrExpr); Name != nullptr; Name = nullptr)

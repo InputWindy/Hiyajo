@@ -286,9 +286,6 @@ D.Row("MAHO_EXPORT", "`__declspec(dllexport)`（MSVC / MinGW）或 `__attribute_
 D.Row("MAHO_IMPORT", "对应平台的导入侧声明")
 D.Row("MAHO_API", "按 `MAHO_EXPORTS` 自动选 `MAHO_EXPORT` / `MAHO_IMPORT` —— "
                   "**这是各处类型与函数上真正用的那一个**（由 codegen 为每个插件定义 `MAHO_<NAME>_MODULE_EXPORTS`）")
-D.Row("MAHO_IF_NOT_NULL(PtrExpr, Name)",
-      "空指针守卫：表达式**只求值一次**，非空时执行后面的语句块。用于经全局访问器拿到的可选服务"
-      "（如 `GetLog()`）。用法与 `if` 相同：`MAHO_IF_NOT_NULL(::Maho::GetLog(), L) { L->Info(\"…\"); }`")
 D.Row("#pragma warning(disable : 4251)",
       "MSVC：导出类里的 STL 成员（`unique_ptr` / `string` …）是安全的 —— 前提是 CRT 一致（`/MD`）")
 
@@ -323,6 +320,11 @@ D.Row("MAHO_VERIFY(Expr)", "与 `MAHO_CHECK` 相同，但表达式**永远求值
 D.Row("MAHO_ENSURE(Expr)", "**软不变量**：假 ⇒ 只报一次（`static` 一次性标志），不崩。"
                           "用于「不该发生但不致命」的场景（例如某服务还没初始化）")
 D.Row("MAHO_ENSURE_NOT_NULL(PtrExpr, Name)", "软空指针守卫：为空则只报一次并跳过整块；表达式只求值一次")
+D.Row("MAHO_IF_NOT_NULL(PtrExpr, Name)",
+      "**静默**空指针守卫：表达式只求值一次，非空时执行后面的语句块；为空则**什么都不做**"
+      "（不报告）。用于「还没起来是正常的」的可选服务，如 `GetLog()`。写法同 `if`："
+      "`MAHO_IF_NOT_NULL(::Maho::GetLog(), L) { L->Info(\"…\"); }`（原先误放在 Export.h，"
+      "它是控制流而非模块边界，故与软兄弟 `MAHO_ENSURE_NOT_NULL` 并列于此）")
 
 # ══════════════════════════════════════════════════════════════════════════════
 # Source/Public/Core/FrameGraph.h —— 帧调度器 + 声明层 + 桥

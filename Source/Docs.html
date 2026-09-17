@@ -247,7 +247,6 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td>MAHO_EXPORT</td><td>`__declspec(dllexport)`（MSVC / MinGW）或 `__attribute__((visibility(<span class="st">"default"</span>)))`（GCC / Clang）</td></tr>
 <tr><td>MAHO_IMPORT</td><td>对应平台的导入侧声明</td></tr>
 <tr><td>MAHO_API</td><td>按 `MAHO_EXPORTS` 自动选 `MAHO_EXPORT` / `MAHO_IMPORT` —— **这是各处类型与函数上真正用的那一个**（由 codegen 为每个插件定义 `MAHO_&lt;NAME&gt;_MODULE_EXPORTS`）</td></tr>
-<tr><td>MAHO_IF_NOT_NULL(PtrExpr, Name)</td><td>空指针守卫：表达式**只求值一次**，非空时执行后面的语句块。用于经全局访问器拿到的可选服务（如 `GetLog()`）。用法与 `<span class="kw">if</span>` 相同：`MAHO_IF_NOT_NULL(::Maho::GetLog(), L) { L-&gt;Info(<span class="st">"…"</span>); }`</td></tr>
 <tr><td>#pragma warning(disable : 4251)</td><td>MSVC：导出类里的 STL 成员（`unique_ptr` / `string` …）是安全的 —— 前提是 CRT 一致（`/MD`）</td></tr>
 </tbody></table>
 </div>
@@ -290,6 +289,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td>MAHO_VERIFY(Expr)</td><td>与 `MAHO_CHECK` 相同，但表达式**永远求值** —— 需要保留副作用时用它</td></tr>
 <tr><td>MAHO_ENSURE(Expr)</td><td>**软不变量**：假 ⇒ 只报一次（`<span class="kw">static</span>` 一次性标志），不崩。用于「不该发生但不致命」的场景（例如某服务还没初始化）</td></tr>
 <tr><td>MAHO_ENSURE_NOT_NULL(PtrExpr, Name)</td><td>软空指针守卫：为空则只报一次并跳过整块；表达式只求值一次</td></tr>
+<tr><td>MAHO_IF_NOT_NULL(PtrExpr, Name)</td><td>**静默**空指针守卫：表达式只求值一次，非空时执行后面的语句块；为空则**什么都不做**（不报告）。用于「还没起来是正常的」的可选服务，如 `GetLog()`。写法同 `<span class="kw">if</span>`：`MAHO_IF_NOT_NULL(::Maho::GetLog(), L) { L-&gt;Info(<span class="st">"…"</span>); }`（原先误放在 Export.h，它是控制流而非模块边界，故与软兄弟 `MAHO_ENSURE_NOT_NULL` 并列于此）</td></tr>
 </tbody></table>
 </div>
 </div>

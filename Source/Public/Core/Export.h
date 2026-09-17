@@ -35,17 +35,6 @@
 // An all-inline class has no key function, so its vftable + deleting dtor are emitted
 // per module and `delete` can dispatch through a vptr into an unloaded image (silent
 // 0xC0000005). See root AGENTS.md, "Export / Module-Boundary Rules (strict)".
-
-/**
- * Null-guard statement -- evaluate a possibly-null pointer expression ONCE and
- * run the statement only when non-null. The bound name is a local, so the
- * expression is not re-evaluated. Use for optional services reached through a
- * global accessor (e.g. GetLog()).
- *
- *   MAHO_IF_NOT_NULL(::Maho::GetLog(), L)
- *   {
- *       L->Info("ready");
- *   }
- */
-#define MAHO_IF_NOT_NULL(PtrExpr, Name)                                  \
-	for (auto* Name = (PtrExpr); Name != nullptr; Name = nullptr)
+//
+// (MAHO_IF_NOT_NULL lives in Core/Fatal.h, next to its soft sibling MAHO_ENSURE_NOT_NULL --
+// it is a control-flow guard, not a module-boundary concern.)
