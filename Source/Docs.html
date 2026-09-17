@@ -67,7 +67,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div id="app">
   <div id="side">
     <h1>Maho 引擎源码</h1>
-    <div class="meta">左侧扫描 Source/**/*.h：23 个头文件 · 已声明 1 个 · 0 个实体 / 0 个成员<br>内容在 Tools/docs_content.py 里逐条声明</div>
+    <div class="meta">左侧扫描 Source/**/*.h：22 个头文件 · 已声明 1 个 · 0 个实体 / 0 个成员<br>内容在 Tools/docs_content.py 里逐条声明</div>
     <div id="tree"><ul>
 <li class="dir"><span class="dir-label" data-dir="Public">Public</span>
 <ul>
@@ -103,7 +103,6 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <li class="file"><a href="#Public__Maho_h" data-file="Public__Maho_h">Maho.h</a></li>
 </ul>
 </li>
-<li class="file"><a href="#Maho_h" data-file="Maho_h">Maho.h</a></li>
 </ul></div>
   </div>
   <div id="main"><div class="pane" id="pane-Public__Core__Assembly_h">
@@ -213,11 +212,6 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </div>
 <div class="pane" id="pane-Public__Maho_h">
 <div class="hdr">Public/Maho.h</div>
-<h2 class="file-title">Maho.h</h2>
-<div class="empty">（尚未声明内容 —— 在 Tools/docs_content.py 里加一条 Header(&quot;Public/Maho.h&quot;)，再逐类声明 Class / Interface / Field）</div>
-</div>
-<div class="pane" id="pane-Maho_h">
-<div class="hdr">Maho.h</div>
 <h2 class="file-title">Maho.h —— 引擎聚合头</h2>
 <div class="doc">
 <p>插件只需 `#include &lt;Maho.h&gt;`，就同时拿到 Core 基建与引擎帧系统。它是**唯一的聚合点**（原先的 Core.h 已折进来：一个聚合头只被另一个聚合头包含，就是纯间接）。下面这张表就是它带进来的东西。</p>
@@ -240,7 +234,6 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td>Engine/Engine.h</td><td>引擎侧：10 个 stage 能力接口 + `FEngineBase` + 引擎 stage 序列别名</td></tr>
 </tbody></table>
 </div>
-<div class="empty">（这个头还没有声明内容）</div>
 </div></div>
 </div>
 <script>

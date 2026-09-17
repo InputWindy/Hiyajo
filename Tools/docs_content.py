@@ -61,7 +61,7 @@ import docs_builder as D
 
 D.Reset()
 
-D.Header("Maho.h", Title="Maho.h —— 引擎聚合头",
+D.Header("Public/Maho.h", Title="Maho.h —— 引擎聚合头",
          Desc="插件只需 `#include <Maho.h>`，就同时拿到 Core 基建与引擎帧系统。"
               "它是**唯一的聚合点**（原先的 Core.h 已折进来：一个聚合头只被另一个聚合头包含，"
               "就是纯间接）。下面这张表就是它带进来的东西。")

@@ -461,7 +461,10 @@ def Build(Out: str | Path = "Source/Docs.html",
 	Paths = ScanTree(Root)
 	for Rel in Declared:
 		if Rel not in Paths:
-			Paths.append(Rel)          # 声明了但磁盘上没有（拼写/尚未创建）也要能点开
+			# 声明的路径必须和扫描出来的相对路径**逐字一致**（例如 Public/Maho.h，而不是 Maho.h），
+			# 否则树里会多出一个根级条目、而真正那个叶子仍然空着。报出来，别让它静默发生。
+			print(f"[docs] 警告：声明的 '{Rel}' 不在 Source/ 扫描结果里（路径写错？）")
+			Paths.append(Rel)
 
 	Panes: list[str] = []
 	Entities = 0
@@ -481,7 +484,7 @@ def Build(Out: str | Path = "Source/Docs.html",
 			Panes.append(RenderDesc(Declared_.Desc))
 			for CardNode in Declared_.Cards:
 				Panes.append(RenderCard(CardNode))
-			if not Declared_.Entities:
+			if not Declared_.Entities and not Declared_.Cards:
 				Panes.append('<div class="empty">（这个头还没有声明内容）</div>')
 			for Index, Entity in enumerate(Declared_.Entities):
 				Entities += 1
