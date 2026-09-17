@@ -1,4 +1,5 @@
-# Run via Tools/launch_switch_engine.vbs / maho_pythonw.bat — engine Tools/python only.
+# Run via Tools/switch_engine.bat (Explorer context menu -> launch_switch_engine.vbs),
+# which forwards to maho_pythonw.bat — engine Tools/python only.
 """
 Pick / rewrite EngineDirectory for a .cproject (Explorer context menu).
 

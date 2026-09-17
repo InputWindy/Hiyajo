@@ -1,26 +1,17 @@
 Option Explicit
-' Launch switch_engine.py with engine Tools\python only (never system Python).
-' Args: .cproject path (from Explorer context menu).
-' Supports installer layout (pythonw.exe) and venv (Scripts\pythonw.exe).
-' WindowStyle MUST be 1+ — style 0 hides the Tk UI as well.
+' Explorer context menu "Maho -> 选择链接引擎…" (and .cproject switch) -> switch_engine.bat.
+' This .vbs does ONE thing: launch the .bat (hidden). The .bat forwards to
+' maho_pythonw.bat -> switch_engine.py; the Tk dialog is the visible result.
 
-Dim fso, sh, tools, root, pyw, script, cmdline, i, rc
+Dim fso, sh, tools, bat, arg, cmdline
 Set fso = CreateObject("Scripting.FileSystemObject")
 Set sh = CreateObject("WScript.Shell")
 
 tools = fso.GetParentFolderName(WScript.ScriptFullName)
-root = fso.GetParentFolderName(tools)
-pyw = ResolveLocalPythonw(tools)
-script = tools & "\switch_engine.py"
+bat = tools & "\switch_engine.bat"
 
-If pyw = "" Then
-	MsgBox "Local Python not found." & vbCrLf & vbCrLf & _
-		"Run Setup.bat first in:" & vbCrLf & root, 16, "Maho"
-	WScript.Quit 1
-End If
-
-If Not fso.FileExists(script) Then
-	MsgBox "Missing script:" & vbCrLf & script, 16, "Maho"
+If Not fso.FileExists(bat) Then
+	MsgBox "Missing:" & vbCrLf & bat, 16, "Maho"
 	WScript.Quit 1
 End If
 
@@ -29,36 +20,8 @@ If WScript.Arguments.Count < 1 Then
 	WScript.Quit 1
 End If
 
-cmdline = """" & pyw & """ """ & script & """"
-For i = 0 To WScript.Arguments.Count - 1
-	cmdline = cmdline & " """ & WScript.Arguments(i) & """"
-Next
-
-' 1 = normal window (shows Tk). Do NOT use 0 — that hides the GUI.
-rc = sh.Run(cmdline, 1, False)
+arg = WScript.Arguments(0)
+' WindowStyle 0 = hidden console (no flash); the GUI is a separate pythonw process.
+cmdline = "cmd.exe /c ""call """ & bat & """ """ & arg & """"
+sh.Run cmdline, 0, False
 WScript.Quit 0
-
-Function ResolveLocalPythonw(toolsDir)
-	Dim c
-	c = toolsDir & "\python\pythonw.exe"
-	If fso.FileExists(c) Then
-		ResolveLocalPythonw = c
-		Exit Function
-	End If
-	c = toolsDir & "\python\Scripts\pythonw.exe"
-	If fso.FileExists(c) Then
-		ResolveLocalPythonw = c
-		Exit Function
-	End If
-	c = toolsDir & "\python\python.exe"
-	If fso.FileExists(c) Then
-		ResolveLocalPythonw = c
-		Exit Function
-	End If
-	c = toolsDir & "\python\Scripts\python.exe"
-	If fso.FileExists(c) Then
-		ResolveLocalPythonw = c
-		Exit Function
-	End If
-	ResolveLocalPythonw = ""
-End Function

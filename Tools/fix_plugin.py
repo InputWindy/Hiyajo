@@ -1,12 +1,10 @@
 #!/usr/bin/env python3
-# Run via launch_fix_plugin.vbs (double-click .cplugin) — engine Tools/python only.
+# Run via Tools/fix_plugin.bat (double-click .cplugin) — engine Tools/python only;
+# never a system Python (no MAHO_ALLOW_SYSTEM_PYTHON escape hatch here).
 """Validate + auto-fix one plugin on .cplugin double-click."""
 
-import os
 import sys
 from pathlib import Path
-
-os.environ.setdefault("MAHO_ALLOW_SYSTEM_PYTHON", "1")
 
 TOOLS_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(TOOLS_DIR))

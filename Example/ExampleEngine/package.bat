@@ -1,21 +1,17 @@
 @echo off
-setlocal
+setlocal EnableExtensions
 cd /d "%~dp0"
 
 rem Package UI — pick platform / config, ship to Packaged/<Platform>/<Config>/.
-rem Forwards to the engine's package_ui.py (same GUI as Tools/package.bat).
+rem Entry contract: engine-local Python only (maho_pythonw.bat -> Tools/python);
+rem this project's .cproject is forwarded to the engine's Tools/package_ui.py.
 
-set "PYW=../../Tools/python/pythonw.exe"
-if not exist "%PYW%" set "PYW=../../Tools/python/Scripts/pythonw.exe"
-if not exist "%PYW%" set "PYW=../../Tools/python/python.exe"
-if not exist "%PYW%" set "PYW=../../Tools/python/Scripts/python.exe"
-
-if not exist "%PYW%" (
-	echo [ERROR] Engine-local Python missing. Run Setup.bat in the engine root:
+call "../../Tools/maho_pythonw.bat" "../../Tools/package_ui.py" "%~dp0ExampleEngine.cproject" %*
+set "ERR=%ERRORLEVEL%"
+if not "%ERR%"=="0" (
+	echo [ERROR] Failed to launch the package UI. Run Setup.bat in the engine root:
 	echo         ../..
 	pause
-	exit /b 1
+	exit /b %ERR%
 )
-
-start "" "%PYW%" "../../Tools/package_ui.py" "%~dp0ExampleEngine.cproject"
 exit /b 0

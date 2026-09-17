@@ -514,47 +514,41 @@ source_group(TREE "${{CMAKE_CURRENT_SOURCE_DIR}}/Plugins/{name}" FILES
 """
 
 PACKAGE_BAT = """@echo off
-setlocal
+setlocal EnableExtensions
 cd /d "%~dp0"
 
 rem Package UI — pick platform / config, ship to Packaged/<Platform>/<Config>/.
-rem Forwards to the engine's package_ui.py (same GUI as Tools/package.bat).
+rem Entry contract: engine-local Python only (maho_pythonw.bat -> Tools/python);
+rem this project's .cproject is forwarded to the engine's Tools/package_ui.py.
 
-set "PYW={engine_rel}/Tools/python/pythonw.exe"
-if not exist "%PYW%" set "PYW={engine_rel}/Tools/python/Scripts/pythonw.exe"
-if not exist "%PYW%" set "PYW={engine_rel}/Tools/python/python.exe"
-if not exist "%PYW%" set "PYW={engine_rel}/Tools/python/Scripts/python.exe"
-
-if not exist "%PYW%" (
-	echo [ERROR] Engine-local Python missing. Run Setup.bat in the engine root:
+call "{engine_rel}/Tools/maho_pythonw.bat" "{engine_rel}/Tools/package_ui.py" "%~dp0{name}.cproject" %*
+set "ERR=%ERRORLEVEL%"
+if not "%ERR%"=="0" (
+	echo [ERROR] Failed to launch the package UI. Run Setup.bat in the engine root:
 	echo         {engine_rel}
 	pause
-	exit /b 1
+	exit /b %ERR%
 )
-
-start "" "%PYW%" "{engine_rel}/Tools/package_ui.py" "%~dp0{name}.cproject"
 exit /b 0
 """
 
 CREATE_PLUGIN_BAT = """@echo off
-setlocal
+setlocal EnableExtensions
 cd /d "%~dp0"
 
-rem CreatePlugin.bat — open the new-plugin UI (creates at the project root).
+rem CreatePlugin.bat — new-plugin UI for this project.
+rem Entry contract: engine-local Python only (maho_pythonw.bat -> Tools/python).
+rem No default directory is passed: the UI itself defaults to <cwd>/Plugins, which
+rem is this project's plugins/ catalog (hand-filled .cplugin Dependencies, no UI).
 
-set "PYW={engine_rel}/Tools/python/pythonw.exe"
-if not exist "%PYW%" set "PYW={engine_rel}/Tools/python/Scripts/pythonw.exe"
-if not exist "%PYW%" set "PYW={engine_rel}/Tools/python/python.exe"
-if not exist "%PYW%" set "PYW={engine_rel}/Tools/python/Scripts/python.exe"
-
-if not exist "%PYW%" (
-	echo [ERROR] Engine-local Python missing. Run Setup.bat in the engine root:
+call "{engine_rel}/Tools/maho_pythonw.bat" "{engine_rel}/Tools/create_plugin_ui.py" %*
+set "ERR=%ERRORLEVEL%"
+if not "%ERR%"=="0" (
+	echo [ERROR] Failed to launch the plugin UI. Run Setup.bat in the engine root:
 	echo         {engine_rel}
 	pause
-	exit /b 1
+	exit /b %ERR%
 )
-
-start "" "%PYW%" "{engine_rel}/Tools/create_plugin_ui.py" "%CD%\\Source"
 exit /b 0
 """
 
@@ -1957,7 +1951,7 @@ def install_linux_cproject_association(*, log: Any = print) -> None:
 		"Comment=Generate build files from a Maho .cproject\n"
 		f'Exec="{generate_sh}" %f\n'
 		"MimeType=application/x-maho-cproject;\n"
-		"Terminal=false\n"
+		"Terminal=true\n"
 		"NoDisplay=true\n",
 		encoding="utf-8",
 		newline="\n",
@@ -2097,7 +2091,7 @@ def install_linux_cplugin_association(*, log: Any = print) -> None:
 		"Comment=Auto-fix missing headers in a Maho .cplugin\n"
 		f'Exec="{fix_sh}" %f\n'
 		"MimeType=application/x-maho-cplugin;\n"
-		"Terminal=false\n"
+		"Terminal=true\n"
 		"NoDisplay=true\n",
 		encoding="utf-8",
 		newline="\n",

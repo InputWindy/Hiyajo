@@ -1,6 +1,11 @@
-#!/usr/bin/env sh
-# Internal: generate build files from .cproject (or the engine workspace).
+#!/bin/sh
+# Internal: generate build files from .cproject.
 # Also the target of the Linux .cproject file association (double-click .cproject).
+# Console tool: output must stay visible — run it from a terminal (the .desktop
+# entry does not open one), so it never hides its own result.
 set -u
-cd "$(dirname "$0")/.." || exit 1
-exec "$(dirname "$0")/maho_python.sh" "$(dirname "$0")/generateProject.py" "$@"
+
+TOOLS_DIR="$(cd "$(dirname "$0")" && pwd)"
+cd "$TOOLS_DIR" || exit 1
+
+exec "$TOOLS_DIR/maho_python.sh" "$TOOLS_DIR/generateProject.py" "$@"

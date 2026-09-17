@@ -1,10 +1,10 @@
-# Run via Tools/maho_pythonw.bat / launch_package.vbs — engine Tools/python only.
+# Run via Tools/package.bat -> Tools/maho_pythonw.bat — engine Tools/python only.
 """
 Maho package UI — pick platform / config and ship to Packaged/<Platform>/.
 
-Logs go to the UI (no console). Launched by:
-  - Engine: Tools/package.bat → launch_package.vbs → pythonw
-  - Game project: <project>/package.bat → Tools/package_ui.py (pythonw)
+Logs go to the UI (no console). Launched by (engine-local pythonw only):
+  - Engine: Tools/package.bat
+  - Game project: <project>/package.bat
 """
 
 from __future__ import annotations

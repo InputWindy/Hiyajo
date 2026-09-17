@@ -1,13 +1,14 @@
 Option Explicit
-' Double-click .cproject → generate sibling .sln (console via cmd).
+' Double-click .cproject -> generate the sibling .sln.
 ' Registered open handler uses wscript.exe (Windows will not quietly default to .bat).
+' This .vbs does ONE thing: launch the console .bat (visible window). The .bat owns
+' the output and its final pause, so the cmake/generate log stays readable.
 
-Dim fso, sh, tools, root, bat, arg, cmdline
+Dim fso, sh, tools, bat, arg, cmdline
 Set fso = CreateObject("Scripting.FileSystemObject")
 Set sh = CreateObject("WScript.Shell")
 
 tools = fso.GetParentFolderName(WScript.ScriptFullName)
-root = fso.GetParentFolderName(tools)
 bat = tools & "\generateProject.bat"
 
 If Not fso.FileExists(bat) Then
@@ -21,7 +22,7 @@ If WScript.Arguments.Count < 1 Then
 End If
 
 arg = WScript.Arguments(0)
-' Keep a console so cmake / generate logs are visible; pause only on failure.
-cmdline = "cmd.exe /c ""call """ & bat & """ """ & arg & """ & if errorlevel 1 (echo. & pause)"""
+' WindowStyle 1 = visible console (cmake/generate log + the .bat's own pause).
+cmdline = "cmd.exe /c ""call """ & bat & """ """ & arg & """"
 sh.Run cmdline, 1, False
 WScript.Quit 0

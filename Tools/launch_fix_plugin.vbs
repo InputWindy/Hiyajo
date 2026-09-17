@@ -1,6 +1,8 @@
 Option Explicit
-' Double-click .cplugin → auto-fix the plugin's missing headers (console via cmd).
+' Double-click .cplugin -> validate + auto-fix that plugin.
 ' Registered open handler uses wscript.exe (Windows will not quietly default to .bat).
+' This .vbs does ONE thing: launch the console .bat (visible window). The .bat owns
+' the fix log and its final pause, so the result stays readable.
 
 Dim fso, sh, tools, bat, arg, cmdline
 Set fso = CreateObject("Scripting.FileSystemObject")
@@ -20,7 +22,7 @@ If WScript.Arguments.Count < 1 Then
 End If
 
 arg = WScript.Arguments(0)
-' Keep a console so fix output is visible; pause on failure.
-cmdline = "cmd.exe /c ""call """ & bat & """ """ & arg & """ & if errorlevel 1 (echo. & pause)"""
+' WindowStyle 1 = visible console (fix log + the .bat's own pause).
+cmdline = "cmd.exe /c ""call """ & bat & """ """ & arg & """"
 sh.Run cmdline, 1, False
 WScript.Quit 0
