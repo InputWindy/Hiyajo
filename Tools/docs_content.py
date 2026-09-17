@@ -842,6 +842,49 @@ D.Class("FQueryResult<TBase>", Desc="筛选结果：**隐式转换为 `std::vect
 D.Interface("std::vector<TBase*> Data", "结果容器（public：只读使用；外部无法注入）")
 
 # ══════════════════════════════════════════════════════════════════════════════
+# Source/Public/Engine/PluginManager.h —— 运行期插件安装树
+# ══════════════════════════════════════════════════════════════════════════════
+
+D.Header("Public/Engine/PluginManager.h", Title="PluginManager.h —— 运行期插件安装树",
+         Desc="运行期的插件**安装树**，来自 `PluginManager.json`（codegen 的 EntryPoint POST_BUILD "
+              "把它放到二进制旁边）。清单是一棵「层类型」树：**工程是根节点**，每个节点的 children "
+              "就是它装进**自己的收集器**的那些插件。\n"
+              "一次查询对所有人都够用，而且每个节点本来就认识自己的名字 ⇒ 宿主与收集器跑**同一句**"
+              "调用：`InstallChildrenOf(GetName())`。反方向不携带任何名字：目录只存树和引擎根，"
+              "不存「谁是谁」。\n"
+              "**进程唯一**：访问器在这里声明、在引擎 DLL（`Maho`）里定义 ⇒ 任何链接 Maho 的插件 DLL "
+              "共享同一个实例。")
+
+D.Card("包含的头文件")
+D.Table("头文件", "功能")
+D.Row("Core/Export.h", "`MAHO_API` —— 类跨 DLL（进程唯一实例在 Maho 里）")
+D.Row("filesystem", "`std::filesystem::path`：`ExecutableDir()` 的返回类型")
+D.Row("map", "节点 → 直接子节点（清单顺序）")
+D.Row("string / string_view", "名字与路径；查询入参用 view，不拷贝")
+
+D.Class("FPluginManager", Desc="插件安装树的持有者（进程唯一）。构造 / 析构 / 拷贝都是私有的 —— "
+        "只能经 `Get()` 拿到那一个实例。")
+D.SetAccess("public")
+D.Interface("static FPluginManager& Get()", "进程唯一实例（首次访问时惰性装载）")
+D.Interface("bool Load()",
+            "装载（或重载）`PluginManager.json`：先找当前工作目录、再找可执行文件目录。缺失 / "
+            "不可解析返回 `false` —— 由调用方走回退策略")
+D.Interface("[[nodiscard]] bool IsLoaded() const", "是否已经拿到可用的目录")
+D.Interface("[[nodiscard]] const std::vector<std::string>& GetChildren(std::string_view LayerName) const",
+            "某节点的**直接**子层类型，按清单顺序 —— 宿主与每个收集器共用的**唯一**查询，各自传自己的"
+            "名字。没有子节点返回空（那是正常情况，不是错误）")
+D.Interface("[[nodiscard]] const std::string& GetEngineRoot() const",
+            "codegen 记下的引擎源码根（绝对路径，生成器用的 posix 形式）。缺失为空 ⇒ 调用方自行探测。"
+            "**在 C++ 里它永远不是编译期常量**：清单是运行期数据")
+D.Interface("[[nodiscard]] static std::filesystem::path ExecutableDir()",
+            "可执行文件所在目录（各平台的规范查询），失败为空。所有运行期路径探测（目录查找、虚拟根）"
+            "都共用它")
+D.SetAccess("private")
+D.Field("bool bLoaded = false", "是否已成功装载过")
+D.Field("std::string EngineRoot", "引擎源码根（来自清单）")
+D.Field("std::map<std::string, std::vector<std::string>> Children", "节点 → 它的直接子节点")
+
+# ══════════════════════════════════════════════════════════════════════════════
 # 下面继续按你的口述追加：再 Header(...) 换一个头，Class/Interface/Field 往下挂。
 
 

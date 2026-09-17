@@ -79,7 +79,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div id="app">
   <div id="side">
     <h1>Maho 引擎源码</h1>
-    <div class="search" title="左侧扫描 Source/**/*.h：22 个头文件 · 已声明 21 个 · 30 个实体 / 157 个成员 ｜ 内容在 Tools/docs_content.py 里逐条声明">
+    <div class="search" title="左侧扫描 Source/**/*.h：22 个头文件 · 已声明 22 个 · 31 个实体 / 166 个成员 ｜ 内容在 Tools/docs_content.py 里逐条声明">
       <input id="q" type="search" placeholder="搜索头文件…  （如 Frame、Core、Entry）" autocomplete="off">
     </div>
     <div id="tree"><ul>
@@ -931,8 +931,47 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </div>
 <div class="pane" id="pane-Public__Engine__PluginManager_h">
 <div class="hdr">Public/Engine/PluginManager.h</div>
-<h2 class="file-title">PluginManager.h</h2>
-<div class="empty">（尚未声明内容 —— 在 Tools/docs_content.py 里加一条 Header(&quot;Public/Engine/PluginManager.h&quot;)，再逐类声明 Class / Interface / Field）</div>
+<h2 class="file-title">PluginManager.h —— 运行期插件安装树</h2>
+<div class="card"><div class="doc">
+<p>运行期的插件**安装树**，来自 `PluginManager.json`（codegen 的 EntryPoint POST_BUILD 把它放到二进制旁边）。清单是一棵「层类型」树：**工程是根节点**，每个节点的 children 就是它装进**自己的收集器**的那些插件。</p>
+<p>一次查询对所有人都够用，而且每个节点本来就认识自己的名字 ⇒ 宿主与收集器跑**同一句**调用：`InstallChildrenOf(GetName())`。反方向不携带任何名字：目录只存树和引擎根，不存「谁是谁」。</p>
+<p>**进程唯一**：访问器在这里声明、在引擎 DLL（`Maho`）里定义 ⇒ 任何链接 Maho 的插件 DLL 共享同一个实例。</p>
+</div></div>
+<div class="card">
+<h3 class="card-title">包含的头文件</h3>
+
+<table>
+<thead><tr><th>头文件</th><th>功能</th></tr></thead>
+<tbody>
+<tr><td>Core/Export.h</td><td>`MAHO_API` —— 类跨 DLL（进程唯一实例在 Maho 里）</td></tr>
+<tr><td>filesystem</td><td>`std::filesystem::path`：`ExecutableDir()` 的返回类型</td></tr>
+<tr><td>map</td><td>节点 → 直接子节点（清单顺序）</td></tr>
+<tr><td>string / string_view</td><td>名字与路径；查询入参用 view，不拷贝</td></tr>
+</tbody></table>
+</div>
+<div class="ent e-class" id="Public__Engine__PluginManager_h-0">
+<h3><span class="kind">类</span> FPluginManager</h3>
+<div class="sect"><div class="doc">
+<p>插件安装树的持有者（进程唯一）。构造 / 析构 / 拷贝都是私有的 —— 只能经 `Get()` 拿到那一个实例。</p>
+</div></div>
+<div class="sect">
+<h4>字段</h4>
+<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">bool</span> bLoaded = <span class="kw">false</span></td><td>是否已成功装载过</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>std::string EngineRoot</td><td>引擎源码根（来自清单）</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>std::map&lt;std::string, std::vector&lt;std::string&gt;&gt; Children</td><td>节点 → 它的直接子节点</td></tr>
+</tbody></table></div>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">static</span> FPluginManager&amp; Get()</td><td>进程唯一实例（首次访问时惰性装载）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">bool</span> Load()</td><td>装载（或重载）`PluginManager.json`：先找当前工作目录、再找可执行文件目录。缺失 / 不可解析返回 `<span class="kw">false</span>` —— 由调用方走回退策略</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">bool</span> IsLoaded() <span class="kw">const</span></td><td>是否已经拿到可用的目录</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">const</span> std::vector&lt;std::string&gt;&amp; GetChildren(std::string_view LayerName) <span class="kw">const</span></td><td>某节点的**直接**子层类型，按清单顺序 —— 宿主与每个收集器共用的**唯一**查询，各自传自己的名字。没有子节点返回空（那是正常情况，不是错误）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">const</span> std::string&amp; GetEngineRoot() <span class="kw">const</span></td><td>codegen 记下的引擎源码根（绝对路径，生成器用的 posix 形式）。缺失为空 ⇒ 调用方自行探测。**在 C++ 里它永远不是编译期常量**：清单是运行期数据</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">static</span> std::filesystem::path ExecutableDir()</td><td>可执行文件所在目录（各平台的规范查询），失败为空。所有运行期路径探测（目录查找、虚拟根）都共用它</td></tr>
+</tbody></table></div>
+</div>
 </div>
 <div class="pane" id="pane-Public__Engine__Query_h">
 <div class="hdr">Public/Engine/Query.h</div>
