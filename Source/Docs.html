@@ -79,7 +79,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div id="app">
   <div id="side">
     <h1>Maho 引擎源码</h1>
-    <div class="search" title="左侧扫描 Source/**/*.h：22 个头文件 · 已声明 14 个 · 15 个实体 / 60 个成员 ｜ 内容在 Tools/docs_content.py 里逐条声明">
+    <div class="search" title="左侧扫描 Source/**/*.h：22 个头文件 · 已声明 17 个 · 23 个实体 / 90 个成员 ｜ 内容在 Tools/docs_content.py 里逐条声明">
       <input id="q" type="search" placeholder="搜索头文件…  （如 Frame、Core、Entry）" autocomplete="off">
     </div>
     <div id="tree"><ul>
@@ -535,18 +535,162 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </div>
 <div class="pane" id="pane-Public__Core__ThreadedServer_h">
 <div class="hdr">Public/Core/ThreadedServer.h</div>
-<h2 class="file-title">ThreadedServer.h</h2>
-<div class="empty">（尚未声明内容 —— 在 Tools/docs_content.py 里加一条 Header(&quot;Public/Core/ThreadedServer.h&quot;)，再逐类声明 Class / Interface / Field）</div>
+<h2 class="file-title">ThreadedServer.h —— 常驻专用线程</h2>
+<div class="card"><div class="doc">
+<p>一个持久线程 + FIFO 串行任务队列。给**长期角色**用（渲染线程、IO 装载线程、调度器本身），不是瞬时并行任务（那种用 `FThreadPool`）。派生 + 覆写 `OnInitialize` / `OnShutdown` / `GetThreadName` 做角色专属设置。</p>
+<p>**实现全在 `Private/Core/ThreadedServer.cpp`，连虚函数也在那里** —— 这样这个类在 `Maho.dll` 里有一个 **key function**：vtable 与 deleting dtor 全进程只有一份，而不是每个模块一份 COMDAT（后者正是 `Core/Export.h` 警告的那种隐患）。</p>
+</div></div>
+<div class="card">
+<h3 class="card-title">包含的头文件</h3>
+
+<table>
+<thead><tr><th>头文件</th><th>功能</th></tr></thead>
+<tbody>
+<tr><td>Core/Export.h</td><td>`MAHO_API` —— 插件侧的角色类派生自它</td></tr>
+<tr><td>atomic</td><td>`bRunning`：跨线程读的运行标志</td></tr>
+<tr><td>condition_variable / mutex</td><td>队列等待与 `Flush` 屏障</td></tr>
+<tr><td>deque / functional</td><td>FIFO 任务队列与任务类型</td></tr>
+<tr><td>thread</td><td>那一个持久线程</td></tr>
+</tbody></table>
+</div>
+<div class="ent e-class" id="Public__Core__ThreadedServer_h-0">
+<h3><span class="kind">类</span> FThreadedServer</h3>
+<div class="sect"><div class="doc">
+<p>常驻专用 worker 的基类。不可拷贝、不可赋值。</p>
+</div></div>
+<div class="sect">
+<h4>字段</h4>
+<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-private">private</span></td><td>std::thread Worker</td><td>那一个持久线程</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>std::deque&lt;std::function&lt;<span class="kw">void</span>()&gt;&gt; Queue</td><td>FIFO 串行队列</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>std::mutex Mutex / std::condition_variable CondVar</td><td>队列与屏障的同步</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>std::atomic&lt;<span class="kw">bool</span>&gt; bRunning</td><td>是否已启动</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">bool</span> bStopping = <span class="kw">false</span></td><td>停止标志（`Shutdown` 置位）</td></tr>
+</tbody></table></div>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td>FThreadedServer() = <span class="kw">default</span></td><td>构造只初始化标志，**不起线程**</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> ~FThreadedServer()</td><td>析构调 `Shutdown()` —— 停止 + join，幂等</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">bool</span> Initialize()</td><td>启动专用线程，幂等；`OnInitialize()` 返回 <span class="kw">false</span> 则启动失败</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Shutdown()</td><td>停止 + join，幂等；join 后调 `OnShutdown()`</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">bool</span> IsRunning() <span class="kw">const</span></td><td>运行标志（任意线程可读）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Submit(std::function&lt;<span class="kw">void</span>()&gt; Task)</td><td>入队即返；FIFO、**串行**执行</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Flush()</td><td>屏障：阻塞到本次调用之前提交的任务全部完成</td></tr>
+<tr><td><span class="acc a-protected">protected</span></td><td>[[nodiscard]] <span class="kw">virtual</span> <span class="kw">bool</span> OnInitialize()</td><td>线程启动前调用；返回 <span class="kw">false</span> 中止启动</td></tr>
+<tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> OnShutdown()</td><td>线程 join 之后调用</td></tr>
+<tr><td><span class="acc a-protected">protected</span></td><td>[[nodiscard]] <span class="kw">virtual</span> <span class="kw">const</span> <span class="kw">char</span>* GetThreadName() <span class="kw">const</span></td><td>线程名（默认 ThreadedServer）</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> RunLoop()</td><td>线程主体：取任务 → 跑（异常隔离上报）→ 循环到停止且队列空</td></tr>
+</tbody></table></div>
+</div>
 </div>
 <div class="pane" id="pane-Public__Core__ThreadPool_h">
 <div class="hdr">Public/Core/ThreadPool.h</div>
-<h2 class="file-title">ThreadPool.h</h2>
-<div class="empty">（尚未声明内容 —— 在 Tools/docs_content.py 里加一条 Header(&quot;Public/Core/ThreadPool.h&quot;)，再逐类声明 Class / Interface / Field）</div>
+<h2 class="file-title">ThreadPool.h —— 固定规模线程池</h2>
+<div class="card"><div class="doc">
+<p>常驻 worker + FIFO 任务队列。`Submit` 入队即返（乱序在 worker 上跑），`Flush` 是**锁步屏障**：等真正「执行完」而不是「出队」。workers 首次 `Submit` 时**惰性启动**（只会增长，从不收缩）。任务是并发跑的，必须自身线程安全。</p>
+<p>**实现全在 `Private/Core/ThreadPool.cpp`**：池是每个装了收集器的插件里的**成员**（`FFrameBuilder::Pool`），所以类带 `MAHO_API` —— 跨 DLL 调用，而不是每个模块内联一份。</p>
+<p>**诊断开关**：默认构造的池读 `MAHO_PARALLELISM`（如 `=1`）覆盖线程数，用来复现串行执行、把并行失败与已知良好基线直接对比；显式指定宽度的池（如 RHI 的串行录制池）不受影响。</p>
+</div></div>
+<div class="card">
+<h3 class="card-title">包含的头文件</h3>
+
+<table>
+<thead><tr><th>头文件</th><th>功能</th></tr></thead>
+<tbody>
+<tr><td>Core/Export.h</td><td>`MAHO_API` —— 插件会跨 DLL 构造 / 调用它</td></tr>
+<tr><td>condition_variable / mutex</td><td>队列等待与「真正空闲」屏障</td></tr>
+<tr><td>cstdint</td><td>`std::uint32_t`（宽度与在飞计数）</td></tr>
+<tr><td>deque</td><td>FIFO 任务队列</td></tr>
+<tr><td>functional</td><td>`std::function&lt;<span class="kw">void</span>()&gt;` 任务</td></tr>
+<tr><td>thread / vector</td><td>worker 线程与其容器</td></tr>
+</tbody></table>
+</div>
+<div class="ent e-class" id="Public__Core__ThreadPool_h-0">
+<h3><span class="kind">类</span> FThreadPool</h3>
+<div class="sect"><div class="doc">
+<p>固定规模线程池。`NumThreads = 0` 时取 `std::thread::hardware_concurrency()`（为 0 则退化为 1）。不可拷贝、不可赋值。</p>
+</div></div>
+<div class="sect">
+<h4>字段</h4>
+<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-private">private</span></td><td>std::vector&lt;std::thread&gt; Workers</td><td>worker 线程</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>std::deque&lt;std::function&lt;<span class="kw">void</span>()&gt;&gt; Queue</td><td>FIFO 任务队列</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>std::mutex Mutex / std::condition_variable CondVar</td><td>队列与屏障的同步</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>std::uint32_t NumThreads</td><td>池宽</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>std::uint32_t PendingCount = 0</td><td>未完成任务数（`Flush` 等它归零）</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">bool</span> bStopping = <span class="kw">false</span></td><td>停止标志（析构时置位）</td></tr>
+</tbody></table></div>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">explicit</span> FThreadPool(std::uint32_t NumThreads = 0)</td><td>构造：**不立刻起线程**，只记宽度</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>~FThreadPool()</td><td>置停止标志、唤醒并 join 全部 worker</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Submit(std::function&lt;<span class="kw">void</span>()&gt; Task)</td><td>入队即返；惰性把整个池拉起来（首次调用即补齐到宽度）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Flush()</td><td>**真正空闲**屏障：等队列空且 `PendingCount == 0`（计数在任务**完成后**才减），并在等待期间容忍并发 `Submit`（嵌套图会从 worker 里再投任务）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] std::uint32_t GetNumThreads() <span class="kw">const</span></td><td>池宽（`= 0` 构造时的解析结果）</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> EnsureThreads(std::uint32_t Required)</td><td>把池长到至少 Required（受宽度上限约束，从不收缩）</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> WorkerLoop()</td><td>worker 主体：取任务 → 跑 → 减在飞计数；任务抛出的异常被隔离上报</td></tr>
+</tbody></table></div>
+</div>
 </div>
 <div class="pane" id="pane-Public__Core__TypeList_h">
 <div class="hdr">Public/Core/TypeList.h</div>
-<h2 class="file-title">TypeList.h</h2>
-<div class="empty">（尚未声明内容 —— 在 Tools/docs_content.py 里加一条 Header(&quot;Public/Core/TypeList.h&quot;)，再逐类声明 Class / Interface / Field）</div>
+<h2 class="file-title">TypeList.h —— 编译期有序类型列表</h2>
+<div class="card"><div class="doc">
+<p>类型层面的「数组」：`TTypeList&lt;A, B&gt;` 与 `TTypeList&lt;B, A&gt;` 是**不同类型**（顺序即语义），但**不编码**遍历是串行还是并行 —— 那是调用方的选择。全套操作都是纯模板，零运行期开销、无状态。</p>
+</div></div>
+<div class="card">
+<h3 class="card-title">包含的头文件</h3>
+
+<table>
+<thead><tr><th>头文件</th><th>功能</th></tr></thead>
+<tbody>
+<tr><td>cstddef</td><td>`std::size_t`（`Count`）</td></tr>
+<tr><td>type_traits</td><td>`std::conditional_t` / `std::false_type` / `std::true_type`（并集与成员判断用）</td></tr>
+</tbody></table>
+</div>
+<div class="ent e-struct" id="Public__Core__TypeList_h-0">
+<h3><span class="kind">结构体</span> TTypeList&lt;TTypes...&gt;</h3>
+<div class="sect"><div class="doc">
+<p>编译期有序类型列表（「类型数组」）。顺序即语义。</p>
+</div></div>
+<div class="sect">
+<h4>字段</h4>
+<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">static</span> <span class="kw">constexpr</span> std::size_t Count = <span class="kw">sizeof</span>...(TTypes)</td><td>元素个数（编译期常量）</td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-alias" id="Public__Core__TypeList_h-1">
+<h3><span class="kind">别名</span> TCons&lt;T, TList&gt; <span class="base">: TTypeList&lt;T, Ts...&gt;</span></h3>
+<div class="sect"><div class="doc">
+<p>把头插到最前</p>
+</div></div>
+</div>
+<div class="ent e-alias" id="Public__Core__TypeList_h-2">
+<h3><span class="kind">别名</span> TAppend&lt;TList, TValue&gt; / TAppend_t <span class="base">: TTypeList&lt;Ts..., TValue&gt;</span></h3>
+<div class="sect"><div class="doc">
+<p>把尾追加到最末</p>
+</div></div>
+</div>
+<div class="ent e-alias" id="Public__Core__TypeList_h-3">
+<h3><span class="kind">别名</span> TContains&lt;TList, T&gt; / TContains_v <span class="base">: <span class="kw">bool</span></span></h3>
+<div class="sect"><div class="doc">
+<p>成员判断（编译期布尔）</p>
+</div></div>
+</div>
+<div class="ent e-alias" id="Public__Core__TypeList_h-4">
+<h3><span class="kind">别名</span> TCatch&lt;TLists...&gt; <span class="base">: 拼接结果</span></h3>
+<div class="sect"><div class="doc">
+<p>把多个 `TTypeList` 按序拼成一个</p>
+</div></div>
+</div>
+<div class="ent e-alias" id="Public__Core__TypeList_h-5">
+<h3><span class="kind">别名</span> TUnionList_t&lt;TListA, TListB&gt; <span class="base">: 保序去重的并集</span></h3>
+<div class="sect"><div class="doc">
+<p>折叠式并集：逐个追加、已在集合内则跳过</p>
+</div></div>
+</div>
 </div>
 <div class="pane" id="pane-Public__Engine__Engine_h">
 <div class="hdr">Public/Engine/Engine.h</div>

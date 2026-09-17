@@ -485,6 +485,116 @@ D.Interface("~TSingleton() = default", "protected 析构：同上")
 D.SetAccess("public")
 D.Interface("TSingleton(const TSingleton&) = delete", "不可拷贝（拷贝赋值同样删除）")
 
+# ══════════════════════════════════════════════════════════════════════════════
+# Source/Public/Core/TypeList.h —— 编译期类型列表
+# ══════════════════════════════════════════════════════════════════════════════
+
+D.Header("Public/Core/TypeList.h", Title="TypeList.h —— 编译期有序类型列表",
+         Desc="类型层面的「数组」：`TTypeList<A, B>` 与 `TTypeList<B, A>` 是**不同类型**（顺序即"
+              "语义），但**不编码**遍历是串行还是并行 —— 那是调用方的选择。全套操作都是纯模板，"
+              "零运行期开销、无状态。")
+
+D.Card("包含的头文件")
+D.Table("头文件", "功能")
+D.Row("cstddef", "`std::size_t`（`Count`）")
+D.Row("type_traits", "`std::conditional_t` / `std::false_type` / `std::true_type`（并集与成员判断用）")
+
+D.Struct("TTypeList<TTypes...>", Desc="编译期有序类型列表（「类型数组」）。顺序即语义。")
+D.Field("static constexpr std::size_t Count = sizeof...(TTypes)", "元素个数（编译期常量）")
+
+D.Alias("TCons<T, TList>", "TTypeList<T, Ts...>", "把头插到最前")
+D.Alias("TAppend<TList, TValue> / TAppend_t", "TTypeList<Ts..., TValue>", "把尾追加到最末")
+D.Alias("TContains<TList, T> / TContains_v", "bool", "成员判断（编译期布尔）")
+D.Alias("TCatch<TLists...>", "拼接结果", "把多个 `TTypeList` 按序拼成一个")
+D.Alias("TUnionList_t<TListA, TListB>", "保序去重的并集", "折叠式并集：逐个追加、已在集合内则跳过")
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Source/Public/Core/ThreadPool.h —— 固定规模线程池
+# ══════════════════════════════════════════════════════════════════════════════
+
+D.Header("Public/Core/ThreadPool.h", Title="ThreadPool.h —— 固定规模线程池",
+         Desc="常驻 worker + FIFO 任务队列。`Submit` 入队即返（乱序在 worker 上跑），`Flush` 是"
+              "**锁步屏障**：等真正「执行完」而不是「出队」。workers 首次 `Submit` 时**惰性启动**"
+              "（只会增长，从不收缩）。任务是并发跑的，必须自身线程安全。\n"
+              "**实现全在 `Private/Core/ThreadPool.cpp`**：池是每个装了收集器的插件里的**成员**"
+              "（`FFrameBuilder::Pool`），所以类带 `MAHO_API` —— 跨 DLL 调用，而不是每个模块内联一份。\n"
+              "**诊断开关**：默认构造的池读 `MAHO_PARALLELISM`（如 `=1`）覆盖线程数，用来复现串行"
+              "执行、把并行失败与已知良好基线直接对比；显式指定宽度的池（如 RHI 的串行录制池）不受影响。")
+
+D.Card("包含的头文件")
+D.Table("头文件", "功能")
+D.Row("Core/Export.h", "`MAHO_API` —— 插件会跨 DLL 构造 / 调用它")
+D.Row("condition_variable / mutex", "队列等待与「真正空闲」屏障")
+D.Row("cstdint", "`std::uint32_t`（宽度与在飞计数）")
+D.Row("deque", "FIFO 任务队列")
+D.Row("functional", "`std::function<void()>` 任务")
+D.Row("thread / vector", "worker 线程与其容器")
+
+D.Class("FThreadPool", Desc="固定规模线程池。`NumThreads = 0` 时取 "
+        "`std::thread::hardware_concurrency()`（为 0 则退化为 1）。不可拷贝、不可赋值。")
+D.SetAccess("public")
+D.Interface("explicit FThreadPool(std::uint32_t NumThreads = 0)", "构造：**不立刻起线程**，只记宽度")
+D.Interface("~FThreadPool()", "置停止标志、唤醒并 join 全部 worker")
+D.Interface("void Submit(std::function<void()> Task)",
+            "入队即返；惰性把整个池拉起来（首次调用即补齐到宽度）")
+D.Interface("void Flush()",
+            "**真正空闲**屏障：等队列空且 `PendingCount == 0`（计数在任务**完成后**才减），并在"
+            "等待期间容忍并发 `Submit`（嵌套图会从 worker 里再投任务）")
+D.Interface("[[nodiscard]] std::uint32_t GetNumThreads() const", "池宽（`= 0` 构造时的解析结果）")
+D.SetAccess("private")
+D.Interface("void EnsureThreads(std::uint32_t Required)", "把池长到至少 Required（受宽度上限约束，从不收缩）")
+D.Interface("void WorkerLoop()", "worker 主体：取任务 → 跑 → 减在飞计数；任务抛出的异常被隔离上报")
+D.Field("std::vector<std::thread> Workers", "worker 线程")
+D.Field("std::deque<std::function<void()>> Queue", "FIFO 任务队列")
+D.Field("std::mutex Mutex / std::condition_variable CondVar", "队列与屏障的同步")
+D.Field("std::uint32_t NumThreads", "池宽")
+D.Field("std::uint32_t PendingCount = 0", "未完成任务数（`Flush` 等它归零）")
+D.Field("bool bStopping = false", "停止标志（析构时置位）")
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Source/Public/Core/ThreadedServer.h —— 常驻单线程服务
+# ══════════════════════════════════════════════════════════════════════════════
+
+D.Header("Public/Core/ThreadedServer.h", Title="ThreadedServer.h —— 常驻专用线程",
+         Desc="一个持久线程 + FIFO 串行任务队列。给**长期角色**用（渲染线程、IO 装载线程、调度器"
+              "本身），不是瞬时并行任务（那种用 `FThreadPool`）。派生 + 覆写 "
+              "`OnInitialize` / `OnShutdown` / `GetThreadName` 做角色专属设置。\n"
+              "**实现全在 `Private/Core/ThreadedServer.cpp`，连虚函数也在那里** —— 这样这个类在 "
+              "`Maho.dll` 里有一个 **key function**：vtable 与 deleting dtor 全进程只有一份，而不是"
+              "每个模块一份 COMDAT（后者正是 `Core/Export.h` 警告的那种隐患）。")
+
+D.Card("包含的头文件")
+D.Table("头文件", "功能")
+D.Row("Core/Export.h", "`MAHO_API` —— 插件侧的角色类派生自它")
+D.Row("atomic", "`bRunning`：跨线程读的运行标志")
+D.Row("condition_variable / mutex", "队列等待与 `Flush` 屏障")
+D.Row("deque / functional", "FIFO 任务队列与任务类型")
+D.Row("thread", "那一个持久线程")
+
+D.Class("FThreadedServer", Desc="常驻专用 worker 的基类。不可拷贝、不可赋值。")
+D.SetAccess("public")
+D.Interface("FThreadedServer() = default", "构造只初始化标志，**不起线程**")
+D.Interface("virtual ~FThreadedServer()", "析构调 `Shutdown()` —— 停止 + join，幂等")
+D.Interface("bool Initialize()", "启动专用线程，幂等；`OnInitialize()` 返回 false 则启动失败")
+D.Interface("void Shutdown()", "停止 + join，幂等；join 后调 `OnShutdown()`")
+D.Interface("[[nodiscard]] bool IsRunning() const", "运行标志（任意线程可读）")
+D.Interface("void Submit(std::function<void()> Task)", "入队即返；FIFO、**串行**执行")
+D.Interface("void Flush()", "屏障：阻塞到本次调用之前提交的任务全部完成")
+D.SetAccess("protected")
+D.Interface("[[nodiscard]] virtual bool OnInitialize()", "线程启动前调用；返回 false 中止启动")
+D.Interface("virtual void OnShutdown()", "线程 join 之后调用")
+D.Interface("[[nodiscard]] virtual const char* GetThreadName() const", "线程名（默认 ThreadedServer）")
+D.SetAccess("private")
+D.Interface("void RunLoop()", "线程主体：取任务 → 跑（异常隔离上报）→ 循环到停止且队列空")
+D.Field("std::thread Worker", "那一个持久线程")
+D.Field("std::deque<std::function<void()>> Queue", "FIFO 串行队列")
+D.Field("std::mutex Mutex / std::condition_variable CondVar", "队列与屏障的同步")
+D.Field("std::atomic<bool> bRunning", "是否已启动")
+D.Field("bool bStopping = false", "停止标志（`Shutdown` 置位）")
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 下面继续按你的口述追加：再 Header(...) 换一个头，Class/Interface/Field 往下挂。
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 
