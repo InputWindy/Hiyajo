@@ -78,7 +78,7 @@ footer.page .spacer { flex:1 1 auto; }
 </header>
 <h1 id="public">Public</h1>
 <h2 id="code-files">Code Files</h2>
-<ul><li><a href="EntryPoint.h">EntryPoint.h</a> — 统一应用驱动：加载引擎 DLL → <code>CreateEngine()</code> → 生命周期</li><li><a href="EntryPointWindows.h">EntryPointWindows.h</a> — Windows 双入口（WinMain + main）</li><li><a href="EntryPointAndroid.h">EntryPointAndroid.h</a> — Android <code>android_main</code>（glue 线程）</li><li><a href="EntryPointIOS.h">EntryPointIOS.h</a> — iOS main</li><li><a href="EntryPointLinux.h">EntryPointLinux.h</a> — Linux main</li><li><a href="EntryPointXbox.h">EntryPointXbox.h</a> — Xbox main</li><li><a href="Maho.h">Maho.h</a> — 引擎聚合头：<code>&lt;Core/Core.h&gt;</code> + <code>&lt;Engine/Engine.h&gt;</code></li></ul>
+<ul><li><a href="EntryPoint.h">EntryPoint.h</a> — 统一应用驱动：加载引擎 DLL → <code>CreateEngine()</code> → 生命周期</li><li><a href="EntryPointWindows.h">EntryPointWindows.h</a> — Windows 双入口（WinMain + main）</li><li><a href="EntryPointAndroid.h">EntryPointAndroid.h</a> — Android <code>android_main</code>（glue 线程）</li><li><a href="EntryPointIOS.h">EntryPointIOS.h</a> — iOS main</li><li><a href="EntryPointLinux.h">EntryPointLinux.h</a> — Linux main</li><li><a href="EntryPointXbox.h">EntryPointXbox.h</a> — Xbox main</li><li><a href="Maho.h">Maho.h</a> — 引擎聚合头：Core 九个头 + <code>&lt;Engine/Engine.h&gt;</code>（唯一的聚合点）</li></ul>
 <h2 id="sub-layers">Sub Layers</h2>
 <ul><li><a href="Core/CoreDoc.html">Core</a> — 类型无关基础设施</li><li><a href="Engine/EngineDoc.html">Engine</a> — 层系统</li></ul>
 <h2 id="concept-entry-and-aggregation">Concept -- Entry and Aggregation</h2>

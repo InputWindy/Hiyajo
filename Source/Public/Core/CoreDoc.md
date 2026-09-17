@@ -3,7 +3,6 @@
 ## Code Files
 
 - [Assembly.h](Assembly.h) — DLL 加载原语（FAssembly）
-- [Core.h](Core.h) — Core 聚合头
 - [Delegate.h](Delegate.h) — 多播事件（TMulticastEvent）
 - [Export.h](Export.h) — DLL 导出/导入宏 + MAHO_IF_NOT_NULL
 - [Fatal.h](Fatal.h) — 致命路径 + 断言宏

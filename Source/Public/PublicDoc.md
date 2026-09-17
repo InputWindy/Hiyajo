@@ -8,7 +8,7 @@
 - [EntryPointIOS.h](EntryPointIOS.h) — iOS main
 - [EntryPointLinux.h](EntryPointLinux.h) — Linux main
 - [EntryPointXbox.h](EntryPointXbox.h) — Xbox main
-- [Maho.h](Maho.h) — 引擎聚合头：`<Core/Core.h>` + `<Engine/Engine.h>`
+- [Maho.h](Maho.h) — 引擎聚合头：Core 九个头 + `<Engine/Engine.h>`（唯一的聚合点）
 
 ## Sub Layers
 

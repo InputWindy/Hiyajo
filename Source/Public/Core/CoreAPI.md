@@ -238,23 +238,4 @@ MAHO_IF_NOT_NULL(::Maho::GetLog(), L)
 }
 ```
 
-## Core.h
 
-### Core.h <聚合头>
-
-Core 模块聚合入口：include 它即可使用整个 Core 模块的编译期 + 并发基础设施。
-
-#### 包含
-
-| 头文件 | 说明 |
-|--------|------|
-| `<Core/TypeList.h>` | 类型列表代数 |
-| `<Core/Delegate.h>` | 多播事件 |
-| `<Core/Singleton.h>` | 单例标识基类 |
-| `<Core/TaskGraph.h>` | 依赖图调度 |
-| `<Core/Assembly.h>` | DLL 加载原语 |
-| `<Core/Fatal.h>` | 致命路径兜底 |
-
-注：`Interface.h` / `ThreadPool.h` / `ThreadedServer.h` / `Export.h` 不在聚合内，按需单独 include。
-
-- [CoreDoc.md](CoreDoc.md) — 概念 · [实现字典](../../Private/Core/CoreAPI.md) — 算法 · [Engine API](../Engine/EngineAPI.md) — 层系统
