@@ -108,6 +108,67 @@ D.Row("inline int Main(int Argc, char** Argv)",
       "abort，不尝试恢复，因为此时状态已不可信）。返回引擎 `Main` 的返回值。")
 
 # ══════════════════════════════════════════════════════════════════════════════
+# Source/Public/EntryPoint{Windows,Android,Linux,IOS,Xbox}.h —— 平台入口 shim
+# ══════════════════════════════════════════════════════════════════════════════
+
+D.Header("Public/EntryPointWindows.h", Title="EntryPointWindows.h —— Windows 入口 shim",
+         Desc="只在一个 .cpp（极薄的 `Main.cpp`）里包含。同时给出 GUI 子系统的 `WinMain`"
+              "（不弹控制台黑框）与控制台子系统的 `main`，两者都转调 `Maho::Main`。"
+              "平台差异只到这一行为止 —— 往下的生命周期完全共用。")
+D.Card("包含的头文件")
+D.Table("头文件", "功能")
+D.Row("EntryPoint.h", "统一入口驱动 `Maho::Main`（本 shim 的全部逻辑都在那里）")
+D.Row("Windows.h", "Win32：`WinMain` 签名 / `HINSTANCE` / `FreeConsole`"
+                   "（先定义 `NOMINMAX`，避免 min/max 宏污染 `std::min/max`）")
+D.Card("入口函数")
+D.Table("函数签名", "说明")
+D.Row("int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)",
+      "GUI 子系统入口。先 `FreeConsole()` 摘掉继承来 / 调试器带进来的控制台（否则会闪出黑框），"
+      "再 `return Maho::Main(__argc, __argv)`。")
+D.Row("int main(int Argc, char** Argv)", "控制台子系统入口：`return Maho::Main(Argc, Argv)`。")
+
+D.Header("Public/EntryPointAndroid.h", Title="EntryPointAndroid.h —— Android 入口 shim",
+         Desc="只在一个 .cpp 里包含。`android_main` 运行在 NDK 的 glue 线程上，`Maho::Main` "
+              "就在那里阻塞，直到 app 结束。")
+D.Card("包含的头文件")
+D.Table("头文件", "功能")
+D.Row("EntryPoint.h", "统一入口驱动 `Maho::Main`")
+D.Row("android_native_app_glue.h", "NDK glue：`android_app` 与 `android_main` 的宿主循环")
+D.Card("入口函数")
+D.Table("函数签名", "说明")
+D.Row("void android_main(struct android_app* App)",
+      "glue 线程上的入口。Android **没有 argv** ⇒ 造一个占位 `Argv` 调 `Maho::Main(1, Argv)`；"
+      "该调用阻塞到 app 退出。返回类型是 `void`（不是 `int`），所以引擎的返回值在此被丢弃。")
+
+D.Header("Public/EntryPointLinux.h", Title="EntryPointLinux.h —— Linux 入口 shim",
+         Desc="只在一个 .cpp 里包含：一个 `main` 转调 `Maho::Main`，无额外平台依赖。")
+D.Card("包含的头文件")
+D.Table("头文件", "功能")
+D.Row("EntryPoint.h", "统一入口驱动 `Maho::Main`")
+D.Card("入口函数")
+D.Table("函数签名", "说明")
+D.Row("int main(int Argc, char** Argv)", "`return Maho::Main(Argc, Argv)` —— 引擎返回值原样透传。")
+
+D.Header("Public/EntryPointIOS.h", Title="EntryPointIOS.h —— iOS 入口 shim",
+         Desc="只在一个 .cpp 里包含：一个 `main` 转调 `Maho::Main`。iOS 运行时没有动态库，"
+              "`ApplyModuleExtension` 对基名原样透传（不加 `.dylib` 后缀）。")
+D.Card("包含的头文件")
+D.Table("头文件", "功能")
+D.Row("EntryPoint.h", "统一入口驱动 `Maho::Main`")
+D.Card("入口函数")
+D.Table("函数签名", "说明")
+D.Row("int main(int Argc, char** Argv)", "`return Maho::Main(Argc, Argv)` —— 引擎返回值原样透传。")
+
+D.Header("Public/EntryPointXbox.h", Title="EntryPointXbox.h —— Xbox 入口 shim",
+         Desc="只在一个 .cpp 里包含：一个 `main` 转调 `Maho::Main`。")
+D.Card("包含的头文件")
+D.Table("头文件", "功能")
+D.Row("EntryPoint.h", "统一入口驱动 `Maho::Main`")
+D.Card("入口函数")
+D.Table("函数签名", "说明")
+D.Row("int main(int Argc, char** Argv)", "`return Maho::Main(Argc, Argv)` —— 引擎返回值原样透传。")
+
+# ══════════════════════════════════════════════════════════════════════════════
 # 下面继续按你的口述追加：再 Header(...) 换一个头，Class/Interface/Field 往下挂。
 # ══════════════════════════════════════════════════════════════════════════════
 

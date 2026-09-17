@@ -72,7 +72,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div id="app">
   <div id="side">
     <h1>Maho 引擎源码</h1>
-    <div class="search" title="左侧扫描 Source/**/*.h：22 个头文件 · 已声明 2 个 · 0 个实体 / 0 个成员 ｜ 内容在 Tools/docs_content.py 里逐条声明">
+    <div class="search" title="左侧扫描 Source/**/*.h：22 个头文件 · 已声明 7 个 · 0 个实体 / 0 个成员 ｜ 内容在 Tools/docs_content.py 里逐条声明">
       <input id="q" type="search" placeholder="搜索头文件…  （如 Frame、Core、Entry）" autocomplete="off">
     </div>
     <div id="tree"><ul>
@@ -217,28 +217,131 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </div>
 <div class="pane" id="pane-Public__EntryPointAndroid_h">
 <div class="hdr">Public/EntryPointAndroid.h</div>
-<h2 class="file-title">EntryPointAndroid.h</h2>
-<div class="empty">（尚未声明内容 —— 在 Tools/docs_content.py 里加一条 Header(&quot;Public/EntryPointAndroid.h&quot;)，再逐类声明 Class / Interface / Field）</div>
+<h2 class="file-title">EntryPointAndroid.h —— Android 入口 shim</h2>
+<div class="card"><div class="doc">
+<p>只在一个 .cpp 里包含。`android_main` 运行在 NDK 的 glue 线程上，`Maho::Main` 就在那里阻塞，直到 app 结束。</p>
+</div></div>
+<div class="card">
+<h3 class="card-title">包含的头文件</h3>
+
+<table>
+<thead><tr><th>头文件</th><th>功能</th></tr></thead>
+<tbody>
+<tr><td>EntryPoint.h</td><td>统一入口驱动 `Maho::Main`</td></tr>
+<tr><td>android_native_app_glue.h</td><td>NDK glue：`android_app` 与 `android_main` 的宿主循环</td></tr>
+</tbody></table>
+</div>
+<div class="card">
+<h3 class="card-title">入口函数</h3>
+
+<table>
+<thead><tr><th>函数签名</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td><span class="kw">void</span> android_main(<span class="kw">struct</span> android_app* App)</td><td>glue 线程上的入口。Android **没有 argv** ⇒ 造一个占位 `Argv` 调 `Maho::Main(1, Argv)`；该调用阻塞到 app 退出。返回类型是 `<span class="kw">void</span>`（不是 `<span class="kw">int</span>`），所以引擎的返回值在此被丢弃。</td></tr>
+</tbody></table>
+</div>
 </div>
 <div class="pane" id="pane-Public__EntryPointIOS_h">
 <div class="hdr">Public/EntryPointIOS.h</div>
-<h2 class="file-title">EntryPointIOS.h</h2>
-<div class="empty">（尚未声明内容 —— 在 Tools/docs_content.py 里加一条 Header(&quot;Public/EntryPointIOS.h&quot;)，再逐类声明 Class / Interface / Field）</div>
+<h2 class="file-title">EntryPointIOS.h —— iOS 入口 shim</h2>
+<div class="card"><div class="doc">
+<p>只在一个 .cpp 里包含：一个 `main` 转调 `Maho::Main`。iOS 运行时没有动态库，`ApplyModuleExtension` 对基名原样透传（不加 `.dylib` 后缀）。</p>
+</div></div>
+<div class="card">
+<h3 class="card-title">包含的头文件</h3>
+
+<table>
+<thead><tr><th>头文件</th><th>功能</th></tr></thead>
+<tbody>
+<tr><td>EntryPoint.h</td><td>统一入口驱动 `Maho::Main`</td></tr>
+</tbody></table>
+</div>
+<div class="card">
+<h3 class="card-title">入口函数</h3>
+
+<table>
+<thead><tr><th>函数签名</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td><span class="kw">int</span> main(<span class="kw">int</span> Argc, <span class="kw">char</span>** Argv)</td><td>`<span class="kw">return</span> Maho::Main(Argc, Argv)` —— 引擎返回值原样透传。</td></tr>
+</tbody></table>
+</div>
 </div>
 <div class="pane" id="pane-Public__EntryPointLinux_h">
 <div class="hdr">Public/EntryPointLinux.h</div>
-<h2 class="file-title">EntryPointLinux.h</h2>
-<div class="empty">（尚未声明内容 —— 在 Tools/docs_content.py 里加一条 Header(&quot;Public/EntryPointLinux.h&quot;)，再逐类声明 Class / Interface / Field）</div>
+<h2 class="file-title">EntryPointLinux.h —— Linux 入口 shim</h2>
+<div class="card"><div class="doc">
+<p>只在一个 .cpp 里包含：一个 `main` 转调 `Maho::Main`，无额外平台依赖。</p>
+</div></div>
+<div class="card">
+<h3 class="card-title">包含的头文件</h3>
+
+<table>
+<thead><tr><th>头文件</th><th>功能</th></tr></thead>
+<tbody>
+<tr><td>EntryPoint.h</td><td>统一入口驱动 `Maho::Main`</td></tr>
+</tbody></table>
+</div>
+<div class="card">
+<h3 class="card-title">入口函数</h3>
+
+<table>
+<thead><tr><th>函数签名</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td><span class="kw">int</span> main(<span class="kw">int</span> Argc, <span class="kw">char</span>** Argv)</td><td>`<span class="kw">return</span> Maho::Main(Argc, Argv)` —— 引擎返回值原样透传。</td></tr>
+</tbody></table>
+</div>
 </div>
 <div class="pane" id="pane-Public__EntryPointWindows_h">
 <div class="hdr">Public/EntryPointWindows.h</div>
-<h2 class="file-title">EntryPointWindows.h</h2>
-<div class="empty">（尚未声明内容 —— 在 Tools/docs_content.py 里加一条 Header(&quot;Public/EntryPointWindows.h&quot;)，再逐类声明 Class / Interface / Field）</div>
+<h2 class="file-title">EntryPointWindows.h —— Windows 入口 shim</h2>
+<div class="card"><div class="doc">
+<p>只在一个 .cpp（极薄的 `Main.cpp`）里包含。同时给出 GUI 子系统的 `WinMain`（不弹控制台黑框）与控制台子系统的 `main`，两者都转调 `Maho::Main`。平台差异只到这一行为止 —— 往下的生命周期完全共用。</p>
+</div></div>
+<div class="card">
+<h3 class="card-title">包含的头文件</h3>
+
+<table>
+<thead><tr><th>头文件</th><th>功能</th></tr></thead>
+<tbody>
+<tr><td>EntryPoint.h</td><td>统一入口驱动 `Maho::Main`（本 shim 的全部逻辑都在那里）</td></tr>
+<tr><td>Windows.h</td><td>Win32：`WinMain` 签名 / `HINSTANCE` / `FreeConsole`（先定义 `NOMINMAX`，避免 min/max 宏污染 `std::min/max`）</td></tr>
+</tbody></table>
+</div>
+<div class="card">
+<h3 class="card-title">入口函数</h3>
+
+<table>
+<thead><tr><th>函数签名</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td><span class="kw">int</span> WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, <span class="kw">int</span>)</td><td>GUI 子系统入口。先 `FreeConsole()` 摘掉继承来 / 调试器带进来的控制台（否则会闪出黑框），再 `<span class="kw">return</span> Maho::Main(__argc, __argv)`。</td></tr>
+<tr><td><span class="kw">int</span> main(<span class="kw">int</span> Argc, <span class="kw">char</span>** Argv)</td><td>控制台子系统入口：`<span class="kw">return</span> Maho::Main(Argc, Argv)`。</td></tr>
+</tbody></table>
+</div>
 </div>
 <div class="pane" id="pane-Public__EntryPointXbox_h">
 <div class="hdr">Public/EntryPointXbox.h</div>
-<h2 class="file-title">EntryPointXbox.h</h2>
-<div class="empty">（尚未声明内容 —— 在 Tools/docs_content.py 里加一条 Header(&quot;Public/EntryPointXbox.h&quot;)，再逐类声明 Class / Interface / Field）</div>
+<h2 class="file-title">EntryPointXbox.h —— Xbox 入口 shim</h2>
+<div class="card"><div class="doc">
+<p>只在一个 .cpp 里包含：一个 `main` 转调 `Maho::Main`。</p>
+</div></div>
+<div class="card">
+<h3 class="card-title">包含的头文件</h3>
+
+<table>
+<thead><tr><th>头文件</th><th>功能</th></tr></thead>
+<tbody>
+<tr><td>EntryPoint.h</td><td>统一入口驱动 `Maho::Main`</td></tr>
+</tbody></table>
+</div>
+<div class="card">
+<h3 class="card-title">入口函数</h3>
+
+<table>
+<thead><tr><th>函数签名</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td><span class="kw">int</span> main(<span class="kw">int</span> Argc, <span class="kw">char</span>** Argv)</td><td>`<span class="kw">return</span> Maho::Main(Argc, Argv)` —— 引擎返回值原样透传。</td></tr>
+</tbody></table>
+</div>
 </div>
 <div class="pane" id="pane-Public__Maho_h">
 <div class="hdr">Public/Maho.h</div>
