@@ -53,12 +53,6 @@ class FEngineBase;
  *  a nested alias so stages and the dispatch macro can still write the nested name. */
 struct FEngineContext
 {
-	/** Which ring slot this instance is -- written ONCE by the scheduler's constructor, read-only
-	 *  after that. It exists because the ENGINE graph and a layer's own collector graph hand out
-	 *  DIFFERENT context types: an engine stage gets this one, the frames it drives get the layer's.
-	 *  Both need to find the same per-frame instance, so both read the slot out of the context they
-	 *  were given. */
-	std::uint32_t Slot = 0;
 };
 
 class MAHO_API IPreInit

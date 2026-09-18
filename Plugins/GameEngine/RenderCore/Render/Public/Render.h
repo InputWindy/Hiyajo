@@ -40,11 +40,6 @@ template <typename T> class TShaderHandle;
  *  a nested alias so stages and the dispatch macro can still write the nested name. */
 struct FRenderContext
 {
-	/** Which ring slot this instance is -- written ONCE by FRender's constructor, read-only after
-	 *  that. `FRender::EndFrame` (an ENGINE stage, so it is handed FEngineContext) reads the slot
-	 *  from there; the features it drives (render stages) read it from here. Both must find the
-	 *  same per-frame instance. */
-	std::uint32_t Slot = 0;
 };
 
 namespace Detail

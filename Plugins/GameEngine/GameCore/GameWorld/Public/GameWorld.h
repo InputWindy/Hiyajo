@@ -29,9 +29,6 @@ class FGameWorld;
  *  carries a nested alias so stages and the dispatch macro can still write the nested name. */
 struct FGameWorldContext
 {
-	/** Which ring slot this instance is -- written ONCE by FGameWorld's constructor, read-only
-	 *  after that (design D8). */
-	std::uint32_t Slot = 0;
 };
 
 /**

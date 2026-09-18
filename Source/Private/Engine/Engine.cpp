@@ -10,15 +10,7 @@
 namespace Maho
 {
 
-FEngineBase::FEngineBase()
-{
-	// Stamp each ring slot with its own index, ONCE. Read-only afterwards (design D8): it is how a
-	// layer reached by the ENGINE graph indexes per-frame state its own sub-frames also touch.
-	for (std::uint32_t Slot = 0; Slot < MAHO_FRAMES_IN_FLIGHT; ++Slot)
-	{
-		Slots[Slot].Slot = Slot;
-	}
-}
+FEngineBase::FEngineBase() = default;
 
 FEngineBase::~FEngineBase() = default;
 

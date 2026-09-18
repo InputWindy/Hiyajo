@@ -31,14 +31,6 @@ MAHO_RENDER_API FRender* GetRender()
 
 FRender::FRender()
 {
-	// Stamp each ring slot with its own index, ONCE (design D8): EndFrame is an engine stage and
-	// receives FEngineContext, while the features receive FRenderContext -- both read the slot out
-	// of what they were handed to reach the same per-frame state.
-	for (std::uint32_t Slot = 0; Slot < MAHO_FRAMES_IN_FLIGHT; ++Slot)
-	{
-		Slots[Slot].Slot = Slot;
-	}
-
 	// Init: I read the window from Platform (its PostInitialize) and log heavily
 	// (Log must be up first) -- both declared by ME, the consumer.
 	MyStage<IInit>().IsWaiting<Platform::FPlatform>().ForStage<IPostInit>();
