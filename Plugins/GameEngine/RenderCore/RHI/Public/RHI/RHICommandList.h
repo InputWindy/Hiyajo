@@ -71,7 +71,7 @@ public:
 	virtual void CopyTextureToBuffer(FRHITexture* Src, FRHIBuffer* Dst, std::uint64_t DstOffset) = 0;
 	virtual void FillBuffer(FRHIBuffer* Buffer, std::uint64_t Offset, std::uint64_t Size, std::uint32_t Data) = 0;
 	/**
-	 * Upload CPU data into a buffer (recorded - runs inside EnqueueTask).
+	 * Upload CPU data into a buffer (recorded into the list it is called on).
 	 * Host-visible buffers are written directly; device-local buffers go
 	 * through a staging copy.
 	 */

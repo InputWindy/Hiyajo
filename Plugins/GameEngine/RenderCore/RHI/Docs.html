@@ -79,7 +79,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div id="app">
   <div id="side">
     <h1>Maho 引擎源码</h1>
-    <div class="search" title="左侧扫描 Source/**/*.h：10 个头文件 · 已声明 10 个 · 85 个实体 / 843 个成员 ｜ 内容在 Tools/docs_content.py 里逐条声明">
+    <div class="search" title="左侧扫描 Source/**/*.h：10 个头文件 · 已声明 10 个 · 85 个实体 / 838 个成员 ｜ 内容在 Tools/docs_content.py 里逐条声明">
       <input id="q" type="search" placeholder="搜索头文件…  （如 Frame、Core、Entry）" autocomplete="off">
     </div>
     <div id="tree"><ul>
@@ -157,7 +157,6 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> EndFrame() = 0</td><td>结束并提交帧命令缓冲 + 呈现</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> Resize(<span class="kw">int</span> Width, <span class="kw">int</span> Height) = 0</td><td>尺寸变化：重建交换链与依赖资源</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> WaitIdle() = 0</td><td>设备空闲（所有已提交工作完成）</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHICommandList* GetFrameCommandList() = 0</td><td>借用帧命令缓冲（非持有；Begin / End 由帧原语负责）</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> PresentTexture(FRHITexture* Src) = 0</td><td>离屏纹理 blit 到当前后缓冲</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> ERHIFormat GetSwapchainFormat() <span class="kw">const</span> = 0</td><td>交换链格式</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> <span class="kw">bool</span> IsInitialized() <span class="kw">const</span> = 0</td><td>是否已就绪</td></tr>
@@ -274,7 +273,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">bool</span> IsNativeFallback() <span class="kw">const</span> <span class="kw">override</span></td><td>是否复用了非独立原生队列（`FRHI::Submit` 据此决定往哪个原生队列提交）</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] VkQueue GetVkQueue() <span class="kw">const</span></td><td>原生队列句柄</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] std::uint32_t GetFamilyIndex() <span class="kw">const</span></td><td>队列族索引</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> Submit(FRHICommandList* <span class="kw">const</span>* CmdLists, std::uint32_t Count, FRHISemaphore* <span class="kw">const</span>* WaitSemaphores, std::uint32_t WaitCount, FRHISemaphore* <span class="kw">const</span>* SignalSemaphores, std::uint32_t SignalCount, FRHIFence* SignalFence) <span class="kw">override</span></td><td>把一组命令列表提交到原生队列（`vkQueueSubmit`）：等待 / 发出信号量 + 可选栅栏。**串行责任在调用方**</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> Submit(FRHICommandList* <span class="kw">const</span>* CmdLists, std::uint32_t Count, FRHISemaphore* <span class="kw">const</span>* WaitSemaphores, std::uint32_t WaitCount, FRHISemaphore* <span class="kw">const</span>* SignalSemaphores, std::uint32_t SignalCount, FRHIFence* SignalFence) <span class="kw">override</span></td><td>把一组命令列表提交到原生队列（`vkQueueSubmit`）：等待 / 发出信号量 + 可选栅栏。**只在服务器线程上被调用**（`IRHI::Submit` 经 `RunOnServer`；帧原语也一样），所以队列的外部同步是构造给的</td></tr>
 </tbody></table></div>
 </div>
 <div class="ent e-class" id="Private__VulkanCommandList_h-1">
@@ -936,7 +935,6 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> EndFrame() <span class="kw">override</span></td><td>结束帧命令缓冲 → 提交（等待镜像可用信号量、发出呈现信号量、挂上在飞栅栏）→ 呈现。尺寸变化（表面过期 / 子最优）就地重建交换链后重试</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> Resize(<span class="kw">int</span> Width, <span class="kw">int</span> Height) <span class="kw">override</span></td><td>记录新尺寸并置 `bFramebufferResized`；真正的重建在帧边界做（不在信号回调里重建）</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> WaitIdle() <span class="kw">override</span></td><td>`vkDeviceWaitIdle`（拆除 / 交换链重建前使用）</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHICommandList* GetFrameCommandList() <span class="kw">override</span></td><td>返回包住帧命令缓冲的**非持有** RHI 对象（特性借它录 pass，不能 Begin / End）</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> PresentTexture(FRHITexture* Src) <span class="kw">override</span></td><td>离屏纹理 blit 到当前镜像（**格式必须与交换链一致**）+ 布局转换，全程录在帧命令缓冲上，最后交给 `EndFrame` 提交</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> ERHIFormat GetSwapchainFormat() <span class="kw">const</span> <span class="kw">override</span></td><td>交换链格式（离屏场景目标据此选择）</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> <span class="kw">bool</span> IsInitialized() <span class="kw">const</span> <span class="kw">override</span></td><td>是否已完整初始化</td></tr>
@@ -1102,13 +1100,13 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> ~FRHIQueue() = <span class="kw">default</span></td><td>虚析构（句柄由后端持有，引用返回，不删除）</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> ERHIQueueType GetType() <span class="kw">const</span> = 0</td><td>本端点的逻辑类型</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> <span class="kw">bool</span> IsNativeFallback() <span class="kw">const</span></td><td>是否复用了非独立原生队列（仅供调试 / 日志；默认 <span class="kw">false</span>）</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> Submit(FRHICommandList* <span class="kw">const</span>* CmdLists, std::uint32_t Count, FRHISemaphore* <span class="kw">const</span>* WaitSemaphores, std::uint32_t WaitCount, FRHISemaphore* <span class="kw">const</span>* SignalSemaphores, std::uint32_t SignalCount, FRHIFence* SignalFence) = 0</td><td>批量提交一组命令列表：等待 / 发出信号量 + 可选栅栏。**调用方保证串行**（队列提交本身要串行化，引擎的设计是把串行责任放在 RDG 而不是在这里加锁）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> Submit(FRHICommandList* <span class="kw">const</span>* CmdLists, std::uint32_t Count, FRHISemaphore* <span class="kw">const</span>* WaitSemaphores, std::uint32_t WaitCount, FRHISemaphore* <span class="kw">const</span>* SignalSemaphores, std::uint32_t SignalCount, FRHIFence* SignalFence) = 0</td><td>批量提交一组命令列表：等待 / 发出信号量 + 可选栅栏。**串行由结构保证**：只有 RHI 服务器线程会调到这里（`IRHI::Submit` 经 `RunOnServer` 搬到那条线程上），调用方不需要「记得保持串行」</td></tr>
 </tbody></table></div>
 </div>
 <div class="ent e-class" id="Public__RHI__RHICommandList_h-2">
 <h3><span class="kind">类</span> FRHICommandList</h3>
 <div class="sect"><div class="doc">
-<p>命令录制面（≈ VkCommandBuffer）。一个实例只属于一次录制 ——**绝不跨任务共享**（Vulkan 禁止并发录制进同一个命令缓冲）：并行录制时`IRHI::EnqueueTask` 给每个任务自己的列表。录制顺序即执行顺序，引擎不在这里做重排。</p>
+<p>命令录制面（≈ VkCommandBuffer）。一个实例只属于一次录制 ——**绝不跨线程共享**（Vulkan 禁止并发录制进同一个命令缓冲）：新模型下每个 pass 在自己的图节点线程上录**自己那张**列表，录完登记进本帧的有序表，由帧尾统一按序提交。</p>
 </div></div>
 <div class="sect">
 <h4>字段</h4>
@@ -1802,7 +1800,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div class="ent e-class" id="Public__RHI__RHIResources_h-11">
 <h3><span class="kind">类</span> FRHITexture <span class="base">: FRHIResource</span></h3>
 <div class="sect"><div class="doc">
-<p>纹理句柄（离屏目标 / 贴图 / 深度）。**交换链镜像不在这一族**（见 `IRHI::GetFrameCommandList` 的说明）：上层只渲染到自己的纹理，再由 `PresentTexture` blit 上屏。</p>
+<p>纹理句柄（离屏目标 / 贴图 / 深度）。**交换链镜像不在这一族**：上层只渲染到自己的纹理，再由 `PresentTexture` blit 上屏（帧命令缓冲与交换链镜像始终是 RHI 私有的）。</p>
 </div></div>
 <div class="sect">
 <h4>接口</h4>
@@ -2390,7 +2388,6 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tbody>
 <tr><td>RHIAPI.h</td><td>`MAHO_RHI_API`</td></tr>
 <tr><td>Core/Singleton.h</td><td>单例标记基类（本层不使用 `Get()` 语义，只为了与引擎侧风格一致的类型锚）</td></tr>
-<tr><td>Core/ThreadPool.h</td><td>`FThreadPool RecordingPool`：串行录制池（见成员说明）</td></tr>
 <tr><td>Core/ThreadedServer.h</td><td>`FThreadedServer`：常驻专用线程 + FIFO 队列（FRHI 的基类）</td></tr>
 <tr><td>Maho.h</td><td>引擎聚合头：日志 / 断言 / 基础类型</td></tr>
 <tr><td>RHI/RHICommandList.h</td><td>命令列表与队列（`IRHI` 的大部分签名用到）</td></tr>
@@ -2411,14 +2408,13 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> ~IRHI() = <span class="kw">default</span></td><td>虚析构（宿主经基类持有）</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHICommandList* CreateCommandList(ERHICommandListType Type) = 0</td><td>建一张命令列表。**生命周期归调用方**（如拥有帧隔离的 RDG），RHI 只给裸对象</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> DestroyCommandList(FRHICommandList* CmdList) = 0</td><td>销毁命令列表</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> Submit(FRHICommandList* CmdList, ERHICommandListType Type = ERHICommandListType::Graphics, FRHISemaphore* <span class="kw">const</span>* WaitSemaphores = <span class="kw">nullptr</span>, std::uint32_t WaitCount = 0, FRHISemaphore* <span class="kw">const</span>* SignalSemaphores = <span class="kw">nullptr</span>, std::uint32_t SignalCount = 0, FRHIFence* SignalFence = <span class="kw">nullptr</span>) = 0</td><td>提交一张已录制的列表，按类型路由到对应队列（原生队列不独立时自动回落到图形队列）。**何时提交是调用方的调度决定**，这里只做队列提交本身</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> EnqueueTask(FRHICommandList* CmdList, std::function&lt;<span class="kw">void</span>(FRHICommandList*)&gt; Task) = 0</td><td>在池上跑一个录制任务（并行录制）。回调拿到**自己那张**命令列表 —— 绝不跨任务共享列表（Vulkan 禁止并发录同一个缓冲）。任务跑完由调用方串行 `Submit`</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> Flush() = 0</td><td>屏障：等此前所有 `EnqueueTask` 都录完。**并行录制时必须先 Flush 再 Submit**，否则会出现「边录边提交」</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> BeginFrame() = 0</td><td>帧原语（在 `EnqueueTask` 内调用 ⇒ 跑在服务器线程上）：取得交换链镜像并开始帧命令缓冲</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> Submit(FRHICommandList* CmdList, ERHICommandListType Type = ERHICommandListType::Graphics, FRHISemaphore* <span class="kw">const</span>* WaitSemaphores = <span class="kw">nullptr</span>, std::uint32_t WaitCount = 0, FRHISemaphore* <span class="kw">const</span>* SignalSemaphores = <span class="kw">nullptr</span>, std::uint32_t SignalCount = 0, FRHIFence* SignalFence = <span class="kw">nullptr</span>) = 0</td><td>提交一张已录制的列表，按类型路由到对应队列（原生队列不独立时自动回落到图形队列）。**提交本身在服务器线程上执行**（`RunOnServer`）—— 哪些列表、什么顺序是调用方的调度决定，而队列靠构造保持单线程</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> BeginFrame() = 0</td><td>帧原语（经 `RunOnServer` 搬到服务器线程上）：等上一帧栅栏 + 重置栅栏 + 取交换链镜像 + 开始帧命令缓冲</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> EndFrame() = 0</td><td>结束并提交帧命令缓冲 + 呈现（与 `BeginFrame` 配对）</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> Resize(<span class="kw">int</span> Width, <span class="kw">int</span> Height) = 0</td><td>交换链 / 帧缓冲尺寸变化（重建资源）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> RunOnServer(std::function&lt;<span class="kw">void</span>()&gt; Fn) = 0</td><td>**唯一的 marshal 入口**：把 `Fn` 放到 RHI 服务器线程上跑并等它完成。队列因此只有一条发射线程（`vkQueueSubmit` / `vkWaitForFences` / `vkResetFences` / `vkQueuePresentKHR` 全在它上面），「提交保持串行」不再是调用方的承诺。**可重入**：从服务器线程再调则内联执行（否则会自己等自己）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> <span class="kw">bool</span> IsServerThread() <span class="kw">const</span> = 0</td><td>调用方是否就是服务器线程</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> WaitIdle() = 0</td><td>设备空闲：等所有已提交 GPU 工作完成。**销毁可能被在飞命令缓冲引用的资源之前必须调**（引擎关闭 / 交换链拆除）</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHICommandList* GetFrameCommandList() = 0</td><td>借用帧命令缓冲作为录制面（已被 `BeginFrame` 开始、由 `EndFrame` 结束并提交）——特性只往里录 pass / draw。**非持有**：绝不调它的 Begin / End</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> PresentTexture(FRHITexture* Src) = 0</td><td>把离屏纹理 blit 到当前交换链后缓冲（在帧命令缓冲上做）。**必须在所有场景录制之后、`EndFrame` 之前**调用；交换链的渲染通道 / 帧缓冲始终是 RHI 私有的</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> ERHIFormat GetSwapchainFormat() <span class="kw">const</span> = 0</td><td>当前交换链格式 —— 离屏目标必须与它一致（blit 要求格式相同）</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> <span class="kw">bool</span> IsInitialized() <span class="kw">const</span> = 0</td><td>设备是否已就绪</td></tr>
@@ -2486,14 +2482,13 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div class="ent e-class" id="Public__RHI__RHIServer_h-2">
 <h3><span class="kind">类</span> FRHI <span class="base">: FThreadedServer, IRHI</span></h3>
 <div class="sect"><div class="doc">
-<p>**渲染服务器**：后端无关的 GPU 设备面。持有 `IDynamicRHI` 设备并实现 `IRHI`。渲染所有者（`FRender`）持有它，且只经 `IRHI` 的命令面交互（`EnqueueTask` / `Submit` / 帧原语）—— **渲染线程就是服务器线程**。</p>
-<p>命令录制经 `EnqueueTask` 并行（池）；队列提交与帧原语是直接调用，**串行责任交给调用方（RDG）**。后端无关：RDG / 渲染插件永远不碰具体后端类型，设备本身（`IDynamicRHI`）留在这个 DLL 里。</p>
+<p>**渲染服务器**：后端无关的 GPU 设备面。持有 `IDynamicRHI` 设备并实现 `IRHI`。渲染所有者（`FRender`）持有它，且只经 `IRHI` 的命令面交互（`Submit` / 帧原语 / `RunOnServer`）—— **渲染线程就是服务器线程**。</p>
+<p>**队列只有一条发射线程**：帧原语与 `Submit` 都经 `RunOnServer` 搬到服务器线程上，所以「提交保持串行」是结构给的而不是纪律给的；`AddPass` 那套「每 pass 自己一张列表 + 在各自图节点线程上录制」的并行录制不再需要池。后端无关：RDG / 渲染插件永远不碰具体后端类型，设备本身（`IDynamicRHI`）留在这个 DLL 里。</p>
 </div></div>
 <div class="sect">
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-private">private</span></td><td>std::unique_ptr&lt;IDynamicRHI&gt; RHI</td><td>设备（后端具体类型；**RHI 私有**，永不外泄）</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td>FThreadPool RecordingPool{1}</td><td>**串行**录制 worker：保持依赖特性的提交顺序（一次绘制必须晚于它之前的清理）。并行录制会把顺序变成竞态，所以这里刻意用 1 个 worker</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>std::unique_ptr&lt;IDynamicRHI&gt; RHI</td><td>设备（后端具体类型；**RHI 私有**，永不外泄）。常驻线程本身来自基类 `FThreadedServer`（`Worker` + `WorkerId`，后者供 `IsServerThread`）</td></tr>
 </tbody></table></div>
 <div class="sect">
 <h4>接口</h4>
@@ -2502,16 +2497,15 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> ~FRHI() <span class="kw">override</span></td><td>虚析构：经基类指针释放（宿主 DLL 边界）</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">bool</span> Initialize(<span class="kw">void</span>* NativeWindowHandle, <span class="kw">int</span> Width, <span class="kw">int</span> Height, ERHIBackend Backend = ERHIBackend::Vulkan)</td><td>起服务器（**先建设备再启动线程**）+ 初始化设备。窗口句柄为空 = 无头模式（跳过 RHI，返回 <span class="kw">true</span>）；宽高非法直接失败（不猜尺寸）</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> ShutdownRHI()</td><td>先停服务器线程、再关设备并释放（幂等）—— 顺序不能反，否则设备析构时可能有在飞任务触碰它</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> EnqueueTask(FRHICommandList* CmdList, std::function&lt;<span class="kw">void</span>(FRHICommandList*)&gt; Task) <span class="kw">override</span></td><td>把录制任务丢进池。**池是单 worker（`RecordingPool{1}`）**：回调按 `EnqueueTask` 顺序执行，于是依赖彼此的特性（先清后画）提交顺序自然有序 —— 这条是刻意选的串行点</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Flush() <span class="kw">override</span></td><td>排空所有待录制任务：保证「录完所有 → 再提交所有」的顺序</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FRHICommandList* CreateCommandList(ERHICommandListType Type) <span class="kw">override</span></td><td>转发到设备建列表</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> DestroyCommandList(FRHICommandList* CmdList) <span class="kw">override</span></td><td>转发销毁列表</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Submit(FRHICommandList* CmdList, ERHICommandListType Type = ERHICommandListType::Graphics, FRHISemaphore* <span class="kw">const</span>* WaitSemaphores = <span class="kw">nullptr</span>, std::uint32_t WaitCount = 0, FRHISemaphore* <span class="kw">const</span>* SignalSemaphores = <span class="kw">nullptr</span>, std::uint32_t SignalCount = 0, FRHIFence* SignalFence = <span class="kw">nullptr</span>) <span class="kw">override</span></td><td>按类型路由到对应队列；**计算 / 传输队列若回落到图形族，就提交到图形队列**，让它们与栅格工作天然串行（跨队列顺序不需要额外信号量）</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> BeginFrame() <span class="kw">override</span></td><td>帧原语：转发到设备（获取镜像 + 开帧缓冲区）</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> EndFrame() <span class="kw">override</span></td><td>帧原语：转发到设备（结束 + 提交 + 呈现）</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Resize(<span class="kw">int</span> Width, <span class="kw">int</span> Height) <span class="kw">override</span></td><td>转发尺寸变化（宽高非法时忽略）</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> WaitIdle() <span class="kw">override</span></td><td>转发设备空闲等待（拆除前的必要动作）</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FRHICommandList* GetFrameCommandList() <span class="kw">override</span></td><td>转发：借用帧命令缓冲（非持有）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Submit(FRHICommandList* CmdList, ERHICommandListType Type = ERHICommandListType::Graphics, FRHISemaphore* <span class="kw">const</span>* WaitSemaphores = <span class="kw">nullptr</span>, std::uint32_t WaitCount = 0, FRHISemaphore* <span class="kw">const</span>* SignalSemaphores = <span class="kw">nullptr</span>, std::uint32_t SignalCount = 0, FRHIFence* SignalFence = <span class="kw">nullptr</span>) <span class="kw">override</span></td><td>**经 `RunOnServer` 在服务器线程上提交**（调用方已在服务器线程时就地执行 —— 帧尾整批提交因此只花一次任务）。路由：按类型到对应队列；**计算 / 传输队列若回落到图形族，就提交到图形队列**，让它们与栅格工作天然串行（跨队列顺序不需要额外信号量）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> BeginFrame() <span class="kw">override</span></td><td>帧原语：经 `RunOnServer` 在服务器线程上转发到设备（等栅栏 + 取镜像 + 开帧缓冲区）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> EndFrame() <span class="kw">override</span></td><td>帧原语：经 `RunOnServer` 在服务器线程上转发（结束 + 提交 + 呈现）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Resize(<span class="kw">int</span> Width, <span class="kw">int</span> Height) <span class="kw">override</span></td><td>经 `RunOnServer` 转发尺寸变化（宽高非法时忽略）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> WaitIdle() <span class="kw">override</span></td><td>经 `RunOnServer` 转发设备空闲等待（队列在前，所以先排空已投递的批）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> RunOnServer(std::function&lt;<span class="kw">void</span>()&gt; Fn) <span class="kw">override</span></td><td>marshal 实现：已在服务器线程（或线程已停）则内联执行；否则投一个任务并用完成闩等待。完成信号由作用域守卫给出 —— 服务器会吞掉任务里的异常并继续服务，所以「最后一句才置位」会让等待方永久卡住</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">bool</span> IsServerThread() <span class="kw">const</span> <span class="kw">override</span></td><td>转问基类 `FThreadedServer`</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> PresentTexture(FRHITexture* Src) <span class="kw">override</span></td><td>转发：离屏纹理 blit 上屏</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] ERHIFormat GetSwapchainFormat() <span class="kw">const</span> <span class="kw">override</span></td><td>转发：交换链格式（设备未就绪时 `Unknown`）</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">bool</span> IsInitialized() <span class="kw">const</span> <span class="kw">override</span></td><td>设备存在且已初始化</td></tr>

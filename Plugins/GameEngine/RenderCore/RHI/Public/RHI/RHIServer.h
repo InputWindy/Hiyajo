@@ -2,7 +2,6 @@
 
 #include "RHIAPI.h"
 #include <Core/Singleton.h>
-#include <Core/ThreadPool.h>
 #include <Core/ThreadedServer.h>
 #include <Maho.h>
 #include <RHI/RHICommandList.h>
@@ -11,6 +10,7 @@
 
 #include <condition_variable>
 #include <cstdint>
+#include <functional>
 #include <limits>
 #include <memory>
 #include <mutex>
@@ -24,10 +24,9 @@ struct IRHI
 	virtual ~IRHI() = default;
 
 	/**
-	 * Create a command list for the given type. Command-list LIFECYCLE belongs
-	 		 * to the caller (e.g. the RDG, which owns frame isolation) - the RHI only
-	 * provides the raw object. Record via EnqueueTask, destroy with
-	 * DestroyCommandList.
+	 * Create a command list for the given type. Command-list LIFECYCLE belongs to the caller (the
+	 * RDG, which records one per pass and owns frame isolation) - the RHI only provides the raw
+	 * object. Record into it on the thread that owns it, destroy with DestroyCommandList.
 	 */
 	[[nodiscard]] virtual FRHICommandList* CreateCommandList(ERHICommandListType Type) = 0;
 	virtual void DestroyCommandList(FRHICommandList* CmdList) = 0;
@@ -48,25 +47,7 @@ struct IRHI
 		std::uint32_t SignalCount = 0,
 		FRHIFence* SignalFence = nullptr) = 0;
 
-	/**
-	 * Run a recording task on a worker thread from the pool (parallel command
-	 		 * recording). The callback receives ITS OWN command list - never share a
-	 * command list across tasks (Vulkan forbids concurrent recording into the
-	 * same buffer). After tasks complete, the caller (RDG) submits the recorded
-	 * command lists serially via Submit.
-	 */
-	virtual void EnqueueTask(
-		FRHICommandList* CmdList,
-		std::function<void(FRHICommandList*)> Task) = 0;
-
-	/**
-	 * Barrier: wait until every EnqueueTask submitted so far has finished
-	 		 * recording. Call BEFORE Submit to guarantee the "record all - submit all"
-	 * ordering when using parallel command recording.
-	 */
-	virtual void Flush() = 0;
-
-	// -- frame primitives (call inside EnqueueTask to run on the server thread) --
+	// -- frame primitives (marshalled onto the server thread by RunOnServer) --
 	virtual void BeginFrame() = 0;
 	virtual void EndFrame() = 0;
 	virtual void Resize(int Width, int Height) = 0;
@@ -87,14 +68,6 @@ struct IRHI
 	 *  BEFORE destroying resources that a submitted command buffer may still
 	 *  reference (engine shutdown / swapchain teardown). */
 	virtual void WaitIdle() = 0;
-
-	/**
-	 * Borrow the frame command buffer as a recording surface. The buffer is
-	 * already begun by BeginFrame and will be ended/submitted by EndFrame -
-	 * features only record render passes / draws into it. Non-owning; never call
-	 * Begin/End on the returned list.
-	 */
-	[[nodiscard]] virtual FRHICommandList* GetFrameCommandList() = 0;
 
 	/**
 	 * Copy an off-screen texture to the current swapchain backbuffer (blit) on
@@ -247,16 +220,6 @@ public:
 	/** Tear the device + server down (idempotent). */
 	void ShutdownRHI();
 
-	/**
-	 * Record commands into a caller-owned command list on a thread-pool worker
-		 * (parallel recording). The caller (RDG) owns the command list's lifecycle
-		 * (frame isolation) and decides WHEN to submit - call Submit explicitly.
-	 */
-	void EnqueueTask(
-		FRHICommandList* CmdList,
-		std::function<void(FRHICommandList*)> Task) override;
-	void Flush() override;
-
 	[[nodiscard]] FRHICommandList* CreateCommandList(ERHICommandListType Type) override;
 	void DestroyCommandList(FRHICommandList* CmdList) override;
 	void Submit(
@@ -275,7 +238,6 @@ public:
 	void WaitIdle() override;
 	void RunOnServer(std::function<void()> Fn) override;
 	[[nodiscard]] bool IsServerThread() const override;
-	[[nodiscard]] FRHICommandList* GetFrameCommandList() override;
 	void PresentTexture(FRHITexture* Src) override;
 	[[nodiscard]] ERHIFormat GetSwapchainFormat() const override;
 
@@ -359,7 +321,6 @@ public:
 
 private:
 	std::unique_ptr<IDynamicRHI> RHI;
-	FThreadPool RecordingPool{1};   // serial recording worker -- keeps dependent submits ordered
 
 	/** The server thread's name -- its row label in a trace. Without it every FThreadedServer in
 	 *  the process reports the base default and their events all land on ONE row. */

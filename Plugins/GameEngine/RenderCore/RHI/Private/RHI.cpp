@@ -113,33 +113,6 @@ void FRHI::ShutdownRHI()
 
 // -- frame pipeline (server-thread ordered) ----------------------------------
 
-void FRHI::EnqueueTask(
-	FRHICommandList* CmdList,
-	std::function<void(FRHICommandList*)> Task)
-{
-	if (CmdList == nullptr || !Task)
-	{
-		return;
-	}
-	// The callback owns the command list lifecycle (Begin/record/End/Submit) --
-	// it may submit the recorded list itself via IRHI::Submit. Recording is serial
-	// (single worker) so callbacks run in EnqueueTask order, keeping the submits of
-	// dependent features ordered (a draw must be submitted after the clear).
-	// Named for the trace: this pool is a DIFFERENT thread set from the RHI server, so it gets a
-	// row of its own ("RHI.Recording") rather than appearing under the server's row.
-	RecordingPool.Submit(FTaskTrace{ "", "RHI.Recording", "Encode" }, [CmdList, Task = std::move(Task)]()
-	{
-		Task(CmdList);
-	});
-}
-
-void FRHI::Flush()
-{
-	// Drain all pending recording tasks - guarantees every EnqueueTask finished
-	// before the caller proceeds to Submit (record-all -> submit-all ordering).
-	RecordingPool.Flush();
-}
-
 bool FRHI::IsServerThread() const
 {
 	return FThreadedServer::IsServerThread();
@@ -240,11 +213,6 @@ void FRHI::WaitIdle()
 			RHI->WaitIdle();
 		}
 	});
-}
-
-FRHICommandList* FRHI::GetFrameCommandList()
-{
-	return RHI ? RHI->GetFrameCommandList() : nullptr;
 }
 
 void FRHI::PresentTexture(FRHITexture* Src)

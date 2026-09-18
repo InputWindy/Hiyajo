@@ -29,7 +29,6 @@ public:
 	virtual void Resize(int Width, int Height) override;
 	virtual void WaitIdle() override;
 
-	[[nodiscard]] virtual FRHICommandList* GetFrameCommandList() override;
 	virtual void PresentTexture(FRHITexture* Src) override;
 	[[nodiscard]] virtual ERHIFormat GetSwapchainFormat() const override;
 

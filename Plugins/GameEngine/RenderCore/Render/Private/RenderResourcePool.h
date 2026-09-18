@@ -236,6 +236,7 @@ private:
 		FRHIDescriptorSet* Set = nullptr;
 		FRHIDescriptorSetLayout* Layout = nullptr;
 		std::vector<FRHIDescriptorWrite> Writes;   // content-address key + referenced-resource record
+		std::uint32_t LastUsedFrame = 0;           // eviction key: the last frame that asked for this content
 	};
 
 	/** Reuse an inactive slot with a matching descriptor + lifetime class, else -1. */
@@ -264,7 +265,23 @@ private:
 	std::vector<FGraphicsPipelineEntry> GraphicsPipelines;   // PSO cache: graphics pipeline keyed by its desc
 	std::vector<FSamplerEntry> Samplers;                // pool-owned samplers (get-or-create by desc)
 	std::vector<FDescriptorSetEntry> DescriptorSets;    // pool-owned descriptor pools + sets (content-addressable)
-	std::vector<FDescriptorSetEntry> MutableDescriptorSets; // pool-owned mutable sets keyed by layout (written at record time)
+	std::vector<FDescriptorSetEntry> MutableDescriptorSets; // pool-owned mutable sets keyed by layout + content
+
+	/** Frames seen, and the age at which a descriptor set is dropped. Sets are content-addressed, so a
+	 *  request whose content no longer repeats (a transient buffer's address, a resized UI buffer,
+	 *  a texture that stopped being drawn) would otherwise leave its set + pool alive forever. Both
+	 *  entry tables are swept at BeginFrame: an entry unused for more than the grace period is freed.
+	 *
+	 *  Grace is deliberately not 1: a frame's sets are referenced by the command lists IT submitted,
+	 *  and BeginFrame only sweeps after it waited the frame fence. Two frames of slack keeps the
+	 *  sweep clear of a set that a still-recorded (not yet submitted) list of the frame being built
+	 *  would have used -- the same reason the command lists themselves are retired one boundary
+	 *  later. `FrameCounter` advances in BeginFrame, so it counts the frame being built. */
+	static constexpr std::uint32_t kDescriptorSetGraceFrames = 2;
+	std::uint32_t FrameCounter = 0;
+
+	/** Free one entry's set + pool (the pair is pool-owned; the set is freed before its pool). */
+	void DestroyDescriptorSetEntry(FDescriptorSetEntry& Entry);
 
 	// Frame-transient parameter pool (bump allocator). Parameter structs are
 	// SmallPoD-size (a handful of descriptors + push-constant scalars), allocated in

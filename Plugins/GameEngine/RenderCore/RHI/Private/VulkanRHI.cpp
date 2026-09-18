@@ -528,11 +528,6 @@ void FVulkanRHI::BeginFrame()
 	FrameCommandListRHI->Begin();
 }
 
-FRHICommandList* FVulkanRHI::GetFrameCommandList()
-{
-	return FrameCommandListRHI;
-}
-
 ERHIFormat FVulkanRHI::GetSwapchainFormat() const
 {
 	// The swapchain picks B8G8R8A8_SRGB when available; the off-screen scene
@@ -1583,7 +1578,8 @@ bool FVulkanRHI::CreateCommandPoolAndBuffer()
 		return false;
 	}
 
-	// Non-owning wrapper so features borrow the frame buffer via GetFrameCommandList.
+	// Non-owning wrapper over the frame command buffer: the frame primitives record into it (the
+	// present blit), it is closed and submitted by EndFrame. Nothing outside this DLL holds it.
 	FVulkanCommandList::FRTRuntime RT;
 	RT.BuildAccel = CmdBuildAccelerationStructuresKHR;
 	RT.CopyAccel = CmdCopyAccelerationStructureKHR;

@@ -263,6 +263,23 @@ std::int32_t FRHIResourcePool::FindReusableBuffer(
 
 // -- native destroy helpers ----------------------------------------------------
 
+void FRHIResourcePool::DestroyDescriptorSetEntry(FDescriptorSetEntry& Entry)
+{
+	if (Entry.Pool == nullptr || RHI == nullptr)
+	{
+		Entry.Pool = nullptr;
+		Entry.Set = nullptr;
+		return;
+	}
+	if (Entry.Set != nullptr)
+	{
+		RHI->FreeDescriptorSet(Entry.Pool, Entry.Set);
+		Entry.Set = nullptr;
+	}
+	RHI->DestroyDescriptorPool(Entry.Pool);
+	Entry.Pool = nullptr;
+}
+
 void FRHIResourcePool::DestroyTextureEntry(FTextureEntry& Entry)
 {
 	if (Entry.View)
@@ -501,10 +518,11 @@ FRHIDescriptorSet* FRHIResourcePool::GetOrCreateDescriptorSet(
 	}
 
 	std::vector<FRHIDescriptorWrite> KeyWrites(Writes, Writes + WriteCount);
-	for (const FDescriptorSetEntry& E : DescriptorSets)
+	for (FDescriptorSetEntry& E : DescriptorSets)
 	{
 		if (E.Set != nullptr && E.Layout == Layout && DescriptorWritesEqual(E.Writes, KeyWrites))
 		{
+			E.LastUsedFrame = FrameCounter;   // keeps the entry alive across the sweep
 			return E.Set;
 		}
 	}
@@ -546,6 +564,7 @@ FRHIDescriptorSet* FRHIResourcePool::GetOrCreateDescriptorSet(
 	Entry.Set = Set;
 	Entry.Layout = Layout;
 	Entry.Writes = std::move(KeyWrites);
+	Entry.LastUsedFrame = FrameCounter;
 	DescriptorSets.push_back(std::move(Entry));
 	return Set;
 }
@@ -569,10 +588,11 @@ FRHIDescriptorSet* FRHIResourcePool::GetOrCreateMutableDescriptorSet(
 	// touched. That is what lets passes record in parallel instead of serializing every record
 	// behind the previous submit.
 	std::vector<FRHIDescriptorWrite> KeyWrites(Writes, Writes + WriteCount);
-	for (const FDescriptorSetEntry& E : MutableDescriptorSets)
+	for (FDescriptorSetEntry& E : MutableDescriptorSets)
 	{
 		if (E.Set != nullptr && E.Layout == Layout && DescriptorWritesEqual(E.Writes, KeyWrites))
 		{
+			E.LastUsedFrame = FrameCounter;   // keeps the entry alive across the sweep
 			return E.Set;
 		}
 	}
@@ -608,6 +628,7 @@ FRHIDescriptorSet* FRHIResourcePool::GetOrCreateMutableDescriptorSet(
 	Entry.Set = Set;
 	Entry.Layout = Layout;
 	Entry.Writes = std::move(KeyWrites);   // kept as the content key for the next lookup
+	Entry.LastUsedFrame = FrameCounter;
 	MutableDescriptorSets.push_back(std::move(Entry));
 	bOutNeedsWrite = true;
 	return Set;
@@ -774,6 +795,28 @@ void FRHIResourcePool::BeginFrame()
 		}
 	}
 
+	// Sweep the descriptor-set tables: both are content-addressed, so an entry whose CONTENT stopped
+	// being requested (a transient buffer's address, a UI buffer that got resized, a texture nobody
+	// draws any more) would otherwise hold its set AND its descriptor pool for the life of the
+	// process. Safe here for the same reason the lists above are: the fence covering everything that
+	// referenced them was waited before this ran.
+	++FrameCounter;
+	for (std::vector<FDescriptorSetEntry>* Table : { &DescriptorSets, &MutableDescriptorSets })
+	{
+		for (auto It = Table->begin(); It != Table->end(); )
+		{
+			if (FrameCounter - It->LastUsedFrame > kDescriptorSetGraceFrames)
+			{
+				DestroyDescriptorSetEntry(*It);
+				It = Table->erase(It);
+			}
+			else
+			{
+				++It;
+			}
+		}
+	}
+
 	// Recycle EVERY transient slot (active or not): mark inactive and free the
 	// slot. Crucially we KEEP native + view + memory - the host BeginFrame already
 	// waited the previous frame's fence, so no in-flight command references them,
@@ -889,30 +932,12 @@ void FRHIResourcePool::Shutdown()
 	// other way around). Free the set, then the pool, for each owned pair.
 	for (FDescriptorSetEntry& E : DescriptorSets)
 	{
-		if (E.Pool && RHI)
-		{
-			if (E.Set)
-			{
-				RHI->FreeDescriptorSet(E.Pool, E.Set);
-				E.Set = nullptr;
-			}
-			RHI->DestroyDescriptorPool(E.Pool);
-			E.Pool = nullptr;
-		}
+		DestroyDescriptorSetEntry(E);
 	}
 	DescriptorSets.clear();
 	for (FDescriptorSetEntry& E : MutableDescriptorSets)
 	{
-		if (E.Pool && RHI)
-		{
-			if (E.Set)
-			{
-				RHI->FreeDescriptorSet(E.Pool, E.Set);
-				E.Set = nullptr;
-			}
-			RHI->DestroyDescriptorPool(E.Pool);
-			E.Pool = nullptr;
-		}
+		DestroyDescriptorSetEntry(E);
 	}
 	MutableDescriptorSets.clear();
 	for (FSamplerEntry& E : Samplers)

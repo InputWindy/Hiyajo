@@ -45,12 +45,6 @@ public:
 	virtual void Resize(int Width, int Height) = 0;
 	virtual void WaitIdle() = 0;
 
-	/**
-	 * Borrow the frame command buffer (already begun by BeginFrame, ended and
-	 * submitted by EndFrame) as a non-owning recording surface.
-	 */
-	[[nodiscard]] virtual FRHICommandList* GetFrameCommandList() = 0;
-
 	/** Blit an off-screen texture to the current swapchain backbuffer. */
 	virtual void PresentTexture(FRHITexture* Src) = 0;
 
