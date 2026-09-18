@@ -16,12 +16,23 @@
 //
 // With MAHO_TRACE set (any value), each scope writes ONE line when it closes:
 //
-//   [tr] ts=<us> dur=<us> tid=<n> name=<scope>
+//   [tr] ts=<us> dur=<us> tid=<n> name=<scope>                  (a manual scope)
+//   [tr] ts=<us> dur=<us> tid=<n> grp=<g> name=<frame>::<stage>  (a TASK bar)
 //
 // (ts, dur, tid, name) is exactly Chrome Trace Event Format's complete-event tuple, so turning
 // this into a file that chrome://tracing and Perfetto load directly is a mechanical rewrite --
 // no per-event parsing decisions to make. `ts` is microseconds since the first traced call, on
 // a MONOTONIC clock, so it is immune to wall-clock adjustments and comparable across threads.
+//
+// Two more environment switches, both read once:
+//
+//   MAHO_TRACE_MIN_US=<n>   duration floor for TASK bars (default 0 = keep all). Task bars are
+//                           generated for EVERY task, so they are what makes a trace expensive;
+//                           a manual scope is a human decision and is never filtered. Note the
+//                           cost of filtering: rows are derived from events, so a frame whose
+//                           every bar falls below the floor loses its row.
+//   MAHO_TRACE_STAGES       (see Source/Private/Core/FrameGraph.cpp) enter/exit bracketing for
+//                           the crash case, where the last stage ENTERED names the culprit.
 //
 // Note what this is NOT: a full event stream. Each scope costs two clock reads plus one line of
 // buffer, so instrument the tens of scopes that matter, not every call in the frame.
@@ -38,6 +49,10 @@ MAHO_API bool TraceEnabled();
 
 /** Monotonic microseconds since the trace origin (the first traced call). The `ts` we emit. */
 MAHO_API std::uint64_t TraceNowMicros();
+
+/** Duration floor for automatically generated TASK bars (MAHO_TRACE_MIN_US, default 0 = all).
+ *  Manual scopes are never filtered -- see the note at the top of this header. */
+MAHO_API std::uint64_t TraceTaskFloorMicros();
 
 /** Record one completed scope. Called by FScopedTrace's destructor; callers rarely need it. */
 MAHO_API void TraceEmit(const char* Name, std::uint64_t StartMicros, std::uint64_t DurMicros);

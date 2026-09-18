@@ -660,15 +660,36 @@ D.Field("bool bStopping = false", "停止标志（`Shutdown` 置位）")
 
 D.Header("Public/Core/Profiler.h", Title="Profiler.h —— CPU 作用域追踪（MAHO_TRACE）",
          Desc="零依赖的 CPU 追踪：设 `MAHO_TRACE`（任意值）后，每个 scope 关闭时写一行\n"
-              "`[tr] ts=<us> dur=<us> tid=<泳道> grp=<组> name=<名字>`\n"
+              "`[tr] ts=<us> dur=<us> tid=<泳道> name=<名字>`（手写埋点）或\n"
+              "`[tr] ts=<us> dur=<us> tid=<泳道> grp=<组> name=<帧>::<stage>`（**任务条**，由池/常驻线程开）\n"
               "`(ts, dur, tid, name)` 正好是 Chrome Trace Event Format 的 complete-event 元组，"
               "所以把它变成 chrome://tracing / Perfetto 直接能载的文件只是一次机械改写"
               "（`Tools/trace_to_chrome.py`）。`ts` 是**单调时钟**上距首次追踪的微秒数，因此跨线程可比。\n"
               "**`tid` 承载的是泳道，不是 OS 线程**：泳道 = 帧（按帧名哈希）。线程池会把一帧的节点撒到"
               "不同 worker 上，按线程分行会把一帧的形状切碎。\n"
+              "**行的装配是手写的**（`FLine`：memcpy + 十进制循环 + 一次 `fwrite`）。`fprintf` 曾是发射路径"
+              "的大头 —— 每转换一次都要解析格式串并查 locale —— 而这里总共只有两个整数、一个泳道号和"
+              "三个名字。文件以 `wb` 打开：文本模式下 CRT 每次写入都要扫描 `\\n` 并展开成 CRLF。\n"
+              "**装不进 1024 字节的事件被丢弃，绝不截断**：截短帧名会给同一个帧凭空多出一行，比丢一条还糟。\n"
               "**注意它不是什么**：不是完整事件流。每个 scope 两次读钟 + 一行缓冲，所以只该埋几十个"
               "真正要紧的作用域，而不是每个调用。\n"
               "环境开关与 `MAHO_TRACE_STAGES` 同形：只读一次，于是关闭时整条路径就是一个可预测的分支。")
+
+D.Card("环境开关（各自只读一次）")
+D.Table("开关", "说明")
+D.Row("MAHO_TRACE", "任意值即开启。关闭时 `FScopedTrace*` 的构造只剩指针拷贝 + 一个分支")
+D.Row("MAHO_TRACE_MIN_US=<n>",
+      "**任务条的时长门槛**（默认 0 = 全留）。任务条是为**每一个**任务生成的，所以它们才是让 trace 变贵的"
+      "东西；而手写 `MAHO_TRACE_SCOPE` 是人对「什么重要」的判断，**永不被过滤**。\n"
+      "过滤的代价说清楚：行是从事件派生出来的，所以一个帧若全部分条都低于门槛，它会**连行一起消失**"
+      "（手写埋点随后落在数字 lane id 下）。这是刻意的取舍 —— 没有任何一条高于门槛的帧不值得占一行。\n"
+      "实测（ExampleEngine，Debug，12s）：门槛 0 → 339501 条 / 23.3MB；门槛 200us → 157985 条 / 11.3MB，"
+      "且留下的正好是有分量的那些（`FUIFeature::IInitViews` / `IRenderUI` / `FRender::IEndFrame` …），"
+      "消失的是调度线程那些 8~12us 的小命令。",
+      )
+D.Row("MAHO_TRACE_STAGES",
+      "帧图节点的 enter/exit 括注（见 `FrameGraph.cpp`）。它只为一个失败模式存在：硬崩（0xC0000005）没有栈、"
+      "也抛不出任何 C++ 能接的东西，于是「最后进入而没退出」的那个 stage 就是唯一能指出真凶的线索")
 
 D.Card("包含的头文件")
 D.Table("头文件", "功能")
@@ -708,9 +729,10 @@ D.Row("MAHO_TRACE_SCOPE(Name)", "单个作用域（`Name` 必须是静态存储�
 D.Row("MAHO_TRACE_SCOPE_LANE(First, Second)", "**建立自己的泳道且没有所属收集器** —— 常驻 worker（ThreadedServer 角色），"
        "不是被某个图驱动的帧。`Second` 是这条的工作名（`Task` / `Read` / `Compile` / `Flush` ……）")
 D.Row("MAHO_TRACE_SCOPE3(Group, First, Second)", "三元形式：收集器 :: 帧 :: stage。帧图把身份交给池，由池调用它")
-D.Row("MAHO_API void TraceEmit / TraceEmitPair / TraceFlush / TraceEnabled / TraceNowMicros",
-       "手写埋点用的底层接口。`TraceFlush` 在 `FEngineBase::PostMain` 收尾调用（**刻意不注册 `atexit`**："
-       "那会在 CRT 退出机制就绪之前自锁）")
+D.Row("MAHO_API void TraceEmit / TraceEmitPair / TraceFlush / TraceEnabled / TraceNowMicros / TraceTaskFloorMicros",
+       "手写埋点用的底层接口。`TraceEmit` 写手写埋点（**不过滤**），`TraceEmitPair` 写任务条"
+       "（**受 `MAHO_TRACE_MIN_US` 过滤**）。`TraceFlush` 在 `FEngineBase::PostMain` 收尾调用"
+       "（**刻意不注册 `atexit`**：那会在 CRT 退出机制就绪之前自锁）")
 
 # ══════════════════════════════════════════════════════════════════════════════
 # Source/Public/Engine/Engine.h —— 引擎层：stage 接口 + 宿主基类

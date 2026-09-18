@@ -518,12 +518,28 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <h2 class="file-title">Profiler.h —— CPU 作用域追踪（MAHO_TRACE）</h2>
 <div class="card"><div class="doc">
 <p>零依赖的 CPU 追踪：设 `MAHO_TRACE`（任意值）后，每个 scope 关闭时写一行</p>
-<p>`[tr] ts=&lt;us&gt; dur=&lt;us&gt; tid=&lt;泳道&gt; grp=&lt;组&gt; name=&lt;名字&gt;`</p>
+<p>`[tr] ts=&lt;us&gt; dur=&lt;us&gt; tid=&lt;泳道&gt; name=&lt;名字&gt;`（手写埋点）或</p>
+<p>`[tr] ts=&lt;us&gt; dur=&lt;us&gt; tid=&lt;泳道&gt; grp=&lt;组&gt; name=&lt;帧&gt;::&lt;stage&gt;`（**任务条**，由池/常驻线程开）</p>
 <p>`(ts, dur, tid, name)` 正好是 Chrome Trace Event Format 的 complete-event 元组，所以把它变成 chrome:<span class="cm">//tracing / Perfetto 直接能载的文件只是一次机械改写（`Tools/trace_to_chrome.py`）。`ts` 是**单调时钟**上距首次追踪的微秒数，因此跨线程可比。</span></p>
 <p>**`tid` 承载的是泳道，不是 OS 线程**：泳道 = 帧（按帧名哈希）。线程池会把一帧的节点撒到不同 worker 上，按线程分行会把一帧的形状切碎。</p>
+<p>**行的装配是手写的**（`FLine`：memcpy + 十进制循环 + 一次 `fwrite`）。`fprintf` 曾是发射路径的大头 —— 每转换一次都要解析格式串并查 locale —— 而这里总共只有两个整数、一个泳道号和三个名字。文件以 `wb` 打开：文本模式下 CRT 每次写入都要扫描 `\n` 并展开成 CRLF。</p>
+<p>**装不进 1024 字节的事件被丢弃，绝不截断**：截短帧名会给同一个帧凭空多出一行，比丢一条还糟。</p>
 <p>**注意它不是什么**：不是完整事件流。每个 scope 两次读钟 + 一行缓冲，所以只该埋几十个真正要紧的作用域，而不是每个调用。</p>
 <p>环境开关与 `MAHO_TRACE_STAGES` 同形：只读一次，于是关闭时整条路径就是一个可预测的分支。</p>
 </div></div>
+<div class="card">
+<h3 class="card-title">环境开关（各自只读一次）</h3>
+
+<table>
+<thead><tr><th>开关</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td>MAHO_TRACE</td><td>任意值即开启。关闭时 `FScopedTrace*` 的构造只剩指针拷贝 + 一个分支</td></tr>
+<tr><td>MAHO_TRACE_MIN_US=&lt;n&gt;</td><td>**任务条的时长门槛**（默认 0 = 全留）。任务条是为**每一个**任务生成的，所以它们才是让 trace 变贵的东西；而手写 `MAHO_TRACE_SCOPE` 是人对「什么重要」的判断，**永不被过滤**。
+过滤的代价说清楚：行是从事件派生出来的，所以一个帧若全部分条都低于门槛，它会**连行一起消失**（手写埋点随后落在数字 lane id 下）。这是刻意的取舍 —— 没有任何一条高于门槛的帧不值得占一行。
+实测（ExampleEngine，Debug，12s）：门槛 0 → 339501 条 / 23.3MB；门槛 200us → 157985 条 / 11.3MB，且留下的正好是有分量的那些（`FUIFeature::IInitViews` / `IRenderUI` / `FRender::IEndFrame` …），消失的是调度线程那些 8~12us 的小命令。</td></tr>
+<tr><td>MAHO_TRACE_STAGES</td><td>帧图节点的 enter/exit 括注（见 `FrameGraph.cpp`）。它只为一个失败模式存在：硬崩（0xC0000005）没有栈、也抛不出任何 C++ 能接的东西，于是「最后进入而没退出」的那个 stage 就是唯一能指出真凶的线索</td></tr>
+</tbody></table>
+</div>
 <div class="card">
 <h3 class="card-title">包含的头文件</h3>
 
@@ -542,7 +558,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td>MAHO_TRACE_SCOPE(Name)</td><td>单个作用域（`Name` 必须是静态存储）</td></tr>
 <tr><td>MAHO_TRACE_SCOPE_LANE(First, Second)</td><td>**建立自己的泳道且没有所属收集器** —— 常驻 worker（ThreadedServer 角色），不是被某个图驱动的帧。`Second` 是这条的工作名（`Task` / `Read` / `Compile` / `Flush` ……）</td></tr>
 <tr><td>MAHO_TRACE_SCOPE3(Group, First, Second)</td><td>三元形式：收集器 :: 帧 :: stage。帧图把身份交给池，由池调用它</td></tr>
-<tr><td>MAHO_API <span class="kw">void</span> TraceEmit / TraceEmitPair / TraceFlush / TraceEnabled / TraceNowMicros</td><td>手写埋点用的底层接口。`TraceFlush` 在 `FEngineBase::PostMain` 收尾调用（**刻意不注册 `atexit`**：那会在 CRT 退出机制就绪之前自锁）</td></tr>
+<tr><td>MAHO_API <span class="kw">void</span> TraceEmit / TraceEmitPair / TraceFlush / TraceEnabled / TraceNowMicros / TraceTaskFloorMicros</td><td>手写埋点用的底层接口。`TraceEmit` 写手写埋点（**不过滤**），`TraceEmitPair` 写任务条（**受 `MAHO_TRACE_MIN_US` 过滤**）。`TraceFlush` 在 `FEngineBase::PostMain` 收尾调用（**刻意不注册 `atexit`**：那会在 CRT 退出机制就绪之前自锁）</td></tr>
 </tbody></table>
 </div>
 <div class="ent e-struct" id="Public__Core__Profiler_h-0">
