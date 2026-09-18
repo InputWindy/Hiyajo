@@ -96,20 +96,26 @@ public:
 		const FRHIDescriptorWrite* Writes,
 		std::uint32_t WriteCount);
 
-	/** Create (get-or-create by layout) a MUTABLE descriptor set the pool OWNS.
-	 *  This is the SINGLE implementation path for Static / PerFrame / PerPass
-	 *  pass-parameter sets: the set is allocated ONCE per layout and re-written at
-	 *  record time by the pass (FRHICommandList::UpdateDescriptorSet) whenever its
-	 *  content changes. The pool allocates the pool+set but does NOT write content
-	 *  at creation; the pass owns the write. The frequency only governs how often
-	 *  content changes -- never the mechanism. The caller must not read the set
-	 *  from an in-flight submit when it updates it (the frame's BeginFrame fence
-	 *  wait guards the single-frame graph this engine runs today; a frames-in-flight
-	 *  ring is the later upgrade). Returns a borrowed handle; pool destroys
-	 *  pool+set at Shutdown. */
+	/** Get-or-create the MUTABLE set a pass will bind, keyed by LAYOUT **+ CONTENT**.
+	 *
+	 *  Content is part of the key on purpose. Keying by layout alone (what this used to do) meant
+	 *  every pass sharing a layout shared ONE set whose contents were rewritten at record time --
+	 *  which is exactly why recording had to be serialized against in-flight submits. With content
+	 *  in the key:
+	 *    - two passes with identical bindings SHARE one set (free reuse),
+	 *    - different bindings get separate sets (no overwrite),
+	 *    - a set whose content is already right is NEVER written again, so a set an in-flight submit
+	 *      may still be reading is never touched -- which is what lets passes record in parallel.
+	 *
+	 *  `bOutNeedsWrite` says whether THIS caller must write the contents at record time
+	 *  (`FRHICommandList::UpdateDescriptorSet`); false means the set is already correct and must be
+	 *  left alone. Returns a borrowed handle; the pool owns the pool+set. */
 	[[nodiscard]] FRHIDescriptorSet* GetOrCreateMutableDescriptorSet(
 		FRHIDescriptorSetLayout* Layout,
-		const FRHIDescriptorSetLayoutDesc& LayoutDesc);
+		const FRHIDescriptorSetLayoutDesc& LayoutDesc,
+		const FRHIDescriptorWrite* Writes,
+		std::uint32_t WriteCount,
+		bool& bOutNeedsWrite);
 
 	[[nodiscard]] FRHITexture* GetTexture(const FRDGTextureRef& Ref) const;
 	[[nodiscard]] FRHITextureView* GetTextureView(const FRDGTextureRef& Ref);

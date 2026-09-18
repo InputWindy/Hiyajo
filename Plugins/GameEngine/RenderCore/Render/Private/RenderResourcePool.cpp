@@ -551,16 +551,26 @@ FRHIDescriptorSet* FRHIResourcePool::GetOrCreateDescriptorSet(
 
 FRHIDescriptorSet* FRHIResourcePool::GetOrCreateMutableDescriptorSet(
 	FRHIDescriptorSetLayout* Layout,
-	const FRHIDescriptorSetLayoutDesc& LayoutDesc)
+	const FRHIDescriptorSetLayoutDesc& LayoutDesc,
+	const FRHIDescriptorWrite* Writes,
+	std::uint32_t WriteCount,
+	bool& bOutNeedsWrite)
 {
+	bOutNeedsWrite = false;
 	if (Layout == nullptr)
 	{
 		return nullptr;
 	}
 
+	// CONTENT is part of the key (the same comparison the immutable path uses; it already ignores
+	// .Set, which is what we are looking up). An identical (layout, writes) IS the same set, so
+	// nothing needs rewriting -- and a set an in-flight submit may still be reading is never
+	// touched. That is what lets passes record in parallel instead of serializing every record
+	// behind the previous submit.
+	std::vector<FRHIDescriptorWrite> KeyWrites(Writes, Writes + WriteCount);
 	for (const FDescriptorSetEntry& E : MutableDescriptorSets)
 	{
-		if (E.Set != nullptr && E.Layout == Layout)
+		if (E.Set != nullptr && E.Layout == Layout && DescriptorWritesEqual(E.Writes, KeyWrites))
 		{
 			return E.Set;
 		}
@@ -590,13 +600,15 @@ FRHIDescriptorSet* FRHIResourcePool::GetOrCreateMutableDescriptorSet(
 		return nullptr;
 	}
 
-	// No content is written here: the set is re-written at record time by the pass
-	// (FRHICommandList::UpdateDescriptorSet) for PerFrame / PerPass dynamic data.
+	// The pool still does not write content (it has no command list); it only decides WHO must:
+	// a freshly created set needs its first write, an existing one must be left alone.
 	FDescriptorSetEntry Entry;
 	Entry.Pool = Pool;
 	Entry.Set = Set;
 	Entry.Layout = Layout;
+	Entry.Writes = std::move(KeyWrites);   // kept as the content key for the next lookup
 	MutableDescriptorSets.push_back(std::move(Entry));
+	bOutNeedsWrite = true;
 	return Set;
 }
 

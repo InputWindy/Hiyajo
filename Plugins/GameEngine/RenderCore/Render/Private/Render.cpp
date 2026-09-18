@@ -483,7 +483,8 @@ void FRender::AddPass(
 	ERHICommandListType PassType,
 	FRHIGraphicsPipelineDesc PipelineDesc,
 	const FRenderPassDesc& Pass,
-	std::function<void(FRHICommandList&)> PassFn)
+	std::function<void(FRHICommandList&)> PassFn,
+	std::vector<FRHIDescriptorSet*>* OutDefaultSets)
 {
 	// Feature-key to ONE pool descriptor-set layout + pipeline layout. The
 	// FPassParameter declares the input sets/push-constants; the pool
@@ -630,23 +631,38 @@ void FRender::AddPass(
 		}
 		else
 		{
-			// Static / PerFrame / PerPass all share one mechanism: a persistent
-			// mutable set keyed by layout, written at record time.
-			Set = GetOrCreateMutableDescriptorSet(SetLayouts[I], SetLayoutDescs[I]);
+			// Static / PerFrame / PerPass share one mechanism: a persistent mutable set keyed by
+			// LAYOUT + CONTENT. The pool decides whether WE must write it -- a set that already has
+			// the right content must be left alone (that is what makes parallel recording safe), so
+			// only freshly created sets enter the write lists.
+			bool bNeedsWrite = false;
+			Set = GetOrCreateMutableDescriptorSet(SetLayouts[I], SetLayoutDescs[I],
+				Writes.data(), static_cast<std::uint32_t>(Writes.size()), bNeedsWrite);
 			if (Set != nullptr)
 			{
 				for (FRHIDescriptorWrite& W : Writes)
 				{
 					W.Set = Set;
 				}
-				DynamicSets.push_back(Set);
-				DynamicWrites.push_back(std::move(Writes));
+				if (bNeedsWrite)
+				{
+					DynamicSets.push_back(Set);
+					DynamicWrites.push_back(std::move(Writes));
+				}
 			}
 		}
 		if (Set != nullptr)
 		{
 			BoundSets[SetDesc.SetIndex - FirstSet] = Set;
 		}
+	}
+
+	// Hand the resolved sets to the record lambda BEFORE it runs: the draw-list path needs them to
+	// restore the pass's own defaults after a per-batch set displaced them. It used to re-look them
+	// up by layout, which only worked while a layout had exactly one set.
+	if (OutDefaultSets != nullptr)
+	{
+		*OutDefaultSets = BoundSets;
 	}
 
 	AddPass(PassType, [=](FRHICommandList& List)
@@ -707,8 +723,12 @@ void FRender::AddPass(
 		TargetH = Pass.Target.Depth.View.GetHeight();
 	}
 
+	// The typed overload resolves the pass's descriptor sets; it hands them back here so the record
+	// lambda below can restore them after a per-batch set displaces one.
+	std::vector<FRHIDescriptorSet*> ResolvedDefaultSets;
+
 	AddPass(PassType, std::move(PipelineDesc), Pass,
-		[this, &DrawList, &Pass, TargetW, TargetH](FRHICommandList& List)
+		[this, &DrawList, &Pass, TargetW, TargetH, &ResolvedDefaultSets](FRHICommandList& List)
 		{
 			// The pass-level merged vertex/index buffers were already created + uploaded
 			// by the producer (InitViews). AddPass only binds + draws; nothing uploads here.
@@ -723,42 +743,20 @@ void FRender::AddPass(
 			}
 			List.SetViewport(0.0f, 0.0f, static_cast<float>(TargetW), static_cast<float>(TargetH));
 
-			// Pass-level DEFAULT descriptor sets. The typed AddPass binds them once before
-			// this lambda, but a per-batch set below REPLACES set N for ONE draw and the
-			// binding stays until re-bound -- so a text/icon batch after an Image would
-			// sample the Image's texture. Resolve the defaults here so a batch with no
-			// per-batch set can restore them, keeping every draw on the correct set.
+			// Pass-level DEFAULT descriptor sets, resolved by the TYPED AddPass and handed to us
+			// through its optional out-param. They matter because a per-batch set below REPLACES
+			// set N for ONE draw and the binding stays until re-bound -- so a text/icon batch after
+			// an Image would sample the Image's texture. A batch with no per-batch set restores
+			// these, keeping every draw on the correct set.
+			//
+			// This used to re-look the sets up by LAYOUT, which only worked while a layout had
+			// exactly one set -- the very sharing this change removes.
 			std::uint32_t DefaultFirstSet = 0;
-			std::uint32_t DefaultSetCount = 0;
 			for (const FRDGDescriptorSet& SetDesc : Pass.Layout.Sets)
 			{
 				if (SetDesc.SetIndex < DefaultFirstSet) { DefaultFirstSet = SetDesc.SetIndex; }
-				const std::uint32_t Span = SetDesc.SetIndex - DefaultFirstSet + 1;
-				if (Span > DefaultSetCount) { DefaultSetCount = Span; }
 			}
-			std::vector<FRHIDescriptorSet*> DefaultSets;
-			if (DefaultSetCount > 0)
-			{
-				DefaultSets.resize(DefaultSetCount, nullptr);
-				for (const FRDGDescriptorSet& SetDesc : Pass.Layout.Sets)
-				{
-					FRHIDescriptorSetLayoutDesc DSLDesc;
-					for (const auto& [Binding, Bnd] : SetDesc.Bindings)
-					{
-						FRHIDescriptorBinding DB;
-						DB.Binding = Binding;
-						DB.Type = Bnd.Type;
-						DB.Count = 1;
-						DB.Stages = Bnd.Stages;
-						DSLDesc.Bindings.push_back(DB);
-					}
-					FRHIDescriptorSetLayout* Layout = GetOrCreateDescriptorSetLayout(DSLDesc);
-					if (Layout != nullptr)
-					{
-						DefaultSets[SetDesc.SetIndex - DefaultFirstSet] = GetOrCreateMutableDescriptorSet(Layout, DSLDesc);
-					}
-				}
-			}
+			const std::vector<FRHIDescriptorSet*>& DefaultSets = ResolvedDefaultSets;
 			// A per-batch set is displaced by a following text/icon batch; re-bind the
 			// defaults for every set index when a batch carries no per-batch set.
 			const auto BindDefaultSets = [&](FRHICommandList& L)
@@ -881,7 +879,8 @@ void FRender::AddPass(
 					List.Draw(B.VertexCount, B.InstanceCount, B.VertexOffset, 0);
 				}
 			}
-		});
+		},
+		&ResolvedDefaultSets);
 }
 
 void FRender::AddPass(ERHICommandListType PassType, std::function<void(FRHICommandList&)> PassFn)
@@ -959,9 +958,17 @@ FRHIDescriptorSet* FRender::GetOrCreateDescriptorSet(
 
 FRHIDescriptorSet* FRender::GetOrCreateMutableDescriptorSet(
 	FRHIDescriptorSetLayout* Layout,
-	const FRHIDescriptorSetLayoutDesc& LayoutDesc)
+	const FRHIDescriptorSetLayoutDesc& LayoutDesc,
+	const FRHIDescriptorWrite* Writes,
+	std::uint32_t WriteCount,
+	bool& bOutNeedsWrite)
 {
-	return ResourcePool ? ResourcePool->GetOrCreateMutableDescriptorSet(Layout, LayoutDesc) : nullptr;
+	if (!ResourcePool)
+	{
+		bOutNeedsWrite = false;
+		return nullptr;
+	}
+	return ResourcePool->GetOrCreateMutableDescriptorSet(Layout, LayoutDesc, Writes, WriteCount, bOutNeedsWrite);
 }
 
 std::uint32_t FRender::GetCanvasWidth() const

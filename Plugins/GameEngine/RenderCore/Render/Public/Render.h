@@ -399,7 +399,10 @@ public:
 	 *  (destroyed at Shutdown); a feature holds only the handle. */
 	[[nodiscard]] FRHIDescriptorSet* GetOrCreateMutableDescriptorSet(
 		FRHIDescriptorSetLayout* Layout,
-		const FRHIDescriptorSetLayoutDesc& LayoutDesc);
+		const FRHIDescriptorSetLayoutDesc& LayoutDesc,
+		const FRHIDescriptorWrite* Writes,
+		std::uint32_t WriteCount,
+		bool& bOutNeedsWrite);
 
 	/**
 	 * Shader resource: async compile + explicit-sync handle. The first call per T
@@ -508,12 +511,18 @@ private:
 	 * compile-time path builds the FRenderPassDesc + push-constant block, then
 	 * forwards here to actually record the pass. Internal: features use the
 	 * macro-declared TParameters AllocParameters< > / AddPass path, never this form.
-	 */
+	 *
+	 * `OutDefaultSets`, when given, receives the set resolved for each set index (slot =
+	 * SetIndex - FirstSet) BEFORE the record lambda runs. It exists for the draw-list path, whose
+	 * lambda must be able to re-bind the pass's own default sets after a per-batch set displaced
+	 * them -- previously it re-looked them up by LAYOUT, which only worked while a layout had
+	 * exactly one set. Optional, so no feature is affected. */
 	void AddPass(
 		ERHICommandListType PassType,
 		FRHIGraphicsPipelineDesc PipelineDesc,
 		const FRenderPassDesc& Pass,
-		std::function<void(FRHICommandList&)> PassFn);
+		std::function<void(FRHICommandList&)> PassFn,
+		std::vector<FRHIDescriptorSet*>* OutDefaultSets = nullptr);
 
 	/** The async shader compiler. Internal: features reach shaders through
 	 *  TryGetShader<T> only; they never touch the compiler server directly. */
