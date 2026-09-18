@@ -35,6 +35,32 @@ namespace Detail
 	void ReportBridgeDiagnostics(const std::vector<FFrameBridge::FDiagnostic>& Diagnostics);
 }
 
+/**
+ * A frame that is ITSELF a collector: it drives a set of sub-frames through its own FFrameBuilder,
+ * so it needs its own task LANE even when it shares the parent's pool.
+ *
+ * Why an interface rather than a base class: install is generic. The parent creates the child
+ * through the DLL factory and only ever holds it as an FFrameExtension, yet a collector child has
+ * to be handed the shared pool before its first Execute. A side cast to this interface is that
+ * hand-off -- and it is the ONLY thing that has to know which frames are collectors.
+ *
+ * The design rule this encodes, stated once: a collector's stage bodies are dispatched by its
+ * PARENT's graph, hence they run on the parent's lane, while its Wait() flushes ITS OWN lane. So
+ * "the caller's task is not in the count it is waiting for" holds by construction -- which is what
+ * a barrier called from inside a pool task requires, and what one pool per collector used to buy
+ * by duplicating threads instead.
+ */
+class MAHO_API IFrameCollector
+{
+public:
+	virtual ~IFrameCollector();
+
+	/** Take the given pool as this collector's task pool, plus a lane of its own within it.
+	 *  Called by the installing parent; never after the collector's first Execute (the graph that
+	 *  holds the pool by reference does not exist yet, and that is the point of doing it here). */
+	virtual void UseSharedPool(FThreadPool& InPool) = 0;
+};
+
 // ── FFrameBuilder: layer-collection management base ─────────────────────
 
 /**
@@ -49,18 +75,40 @@ namespace Detail
  * FQuery data source (GetQueryData -> Pipelines).
  */
 template <typename TContext>
-class FFrameBuilder : public virtual FQuery<FFrameExtension>
+class FFrameBuilder
+	: public virtual FQuery<FFrameExtension>
+	, public IFrameCollector
 {
 public:
 
 	/** Quiescence before anything is torn down. Order matters and it is the whole reason this
 	 *  destructor body exists: Wait() stops the frame work (graph AND pool) while every member is
 	 *  still alive, then the members die in reverse order -- Graph (which stops the scheduler
-	 *  thread), then Pool (joins the workers), then Features (destroys the frame instances, i.e.
-	 *  runs plugin destructors), then Modules (frees the DLLs). */
+	 *  thread), then Features (destroys the frame instances, i.e. runs plugin destructors), then
+	 *  Pool (joins the workers), then Modules (frees the DLLs). Features before Pool is not
+	 *  cosmetic: a COLLECTOR child is destroyed there and its destructor flushes -- and releases
+	 *  its lane in -- the shared pool, so that pool must still be alive. See the member note. */
 	virtual ~FFrameBuilder()
 	{
 		Wait();
+
+		// Hand the lane back so a collector installed/uninstalled repeatedly (reload) does not
+		// leak one per cycle. Safe unconditionally because a shared pool is always outlived by the
+		// instances that share it (member order, above).
+		if (Pool != &OwnedPool)
+		{
+			Pool->DestroyLane(Lane);
+		}
+	}
+
+	/** IFrameCollector: share the installing parent's task pool, and take a lane of our own in it.
+	 *  Called from Install, i.e. before this collector exists as far as the graph is concerned. */
+	void UseSharedPool(FThreadPool& InPool) override
+	{
+		// The parent's pool replaces ours entirely -- OwnedPool simply never gets workers (the
+		// pool is lazy), so nothing is doubled by having the member.
+		Pool = &InPool;
+		Lane = InPool.CreateLane();
 	}
 
 	/** EVERY terminal state of an install / uninstall / reload operation. Grouped by
@@ -235,6 +283,20 @@ protected:
 		// A per-name check cannot see that the cycle is valid across stages, so it
 		// would refuse valid mutual deps. The stage-aware graph Compile validates
 		// missing deps / real cycles instead (and reports once, non-fatal).
+
+		// A child that is ITSELF a collector is handed OUR pool and takes its own lane in it, so
+		// the whole tree runs on one worker set while each collector keeps an isolated barrier.
+		// Install is generic and only knows the child as an FFrameExtension, so this side cast is
+		// the one place that asks "are you a collector too?". Both ends are this same class:
+		// whichever collector installs a collector hands down whatever pool it was given, so the
+		// outermost builder's workers are the ones used all the way down.
+		//
+		// BEFORE the pushes, i.e. only once the child is definitely accepted: a refused install
+		// must leave the caller with nothing to clean up.
+		if (auto* Child = dynamic_cast<IFrameCollector*>(Layer.get()))
+		{
+			Child->UseSharedPool(*Pool);
+		}
 
 		PendingAdded.push_back(Layer.get());
 		Modules.push_back(std::move(Asm));
@@ -542,7 +604,7 @@ protected:
 		{
 			Graph->Wait();
 		}
-		Pool.Flush();
+		Pool->Flush(Lane);
 	}
 
 	/** Ask every ACTIVE frame to uninstall (the teardown sweep). Returns how many were asked --
@@ -791,7 +853,9 @@ private:
 	{
 		if (!Graph)
 		{
-			Graph = std::make_unique<FFrameGraph>(Pool);
+			// The lane goes in with the pool: it is the identity of "work this graph submitted",
+			// which is exactly what this graph's Wait() has to drain and nothing else's.
+			Graph = std::make_unique<FFrameGraph>(*Pool, Lane);
 
 			// A collector IS an FFrameExtension (FRender, FGameWorld, FExampleEditor), so it can
 			// name the group its nodes are traced under -- which is what lets a viewer lay a
@@ -1208,8 +1272,24 @@ private:
 	/** name -> slot in the parallel vectors. The one O(log n) lookup behind HasLayerName /
 	 *  StoredName, kept in sync by Install (insert) and DeleteUnloaded (erase). */
 	std::map<std::string, std::size_t> NameToSlot;
-	std::vector<std::unique_ptr<FFrameExtension>> Features; // frame instance ownership
-	FThreadPool Pool;                                 // task execution
+
+	/** The pool this collector drives its nodes in, and the lane of it that is OURS.
+	 *
+	 *  OwnedPool is the fallback -- a host, or a collector nobody handed a pool to, gets workers
+	 *  of its own. UseSharedPool points Pool at a PARENT's instead and takes a lane, so nested
+	 *  collectors (host -> FRender -> FExampleEditor) all end up on the outermost builder's worker
+	 *  set while each keeps an isolated barrier. That is the whole point of lanes: the isolation
+	 *  the engine needs is per COLLECTOR, and it used to be bought with one thread set per
+	 *  collector (4 x hardware_concurrency threads to run ~2 nodes at a time). */
+	FThreadPool  OwnedPool;
+	FThreadPool* Pool = &OwnedPool;
+	FThreadPool::FLane Lane = FThreadPool::DefaultLane;
+
+	/** Frame INSTANCE ownership. Declared AFTER Pool, deliberately: members are destroyed in
+	 *  reverse declaration order, and a collector child destroyed here flushes -- and releases its
+	 *  lane in -- the very pool its parent may be sharing. Pool after Features is what guarantees
+	 *  that pool is still alive; the reverse order would be a use-after-free during teardown. */
+	std::vector<std::unique_ptr<FFrameExtension>> Features;
 
 	/** Init/shutdown batches AND the frame loop (see GetGraph). Declared AFTER Pool so that it
 	 *  is destroyed BEFORE it -- the graph holds Pool by reference. */

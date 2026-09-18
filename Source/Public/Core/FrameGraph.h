@@ -567,7 +567,7 @@ struct FTaskNode
 class FFrameGraph : public FThreadedServer
 {
 public:
-	explicit FFrameGraph(FThreadPool& InPool);
+	explicit FFrameGraph(FThreadPool& InPool, FThreadPool::FLane InLane = FThreadPool::DefaultLane);
 	~FFrameGraph() override;
 
 	FFrameGraph(const FFrameGraph&) = delete;
@@ -665,7 +665,15 @@ private:
 
 	void WireNode(FTaskNode& Node, const FTask& Decl);
 
-	FThreadPool& Pool;
+	/** The pool the node bodies run in, and the LANE of it this graph owns.
+	 *
+	 *  The lane is what makes "the caller's own task is not in the count" true for this graph's
+	 *  Wait(), even when several collectors share one worker set: a node body dispatched by THIS
+	 *  graph is counted on THIS lane, so a stage body of the collector that owns this graph --
+	 *  which was dispatched by the PARENT's graph, i.e. the parent's lane -- can block on this
+	 *  lane's quiescence. See FThreadPool's header. */
+	FThreadPool&      Pool;
+	FThreadPool::FLane Lane;
 
 	/** Trace group for the nodes this graph dispatches. Static storage, empty for the host
 	 *  graph -- see SetOwnerName. */

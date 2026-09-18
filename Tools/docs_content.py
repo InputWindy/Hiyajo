@@ -530,26 +530,66 @@ D.Row("deque", "FIFO 任务队列")
 D.Row("functional", "`std::function<void()>` 任务")
 D.Row("thread / vector", "worker 线程与其容器")
 
-D.Class("FThreadPool", Desc="固定规模线程池。`NumThreads = 0` 时取 "
-        "`std::thread::hardware_concurrency()`（为 0 则退化为 1）。不可拷贝、不可赋值。")
+D.Class("FThreadPool", Desc="任务执行原语：一组 worker 线程 + 若干 **lane**。lane 是一条独立的"
+        "队列 + 完成计数，共用同一批 worker。`NumThreads = 0` 时取 "
+        "`std::thread::hardware_concurrency()`（为 0 则退化为 1）。不可拷贝、不可赋值。\n"
+        "**为什么有 lane：**引擎需要**每个收集器一条栅栏** —— 收集器的 `Wait()` 只能排空**它自己**"
+        "提交的工作，不能等别的收集器（这正是「节点体可以阻塞在另一个图的静默点」成立的前提）。"
+        "给每个收集器一个池能做到，但会把**线程数**乘以收集器份数（4 × 核数 = 24 核机器上 96 条"
+        "线程，去跑约 2 个并发节点）。lane 把被混在一起的两件事拆开：worker 集共享，队列与计数"
+        "按 lane 独立。\n"
+        "它还顺手消掉一个共享必然带来的陷阱：栅栏不能被「自己的计数包含了自己的线程」调用 —— "
+        "`Flush` 等的是归零，而调用者那颗任务要等 `Flush` 返回才结束。而帧的 stage body 是由**父**"
+        "收集器的图派发的，所以收集器在 stage body 里排空**自己**的 lane 是一次**跨 lane** 排空，"
+        "与从前「跨池」是同一件事。")
 D.SetAccess("public")
+D.Interface("using FLane = std::uint32_t", "lane 句柄。`DefaultLane = 0` 是池自身那条；`MaxLanes = 16`")
 D.Interface("explicit FThreadPool(std::uint32_t NumThreads = 0)", "构造：**不立刻起线程**，只记宽度")
 D.Interface("~FThreadPool()", "置停止标志、唤醒并 join 全部 worker")
 D.Interface("void Submit(std::function<void()> Task)",
-            "入队即返；惰性把整个池拉起来（首次调用即补齐到宽度）")
-D.Interface("void Flush()",
-            "**真正空闲**屏障：等队列空且 `PendingCount == 0`（计数在任务**完成后**才减），并在"
-            "等待期间容忍并发 `Submit`（嵌套图会从 worker 里再投任务）")
+            "入队即返（默认 lane）；惰性把整个池拉起来（首次调用即补齐到宽度）")
+D.Interface("void Flush()", "默认 lane 上的屏障（见下）")
+D.Interface("[[nodiscard]] FLane CreateLane()",
+            "在同一批 worker 上开一条新 lane（自己的队列 + 计数）。池满（`MaxLanes`）时**上报并**"
+            "返回 `DefaultLane` —— 调用者退化为共用默认栅栏，而不是拿到一条没人能推断的 lane")
+D.Interface("void DestroyLane(FLane Lane)",
+            "归还 lane。**仍有工作时拒绝并上报**：把还在计数里的工作交还回去，等于把它的完成"
+            "记到别人头上。lane 0 永不归还")
+D.Interface("void Submit(FLane Lane, std::function<void()> Task)",
+            "按 lane 入队。**未知 lane 上报后回落到默认 lane** —— 工作永远不会被静默丢掉")
+D.Interface("void Flush(FLane Lane)",
+            "**真正空闲**屏障：等该 lane 队列空且计数归零（计数在任务**完成后**才减），并在等待"
+            "期间容忍并发 `Submit`（嵌套图会从 worker 里再投任务）。调用者若**本身是该池的 worker**"
+            "（即它正跑着这个池的任务），会**帮助排空它正在等的那条 lane** —— 否则一个 worker 全"
+            "被阻塞在这里的池，队列没人能跑，计数永远回不到零。只排空**目标 lane**，所以既不改变"
+            "语义也不会顺手碰别人的工作")
 D.Interface("[[nodiscard]] std::uint32_t GetNumThreads() const", "池宽（`= 0` 构造时的解析结果）")
+D.Interface("[[nodiscard]] std::uint32_t GetLanePending(FLane Lane) const", "诊断/测试：该 lane 未完成的任务数")
 D.SetAccess("private")
 D.Interface("void EnsureThreads(std::uint32_t Required)", "把池长到至少 Required（受宽度上限约束，从不收缩）")
-D.Interface("void WorkerLoop()", "worker 主体：取任务 → 跑 → 减在飞计数；任务抛出的异常被隔离上报")
-D.Field("std::vector<std::thread> Workers", "worker 线程")
-D.Field("std::deque<std::function<void()>> Queue", "FIFO 任务队列")
-D.Field("std::mutex Mutex / std::condition_variable CondVar", "队列与屏障的同步")
+D.Interface("void WorkerLoop()",
+            "worker 主体：等「任一条 lane 有活」→ 轮转取一条（不让忙的 lane 饿死安静的）→ 跑 → "
+            "减该 lane 的计数；任务抛出的异常被隔离上报")
+D.Interface("bool TakeAnyTaskLocked(std::function<void()>& OutTask, FLane& OutLane)",
+            "从游标开始轮转，取第一条非空 lane 的任务")
+D.Interface("bool AnyLaneHasWorkLocked() const", "worker 的唤醒条件（任一条 lane 队列非空）")
+D.Interface("void RunTaskSafely(const std::function<void()>& Task)",
+            "跑一个任务并隔离异常，期间把本线程标记为**该池的 worker**（`thread_local`，保存/恢复）"
+            "—— 这个标记正是 `Flush` 帮助排空的许可来源：不是本池 worker 的线程（游戏线程、关闭路径）"
+            "必须留在队列之外，让节点体在那里跑恰恰是池存在的意义")
+D.Interface("void NotifyWorkAvailableLocked() / NotifyProgressLocked()",
+            "唤醒条件式通知：有 `Flush` 等待者时用 `notify_all`（等待者可能需要帮助排空），"
+            "否则 `notify_one`，免得每次入队都惊群")
+D.Field("std::vector<std::thread> Workers", "worker 线程（**共享给所有 lane**）")
+D.Field("std::array<FLaneState, MaxLanes> Lanes", "lane 表；`FLaneState` = 队列 + `Pending` + `bInUse`")
+D.Field("FLane NextLaneToServe", "轮转游标")
+D.Field("std::uint32_t FlushWaiters", "当前阻塞在 `Flush` 的线程数（决定通知方式）")
+D.Field("std::mutex Mutex / std::condition_variable CondVar",
+        "一把锁管所有 lane 的队列、计数与唤醒簿记；临界区只有入队/出队，所以按 lane 分锁买不到"
+        "什么，却会让「哪条 lane 有活」的扫描失去原子性")
 D.Field("std::uint32_t NumThreads", "池宽")
-D.Field("std::uint32_t PendingCount = 0", "未完成任务数（`Flush` 等它归零）")
 D.Field("bool bStopping = false", "停止标志（析构时置位）")
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 # Source/Public/Core/ThreadedServer.h —— 常驻单线程服务
@@ -710,12 +750,12 @@ D.Field("TContext& Context", "调度上下文（如 `FEngineBase&` / `FRender&`�
 
 D.Header("Public/Engine/FrameBuilder.h", Title="FrameBuilder.h —— 帧集合 + 帧循环（宿主词汇）",
          Desc="宿主只认这一页的词汇：装 / 卸 / 重载帧集合、驱动帧循环、收摊排空。\n"
-              "结构上分两层：**`FFrameBuilderBase`**（与 `TContext` 无关的「集合本身」：状态 + "
-              "安装/卸载/重载/清扫/身份查询）与 **`FFrameBuilder<TContext>`**（**驱动层**："
-              "stage 分派 `Execute` / `FlushPendingUpdates` / `FlushUnload` 与 LINQ 帧集展开）。\n"
-              "**为什么非要分两层**：类模板的成员天生都是模板，其函数体无法 out-of-line（那需要显式"
-              "实例化，而引擎模块不许 include 插件头、无法为插件上下文实例化）⇒ 把与 `TContext` "
-              "无关的部分下沉成非模板基类，实现就能进 `Private/Engine/FrameBuilder.cpp`。\n"
+              "类本身**一个**（`FFrameBuilder<TContext>`），另有 `IFrameCollector` 接口（见下）—— "
+              "它的存在让装载方能在不知道 `TContext` 的情况下，把父收集器的任务池递给子收集器。\n"
+              "类模板的成员天生都是模板，函数体无法 out-of-line（那需要显式实例化，而引擎模块不许 "
+              "include 插件头、无法为插件上下文实例化）⇒ 只有**无状态**的辅助函数下沉进 "
+              "`Private/Engine/FrameBuilder.cpp`（`Detail::ReportBridgeDiagnostics`、`IFrameCollector` "
+              "的虚析构）。\n"
               "**私有持有的三件**：`FFrameGraph`（图）、`FFrameBridge`（桥）、`TFrameDispatch`"
               "（分派）—— 宿主全程看不见它们。")
 
@@ -724,7 +764,7 @@ D.Table("头文件", "功能")
 D.Row("Core/FrameGraph.h", "`FFrameGraph` / `FFrameBridge` / `FFrameExtension`（私有实现类型）")
 D.Row("Core/Assembly.h", "`FAssembly`：模块句柄与符号查找（装载时用）")
 D.Row("Core/Delegate.h", "三个广播事件（`OnFramesChanged` / `OnFrameStatus` / `OnClosing`）")
-D.Row("Core/ThreadPool.h", "`FThreadPool Pool`：收集器自己的池（每个插件一个）")
+D.Row("Core/ThreadPool.h", "`FThreadPool`：任务池；收集器**按 lane** 共享它（见 `OwnedPool` / `Pool` / `Lane`）")
 D.Row("Core/Fatal.h / Core/TypeList.h", "上报路径；`StageIndicesOf`")
 D.Row("Engine/Frame.h", "`TFrameDispatch`（驱动层用）")
 D.Row("Engine/Query.h", "`FQuery`：`GetQueryData()` 的数据源是 `Pipelines`")
@@ -742,7 +782,7 @@ D.Class("FFrameBuilderBase", Base="FQuery<FFrameExtension>",
         Desc="**集合本身**：与 `TContext` 无关，实现在 `Private/Engine/FrameBuilder.cpp`（类带 "
              "`MAHO_API` —— 宿主是它的子类）。拥有全部状态，并实现「与调度上下文无关」的那部分逻辑。")
 D.SetAccess("public")
-D.Interface("virtual ~FFrameBuilderBase()", "析构先 `Wait()`（图 + 池），再用例析构：Graph → Pool → Features（跑插件析构）→ Modules（释放 DLL）")
+D.Interface("virtual ~FFrameBuilderBase()", "析构先 `Wait()`（图 + 本 lane 的池屏障），再用例析构：Graph → Features（跑插件析构）→ Pool（join worker）→ Modules（释放 DLL）。**Features 必须早于 Pool**：收集器子实例在这里被销毁，而它的析构要 flush —— 并归还自己那条 lane —— 父收集器共享的那个池，池必须还活着")
 D.Interface("[[nodiscard]] FFrameStats GetStats() const", "当前规模（工具 / 面板查询用，勿每帧轮询）")
 D.Field("TMulticastEvent<void()> OnFramesChanged", "活动帧集在安全点变化时广播")
 D.Field("TMulticastEvent<void(const FFrameStatusInfo&)> OnFrameStatus", "**每个终态**都广播（12 态，无静默路径）")
@@ -776,20 +816,52 @@ D.Field("std::map<std::string, int> ReverseDepCount", "名字 → 被依赖次�
 D.Field("Modules / ModulePaths / LayerNames", "三条并行向量：DLL 句柄保活 / DLL 路径 / 装载时拷下的名字")
 D.Field("std::map<std::string, std::size_t> NameToSlot", "名字 → 槽位（O(log n) 的唯一查表）")
 D.Field("std::vector<std::unique_ptr<FFrameExtension>> Features", "实例所有权（析构顺序的关键一环）")
-D.Field("FThreadPool Pool", "收集器自己的池")
+D.Field("FThreadPool OwnedPool / FThreadPool* Pool / FThreadPool::FLane Lane",
+        "本收集器驱动节点的池，以及**属于它自己**的那条 lane。`OwnedPool` 是兜底（宿主、或没人递池的"
+        "收集器有自己的 worker）；`UseSharedPool` 把 `Pool` 指向**父**收集器那个池并取一条 lane，"
+        "于是嵌套收集器（宿主 → FRender → FExampleEditor）全落在最外层那个 worker 集上，同时各自"
+        "保有独立栅栏。**这是 lane 存在的全部理由**：引擎需要的隔离是**每收集器**的，而它从前是用"
+        "「每收集器一套线程」买的（4 × 核数条线程，去跑约 2 个并发节点）。\n"
+        "`Features` **刻意声明在 `Pool` 之后**：成员按声明逆序销毁，而收集器子实例正是在那里被销毁，"
+        "它的析构要 flush 父收集器共享的池 —— 顺序写反就是收摊期的一次 use-after-free")
 D.Field("std::unique_ptr<FFrameGraph> Graph", "那张图（声明在 Pool 之后 ⇒ 先于 Pool 析构）")
 D.Field("LoopFrames / LoopFrameNumbers / bLoopDirty / bLoopJustExpanded / LastLoopRejectReason",
         "帧集缓存 + 每序列一个生成计数器 + 两个「只报一次」守卫")
 D.Field("std::atomic<bool> bClosing", "关闭标志（阶段里可能从任意线程置位，故原子）")
 D.Field("bool bFlushing", "flush 重入守卫（RAII 管理）")
 
-D.Class("FFrameBuilder<TContext>", Base="FFrameBuilderBase",
+D.Class("IFrameCollector", Desc="**本身也是收集器**的帧（它通过自己的 `FFrameBuilder` 驱动一组子帧）—— "
+        "即使共用父收集器的池，它也需要**自己的 lane**。\n"
+        "为什么是接口而不是基类：装载是泛型的。父收集器经 DLL 工厂建出子实例，全程只把它当 "
+        "`FFrameExtension` 看；而收集器子实例必须在它第一次 `Execute` **之前**拿到共享池。向本接口"
+        "的一次**旁转**（side cast，两者都是那个具体收集器的基类）就是这次交接，而且它是**唯一**"
+        "需要知道「哪些帧是收集器」的地方。\n"
+        "它把一条设计规则固化下来：收集器的 stage body 由**父**收集器的图派发，所以跑在**父**的 lane 上，"
+        "而它的 `Wait()` 排空的是**自己**的 lane —— 于是「调用者那颗任务不在它等的计数里」是构造上成立"
+        "的。那正是「从池任务内部调用栅栏」所必需的性质，也是从前「每收集器一个池」用重复线程买来的东西。")
+D.SetAccess("public")
+D.Interface("virtual ~IFrameCollector()",
+            "**out-of-line 定义在 `Source/Private/Engine/FrameBuilder.cpp`**（与 `FThreadedServer` 的虚函数"
+            "同理）：本接口是插件侧对象的基类，把首个 out-of-line 虚函数留在引擎自己的模块里就有了"
+            "**key function** —— 一份 vtable / 一份 deleting dtor 在 Maho.dll，而不是每个模块一份 COMDAT 副本；"
+            "这也让装载方的 `dynamic_cast` 在整个 DLL 边界上比对到**同一条 RTTI 记录**")
+D.Interface("virtual void UseSharedPool(FThreadPool& InPool) = 0",
+            "把给定池当作本收集器的任务池，并在其中取一条**属于自己**的 lane。由装载它的父收集器调用；"
+            "**绝不在第一次 `Execute` 之后调用**（持池引用的图还不存在，而这正是放在这个时机的原因）")
+
+D.Class("FFrameBuilder<TContext>", Base="FFrameBuilderBase, IFrameCollector",
         Desc="**驱动层**：只保留真正需要 `TContext` 或 stage 列表的东西 —— 三个 stage 分派入口、"
              "LINQ 帧集展开、以及安装/重载/卸载入口。")
 D.SetAccess("protected")
 D.Interface("template <typename T> bool Install()", "按类型装载：`Install(T::GetModulePath())`")
 D.Interface("bool Install(std::string_view DllPath, const char* FactorySymbol = \"CreateFrame\")",
-            "按路径装载（下个安全点生效）：查符号 → 建实例 → 名字查重 → 入 pending。关闭中 / 重名一律拒绝并上报")
+            "按路径装载（下个安全点生效）：查符号 → 建实例 → 名字查重 → 入 pending。关闭中 / 重名一律拒绝并上报。"
+            "**实例被接受之后、入 pending 之前**做一次 `dynamic_cast<IFrameCollector*>`：是收集器就 "
+            "`UseSharedPool(*Pool)` —— 装载是泛型的，这是唯一需要问「你是不是也是收集器」的地方；"
+            "两端都是本类，所以谁装收集器就把自己拿到的池继续往下递，最外层 builder 的 worker 一路用到最里")
+D.Interface("void UseSharedPool(FThreadPool& InPool) override",
+            "`IFrameCollector` 的实现：把 `Pool` 指向父收集器的池（`OwnedPool` 就此闲置 —— 池是惰性的，"
+            "所以留着这个成员不会多起线程），并 `CreateLane()` 取一条自己的 lane")
 D.Interface("void Reload(std::string_view Name)", "热重载：下个安全点卸旧（依赖安全）、随后装回同 DLL 新副本")
 D.Interface("void TryUninstall(std::string_view Query)", "按**名字或 DLL 路径**匹配第一命中，命中即入卸载 pending")
 D.Interface("template <TInitStages, TShutdownStages> void FlushPendingUpdates()",

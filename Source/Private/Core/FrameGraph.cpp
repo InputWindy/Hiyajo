@@ -75,8 +75,9 @@ void FFrameExtension::AddDependent(std::type_index MyStage, FEdge Edge)
 	Dependents.emplace_back(MyStage, Edge);
 }
 
-FFrameGraph::FFrameGraph(FThreadPool& InPool)
+FFrameGraph::FFrameGraph(FThreadPool& InPool, FThreadPool::FLane InLane)
 	: Pool(InPool)
+	, Lane(InLane)
 {
 	for (auto& Count : SlotInFlight)
 	{
@@ -403,7 +404,7 @@ void FFrameGraph::Dispatch(FNodeId Id)
 	// still about to run, and "the phase is idle" would be a lie.
 	SlotInFlight[SlotIndexOf(Node.Key.Phase)].fetch_add(1, std::memory_order_acq_rel);
 
-	Pool.Submit([this, Id]()
+	Pool.Submit(Lane, [this, Id]()
 	{
 		// A hard crash (0xC0000005) has no stack and no exception to catch, so the last stage
 		// ENTERED is the only thing that names the culprit -- that is what this trace exists for,
