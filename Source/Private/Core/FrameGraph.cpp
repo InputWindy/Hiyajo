@@ -136,7 +136,9 @@ bool FFrameGraph::Submit(std::vector<FTask> Tasks, std::string* OutReason)
 	}
 
 	// C1: qualified call -- this class's own Submit would otherwise hide the server's.
-	FThreadedServer::Submit([this, Batch = std::move(Tasks)]() mutable
+	// Named for the trace: the scheduler's own commands are the busiest row in a profile (~30 per
+	// frame), and "Task" on all of them says nothing about which half of the work it is.
+	FThreadedServer::Submit("Submit", [this, Batch = std::move(Tasks)]() mutable
 	{
 		ApplySubmit(std::move(Batch));
 	});
@@ -449,7 +451,9 @@ void FFrameGraph::Dispatch(FNodeId Id)
 
 		// Completion bookkeeping happens ON THE SCHEDULER THREAD (state is single-owned).
 		// The body never touches the graph: it cannot even reach its own completion event.
-		FThreadedServer::Submit([this, Id]() { OnNodeCompleted(Id); });
+		// Named for the trace -- one of these per dispatched node, so it is the other half of the
+		// scheduler's command traffic.
+		FThreadedServer::Submit("Complete", [this, Id]() { OnNodeCompleted(Id); });
 	});
 }
 

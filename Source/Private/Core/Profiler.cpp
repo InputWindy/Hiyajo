@@ -4,7 +4,6 @@
 #include <cstdio>
 #include <cstdlib>
 #include <functional>
-#include <string>
 #include <string_view>
 
 namespace Maho
@@ -50,23 +49,32 @@ std::uint32_t LaneOf(const char* FrameName)
 	return static_cast<std::uint32_t>(Hashed & 0x7fffffffu) + 1u;   // 0 stays "no lane"
 }
 
-/** `type_info::name()` spells a stage as "class Maho::IRender". The namespace is noise on a
- *  timeline lane label, so keep the last component -- and drop the "class "/"struct " keyword
- *  that appears when there is no namespace at all. */
-std::string ShortStageName(const char* Raw)
+/** A slice of a string, for names we only ever print. */
+struct FNameSlice
+{
+	const char* Data = "";
+	std::size_t Size = 0;
+};
+
+/** The usable part of a stage name, as a SLICE of the input -- `type_info::name()` spells a stage
+ *  as "class Maho::IRender", and neither the namespace nor the keyword belongs on a timeline lane
+ *  label, but copying it out to strip them would put an allocation on the emit path. That cost is
+ *  not hypothetical: once the pool traces every task, the emitter runs tens of thousands of times
+ *  a second, and an allocating form shows up in the very numbers it reports. */
+FNameSlice ShortStageName(const char* Raw)
 {
 	std::string_view View(Raw);
 	const std::size_t Pos = View.rfind("::");
-	std::string Short(View.substr(Pos == std::string_view::npos ? 0 : Pos + 2));
+	View.remove_prefix(Pos == std::string_view::npos ? 0 : Pos + 2);
 	for (const std::string_view Keyword : { "class ", "struct ", "enum " })
 	{
-		if (Short.compare(0, Keyword.size(), Keyword) == 0)
+		if (View.starts_with(Keyword))
 		{
-			Short.erase(0, Keyword.size());
+			View.remove_prefix(Keyword.size());
 			break;
 		}
 	}
-	return Short;
+	return FNameSlice{ View.data(), View.size() };
 }
 
 } // namespace
@@ -107,11 +115,12 @@ void TraceEmitPair(const char* Group, const char* First, const char* Second,
 {
 	if (std::FILE* File = TraceFileHandle())
 	{
-		const std::string Short = ShortStageName(Second);
-		std::fprintf(File, "[tr] ts=%llu dur=%llu tid=%u grp=%s name=%s::%s\n",
+		const FNameSlice Short = ShortStageName(Second);
+		std::fprintf(File, "[tr] ts=%llu dur=%llu tid=%u grp=%s name=%s::%.*s\n",
 			static_cast<unsigned long long>(StartMicros),
 			static_cast<unsigned long long>(DurMicros),
-			unsigned(GCurrentLane), (Group != nullptr) ? Group : "", First, Short.c_str());
+			unsigned(GCurrentLane), (Group != nullptr) ? Group : "",
+			First, static_cast<int>(Short.Size), Short.Data);
 	}
 }
 
