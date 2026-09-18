@@ -46,9 +46,9 @@ public:
 	 */
 	[[nodiscard]] const FDrawList& GetTriangleDrawList() const { return TriangleDrawList; }
 
-	void BeginRender(FRender& R) override;
-	void Render(FRender& R) override;
-	void EndRender(FRender& R) override;
+	void BeginRender(FRender& R, FRenderContext& Frame) override;
+	void Render(FRender& R, FRenderContext& Frame) override;
+	void EndRender(FRender& R, FRenderContext& Frame) override;
 
 	/**
 	 * Release the shared targets BEFORE this module unloads. FScene is a sub-plugin of
@@ -57,7 +57,7 @@ public:
 	 * the resource system destroy objects whose owning module is already gone (the
 	 * validated crash: a sub-plugin unloaded before FResourceSystem::Shutdown).
 	 */
-	void PreUnInstall(FRender& R) override;
+	void PreUnInstall(FRender& R, FRenderContext& Frame) override;
 
 	/**
 	 * SceneColor doubles as a render target (scene clears/draws into it) AND a sampled

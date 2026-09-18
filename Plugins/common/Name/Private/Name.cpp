@@ -10,13 +10,13 @@ FNamePool* GetNamePool()
 	return GNamePool;
 }
 
-void FNamePool::Initialize(FEngineBase&)
+void FNamePool::Initialize(FEngineBase&, FEngineContext&)
 {
 	GNamePool = this;
 	free();
 }
 
-void FNamePool::Shutdown(FEngineBase&)
+void FNamePool::Shutdown(FEngineBase&, FEngineContext&)
 {
 	GNamePool = nullptr;
 	free();

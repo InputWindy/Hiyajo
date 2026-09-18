@@ -75,7 +75,7 @@ void FEditorTheme::ReloadDefaults()
 	}
 }
 
-void FEditorTheme::Init(FExampleEditor& Editor)
+void FEditorTheme::Init(FExampleEditor& Editor, FExampleEditorContext& Frame)
 {
 	MAHO_TRACE_SCOPE("FEditorTheme::Init");
 	(void)Editor;
@@ -116,7 +116,7 @@ UI::FUIView* FEditorTheme::EnsureView(FExampleEditor& Editor)
 	return View.get();
 }
 
-void FEditorTheme::Shutdown(FExampleEditor& Editor)
+void FEditorTheme::Shutdown(FExampleEditor& Editor, FExampleEditorContext& Frame)
 {
 	MAHO_TRACE_SCOPE("FEditorTheme::Shutdown");
 	(void)Editor;
@@ -132,7 +132,7 @@ void FEditorTheme::Shutdown(FExampleEditor& Editor)
 	View.reset();
 }
 
-void FEditorTheme::Update(FExampleEditor& Editor)
+void FEditorTheme::Update(FExampleEditor& Editor, FExampleEditorContext& Frame)
 {
 	MAHO_TRACE_SCOPE("FEditorTheme::Update");
 	UI::FUIView* PanelView = EnsureView(Editor);

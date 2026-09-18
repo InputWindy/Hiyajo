@@ -26,9 +26,9 @@ class FEditorViewport : public FFrameExtension, public IPipeline<IEditorPanel, I
 public:
 	/** Declaration phase (host `NewFrame` before): rebuild this view's tree, then
 	 *  publish the image's on-screen rect to the host (the game cursor re-bases to it). */
-	void Update(FExampleEditor& Editor) override;
+	void Update(FExampleEditor& Editor, FExampleEditorContext& Frame) override;
 	/** Unregisters the view (the registry only holds a raw pointer, never owns). */
-	void Shutdown(FExampleEditor& Editor) override;
+	void Shutdown(FExampleEditor& Editor, FExampleEditorContext& Frame) override;
 
 private:
 	/** Lazy view creation + registration: the UI plugin may not be up during install. */

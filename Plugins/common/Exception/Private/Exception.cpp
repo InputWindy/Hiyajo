@@ -10,13 +10,13 @@ MAHO_EXCEPTION_API FException* GetExceptionCenter()
 	return GExceptionCenter;
 }
 
-void FException::Initialize(FEngineBase&)
+void FException::Initialize(FEngineBase&, FEngineContext&)
 {
 	OnException.RemoveAll();
 	GExceptionCenter = this;
 }
 
-void FException::Shutdown(FEngineBase&)
+void FException::Shutdown(FEngineBase&, FEngineContext&)
 {
 	GExceptionCenter = nullptr;
 	OnException.RemoveAll();

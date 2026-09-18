@@ -57,7 +57,7 @@ FDrawTriangleFeature::~FDrawTriangleFeature()
 	// destroying the pool, so no raw RHI object outlives it.
 }
 
-void FDrawTriangleFeature::Render(FRender& R)
+void FDrawTriangleFeature::Render(FRender& R, FRenderContext& Frame)
 {
 	Scene::FScene* Scene = Scene::GetScene();
 	if (Scene == nullptr || !Scene->GetSceneColor().IsValid())

@@ -563,9 +563,15 @@ protected:
 		// sequence silently loses its cross-frame exclusion) or at an unrelated older generation.
 		std::int32_t& SequenceFrame = LoopFrameNumbers[std::type_index(typeid(TLoopStages))];
 
-		TFrameDispatch<TLoopStages, TContext> Dispatch(GetContext());
+		// ONE read of the counter feeds BOTH the batch's frame number and the frame-context slot:
+		// the ring arithmetic goes through FFrameBridge::PhaseOf either way, so the slot the stages
+		// read cannot drift from the phase the bridge stamps into the batch.
+		const std::int32_t Frame = SequenceFrame++;
+
+		TFrameDispatch<TLoopStages, TContext> Dispatch(GetContext(),
+			GetContext(FFrameBridge::PhaseOf(Frame)));
 		FFrameBridge::FResult Built = FFrameBridge::Build(LoopFrames,
-			TFrameDispatch<TLoopStages, TContext>::StageIndices(), SequenceFrame++, Dispatch);
+			TFrameDispatch<TLoopStages, TContext>::StageIndices(), Frame, Dispatch);
 
 		// Report the declarations that cannot bind ONCE per frame set, not once per frame: the
 		// same typo would otherwise be logged on every single frame.
@@ -705,7 +711,9 @@ protected:
 			// quiescent ring (ring-reuse rule). With that, an install/uninstall is simply a
 			// batch that happens at a safe point.
 			FFrameGraph& Update = GetGraph();
-			TFrameDispatch<TInitStages, TContext> Dispatch(GetContext());
+			// A one-shot batch runs at frame number 0 (below), so its slot is PhaseOf(0) == 0 -- and
+			// these batches are drained before and after, so slot 0 is never shared with the loop.
+			TFrameDispatch<TInitStages, TContext> Dispatch(GetContext(), GetContext(0));
 			Update.Wait();
 			FFrameBridge::FResult Built = FFrameBridge::Build(NewLayers,
 				TFrameDispatch<TInitStages, TContext>::StageIndices(), 0, Dispatch);
@@ -953,6 +961,24 @@ private:
 
 	TContext& GetContext() { return *static_cast<TContext*>(this); }
 
+	/** The frame context of a ring SLOT, TYPE-ERASED. Implemented by the scheduler, which owns the
+	 *  storage and is the only party that knows the nested type:
+	 *
+	 *      void* GetContext(int Slot) override { return &Slots[Slot]; }
+	 *
+	 *  The base never names that type: it carries the pointer through TFrameDispatch as a `void*`,
+	 *  and the per-stage dispatch specialization -- expanded in the scheduler's own header, where the
+	 *  type is complete -- turns it back into a reference. That is the whole reason FFrameBuilder
+	 *  needs no extra template parameter and no change to its entry signatures.
+	 *
+	 *  Every slot must be a LIVE object: all stages take a reference, so returning nullptr would be
+	 *  undefined behaviour downstream.
+	 *
+	 *  The SLOT is the base's to choose, not the caller's: it is the ring index of the batch being
+	 *  built (`FFrameBridge::PhaseOf`), so the phase is computed in exactly one place and cannot
+	 *  drift from the phase the bridge puts in the batch. */
+	[[nodiscard]] virtual void* GetContext(int Slot) = 0;
+
 	/** Rebuild the reverse dependency count: layer name -> depended-on count. */
 	void RebuildReverseDeps()
 	{
@@ -1120,7 +1146,7 @@ private:
 		// One SHOT batch through the shared graph, exactly like the init path: the drain BEFORE
 		// the submit is what keeps it out of a frame that is still in flight (see the init path).
 		FFrameGraph& Update = GetGraph();
-		TFrameDispatch<TShutdownStages, TContext> Dispatch(GetContext());
+		TFrameDispatch<TShutdownStages, TContext> Dispatch(GetContext(), GetContext(0));   // frame 0 below, so slot 0
 		Update.Wait();
 		FFrameBridge::FResult Built = FFrameBridge::Build(ToUnload,
 			TFrameDispatch<TShutdownStages, TContext>::StageIndices(), 0, Dispatch);

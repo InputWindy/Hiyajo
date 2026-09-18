@@ -299,7 +299,7 @@ FUIFeature::FUIFeature()
 	MyStage<IPreUnInstall>().IsBlocking<Scene::FScene>().OnStage<IPreUnInstall>();
 }
 
-void FUIFeature::OnInstalled(FRender& R)
+void FUIFeature::OnInstalled(FRender& R, FRenderContext& Frame)
 {
 	// THIS feature owns the UI's CPU-side ImGui context (FRender is now completely
 	// UI-agnostic). Create it here, on install, BEFORE anything touches ImGui::GetIO()
@@ -414,7 +414,7 @@ void FUIFeature::SetEditorInput(
 	bEditorInputThisFrame = true;
 }
 
-void FUIFeature::InitViews(FRender& R)
+void FUIFeature::InitViews(FRender& R, FRenderContext& Frame)
 {
 	if (!bContextCreated || !bUIInit)
 	{
@@ -844,7 +844,7 @@ void FUIFeature::InitViews(FRender& R)
 	}
 }
 
-void FUIFeature::RenderUI(FRender& R)
+void FUIFeature::RenderUI(FRender& R, FRenderContext& Frame)
 {
 	// Draw into THIS feature's composite target -- NOT SceneColor. The UI is the final
 	// on-screen surface: the scene is sampled INto it (game imgui::image of the SceneColor
@@ -1019,7 +1019,7 @@ void FUIFeature::TransitionUIRenderTargetForSampling(FRender& R)
 	}
 }
 
-void FUIFeature::PreUnInstall(FRender& R)
+void FUIFeature::PreUnInstall(FRender& R, FRenderContext& Frame)
 {
 	(void)R;
 	// Release this feature's composite target before shutdown (the pool owns the native

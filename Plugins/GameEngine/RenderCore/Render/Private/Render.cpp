@@ -138,7 +138,7 @@ FRender::FRender()
 
 FRender::~FRender() = default;
 
-void FRender::PreInitialize(FEngineBase&)
+void FRender::PreInitialize(FEngineBase&, FEngineContext&)
 {
 	// Pull up the render features I declare (Render.cplugin Plugins), at the
 	// earliest stage of my own lifecycle -- before any of my business init runs.
@@ -155,7 +155,7 @@ void FRender::PreInitialize(FEngineBase&)
 	InstallChildrenOf(GetName());
 }
 
-void FRender::Initialize(FEngineBase& Engine)
+void FRender::Initialize(FEngineBase& Engine, FEngineContext& Frame)
 {
 	(void)Engine;
 	GRender = this;
@@ -217,7 +217,7 @@ void FRender::Initialize(FEngineBase& Engine)
 	}
 }
 
-void FRender::PostInitialize(FEngineBase&)
+void FRender::PostInitialize(FEngineBase&, FEngineContext&)
 {
 	// The editor feature (ExampleEditor, Type=Editor) is declared in Render.cplugin's
 	// Plugins, so InstallChildrenOf(GetName()) in PreInitialize mounts it into OUR
@@ -240,11 +240,11 @@ void FRender::WaitShaderCompiles()
 	}
 }
 
-void FRender::PreShutdown(FEngineBase&)
+void FRender::PreShutdown(FEngineBase&, FEngineContext&)
 {
 }
 
-void FRender::Shutdown(FEngineBase&)
+void FRender::Shutdown(FEngineBase&, FEngineContext&)
 {
 	// Clean-exit guarantee: drain EVERY async worker BEFORE tearing anything
 	// down. The engine's shutdown graph runs the IShutdown stages concurrently,
@@ -339,11 +339,11 @@ void FRender::Shutdown(FEngineBase&)
 	// its PreUnInstall, ordered here by the collect/shutdown graph.)
 }
 
-void FRender::PostShutdown(FEngineBase&)
+void FRender::PostShutdown(FEngineBase&, FEngineContext&)
 {
 }
 
-void FRender::BeginFrame(FEngineBase&)
+void FRender::BeginFrame(FEngineBase&, FEngineContext&)
 {
 	// Swapchain frame lifecycle lives on the host (engine) stages, not the render
 	// graph: RHI->BeginFrame waits the previous fence, acquires the swapchain
@@ -373,7 +373,7 @@ void FRender::BeginResourcePool()
 	}
 }
 
-void FRender::Tick(FEngineBase&)
+void FRender::Tick(FEngineBase&, FEngineContext&)
 {
 	// Frame-start barrier: wait the PREVIOUS frame's render-graph tasks before the frame set
 	// can change. The render CPU work runs during the interval and is collected here, so the
@@ -402,7 +402,7 @@ void FRender::Tick(FEngineBase&)
 	// any teardown logging lands in a live logger.
 }
 
-void FRender::EndFrame(FEngineBase&)
+void FRender::EndFrame(FEngineBase&, FEngineContext&)
 {
 	// RHI->EndFrame (end + submit the frame buffer, present the swapchain) must run after
 	// every feature submit, so drain the async render-graph tasks first: this serializes the
@@ -449,7 +449,7 @@ void FRender::EndFrame(FEngineBase&)
 	}
 }
 
-void FRender::RequestExit(FEngineBase&)
+void FRender::RequestExit(FEngineBase&, FEngineContext&)
 {
 }
 

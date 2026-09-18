@@ -46,7 +46,7 @@ FScene::FScene()
 	TriangleDrawList.Add(Triangle);
 }
 
-void FScene::BeginRender(FRender& R)
+void FScene::BeginRender(FRender& R, FRenderContext& Frame)
 {
 	MAHO_TRACE_SCOPE("FScene::BeginRender");
 	// Targets are (re)built on (re)size; the clear is recorded + submitted in
@@ -59,7 +59,7 @@ FScene::~FScene()
 	GScene = nullptr;
 }
 
-void FScene::PreUnInstall(FRender& R)
+void FScene::PreUnInstall(FRender& R, FRenderContext& Frame)
 {
 	MAHO_TRACE_SCOPE("FScene::PreUnInstall");
 	(void)R;
@@ -172,7 +172,7 @@ void FScene::EnsureTargets(FRender& R)
 	CachedHeight = H;
 }
 
-void FScene::Render(FRender& R)
+void FScene::Render(FRender& R, FRenderContext& Frame)
 {
 	// Scene pass head: RECORD + SUBMIT the clear in one AddPass (AddPass acquires
 	// the list, Begin/End it, and submits at this call site -- so the clear runs in
@@ -237,7 +237,7 @@ void FScene::Render(FRender& R)
 	});
 }
 
-void FScene::EndRender(FRender& R)
+void FScene::EndRender(FRender& R, FRenderContext& Frame)
 {
 	// The clear is submitted at the end of Render (AddPass submits at its call
 	// site), so this stage is now a no-op. It stays in the stage list so the draw

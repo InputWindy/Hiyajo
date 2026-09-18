@@ -39,7 +39,7 @@ MAHO_DECLARE_FRAME(FDrawTriangleFeature);
 	~FDrawTriangleFeature() override;
 
 private:
-	void Render(FRender& R) override;
+	void Render(FRender& R, FRenderContext& Frame) override;
 };
 
 } // namespace Maho

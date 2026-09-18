@@ -21,6 +21,16 @@ namespace GameWorld
 
 class FGameWorld;
 
+/** Per-frame state for the WORLD's stages (one instance per ring slot; reach it as
+ *  `FGameWorld::FContext`).
+ *
+ *  DEFINED HERE, at namespace scope, and not inside the class: the stage interfaces below must
+ *  name it in their signatures, and they are declared before `FGameWorld` exists. `FGameWorld`
+ *  carries a nested alias so stages and the dispatch macro can still write the nested name. */
+struct FGameWorldContext
+{
+};
+
 /**
  * Sample component (demonstrates the object model; add your own component structs
  * / classes in your systems).
@@ -41,7 +51,7 @@ class MAHO_GAMEWORLD_API IOnInstalled
 {
 public:
 	virtual ~IOnInstalled() = default;
-	virtual void OnInstalled(FGameWorld&) = 0;
+	virtual void OnInstalled(FGameWorld&, FGameWorldContext&) = 0;
 };
 
 /** Per-frame, once, before any fixed/regular update. */
@@ -49,7 +59,7 @@ class MAHO_GAMEWORLD_API IProcessInput
 {
 public:
 	virtual ~IProcessInput() = default;
-	virtual void ProcessInput(FGameWorld&) = 0;
+	virtual void ProcessInput(FGameWorld&, FGameWorldContext&) = 0;
 };
 
 /** Fixed-timestep update - runs 0..N times per frame with a fixed dt. */
@@ -57,7 +67,7 @@ class MAHO_GAMEWORLD_API IFixedUpdate
 {
 public:
 	virtual ~IFixedUpdate() = default;
-	virtual void FixedUpdate(FGameWorld&) = 0;
+	virtual void FixedUpdate(FGameWorld&, FGameWorldContext&) = 0;
 };
 
 /** Per-frame update (after all fixed steps this frame). */
@@ -65,7 +75,7 @@ class MAHO_GAMEWORLD_API IUpdate
 {
 public:
 	virtual ~IUpdate() = default;
-	virtual void Update(FGameWorld&) = 0;
+	virtual void Update(FGameWorld&, FGameWorldContext&) = 0;
 };
 
 /** Per-frame, after update. */
@@ -73,7 +83,7 @@ class MAHO_GAMEWORLD_API ILateUpdate
 {
 public:
 	virtual ~ILateUpdate() = default;
-	virtual void LateUpdate(FGameWorld&) = 0;
+	virtual void LateUpdate(FGameWorld&, FGameWorldContext&) = 0;
 };
 
 /** Detached from the world (removed at the next safe point). */
@@ -81,7 +91,7 @@ class MAHO_GAMEWORLD_API IPreUnInstall
 {
 public:
 	virtual ~IPreUnInstall() = default;
-	virtual void PreUnInstall(FGameWorld&) = 0;
+	virtual void PreUnInstall(FGameWorld&, FGameWorldContext&) = 0;
 };
 
 /**
@@ -99,6 +109,24 @@ class MAHO_GAMEWORLD_API FGameWorld
 	: public FFrameExtension, public IPipeline<IPreInit, IInit, IPostInit, IBeginFrame, ITick, IEndFrame, IExit, IPreShutdown, IShutdown, IPostShutdown>
 	, public FFrameBuilder<FGameWorld>
 {
+public:
+	/** Per-frame state for the world's systems -- one instance per ring slot. (Same shape as
+	 *  FEngineBase::FContext; the reasoning lives there.) EMPTY FOR NOW.
+	 *
+	 *  An ALIAS, not the definition: the stage interfaces must name this type before FGameWorld
+	 *  exists, so the definition lives at namespace scope (see FGameWorldContext). Stages and the
+	 *  dispatch macro write the nested name; it is the same type either way. */
+	using FContext = FGameWorldContext;
+
+protected:
+	std::array<FContext, MAHO_FRAMES_IN_FLIGHT> Slots;
+
+	void* GetContext(int Slot) override
+	{
+		return &Slots[Slot];
+	}
+
+private:
 	MAHO_DECLARE_FRAME(FGameWorld);
 
 public:
@@ -163,16 +191,16 @@ private:
 	// engine stage overrides (the host drives these; the ECS frame runs in Tick).
 	// FGameWorld inherits all ten engine stages and overrides every one (PerFrame etc.
 	// are empty) -- the stage interfaces are pure virtual, so all must be implemented.
-	void PreInitialize(FEngineBase&) override;
-	void Initialize(FEngineBase&) override;
-	void PostInitialize(FEngineBase&) override;
-	void BeginFrame(FEngineBase&) override;
-	void Tick(FEngineBase&) override;
-	void EndFrame(FEngineBase&) override;
-	void RequestExit(FEngineBase&) override;
-	void PreShutdown(FEngineBase&) override;
-	void Shutdown(FEngineBase&) override;
-	void PostShutdown(FEngineBase&) override;
+	void PreInitialize(FEngineBase&, FEngineContext&) override;
+	void Initialize(FEngineBase&, FEngineContext&) override;
+	void PostInitialize(FEngineBase&, FEngineContext&) override;
+	void BeginFrame(FEngineBase&, FEngineContext&) override;
+	void Tick(FEngineBase&, FEngineContext&) override;
+	void EndFrame(FEngineBase&, FEngineContext&) override;
+	void RequestExit(FEngineBase&, FEngineContext&) override;
+	void PreShutdown(FEngineBase&, FEngineContext&) override;
+	void Shutdown(FEngineBase&, FEngineContext&) override;
+	void PostShutdown(FEngineBase&, FEngineContext&) override;
 
 	template <typename C>
 	TComponentPool<C>* GetOrAddPool()

@@ -83,26 +83,31 @@ namespace Maho
  * skips -- which is a legal state, not an error (the bridge never even emits the node).
  */
 template <typename TStage, typename TContext>
-void Invoke(FFrameExtension* Frame, TContext& Context);
+void Invoke(FFrameExtension* Frame, TContext& Context, void* FrameContext);
 
 /**
  * Stage dispatch specialization sugar - full-specializes Invoke<TStage, TContext> to
- * dynamic_cast the frame to CastType and call Method(Context). Each context type (FEngineBase,
- * FRender, ...) declares its own specializations for the stage interfaces it schedules.
+ * dynamic_cast the frame to CastType and call Method(Context, FrameContext). Each context type
+ * (FEngineBase, FRender, ...) declares its own specializations for the stage interfaces it schedules.
  *
  *   MAHO_DECLARE_STAGE_DISPATCH(FEngineBase, IInit, IInit, Initialize)
- *   // => Invoke<IInit, FEngineBase>(Frame, Engine) -> cast IInit -> Initialize(Engine)
+ *   // => Invoke<IInit, FEngineBase>(Frame, Engine, Slot) -> cast IInit -> Initialize(Engine, *Slot)
+ *
+ * THE TYPE-ERASURE BOUNDARY is here: the infrastructure carries the slot's frame context as a
+ * `void*` (see TFrameDispatch), and this macro is the ONE place it is turned back into a concrete
+ * type -- which works because the expansion site (the scheduler's own header) has that nested type
+ * complete. It is also why FFrameBuilder never has to name the type at all.
  *
  * The cast is a cross-cast (the stage interface is a base of the concrete frame, not of FFrameExtension),
  * which is exactly why FFrameExtension must be polymorphic.
  */
 #define MAHO_DECLARE_STAGE_DISPATCH(ContextType, StageType, CastType, Method) \
 template <>                                                                    \
-inline void Invoke<StageType, ContextType>(FFrameExtension* Frame, ContextType& Context) \
+inline void Invoke<StageType, ContextType>(FFrameExtension* Frame, ContextType& Context, void* FrameContext) \
 {                                                                              \
 	if (auto* S = dynamic_cast<CastType*>(Frame))                              \
 	{                                                                          \
-		S->Method(Context);                                                     \
+		S->Method(Context, *static_cast<typename ContextType::FContext*>(FrameContext)); \
 	}                                                                          \
 }
 
@@ -126,8 +131,9 @@ class TFrameDispatch : public FFrameBridge::IDispatch
 public:
 	using FStages = TStages;
 
-	explicit TFrameDispatch(TContext& InContext)
+	explicit TFrameDispatch(TContext& InContext, void* InFrameContext)
 		: Context(InContext)
+		, FrameContext(InFrameContext)
 	{
 	}
 
@@ -188,9 +194,10 @@ private:
 			// the host object itself.
 			FFrameExtension* TargetFrame = &Frame;
 			TContext* TargetContext = &Context;
-			return [TargetFrame, TargetContext]()
+			void* TargetFrameContext = FrameContext;
+			return [TargetFrame, TargetContext, TargetFrameContext]()
 			{
-				Invoke<TCurrent, TContext>(TargetFrame, *TargetContext);
+				Invoke<TCurrent, TContext>(TargetFrame, *TargetContext, TargetFrameContext);
 			};
 		}
 		if constexpr (sizeof...(TRest) > 0)
@@ -207,6 +214,11 @@ private:
 	}
 
 	TContext& Context;
+
+	/** The current slot's frame context, TYPE-ERASED. The infrastructure only ever carries it; the
+	 *  one place it becomes a concrete type is the per-stage dispatch specialization (see the macro
+	 *  above), which is why FFrameBuilder never names it. */
+	void* FrameContext = nullptr;
 };
 
 } // namespace Maho

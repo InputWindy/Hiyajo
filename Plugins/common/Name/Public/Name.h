@@ -60,12 +60,12 @@ class FNamePool
 
 private:
 	// -- engine layer stages (scheduler-only) --
-	void PreInitialize(FEngineBase&) override {}
-	void Initialize(FEngineBase&) override;
-	void PostInitialize(FEngineBase&) override {}
-	void PreShutdown(FEngineBase&) override {}
-	void Shutdown(FEngineBase&) override;
-	void PostShutdown(FEngineBase&) override {}
+	void PreInitialize(FEngineBase&, FEngineContext&) override {}
+	void Initialize(FEngineBase&, FEngineContext&) override;
+	void PostInitialize(FEngineBase&, FEngineContext&) override {}
+	void PreShutdown(FEngineBase&, FEngineContext&) override {}
+	void Shutdown(FEngineBase&, FEngineContext&) override;
+	void PostShutdown(FEngineBase&, FEngineContext&) override {}
 
 public:
 	/** Intern a string - returns the canonical FName (thread-safe). */

@@ -72,7 +72,7 @@ FPaths* GetPaths()
 	return GPaths;
 }
 
-void FPaths::Initialize(FEngineBase&)
+void FPaths::Initialize(FEngineBase&, FEngineContext&)
 {
 	GPaths = this;
 
@@ -98,7 +98,7 @@ void FPaths::Initialize(FEngineBase&)
 	}
 }
 
-void FPaths::Shutdown(FEngineBase&)
+void FPaths::Shutdown(FEngineBase&, FEngineContext&)
 {
 	GPaths = nullptr;
 	Roots.clear();

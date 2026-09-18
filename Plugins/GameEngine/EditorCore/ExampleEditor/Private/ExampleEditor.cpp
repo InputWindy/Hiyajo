@@ -258,7 +258,7 @@ FExampleEditor::FExampleEditor()
 	MyStage<IPreUnInstall>().IsWaiting<Scene::FScene>().ForStage<IPreUnInstall>();
 }
 
-void FExampleEditor::EditorInput(FRender& R)
+void FExampleEditor::EditorInput(FRender& R, FRenderContext& Frame)
 {
 	// Editor-build input takeover: taste the Win32 cursor, confine it to the viewport panel
 	// (clamp panel-local) and map it BACK to the game UI's whole-window coordinate space, then
@@ -397,7 +397,7 @@ void FExampleEditor::UploadFont(FRender& R)
 	});
 }
 
-void FExampleEditor::OnInstalled(FRender& R)
+void FExampleEditor::OnInstalled(FRender& R, FRenderContext& Frame)
 {
 	// THIS feature owns the editor's OWN ImGui context -- fully isolated from the game's
 	// UIFeature context. Created at install, before anything touches GetIO(); it becomes
@@ -867,7 +867,9 @@ void FExampleEditor::UpdateEditorPanels()
 
 	for (IEditorPanel* P : Cast<IEditorPanel>())
 	{
-		P->Update(*this);
+		// Slot 0, same as FlushPendingUpdates: a panel's Update is the host-driven sibling of
+		// its Init/Shutdown batch, which that one-shot path already runs in slot 0.
+		P->Update(*this, Slots[0]);
 	}
 }
 
@@ -959,7 +961,7 @@ void FExampleEditor::RenderEditorUI(FRender& R)
 	R.SetPresentTarget(EditorRT);
 }
 
-void FExampleEditor::EditorCompose(FRender& R)
+void FExampleEditor::EditorCompose(FRender& R, FRenderContext& Frame)
 {
 	// Pass3 -- the editor's whole frame in a single graph stage (after the game-UI
 	// composite IRenderUI, before the frame's IPresent). Split into two private steps:
@@ -984,7 +986,7 @@ bool FExampleEditor::ConsumeDroppedFiles(std::vector<std::string>& Out)
 	return true;
 }
 
-void FExampleEditor::PreUnInstall(FRender& R)
+void FExampleEditor::PreUnInstall(FRender& R, FRenderContext& Frame)
 {
 	// Hand back the two capability tokens this module registered into the UI layer. The slots
 	// live on FUIViewRegistry -- a frame, not a file-scope static -- so their destruction is

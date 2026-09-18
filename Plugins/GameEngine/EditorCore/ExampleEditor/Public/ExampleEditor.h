@@ -26,6 +26,17 @@ namespace Maho
 
 class FExampleEditor;
 
+/** Per-frame state for the EDITOR's own stages (one instance per ring slot; reach it as
+ *  `FExampleEditor::FContext`).
+ *
+ *  DEFINED HERE, at namespace scope, and not inside the class: the stage interfaces below must
+ *  name it in their signatures, and they are declared before `FExampleEditor` exists.
+ *  `FExampleEditor` carries a nested alias so stages and the dispatch macro can still write the
+ *  nested name. */
+struct FExampleEditorContext
+{
+};
+
 /**
  * Lightweight shared editor state, owned by the host and read/written by the
  * component plugins through FExampleEditor::GetEditorContext(). The host keeps
@@ -52,7 +63,7 @@ class MAHO_EXAMPLEEDITOR_API IEditorInit
 {
 public:
 	virtual ~IEditorInit() = default;
-	virtual void Init(FExampleEditor&) = 0;
+	virtual void Init(FExampleEditor&, FExampleEditorContext&) = 0;
 };
 
 /**
@@ -66,20 +77,20 @@ class MAHO_EXAMPLEEDITOR_API IEditorPanel
 public:
 	virtual ~IEditorPanel() = default;
 	/** 声明期（宿主 `NewFrame` 之前）：只改自己的 UI 树，不碰后端。 */
-	virtual void Update(FExampleEditor&) = 0;
+	virtual void Update(FExampleEditor&, FExampleEditorContext&) = 0;
 };
 
 class MAHO_EXAMPLEEDITOR_API IEditorShutdown
 {
 public:
 	virtual ~IEditorShutdown() = default;
-	virtual void Shutdown(FExampleEditor&) = 0;
+	virtual void Shutdown(FExampleEditor&, FExampleEditorContext&) = 0;
 };
 
 // Stage dispatch specializations so the host's FFrameBuilder install/uninstall
 // graph can drive component Init/Shutdown (Invoke<IEditorInit, FExampleEditor>).
-MAHO_DECLARE_STAGE_DISPATCH(FExampleEditor, IEditorInit, IEditorInit, Init)
-MAHO_DECLARE_STAGE_DISPATCH(FExampleEditor, IEditorShutdown, IEditorShutdown, Shutdown)
+// The per-stage dispatch specializations live AT THE BOTTOM of this header, after `class FExampleEditor`:
+// their body names `FExampleEditor::FContext`, which is only declared inside the class.
 
 /**
  * The editor's draw shader type (mirrors FUIShader). The GLSL sources are private
@@ -126,23 +137,41 @@ class MAHO_EXAMPLEEDITOR_API FExampleEditor
 	: public FFrameExtension, public IPipeline<IOnInstalled, IEditorInput, IEditorCompose, IPreUnInstall>
 	, public FFrameBuilder<FExampleEditor>
 {
+public:
+	/** Per-frame state for the editor's stages -- one instance per ring slot. (Same shape as
+	 *  FEngineBase::FContext; the reasoning lives there.) EMPTY FOR NOW.
+	 *
+	 *  An ALIAS, not the definition: the stage interfaces must name this type before FExampleEditor
+	 *  exists, so the definition lives at namespace scope (see FExampleEditorContext). Stages and
+	 *  the dispatch macro write the nested name; it is the same type either way. */
+	using FContext = FExampleEditorContext;
+
+protected:
+	std::array<FContext, MAHO_FRAMES_IN_FLIGHT> Slots;
+
+	void* GetContext(int Slot) override
+	{
+		return &Slots[Slot];
+	}
+
+private:
 	MAHO_DECLARE_FRAME(FExampleEditor);
 
 	FExampleEditor();
 
 public:
-	void OnInstalled(FRender&) override;
+	void OnInstalled(FRender&, FRenderContext&) override;
 	/** Pass0: editor input takeover. Runs FIRST, before the game-UI feature's IInitViews
 	 *  feeds + NewFrame()s its IO. Tastes the Win32 cursor, re-bases it to the viewport
 	 *  panel rect (clamped panel-local) and feeds the game context via FUIFeature::GetUI()
 	 *  -> SetEditorInput, so the game UI only responds inside the panel and its layout
 	 *  matches the displayed panel. Blocked before FUIFeature's IRenderUI (ctor). */
-	void EditorInput(FRender&) override;
+	void EditorInput(FRender&, FRenderContext&) override;
 	/** Pass3: run the editor's OWN InitViews + Render in a single IEditorCompose stage
 	 *  (after the game-UI composite IRenderUI, before the frame's IPresent blit). It takes
 	 *  over the frame's present target with its EditorRT. */
-	void EditorCompose(FRender&) override;
-	void PreUnInstall(FRender&) override;
+	void EditorCompose(FRender&, FRenderContext&) override;
+	void PreUnInstall(FRender&, FRenderContext&) override;
 
 	/** Called by a viewport component (Update) to publish the on-screen panel rect (client
 	 *  pixels) the game UI is presented into. EditorInput re-bases the game cursor to it. */
@@ -253,5 +282,10 @@ private:
 	float VpX = 0.f, VpY = 0.f, VpW = 0.f, VpH = 0.f;
 	bool bVpValid = false;
 };
+
+// Stage dispatch for the editor's own stages. Placed AFTER the class on purpose: each expansion names
+// `FExampleEditor::FContext`, and a full specialization's body is compiled where it is written.
+MAHO_DECLARE_STAGE_DISPATCH(FExampleEditor, IEditorInit, IEditorInit, Init)
+MAHO_DECLARE_STAGE_DISPATCH(FExampleEditor, IEditorShutdown, IEditorShutdown, Shutdown)
 
 } // namespace Maho

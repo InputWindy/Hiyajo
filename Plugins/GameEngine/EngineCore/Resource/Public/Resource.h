@@ -231,16 +231,16 @@ private:
 	[[nodiscard]] const char* GetThreadName() const override;
 
 	// -- engine pipeline stages (scheduler-only) --
-	void PreInitialize(FEngineBase&) override {}
-	void Initialize(FEngineBase& Engine) override;
-	void PostInitialize(FEngineBase&) override {}
-	void BeginFrame(FEngineBase&) override {}
-	void Tick(FEngineBase& Engine) override;
-	void EndFrame(FEngineBase&) override {}
-	void RequestExit(FEngineBase&) override {}
-	void PreShutdown(FEngineBase&) override {}
-	void Shutdown(FEngineBase& Engine) override;
-	void PostShutdown(FEngineBase&) override {}
+	void PreInitialize(FEngineBase&, FEngineContext&) override {}
+	void Initialize(FEngineBase& Engine, FEngineContext& Frame) override;
+	void PostInitialize(FEngineBase&, FEngineContext&) override {}
+	void BeginFrame(FEngineBase&, FEngineContext&) override {}
+	void Tick(FEngineBase& Engine, FEngineContext& Frame) override;
+	void EndFrame(FEngineBase&, FEngineContext&) override {}
+	void RequestExit(FEngineBase&, FEngineContext&) override {}
+	void PreShutdown(FEngineBase&, FEngineContext&) override {}
+	void Shutdown(FEngineBase& Engine, FEngineContext& Frame) override;
+	void PostShutdown(FEngineBase&, FEngineContext&) override {}
 
 	FResourceSystem();
 

@@ -284,7 +284,7 @@ FScriptSystem::FScriptSystem()
 	MyStage<IInit>().IsWaiting<FLog>().ForStage<IInit>();
 }
 
-void FScriptSystem::Initialize(FEngineBase& Engine)
+void FScriptSystem::Initialize(FEngineBase& Engine, FEngineContext& Frame)
 {
 	(void)Engine;
 
@@ -306,7 +306,7 @@ void FScriptSystem::Initialize(FEngineBase& Engine)
 	GScriptSystem = this;
 }
 
-void FScriptSystem::Shutdown(FEngineBase&)
+void FScriptSystem::Shutdown(FEngineBase&, FEngineContext&)
 {
 	GScriptSystem = nullptr;
 

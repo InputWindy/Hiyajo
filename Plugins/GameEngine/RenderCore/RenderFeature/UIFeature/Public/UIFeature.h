@@ -72,10 +72,10 @@ MAHO_DECLARE_FRAME(FUIFeature);
 	FUIFeature();
 
 public:
-	void OnInstalled(FRender& R) override;
-	void InitViews(FRender& R) override;
-	void RenderUI(FRender& R) override;
-	void PreUnInstall(FRender& R) override;
+	void OnInstalled(FRender& R, FRenderContext& Frame) override;
+	void InitViews(FRender& R, FRenderContext& Frame) override;
+	void RenderUI(FRender& R, FRenderContext& Frame) override;
+	void PreUnInstall(FRender& R, FRenderContext& Frame) override;
 
 	/** Pass2 composite target (game view). Read by the editor compose (pass3) to embed
 	 *  it as the viewport background via imgui::image. Null until InitViews creates it

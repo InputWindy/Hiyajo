@@ -53,12 +53,12 @@ public:
 
 private:
 	// -- engine pipeline stages (scheduler-only) --
-	void PreInitialize(FEngineBase&) override {}
-	void Initialize(FEngineBase& Engine) override;
-	void PostInitialize(FEngineBase&) override {}
-	void PreShutdown(FEngineBase&) override {}
-	void Shutdown(FEngineBase& Engine) override;
-	void PostShutdown(FEngineBase&) override {}
+	void PreInitialize(FEngineBase&, FEngineContext&) override {}
+	void Initialize(FEngineBase& Engine, FEngineContext& Frame) override;
+	void PostInitialize(FEngineBase&, FEngineContext&) override {}
+	void PreShutdown(FEngineBase&, FEngineContext&) override {}
+	void Shutdown(FEngineBase& Engine, FEngineContext& Frame) override;
+	void PostShutdown(FEngineBase&, FEngineContext&) override {}
 
 protected:
 	FTimer() = default;

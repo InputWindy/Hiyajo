@@ -205,16 +205,16 @@ public:
 
 private:
 	// -- engine pipeline stages (scheduler-only) --
-	void PreInitialize(FEngineBase&) override {}
-	void Initialize(FEngineBase& Engine) override;
-	void PostInitialize(FEngineBase&) override {}
-	void Shutdown(FEngineBase& Engine) override;
-	void BeginFrame(FEngineBase& Engine) override;
-	void Tick(FEngineBase& Engine) override;
-	void EndFrame(FEngineBase& Engine) override;
-	void RequestExit(FEngineBase& Engine) override;
-	void PreShutdown(FEngineBase&) override {}
-	void PostShutdown(FEngineBase&) override {}
+	void PreInitialize(FEngineBase&, FEngineContext&) override {}
+	void Initialize(FEngineBase& Engine, FEngineContext& Frame) override;
+	void PostInitialize(FEngineBase&, FEngineContext&) override {}
+	void Shutdown(FEngineBase& Engine, FEngineContext& Frame) override;
+	void BeginFrame(FEngineBase& Engine, FEngineContext& Frame) override;
+	void Tick(FEngineBase& Engine, FEngineContext& Frame) override;
+	void EndFrame(FEngineBase& Engine, FEngineContext& Frame) override;
+	void RequestExit(FEngineBase& Engine, FEngineContext& Frame) override;
+	void PreShutdown(FEngineBase&, FEngineContext&) override {}
+	void PostShutdown(FEngineBase&, FEngineContext&) override {}
 
 	std::unique_ptr<IPlatform> Surface;
 	std::function<void()> PollEventsFn;

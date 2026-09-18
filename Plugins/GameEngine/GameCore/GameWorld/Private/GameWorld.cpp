@@ -44,19 +44,19 @@ FGameWorld::~FGameWorld()
 // -- engine stage overrides (host drives these). Initialize/Tick/Shutdown carry
 // the real work; the remaining stages are empty -- FGameWorld only hosts the world
 // and schedules its systems, the per-stage ECS frame runs in Tick.
-void FGameWorld::PreInitialize(FEngineBase&) {}
-void FGameWorld::PostInitialize(FEngineBase&)
+void FGameWorld::PreInitialize(FEngineBase&, FEngineContext&) {}
+void FGameWorld::PostInitialize(FEngineBase&, FEngineContext&)
 {
 	// Nothing to build: the stage sequences are compile-time (FInputStages / FFixedStages /
 	// FPostStages) and the collector's graph is created on first use. Tick drives them.
 }
-void FGameWorld::BeginFrame(FEngineBase&) {}
-void FGameWorld::EndFrame(FEngineBase&) {}
-void FGameWorld::RequestExit(FEngineBase&) {}
-void FGameWorld::PreShutdown(FEngineBase&) {}
-void FGameWorld::PostShutdown(FEngineBase&) {}
+void FGameWorld::BeginFrame(FEngineBase&, FEngineContext&) {}
+void FGameWorld::EndFrame(FEngineBase&, FEngineContext&) {}
+void FGameWorld::RequestExit(FEngineBase&, FEngineContext&) {}
+void FGameWorld::PreShutdown(FEngineBase&, FEngineContext&) {}
+void FGameWorld::PostShutdown(FEngineBase&, FEngineContext&) {}
 
-void FGameWorld::Initialize(FEngineBase&)
+void FGameWorld::Initialize(FEngineBase&, FEngineContext&)
 {
 	GGameWorld = this;
 	LastFrame = std::chrono::steady_clock::now();
@@ -79,7 +79,7 @@ void FGameWorld::Initialize(FEngineBase&)
 	Install<GameWorld::FUISystem>();
 }
 
-void FGameWorld::Tick(FEngineBase&)
+void FGameWorld::Tick(FEngineBase&, FEngineContext&)
 {
 	// Frame-start barrier: the post-fixed group is dispatched un-waited below, so it pipelines
 	// across frames into this wait -- cross-frame parallelism, same as the render graph. Must
@@ -116,7 +116,7 @@ void FGameWorld::Tick(FEngineBase&)
 	Execute<FPostStages>();
 }
 
-void FGameWorld::Shutdown(FEngineBase&)
+void FGameWorld::Shutdown(FEngineBase&, FEngineContext&)
 {
 	// MY OWN state first, the world systems AFTER. The component pools hold objects
 	// whose destructors live in the systems' modules, and the graph's nodes point at

@@ -45,10 +45,10 @@ class MAHO_UISYSTEM_API FUISystem : public FFrameExtension, public IPipeline<IOn
 	MAHO_DECLARE_FRAME(FUISystem);
 
 public:
-	void OnInstalled(FGameWorld& World) override;
-	void ProcessInput(FGameWorld& World) override;
-	void Update(FGameWorld& World) override;
-	void PreUnInstall(FGameWorld& World) override;
+	void OnInstalled(FGameWorld& World, FGameWorldContext& Frame) override;
+	void ProcessInput(FGameWorld& World, FGameWorldContext& Frame) override;
+	void Update(FGameWorld& World, FGameWorldContext& Frame) override;
+	void PreUnInstall(FGameWorld& World, FGameWorldContext& Frame) override;
 
 public:
 	static UI::FUIName GameRenderScope();

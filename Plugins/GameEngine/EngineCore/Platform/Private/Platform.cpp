@@ -374,7 +374,7 @@ namespace
 	}
 }
 
-void FPlatform::Initialize(FEngineBase&)
+void FPlatform::Initialize(FEngineBase&, FEngineContext&)
 {
 	// Window size comes from the CVars; the Config layer already pushed the
 	// [ConsoleVariables] ini values into them (r.Window.Width/Height).
@@ -389,7 +389,7 @@ void FPlatform::Initialize(FEngineBase&)
 	GPlatform = this;
 }
 
-void FPlatform::Shutdown(FEngineBase&)
+void FPlatform::Shutdown(FEngineBase&, FEngineContext&)
 {
 	GPlatform = nullptr;
 	DestroyWindow();
@@ -622,11 +622,11 @@ void FPlatform::PollEvents()
 
 // -- engine loop stages (FEngineLayer) --
 
-void FPlatform::BeginFrame(FEngineBase&)
+void FPlatform::BeginFrame(FEngineBase&, FEngineContext&)
 {
 }
 
-void FPlatform::Tick(FEngineBase& Engine)
+void FPlatform::Tick(FEngineBase& Engine, FEngineContext& Frame)
 {
 	PollEvents();   // the pump writes the LIVE copy (Input) and appends edge events
 
@@ -658,13 +658,13 @@ void FPlatform::ReadFrameInput(MInputContext& Out) const
 	Out = InputRing[InputRingPublished.load(std::memory_order_acquire)];
 }
 
-void FPlatform::EndFrame(FEngineBase&)
+void FPlatform::EndFrame(FEngineBase&, FEngineContext&)
 {
 	// Nothing to do: Tick() publishes the frame's input into the ring and drains the event
 	// stream, so the state a reader observes is already frozen at that point.
 }
 
-void FPlatform::RequestExit(FEngineBase& Engine)
+void FPlatform::RequestExit(FEngineBase& Engine, FEngineContext& Frame)
 {
 	// window close request -> tell the host engine to exit the main loop.
 	if (ShouldClose())

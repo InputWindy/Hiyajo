@@ -42,9 +42,9 @@ public:
 	/** Declares this layer's dependency edges onto the service layers. */
 	FTestLayerA();
 
-	void Initialize(FEngineBase&) override;
-	void Tick(FEngineBase&) override;
-	void Shutdown(FEngineBase&) override;
+	void Initialize(FEngineBase&, FEngineContext&) override;
+	void Tick(FEngineBase&, FEngineContext&) override;
+	void Shutdown(FEngineBase&, FEngineContext&) override;
 
 private:
 	std::uint64_t TickCount = 0;

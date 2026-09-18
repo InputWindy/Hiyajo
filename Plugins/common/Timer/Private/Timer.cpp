@@ -15,14 +15,14 @@ MAHO_TIMER_API FTimer* GetTimer()
 	return GTimer;
 }
 
-void FTimer::Initialize(FEngineBase& Engine)
+void FTimer::Initialize(FEngineBase& Engine, FEngineContext& Frame)
 {
 	(void)Engine;
 	Reset();
 	GTimer = this;
 }
 
-void FTimer::Shutdown(FEngineBase&)
+void FTimer::Shutdown(FEngineBase&, FEngineContext&)
 {
 	Reset();
 	GTimer = nullptr;

@@ -32,11 +32,11 @@ class FEditorTheme : public FFrameExtension, public IPipeline<IEditorInit, IEdit
 	MAHO_DECLARE_FRAME(FEditorTheme);
 
 public:
-	void Init(FExampleEditor& Editor) override;
+	void Init(FExampleEditor& Editor, FExampleEditorContext& Frame) override;
 	/** Declaration phase (host `NewFrame` before): rebuilds this view's tree only. */
-	void Update(FExampleEditor& Editor) override;
+	void Update(FExampleEditor& Editor, FExampleEditorContext& Frame) override;
 	/** Unregisters the view (the registry only holds a raw pointer, never owns). */
-	void Shutdown(FExampleEditor& Editor) override;
+	void Shutdown(FExampleEditor& Editor, FExampleEditorContext& Frame) override;
 
 private:
 	/** Refill the Colors + Styles buffers from the built-in palette defaults. */

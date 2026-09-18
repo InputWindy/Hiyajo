@@ -39,7 +39,7 @@ namespace
 	}
 }
 
-void FConfig::Initialize(FEngineBase&)
+void FConfig::Initialize(FEngineBase&, FEngineContext&)
 {
 	GConfig = this;
 	Sections.clear();
@@ -58,7 +58,7 @@ void FConfig::Initialize(FEngineBase&)
 	}
 }
 
-void FConfig::Shutdown(FEngineBase&)
+void FConfig::Shutdown(FEngineBase&, FEngineContext&)
 {
 	GConfig = nullptr;
 	Sections.clear();

@@ -32,6 +32,16 @@ class FRHIResourcePool;
 
 template <typename T> class TShaderHandle;
 
+/** Per-frame state for the RENDER stages (one instance per ring slot; reach it as
+ *  `FRender::FContext`).
+ *
+ *  DEFINED HERE, at namespace scope, and not inside the class: the stage interfaces below must
+ *  name it in their signatures, and they are declared before `FRender` exists. `FRender` carries
+ *  a nested alias so stages and the dispatch macro can still write the nested name. */
+struct FRenderContext
+{
+};
+
 namespace Detail
 {
 	/** Resolve a shader type's optional static entry point (default "main"). */
@@ -71,49 +81,49 @@ class MAHO_RENDER_API IOnInstalled
 {
 public:
 	virtual ~IOnInstalled() = default;
-	virtual void OnInstalled(FRender&) = 0;
+	virtual void OnInstalled(FRender&, FRenderContext&) = 0;
 };
 
 class MAHO_RENDER_API IInitViews
 {
 public:
 	virtual ~IInitViews() = default;
-	virtual void InitViews(FRender&) = 0;
+	virtual void InitViews(FRender&, FRenderContext&) = 0;
 };
 
 class MAHO_RENDER_API IBeginRender
 {
 public:
 	virtual ~IBeginRender() = default;
-	virtual void BeginRender(FRender&) = 0;
+	virtual void BeginRender(FRender&, FRenderContext&) = 0;
 };
 
 class MAHO_RENDER_API IRender
 {
 public:
 	virtual ~IRender() = default;
-	virtual void Render(FRender&) = 0;
+	virtual void Render(FRender&, FRenderContext&) = 0;
 };
 
 class MAHO_RENDER_API IEndRender
 {
 public:
 	virtual ~IEndRender() = default;
-	virtual void EndRender(FRender&) = 0;
+	virtual void EndRender(FRender&, FRenderContext&) = 0;
 };
 
 class MAHO_RENDER_API IPostProcess
 {
 public:
 	virtual ~IPostProcess() = default;
-	virtual void PostProcess(FRender&) = 0;
+	virtual void PostProcess(FRender&, FRenderContext&) = 0;
 };
 
 class MAHO_RENDER_API IRenderUI
 {
 public:
 	virtual ~IRenderUI() = default;
-	virtual void RenderUI(FRender&) = 0;
+	virtual void RenderUI(FRender&, FRenderContext&) = 0;
 };
 
 #ifdef MAHO_EDITOR_BUILD
@@ -131,7 +141,7 @@ class MAHO_RENDER_API IEditorInput
 {
 public:
 	virtual ~IEditorInput() = default;
-	virtual void EditorInput(FRender&) = 0;
+	virtual void EditorInput(FRender&, FRenderContext&) = 0;
 };
 
 /**
@@ -148,7 +158,7 @@ class MAHO_RENDER_API IEditorCompose
 {
 public:
 	virtual ~IEditorCompose() = default;
-	virtual void EditorCompose(FRender&) = 0;
+	virtual void EditorCompose(FRender&, FRenderContext&) = 0;
 };
 #endif // MAHO_EDITOR_BUILD
 
@@ -156,29 +166,18 @@ class MAHO_RENDER_API IPresent
 {
 public:
 	virtual ~IPresent() = default;
-	virtual void Present(FRender&) = 0;
+	virtual void Present(FRender&, FRenderContext&) = 0;
 };
 
 class MAHO_RENDER_API IPreUnInstall
 {
 public:
 	virtual ~IPreUnInstall() = default;
-	virtual void PreUnInstall(FRender&) = 0;
+	virtual void PreUnInstall(FRender&, FRenderContext&) = 0;
 };
 
-MAHO_DECLARE_STAGE_DISPATCH(FRender, IOnInstalled, IOnInstalled, OnInstalled)
-MAHO_DECLARE_STAGE_DISPATCH(FRender, IInitViews, IInitViews, InitViews)
-MAHO_DECLARE_STAGE_DISPATCH(FRender, IBeginRender, IBeginRender, BeginRender)
-MAHO_DECLARE_STAGE_DISPATCH(FRender, IRender,      IRender,      Render)
-MAHO_DECLARE_STAGE_DISPATCH(FRender, IEndRender,   IEndRender,   EndRender)
-MAHO_DECLARE_STAGE_DISPATCH(FRender, IPostProcess, IPostProcess, PostProcess)
-MAHO_DECLARE_STAGE_DISPATCH(FRender, IRenderUI,    IRenderUI,    RenderUI)
-#ifdef MAHO_EDITOR_BUILD
-MAHO_DECLARE_STAGE_DISPATCH(FRender, IEditorInput, IEditorInput, EditorInput)
-MAHO_DECLARE_STAGE_DISPATCH(FRender, IEditorCompose, IEditorCompose, EditorCompose)
-#endif // MAHO_EDITOR_BUILD
-MAHO_DECLARE_STAGE_DISPATCH(FRender, IPresent, IPresent, Present)
-MAHO_DECLARE_STAGE_DISPATCH(FRender, IPreUnInstall, IPreUnInstall, PreUnInstall)
+// The per-stage dispatch specializations live AT THE BOTTOM of this header, after `class FRender`:
+// their body names `FRender::FContext`, which is only declared inside the class.
 
 /**
  * Render subsystem - a layer in the host engine (mounted as IInit/ITick/...),
@@ -199,7 +198,30 @@ class MAHO_RENDER_API FRender
 	: public FFrameExtension, public IPipeline<IPreInit, IInit, IPostInit, IBeginFrame, ITick, IEndFrame, IExit, IPreShutdown, IShutdown, IPostShutdown>
 	, public FFrameBuilder<FRender>
 {
-MAHO_DECLARE_FRAME(FRender);
+public:
+	/** Per-frame state for the render stages -- one instance per ring slot, so a stage of frame N
+	 *  and the same stage of frame N+1 never touch the same state. (Same shape as
+	 *  FEngineBase::FContext; the reasoning lives there.) EMPTY FOR NOW: this step only establishes
+	 *  the plumbing.
+	 *
+	 *  An ALIAS, not the definition: the stage interfaces must name this type before FRender
+	 *  exists, so the definition lives at namespace scope (see FRenderContext). Stages and the
+	 *  dispatch macro write the nested name; it is the same type either way. */
+	using FContext = FRenderContext;
+
+protected:
+	/** One context per ring slot. The derived class owns the storage -- the base cannot name the
+	 *  nested type while it is being instantiated. */
+	std::array<FContext, MAHO_FRAMES_IN_FLIGHT> Slots;
+
+	/** Type-erased access to a slot's context (see FFrameBuilder). Must never return nullptr. */
+	void* GetContext(int Slot) override
+	{
+		return &Slots[Slot];
+	}
+
+private:
+	MAHO_DECLARE_FRAME(FRender);
 
 	FRender();
 	~FRender() override;
@@ -458,16 +480,16 @@ public:
 	}
 
 	// -- host engine stages (FEngineBase context) --
-	void PreInitialize(FEngineBase&) override;
-	void Initialize(FEngineBase& Engine) override;
-	void PostInitialize(FEngineBase&) override;
-	void PreShutdown(FEngineBase&) override;
-	void Shutdown(FEngineBase& Engine) override;
-	void PostShutdown(FEngineBase&) override;
-	void BeginFrame(FEngineBase& Engine) override;
-	void Tick(FEngineBase& Engine) override;
-	void EndFrame(FEngineBase& Engine) override;
-	void RequestExit(FEngineBase& Engine) override;
+	void PreInitialize(FEngineBase&, FEngineContext&) override;
+	void Initialize(FEngineBase& Engine, FEngineContext& Frame) override;
+	void PostInitialize(FEngineBase&, FEngineContext&) override;
+	void PreShutdown(FEngineBase&, FEngineContext&) override;
+	void Shutdown(FEngineBase& Engine, FEngineContext& Frame) override;
+	void PostShutdown(FEngineBase&, FEngineContext&) override;
+	void BeginFrame(FEngineBase& Engine, FEngineContext& Frame) override;
+	void Tick(FEngineBase& Engine, FEngineContext& Frame) override;
+	void EndFrame(FEngineBase& Engine, FEngineContext& Frame) override;
+	void RequestExit(FEngineBase& Engine, FEngineContext& Frame) override;
 
 private:
 	/** TShaderHandle drives the shader compile through the pool's PSO cache; it
@@ -732,5 +754,21 @@ private:
 
 	FRender* Owner = nullptr;
 };
+
+// Stage dispatch for the render subsystem. AFTER the class on purpose: each expansion names
+// `FRender::FContext`, and a full specialization's body is compiled where it is written.
+MAHO_DECLARE_STAGE_DISPATCH(FRender, IOnInstalled, IOnInstalled, OnInstalled)
+MAHO_DECLARE_STAGE_DISPATCH(FRender, IInitViews, IInitViews, InitViews)
+MAHO_DECLARE_STAGE_DISPATCH(FRender, IBeginRender, IBeginRender, BeginRender)
+MAHO_DECLARE_STAGE_DISPATCH(FRender, IRender,      IRender,      Render)
+MAHO_DECLARE_STAGE_DISPATCH(FRender, IEndRender,   IEndRender,   EndRender)
+MAHO_DECLARE_STAGE_DISPATCH(FRender, IPostProcess, IPostProcess, PostProcess)
+MAHO_DECLARE_STAGE_DISPATCH(FRender, IRenderUI,    IRenderUI,    RenderUI)
+#ifdef MAHO_EDITOR_BUILD
+MAHO_DECLARE_STAGE_DISPATCH(FRender, IEditorInput, IEditorInput, EditorInput)
+MAHO_DECLARE_STAGE_DISPATCH(FRender, IEditorCompose, IEditorCompose, EditorCompose)
+#endif // MAHO_EDITOR_BUILD
+MAHO_DECLARE_STAGE_DISPATCH(FRender, IPresent, IPresent, Present)
+MAHO_DECLARE_STAGE_DISPATCH(FRender, IPreUnInstall, IPreUnInstall, PreUnInstall)
 
 } // namespace Maho

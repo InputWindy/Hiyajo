@@ -119,7 +119,7 @@ FOnTransferDone FResourceSystem::MakeTransferDone(std::string AssetPath)
 	};
 }
 
-void FResourceSystem::Initialize(FEngineBase& Engine)
+void FResourceSystem::Initialize(FEngineBase& Engine, FEngineContext& Frame)
 {
 	(void)Engine;
 	FThreadedServer::Initialize();   // start the async load thread
@@ -131,7 +131,7 @@ const char* FResourceSystem::GetThreadName() const
 	return "ResourceIO";
 }
 
-void FResourceSystem::Shutdown(FEngineBase&)
+void FResourceSystem::Shutdown(FEngineBase&, FEngineContext&)
 {
 	GResourceSystem = nullptr;
 	FThreadedServer::Shutdown();   // stop + join the IO thread
@@ -175,7 +175,7 @@ void FResourceSystem::Shutdown(FEngineBase&)
 	}
 }
 
-void FResourceSystem::Tick(FEngineBase& Engine)
+void FResourceSystem::Tick(FEngineBase& Engine, FEngineContext& Frame)
 {
 	(void)Engine;
 	ProcessReadyIO();   // poll transfers + decode on the game thread

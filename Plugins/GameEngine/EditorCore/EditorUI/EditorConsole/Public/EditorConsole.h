@@ -48,11 +48,11 @@ class FEditorConsole : public FFrameExtension, public IPipeline<IEditorInit, IEd
 	MAHO_DECLARE_FRAME(FEditorConsole);
 
 public:
-	void Init(FExampleEditor& Editor) override;
+	void Init(FExampleEditor& Editor, FExampleEditorContext& Frame) override;
 	/** 声明期（宿主 `NewFrame` 之前）：只重建本视图的树，不碰后端。 */
-	void Update(FExampleEditor& Editor) override;
+	void Update(FExampleEditor& Editor, FExampleEditorContext& Frame) override;
 	/** 解绑日志监听 + 注销视图（注册表只持裸指针，从不删除）。 */
-	void Shutdown(FExampleEditor& Editor) override;
+	void Shutdown(FExampleEditor& Editor, FExampleEditorContext& Frame) override;
 
 private:
 	/** One buffered console line. Timestamp is captured locally at enqueue time,

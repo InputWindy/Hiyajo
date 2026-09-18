@@ -43,9 +43,9 @@ class FContentBrowser : public FFrameExtension, public IPipeline<IEditorPanel, I
 
 public:
 	/** 声明期（宿主 `NewFrame` 之前）：只重建本视图的树，不碰后端。 */
-	void Update(FExampleEditor& Editor) override;
+	void Update(FExampleEditor& Editor, FExampleEditorContext& Frame) override;
 	/** 注销视图（注册表只持裸指针，从不删除）。 */
-	void Shutdown(FExampleEditor& Editor) override;
+	void Shutdown(FExampleEditor& Editor, FExampleEditorContext& Frame) override;
 
 private:
 	/** One scanned directory. VirtualPath is the display path ("Game/Textures"), the

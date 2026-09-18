@@ -114,8 +114,8 @@ public:
 	TMulticastEvent<void(const FLogMessage&)> OnLog;
 private:
 	// -- engine init/shutdown stages (scheduler-only) --
-	void Initialize(FEngineBase& Engine) override;
-	void Shutdown(FEngineBase& Engine) override;
+	void Initialize(FEngineBase& Engine, FEngineContext& Frame) override;
+	void Shutdown(FEngineBase& Engine, FEngineContext& Frame) override;
 
 	void LogLine(ELogLevel Level, std::string Message);
 	void LogLine(ELogLevel Level, std::string Category, std::string Message);

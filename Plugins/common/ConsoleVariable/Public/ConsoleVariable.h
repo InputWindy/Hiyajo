@@ -77,8 +77,8 @@ public:
 	/** Process-unique accessor - declared here, defined in ConsoleVariable.cpp (in ConsoleVariable.dll). */
 	static FConsoleVariable& Get();
 
-	void Initialize(FEngineBase& Engine) override;
-	void Shutdown(FEngineBase& Engine) override;
+	void Initialize(FEngineBase& Engine, FEngineContext& Frame) override;
+	void Shutdown(FEngineBase& Engine, FEngineContext& Frame) override;
 
 	/** Find a registered variable; nullptr when absent. */
 	[[nodiscard]] IConsoleVariable* Find(std::string_view Name);

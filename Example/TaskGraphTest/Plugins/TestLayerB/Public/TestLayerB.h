@@ -27,9 +27,9 @@ class FTestLayerB : public FFrameExtension, public IPipeline<IInit, ITick, IShut
 MAHO_DECLARE_FRAME(FTestLayerB);
 
 public:
-	void Initialize(FEngineBase&) override;
-	void Tick(FEngineBase&) override;
-	void Shutdown(FEngineBase&) override;
+	void Initialize(FEngineBase&, FEngineContext&) override;
+	void Tick(FEngineBase&, FEngineContext&) override;
+	void Shutdown(FEngineBase&, FEngineContext&) override;
 
 private:
 	std::uint64_t TickCount = 0;

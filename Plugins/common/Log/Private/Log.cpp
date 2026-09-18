@@ -21,7 +21,7 @@ FLog::FLog() = default;
 
 FLog::~FLog() = default;   // full type spdlog::logger is visible here
 
-void FLog::Initialize(FEngineBase& Engine)
+void FLog::Initialize(FEngineBase& Engine, FEngineContext& Frame)
 {
 	// stdout (color) + rotating file - GUI apps (WIN32 subsystem) have no
 	// console, so the file sink is the durable log destination.
@@ -47,7 +47,7 @@ void FLog::Initialize(FEngineBase& Engine)
 	GLog = this;
 }
 
-void FLog::Shutdown(FEngineBase&)
+void FLog::Shutdown(FEngineBase&, FEngineContext&)
 {
 	GLog = nullptr;
 	// Subscribers (e.g. the Editor Console) unbind themselves in their own Shutdown,

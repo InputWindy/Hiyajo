@@ -101,7 +101,7 @@ namespace
 	}
 }
 
-void FTestLayerB::Initialize(FEngineBase&)
+void FTestLayerB::Initialize(FEngineBase&, FEngineContext&)
 {
 	FStageProbe Probe(GInStage[0], "Init");
 	NoteThread();
@@ -109,7 +109,7 @@ void FTestLayerB::Initialize(FEngineBase&)
 	std::fflush(stdout);
 }
 
-void FTestLayerB::Tick(FEngineBase& Engine)
+void FTestLayerB::Tick(FEngineBase& Engine, FEngineContext& Frame)
 {
 	FStageProbe Probe(GInStage[1], "Tick");
 	NoteThread();
@@ -131,7 +131,7 @@ void FTestLayerB::Tick(FEngineBase& Engine)
 	}
 }
 
-void FTestLayerB::Shutdown(FEngineBase&)
+void FTestLayerB::Shutdown(FEngineBase&, FEngineContext&)
 {
 	FStageProbe Probe(GInStage[2], "Shutdown");
 

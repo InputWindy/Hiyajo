@@ -151,13 +151,13 @@ void FUIViewRegistry::WriteClipboard(std::string_view Text) const
 	if (Set) { Set(Text); }
 }
 
-void FUIViewRegistry::Initialize(FEngineBase& Engine)
+void FUIViewRegistry::Initialize(FEngineBase& Engine, FEngineContext& Frame)
 {
 	std::scoped_lock Lock(Mutex);
 	GUIRegistry = this;
 }
 
-void FUIViewRegistry::Shutdown(FEngineBase& Engine)
+void FUIViewRegistry::Shutdown(FEngineBase& Engine, FEngineContext& Frame)
 {
 	// 1) 能力槽：先对账，再清空。
 	//    注册者若已经卸载（它死在别的 collector 的子树里 —— 比如 FExampleEditor 在 FRender 下），

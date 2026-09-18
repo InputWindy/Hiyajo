@@ -46,7 +46,7 @@ UI::FUIView* FEditorViewport::EnsureView(FExampleEditor& Editor)
 	return View.get();
 }
 
-void FEditorViewport::Shutdown(FExampleEditor& Editor)
+void FEditorViewport::Shutdown(FExampleEditor& Editor, FExampleEditorContext& Frame)
 {
 	MAHO_TRACE_SCOPE("FEditorViewport::Shutdown");
 	(void)Editor;
@@ -62,7 +62,7 @@ void FEditorViewport::Shutdown(FExampleEditor& Editor)
 	View.reset();
 }
 
-void FEditorViewport::Update(FExampleEditor& Editor)
+void FEditorViewport::Update(FExampleEditor& Editor, FExampleEditorContext& Frame)
 {
 	MAHO_TRACE_SCOPE("FEditorViewport::Update");
 	UI::FUIView* PanelView = EnsureView(Editor);

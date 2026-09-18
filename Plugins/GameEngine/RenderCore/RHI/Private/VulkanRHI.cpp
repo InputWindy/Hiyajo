@@ -25,7 +25,7 @@ namespace
 
 static ConsoleVariable::TAutoConsoleVariable<int> GCVarVSync(
 	"r.VSync",
-	0,
+	1,
 	"0=prefer Mailbox/Immediate, 1=FIFO (vsync)");
 
 /** The present mode a given r.VSync value asks for, among the modes the surface offers.

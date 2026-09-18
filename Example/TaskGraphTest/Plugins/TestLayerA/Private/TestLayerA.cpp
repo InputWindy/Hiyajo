@@ -102,7 +102,7 @@ FTestLayerA::FTestLayerA()
 	MyStage<IInit>().IsWaiting<FLog>().ForStage<IInit>();
 }
 
-void FTestLayerA::Initialize(FEngineBase&)
+void FTestLayerA::Initialize(FEngineBase&, FEngineContext&)
 {
 	FStageProbe Probe(GInStage[0], "Init");
 	NoteThread();
@@ -138,7 +138,7 @@ void FTestLayerA::Initialize(FEngineBase&)
 	std::fflush(stdout);
 }
 
-void FTestLayerA::Tick(FEngineBase& Engine)
+void FTestLayerA::Tick(FEngineBase& Engine, FEngineContext& Frame)
 {
 	FStageProbe Probe(GInStage[1], "Tick");
 	NoteThread();
@@ -158,7 +158,7 @@ void FTestLayerA::Tick(FEngineBase& Engine)
 	}
 }
 
-void FTestLayerA::Shutdown(FEngineBase&)
+void FTestLayerA::Shutdown(FEngineBase&, FEngineContext&)
 {
 	FStageProbe Probe(GInStage[2], "Shutdown");
 

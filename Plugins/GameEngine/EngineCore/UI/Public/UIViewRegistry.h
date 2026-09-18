@@ -82,8 +82,8 @@ public:
 
 private:
 	// -- engine init/shutdown stages (scheduler-only) --
-	void Initialize(FEngineBase& Engine) override;   // 发布 this
-	void Shutdown(FEngineBase& Engine) override;     // 清槽 + 清空 + 撤发布
+	void Initialize(FEngineBase& Engine, FEngineContext& Frame) override;   // 发布 this
+	void Shutdown(FEngineBase& Engine, FEngineContext& Frame) override;     // 清槽 + 清空 + 撤发布
 
 	mutable std::mutex Mutex;
 	std::vector<FUIView*> Views;

@@ -154,7 +154,7 @@ UI::FUIView* FContentBrowser::EnsureView(FExampleEditor& Editor)
 	return View.get();
 }
 
-void FContentBrowser::Update(FExampleEditor& Editor)
+void FContentBrowser::Update(FExampleEditor& Editor, FExampleEditorContext& Frame)
 {
 	MAHO_TRACE_SCOPE("FContentBrowser::Update");
 	UI::FUIView* PanelView = EnsureView(Editor);
@@ -789,7 +789,7 @@ void FContentBrowser::SetStatus(bool bError, std::string Text)
 	Status = std::move(Text);
 }
 
-void FContentBrowser::Shutdown(FExampleEditor& Editor)
+void FContentBrowser::Shutdown(FExampleEditor& Editor, FExampleEditorContext& Frame)
 {
 	MAHO_TRACE_SCOPE("FContentBrowser::Shutdown");
 	(void)Editor;

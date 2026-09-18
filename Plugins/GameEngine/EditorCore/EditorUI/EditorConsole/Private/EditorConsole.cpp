@@ -103,7 +103,7 @@ T& Ensure(UI::FUIBuilder& Parent, UI::FUIName Id, bool& bOutCreated)
 
 } // namespace
 
-void FEditorConsole::Init(FExampleEditor&)
+void FEditorConsole::Init(FExampleEditor&, FExampleEditorContext&)
 {
 	MAHO_TRACE_SCOPE("FEditorConsole::Init");
 	if (ListenerId != 0)
@@ -295,7 +295,7 @@ void FEditorConsole::StepSuggest(int Step, const std::vector<std::string>& Match
 	FillFromList(Matches[static_cast<std::size_t>(SuggestIndex)]);
 }
 
-void FEditorConsole::Update(FExampleEditor& Editor)
+void FEditorConsole::Update(FExampleEditor& Editor, FExampleEditorContext& Frame)
 {
 	MAHO_TRACE_SCOPE("FEditorConsole::Update");
 	UI::FUIView* PanelView = EnsureView(Editor);
@@ -833,7 +833,7 @@ void FEditorConsole::Update(FExampleEditor& Editor)
 	}
 }
 
-void FEditorConsole::Shutdown(FExampleEditor& Editor)
+void FEditorConsole::Shutdown(FExampleEditor& Editor, FExampleEditorContext& Frame)
 {
 	MAHO_TRACE_SCOPE("FEditorConsole::Shutdown");
 	(void)Editor;

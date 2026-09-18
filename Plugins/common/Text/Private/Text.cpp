@@ -47,7 +47,7 @@ std::string FText::Resolve() const
 	return Translated ? *Translated : Source;
 }
 
-void FTextManager::Initialize(FEngineBase& Engine)
+void FTextManager::Initialize(FEngineBase& Engine, FEngineContext& Frame)
 {
 	(void)Engine;
 	std::lock_guard<std::mutex> Lock(Mutex);
@@ -56,7 +56,7 @@ void FTextManager::Initialize(FEngineBase& Engine)
 	GTextManager = this;
 }
 
-void FTextManager::Shutdown(FEngineBase&)
+void FTextManager::Shutdown(FEngineBase&, FEngineContext&)
 {
 	std::lock_guard<std::mutex> Lock(Mutex);
 	Catalog.clear();

@@ -14,12 +14,12 @@ namespace GameWorld
 // OnInstalled, cleared at PreUnInstall.
 FUISystem* GUISystem = nullptr;
 
-void FUISystem::OnInstalled(FGameWorld& World)
+void FUISystem::OnInstalled(FGameWorld& World, FGameWorldContext& Frame)
 {
 	GUISystem = this;
 }
 
-void FUISystem::ProcessInput(FGameWorld&)
+void FUISystem::ProcessInput(FGameWorld&, FGameWorldContext&)
 {
 	// Input hook -- the world's IProcessInput stage. UI input is delivered to the tree by
 	// the translation layer (the render side owns the context), so there is nothing to
@@ -86,7 +86,7 @@ void FUISystem::BuildDemoTree(UI::FUIBuilder& Root)
 		.SetWrap(true);
 }
 
-void FUISystem::Update(FGameWorld& World)
+void FUISystem::Update(FGameWorld& World, FGameWorldContext& Frame)
 {
 	UI::FUIView* View = EnsureDemoView(World);
 	if (View == nullptr)
@@ -112,7 +112,7 @@ void FUISystem::Update(FGameWorld& World)
 	}
 }
 
-void FUISystem::PreUnInstall(FGameWorld& World)
+void FUISystem::PreUnInstall(FGameWorld& World, FGameWorldContext& Frame)
 {
 	// 关表先于释放树：注册表只持裸指针，视图必须先注销再被销毁。
 	// 顺序由 FGameWorld 声明（它才是驱动本阶段的层）：`BlockOn("FUIViewRegistry", IShutdown)`
