@@ -211,6 +211,12 @@ namespace Maho
 
 FExampleEditor::FExampleEditor()
 {
+	// Stamp each ring slot with its own index, ONCE (design D8).
+	for (std::uint32_t Slot = 0; Slot < MAHO_FRAMES_IN_FLIGHT; ++Slot)
+	{
+		Slots[Slot].Slot = Slot;
+	}
+
 	// CONFLICT #1 -- a missing dependency edge: both UI features write PROCESS-GLOBAL
 	// ImGui state at install.
 	//

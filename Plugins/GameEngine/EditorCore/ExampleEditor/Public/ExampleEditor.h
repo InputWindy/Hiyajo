@@ -35,6 +35,9 @@ class FExampleEditor;
  *  nested name. */
 struct FExampleEditorContext
 {
+	/** Which ring slot this instance is -- written ONCE by FExampleEditor's constructor, read-only
+	 *  after that (design D8). */
+	std::uint32_t Slot = 0;
 };
 
 /**

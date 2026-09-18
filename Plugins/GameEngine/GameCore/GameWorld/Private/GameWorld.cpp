@@ -20,6 +20,12 @@ FGameWorld* GetGameWorld()
 
 FGameWorld::FGameWorld()
 {
+	// Stamp each ring slot with its own index, ONCE (design D8).
+	for (std::uint32_t Slot = 0; Slot < MAHO_FRAMES_IN_FLIGHT; ++Slot)
+	{
+		Slots[Slot].Slot = Slot;
+	}
+
 	// No forward dependencies: the world's Initialize only creates a sample entity and
 	// installs the UISystem peer layer (which owns the UI broker). Any resource/type the
 	// world needs is reachable through the systems it installs, so it does not gate on
