@@ -7,6 +7,7 @@
 
 #include "ConsoleVariable.h"
 
+#include <Core/Profiler.h>
 #include <UIClipboard.h>
 #include <UITheme.h>
 #include <UIView.h>
@@ -104,6 +105,7 @@ T& Ensure(UI::FUIBuilder& Parent, UI::FUIName Id, bool& bOutCreated)
 
 void FEditorConsole::Init(FExampleEditor&)
 {
+	MAHO_TRACE_SCOPE("FEditorConsole::Init");
 	if (ListenerId != 0)
 	{
 		return;
@@ -295,6 +297,7 @@ void FEditorConsole::StepSuggest(int Step, const std::vector<std::string>& Match
 
 void FEditorConsole::Update(FExampleEditor& Editor)
 {
+	MAHO_TRACE_SCOPE("FEditorConsole::Update");
 	UI::FUIView* PanelView = EnsureView(Editor);
 	if (PanelView == nullptr)
 	{
@@ -351,6 +354,7 @@ void FEditorConsole::Update(FExampleEditor& Editor)
 	std::vector<FLogEntry> Snapshot;
 	std::size_t DroppedThisFrame = 0;
 	{
+		MAHO_TRACE_SCOPE("FEditorConsole::Update.Snapshot");
 		std::lock_guard<std::mutex> Lock(LinesMutex);
 		DroppedThisFrame = DroppedCount;
 		DroppedCount = 0;
@@ -590,6 +594,7 @@ void FEditorConsole::Update(FExampleEditor& Editor)
 	}
 
 	// ---- 声明期：只改本视图的树 -------------------------------------------
+	MAHO_TRACE_SCOPE("FEditorConsole::Update.Declare");
 	UI::FUIEditScope Scope = PanelView->Edit();
 	UI::FUIBuilder& Root = Scope.GetRoot();
 	Root.Layout().SetDirection(UI::EUIDirection::Column);
@@ -830,6 +835,7 @@ void FEditorConsole::Update(FExampleEditor& Editor)
 
 void FEditorConsole::Shutdown(FExampleEditor& Editor)
 {
+	MAHO_TRACE_SCOPE("FEditorConsole::Shutdown");
 	(void)Editor;
 
 	if (ListenerId != 0)

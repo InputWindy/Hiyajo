@@ -1,6 +1,7 @@
 #include <Engine/Engine.h>
 
 #include <CLI/CLI.hpp>
+#include <Core/Profiler.h>
 
 #include <algorithm>
 #include <string>
@@ -137,6 +138,11 @@ void FEngineBase::PostMain()
 			+ ", active=" + std::to_string(Stats.Active)
 			+ ") -- a shutdown dependency edge is missing").c_str());
 	}
+
+	// Ensure the trace's tail is on disk. Events are written straight through as they close, so
+	// this only flushes what stdio still holds -- but teardown is the one point the host reaches
+	// deterministically, and it costs nothing when MAHO_TRACE was never set.
+	TraceFlush();
 }
 
 int FEngineBase::Main()

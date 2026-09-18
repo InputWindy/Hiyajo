@@ -1,7 +1,7 @@
 #include "Render.h"
 
+#include <Core/Profiler.h>
 #include <DrawTriangleFeature.h>
-#include <FrameRenderFeature.h>
 #include <UIFeature.h>
 #include <Log.h>
 #include <Name.h>
@@ -352,8 +352,13 @@ void FRender::BeginFrame(FEngineBase&)
 	// advances -- all before the render graph runs in Tick.
 	if (IRHI* RHIp = RHI.get())
 	{
+		// This node is the frame's head, so everything the frame does is serialized behind it:
+		// the trace splits it into its three waits, because "the whole frame stalled here" is
+		// not actionable on its own -- which of the three blocks is.
+		MAHO_TRACE_SCOPE("FRender::BeginFrame.RHI");
 		RHIp->BeginFrame();
 	}
+	MAHO_TRACE_SCOPE("FRender::BeginFrame.ResourcePool");
 	BeginResourcePool();
 
 	// (The UI frame feed + NewFrame moved into FUIFeature::InitViews; FRender holds
@@ -402,12 +407,16 @@ void FRender::EndFrame(FEngineBase&)
 	// RHI->EndFrame (end + submit the frame buffer, present the swapchain) must run after
 	// every feature submit, so drain the async render-graph tasks first: this serializes the
 	// present behind this frame's draws.
-	Wait();
+	{
+		MAHO_TRACE_SCOPE("FRender::EndFrame.GraphWait");
+		Wait();
+	}
 	// Retire any per-pass submit fence left pending by the last AddPass (and, by
 	// waiting, guarantee this frame's per-pass GPU work completed before the frame
 	// buffer's submit/present is queued behind it).
 	if (IRHI* P = RHI.get())
 	{
+		MAHO_TRACE_SCOPE("FRender::EndFrame.RetirePassFences");
 		std::lock_guard<std::mutex> Lock(PassSubmitMutex);
 		for (FRHIFence* Fence : PendingPassFences)
 		{
@@ -418,22 +427,24 @@ void FRender::EndFrame(FEngineBase&)
 	}
 	if (IRHI* RHIp = RHI.get())
 	{
-		// Issue the present primitive HERE, on the host frame chain, alongside
-		// BeginFrame/EndFrame. FFrameRenderFeature::IPresent only decides the target and
-		// acts as the ordering anchor: it lives in the render COLLECTOR graph, whereas
-		// IBeginFrame/IEndFrame are nodes in the host graph, so letting it call into the
-		// RHI split the three frame primitives across two graphs that have no dependency
-		// edge between them. RHI.cpp:134 puts the "keep the frame path serial" burden on
-		// the caller and the caller could not honour it; on one chain the per-layer gate
-		// does it for free.
+		// Issue the present primitive HERE, on the host frame chain, alongside BeginFrame/EndFrame.
+		// It used to be issued from a render feature's IPresent, but that stage lives in the render
+		// COLLECTOR graph whereas IBeginFrame/IEndFrame are nodes in the host graph -- two graphs
+		// with no dependency edge between them, so nothing could order the three frame primitives.
+		// RHI.cpp:134 puts the "keep the frame path serial" burden on the caller and that caller
+		// could not honour it; on one chain the per-layer gate does it for free.
 		//
 		// The render graph was drained above, so reading the target here is also what
 		// makes "last writer wins" deterministic.
-		const FRDGTextureRef Target = GetPresentTarget();
-		if (Target.IsValid())
 		{
-			PresentTexture(Target);
+			MAHO_TRACE_SCOPE("FRender::EndFrame.PresentTexture");
+			const FRDGTextureRef Target = GetPresentTarget();
+			if (Target.IsValid())
+			{
+				PresentTexture(Target);
+			}
 		}
+		MAHO_TRACE_SCOPE("FRender::EndFrame.RHI");
 		RHIp->EndFrame();
 	}
 }

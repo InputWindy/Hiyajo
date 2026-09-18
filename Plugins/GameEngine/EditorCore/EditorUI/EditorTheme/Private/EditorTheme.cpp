@@ -1,5 +1,6 @@
 #include "EditorTheme.h"
 
+#include <Core/Profiler.h>
 #include <ExampleEditorTheme.h>
 
 #include <UIViewRegistry.h>
@@ -76,6 +77,7 @@ void FEditorTheme::ReloadDefaults()
 
 void FEditorTheme::Init(FExampleEditor& Editor)
 {
+	MAHO_TRACE_SCOPE("FEditorTheme::Init");
 	(void)Editor;
 
 	std::strncpy(PathBuffer, GetEditorThemeDefaultPath(), sizeof(PathBuffer) - 1);
@@ -116,6 +118,7 @@ UI::FUIView* FEditorTheme::EnsureView(FExampleEditor& Editor)
 
 void FEditorTheme::Shutdown(FExampleEditor& Editor)
 {
+	MAHO_TRACE_SCOPE("FEditorTheme::Shutdown");
 	(void)Editor;
 
 	if (View == nullptr)
@@ -131,6 +134,7 @@ void FEditorTheme::Shutdown(FExampleEditor& Editor)
 
 void FEditorTheme::Update(FExampleEditor& Editor)
 {
+	MAHO_TRACE_SCOPE("FEditorTheme::Update");
 	UI::FUIView* PanelView = EnsureView(Editor);
 	if (PanelView == nullptr)
 	{
@@ -203,6 +207,7 @@ void FEditorTheme::Update(FExampleEditor& Editor)
 	}
 
 	// -- 声明期：只改本视图的树 -------------------------------------------
+	MAHO_TRACE_SCOPE("FEditorTheme::Update.Declare");
 	UI::FUIEditScope Scope = PanelView->Edit();
 	UI::FUIBuilder& Root = Scope.GetRoot();
 	Root.Layout().SetDirection(UI::EUIDirection::Column);

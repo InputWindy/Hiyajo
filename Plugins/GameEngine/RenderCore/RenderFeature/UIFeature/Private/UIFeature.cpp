@@ -11,7 +11,6 @@
 #include <utility>
 #include <vector>
 #include <DrawTriangleFeature.h>
-#include <FrameRenderFeature.h>
 #include <Log.h>
 #include <Name.h>
 #include <Platform.h>
@@ -20,6 +19,7 @@
 #include <UIResource.h>
 #include <UIViewRegistry.h>
 #include <Core/Fatal.h>
+#include <Core/Profiler.h>
 #include <RHI/RHICommandList.h>
 #include <RHI/RHIEnums.h>
 #include <RHI/RHIResources.h>
@@ -171,6 +171,7 @@ bool FUIFeature::EnsureUIBackend(FRender& R)
 		return true;
 	}
 
+	MAHO_TRACE_SCOPE("FUIFeature::EnsureUIBackend");
 	// -- font texture + its ImGui id --
 	ImFontAtlas* Fonts = ImGui::GetIO().Fonts;
 	unsigned char* Pixels = nullptr;
@@ -212,6 +213,7 @@ void FUIFeature::UploadFont(FRender& R)
 	{
 		return;
 	}
+	MAHO_TRACE_SCOPE("FUIFeature::UploadFont");
 	// One-time font-atlas upload. The UI draw pass's lambda runs INSIDE
 	// BeginRendering, where transfer commands (vkCmdCopyBufferToImage + barriers)
 	// are illegal -- so this genuine transfer submit stays OUTSIDE a render pass. It
@@ -284,13 +286,11 @@ FUIFeature::FUIFeature()
 	// PUBLISHED FRAME instead (FPlatform::ReadFrameInput): the platform freezes each frame into a
 	// k-slot ring (k = MAHO_FRAMES_IN_FLIGHT), so a reader lagging by up to k frames still sees a
 	// coherent snapshot instead of racing the pump's live copy.
-	// This feature is OFF-SCREEN ONLY now: it draws the ImGui list into its own
-	// composite target and sets it as FRender's present target. It no longer owns
-	// the present blit -- the frame feature does. Declare the reverse edge so the
-	// frame feature's IPresent (the very last frame stage) runs AFTER this
-	// feature's IRenderUI, and consumes the target it set. FFrameRenderFeature is
-	// always installed, so this edges its IPresent behind us.
-	MyStage<IRenderUI>().IsBlocking<FFrameRenderFeature>().OnStage<IPresent>();
+	// This feature is OFF-SCREEN ONLY: it draws the ImGui list into its own composite target and
+	// sets it as FRender's present target. It does not present, and nothing in this graph does --
+	// the present primitive is issued by FRender::EndFrame (a HOST-graph node, which no edge in
+	// this collector graph could ever be ordered against; see the note in Render.cpp). So there is
+	// deliberately no "present ordering" edge here: it would name a node that no longer exists.
 	// Teardown serialization. FRender::Shutdown drives every feature's IPreUnInstall as ONE
 	// graph batch, so without an edge the teardown bodies of Scene / UIFeature / ExampleEditor
 	// run CONCURRENTLY and race on the resources they release (pool entries, scene-color mirrors,
@@ -308,6 +308,7 @@ void FUIFeature::OnInstalled(FRender& R)
 	// InitViews bails each frame.
 	if (!bContextCreated)
 	{
+		MAHO_TRACE_SCOPE("FUIFeature::OnInstalled.CreateContext");
 		Platform::FPlatform* P = Platform::GetPlatform();
 		if (P == nullptr || P->GetWindowWidth() == 0 || P->GetToolkitWindowHandle() == nullptr)
 		{
@@ -449,6 +450,7 @@ void FUIFeature::InitViews(FRender& R)
 	//    so the IPresent blit to the backbuffer is geometry/format-consistent, rebuilt
 	//    on resize. LoadOp Clear (fully redrawn each frame) in RenderUI.
 	{
+		MAHO_TRACE_SCOPE("FUIFeature::InitViews.EnsureCompositeTarget");
 		const std::uint32_t CanvasW = R.GetCanvasWidth();
 		const std::uint32_t CanvasH = R.GetCanvasHeight();
 		if (CanvasW == 0 || CanvasH == 0)
@@ -521,6 +523,7 @@ void FUIFeature::InitViews(FRender& R)
 	bEditorInputThisFrame = false;
 	if (!bEditorFed)
 	{
+		MAHO_TRACE_SCOPE("FUIFeature::InitViews.FeedInput");
 		// Whole-window fallback poll (pure game build, or the panel not yet present).
 		// Read the canonical client-space input snapshot produced by FPlatform's GLFW
 		// callbacks (fired on the window-loop thread during PollEvents). The snapshot's
@@ -580,15 +583,18 @@ void FUIFeature::InitViews(FRender& R)
 	// ImFontAtlas::Build() and ImGui::NewFrame() asserts IsBuilt(). Calling
 	// GetTexDataAsRGBA32() triggers that build on the first frame and returns the
 	// existing pixels afterwards (the GPU upload already happened in OnInstalled).
-	unsigned char* FontPixels = nullptr;
-	int FontW = 0, FontH = 0, FontBpp = 0;
-	IO.Fonts->GetTexDataAsRGBA32(&FontPixels, &FontW, &FontH, &FontBpp);
-	if (FontPixels == nullptr || FontW <= 0 || FontH <= 0)
 	{
-		MAHO_LOG_CORE_ERROR("FUIFeature: font atlas not built");
-		return;
+		MAHO_TRACE_SCOPE("FUIFeature::InitViews.NewFrame");
+		unsigned char* FontPixels = nullptr;
+		int FontW = 0, FontH = 0, FontBpp = 0;
+		IO.Fonts->GetTexDataAsRGBA32(&FontPixels, &FontW, &FontH, &FontBpp);
+		if (FontPixels == nullptr || FontW <= 0 || FontH <= 0)
+		{
+			MAHO_LOG_CORE_ERROR("FUIFeature: font atlas not built");
+			return;
+		}
+		ImGui::NewFrame();
 	}
-	ImGui::NewFrame();
 
 	// Composite base: draw the scene (the SceneColor mirror) as a fullscreen background
 	// image underneath every UI control. The UI surface is the final on-screen layer;
@@ -637,29 +643,32 @@ void FUIFeature::InitViews(FRender& R)
 	// this feature only ever renders its own context. The display rect is the WHOLE
 	// window (game layout never re-scales to an editor panel), i.e. the same space the
 	// input feed above used.
-	UI::FUIViewFrameDesc FrameDesc;
-	FrameDesc.ImGuiContext = m_Context;
-	// 只翻游戏作用域的视图。编辑器侧声明的是另一个名字，双方各自声明、互不需要对方的头 ——
-	// 游戏视图因此不必知道本 feature 的上下文地址（同一个字面量 = 同一个作用域）。
-	FrameDesc.RenderScope = UI::FUIName("UI.Scope.Game");
-	FrameDesc.DisplayWidth = IO.DisplaySize.x;
-	FrameDesc.DisplayHeight = IO.DisplaySize.y;
-	const std::uint32_t Translated = UI::TranslateRegisteredViews(FrameDesc);
-
-	// 一次性自检：注册总数 vs 本上下文命中数。两者不等时，"UI 不见了" 的责任方就分得清 ——
-	// 注册总数 0 = 声明侧没跑（世界系统未驱动 / 注册表未就位），命中 0 而总数非 0 = 翻译侧
-	// 筛掉了（视图登记的上下文不是本上下文）。没有这条，这类失败是完全沉默的。
 	{
-		static bool bLoggedViewCount = false;
-		if (!bLoggedViewCount)
+		MAHO_TRACE_SCOPE("FUIFeature::InitViews.TranslateViews");
+		UI::FUIViewFrameDesc FrameDesc;
+		FrameDesc.ImGuiContext = m_Context;
+		// 只翻游戏作用域的视图。编辑器侧声明的是另一个名字，双方各自声明、互不需要对方的头 ——
+		// 游戏视图因此不必知道本 feature 的上下文地址（同一个字面量 = 同一个作用域）。
+		FrameDesc.RenderScope = UI::FUIName("UI.Scope.Game");
+		FrameDesc.DisplayWidth = IO.DisplaySize.x;
+		FrameDesc.DisplayHeight = IO.DisplaySize.y;
+		const std::uint32_t Translated = UI::TranslateRegisteredViews(FrameDesc);
+
+		// 一次性自检：注册总数 vs 本上下文命中数。两者不等时，"UI 不见了" 的责任方就分得清 ——
+		// 注册总数 0 = 声明侧没跑（世界系统未驱动 / 注册表未就位），命中 0 而总数非 0 = 翻译侧
+		// 筛掉了（视图登记的上下文不是本上下文）。没有这条，这类失败是完全沉默的。
 		{
-			bLoggedViewCount = true;
-			std::size_t Registered = 0;
-			if (UI::FUIViewRegistry* Registry = UI::GetUIViewRegistry())
+			static bool bLoggedViewCount = false;
+			if (!bLoggedViewCount)
 			{
-				Registered = Registry->SnapshotViews().size();
+				bLoggedViewCount = true;
+				std::size_t Registered = 0;
+				if (UI::FUIViewRegistry* Registry = UI::GetUIViewRegistry())
+				{
+					Registered = Registry->SnapshotViews().size();
+				}
+				MAHO_LOG_CORE_INFO("FUIFeature: UI views registered={} translated={}", Registered, Translated);
 			}
-			MAHO_LOG_CORE_INFO("FUIFeature: UI views registered={} translated={}", Registered, Translated);
 		}
 	}
 
@@ -682,6 +691,7 @@ void FUIFeature::InitViews(FRender& R)
 	//    buffers are the merged ImDrawData (one vertex/index array), created + uploaded
 	//    HERE (InitViews); only the FRDGBufferRefs are stored. RenderUI (later, same
 	//    graph) draws them via AddPass.
+	MAHO_TRACE_SCOPE("FUIFeature::InitViews.TranslateDrawData");
 	FDrawList& DrawList = this->DrawList;
 	DrawList.Reset();
 
@@ -923,48 +933,51 @@ void FUIFeature::RenderUI(FRender& R)
 		return;
 	}
 
-	FRHIGraphicsPipelineDesc PipelineDesc;
-	PipelineDesc.VertexShader = VS;
-	PipelineDesc.FragmentShader = FS;
-	PipelineDesc.VertexShaderHash = Shader.GetVertexHash();
-	PipelineDesc.FragmentShaderHash = Shader.GetFragmentHash();
-	PipelineDesc.VertexEntryPoint = Detail::GetVertexEntryPoint<FUIShader>();
-	PipelineDesc.FragmentEntryPoint = Detail::GetFragmentEntryPoint<FUIShader>();
-	// NOTE: PipelineDesc.Layout is left unset -- AddPass fills it from Pass.Layout.
-	PipelineDesc.RenderPass = nullptr;   // dynamic rendering
-	PipelineDesc.Topology = ERHIPrimitiveTopology::TriangleList;
-	PipelineDesc.VertexStride = sizeof(ImDrawVert);
-	PipelineDesc.Attributes = {
-		{ 0, ERHIFormat::R32G32_SFLOAT,  offsetof(ImDrawVert, pos) },   // aPos
-		{ 1, ERHIFormat::R32G32_SFLOAT,  offsetof(ImDrawVert, uv) },    // aUV
-		{ 2, ERHIFormat::R8G8B8A8_UNORM, offsetof(ImDrawVert, col) },   // aColor
-	};
-	PipelineDesc.CullMode = ERHICullMode::None;
-	PipelineDesc.FillMode = ERHIFillMode::Solid;
-	PipelineDesc.ColorFormat = ColorFormat;
-	PipelineDesc.DepthFormat = ERHIFormat::Unknown;
-	FRHIAttachmentBlend Blend;
-	Blend.bBlend = true;
-	Blend.SrcColorFactor = ERHIBlendFactor::SrcAlpha;
-	Blend.DstColorFactor = ERHIBlendFactor::OneMinusSrcAlpha;
-	Blend.SrcAlphaFactor = ERHIBlendFactor::One;
-	Blend.DstAlphaFactor = ERHIBlendFactor::OneMinusSrcAlpha;
-	PipelineDesc.AttachmentBlends = { Blend };
+	{
+		MAHO_TRACE_SCOPE("FUIFeature::RenderUI.Compose");
+		FRHIGraphicsPipelineDesc PipelineDesc;
+		PipelineDesc.VertexShader = VS;
+		PipelineDesc.FragmentShader = FS;
+		PipelineDesc.VertexShaderHash = Shader.GetVertexHash();
+		PipelineDesc.FragmentShaderHash = Shader.GetFragmentHash();
+		PipelineDesc.VertexEntryPoint = Detail::GetVertexEntryPoint<FUIShader>();
+		PipelineDesc.FragmentEntryPoint = Detail::GetFragmentEntryPoint<FUIShader>();
+		// NOTE: PipelineDesc.Layout is left unset -- AddPass fills it from Pass.Layout.
+		PipelineDesc.RenderPass = nullptr;   // dynamic rendering
+		PipelineDesc.Topology = ERHIPrimitiveTopology::TriangleList;
+		PipelineDesc.VertexStride = sizeof(ImDrawVert);
+		PipelineDesc.Attributes = {
+			{ 0, ERHIFormat::R32G32_SFLOAT,  offsetof(ImDrawVert, pos) },   // aPos
+			{ 1, ERHIFormat::R32G32_SFLOAT,  offsetof(ImDrawVert, uv) },    // aUV
+			{ 2, ERHIFormat::R8G8B8A8_UNORM, offsetof(ImDrawVert, col) },   // aColor
+		};
+		PipelineDesc.CullMode = ERHICullMode::None;
+		PipelineDesc.FillMode = ERHIFillMode::Solid;
+		PipelineDesc.ColorFormat = ColorFormat;
+		PipelineDesc.DepthFormat = ERHIFormat::Unknown;
+		FRHIAttachmentBlend Blend;
+		Blend.bBlend = true;
+		Blend.SrcColorFactor = ERHIBlendFactor::SrcAlpha;
+		Blend.DstColorFactor = ERHIBlendFactor::OneMinusSrcAlpha;
+		Blend.SrcAlphaFactor = ERHIBlendFactor::One;
+		Blend.DstAlphaFactor = ERHIBlendFactor::OneMinusSrcAlpha;
+		PipelineDesc.AttachmentBlends = { Blend };
 
-	// One AddPass == one subpass. AddPass uploads the CPU primitive data once, resolves
-	// the pass-level font set + each per-batch set by content, binds the pipeline, and
-	// records every batch's draw. Nothing below is a raw RHI operation.
-	// The UI composites the scene-color mirror (game imgui::image of SceneColor) which
-	// the scene left as COLOR_ATTACHMENT, but descriptor writes hardcode SHADER_READ_ONLY.
-	// Flip SceneColor to SR before this compose pass samples it, and back afterwards.
-	if (Scene::FScene* Scene = Scene::GetScene())
-	{
-		Scene->TransitionSceneColorForSampling(R);
-	}
-	R.AddPass(ERHICommandListType::Graphics, PipelineDesc, Target, Params, DrawList);
-	if (Scene::FScene* Scene = Scene::GetScene())
-	{
-		Scene->TransitionSceneColorForRendering(R);
+		// One AddPass == one subpass. AddPass uploads the CPU primitive data once, resolves
+		// the pass-level font set + each per-batch set by content, binds the pipeline, and
+		// records every batch's draw. Nothing below is a raw RHI operation.
+		// The UI composites the scene-color mirror (game imgui::image of SceneColor) which
+		// the scene left as COLOR_ATTACHMENT, but descriptor writes hardcode SHADER_READ_ONLY.
+		// Flip SceneColor to SR before this compose pass samples it, and back afterwards.
+		if (Scene::FScene* Scene = Scene::GetScene())
+		{
+			Scene->TransitionSceneColorForSampling(R);
+		}
+		R.AddPass(ERHICommandListType::Graphics, PipelineDesc, Target, Params, DrawList);
+		if (Scene::FScene* Scene = Scene::GetScene())
+		{
+			Scene->TransitionSceneColorForRendering(R);
+		}
 	}
 
 	// This feature is off-screen only: it composites into its own target then sets it
@@ -977,6 +990,7 @@ void FUIFeature::RenderUI(FRender& R)
 	// composited). So pass2 MUST STILL set the present target here; pass3 reads it as its
 	// viewport background and only THEN replaces it with EditorRT at the very end. Without
 	// this, the viewport would sample a stale/empty present target.
+	MAHO_TRACE_SCOPE("FUIFeature::RenderUI.SetPresentTarget");
 	R.SetPresentTarget(UIRenderTarget);
 #ifdef MAHO_EDITOR_BUILD
 	// Editor build: pass3 samples this present target as its viewport background (the

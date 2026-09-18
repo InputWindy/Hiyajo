@@ -126,6 +126,11 @@ void FResourceSystem::Initialize(FEngineBase& Engine)
 	GResourceSystem = this;
 }
 
+const char* FResourceSystem::GetThreadName() const
+{
+	return "ResourceIO";
+}
+
 void FResourceSystem::Shutdown(FEngineBase&)
 {
 	GResourceSystem = nullptr;

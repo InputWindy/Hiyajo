@@ -1,5 +1,6 @@
 #include "ContentBrowser.h"
 
+#include <Core/Profiler.h>
 #include <AssetTypes.h>
 #include <Log.h>
 #include <Paths.h>
@@ -155,6 +156,7 @@ UI::FUIView* FContentBrowser::EnsureView(FExampleEditor& Editor)
 
 void FContentBrowser::Update(FExampleEditor& Editor)
 {
+	MAHO_TRACE_SCOPE("FContentBrowser::Update");
 	UI::FUIView* PanelView = EnsureView(Editor);
 	if (PanelView == nullptr)
 	{
@@ -204,6 +206,7 @@ void FContentBrowser::Update(FExampleEditor& Editor)
 
 	// ---- 声明期：只改本视图的树 -------------------------------------------
 	{
+		MAHO_TRACE_SCOPE("FContentBrowser::Update.Declare");
 		UI::FUIEditScope Scope = PanelView->Edit();
 		UI::FUIBuilder& Root = Scope.GetRoot();
 		Root.Layout().SetDirection(UI::EUIDirection::Column);
@@ -469,6 +472,7 @@ bool FContentBrowser::IsAnyNodeHovered(const UI::FUIBuilder& Node) const
 
 void FContentBrowser::Rescan()
 {
+	MAHO_TRACE_SCOPE("FContentBrowser::Rescan");
 	Roots.clear();
 	std::error_code Ec;
 	Paths::FPaths* P = Paths::GetPaths();
@@ -787,6 +791,7 @@ void FContentBrowser::SetStatus(bool bError, std::string Text)
 
 void FContentBrowser::Shutdown(FExampleEditor& Editor)
 {
+	MAHO_TRACE_SCOPE("FContentBrowser::Shutdown");
 	(void)Editor;
 
 	if (View == nullptr)

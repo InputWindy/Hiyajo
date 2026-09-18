@@ -1,5 +1,6 @@
 #include "EditorViewport.h"
 
+#include <Core/Profiler.h>
 #include <UIViewRegistry.h>
 #include <Widgets/FUIImage.h>
 
@@ -47,6 +48,7 @@ UI::FUIView* FEditorViewport::EnsureView(FExampleEditor& Editor)
 
 void FEditorViewport::Shutdown(FExampleEditor& Editor)
 {
+	MAHO_TRACE_SCOPE("FEditorViewport::Shutdown");
 	(void)Editor;
 
 	if (View == nullptr)
@@ -62,6 +64,7 @@ void FEditorViewport::Shutdown(FExampleEditor& Editor)
 
 void FEditorViewport::Update(FExampleEditor& Editor)
 {
+	MAHO_TRACE_SCOPE("FEditorViewport::Update");
 	UI::FUIView* PanelView = EnsureView(Editor);
 	if (PanelView == nullptr)
 	{
@@ -70,6 +73,7 @@ void FEditorViewport::Update(FExampleEditor& Editor)
 
 	UI::FUIRect ImageRect{};
 	{
+		MAHO_TRACE_SCOPE("FEditorViewport::Update.Declare");
 		UI::FUIEditScope Scope = PanelView->Edit();
 		UI::FUIBuilder& Root = Scope.GetRoot();
 		Root.Layout().SetDirection(UI::EUIDirection::Column);

@@ -24,7 +24,6 @@ target_include_directories(ExampleEditor PUBLIC
 	"${ENGINE_DIR}/Plugins/GameEngine/RenderCore/RenderFeature/UIFeature/Public"
 )
 target_include_directories(ExampleEditor PRIVATE
-	"${ENGINE_DIR}/Plugins/GameEngine/RenderCore/RenderFeature/FrameRenderFeature/Public"
 	"${ENGINE_DIR}/Plugins/GameEngine/RenderCore/RenderFeature/UIFeature/Public"
 )
 set_target_properties(ExampleEditor PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
@@ -100,8 +99,7 @@ endif()
 # The editor links the ImGui symbols + the Render/Scene feature plugins it calls into.
 # Scene is compile-visible via Dependencies here (GetScene symbol); the render surface the
 # editor owns is created through FRender (Render is a Dependencies link). Cross-feature type
-# references (UIView.h from the UI plugin, FrameRenderFeature.h for the reverse BlockOn edge)
-# come from the codegen PrivateIncludes include paths.
+# references (UIView.h from the UI plugin) come from the codegen PrivateIncludes include paths.
 # The editor is the docking host and the only layer that drives ImGui's frame for its OWN
 # context; the plugin links it explicitly. Render/Scene/UI/UIFeature come from the generated
 # block above (codegen from Dependencies).

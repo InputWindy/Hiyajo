@@ -226,6 +226,10 @@ public:
 	void ForEachResource(const std::function<void(const Name::FName&, const FResource&)>& Fn) const;
 
 private:
+	/** The IO thread's name -- its row label in a trace. Without it every FThreadedServer in the
+	 *  process reports the base default and their events all land on ONE row. */
+	[[nodiscard]] const char* GetThreadName() const override;
+
 	// -- engine pipeline stages (scheduler-only) --
 	void PreInitialize(FEngineBase&) override {}
 	void Initialize(FEngineBase& Engine) override;

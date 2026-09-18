@@ -614,6 +614,22 @@ public:
 	 */
 	void Wait();
 
+	/**
+	 * The collector whose frame set this graph drives, as the trace group for every node it
+	 * dispatches (see Core/Profiler.h). Purely diagnostic, and set ONCE before Initialize():
+	 * a collector's own stages are the top-level rows, and the frames IT drives are its
+	 * sub-blocks, which is exactly the relation the group records. Left empty by the host
+	 * graph, whose frames ARE the top level. The string must be static storage (a frame name
+	 * from MAHO_DECLARE_FRAME is).
+	 */
+	void SetOwnerName(const char* InOwnerName) { OwnerName = InOwnerName; }
+
+protected:
+	/** The scheduler thread's name, and therefore the label of its row in a trace: this thread is
+	 *  where dispatch, completion notification and the reaping runs, so it is a role worth being
+	 *  able to tell apart from the render / IO / compile servers' rows. */
+	[[nodiscard]] const char* GetThreadName() const override;
+
 private:
 	// The raw enqueue is not part of this class's surface: a caller must not inject arbitrary
 	// commands into the scheduler thread. (Internal calls use the qualified name.)
@@ -650,6 +666,10 @@ private:
 	void WireNode(FTaskNode& Node, const FTask& Decl);
 
 	FThreadPool& Pool;
+
+	/** Trace group for the nodes this graph dispatches. Static storage, empty for the host
+	 *  graph -- see SetOwnerName. */
+	const char* OwnerName = "";
 
 	// A deque, NOT a vector: FTaskNode holds a std::function and is not movable in a way a
 	// vector's growth path needs, and a deque keeps references to existing elements valid --

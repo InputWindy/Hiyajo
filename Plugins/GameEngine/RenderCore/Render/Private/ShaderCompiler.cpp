@@ -163,6 +163,11 @@ bool FShaderCompilerServer::Initialize()
 	return FThreadedServer::Initialize();
 }
 
+const char* FShaderCompilerServer::GetThreadName() const
+{
+	return "ShaderCompiler";
+}
+
 void FShaderCompilerServer::CompileAsync(
 	const FShaderCompileDesc& Desc,
 	std::function<void(const FShaderCompileResult&)> OnDone)

@@ -92,6 +92,11 @@ bool FRHI::Initialize(void* NativeWindowHandle, int Width, int Height, ERHIBacke
 	return true;
 }
 
+const char* FRHI::GetThreadName() const
+{
+	return "RHI";
+}
+
 void FRHI::ShutdownRHI()
 {
 	// Stop the render server thread first (idempotent).

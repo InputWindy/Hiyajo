@@ -75,6 +75,10 @@ public:
 private:
 	void ProcessCompileJob(const FShaderCompileDesc& Desc,
 		std::function<void(const FShaderCompileResult&)> OnDone);
+
+	/** The server thread's name -- its row label in a trace. Without it every FThreadedServer in
+	 *  the process reports the base default and their events all land on ONE row. */
+	[[nodiscard]] const char* GetThreadName() const override;
 };
 
 } // namespace Maho

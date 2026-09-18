@@ -12,14 +12,12 @@
   "PrivateIncludes": [
     "Scene",
     "DrawTriangleFeature",
-    "UIFeature",
-    "FrameRenderFeature"
+    "UIFeature"
   ],
   "Plugins": [
     "Scene",
     "DrawTriangleFeature",
     "UIFeature",
-    "FrameRenderFeature",
     "ExampleEditor"
   ]
 }

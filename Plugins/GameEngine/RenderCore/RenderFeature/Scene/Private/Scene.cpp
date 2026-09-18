@@ -1,6 +1,7 @@
 #include "Scene.h"
 
 #include "AssetTypes.h"
+#include <Core/Profiler.h>
 #include <Log.h>
 #include <Name.h>
 #include <Resource.h>
@@ -47,6 +48,7 @@ FScene::FScene()
 
 void FScene::BeginRender(FRender& R)
 {
+	MAHO_TRACE_SCOPE("FScene::BeginRender");
 	// Targets are (re)built on (re)size; the clear is recorded + submitted in
 	// Render via AddPass. The feature no longer owns a command list here.
 	EnsureTargets(R);
@@ -59,6 +61,7 @@ FScene::~FScene()
 
 void FScene::PreUnInstall(FRender& R)
 {
+	MAHO_TRACE_SCOPE("FScene::PreUnInstall");
 	(void)R;
 	// Drop the shared targets while OUR module is still loaded: the resource system
 	// outlives this sub-plugin, so a leftover here would be destroyed (dtor / mirror
@@ -80,6 +83,7 @@ void FScene::PreUnInstall(FRender& R)
 
 void FScene::EnsureTargets(FRender& R)
 {
+	MAHO_TRACE_SCOPE("FScene::EnsureTargets");
 	const std::uint32_t W = R.GetCanvasWidth();
 	const std::uint32_t H = R.GetCanvasHeight();
 	if (W == 0 || H == 0)
@@ -93,6 +97,7 @@ void FScene::EnsureTargets(FRender& R)
 
 	// Resize or first creation: drop the old resource-system entries (each DestroyResource
 	// broadcasts OnAssetUnloaded -> the render mirror releases + erases the old target).
+	MAHO_TRACE_SCOPE("FScene::EnsureTargets.Rebuild");
 	Resource::FResourceSystem* RS = Resource::GetResourceSystem();
 	if (RS != nullptr && (SceneColor.IsValid() || SceneDepth.IsValid()))
 	{
@@ -243,6 +248,7 @@ void FScene::EndRender(FRender& R)
 
 void FScene::TransitionSceneColorForSampling(FRender& R)
 {
+	MAHO_TRACE_SCOPE("FScene::TransitionSceneColorForSampling");
 	// SceneColor leaves RenderTarget -> ShaderResource so a later sampled use (the
 	// editor viewport mirror) binds it legally. AddPass submits at this call site, so
 	// the transition is queued on the graphics queue BEFORE the UI compose pass that
@@ -260,6 +266,7 @@ void FScene::TransitionSceneColorForSampling(FRender& R)
 
 void FScene::TransitionSceneColorForRendering(FRender& R)
 {
+	MAHO_TRACE_SCOPE("FScene::TransitionSceneColorForRendering");
 	// Undo the sampling flip so the next scene write can target COLOR_ATTACHMENT again.
 	if (SceneColor.IsValid() && SceneColorLayout == ESceneColorLayout::ShaderResource)
 	{

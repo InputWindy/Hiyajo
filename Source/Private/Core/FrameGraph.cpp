@@ -1,6 +1,7 @@
 #include <Core/FrameGraph.h>
 
 #include <Core/Fatal.h>
+#include <Core/Profiler.h>
 
 #include <algorithm>
 #include <cstdio>
@@ -92,7 +93,13 @@ FFrameGraph::~FFrameGraph()
 	FThreadedServer::Shutdown();
 }
 
+const char* FFrameGraph::GetThreadName() const
+{
+	return "FrameGraph";
+}
+
 // ── submission (host thread) ──────────────────────────────────────────────────
+
 
 bool FFrameGraph::Submit(std::vector<FTask> Tasks, std::string* OutReason)
 {
@@ -411,6 +418,14 @@ void FFrameGraph::Dispatch(FNodeId Id)
 		// complete the node, or every waiter downstream waits forever.
 		try
 		{
+			// One scope per dispatched node covers EVERY frame x stage in the process from a
+			// single call site: the node identity already IS the {frame, stage} pair the profile
+			// wants, and each node runs on whichever worker claimed it, so the time-axis lanes
+			// fall out for free. Both names are static by invariant I3 (GetName must return
+			// literal storage), which is what lets the event keep the pointers past this frame.
+			// The group is this graph's collector, i.e. the frame whose graph is driving this one.
+			FScopedTracePair NodeScope(OwnerName, Nodes[Id].Key.Name.data(),
+				Nodes[Id].Key.Stage.name());
 			Nodes[Id].Closure();
 		}
 		catch (const std::exception& E)

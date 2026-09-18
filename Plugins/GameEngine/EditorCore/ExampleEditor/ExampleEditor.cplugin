@@ -10,7 +10,6 @@
 	"UIFeature"
   ],
   "PrivateIncludes": [
-    "FrameRenderFeature",
     "UIFeature"
   ],
   "Plugins": [

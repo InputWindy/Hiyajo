@@ -11,8 +11,8 @@
 #include <utility>
 #include <variant>
 #include <vector>
+#include <Core/Profiler.h>
 #include <Log.h>
-#include <FrameRenderFeature.h>
 #include <Name.h>
 #include <Platform.h>
 #include <Scene.h>
@@ -238,14 +238,11 @@ FExampleEditor::FExampleEditor()
 	// editor surface could be overridden back to the game RT.
 	MyStage<IEditorCompose>().IsWaiting<FUIFeature>().ForStage<IRenderUI>();
 	// Editor runs its compose + submits LAST, after the scene's IEndRender (the scene
-	// color mirror the viewport samples is written by then). The reverse edge declares
-	// that the frame feature's IPresent (the very last frame stage) runs AFTER this
-	// feature's IEditorCompose and consumes the EditorRT it set as the present target.
-	// FFrameRenderFeature is always installed, so the edge is satisfied; an absent editor
-	// (runtime build) never gets here. No forward WaitFor: FFrameRenderFeature is present
-	// in both build types, but this feature only exists in an editor build.
+	// color mirror the viewport samples is written by then). It sets the EditorRT as the present
+	// target; the present primitive itself is issued by FRender::EndFrame, a HOST-graph node that
+	// nothing in this collector graph can be ordered against -- so no "present ordering" edge is
+	// declared here.
 	MyStage<IEditorCompose>().IsWaiting<Scene::FScene>().ForStage<IEndRender>();
-	MyStage<IEditorCompose>().IsBlocking<FFrameRenderFeature>().OnStage<IPresent>();
 	// Pass0 -> pass3 hand-off crosses a FRAME boundary, and the render graph pipelines frames
 	// (FRender::Tick's Execute does not drain): InitEditorViews@N reads the input cache
 	// (EditorInputEvents / EditorWheelX / bEditorInputCached) while EditorInput@N+1 may already
@@ -305,6 +302,7 @@ void FExampleEditor::EditorInput(FRender& R)
 	// Cache the drained event batch + the exchanged-to-zero wheel delta here so
 	// InitEditorViews (pass3, later this frame) re-uses them WITHOUT draining the platform
 	// again (a second drain/consume returns nothing -- these are single-consumer resources).
+	MAHO_TRACE_SCOPE("FExampleEditor::EditorInput.DrainAndRebase");
 	EditorInputEvents.clear();
 	P->DrainInputEvents(EditorInputEvents);
 	P->ConsumeMouseWheelXY(EditorWheelX, EditorWheelY);
@@ -332,6 +330,7 @@ void FExampleEditor::EditorInput(FRender& R)
 
 bool FExampleEditor::EnsureUIBackend(FRender& R)
 {
+	MAHO_TRACE_SCOPE("FExampleEditor::EnsureUIBackend");
 	if (bUIInit)
 	{
 		return true;
@@ -409,6 +408,7 @@ void FExampleEditor::OnInstalled(FRender& R)
 	// with anything.
 	if (m_Context == nullptr)
 	{
+		MAHO_TRACE_SCOPE("FExampleEditor::OnInstalled.SetupContext");
 		Platform::FPlatform* P = Platform::GetPlatform();
 		if (P == nullptr || P->GetWindowWidth() == 0 || P->GetToolkitWindowHandle() == nullptr)
 		{
@@ -487,6 +487,7 @@ void FExampleEditor::OnInstalled(FRender& R)
 
 void FExampleEditor::InstallEditorComponents()
 {
+	MAHO_TRACE_SCOPE("FExampleEditor::InstallEditorComponents");
 	// Editor components (viewport, console, theme) are declaratively listed in
 	// ExampleEditor.cplugin Plugins and installed into this host's collector by
 	// module base name at the next safe point (their IEditorInit graph runs on
@@ -523,6 +524,7 @@ void FExampleEditor::InitEditorViews(FRender& R)
 
 	// Rebuild the editor composite target (EditorRT) to the current canvas.
 	{
+		MAHO_TRACE_SCOPE("FExampleEditor::InitEditorViews.RebuildTarget");
 		const std::uint32_t CanvasW = R.GetCanvasWidth();
 		const std::uint32_t CanvasH = R.GetCanvasHeight();
 		if (CanvasW == 0 || CanvasH == 0)
@@ -608,6 +610,7 @@ void FExampleEditor::InitEditorViews(FRender& R)
 	// fed (snapshot reads are non-consuming, safe for multiple readers).
 	if (bEditorInputCached)
 	{
+		MAHO_TRACE_SCOPE("FExampleEditor::InitEditorViews.FeedInputEvents");
 		for (const auto& Ev : EditorInputEvents)
 		{
 			if (Ev.Type == Platform::MInputEventType::Key)
@@ -657,6 +660,7 @@ void FExampleEditor::InitEditorViews(FRender& R)
 	}
 
 	// Translate ImDrawData -> FDrawList (merged vertex/index buffers uploaded here).
+	MAHO_TRACE_SCOPE("FExampleEditor::InitEditorViews.Translate");
 	FDrawList& Out = this->DrawList;
 	Out.Reset();
 	std::size_t TotalVerts = 0, TotalIndices = 0;
@@ -805,6 +809,7 @@ void FExampleEditor::InitEditorViews(FRender& R)
 
 void FExampleEditor::DrawEditorPanels()
 {
+	MAHO_TRACE_SCOPE("FExampleEditor::DrawEditorPanels");
 	// Docking host: a fullscreen dockspace behind the editor windows (host-owned frame
 	// shell). Each component plugin draws its own window inside it.
 	ImGuiViewport* VP = ImGui::GetMainViewport();
@@ -843,6 +848,7 @@ UI::FUIName FExampleEditor::EditorRenderScope()
 
 void FExampleEditor::UpdateEditorPanels()
 {
+	MAHO_TRACE_SCOPE("FExampleEditor::UpdateEditorPanels");
 	// 先抽干：上一帧翻译线程入队的交互事件交回各自所有者线程（回调内可再次 Edit()）。
 	// 只抽本编辑器作用域的视图：注册表是全进程共享的，游戏侧视图归游戏自己的翻译循环，由它的
 	// 所有者（UISystem）在自己的更新期抽干 —— 越作用域抽干会把事件投递到别的所有者线程上。
@@ -1023,6 +1029,7 @@ void FExampleEditor::PreUnInstall(FRender& R)
 
 void FExampleEditor::ShutdownEditorComponents()
 {
+	MAHO_TRACE_SCOPE("FExampleEditor::ShutdownEditorComponents");
 	// Uninstall by module base name + suffix -- symmetric with Install(...). The
 	// layer's GetName() is "FEditorConsole", but TryUninstall resolves either form,
 	// so this guarantees the component's IEditorShutdown (EditorConsole unbinding

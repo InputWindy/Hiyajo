@@ -792,6 +792,17 @@ private:
 		if (!Graph)
 		{
 			Graph = std::make_unique<FFrameGraph>(Pool);
+
+			// A collector IS an FFrameExtension (FRender, FGameWorld, FExampleEditor), so it can
+			// name the group its nodes are traced under -- which is what lets a viewer lay a
+			// collector's features out as that collector's sub-blocks instead of as unrelated
+			// rows. The host is NOT a frame (it only owns this builder), so the cast fails there
+			// and the group stays empty: the host's frames ARE the top level.
+			if (auto* Self = dynamic_cast<FFrameExtension*>(this))
+			{
+				Graph->SetOwnerName(Self->GetName().data());
+			}
+
 			Graph->Initialize();
 		}
 		return *Graph;
