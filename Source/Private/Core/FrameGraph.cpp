@@ -404,7 +404,15 @@ void FFrameGraph::Dispatch(FNodeId Id)
 	// still about to run, and "the phase is idle" would be a lie.
 	SlotInFlight[SlotIndexOf(Node.Key.Phase)].fetch_add(1, std::memory_order_acq_rel);
 
-	Pool.Submit(Lane, [this, Id]()
+	// The task's TRACE IDENTITY travels with it into the pool, which is where the bar is opened
+	// (see FThreadPool::RunTracedTask). The graph is the party that knows the triple
+	// {collector, frame, stage} -- that is exactly the node's identity -- so it hands it over at
+	// Submit instead of instrumenting its own call site: every candidate runner (a worker, or a
+	// Flush that helps drain) then draws the same bar without knowing anything about frames.
+	// All three names are static by invariant I3 (GetName must return literal storage).
+	Pool.Submit(Lane,
+		FTaskTrace{ OwnerName, Node.Key.Name.data(), Node.Key.Stage.name() },
+		[this, Id]()
 	{
 		// A hard crash (0xC0000005) has no stack and no exception to catch, so the last stage
 		// ENTERED is the only thing that names the culprit -- that is what this trace exists for,
@@ -419,14 +427,10 @@ void FFrameGraph::Dispatch(FNodeId Id)
 		// complete the node, or every waiter downstream waits forever.
 		try
 		{
-			// One scope per dispatched node covers EVERY frame x stage in the process from a
-			// single call site: the node identity already IS the {frame, stage} pair the profile
-			// wants, and each node runs on whichever worker claimed it, so the time-axis lanes
-			// fall out for free. Both names are static by invariant I3 (GetName must return
-			// literal storage), which is what lets the event keep the pointers past this frame.
-			// The group is this graph's collector, i.e. the frame whose graph is driving this one.
-			FScopedTracePair NodeScope(OwnerName, Nodes[Id].Key.Name.data(),
-				Nodes[Id].Key.Stage.name());
+			// No trace scope here: the bar for this node is opened by the pool, from the identity
+			// handed to Submit above (FThreadPool::RunTracedTask). That is strictly better than
+			// bracketing the body locally -- it also covers a node run by a Flush that helped
+			// drain, and it keeps ONE instrumentation point for all work in the process.
 			Nodes[Id].Closure();
 		}
 		catch (const std::exception& E)

@@ -71,9 +71,14 @@ void FThreadedServer::Shutdown()
 
 void FThreadedServer::Submit(std::function<void()> Task)
 {
+	Submit("Task", std::move(Task));
+}
+
+void FThreadedServer::Submit(const char* Stage, std::function<void()> Task)
+{
 	{
 		std::lock_guard Lock(Mutex);
-		Queue.push_back(std::move(Task));
+		Queue.push_back(FQueuedTask{ Stage != nullptr ? Stage : "Task", std::move(Task) });
 	}
 	CondVar.notify_one();
 }
@@ -81,7 +86,7 @@ void FThreadedServer::Submit(std::function<void()> Task)
 void FThreadedServer::Flush()
 {
 	// Traced from the CALLER's side: this is where the barrier's cost is paid, and it lands on
-	// whatever lane the caller is already on -- the server's own row shows the Task bar this
+	// whatever lane the caller is already on -- the server's own row shows the task bar this
 	// wait is waiting behind, so the two line up visually. A plain single-name scope (not a lane
 	// scope): switching lanes here would move the stall onto the server's row, which is not where
 	// the time is spent.
@@ -90,7 +95,7 @@ void FThreadedServer::Flush()
 	std::mutex BarrierMutex;
 	std::condition_variable BarrierCv;
 	bool bDone = false;
-	Submit([&]
+	Submit("Flush", [&]
 	{
 		std::lock_guard Lock(BarrierMutex);
 		bDone = true;
@@ -118,7 +123,7 @@ void FThreadedServer::RunLoop()
 
 	while (true)
 	{
-		std::function<void()> Task;
+		FQueuedTask Queued;
 		{
 			std::unique_lock Lock(Mutex);
 
@@ -132,17 +137,17 @@ void FThreadedServer::RunLoop()
 			{
 				return;
 			}
-			Task = std::move(Queue.front());
+			Queued = std::move(Queue.front());
 			Queue.pop_front();
 		}
 
-		// One bar per task: the server thread's row IS its task sequence, and the gaps between
-		// bars are the idle time. Note that a task may itself open a pair scope -- the lane is
-		// thread-local state, so a nested scope simply restores this lane on the way out.
-		MAHO_TRACE_SCOPE_LANE(ThreadName, "Task");
+		// One bar per task, opened HERE rather than at the submitter's call site: this is the
+		// point every server task passes through, and the label the submitter handed over is
+		// exactly what the bar needs. The scope also tells the tracer which row this is.
+		MAHO_TRACE_SCOPE_LANE(ThreadName, Queued.Stage);
 		try
 		{
-			Task();
+			Queued.Task();
 		}
 		catch (const std::exception& E)
 		{

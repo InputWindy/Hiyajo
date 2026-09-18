@@ -123,7 +123,9 @@ void FRHI::EnqueueTask(
 	// it may submit the recorded list itself via IRHI::Submit. Recording is serial
 	// (single worker) so callbacks run in EnqueueTask order, keeping the submits of
 	// dependent features ordered (a draw must be submitted after the clear).
-	RecordingPool.Submit([CmdList, Task = std::move(Task)]()
+	// Named for the trace: this pool is a DIFFERENT thread set from the RHI server, so it gets a
+	// row of its own ("RHI.Recording") rather than appearing under the server's row.
+	RecordingPool.Submit(FTaskTrace{ "", "RHI.Recording", "Encode" }, [CmdList, Task = std::move(Task)]()
 	{
 		Task(CmdList);
 	});

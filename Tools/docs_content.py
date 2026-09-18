@@ -547,7 +547,11 @@ D.Interface("using FLane = std::uint32_t", "lane 句柄。`DefaultLane = 0` 是�
 D.Interface("explicit FThreadPool(std::uint32_t NumThreads = 0)", "构造：**不立刻起线程**，只记宽度")
 D.Interface("~FThreadPool()", "置停止标志、唤醒并 join 全部 worker")
 D.Interface("void Submit(std::function<void()> Task)",
-            "入队即返（默认 lane）；惰性把整个池拉起来（首次调用即补齐到宽度）")
+            "入队即返（默认 lane，**不带身份**：只会开出一个无名条，所以带身份一律走下面那个重载）；"
+            "惰性把整个池拉起来（首次调用即补齐到宽度）")
+D.Interface("void Submit(FTaskTrace Trace, std::function<void()> Task)",
+            "默认 lane + 任务身份。**trace 条在任务 RUN 的地方开，不在提交处开**（见 `RunTracedTask`）："
+            "提交方不可能知道工作何时开始，而埋点写在调用点的版本正是会被忘掉的那个")
 D.Interface("void Flush()", "默认 lane 上的屏障（见下）")
 D.Interface("[[nodiscard]] FLane CreateLane()",
             "在同一批 worker 上开一条新 lane（自己的队列 + 计数）。池满（`MaxLanes`）时**上报并**"
@@ -555,8 +559,10 @@ D.Interface("[[nodiscard]] FLane CreateLane()",
 D.Interface("void DestroyLane(FLane Lane)",
             "归还 lane。**仍有工作时拒绝并上报**：把还在计数里的工作交还回去，等于把它的完成"
             "记到别人头上。lane 0 永不归还")
-D.Interface("void Submit(FLane Lane, std::function<void()> Task)",
-            "按 lane 入队。**未知 lane 上报后回落到默认 lane** —— 工作永远不会被静默丢掉")
+D.Interface("void Submit(FLane Lane, FTaskTrace Trace, std::function<void()> Task)",
+            "按 lane 入队，并带上任务身份三元组 `{Group, Name, Stage}`（`Name` 同时就是 lane 的键 —— "
+            "`FScopedTracePair` 按它哈希选行，所以任务必然落在提交方建立的那一行上）。"
+            "**未知 lane 上报后回落到默认 lane** —— 工作永远不会被静默丢掉")
 D.Interface("void Flush(FLane Lane)",
             "**真正空闲**屏障：等该 lane 队列空且计数归零（计数在任务**完成后**才减），并在等待"
             "期间容忍并发 `Submit`（嵌套图会从 worker 里再投任务）。调用者若**本身是该池的 worker**"
@@ -570,9 +576,16 @@ D.Interface("void EnsureThreads(std::uint32_t Required)", "把池长到至少 Re
 D.Interface("void WorkerLoop()",
             "worker 主体：等「任一条 lane 有活」→ 轮转取一条（不让忙的 lane 饿死安静的）→ 跑 → "
             "减该 lane 的计数；任务抛出的异常被隔离上报")
-D.Interface("bool TakeAnyTaskLocked(std::function<void()>& OutTask, FLane& OutLane)",
+D.Interface("bool TakeAnyTaskLocked(FQueuedTask& OutTask, FLane& OutLane)",
             "从游标开始轮转，取第一条非空 lane 的任务")
 D.Interface("bool AnyLaneHasWorkLocked() const", "worker 的唤醒条件（任一条 lane 队列非空）")
+D.Interface("void RunTracedTask(const FTaskTrace& Trace, const std::function<void()>& Task)",
+            "**全引擎唯一的埋点位置**：在任务真正 RUN 的地方开一个 `FScopedTracePair(Group, Name, "
+            "Stage)`，再交给 `RunTaskSafely`。放在任务边界而不是每个提交方的调用点，是因为这是每一份"
+            "工作都必经的唯一地点 —— 时间轴因此不可能出现「只因为某个提交方忘了给自己埋点」而缺掉的条。"
+            "scope 同时确定 lane，所以 stage body 里的手写埋点依旧落在它所属帧那一行。"
+            "`Trace.Name` 为空则什么都不开（没有标签的条只会往默认 lane 上堆无名块）。"
+            "提交方忘了带身份，条就消失了；带身份的任务走这里，worker 取到的和 `Flush` 帮助排空的都走这里")
 D.Interface("void RunTaskSafely(const std::function<void()>& Task)",
             "跑一个任务并隔离异常，期间把本线程标记为**该池的 worker**（`thread_local`，保存/恢复）"
             "—— 这个标记正是 `Flush` 帮助排空的许可来源：不是本池 worker 的线程（游戏线程、关闭路径）"
@@ -580,6 +593,8 @@ D.Interface("void RunTaskSafely(const std::function<void()>& Task)",
 D.Interface("void NotifyWorkAvailableLocked() / NotifyProgressLocked()",
             "唤醒条件式通知：有 `Flush` 等待者时用 `notify_all`（等待者可能需要帮助排空），"
             "否则 `notify_one`，免得每次入队都惊群")
+D.Interface("struct FQueuedTask", "队列条目 = `FTaskTrace Trace` + `std::function<void()> Task`（**身份跟着任务走**，"
+            "所以无论谁把它取出来跑 —— worker 或帮助排空的 `Flush` —— 都能画出同一条）")
 D.Field("std::vector<std::thread> Workers", "worker 线程（**共享给所有 lane**）")
 D.Field("std::array<FLaneState, MaxLanes> Lanes", "lane 表；`FLaneState` = 队列 + `Pending` + `bInUse`")
 D.Field("FLane NextLaneToServe", "轮转游标")
@@ -606,6 +621,7 @@ D.Header("Public/Core/ThreadedServer.h", Title="ThreadedServer.h —— 常驻�
 D.Card("包含的头文件")
 D.Table("头文件", "功能")
 D.Row("Core/Export.h", "`MAHO_API` —— 插件侧的角色类派生自它")
+D.Row("Core/Profiler.h", "`MAHO_TRACE_SCOPE_LANE`：每个任务一根条，开在任务真正 RUN 的那一行")
 D.Row("atomic", "`bRunning`：跨线程读的运行标志")
 D.Row("condition_variable / mutex", "队列等待与 `Flush` 屏障")
 D.Row("deque / functional", "FIFO 任务队列与任务类型")
@@ -618,19 +634,83 @@ D.Interface("virtual ~FThreadedServer()", "析构调 `Shutdown()` —— 停止 
 D.Interface("bool Initialize()", "启动专用线程，幂等；`OnInitialize()` 返回 false 则启动失败")
 D.Interface("void Shutdown()", "停止 + join，幂等；join 后调 `OnShutdown()`")
 D.Interface("[[nodiscard]] bool IsRunning() const", "运行标志（任意线程可读）")
-D.Interface("void Submit(std::function<void()> Task)", "入队即返；FIFO、**串行**执行")
-D.Interface("void Flush()", "屏障：阻塞到本次调用之前提交的任务全部完成")
+D.Interface("void Submit(std::function<void()> Task)", "入队即返；FIFO、**串行**执行。trace 标签为 `<角色名>::Task`")
+D.Interface("void Submit(const char* Stage, std::function<void()> Task)",
+            "带名字入队：trace 标签为 `<角色名>::<Stage>`。角色名来自 `GetThreadName()`（行本来就是它的），"
+            "所以调用方只需给出**只有它才知道**的那半 —— 这个任务在干什么。`Stage` 必须是静态存储。"
+            "条同样开在任务 RUN 的地方（`RunLoop`），不在提交处")
+D.Interface("void Flush()", "屏障：阻塞到本次调用之前提交的任务全部完成。它派发的屏障任务标签为 `<角色名>::Flush`")
 D.SetAccess("protected")
 D.Interface("[[nodiscard]] virtual bool OnInitialize()", "线程启动前调用；返回 false 中止启动")
 D.Interface("virtual void OnShutdown()", "线程 join 之后调用")
 D.Interface("[[nodiscard]] virtual const char* GetThreadName() const", "线程名（默认 ThreadedServer）")
 D.SetAccess("private")
-D.Interface("void RunLoop()", "线程主体：取任务 → 跑（异常隔离上报）→ 循环到停止且队列空")
+D.Interface("void RunLoop()", "线程主体：**进循环前先打一个 `Started` 标记**（行是从事件派生出来的，零任务的"
+            "常驻线程否则完全不可见）→ 取任务 → 开 `MAHO_TRACE_SCOPE_LANE(角色名, 任务标签)` 再跑"
+            "（异常隔离上报）→ 循环到停止且队列空。**等待本身不画条**：空档本来就表示 idle")
 D.Field("std::thread Worker", "那一个持久线程")
-D.Field("std::deque<std::function<void()>> Queue", "FIFO 串行队列")
+D.Field("std::deque<FQueuedTask> Queue", "FIFO 串行队列；条目 = `const char* Stage` + 任务（**标签跟着任务走**）")
 D.Field("std::mutex Mutex / std::condition_variable CondVar", "队列与屏障的同步")
 D.Field("std::atomic<bool> bRunning", "是否已启动")
 D.Field("bool bStopping = false", "停止标志（`Shutdown` 置位）")
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Source/Public/Core/Profiler.h —— CPU 作用域追踪
+# ══════════════════════════════════════════════════════════════════════════════
+
+D.Header("Public/Core/Profiler.h", Title="Profiler.h —— CPU 作用域追踪（MAHO_TRACE）",
+         Desc="零依赖的 CPU 追踪：设 `MAHO_TRACE`（任意值）后，每个 scope 关闭时写一行\n"
+              "`[tr] ts=<us> dur=<us> tid=<泳道> grp=<组> name=<名字>`\n"
+              "`(ts, dur, tid, name)` 正好是 Chrome Trace Event Format 的 complete-event 元组，"
+              "所以把它变成 chrome://tracing / Perfetto 直接能载的文件只是一次机械改写"
+              "（`Tools/trace_to_chrome.py`）。`ts` 是**单调时钟**上距首次追踪的微秒数，因此跨线程可比。\n"
+              "**`tid` 承载的是泳道，不是 OS 线程**：泳道 = 帧（按帧名哈希）。线程池会把一帧的节点撒到"
+              "不同 worker 上，按线程分行会把一帧的形状切碎。\n"
+              "**注意它不是什么**：不是完整事件流。每个 scope 两次读钟 + 一行缓冲，所以只该埋几十个"
+              "真正要紧的作用域，而不是每个调用。\n"
+              "环境开关与 `MAHO_TRACE_STAGES` 同形：只读一次，于是关闭时整条路径就是一个可预测的分支。")
+
+D.Card("包含的头文件")
+D.Table("头文件", "功能")
+D.Row("Core/Export.h", "`MAHO_API` —— 它在 Maho.dll 里，任何层一个宏即可埋点，不加载插件、不跨模块调用")
+
+D.Struct("FTaskTrace", Desc="**任务身份三元组**：一份工作属于谁、在干什么。它存在的理由是"
+        "**trace 开在任务边界**（`FThreadPool::RunTracedTask` / `FThreadedServer::RunLoop`）—— "
+        "那是每一份工作都必经的唯一地点 —— 而身份只有**提交方**知道，所以随任务一起交出去：\n"
+        "`Pool.Submit(Lane, {\"FRender\", Stage.name(), \"Scene\"}, [this]{ ... });`\n"
+        "三个字符串都必须是**静态存储**（字面量、帧的 `GetName()`、stage 的 `type_info::name()`）："
+        "事件比任务活得久，指针要一直有效。`Name` 同时就是**泳道的键**（`FScopedTracePair` 按它哈希选行），"
+        "所以任务必然落在提交方建立的那一行上。`Name` 为空表示**不追踪** —— 没有标签的条只会往默认"
+        "泳道上堆无名块")
+D.Field("const char* Group = \"\"", "驱动这个任务的收集器（空 = 顶层）")
+D.Field("const char* Name = \"\"", "要跑它的帧 / 常驻角色名；同时也是它画在哪一行")
+D.Field("const char* Stage = \"\"", "它在干什么（stage 类型名、阶段标签……）")
+
+D.Class("FScopedTrace", Desc="RAII 单名作用域。构造取起始时间戳、析构记录 —— 于是提前 return、抛异常、"
+        "`break` 都仍会产生一个完整事件。关闭时它只是指针拷贝 + 一个分支：时间戳保持")
+D.SetAccess("public")
+D.Interface("explicit FScopedTrace(const char* InName)",
+            "`Name` 必须是字符串**字面量**（或其它静态存储）：事件保留指针，而名字是在 scope 关闭时才写的，"
+            "那时帧早就返回了")
+D.Interface("~FScopedTrace()", "`Start != 0` 才记录（`TraceEnabled()` 为假时它永远是 0）")
+
+D.Class("FScopedTracePair", Desc="双名作用域 —— 也是**建立泳道**的那件东西。它活着期间记录的一切都归到 "
+        "`First`：嵌套的 scope、手写的 `MAHO_TRACE_SCOPE`、以及在**别的线程**上跑的工作。"
+        "这正是「把一帧的 stage 排在同一行」的实现方式。定义在 .cpp 里，因为泳道栈是 .cpp 拥有的 "
+        "`thread_local` 状态")
+D.SetAccess("public")
+D.Interface("FScopedTracePair(const char* InGroup, const char* InFirst, const char* InSecond)",
+            "构造：记起始时间戳，把当前泳道存起来，并把本线程泳道切到 `hash(InFirst)`；析构：记录事件后还原泳道")
+
+D.Card("宏")
+D.Table("宏", "说明")
+D.Row("MAHO_TRACE_SCOPE(Name)", "单个作用域（`Name` 必须是静态存储）")
+D.Row("MAHO_TRACE_SCOPE_LANE(First, Second)", "**建立自己的泳道且没有所属收集器** —— 常驻 worker（ThreadedServer 角色），"
+       "不是被某个图驱动的帧。`Second` 是这条的工作名（`Task` / `Read` / `Compile` / `Flush` ……）")
+D.Row("MAHO_TRACE_SCOPE3(Group, First, Second)", "三元形式：收集器 :: 帧 :: stage。帧图把身份交给池，由池调用它")
+D.Row("MAHO_API void TraceEmit / TraceEmitPair / TraceFlush / TraceEnabled / TraceNowMicros",
+       "手写埋点用的底层接口。`TraceFlush` 在 `FEngineBase::PostMain` 收尾调用（**刻意不注册 `atexit`**："
+       "那会在 CRT 退出机制就绪之前自锁）")
 
 # ══════════════════════════════════════════════════════════════════════════════
 # Source/Public/Engine/Engine.h —— 引擎层：stage 接口 + 宿主基类

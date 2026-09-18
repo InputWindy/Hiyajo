@@ -139,10 +139,15 @@ std::uint32_t FThreadPool::GetLanePending(FLane Lane) const
 
 void FThreadPool::Submit(std::function<void()> Task)
 {
-	Submit(DefaultLane, std::move(Task));
+	Submit(DefaultLane, FTaskTrace{}, std::move(Task));
 }
 
-void FThreadPool::Submit(FLane Lane, std::function<void()> Task)
+void FThreadPool::Submit(FTaskTrace Trace, std::function<void()> Task)
+{
+	Submit(DefaultLane, Trace, std::move(Task));
+}
+
+void FThreadPool::Submit(FLane Lane, FTaskTrace Trace, std::function<void()> Task)
 {
 	EnsureThreads(NumThreads);
 
@@ -154,7 +159,7 @@ void FThreadPool::Submit(FLane Lane, std::function<void()> Task)
 		ReportError("FThreadPool::Submit: unknown lane, falling back to the default lane");
 		Lane = DefaultLane;
 	}
-	Lanes[Lane].Queue.push_back(std::move(Task));
+	Lanes[Lane].Queue.push_back(FQueuedTask{ Trace, std::move(Task) });
 	Lanes[Lane].Pending += 1;
 	NotifyWorkAvailableLocked();
 }
@@ -197,11 +202,12 @@ void FThreadPool::Flush(FLane Lane)
 		if (bMayHelpDrain && !Lanes[Lane].Queue.empty())
 		{
 			// Drain exactly ONE lane -- the one being waited on. That is what keeps this exact:
-			// it advances this condition and touches nothing else's.
-			std::function<void()> Task = std::move(Lanes[Lane].Queue.front());
+			// it advances this condition and touches nothing else's. Traced like any other task,
+			// so a drained task's bar looks the same as a worker-run one.
+			FQueuedTask Queued = std::move(Lanes[Lane].Queue.front());
 			Lanes[Lane].Queue.pop_front();
 			Lock.unlock();
-			RunTaskSafely(Task);
+			RunTracedTask(Queued.Trace, Queued.Task);
 			Lock.lock();
 			Lanes[Lane].Pending -= 1;
 			NotifyProgressLocked();
@@ -230,7 +236,7 @@ bool FThreadPool::AnyLaneHasWorkLocked() const
 	return false;
 }
 
-bool FThreadPool::TakeAnyTaskLocked(std::function<void()>& OutTask, FLane& OutLane)
+bool FThreadPool::TakeAnyTaskLocked(FQueuedTask& OutTask, FLane& OutLane)
 {
 	// Round-robin from the cursor so a busy lane cannot starve a quiet one (lane 0 carries the
 	// host graph and would otherwise always win).
@@ -288,11 +294,28 @@ void FThreadPool::RunTaskSafely(const std::function<void()>& Task)
 	GRunningPool = Previous;
 }
 
+void FThreadPool::RunTracedTask(const FTaskTrace& Trace, const std::function<void()>& Task)
+{
+	if (Trace.Name[0] == '\0')
+	{
+		RunTaskSafely(Task);
+		return;
+	}
+
+	// The single instrumentation point for everything the engine executes. It lives HERE, at the
+	// task boundary, rather than at each submitter's call site: this is the one place every piece
+	// of work passes through, so the timeline cannot have a hole that exists only because somebody
+	// forgot to instrument themselves. The scope also establishes the lane (FScopedTracePair), so
+	// manual points inside a stage body still land on their frame's row.
+	FScopedTracePair Scope(Trace.Group, Trace.Name, Trace.Stage);
+	RunTaskSafely(Task);
+}
+
 void FThreadPool::WorkerLoop()
 {
 	while (true)
 	{
-		std::function<void()> Task;
+		FQueuedTask Queued;
 		FLane TaskLane = DefaultLane;
 		{
 			std::unique_lock Lock(Mutex);
@@ -301,13 +324,13 @@ void FThreadPool::WorkerLoop()
 			{
 				return;
 			}
-			if (!TakeAnyTaskLocked(Task, TaskLane))
+			if (!TakeAnyTaskLocked(Queued, TaskLane))
 			{
 				continue;
 			}
 		}
 
-		RunTaskSafely(Task);
+		RunTracedTask(Queued.Trace, Queued.Task);
 
 		{
 			std::lock_guard Lock(Mutex);

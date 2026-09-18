@@ -79,7 +79,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div id="app">
   <div id="side">
     <h1>Maho 引擎源码</h1>
-    <div class="search" title="左侧扫描 Source/**/*.h：23 个头文件 · 已声明 22 个 · 32 个实体 / 180 个成员 ｜ 内容在 Tools/docs_content.py 里逐条声明">
+    <div class="search" title="左侧扫描 Source/**/*.h：23 个头文件 · 已声明 23 个 · 35 个实体 / 190 个成员 ｜ 内容在 Tools/docs_content.py 里逐条声明">
       <input id="q" type="search" placeholder="搜索头文件…  （如 Frame、Core、Entry）" autocomplete="off">
     </div>
     <div id="tree"><ul>
@@ -515,8 +515,74 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </div>
 <div class="pane" id="pane-Public__Core__Profiler_h">
 <div class="hdr">Public/Core/Profiler.h</div>
-<h2 class="file-title">Profiler.h</h2>
-<div class="empty">（尚未声明内容 —— 在 Tools/docs_content.py 里加一条 Header(&quot;Public/Core/Profiler.h&quot;)，再逐类声明 Class / Interface / Field）</div>
+<h2 class="file-title">Profiler.h —— CPU 作用域追踪（MAHO_TRACE）</h2>
+<div class="card"><div class="doc">
+<p>零依赖的 CPU 追踪：设 `MAHO_TRACE`（任意值）后，每个 scope 关闭时写一行</p>
+<p>`[tr] ts=&lt;us&gt; dur=&lt;us&gt; tid=&lt;泳道&gt; grp=&lt;组&gt; name=&lt;名字&gt;`</p>
+<p>`(ts, dur, tid, name)` 正好是 Chrome Trace Event Format 的 complete-event 元组，所以把它变成 chrome:<span class="cm">//tracing / Perfetto 直接能载的文件只是一次机械改写（`Tools/trace_to_chrome.py`）。`ts` 是**单调时钟**上距首次追踪的微秒数，因此跨线程可比。</span></p>
+<p>**`tid` 承载的是泳道，不是 OS 线程**：泳道 = 帧（按帧名哈希）。线程池会把一帧的节点撒到不同 worker 上，按线程分行会把一帧的形状切碎。</p>
+<p>**注意它不是什么**：不是完整事件流。每个 scope 两次读钟 + 一行缓冲，所以只该埋几十个真正要紧的作用域，而不是每个调用。</p>
+<p>环境开关与 `MAHO_TRACE_STAGES` 同形：只读一次，于是关闭时整条路径就是一个可预测的分支。</p>
+</div></div>
+<div class="card">
+<h3 class="card-title">包含的头文件</h3>
+
+<table>
+<thead><tr><th>头文件</th><th>功能</th></tr></thead>
+<tbody>
+<tr><td>Core/Export.h</td><td>`MAHO_API` —— 它在 Maho.dll 里，任何层一个宏即可埋点，不加载插件、不跨模块调用</td></tr>
+</tbody></table>
+</div>
+<div class="card">
+<h3 class="card-title">宏</h3>
+
+<table>
+<thead><tr><th>宏</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td>MAHO_TRACE_SCOPE(Name)</td><td>单个作用域（`Name` 必须是静态存储）</td></tr>
+<tr><td>MAHO_TRACE_SCOPE_LANE(First, Second)</td><td>**建立自己的泳道且没有所属收集器** —— 常驻 worker（ThreadedServer 角色），不是被某个图驱动的帧。`Second` 是这条的工作名（`Task` / `Read` / `Compile` / `Flush` ……）</td></tr>
+<tr><td>MAHO_TRACE_SCOPE3(Group, First, Second)</td><td>三元形式：收集器 :: 帧 :: stage。帧图把身份交给池，由池调用它</td></tr>
+<tr><td>MAHO_API <span class="kw">void</span> TraceEmit / TraceEmitPair / TraceFlush / TraceEnabled / TraceNowMicros</td><td>手写埋点用的底层接口。`TraceFlush` 在 `FEngineBase::PostMain` 收尾调用（**刻意不注册 `atexit`**：那会在 CRT 退出机制就绪之前自锁）</td></tr>
+</tbody></table>
+</div>
+<div class="ent e-struct" id="Public__Core__Profiler_h-0">
+<h3><span class="kind">结构体</span> FTaskTrace</h3>
+<div class="sect"><div class="doc">
+<p>**任务身份三元组**：一份工作属于谁、在干什么。它存在的理由是**trace 开在任务边界**（`FThreadPool::RunTracedTask` / `FThreadedServer::RunLoop`）—— 那是每一份工作都必经的唯一地点 —— 而身份只有**提交方**知道，所以随任务一起交出去：</p>
+<p>`Pool.Submit(Lane, {<span class="st">"FRender"</span>, Stage.name(), <span class="st">"Scene"</span>}, [<span class="kw">this</span>]{ ... });`</p>
+<p>三个字符串都必须是**静态存储**（字面量、帧的 `GetName()`、stage 的 `type_info::name()`）：事件比任务活得久，指针要一直有效。`Name` 同时就是**泳道的键**（`FScopedTracePair` 按它哈希选行），所以任务必然落在提交方建立的那一行上。`Name` 为空表示**不追踪** —— 没有标签的条只会往默认泳道上堆无名块</p>
+</div></div>
+<div class="sect">
+<h4>字段</h4>
+<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">const</span> <span class="kw">char</span>* Group = <span class="st">""</span></td><td>驱动这个任务的收集器（空 = 顶层）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">const</span> <span class="kw">char</span>* Name = <span class="st">""</span></td><td>要跑它的帧 / 常驻角色名；同时也是它画在哪一行</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">const</span> <span class="kw">char</span>* Stage = <span class="st">""</span></td><td>它在干什么（stage 类型名、阶段标签……）</td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-class" id="Public__Core__Profiler_h-1">
+<h3><span class="kind">类</span> FScopedTrace</h3>
+<div class="sect"><div class="doc">
+<p>RAII 单名作用域。构造取起始时间戳、析构记录 —— 于是提前 <span class="kw">return</span>、抛异常、`<span class="kw">break</span>` 都仍会产生一个完整事件。关闭时它只是指针拷贝 + 一个分支：时间戳保持</p>
+</div></div>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">explicit</span> FScopedTrace(<span class="kw">const</span> <span class="kw">char</span>* InName)</td><td>`Name` 必须是字符串**字面量**（或其它静态存储）：事件保留指针，而名字是在 scope 关闭时才写的，那时帧早就返回了</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>~FScopedTrace()</td><td>`Start != 0` 才记录（`TraceEnabled()` 为假时它永远是 0）</td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-class" id="Public__Core__Profiler_h-2">
+<h3><span class="kind">类</span> FScopedTracePair</h3>
+<div class="sect"><div class="doc">
+<p>双名作用域 —— 也是**建立泳道**的那件东西。它活着期间记录的一切都归到 `First`：嵌套的 scope、手写的 `MAHO_TRACE_SCOPE`、以及在**别的线程**上跑的工作。这正是「把一帧的 stage 排在同一行」的实现方式。定义在 .cpp 里，因为泳道栈是 .cpp 拥有的 `thread_local` 状态</p>
+</div></div>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td>FScopedTracePair(<span class="kw">const</span> <span class="kw">char</span>* InGroup, <span class="kw">const</span> <span class="kw">char</span>* InFirst, <span class="kw">const</span> <span class="kw">char</span>* InSecond)</td><td>构造：记起始时间戳，把当前泳道存起来，并把本线程泳道切到 `hash(InFirst)`；析构：记录事件后还原泳道</td></tr>
+</tbody></table></div>
+</div>
 </div>
 <div class="pane" id="pane-Public__Core__Singleton_h">
 <div class="hdr">Public/Core/Singleton.h</div>
@@ -553,6 +619,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <thead><tr><th>头文件</th><th>功能</th></tr></thead>
 <tbody>
 <tr><td>Core/Export.h</td><td>`MAHO_API` —— 插件侧的角色类派生自它</td></tr>
+<tr><td>Core/Profiler.h</td><td>`MAHO_TRACE_SCOPE_LANE`：每个任务一根条，开在任务真正 RUN 的那一行</td></tr>
 <tr><td>atomic</td><td>`bRunning`：跨线程读的运行标志</td></tr>
 <tr><td>condition_variable / mutex</td><td>队列等待与 `Flush` 屏障</td></tr>
 <tr><td>deque / functional</td><td>FIFO 任务队列与任务类型</td></tr>
@@ -568,7 +635,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
 <tr><td><span class="acc a-private">private</span></td><td>std::thread Worker</td><td>那一个持久线程</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td>std::deque&lt;std::function&lt;<span class="kw">void</span>()&gt;&gt; Queue</td><td>FIFO 串行队列</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>std::deque&lt;FQueuedTask&gt; Queue</td><td>FIFO 串行队列；条目 = `<span class="kw">const</span> <span class="kw">char</span>* Stage` + 任务（**标签跟着任务走**）</td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>std::mutex Mutex / std::condition_variable CondVar</td><td>队列与屏障的同步</td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>std::atomic&lt;<span class="kw">bool</span>&gt; bRunning</td><td>是否已启动</td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">bool</span> bStopping = <span class="kw">false</span></td><td>停止标志（`Shutdown` 置位）</td></tr>
@@ -581,12 +648,13 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">bool</span> Initialize()</td><td>启动专用线程，幂等；`OnInitialize()` 返回 <span class="kw">false</span> 则启动失败</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Shutdown()</td><td>停止 + join，幂等；join 后调 `OnShutdown()`</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">bool</span> IsRunning() <span class="kw">const</span></td><td>运行标志（任意线程可读）</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Submit(std::function&lt;<span class="kw">void</span>()&gt; Task)</td><td>入队即返；FIFO、**串行**执行</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Flush()</td><td>屏障：阻塞到本次调用之前提交的任务全部完成</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Submit(std::function&lt;<span class="kw">void</span>()&gt; Task)</td><td>入队即返；FIFO、**串行**执行。trace 标签为 `&lt;角色名&gt;::Task`</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Submit(<span class="kw">const</span> <span class="kw">char</span>* Stage, std::function&lt;<span class="kw">void</span>()&gt; Task)</td><td>带名字入队：trace 标签为 `&lt;角色名&gt;::&lt;Stage&gt;`。角色名来自 `GetThreadName()`（行本来就是它的），所以调用方只需给出**只有它才知道**的那半 —— 这个任务在干什么。`Stage` 必须是静态存储。条同样开在任务 RUN 的地方（`RunLoop`），不在提交处</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Flush()</td><td>屏障：阻塞到本次调用之前提交的任务全部完成。它派发的屏障任务标签为 `&lt;角色名&gt;::Flush`</td></tr>
 <tr><td><span class="acc a-protected">protected</span></td><td>[[nodiscard]] <span class="kw">virtual</span> <span class="kw">bool</span> OnInitialize()</td><td>线程启动前调用；返回 <span class="kw">false</span> 中止启动</td></tr>
 <tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> OnShutdown()</td><td>线程 join 之后调用</td></tr>
 <tr><td><span class="acc a-protected">protected</span></td><td>[[nodiscard]] <span class="kw">virtual</span> <span class="kw">const</span> <span class="kw">char</span>* GetThreadName() <span class="kw">const</span></td><td>线程名（默认 ThreadedServer）</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> RunLoop()</td><td>线程主体：取任务 → 跑（异常隔离上报）→ 循环到停止且队列空</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> RunLoop()</td><td>线程主体：**进循环前先打一个 `Started` 标记**（行是从事件派生出来的，零任务的常驻线程否则完全不可见）→ 取任务 → 开 `MAHO_TRACE_SCOPE_LANE(角色名, 任务标签)` 再跑（异常隔离上报）→ 循环到停止且队列空。**等待本身不画条**：空档本来就表示 idle</td></tr>
 </tbody></table></div>
 </div>
 </div>
@@ -636,20 +704,23 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">using</span> FLane = std::uint32_t</td><td>lane 句柄。`DefaultLane = 0` 是池自身那条；`MaxLanes = 16`</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">explicit</span> FThreadPool(std::uint32_t NumThreads = 0)</td><td>构造：**不立刻起线程**，只记宽度</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>~FThreadPool()</td><td>置停止标志、唤醒并 join 全部 worker</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Submit(std::function&lt;<span class="kw">void</span>()&gt; Task)</td><td>入队即返（默认 lane）；惰性把整个池拉起来（首次调用即补齐到宽度）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Submit(std::function&lt;<span class="kw">void</span>()&gt; Task)</td><td>入队即返（默认 lane，**不带身份**：只会开出一个无名条，所以带身份一律走下面那个重载）；惰性把整个池拉起来（首次调用即补齐到宽度）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Submit(FTaskTrace Trace, std::function&lt;<span class="kw">void</span>()&gt; Task)</td><td>默认 lane + 任务身份。**trace 条在任务 RUN 的地方开，不在提交处开**（见 `RunTracedTask`）：提交方不可能知道工作何时开始，而埋点写在调用点的版本正是会被忘掉的那个</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Flush()</td><td>默认 lane 上的屏障（见下）</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FLane CreateLane()</td><td>在同一批 worker 上开一条新 lane（自己的队列 + 计数）。池满（`MaxLanes`）时**上报并**返回 `DefaultLane` —— 调用者退化为共用默认栅栏，而不是拿到一条没人能推断的 lane</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> DestroyLane(FLane Lane)</td><td>归还 lane。**仍有工作时拒绝并上报**：把还在计数里的工作交还回去，等于把它的完成记到别人头上。lane 0 永不归还</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Submit(FLane Lane, std::function&lt;<span class="kw">void</span>()&gt; Task)</td><td>按 lane 入队。**未知 lane 上报后回落到默认 lane** —— 工作永远不会被静默丢掉</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Submit(FLane Lane, FTaskTrace Trace, std::function&lt;<span class="kw">void</span>()&gt; Task)</td><td>按 lane 入队，并带上任务身份三元组 `{Group, Name, Stage}`（`Name` 同时就是 lane 的键 —— `FScopedTracePair` 按它哈希选行，所以任务必然落在提交方建立的那一行上）。**未知 lane 上报后回落到默认 lane** —— 工作永远不会被静默丢掉</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Flush(FLane Lane)</td><td>**真正空闲**屏障：等该 lane 队列空且计数归零（计数在任务**完成后**才减），并在等待期间容忍并发 `Submit`（嵌套图会从 worker 里再投任务）。调用者若**本身是该池的 worker**（即它正跑着这个池的任务），会**帮助排空它正在等的那条 lane** —— 否则一个 worker 全被阻塞在这里的池，队列没人能跑，计数永远回不到零。只排空**目标 lane**，所以既不改变语义也不会顺手碰别人的工作</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] std::uint32_t GetNumThreads() <span class="kw">const</span></td><td>池宽（`= 0` 构造时的解析结果）</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] std::uint32_t GetLanePending(FLane Lane) <span class="kw">const</span></td><td>诊断/测试：该 lane 未完成的任务数</td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> EnsureThreads(std::uint32_t Required)</td><td>把池长到至少 Required（受宽度上限约束，从不收缩）</td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> WorkerLoop()</td><td>worker 主体：等「任一条 lane 有活」→ 轮转取一条（不让忙的 lane 饿死安静的）→ 跑 → 减该 lane 的计数；任务抛出的异常被隔离上报</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td><span class="kw">bool</span> TakeAnyTaskLocked(std::function&lt;<span class="kw">void</span>()&gt;&amp; OutTask, FLane&amp; OutLane)</td><td>从游标开始轮转，取第一条非空 lane 的任务</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">bool</span> TakeAnyTaskLocked(FQueuedTask&amp; OutTask, FLane&amp; OutLane)</td><td>从游标开始轮转，取第一条非空 lane 的任务</td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">bool</span> AnyLaneHasWorkLocked() <span class="kw">const</span></td><td>worker 的唤醒条件（任一条 lane 队列非空）</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> RunTracedTask(<span class="kw">const</span> FTaskTrace&amp; Trace, <span class="kw">const</span> std::function&lt;<span class="kw">void</span>()&gt;&amp; Task)</td><td>**全引擎唯一的埋点位置**：在任务真正 RUN 的地方开一个 `FScopedTracePair(Group, Name, Stage)`，再交给 `RunTaskSafely`。放在任务边界而不是每个提交方的调用点，是因为这是每一份工作都必经的唯一地点 —— 时间轴因此不可能出现「只因为某个提交方忘了给自己埋点」而缺掉的条。scope 同时确定 lane，所以 stage body 里的手写埋点依旧落在它所属帧那一行。`Trace.Name` 为空则什么都不开（没有标签的条只会往默认 lane 上堆无名块）。提交方忘了带身份，条就消失了；带身份的任务走这里，worker 取到的和 `Flush` 帮助排空的都走这里</td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> RunTaskSafely(<span class="kw">const</span> std::function&lt;<span class="kw">void</span>()&gt;&amp; Task)</td><td>跑一个任务并隔离异常，期间把本线程标记为**该池的 worker**（`thread_local`，保存/恢复）—— 这个标记正是 `Flush` 帮助排空的许可来源：不是本池 worker 的线程（游戏线程、关闭路径）必须留在队列之外，让节点体在那里跑恰恰是池存在的意义</td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> NotifyWorkAvailableLocked() / NotifyProgressLocked()</td><td>唤醒条件式通知：有 `Flush` 等待者时用 `notify_all`（等待者可能需要帮助排空），否则 `notify_one`，免得每次入队都惊群</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">struct</span> FQueuedTask</td><td>队列条目 = `FTaskTrace Trace` + `std::function&lt;<span class="kw">void</span>()&gt; Task`（**身份跟着任务走**，所以无论谁把它取出来跑 —— worker 或帮助排空的 `Flush` —— 都能画出同一条）</td></tr>
 </tbody></table></div>
 </div>
 </div>

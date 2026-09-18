@@ -184,7 +184,7 @@ void FResourceSystem::Tick(FEngineBase& Engine)
 FTransferHandle FResourceSystem::RequestLoad(std::string Path)
 {
 	auto State = std::make_shared<FTransferState>();
-	Submit([State, Path = std::move(Path)]()
+	Submit("Read", [State, Path = std::move(Path)]()
 	{
 		FBulkData Bulk;
 		std::ifstream Stream(Path, std::ios::binary);
@@ -243,7 +243,7 @@ bool FResourceSystem::EnqueueExport(
 {
 	auto State = std::make_shared<FTransferState>();
 	const std::string Dest = std::move(DestinationPath);
-	Submit([State, Dest, Bytes = std::move(Bytes)]()
+	Submit("Write", [State, Dest, Bytes = std::move(Bytes)]()
 	{
 		const bool bWritten = WriteBytes(Dest, Bytes);
 		if (bWritten)

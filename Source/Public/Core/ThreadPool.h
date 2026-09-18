@@ -41,6 +41,7 @@
 // can run and the count would never reach zero.
 
 #include <Core/Export.h>
+#include <Core/Profiler.h>
 
 #include <array>
 #include <condition_variable>
@@ -77,6 +78,11 @@ public:
 	/** Enqueue one task on the default lane; returns immediately. Lazily starts a worker. */
 	void Submit(std::function<void()> Task);
 
+	/** Enqueue a task that KNOWS what it is. The trace bar is opened where the task RUNS (see
+	 *  RunTracedTask), not here: a submitter cannot know when its work starts, and instrumental
+	 *  call sites are the ones that get forgotten. */
+	void Submit(FTaskTrace Trace, std::function<void()> Task);
+
 	/** Quiescence barrier on the default lane: block until every task submitted to it before
 	 *  this call -- and any task a worker submits to it while draining -- has completed. */
 	void Flush();
@@ -90,9 +96,9 @@ public:
 	 *  a lane whose tasks are about to be counted against someone else. Lane 0 is never released. */
 	void DestroyLane(FLane Lane);
 
-	/** Enqueue on a specific lane. An unknown lane is REPORTED and falls back to the default --
-	 *  work is never silently dropped. */
-	void Submit(FLane Lane, std::function<void()> Task);
+	/** Enqueue on a specific lane, carrying the task's trace identity. An unknown lane is REPORTED
+	 *  and falls back to the default -- work is never silently dropped. */
+	void Submit(FLane Lane, FTaskTrace Trace, std::function<void()> Task);
 
 	/** Quiescence barrier on one lane. See Flush(). */
 	void Flush(FLane Lane);
@@ -106,6 +112,20 @@ public:
 	[[nodiscard]] std::uint32_t GetLanePending(FLane Lane) const;
 
 private:
+	/** One queue entry: the work, plus the identity to draw it under. */
+	struct FQueuedTask
+	{
+		FTaskTrace            Trace;
+		std::function<void()> Task;
+	};
+
+	struct FLaneState
+	{
+		std::deque<FQueuedTask> Queue;
+		std::uint32_t           Pending = 0;   // uncompleted tasks in this lane
+		bool                    bInUse  = false;
+	};
+
 	/** Grow the pool to at least Required workers (lazy -- never shrinks). */
 	void EnsureThreads(std::uint32_t Required);
 
@@ -115,9 +135,14 @@ private:
 	 *  pool for the duration (that is what licenses Flush to help drain). */
 	void RunTaskSafely(const std::function<void()>& Task);
 
+	/** Run one task with its trace scope around it -- the single instrumentation point for every
+	 *  piece of work the engine executes, whether a worker picked it up or Flush helped drain it.
+	 *  Opens nothing when the task carries no Name (see FTaskTrace). */
+	void RunTracedTask(const FTaskTrace& Trace, const std::function<void()>& Task);
+
 	/** Pop one task from any lane that has work (round-robin, so no lane starves). False when
 	 *  every lane is empty. */
-	bool TakeAnyTaskLocked(std::function<void()>& OutTask, FLane& OutLane);
+	bool TakeAnyTaskLocked(FQueuedTask& OutTask, FLane& OutLane);
 
 	/** True when any lane has a queued task (the worker loop's wake condition). */
 	[[nodiscard]] bool AnyLaneHasWorkLocked() const;
@@ -127,13 +152,6 @@ private:
 
 	/** Wake whoever can make progress after a lane lost a pending task. */
 	void NotifyProgressLocked();
-
-	struct FLaneState
-	{
-		std::deque<std::function<void()>> Queue;
-		std::uint32_t                     Pending = 0;   // uncompleted tasks in this lane
-		bool                              bInUse  = false;
-	};
 
 	std::vector<std::thread> Workers;
 

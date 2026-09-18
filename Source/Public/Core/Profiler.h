@@ -56,6 +56,30 @@ MAHO_API void TraceEmitPair(const char* Group, const char* First, const char* Se
  *  host can snapshot mid-run (each call appends whatever is buffered). */
 MAHO_API void TraceFlush();
 
+/** The identity a submitted TASK carries into the trace: who it belongs to, what it is doing.
+ *
+ *  It exists so the trace can be opened at the ONE place every piece of work passes through --
+ *  the pool worker that runs it (FThreadPool) or the resident thread that runs it
+ *  (FThreadedServer) -- rather than at each submitter's call site. The submitter is the only
+ *  party that KNOWS the identity, so it hands it over together with the task:
+ *
+ *      Pool.Submit(Lane, {"FRender", Stage.name(), "Scene"}, [this] { ... });
+ *
+ *  All three strings must be static storage (a literal, a frame's GetName(), a stage's
+ *  type_info::name()): the event outlives the task and keeps the pointers.
+ *
+ *  Name doubles as the LANE key -- it is what FScopedTracePair hashes to pick a row -- so a task
+ *  lands on the row its submitter established, by construction.
+ *
+ *  An empty Name means "not traced": opening a scope with no label would only put unnameable
+ *  bars on the default lane. */
+struct FTaskTrace
+{
+	const char* Group = "";   // the collector DRIVING this task ("" = top level)
+	const char* Name  = "";   // the frame/role that runs it; also the lane it is drawn on
+	const char* Stage = "";   // what it is doing (a stage type's name, a phase label, ...)
+};
+
 /** RAII scope. Takes the start timestamp on construction and records on destruction -- so an
  *  early return, an exception, or a break all still produce a complete event.
  *
