@@ -3,6 +3,7 @@
 #include "VulkanResources.h"
 
 #include <ConsoleVariable.h>
+#include <Core/Profiler.h>
 #include <Log.h>
 
 #if defined(_WIN32)
@@ -24,8 +25,42 @@ namespace
 
 static ConsoleVariable::TAutoConsoleVariable<int> GCVarVSync(
 	"r.VSync",
-	1,
+	0,
 	"0=prefer Mailbox/Immediate, 1=FIFO (vsync)");
+
+/** The present mode a given r.VSync value asks for, among the modes the surface offers.
+ *
+ *  A free function because TWO call sites need the same answer: CreateSwapchain, which bakes it
+ *  into the swapchain, and the frame-boundary change check, which compares the current request
+ *  against the swapchain that is actually live. Two copies of the preference order would let
+ *  "what we ask for" and "what we detect a change against" drift apart. */
+VkPresentModeKHR ChoosePresentMode(const std::vector<VkPresentModeKHR>& Available, int VSync)
+{
+	if (VSync == 0)
+	{
+		// Mailbox before Immediate: both stop waiting for the display, but Immediate is allowed to
+		// tear and Mailbox is not, so the tearing one is only a fallback.
+		for (VkPresentModeKHR Mode : Available)
+		{
+			if (Mode == VK_PRESENT_MODE_MAILBOX_KHR)
+			{
+				return Mode;
+			}
+		}
+		for (VkPresentModeKHR Mode : Available)
+		{
+			if (Mode == VK_PRESENT_MODE_IMMEDIATE_KHR)
+			{
+				return Mode;
+			}
+		}
+	}
+
+	// FIFO is the one mode the spec REQUIRES of every surface, so this always terminates on a real
+	// mode -- and it is the correct answer for both "the caller asked for vsync" and "the caller
+	// asked for no vsync but the surface cannot do better".
+	return VK_PRESENT_MODE_FIFO_KHR;
+}
 
 static ConsoleVariable::TAutoConsoleVariable<int> GCVarSwapchainExtraImages(
 	"r.Swapchain.ExtraImages",
@@ -397,9 +432,34 @@ void FVulkanRHI::BeginFrame()
 		return;
 	}
 
-	if (!CheckVkResult(vkWaitForFences(Device, 1, &InFlightFence, VK_TRUE, UINT64_MAX), "vkWaitForFences"))
+	// r.VSync is read once, at swapchain creation -- the present mode is baked in there -- so a
+	// runtime change (the editor's cvar box) is inert until the swapchain is rebuilt. POLLED, not
+	// hooked, because the cvar registry has no change notification, and one integer read per frame
+	// is cheaper than a hook that would have to be marshalled onto this thread anyway.
+	//
+	// The frame boundary is the only place this can be done: the swapchain index and the
+	// per-image semaphores are about to be re-acquired, and RecreateSwapchain's own device wait
+	// has nothing in flight to disturb. A failed rebuild is not retried -- the value is recorded
+	// as active either way, and the normal OUT_OF_DATE path repairs the swapchain afterwards.
+	if (const int RequestedVSync = GCVarVSync.GetValue(); RequestedVSync != ActiveVSync)
 	{
-		return;
+		ActiveVSync = RequestedVSync;
+		MAHO_TRACE_SCOPE("RHI.BeginFrame.RecreateSwapchain");
+		if (!RecreateSwapchain())
+		{
+			return;
+		}
+	}
+
+	// The trace splits the frame head into the waits it is actually made of: the fence is the
+	// GPU's previous frame, and the acquire is the presentation engine's. "BeginFrame costs
+	// 11 ms" is only actionable once it is known WHICH of the two owns the time.
+	{
+		MAHO_TRACE_SCOPE("RHI.BeginFrame.WaitForFences");
+		if (!CheckVkResult(vkWaitForFences(Device, 1, &InFlightFence, VK_TRUE, UINT64_MAX), "vkWaitForFences"))
+		{
+			return;
+		}
 	}
 
 	if (!CheckVkResult(vkResetFences(Device, 1, &InFlightFence), "vkResetFences"))
@@ -413,25 +473,32 @@ void FVulkanRHI::BeginFrame()
 	// this frame's uploads -- keeps the deferred list length bounded to one frame.
 	if (MemoryAllocator)
 	{
+		MAHO_TRACE_SCOPE("RHI.BeginFrame.FlushDeferredFrees");
 		MemoryAllocator->FlushDeferredFrees();
 	}
 
-	VkResult AcquireResult = vkAcquireNextImageKHR(
-		Device,
-		Swapchain,
-		UINT64_MAX,
-		ImageAvailableSemaphore,
-		VK_NULL_HANDLE,
-		&CurrentImageIndex);
+	VkResult AcquireResult;
+	{
+		MAHO_TRACE_SCOPE("RHI.BeginFrame.AcquireNextImage");
+		AcquireResult = vkAcquireNextImageKHR(
+			Device,
+			Swapchain,
+			UINT64_MAX,
+			ImageAvailableSemaphore,
+			VK_NULL_HANDLE,
+			&CurrentImageIndex);
+	}
 
 	if (AcquireResult == VK_ERROR_OUT_OF_DATE_KHR || bFramebufferResized)
 	{
 		bFramebufferResized = false;
+		MAHO_TRACE_SCOPE("RHI.BeginFrame.RecreateSwapchain");
 		if (!RecreateSwapchain())
 		{
 			return;
 		}
 
+		MAHO_TRACE_SCOPE("RHI.BeginFrame.AcquireNextImage");
 		AcquireResult = vkAcquireNextImageKHR(
 			Device,
 			Swapchain,
@@ -457,6 +524,7 @@ void FVulkanRHI::BeginFrame()
 	{
 		return;
 	}
+	MAHO_TRACE_SCOPE("RHI.BeginFrame.BeginCommandList");
 	FrameCommandListRHI->Begin();
 }
 
@@ -593,6 +661,7 @@ void FVulkanRHI::EndFrame()
 	// + PresentTexture) before submitting.
 	if (FrameCommandListRHI != nullptr)
 	{
+		MAHO_TRACE_SCOPE("RHI.EndFrame.EndCommandList");
 		FrameCommandListRHI->End();
 	}
 
@@ -610,9 +679,12 @@ void FVulkanRHI::EndFrame()
 		? nullptr
 		: &RenderFinishedSemaphores[CurrentImageIndex < RenderFinishedSemaphores.size() ? CurrentImageIndex : 0];
 
-	if (!CheckVkResult(vkQueueSubmit(GraphicsVkQueue, 1, &SubmitInfo, InFlightFence), "vkQueueSubmit"))
 	{
-		return;
+		MAHO_TRACE_SCOPE("RHI.EndFrame.QueueSubmit");
+		if (!CheckVkResult(vkQueueSubmit(GraphicsVkQueue, 1, &SubmitInfo, InFlightFence), "vkQueueSubmit"))
+		{
+			return;
+		}
 	}
 
 	VkPresentInfoKHR PresentInfo{};
@@ -625,11 +697,19 @@ void FVulkanRHI::EndFrame()
 	PresentInfo.pSwapchains = &Swapchain;
 	PresentInfo.pImageIndices = &CurrentImageIndex;
 
-	VkResult PresentResult = vkQueuePresentKHR(PresentQueue, &PresentInfo);
+	VkResult PresentResult;
+	{
+		// The one call that throttles to the display: with a FIFO present mode this blocks until
+		// the presentation engine takes the image, which is where a "vsynced" frame spends its
+		// idle time.
+		MAHO_TRACE_SCOPE("RHI.EndFrame.QueuePresent");
+		PresentResult = vkQueuePresentKHR(PresentQueue, &PresentInfo);
+	}
 
 	if (PresentResult == VK_ERROR_OUT_OF_DATE_KHR || PresentResult == VK_SUBOPTIMAL_KHR || bFramebufferResized)
 	{
 		bFramebufferResized = false;
+		MAHO_TRACE_SCOPE("RHI.EndFrame.RecreateSwapchain");
 		RecreateSwapchain();
 	}
 	else if (!CheckVkResult(PresentResult, "vkQueuePresentKHR"))
@@ -1258,41 +1338,8 @@ bool FVulkanRHI::CreateSwapchain()
 	std::vector<VkPresentModeKHR> PresentModes(PresentModeCount);
 	vkGetPhysicalDeviceSurfacePresentModesKHR(PhysicalDevice, Surface, &PresentModeCount, PresentModes.data());
 
-	VkPresentModeKHR PresentMode = VK_PRESENT_MODE_FIFO_KHR;
 	const int VSync = GCVarVSync.GetValue();
-	if (VSync == 0)
-	{
-		for (VkPresentModeKHR Mode : PresentModes)
-		{
-			if (Mode == VK_PRESENT_MODE_MAILBOX_KHR)
-			{
-				PresentMode = Mode;
-				break;
-			}
-		}
-		if (PresentMode == VK_PRESENT_MODE_FIFO_KHR)
-		{
-			for (VkPresentModeKHR Mode : PresentModes)
-			{
-				if (Mode == VK_PRESENT_MODE_IMMEDIATE_KHR)
-				{
-					PresentMode = Mode;
-					break;
-				}
-			}
-		}
-	}
-	else
-	{
-		for (VkPresentModeKHR Mode : PresentModes)
-		{
-			if (Mode == VK_PRESENT_MODE_FIFO_KHR)
-			{
-				PresentMode = Mode;
-				break;
-			}
-		}
-	}
+	const VkPresentModeKHR PresentMode = ChoosePresentMode(PresentModes, VSync);
 
 	if (Capabilities.currentExtent.width != UINT32_MAX)
 	{
@@ -1377,12 +1424,17 @@ bool FVulkanRHI::CreateSwapchain()
 	SwapchainImages.resize(SwapchainImageCount);
 	vkGetSwapchainImagesKHR(Device, Swapchain, &SwapchainImageCount, SwapchainImages.data());
 
+	// From here on this swapchain IS the live one, so the value it was built from becomes the
+	// baseline the frame-boundary check compares against.
+	ActiveVSync = VSync;
+
 	MAHO_LOG_CORE_INFO(
-		"Vulkan swapchain created: {}x{}, {} images, format {}",
+		"Vulkan swapchain created: {}x{}, {} images, format {}, presentMode {}",
 		SwapchainExtent.width,
 		SwapchainExtent.height,
 		SwapchainImageCount,
-		static_cast<int>(SwapchainImageFormat));
+		static_cast<int>(SwapchainImageFormat),
+		static_cast<int>(PresentMode));
 
 	return true;
 }

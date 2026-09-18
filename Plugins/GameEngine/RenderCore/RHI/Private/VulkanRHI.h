@@ -254,6 +254,11 @@ private:
 
 	bool bFramebufferResized = false;
 
+	/** The r.VSync value the LIVE swapchain was created with. Compared against the cvar at each
+	 *  frame boundary, because the present mode is fixed into the swapchain at creation -- a cvar
+	 *  change alone is inert until something rebuilds it. -1 until a swapchain exists. */
+	int ActiveVSync = -1;
+
 	// Ray tracing: device-level functions (KHR extensions).
 	bool bRayTracingSupported = false;
 	PFN_vkCreateAccelerationStructureKHR CreateAccelerationStructureKHR = nullptr;
