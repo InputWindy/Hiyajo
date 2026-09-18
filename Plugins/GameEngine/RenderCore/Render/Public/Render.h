@@ -257,12 +257,11 @@ protected:
 	/** Type-erased access to a slot's context (see FFrameBuilder). Must never return nullptr. */
 	void* GetContext(int Slot) override
 	{
-		// Remember which slot the dispatcher is about to run, so the frame's own AddPass path can
-		// reach THIS frame's recorded-pass table without threading a context parameter through every
-		// feature's call site. Sound because a frame's stage nodes have all finished before the next
-		// Execute: FRender::EndFrame waits the collector graph and the host's IBeginFrame@N+1 is
-		// ordered after IEndFrame@N (both declared in the ctor).
-		CurrentSlot = Slot;
+		// The dispatcher publishes this pointer as the AMBIENT frame context for the duration of each
+		// stage call (GetCurrentFrameContext), which is how a helper reached from a stage body -- the
+		// frame's own AddPass -- knows which frame it belongs to. It is deliberately NOT remembered
+		// here: frames overlap now, so a member would attribute a late-running node's work to whichever
+		// frame the dispatcher last prepared.
 		return &Slots[Slot];
 	}
 
@@ -300,6 +299,27 @@ public:
 	[[nodiscard]] ERHIFormat GetSwapchainFormat() const;
 	/** Blit a scene-color RDG texture to the swapchain backbuffer (the frame's IPresent point). */
 	void PresentTexture(const FRDGTextureRef& Texture);
+
+	/**
+	 * Frame HEAD, called by the frame feature's IBeginRender stage: open the swapchain frame (the RHI
+	 * waits the previous frame's fence, resets it, acquires an image, begins the frame command list)
+	 * and advance the resource pool (destroy the finished frame's submitted lists, recycle transients,
+	 * sweep descriptor sets nothing asked for).
+	 *
+	 * Both are FRAME primitives, so both belong to the frame's first stage: that makes their ordering
+	 * a declared edge instead of "a host stage happened to run before the graph". Everything that
+	 * acquires a list or allocates from the pool must be ordered after this -- the same discipline the
+	 * tail stage (IPresent) needs, from the other end of the frame.
+	 */
+	void BeginSwapchainFrame();
+
+	/**
+	 * Frame END, called by the frame feature's IPresent stage AFTER it submitted the frame's passes
+	 * and recorded the blit: close the frame command list, submit it and present. Because the blit is
+	 * recorded in that same stage just before this call, "close after the recording finished" is a
+	 * statement order -- which is exactly why the host's `Wait()` is gone.
+	 */
+	void EndSwapchainFrame();
 
 	/**
 	 * Submit everything this frame recorded, in registration order: the passes recorded OFF the
@@ -631,21 +651,15 @@ private:
 	// until then a pass is just a recorded list in the frame's table, so passes record in parallel
 	// and no per-pass fence exists. The frame command list's open/close stay on the host stages.
 
-	/** Passes recorded OFF the frame graph: the asset-mirror upload (Render.cpp:UploadTextureMirror)
-	 *  runs on the resource system's IO thread, in the gap the graph reserves between this frame's
-	 *  IBeginFrame and ITick -- BEFORE Execute, so "this frame's slot" is not yet known and the pass
-	 *  cannot land in any context's table. It goes here instead and is drained FIRST by the next
-	 *  IPresent, so a mirror's copy is on the queue before the draws that sample it. */
+	/** Passes recorded OFF the frame graph: a pass recorded OUTSIDE any stage call (no ambient frame
+	 *  context) has no frame to belong to. Today that is the asset-mirror upload, which runs on the
+	 *  resource system's IO thread in the gap the graph leaves between the frame head and Tick. It
+	 *  goes here and is drained FIRST by the next IPresent, so a mirror's copy is on the queue before
+	 *  the draws that sample it. */
 	std::mutex OffFramePassMutex;
 	std::vector<FRenderContext::FPendingPass> OffFramePasses;
 
-	/** The slot the dispatcher is about to run (written by GetContext(int), read by AddPass). See
-	 *  GetContext for why this is sound. */
-	int CurrentSlot = 0;
-
-	/** Record one pass into the table the caller names: acquire a list, run the lambda on THIS
-	 *  thread, hand the finished list back. AddPass routes to this frame's table, the asset-mirror
-	 *  upload to the off-frame one. */
+	/** Record one pass: acquire a list, run the lambda on THIS thread, hand the finished list back. */
 	[[nodiscard]] FRHICommandList* RecordPass(const std::function<void(FRHICommandList&)>& PassFn);
 
 	// -- CPU asset -> GPU mirror --

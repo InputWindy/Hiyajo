@@ -383,7 +383,10 @@ void FExampleEditor::UploadFont(FRender& R)
 			StagingDesc.Size = static_cast<std::uint64_t>(FontW) * FontH * 4;
 			StagingDesc.Usage = ERHIBufferUsage::TransferSrc;
 			StagingDesc.MemoryUsage = ERHIMemoryUsage::CPUToGPU;
-			FRDGBufferRef Staging = R.CreateBuffer(StagingDesc, ERDGResourceLifetime::Transient);
+			// PERSISTENT, for the same reason as the game UI's font staging: the pass is recorded the
+			// first time the editor's UI backend comes up (possibly before the frame head), and its
+			// list is submitted at the frame's tail -- a transient would be recycled in between.
+			FRDGBufferRef Staging = R.CreateBuffer(StagingDesc, ERDGResourceLifetime::Persistent);
 			if (!Staging.IsValid() || Staging.GetRHI() == nullptr)
 			{
 				MAHO_LOG_CORE_ERROR("ExampleEditor: font staging failed");

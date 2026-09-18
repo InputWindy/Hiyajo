@@ -100,25 +100,16 @@ FRender::FRender()
 	MyStage<IBeginFrame>().IsBlocking<Resource::FResourceSystem>().OnStage<ITick>();
 	MyStage<ITick>().IsWaiting<Resource::FResourceSystem>().ForStage<ITick>();
 
-	// The swapchain frame lifecycle lives on MY OWN two host stages (IBeginFrame acquires the
-	// image + begins the frame buffer + recycles the finished frame's command lists; IEndFrame
-	// submits and presents), and the RHI keeps ONE copy of that frame state -- one fence, one
-	// frame command list, one acquired image index. So my next frame may not start until my
-	// previous frame has finished presenting:
+	// The swapchain frame lifecycle is NOT on my two host stages any more: the frame's first stage
+	// opens it (FScene::IBeginRender -> BeginSwapchainFrame) and its last one closes it
+	// (FScene::IPresent -> EndSwapchainFrame), both inside the collector's graph. THAT is where the
+	// frame isolation now lives -- as a declared cross-frame edge in that graph (frame head @N+1
+	// waits frame tail @N), because both ends are nodes of that graph. It cannot be declared from
+	// here: this is the engine graph, and an edge across the two is a silent no-op.
 	//
-	//     IBeginFrame@N+1  waits for  IEndFrame@N
-	//
-	// The only cross-frame ordering the scheduler provides by itself is the implicit per-stage
-	// self edge (IBeginFrame@N+1 vs IBeginFrame@N), which is NOT enough here -- it would let
-	// IBeginFrame@N+1 wait on a fence / reset a command list / re-acquire an image while
-	// IEndFrame@N is still submitting. That is a measured failure: Vulkan validation reports
-	// VkFence "simultaneously used in current thread (vkQueueSubmit) and thread
-	// (vkWaitForFences)", layout transitions on an image "not acquired from the swapchain", and
-	// pSignalSemaphores "still in use". This one explicit edge is what removes all of it, because
-	// it is exactly the ordering the old per-layer gate used to impose.
-	//
-	// The general form -- the RHI holding MAHO_FRAMES_IN_FLIGHT copies of that state, so that
-	// frames may overlap -- is the follow-up; until then this edge IS the frame isolation.
+	// The edge below still pins the HOST chain's frame boundary: without it, this layer's
+	// IBeginFrame@N+1 could run while its own ITick@N is still going -- which matters for everything
+	// that interleaves with the host stages (the platform's pump, a one-shot install batch).
 	MyStage<IBeginFrame>().WaitFor<FRender>().OnLastFrameStage<IEndFrame>();
 
 	// Frame isolation against the PLATFORM, not merely against ourselves. The input snapshot is
@@ -322,9 +313,15 @@ void FRender::Shutdown(FEngineBase&, FEngineContext&)
 	// The compile server thread was already joined above; just release the server.
 	ShaderCompiler.reset();
 
-	// Release pooled resources before the RHI device goes away.
+	// Release pooled resources before the RHI device goes away. Drain FIRST: the pool teardown is the
+	// last lifetime boundary in the layer, so the collector graph has to be quiet -- with frames
+	// pipelining, a frame submitted by the last Tick may still have nodes running here, and destroying
+	// a command list / buffer it is about to submit is exactly the "destroyed while bound in a
+	// command buffer" validation error. (The Wait at the top of this function covers the frames that
+	// were already in flight; this one also covers anything the teardown steps above submitted.)
 	if (ResourcePool)
 	{
+		Wait();
 		ResourcePool->Shutdown();
 		ResourcePool.reset();
 	}
@@ -345,24 +342,38 @@ void FRender::PostShutdown(FEngineBase&, FEngineContext&)
 
 void FRender::BeginFrame(FEngineBase&, FEngineContext&)
 {
-	// Swapchain frame lifecycle lives on the host (engine) stages, not the render
-	// graph: RHI->BeginFrame waits the previous fence, acquires the swapchain
-	// image and begins the frame buffer; then the previous frame's feature
-	// command lists are recycled (their submits are done) and the resource pool
-	// advances -- all before the render graph runs in Tick.
+	// EMPTY on purpose. The swapchain frame is opened by the frame's FIRST stage
+	// (FScene::IBeginRender -> BeginSwapchainFrame), inside the render graph, so its ordering is a
+	// declared edge instead of "this host stage happens to run before the batch". The host stages
+	// keep their place in the sequence -- other layers interleave with them -- but the render
+	// layer's own frame work is graph-scheduled now.
+	//
+	// (The UI frame feed + NewFrame live in FUIFeature::InitViews; FRender holds no ImGui state.)
+}
+
+void FRender::BeginSwapchainFrame()
+{
+	// Frame head. Everything the frame does is serialized behind this node, and the trace splits the
+	// two waits apart, because "the whole frame stalled here" is not actionable on its own.
 	if (IRHI* RHIp = RHI.get())
 	{
-		// This node is the frame's head, so everything the frame does is serialized behind it:
-		// the trace splits it into its three waits, because "the whole frame stalled here" is
-		// not actionable on its own -- which of the three blocks is.
-		MAHO_TRACE_SCOPE("FRender::BeginFrame.RHI");
+		MAHO_TRACE_SCOPE("FRender::BeginSwapchainFrame.RHI");
 		RHIp->BeginFrame();
 	}
-	MAHO_TRACE_SCOPE("FRender::BeginFrame.ResourcePool");
+	MAHO_TRACE_SCOPE("FRender::BeginSwapchainFrame.ResourcePool");
 	BeginResourcePool();
+}
 
-	// (The UI frame feed + NewFrame moved into FUIFeature::InitViews; FRender holds
-	// no ImGui state and feeds nothing here.)
+void FRender::EndSwapchainFrame()
+{
+	// Frame end: close + submit the frame command list and present. The blit was recorded into that
+	// list by the CALLER (the tail stage) just before this, so the close is ordered by statement
+	// order -- no graph drain needed to know the recording finished.
+	if (IRHI* RHIp = RHI.get())
+	{
+		MAHO_TRACE_SCOPE("FRender::EndSwapchainFrame.RHI");
+		RHIp->EndFrame();
+	}
 }
 
 void FRender::BeginResourcePool()
@@ -375,49 +386,34 @@ void FRender::BeginResourcePool()
 
 void FRender::Tick(FEngineBase&, FEngineContext&)
 {
-	// Frame-start barrier: wait the PREVIOUS frame's render-graph tasks before the frame set
-	// can change. The render CPU work runs during the interval and is collected here, so the
-	// expansion never races in-flight Render() calls.
-	Wait();
-
 	// (The whole ImGui frame lifecycle -- feed / NewFrame / build / Render /
 	// GetDrawData -- moved into FUIFeature::InitViews inside the render graph below.
 	// FRender holds no ImGui state and only schedules.)
 
-	// Apply feature install/uninstall, then dispatch this frame. There is no Init and no
-	// Compile: the batch builder re-queries the frame set when the system set changed and
-	// reports what it could not bind. All frame work (swapchain begin, feature
-	// acquire/record/submit, present, swapchain end) is a scheduled stage -- FRender only
-	// schedules; the frame feature + per-feature deps order it all.
+	// No frame-start drain any more. The frame boundary is a DECLARED edge inside the collector's
+	// own graph (the frame head waits the previous frame's tail), so a full Wait() here would only
+	// flatten the ring: frame N+1's batch could never overlap frame N's nodes. Quiescence is the
+	// change's business, not every frame's -- FlushPendingUpdates drains (fully: graph + pool) when
+	// the frame set actually changes, which is the only event that needed it.
 	FlushPendingUpdates<TTypeList<IOnInstalled>, TTypeList<IPreUnInstall>>();
 
 	// The stage SEQUENCE is FRenderStages itself (see Render.h), so the editor-only stages
 	// (IEditorInput / IEditorCompose) are part of it in an editor build -- and a stage no
-	// installed feature implements is simply not emitted. One call either way.
+	// installed feature implements is simply not emitted. One call either way. The batch builder
+	// re-queries the frame set and reports what it could not bind.
 	Execute<FRenderStages>();
-	// No trailing wait: the render graph PIPELINES across frames. What keeps that safe is the
-	// structural self edge (a stage against its own previous frame); the next Tick's leading
-	// Wait() collects this frame's tasks. At shutdown the leftover tasks are drained by
-	// FRender::Shutdown (Wait at its start) and FLog's Shutdown is ordered after FRender's, so
-	// any teardown logging lands in a live logger.
+	// No trailing wait either: the ring is what keeps the pipeline safe (per-stage self edges +
+	// admission), and at shutdown the leftover nodes are drained by FRender::Shutdown's Wait().
 }
 
 void FRender::EndFrame(FEngineBase&, FEngineContext&)
 {
-	// Close the frame: drain the render graph, then close + submit the frame command list and
-	// present. Nothing is submitted here any more -- this frame's passes went out from the
-	// collector's IPresent stage (SubmitRecordedPasses), and so did the blit into the frame command
-	// list. What the Wait() buys now is narrower and still needed: RHI::EndFrame ENDS the frame
-	// command list, so its recording (BeginFrame + the blit) must have completed.
-	{
-		MAHO_TRACE_SCOPE("FRender::EndFrame.GraphWait");
-		Wait();
-	}
-	if (IRHI* RHIp = RHI.get())
-	{
-		MAHO_TRACE_SCOPE("FRender::EndFrame.RHI");
-		RHIp->EndFrame();
-	}
+	// EMPTY on purpose: the frame is closed by its TAIL stage (FScene::IPresent -> EndSwapchainFrame).
+	// Closing it here would need "wait for that stage", and the reason that wait existed is gone --
+	// the frame command list's only recording (the blit) happens in the same stage that closes it.
+	// This is also what un-pins the frame loop: the host may run ahead of the collector by the ring
+	// depth, and the RHI's single-depth frame state is protected by the collector's own cross-frame
+	// edge (frame head @N+1 waits frame tail @N) instead of by a barrier on this chain.
 }
 
 void FRender::RequestExit(FEngineBase&, FEngineContext&)
@@ -857,20 +853,39 @@ void FRender::AddPass(
 void FRender::AddPass(ERHICommandListType PassType, std::function<void(FRHICommandList&)> PassFn)
 {
 	// Record only -- no wait, no fence, no submit, and no critical section: each pass owns its own
-	// command list, so passes record in parallel on their own node threads. The list is registered
-	// in THIS frame's table; the frame's IPresent submits the table in registration order, which is
-	// the order the stage nodes ran (the declared edge order). A later pass therefore never waits
-	// for an earlier one, and nothing here can race an in-flight submit: this frame's lists are not
-	// on the queue yet.
+	// command list, so passes record in parallel on their own node threads. The frame's IPresent
+	// submits the tables in registration order, which is the order the stage nodes ran (the declared
+	// edge order). A later pass therefore never waits for an earlier one, and nothing here can race an
+	// in-flight submit: this frame's lists are not on the queue yet.
 	FRHICommandList* List = RecordPass(PassFn);
 	if (List == nullptr)
 	{
 		return;
 	}
 
-	FRenderContext& Frame = Slots[static_cast<std::size_t>(CurrentSlot)];
-	std::lock_guard<std::mutex> Lock(Frame.Mutex);
-	Frame.Passes.push_back({List, PassType});
+	// Which frame does this pass belong to? The one whose stage call is running on THIS thread --
+	// the dispatcher publishes it for the duration of the call. Reading it per CALL (rather than
+	// from a collector member) is what keeps the registration in the right frame when frames
+	// overlap: an in-flight node of frame N would otherwise be attributed to whichever frame the
+	// dispatcher had prepared last.
+	// Which frame does this pass belong to? The one whose stage call is running on THIS thread --
+	// the dispatcher publishes it for the duration of the call. Reading it per CALL (rather than
+	// from a collector member) is what keeps the registration in the right frame when frames
+	// overlap: an in-flight node of frame N would otherwise be attributed to whichever frame the
+	// dispatcher had prepared last.
+	FRenderContext* Frame = static_cast<FRenderContext*>(GetCurrentFrameContext());
+	if (Frame != nullptr)
+	{
+		std::lock_guard<std::mutex> Lock(Frame->Mutex);
+		Frame->Passes.push_back({List, PassType});
+		return;
+	}
+
+	// No ambient context: recorded OUTSIDE any stage. Nothing about this pass belongs to a frame, so
+	// it cannot go into a frame's table (there is none to pick) -- it goes to the off-frame one,
+	// drained first by the next IPresent.
+	std::lock_guard<std::mutex> Lock(OffFramePassMutex);
+	OffFramePasses.push_back({List, PassType});
 }
 
 FRHICommandList* FRender::RecordPass(const std::function<void(FRHICommandList&)>& PassFn)
@@ -1137,7 +1152,13 @@ bool FRender::UploadTextureMirror(const Name::FName& AssetName, Resource::FTextu
 	Staging.Size = static_cast<std::uint64_t>(Pixels.size());
 	Staging.Usage = ERHIBufferUsage::TransferSrc;
 	Staging.MemoryUsage = ERHIMemoryUsage::CPUToGPU;
-	FRDGBufferRef StagingRef = CreateBuffer(Staging, ERDGResourceLifetime::Transient);
+	// PERSISTENT, not Transient: the pass below is recorded OFF the frame graph, so it is submitted
+	// by the NEXT frame's IPresent -- while the frame's head has already recycled every transient.
+	// A frame-scoped slot would therefore be handed to another allocation (and its native destroyed
+	// when the descriptor differs) before this list ever reached the queue: Vulkan reports it as a
+	// buffer "destroyed" while bound in a command buffer being submitted. A frame-external pass needs
+	// a frame-external buffer; the pool keeps one per size and reuses it for the next same-size import.
+	FRDGBufferRef StagingRef = CreateBuffer(Staging, ERDGResourceLifetime::Persistent);
 	if (!StagingRef.IsValid() || StagingRef.GetRHI() == nullptr)
 	{
 		ReleaseTexture(TexRef);
@@ -1159,25 +1180,20 @@ bool FRender::UploadTextureMirror(const Name::FName& AssetName, Resource::FTextu
 	// pattern. Pixels are copied synchronously during record (still valid here --
 	// Done() below is what drops the CPU bulk).
 	//
-	// This runs on the resource system's IO thread, in the gap between the frame's IBeginFrame and
-	// ITick: no Execute has happened yet, so no frame's slot is current and the pass cannot land in
-	// a frame context's table. It goes to the off-frame table and is submitted by that frame's
-	// IPresent (first), which keeps the copy ahead of the draws that sample the mirror.
+	// This runs on the resource system's IO thread, outside any stage call, so AddPass sees no
+	// ambient frame context and files the pass in the OFF-FRAME table -- submitted (first) by the
+	// next frame's IPresent, which keeps the copy ahead of the draws that sample the mirror.
 	FRHITexture* RHITex = TexRef.GetRHI();
 	FRHIBuffer* RHIStaging = StagingRef.GetRHI();
 	const std::uint8_t* PixelsData = Pixels.data();
 	const std::uint64_t PixelBytes = static_cast<std::uint64_t>(Pixels.size());
-	if (FRHICommandList* List = RecordPass([=](FRHICommandList& Cmd)
+	AddPass(ERHICommandListType::Graphics, [=](FRHICommandList& Cmd)
 	{
 		Cmd.UpdateBuffer(RHIStaging, 0, PixelBytes, PixelsData);
 		Cmd.TransitionTexture(RHITex, ERHIResourceState::Common, ERHIResourceState::CopyDst);
 		Cmd.CopyBufferToTexture(RHIStaging, RHITex, 0);
 		Cmd.TransitionTexture(RHITex, ERHIResourceState::CopyDst, ERHIResourceState::ShaderResource);
-	}))
-	{
-		std::lock_guard<std::mutex> Lock(OffFramePassMutex);
-		OffFramePasses.push_back({List, ERHICommandListType::Graphics});
-	}
+	});
 	return true;
 }
 

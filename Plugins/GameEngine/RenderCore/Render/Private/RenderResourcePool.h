@@ -250,6 +250,17 @@ private:
 	void DestroyTextureEntry(FTextureEntry& Entry);
 	void DestroyBufferEntry(FBufferEntry& Entry);
 
+	/** Same, but the natives are held until the NEXT frame boundary instead of being destroyed
+	 *  now. A frame's resources are recycled at the frame's HEAD, while its command lists are only
+	 *  submitted by that frame's TAIL -- so a native whose slot is re-used here may still be bound
+	 *  in a list that has not reached the queue yet, and Vulkan reports it as a buffer destroyed
+	 *  while bound in a command buffer being submitted. One frame of grace is far more than the tail
+	 *  needs (it runs within the same frame), and it costs one frame of memory for a slot that
+	 *  changed descriptor. */
+	void CondemnTexture(FRHITexture* Native, FRHITextureView* View);
+	void CondemnBuffer(FRHIBuffer* Native);
+	void FlushCondemned();
+
 	IRHI* RHI = nullptr;
 	std::vector<FTextureEntry> Textures;
 	std::vector<std::uint32_t> FreeTextureSlots;
@@ -279,6 +290,11 @@ private:
 	 *  later. `FrameCounter` advances in BeginFrame, so it counts the frame being built. */
 	static constexpr std::uint32_t kDescriptorSetGraceFrames = 2;
 	std::uint32_t FrameCounter = 0;
+
+	// Natives whose slot was re-used with a different descriptor: destroyed a frame later (see
+	// CondemnTexture / CondemnBuffer) so a submission still in flight cannot be invalidated.
+	std::vector<std::pair<FRHITexture*, FRHITextureView*>> CondemnedTextures;
+	std::vector<FRHIBuffer*> CondemnedBuffers;
 
 	/** Free one entry's set + pool (the pair is pool-owned; the set is freed before its pool). */
 	void DestroyDescriptorSetEntry(FDescriptorSetEntry& Entry);

@@ -86,6 +86,32 @@ template <typename TStage, typename TContext>
 void Invoke(FFrameExtension* Frame, TContext& Context, void* FrameContext);
 
 /**
+ * The frame context of the stage call running ON THIS THREAD, or nullptr outside a stage call.
+ *
+ * Exists because a stage body may call a helper that was NOT handed the context (the classic one is
+ * "record this pass"): with frames pipelining, two frames' stage bodies run concurrently, so "the
+ * frame I am part of" is a property of the CALL, not of the collector -- a helper that read it from
+ * the dispatcher would attribute work to whichever frame the dispatcher happened to be setting up.
+ * The dispatcher publishes it for exactly the duration of the call (FScopedFrameContext), so a
+ * nested call (a one-shot batch inside a stage) sees its own and the outer one is restored after.
+ */
+MAHO_API void* GetCurrentFrameContext() noexcept;
+
+/** Publishes the frame context for the duration of one stage call (see GetCurrentFrameContext). */
+class MAHO_API FScopedFrameContext
+{
+public:
+	explicit FScopedFrameContext(void* InFrameContext) noexcept;
+	~FScopedFrameContext();
+
+	FScopedFrameContext(const FScopedFrameContext&) = delete;
+	FScopedFrameContext& operator=(const FScopedFrameContext&) = delete;
+
+private:
+	void* Previous;
+};
+
+/**
  * Stage dispatch specialization sugar - full-specializes Invoke<TStage, TContext> to
  * dynamic_cast the frame to CastType and call Method(Context, FrameContext). Each context type
  * (FEngineBase, FRender, ...) declares its own specializations for the stage interfaces it schedules.
@@ -98,6 +124,10 @@ void Invoke(FFrameExtension* Frame, TContext& Context, void* FrameContext);
  * type -- which works because the expansion site (the scheduler's own header) has that nested type
  * complete. It is also why FFrameBuilder never has to name the type at all.
  *
+ * It also PUBLISHES the context as the ambient one for the duration of the call
+ * (GetCurrentFrameContext), which is what lets a helper reached from the stage body -- one that was
+ * never handed the context -- attribute its work to the right frame.
+ *
  * The cast is a cross-cast (the stage interface is a base of the concrete frame, not of FFrameExtension),
  * which is exactly why FFrameExtension must be polymorphic.
  */
@@ -107,6 +137,7 @@ inline void Invoke<StageType, ContextType>(FFrameExtension* Frame, ContextType& 
 {                                                                              \
 	if (auto* S = dynamic_cast<CastType*>(Frame))                              \
 	{                                                                          \
+		FScopedFrameContext Ambient(FrameContext);                             \
 		S->Method(Context, *static_cast<typename ContextType::FContext*>(FrameContext)); \
 	}                                                                          \
 }

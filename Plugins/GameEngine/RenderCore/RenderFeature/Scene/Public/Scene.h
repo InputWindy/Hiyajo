@@ -26,11 +26,12 @@ MAHO_SCENE_API FScene* GetScene();
  * SceneDepth). Other features read them through Scene::GetScene() - no named
  * slots in FRender. Targets are rebuilt when the swapchain extent changes.
  *
- * It also implements IPresent, the frame's LAST stage and its single submission
- * point: submit every pass the frame recorded, then blit the present target to
- * the swapchain. (That stage used to have no implementer: the blit was issued
- * from the host chain, which is why nothing but "drain the whole graph" ordered
- * it against the features that write the target.)
+ * It also owns the FRAME BOUNDARY: IBeginRender opens the swapchain frame
+ * (BeginSwapchainFrame: fence wait + acquire + begin frame command list + pool
+ * advance) and IPresent closes it (submit the frame's passes, blit, then
+ * EndSwapchainFrame). Both are nodes of this collector's graph, so the ordering
+ * "next frame's head after this frame's tail" is a declared cross-frame edge
+ * (see the ctor) rather than a Wait() on the host chain.
  */
 class MAHO_SCENE_API FScene : public FFrameExtension, public IPipeline<IBeginRender, IRender, IEndRender, IPresent, IPreUnInstall>
 {
@@ -51,15 +52,19 @@ public:
 	 */
 	[[nodiscard]] const FDrawList& GetTriangleDrawList() const { return TriangleDrawList; }
 
+	/** The frame HEAD: opens the swapchain frame, then (re)builds the shared targets. Everything that
+	 *  acquires a command list or allocates from the resource pool must be ordered after this. */
 	void BeginRender(FRender& R, FRenderContext& Frame) override;
 	void Render(FRender& R, FRenderContext& Frame) override;
 	void EndRender(FRender& R, FRenderContext& Frame) override;
 
 	/**
-	 * The frame's last stage: submit everything recorded this frame, then record the blit of the
-	 * present target onto the swapchain backbuffer. The submission point exists here (rather than
-	 * in the host's IEndFrame) because the frame's recorded-pass table is per-slot state of THIS
-	 * graph -- the host chain's slot comes from the engine graph's counter and must not index it.
+	 * The frame's last stage, and its single submission point: submit every pass recorded this frame,
+	 * record the blit of the present target, then close + submit the frame command list and present.
+	 * Both the submission point and the frame close live here (rather than on the host's IEndFrame)
+	 * because the frame's recorded-pass table is per-slot state of THIS graph -- the host chain's slot
+	 * comes from the engine graph's counter and must not index it -- and because closing the frame
+	 * list requires the recording that this same stage just did.
 	 */
 	void Present(FRender& R, FRenderContext& Frame) override;
 

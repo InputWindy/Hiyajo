@@ -710,11 +710,19 @@ protected:
 			// using the same graph and the same ring, so a one-shot batch may only start from a
 			// quiescent ring (ring-reuse rule). With that, an install/uninstall is simply a
 			// batch that happens at a safe point.
+			//
+			// The drain is the BUILDER's Wait(), not the graph's alone: a stage body may have
+			// submitted its own async work to the pool (nested graph work, asset / RHI helpers)
+			// that no node fence tracks, and the point of this drain is that nothing of the frames
+			// being changed is still running anywhere. This is also why the frame LOOP no longer
+			// needs a per-frame drain: quiescence belongs to the change, not to every frame --
+			// draining each frame would flatten the ring (the collector's frames could never
+			// overlap) to protect an event that happens on install/uninstall.
 			FFrameGraph& Update = GetGraph();
 			// A one-shot batch runs at frame number 0 (below), so its slot is PhaseOf(0) == 0 -- and
 			// these batches are drained before and after, so slot 0 is never shared with the loop.
 			TFrameDispatch<TInitStages, TContext> Dispatch(GetContext(), GetContext(0));
-			Update.Wait();
+			Wait();
 			FFrameBridge::FResult Built = FFrameBridge::Build(NewLayers,
 				TFrameDispatch<TInitStages, TContext>::StageIndices(), 0, Dispatch);
 			ReportDiagnostics(Built.Diagnostics);
@@ -741,7 +749,7 @@ protected:
 			}
 			else
 			{
-				Update.Wait();
+				Wait();
 				for (FFrameExtension* P : NewLayers)
 				{
 					EmitStatus(EFrameStatus::Installed, StoredName(P), {});
@@ -1145,9 +1153,11 @@ private:
 
 		// One SHOT batch through the shared graph, exactly like the init path: the drain BEFORE
 		// the submit is what keeps it out of a frame that is still in flight (see the init path).
+		// Full Wait() for the same reason it is full there -- the modules about to be freed must not
+		// have a node OR an async pool task still running a closure rooted in them.
 		FFrameGraph& Update = GetGraph();
 		TFrameDispatch<TShutdownStages, TContext> Dispatch(GetContext(), GetContext(0));   // frame 0 below, so slot 0
-		Update.Wait();
+		Wait();
 		FFrameBridge::FResult Built = FFrameBridge::Build(ToUnload,
 			TFrameDispatch<TShutdownStages, TContext>::StageIndices(), 0, Dispatch);
 		ReportDiagnostics(Built.Diagnostics);
@@ -1168,7 +1178,7 @@ private:
 			return false;   // the active set did not change
 		}
 
-		Update.Wait();
+		Wait();
 
 		std::set<std::string> UnloadedNames;   // collected BEFORE DeleteUnloaded clears the stored names
 		for (FFrameExtension* L : ToUnload)

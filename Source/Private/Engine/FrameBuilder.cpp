@@ -8,6 +8,33 @@
 namespace Maho
 {
 
+namespace
+{
+	/** The stage call this thread is currently inside, published by MAHO_DECLARE_STAGE_DISPATCH.
+	 *  thread_local, not a collector member: frames pipeline, so two frames' stage bodies run at the
+	 *  same time and "the frame I belong to" is a property of the call. */
+	thread_local void* GCurrentFrameContext = nullptr;
+}
+
+void* GetCurrentFrameContext() noexcept
+{
+	return GCurrentFrameContext;
+}
+
+FScopedFrameContext::FScopedFrameContext(void* InFrameContext) noexcept
+	: Previous(GCurrentFrameContext)
+{
+	GCurrentFrameContext = InFrameContext;
+}
+
+FScopedFrameContext::~FScopedFrameContext()
+{
+	// Restore, don't clear: a stage body may run a one-shot batch (an install/uninstall flush), whose
+	// own stage calls publish and restore their contexts -- the outer frame must still be visible
+	// after they return.
+	GCurrentFrameContext = Previous;
+}
+
 namespace Detail
 {
 

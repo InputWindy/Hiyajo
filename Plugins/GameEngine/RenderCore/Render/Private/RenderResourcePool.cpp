@@ -280,6 +280,49 @@ void FRHIResourcePool::DestroyDescriptorSetEntry(FDescriptorSetEntry& Entry)
 	Entry.Pool = nullptr;
 }
 
+void FRHIResourcePool::CondemnTexture(FRHITexture* Native, FRHITextureView* View)
+{
+	if (Native == nullptr && View == nullptr)
+	{
+		return;
+	}
+	CondemnedTextures.emplace_back(Native, View);
+}
+
+void FRHIResourcePool::CondemnBuffer(FRHIBuffer* Native)
+{
+	if (Native != nullptr)
+	{
+		CondemnedBuffers.push_back(Native);
+	}
+}
+
+void FRHIResourcePool::FlushCondemned()
+{
+	// Called one frame after the condemn: the fence covering the frame that used these was waited
+	// in RHI::BeginFrame, which runs before this.
+	if (RHI != nullptr)
+	{
+		for (const auto& [Native, View] : CondemnedTextures)
+		{
+			if (View != nullptr)
+			{
+				RHI->DestroyTextureView(View);
+			}
+			if (Native != nullptr)
+			{
+				RHI->DestroyTexture(Native);
+			}
+		}
+		for (FRHIBuffer* Native : CondemnedBuffers)
+		{
+			RHI->DestroyBuffer(Native);
+		}
+	}
+	CondemnedTextures.clear();
+	CondemnedBuffers.clear();
+}
+
 void FRHIResourcePool::DestroyTextureEntry(FTextureEntry& Entry)
 {
 	if (Entry.View)
@@ -321,12 +364,15 @@ FRDGTextureRef FRHIResourcePool::CreateTexture(const FRHITextureDesc& Desc, ERDG
 
 	const std::uint32_t Slot = AllocTextureSlot();
 	FTextureEntry& Entry = Textures[Slot];
-	// A recycled slot (free list) may hold a stale native from a DIFFERENT
-	// descriptor (transient desc changed, or a persistent slot that never matched).
-	// Drop it before reusing so the pool never leaks a Vulkan object + memory.
+	// A recycled slot (free list) may hold a stale native from a DIFFERENT descriptor (transient
+	// desc changed, or a persistent slot that never matched). It is CONDEMNED rather than destroyed
+	// right here: this runs at a frame head, and the frame that last used it may still have its
+	// command lists queued for submission (see CondemnTexture).
 	if (Entry.Native != nullptr || Entry.View != nullptr)
 	{
-		DestroyTextureEntry(Entry);
+		CondemnTexture(Entry.Native, Entry.View);
+		Entry.Native = nullptr;
+		Entry.View = nullptr;
 	}
 
 	Entry.Desc = Desc;
@@ -363,7 +409,10 @@ FRDGBufferRef FRHIResourcePool::CreateBuffer(const FRHIBufferDesc& Desc, ERDGRes
 	FBufferEntry& Entry = Buffers[Slot];
 	if (Entry.Native != nullptr)
 	{
-		DestroyBufferEntry(Entry);
+		// Condemned, not destroyed: see CondemnBuffer (a frame head may run while the frame that
+		// used this buffer still has its lists queued for submission).
+		CondemnBuffer(Entry.Native);
+		Entry.Native = nullptr;
 	}
 
 	Entry.Desc = Desc;
@@ -795,6 +844,11 @@ void FRHIResourcePool::BeginFrame()
 		}
 	}
 
+	// Destroy the natives condemned by the PREVIOUS frame's slot re-use. Safe here for the same
+	// reason the lists above are: the fence covering everything that may have referenced them was
+	// waited before this ran (RHI::BeginFrame).
+	FlushCondemned();
+
 	// Sweep the descriptor-set tables: both are content-addressed, so an entry whose CONTENT stopped
 	// being requested (a transient buffer's address, a UI buffer that got resized, a texture nobody
 	// draws any more) would otherwise hold its set AND its descriptor pool for the life of the
@@ -868,6 +922,10 @@ void FRHIResourcePool::BeginFrame()
 
 void FRHIResourcePool::Shutdown()
 {
+	// Natives condemned in the last frame go with everything else (no frame boundary is left to
+	// flush them on).
+	FlushCondemned();
+
 	// Both lifetimes end here: the lists waiting to be submitted (a pass recorded in a teardown stage
 	// has no frame left to submit it) and the ones submitted but not yet recycled by a BeginFrame.
 	for (FRHICommandList* List : PendingRenderLists)

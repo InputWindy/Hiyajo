@@ -34,9 +34,21 @@ FScene::FScene()
 {
 	GScene = this;
 
-	// BeginRender runs after the host FRender::BeginFrame (engine stage), which
-	// already waited the previous fence, recycled the previous frame's lists and
-	// began the frame buffer -- so list acquisition here cannot race the recycle.
+	// BeginRender is the FRAME HEAD and Present is the FRAME TAIL, both nodes of this collector's
+	// graph -- so the frame boundary between them is a declared edge:
+	//
+	//     IBeginRender@N+1  waits for  IPresent@N
+	//
+	// It is what protects the RHI's single-depth frame state (one frame command buffer, one
+	// in-flight fence, one acquired image): the next frame's head must not wait on / reset them
+	// while this frame's tail is still submitting. Declarable HERE because both ends are stages of
+	// the same graph; the host chain cannot express it (an edge from the engine graph into this one
+	// is a silent no-op).
+	//
+	// The K-deep form -- RHI holding MAHO_FRAMES_IN_FLIGHT copies of that state, so frames may
+	// genuinely overlap -- replaces this edge with a per-slot fence wait; until then this edge IS
+	// the frame isolation, and it is why the host needs no per-frame Wait() any more.
+	MyStage<IBeginRender>().WaitFor<FScene>().OnLastFrameStage<IPresent>();
 
 	// Test producer of the draw protocol: hardcode the fullscreen triangle. No
 	// vertex buffer -- the vertex shader generates its 3 positions from
@@ -49,8 +61,16 @@ FScene::FScene()
 void FScene::BeginRender(FRender& R, FRenderContext& Frame)
 {
 	MAHO_TRACE_SCOPE("FScene::BeginRender");
-	// Targets are (re)built on (re)size; the clear is recorded + submitted in
-	// Render via AddPass. The feature no longer owns a command list here.
+	// THE FRAME HEAD. Opening the swapchain frame is a frame primitive, so it happens in the frame's
+	// first stage rather than on a host stage with an implied ordering: this node waits the previous
+	// frame's tail (declared cross-frame edge in the ctor), the per-stage self edge keeps every later
+	// stage within it, and everything that acquires a list or allocates from the pool declares an
+	// edge onto this stage (see FUIFeature::IInitViews / DrawTriangleFeature / ExampleEditor).
+	R.BeginSwapchainFrame();
+
+	// Targets are (re)built on (re)size -- read AFTER the frame opened, so a swapchain recreation
+	// inside it is already reflected in the canvas size. The clear is recorded + submitted in
+	// Render; the feature no longer owns a command list here.
 	EnsureTargets(R);
 }
 
@@ -264,6 +284,13 @@ void FScene::Present(FRender& R, FRenderContext& Frame)
 	{
 		R.PresentTexture(Target);
 	}
+
+	// THE FRAME END, right after the blit went into the frame command list: close it, submit it
+	// (queue-order: behind the pass batch submitted above) and present. Hosting it here is what
+	// removes the host's per-frame Wait() -- "recording finished before the close" is statement
+	// order now, while the cross-frame edge in the ctor is what keeps the next frame's head off
+	// this frame's opened swapchain state (one frame buffer, one fence, one acquired image).
+	R.EndSwapchainFrame();
 }
 
 void FScene::TransitionSceneColorForSampling(FRender& R)

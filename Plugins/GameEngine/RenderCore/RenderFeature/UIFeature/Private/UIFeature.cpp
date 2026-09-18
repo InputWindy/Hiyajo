@@ -232,7 +232,12 @@ void FUIFeature::UploadFont(FRender& R)
 			StagingDesc.Size = static_cast<std::uint64_t>(FontW) * FontH * 4;
 			StagingDesc.Usage = ERHIBufferUsage::TransferSrc;
 			StagingDesc.MemoryUsage = ERHIMemoryUsage::CPUToGPU;
-			FRDGBufferRef Staging = R.CreateBuffer(StagingDesc, ERDGResourceLifetime::Transient);
+			// PERSISTENT: this one-shot upload's pass is recorded the FIRST time the UI backend comes
+			// up, which can be before the frame's head stage (and even inside the install batch), while
+			// the list it lands in is only submitted at the frame's tail. A frame-scoped transient
+			// would be recycled by the head and its native destroyed by a later allocation in the same
+			// frame, i.e. while this list was still waiting to be submitted.
+			FRDGBufferRef Staging = R.CreateBuffer(StagingDesc, ERDGResourceLifetime::Persistent);
 			if (!Staging.IsValid() || Staging.GetRHI() == nullptr)
 			{
 				MAHO_LOG_CORE_ERROR("FUIFeature: UI font staging buffer failed");
