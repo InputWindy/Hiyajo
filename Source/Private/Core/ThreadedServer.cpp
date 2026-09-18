@@ -92,6 +92,15 @@ void FThreadedServer::Flush()
 	// the time is spent.
 	MAHO_TRACE_SCOPE("ThreadedServer::Flush");
 
+	// A barrier means "wait until the work I queued has run" -- and with no worker there is nothing
+	// that will ever run it, so waiting would hang forever. (Found the hard way: a caller that
+	// drained a server AFTER Shutdown -- the thread is joined, the queue is dead -- blocked for good.)
+	// The server never refuses work, but it also must not pretend a barrier can be honoured here.
+	if (!IsRunning())
+	{
+		return;
+	}
+
 	std::mutex BarrierMutex;
 	std::condition_variable BarrierCv;
 	bool bDone = false;
