@@ -44,9 +44,16 @@ END_SHADER_PARAMETER_STRUCT()
 
 FDrawTriangleFeature::FDrawTriangleFeature()
 {
-	// Draw AFTER FScene clears + submits: AddPass submits at the IRender call
-	// site, so order this feature's IRender against FScene's IEndRender submit.
+	// Draw after FScene's clear: AddPass only REGISTERS a pass in the frame's table, so what
+	// orders the two is the order that table is submitted in -- the frame's IPresent stage, in
+	// registration order (= this edge order).
 	MyStage<IRender>().IsWaiting<Scene::FScene>().ForStage<IEndRender>();
+	// The frame's submission point (FScene::IPresent) is declared to run after this stage. It is
+	// the LAST stage of the sequence, but the graph has NO stage barrier: a stage is ordered only
+	// by declared edges, so every stage that RECORDS a pass must declare this. Without it my pass
+	// can be registered after IPresent has already taken the table, and is then submitted a whole
+	// ring later -- referencing a command list whose frame long outlived its resources.
+	MyStage<IRender>().IsBlocking<Scene::FScene>().OnStage<IPresent>();
 }
 
 FDrawTriangleFeature::~FDrawTriangleFeature()

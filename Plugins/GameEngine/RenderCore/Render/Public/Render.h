@@ -37,9 +37,26 @@ template <typename T> class TShaderHandle;
  *
  *  DEFINED HERE, at namespace scope, and not inside the class: the stage interfaces below must
  *  name it in their signatures, and they are declared before `FRender` exists. `FRender` carries
- *  a nested alias so stages and the dispatch macro can still write the nested name. */
+ *  a nested alias so stages and the dispatch macro can still write the nested name.
+ *
+ *  The members are the frame's RECORDED PASSES, in submission order -- the state the whole
+ *  "record now, submit once at the end" model hangs off. It is per-slot on purpose: it is the
+ *  COLLECTOR graph's frame state, so only stages driven by that graph (whose slot comes from its
+ *  own counter) may touch it -- the engine-side host chain must never index it (see
+ *  `refactor-per-frame-context` D8). */
 struct FRenderContext
 {
+	/** One pass recorded this frame, waiting for the frame's IPresent to submit it. */
+	struct FPendingPass
+	{
+		FRHICommandList* List = nullptr;
+		ERHICommandListType Type = ERHICommandListType::Graphics;
+	};
+
+	/** A frame's stage nodes record concurrently (they are separate graph nodes on pool threads),
+	 *  so the table they all append to needs a lock. */
+	std::mutex Mutex;
+	std::vector<FPendingPass> Passes;
 };
 
 namespace Detail
@@ -162,6 +179,29 @@ public:
 };
 #endif // MAHO_EDITOR_BUILD
 
+/**
+ * The frame's LAST stage in the sequence, and the frame's single submission point. Implemented by
+ * the frame feature (FScene) -- it used to have no implementer at all, because the blit was issued
+ * from the host chain (`FRender::EndFrame`) instead.
+ *
+ * Two things happen here, in order:
+ *   1. `FRender::SubmitRecordedPasses` submits every pass recorded this frame, in registration
+ *      order (= the order the stage nodes ran), plus any pass recorded off-frame (the asset-mirror
+ *      upload);
+ *   2. `FRender::PresentTexture(R.GetPresentTarget())` records the blit that puts the frame's final
+ *      target on the swapchain backbuffer.
+ *
+ * RECORDING IT HERE is what makes "the present target's last writer runs before the blit" a
+ * declared edge instead of a consequence of draining the whole graph (the host `IEndFrame` used to
+ * wait the graph, and that wait WAS the ordering).
+ *
+ * Being last in the SEQUENCE is not an ordering by itself: the scheduler emits a stage chain only
+ * between a frame's OWN stages and has no stage barrier. So every stage that records a pass must
+ * declare itself against this one (`MyStage<X>().IsBlocking<Scene::FScene>().OnStage<IPresent>()`),
+ * and so must every writer of the present target. A recorder that misses its edge does not lose
+ * much on paper and everything in practice: its pass is registered after this stage has already
+ * taken the table, so it is submitted a whole ring later against resources its frame has released.
+ */
 class MAHO_RENDER_API IPresent
 {
 public:
@@ -217,6 +257,12 @@ protected:
 	/** Type-erased access to a slot's context (see FFrameBuilder). Must never return nullptr. */
 	void* GetContext(int Slot) override
 	{
+		// Remember which slot the dispatcher is about to run, so the frame's own AddPass path can
+		// reach THIS frame's recorded-pass table without threading a context parameter through every
+		// feature's call site. Sound because a frame's stage nodes have all finished before the next
+		// Execute: FRender::EndFrame waits the collector graph and the host's IBeginFrame@N+1 is
+		// ordered after IEndFrame@N (both declared in the ctor).
+		CurrentSlot = Slot;
 		return &Slots[Slot];
 	}
 
@@ -252,8 +298,19 @@ public:
 	[[nodiscard]] std::uint32_t GetCanvasWidth() const;
 	[[nodiscard]] std::uint32_t GetCanvasHeight() const;
 	[[nodiscard]] ERHIFormat GetSwapchainFormat() const;
-	/** Blit a scene-color RDG texture to the swapchain backbuffer (the frame feature's present point). */
+	/** Blit a scene-color RDG texture to the swapchain backbuffer (the frame's IPresent point). */
 	void PresentTexture(const FRDGTextureRef& Texture);
+
+	/**
+	 * Submit everything this frame recorded, in registration order: the passes recorded OFF the
+	 * frame graph first (an asset-mirror upload records on the resource IO thread, between this
+	 * frame's IBeginFrame and ITick, where "this frame" is not yet known -- see PendingOffFramePasses),
+	 * then this frame's table. The submit runs on the RHI server thread (one hop for the whole
+	 * batch), so the frame's lists reach the queue before the frame command list that
+	 * `RHI::EndFrame` submits afterwards -- which is what puts them before the present blit, on the
+	 * same queue's FIFO. Called by the frame's IPresent stage; nothing else submits a pass list.
+	 */
+	void SubmitRecordedPasses(FRenderContext& Frame);
 
 	/**
 	 * Set the FINAL on-screen present target for this frame. Any UI feature that
@@ -272,12 +329,12 @@ public:
 	void ReleaseTexture(FRDGTextureRef& Ref);
 	void ReleaseBuffer(FRDGBufferRef& Ref);
 
-	/** Record + submit a render-feature pass in one call (syntactic sugar over
-	 *  AcquireRenderList + Begin/End + Submit). The lambda receives the command list
-	 *  mid-pass: record draw commands, do NOT call Begin/End/Submit yourself. The
-	 *  pass submits here, so it runs at the AddPass call site (the feature's IRender
-	 *  stage). Order between passes is the order features call AddPass -- guarantee
-	 *  it with stage deps against the feature(s) that must submit first. */
+	/** Record a render-feature pass: acquire a command list, record on the CALLING node thread, and
+	 *  register the list in this frame's ordered table. It does NOT submit -- the frame's IPresent
+	 *  submits the table once, in registration order (which is the order the stage nodes ran, i.e.
+	 *  the declared edge order). Order between passes is therefore a graph property, not a call-site
+	 *  one: passes record in PARALLEL, so a feature must not rely on "my AddPass ran before that
+	 *  one's" unless it declared an edge against it. */
 	void AddPass(ERHICommandListType PassType, std::function<void(FRHICommandList&)> PassFn);
 
 	/**
@@ -570,16 +627,26 @@ private:
 	using FRenderStages = TTypeList<IInitViews, IBeginRender, IRender, IEndRender, IPostProcess, IRenderUI, IPresent>;
 #endif
 
-	// Per-pass submit serialization. AddPass records a pass then submits it immediately
-	// (un-fenced). A later pass reuses a resource the earlier, still-pending submit reads
-	// -- its mutable descriptor set (rewritten at record time) or a transient buffer --
-	// so without ordering the later pass rewrites a descriptor set / frees a buffer the
-	// GPU is still reading (VUID-vkUpdateDescriptorSets-None-03047 / VUID-vkDestroyBuffer-
-	// buffer-00922). Each per-pass submit carries its own fence; the next AddPass waits
-	// every prior one before recording. Guarded because render-graph stage nodes can
-	// record passes concurrently on the thread pool.
-	std::mutex PassSubmitMutex;
-	std::vector<FRHIFence*> PendingPassFences;
+	// Recorded passes are submitted ONCE, by the frame's IPresent stage (SubmitRecordedPasses):
+	// until then a pass is just a recorded list in the frame's table, so passes record in parallel
+	// and no per-pass fence exists. The frame command list's open/close stay on the host stages.
+
+	/** Passes recorded OFF the frame graph: the asset-mirror upload (Render.cpp:UploadTextureMirror)
+	 *  runs on the resource system's IO thread, in the gap the graph reserves between this frame's
+	 *  IBeginFrame and ITick -- BEFORE Execute, so "this frame's slot" is not yet known and the pass
+	 *  cannot land in any context's table. It goes here instead and is drained FIRST by the next
+	 *  IPresent, so a mirror's copy is on the queue before the draws that sample it. */
+	std::mutex OffFramePassMutex;
+	std::vector<FRenderContext::FPendingPass> OffFramePasses;
+
+	/** The slot the dispatcher is about to run (written by GetContext(int), read by AddPass). See
+	 *  GetContext for why this is sound. */
+	int CurrentSlot = 0;
+
+	/** Record one pass into the table the caller names: acquire a list, run the lambda on THIS
+	 *  thread, hand the finished list back. AddPass routes to this frame's table, the asset-mirror
+	 *  upload to the off-frame one. */
+	[[nodiscard]] FRHICommandList* RecordPass(const std::function<void(FRHICommandList&)>& PassFn);
 
 	// -- CPU asset -> GPU mirror --
 	/** Asset FName -> RDG mirror resource (texture or buffer). Owned by the render

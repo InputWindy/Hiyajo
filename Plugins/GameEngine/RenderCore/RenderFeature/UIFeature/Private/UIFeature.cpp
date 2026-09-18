@@ -279,6 +279,15 @@ FUIFeature::FUIFeature()
 	// one (still COLOR_ATTACHMENT) -> vkCmdDraw layout-mismatch validation error. Pin the
 	// data-flow edge so the reader always sees the current target.
 	MyStage<IInitViews>().IsWaiting<Scene::FScene>().ForStage<IBeginRender>();
+	// The compose pass SAMPLES SceneColor (the game's imgui::image of the scene mirror): it flips the
+	// scene color to SHADER_READ_ONLY right before AddPass and back right after, each as its own
+	// command list. So every WRITER of SceneColor must have finished by then -- Scene's clear is
+	// covered by the IEndRender edge above, but the triangle feature's IRender is not: with no edge
+	// the two run concurrently, and its draw can be registered between my two flips, i.e. after the
+	// flip to SHADER_READ_ONLY and before the flip back, which is exactly a
+	// vkCmdBeginRendering-pRenderingInfo-09592 attachment-layout error. Declared by NAME: this
+	// feature has no build dependency on the triangle plugin.
+	MyStage<IRenderUI>().IsWaiting("FDrawTriangleFeature").ForStage<IRender>();
 	// NOTE: do NOT try to order this stage against FPlatform::ITick with an edge -- it cannot
 	// work. This frame lives in the RENDER COLLECTOR's graph while FPlatform::ITick lives in the
 	// ENGINE's (they are separate FFrameGraph instances), so a declaration here would never bind:
@@ -287,10 +296,12 @@ FUIFeature::FUIFeature()
 	// k-slot ring (k = MAHO_FRAMES_IN_FLIGHT), so a reader lagging by up to k frames still sees a
 	// coherent snapshot instead of racing the pump's live copy.
 	// This feature is OFF-SCREEN ONLY: it draws the ImGui list into its own composite target and
-	// sets it as FRender's present target. It does not present, and nothing in this graph does --
-	// the present primitive is issued by FRender::EndFrame (a HOST-graph node, which no edge in
-	// this collector graph could ever be ordered against; see the note in Render.cpp). So there is
-	// deliberately no "present ordering" edge here: it would name a node that no longer exists.
+	// sets it as FRender's present target. The present primitive itself is the recorder's tail
+	// stage FScene::IPresent (which submits the frame's table and then records the blit), so the
+	// two stages below must be ordered BEFORE it -- they record passes, and the graph has no stage
+	// barrier: only a declared edge keeps a recorded pass inside the frame that records it.
+	MyStage<IInitViews>().IsBlocking<Scene::FScene>().OnStage<IPresent>();
+	MyStage<IRenderUI>().IsBlocking<Scene::FScene>().OnStage<IPresent>();
 	// Teardown serialization. FRender::Shutdown drives every feature's IPreUnInstall as ONE
 	// graph batch, so without an edge the teardown bodies of Scene / UIFeature / ExampleEditor
 	// run CONCURRENTLY and race on the resources they release (pool entries, scene-color mirrors,

@@ -404,46 +404,17 @@ void FRender::Tick(FEngineBase&, FEngineContext&)
 
 void FRender::EndFrame(FEngineBase&, FEngineContext&)
 {
-	// RHI->EndFrame (end + submit the frame buffer, present the swapchain) must run after
-	// every feature submit, so drain the async render-graph tasks first: this serializes the
-	// present behind this frame's draws.
+	// Close the frame: drain the render graph, then close + submit the frame command list and
+	// present. Nothing is submitted here any more -- this frame's passes went out from the
+	// collector's IPresent stage (SubmitRecordedPasses), and so did the blit into the frame command
+	// list. What the Wait() buys now is narrower and still needed: RHI::EndFrame ENDS the frame
+	// command list, so its recording (BeginFrame + the blit) must have completed.
 	{
 		MAHO_TRACE_SCOPE("FRender::EndFrame.GraphWait");
 		Wait();
 	}
-	// Retire any per-pass submit fence left pending by the last AddPass (and, by
-	// waiting, guarantee this frame's per-pass GPU work completed before the frame
-	// buffer's submit/present is queued behind it).
-	if (IRHI* P = RHI.get())
-	{
-		MAHO_TRACE_SCOPE("FRender::EndFrame.RetirePassFences");
-		std::lock_guard<std::mutex> Lock(PassSubmitMutex);
-		for (FRHIFence* Fence : PendingPassFences)
-		{
-			P->WaitForFence(Fence);
-			P->DestroyFence(Fence);
-		}
-		PendingPassFences.clear();
-	}
 	if (IRHI* RHIp = RHI.get())
 	{
-		// Issue the present primitive HERE, on the host frame chain, alongside BeginFrame/EndFrame.
-		// It used to be issued from a render feature's IPresent, but that stage lives in the render
-		// COLLECTOR graph whereas IBeginFrame/IEndFrame are nodes in the host graph -- two graphs
-		// with no dependency edge between them, so nothing could order the three frame primitives.
-		// RHI.cpp:134 puts the "keep the frame path serial" burden on the caller and that caller
-		// could not honour it; on one chain the per-layer gate does it for free.
-		//
-		// The render graph was drained above, so reading the target here is also what
-		// makes "last writer wins" deterministic.
-		{
-			MAHO_TRACE_SCOPE("FRender::EndFrame.PresentTexture");
-			const FRDGTextureRef Target = GetPresentTarget();
-			if (Target.IsValid())
-			{
-				PresentTexture(Target);
-			}
-		}
 		MAHO_TRACE_SCOPE("FRender::EndFrame.RHI");
 		RHIp->EndFrame();
 	}
@@ -885,35 +856,92 @@ void FRender::AddPass(
 
 void FRender::AddPass(ERHICommandListType PassType, std::function<void(FRHICommandList&)> PassFn)
 {
-	FRHICommandList* List = ResourcePool ? ResourcePool->AcquireRenderList() : nullptr;
+	// Record only -- no wait, no fence, no submit, and no critical section: each pass owns its own
+	// command list, so passes record in parallel on their own node threads. The list is registered
+	// in THIS frame's table; the frame's IPresent submits the table in registration order, which is
+	// the order the stage nodes ran (the declared edge order). A later pass therefore never waits
+	// for an earlier one, and nothing here can race an in-flight submit: this frame's lists are not
+	// on the queue yet.
+	FRHICommandList* List = RecordPass(PassFn);
 	if (List == nullptr)
 	{
 		return;
 	}
-	// If earlier per-pass submits are still pending, wait them BEFORE this pass records.
-	// Recording rewrites resources those pending submits read (the mutable descriptor set
-	// updated at record time below, or a transient buffer this pass reuses). Without this
-	// a later pass mutates a descriptor set / frees a buffer an in-flight command buffer
-	// still references (Vulkan validation VUID-*-03047 / VUID-*-00922). The whole
-	// wait -> record -> submit is one critical section so a concurrent stage node cannot
-	// slip a submit in between another thread's wait and submit.
-	if (IRHI* P = RHI.get())
+
+	FRenderContext& Frame = Slots[static_cast<std::size_t>(CurrentSlot)];
+	std::lock_guard<std::mutex> Lock(Frame.Mutex);
+	Frame.Passes.push_back({List, PassType});
+}
+
+FRHICommandList* FRender::RecordPass(const std::function<void(FRHICommandList&)>& PassFn)
+{
+	FRHICommandList* List = ResourcePool ? ResourcePool->AcquireRenderList() : nullptr;
+	if (List == nullptr)
 	{
-		std::lock_guard<std::mutex> Lock(PassSubmitMutex);
-		for (FRHIFence* Fence : PendingPassFences)
+		return nullptr;
+	}
+	List->Begin();
+	PassFn(*List);
+	List->End();
+	return List;
+}
+
+void FRender::SubmitRecordedPasses(FRenderContext& Frame)
+{
+	IRHI* P = RHI.get();
+	if (P == nullptr)
+	{
+		return;
+	}
+
+	// Take both tables out under their locks, then submit without holding either: what is being
+	// swapped was recorded before this stage ran (the frame's nodes are done -- this stage is last
+	// in the sequence).
+	std::vector<FRenderContext::FPendingPass> OffFramePasses;
+	{
+		std::lock_guard<std::mutex> Lock(OffFramePassMutex);
+		OffFramePasses.swap(this->OffFramePasses);
+	}
+	std::vector<FRenderContext::FPendingPass> Passes;
+	{
+		std::lock_guard<std::mutex> Lock(Frame.Mutex);
+		Passes.swap(Frame.Passes);
+	}
+
+	// Submission is the handover point for the lists' lifetime: from here on they belong to the pool,
+	// which destroys them at the next frame boundary (after it waited the frame fence). Until now
+	// they were owned by the table they sat in -- and a table may hold a list recorded BEFORE the
+	// frame loop started (the asset-mirror upload at init), which must survive until this point.
+	std::vector<FRHICommandList*> Submitted;
+	Submitted.reserve(OffFramePasses.size() + Passes.size());
+	for (const FRenderContext::FPendingPass& Pass : OffFramePasses)
+	{
+		Submitted.push_back(Pass.List);
+	}
+	for (const FRenderContext::FPendingPass& Pass : Passes)
+	{
+		Submitted.push_back(Pass.List);
+	}
+
+	// ONE hop for the whole batch: the server thread runs the loop below inline (Submit's marshal
+	// is re-entrant), so the frame costs a single task and the queue still sees exactly one emitter.
+	// The batch is what `RHI::EndFrame` then queues the frame command list behind -- same queue,
+	// FIFO, so the passes precede the present blit.
+	P->RunOnServer([P, OffFramePasses = std::move(OffFramePasses), Passes = std::move(Passes)]
+	{
+		for (const FRenderContext::FPendingPass& Pass : OffFramePasses)
 		{
-			P->WaitForFence(Fence);
-			P->DestroyFence(Fence);
+			P->Submit(Pass.List, Pass.Type);
 		}
-		PendingPassFences.clear();
+		for (const FRenderContext::FPendingPass& Pass : Passes)
+		{
+			P->Submit(Pass.List, Pass.Type);
+		}
+	});
 
-		List->Begin();
-		PassFn(*List);
-		List->End();
-
-		FRHIFence* Fence = P->CreateFence(false);
-		P->Submit(List, PassType, nullptr, 0, nullptr, 0, Fence);
-		PendingPassFences.push_back(Fence);
+	if (ResourcePool)
+	{
+		ResourcePool->RetireRenderLists(Submitted);
 	}
 }
 
@@ -1126,21 +1154,30 @@ bool FRender::UploadTextureMirror(const Name::FName& AssetName, Resource::FTextu
 	// uses the handle as ImTextureID for ImGui::Image. FRender only commits the GPU
 	// mirror; the descriptor-set half lives in the UI feature.
 
-	// One transfer submit outside a render pass: copy the CPU pixels into a staging
+	// One transfer pass outside a render pass: copy the CPU pixels into a staging
 	// buffer then CopyBufferToTexture. UIFeature::UploadFont follows the same
 	// pattern. Pixels are copied synchronously during record (still valid here --
 	// Done() below is what drops the CPU bulk).
+	//
+	// This runs on the resource system's IO thread, in the gap between the frame's IBeginFrame and
+	// ITick: no Execute has happened yet, so no frame's slot is current and the pass cannot land in
+	// a frame context's table. It goes to the off-frame table and is submitted by that frame's
+	// IPresent (first), which keeps the copy ahead of the draws that sample the mirror.
 	FRHITexture* RHITex = TexRef.GetRHI();
 	FRHIBuffer* RHIStaging = StagingRef.GetRHI();
 	const std::uint8_t* PixelsData = Pixels.data();
 	const std::uint64_t PixelBytes = static_cast<std::uint64_t>(Pixels.size());
-	AddPass(ERHICommandListType::Graphics, [=](FRHICommandList& Cmd)
+	if (FRHICommandList* List = RecordPass([=](FRHICommandList& Cmd)
 	{
 		Cmd.UpdateBuffer(RHIStaging, 0, PixelBytes, PixelsData);
 		Cmd.TransitionTexture(RHITex, ERHIResourceState::Common, ERHIResourceState::CopyDst);
 		Cmd.CopyBufferToTexture(RHIStaging, RHITex, 0);
 		Cmd.TransitionTexture(RHITex, ERHIResourceState::CopyDst, ERHIResourceState::ShaderResource);
-	});
+	}))
+	{
+		std::lock_guard<std::mutex> Lock(OffFramePassMutex);
+		OffFramePasses.push_back({List, ERHICommandListType::Graphics});
+	}
 	return true;
 }
 

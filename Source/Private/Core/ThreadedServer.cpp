@@ -122,6 +122,13 @@ void FThreadedServer::RunLoop()
 	// contract requires anyway.
 	const char* const ThreadName = GetThreadName();
 
+	// Publish this thread's identity for IsServerThread(): a marshal helper on the server thread
+	// must recognize itself and run inline instead of posting a task and waiting on it forever.
+	{
+		std::lock_guard Lock(Mutex);
+		WorkerId = std::this_thread::get_id();
+	}
+
 	// A one-shot marker, before the first wait, so this thread's row exists even if it is never
 	// given a task. Rows are derived from events, so a server nobody submits to would otherwise
 	// be INVISIBLE -- and "this resident thread exists and does nothing" is exactly the kind of
@@ -144,7 +151,7 @@ void FThreadedServer::RunLoop()
 
 			if (bStopping && Queue.empty())
 			{
-				return;
+				break;
 			}
 			Queued = std::move(Queue.front());
 			Queue.pop_front();
@@ -169,6 +176,19 @@ void FThreadedServer::RunLoop()
 			ReportError("Unknown exception in threaded server");
 		}
 	}
+
+	// Retract this thread's identity: the id may be recycled by the OS for a later thread, and a
+	// stale match would make a marshal helper believe it is already on the server.
+	{
+		std::lock_guard Lock(Mutex);
+		WorkerId = std::thread::id{};
+	}
+}
+
+bool FThreadedServer::IsServerThread() const
+{
+	std::lock_guard Lock(Mutex);
+	return WorkerId != std::thread::id{} && WorkerId == std::this_thread::get_id();
 }
 
 } // namespace Maho

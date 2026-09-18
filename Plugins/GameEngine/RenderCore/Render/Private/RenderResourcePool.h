@@ -54,13 +54,20 @@ public:
 
 	/**
 	 * Allocate a fresh graphics command list for a render-feature pass. The pool
-	 * tracks it for deferred destruction: the feature records + submits in its own
-	 * stages, but the list is NOT destroyed until the NEXT BeginFrame (after the
-	 * host waited the previous frame's swapchain fence). This is the same
-	 * fence-aligned lifetime rule as transient resources - a list that was
-	 * submitted may still be executing on the GPU.
+	 * tracks it: a pass is recorded in its own frame and SUBMITTED at that frame's
+	 * IPresent stage, and the list is destroyed at the next BeginFrame -- after the
+	 * host waited the swapchain fence, so nothing is still executing. Submission is
+	 * the handover point (RetireRenderLists): a list recorded BEFORE the frame loop
+	 * started (an asset-mirror upload, an init-time upload) sits in a frame's table
+	 * until that frame's IPresent submits it, and must survive until then.
 	 */
 	[[nodiscard]] FRHICommandList* AcquireRenderList();
+
+	/** Hand back the lists this frame just SUBMITTED: they are destroyed at the next BeginFrame.
+	 *  Called by the frame's submission point, so a list's lifetime starts when it is recorded and
+	 *  ends one frame-boundary after it reached the queue -- never while it is still queued to be
+	 *  submitted. */
+	void RetireRenderLists(const std::vector<FRHICommandList*>& Lists);
 
 	/**
 	 * PSO cache: get-or-create a pipeline layout / graphics pipeline keyed by its
@@ -247,8 +254,9 @@ private:
 	std::vector<std::uint32_t> FreeTextureSlots;
 	std::vector<FBufferEntry> Buffers;
 	std::vector<std::uint32_t> FreeBufferSlots;
-	std::vector<FRHICommandList*> PendingRenderLists;   // lists acquired this frame; destroyed at the next BeginFrame
-	std::mutex RenderListsMutex;                        // guards PendingRenderLists (features acquire on pool workers)
+	std::vector<FRHICommandList*> PendingRenderLists;    // acquired, NOT yet submitted (destroyed at Shutdown)
+	std::vector<FRHICommandList*> RetiringRenderLists;   // submitted, destroyed at the next BeginFrame
+	std::mutex RenderListsMutex;                        // guards both lists (features record on pool workers)
 
 	std::vector<FPipelineLayoutEntry> PipelineLayouts;  // PSO cache: layout native keyed by its desc
 	std::vector<FDescriptorSetLayoutEntry> DescriptorSetLayouts;  // PSO cache: set layouts (pipeline-layout deps)

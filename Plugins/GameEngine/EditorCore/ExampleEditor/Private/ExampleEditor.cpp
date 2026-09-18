@@ -237,12 +237,13 @@ FExampleEditor::FExampleEditor()
 	// composite. Without this edge the two UI features could run in any order and the
 	// editor surface could be overridden back to the game RT.
 	MyStage<IEditorCompose>().IsWaiting<FUIFeature>().ForStage<IRenderUI>();
-	// Editor runs its compose + submits LAST, after the scene's IEndRender (the scene
+	// Editor runs its compose LAST among the recorders, after the scene's IEndRender (the scene
 	// color mirror the viewport samples is written by then). It sets the EditorRT as the present
-	// target; the present primitive itself is issued by FRender::EndFrame, a HOST-graph node that
-	// nothing in this collector graph can be ordered against -- so no "present ordering" edge is
-	// declared here.
+	// target, and the frame's submission point + blit is the recorded collector's tail stage
+	// (FScene::IPresent) -- declared to run after this stage below, since the graph has no stage
+	// barrier and only a declared edge keeps a recorded pass inside its own frame.
 	MyStage<IEditorCompose>().IsWaiting<Scene::FScene>().ForStage<IEndRender>();
+	MyStage<IEditorCompose>().IsBlocking<Scene::FScene>().OnStage<IPresent>();
 	// Pass0 -> pass3 hand-off crosses a FRAME boundary, and the render graph pipelines frames
 	// (FRender::Tick's Execute does not drain): InitEditorViews@N reads the input cache
 	// (EditorInputEvents / EditorWheelX / bEditorInputCached) while EditorInput@N+1 may already

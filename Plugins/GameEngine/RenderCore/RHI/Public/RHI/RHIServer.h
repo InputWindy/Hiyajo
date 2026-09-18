@@ -33,10 +33,11 @@ struct IRHI
 	virtual void DestroyCommandList(FRHICommandList* CmdList) = 0;
 
 	/**
-	 * Submit a recorded command list on the RHI worker, routing to the queue
-	 * that matches the command-list type (graphics/compute/transfer, honoring
-	 * native-queue fallback). When to submit is the caller's (RDG) scheduling
-	 		 * decision - this only performs the queue submit itself.
+	 * Submit a recorded command list, routing to the queue that matches the
+	 * command-list type (graphics/compute/transfer, honoring native-queue
+	 * fallback). The submit itself runs on the server thread (RunOnServer), so
+	 * WHICH list goes on the queue and in what order is the caller's decision,
+	 * while the queue stays single-threaded by construction.
 	 */
 	virtual void Submit(
 		FRHICommandList* CmdList,
@@ -69,6 +70,18 @@ struct IRHI
 	virtual void BeginFrame() = 0;
 	virtual void EndFrame() = 0;
 	virtual void Resize(int Width, int Height) = 0;
+
+	/**
+	 * Run Fn ON the server thread and block until it finished. This is the ONE marshal entry, and
+	 * the reason the queue has a single emitter: vkQueueSubmit / vkWaitForFences / vkResetFences /
+	 * vkQueuePresentKHR are then only ever issued by that thread, so "keep the submissions serial"
+	 * stops being a promise the caller has to keep. Re-entrant: called from the server thread it
+	 * runs Fn inline (posting a task and waiting on it would wait on itself forever).
+	 */
+	virtual void RunOnServer(std::function<void()> Fn) = 0;
+
+	/** True when the caller IS the server thread. */
+	[[nodiscard]] virtual bool IsServerThread() const = 0;
 
 	/** Block until all submitted GPU work has completed (device idle). Call
 	 *  BEFORE destroying resources that a submitted command buffer may still
@@ -211,12 +224,13 @@ class IDynamicRHI;
  * RHI - backend-agnostic GPU device surface, a RENDER SERVER (FThreadedServer),
  * NOT a scheduled layer. Hosts the IDynamicRHI device and exposes the IRHI
  * capability surface. The render owner (FRender) holds it and interacts only
- * through the IRHI command surface (EnqueueTask / Submit / frame primitives) -
- * the render thread is the server thread. Command recording is parallel via
- * EnqueueTask (thread pool); queue submits and frame primitives are direct
- * calls - the caller (RDG) keeps them serial. Backend-agnostic - higher layers
- * (RDG / render plugin) never touch a concrete backend type. The device itself
- * (IDynamicRHI) stays private to this DLL.
+ * through the IRHI command surface - the render thread is the server thread.
+ *
+ * Queue emission has ONE owner: the server thread. Frame primitives and every
+ * Submit go through IRHI::RunOnServer (re-entrant), so a caller on any thread --
+ * a render-graph node, the host frame chain -- never issues vkQueueSubmit itself.
+ * Backend-agnostic - higher layers (RDG / render plugin) never touch a concrete
+ * backend type. The device itself (IDynamicRHI) stays private to this DLL.
  */
 class FRHI final
 	: public FThreadedServer
@@ -259,6 +273,8 @@ public:
 	void EndFrame() override;
 	void Resize(int Width, int Height) override;
 	void WaitIdle() override;
+	void RunOnServer(std::function<void()> Fn) override;
+	[[nodiscard]] bool IsServerThread() const override;
 	[[nodiscard]] FRHICommandList* GetFrameCommandList() override;
 	void PresentTexture(FRHITexture* Src) override;
 	[[nodiscard]] ERHIFormat GetSwapchainFormat() const override;

@@ -67,6 +67,11 @@ public:
 	/** Barrier: block until every task submitted before this call completed. */
 	void Flush();
 
+	/** True when the CALLER is this server's own worker thread. The task body runs there, so a role
+	 *  that must reach its own thread (a marshal helper) uses this to run inline instead of posting a
+	 *  task and waiting on itself. */
+	[[nodiscard]] bool IsServerThread() const;
+
 protected:
 	/** Called before the thread starts; return false to abort. */
 	[[nodiscard]] virtual bool OnInitialize();
@@ -88,8 +93,9 @@ private:
 	void RunLoop();
 
 	std::thread Worker;
+	std::thread::id WorkerId;   // set by RunLoop (its own id); guarded by Mutex
 	std::deque<FQueuedTask> Queue;
-	std::mutex Mutex;
+	mutable std::mutex Mutex;   // mutable: const IsServerThread() reads WorkerId under it
 	std::condition_variable CondVar;
 	std::atomic<bool> bRunning{false};
 	bool bStopping = false;

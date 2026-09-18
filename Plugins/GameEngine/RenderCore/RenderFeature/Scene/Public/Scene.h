@@ -25,9 +25,14 @@ MAHO_SCENE_API FScene* GetScene();
  * record stages; cross-frame owns the shared scene targets (SceneColor /
  * SceneDepth). Other features read them through Scene::GetScene() - no named
  * slots in FRender. Targets are rebuilt when the swapchain extent changes.
- * (The present/blit lives in the UI feature's IPresent, not here.)
+ *
+ * It also implements IPresent, the frame's LAST stage and its single submission
+ * point: submit every pass the frame recorded, then blit the present target to
+ * the swapchain. (That stage used to have no implementer: the blit was issued
+ * from the host chain, which is why nothing but "drain the whole graph" ordered
+ * it against the features that write the target.)
  */
-class MAHO_SCENE_API FScene : public FFrameExtension, public IPipeline<IBeginRender, IRender, IEndRender, IPreUnInstall>
+class MAHO_SCENE_API FScene : public FFrameExtension, public IPipeline<IBeginRender, IRender, IEndRender, IPresent, IPreUnInstall>
 {
 	MAHO_DECLARE_FRAME(FScene);
 
@@ -49,6 +54,14 @@ public:
 	void BeginRender(FRender& R, FRenderContext& Frame) override;
 	void Render(FRender& R, FRenderContext& Frame) override;
 	void EndRender(FRender& R, FRenderContext& Frame) override;
+
+	/**
+	 * The frame's last stage: submit everything recorded this frame, then record the blit of the
+	 * present target onto the swapchain backbuffer. The submission point exists here (rather than
+	 * in the host's IEndFrame) because the frame's recorded-pass table is per-slot state of THIS
+	 * graph -- the host chain's slot comes from the engine graph's counter and must not index it.
+	 */
+	void Present(FRender& R, FRenderContext& Frame) override;
 
 	/**
 	 * Release the shared targets BEFORE this module unloads. FScene is a sub-plugin of

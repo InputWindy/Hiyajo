@@ -8,6 +8,8 @@
 #include <Platform.h>
 
 #include <map>
+#include <memory>
+#include <mutex>
 #include <vector>
 
 #include "RHI.h"
@@ -138,38 +140,106 @@ void FRHI::Flush()
 	RecordingPool.Flush();
 }
 
-// -- frame primitives - direct forwarding (caller guarantees queue serial) --
+bool FRHI::IsServerThread() const
+{
+	return FThreadedServer::IsServerThread();
+}
+
+void FRHI::RunOnServer(std::function<void()> Fn)
+{
+	if (!Fn)
+	{
+		return;
+	}
+
+	// Already on the server thread (a task that wants the thread it is running on), or the thread
+	// is gone (shutdown): run inline. Posting + waiting in either case would wait on itself / on a
+	// task nobody will ever run -- the same trap FThreadedServer::Flush documents.
+	if (IsServerThread() || !IsRunning())
+	{
+		Fn();
+		return;
+	}
+
+	// The completion is signalled by a scope guard, not by the last statement: the server catches a
+	// throwing task and keeps serving, so a body that threw would otherwise leave this caller
+	// waiting forever.
+	struct FCompletion
+	{
+		std::mutex Mutex;
+		std::condition_variable CondVar;
+		bool bDone = false;
+	};
+	auto Completion = std::make_shared<FCompletion>();
+
+	// Qualified: FRHI's own Submit is the QUEUE submit (IRHI), which would hide the server's task
+	// Submit(this) overload.
+	FThreadedServer::Submit("Marshal", [Completion, Fn = std::move(Fn)]()
+	{
+		struct FSignal
+		{
+			std::shared_ptr<FCompletion> C;
+			~FSignal()
+			{
+				{
+					std::lock_guard Lock(C->Mutex);
+					C->bDone = true;
+				}
+				C->CondVar.notify_all();
+			}
+		} Signal{ Completion };
+
+		Fn();
+	});
+
+	std::unique_lock Lock(Completion->Mutex);
+	Completion->CondVar.wait(Lock, [&] { return Completion->bDone; });
+}
+
+// -- frame primitives - marshalled onto the server thread (the ONLY queue emitter) --
 
 void FRHI::BeginFrame()
 {
-	if (RHI)
+	RunOnServer([this]
 	{
-		RHI->BeginFrame();
-	}
+		if (RHI)
+		{
+			RHI->BeginFrame();
+		}
+	});
 }
 
 void FRHI::EndFrame()
 {
-	if (RHI)
+	RunOnServer([this]
 	{
-		RHI->EndFrame();
-	}
+		if (RHI)
+		{
+			RHI->EndFrame();
+		}
+	});
 }
 
 void FRHI::Resize(int Width, int Height)
 {
-	if (RHI && Width > 0 && Height > 0)
+	RunOnServer([this, Width, Height]
 	{
-		RHI->Resize(Width, Height);
-	}
+		if (RHI && Width > 0 && Height > 0)
+		{
+			RHI->Resize(Width, Height);
+		}
+	});
 }
 
 void FRHI::WaitIdle()
 {
-	if (RHI)
+	RunOnServer([this]
 	{
-		RHI->WaitIdle();
-	}
+		if (RHI)
+		{
+			RHI->WaitIdle();
+		}
+	});
 }
 
 FRHICommandList* FRHI::GetFrameCommandList()
@@ -219,36 +289,39 @@ void FRHI::Submit(
 		return;
 	}
 
-	// Direct queue submit, routed to the queue matching the command-list type.
-	// Cross-queue ordering: when the compute/transfer queue falls back to the
-	// graphics family, submit there so it serializes with raster work. The
-	// caller (RDG) must keep queue submissions serialized.
-	switch (Type)
+	// The queue op runs on the server thread (RunOnServer; inline when the caller is already there,
+	// which is how the frame's batch submits its lists in one hop). Routing: the queue matching the
+	// command-list type, with compute/transfer falling back to the graphics family so they serialize
+	// with raster work on one queue when the device has no separate one.
+	RunOnServer([this, CmdList, Type, WaitSemaphores, WaitCount, SignalSemaphores, SignalCount, SignalFence]
 	{
-	case ERHICommandListType::Compute:
-		if (RHI->GetComputeQueue().IsNativeFallback())
+		switch (Type)
 		{
+		case ERHICommandListType::Compute:
+			if (RHI->GetComputeQueue().IsNativeFallback())
+			{
+				RHI->GetGraphicsQueue().Submit(&CmdList, 1, WaitSemaphores, WaitCount, SignalSemaphores, SignalCount, SignalFence);
+			}
+			else
+			{
+				RHI->GetComputeQueue().Submit(&CmdList, 1, WaitSemaphores, WaitCount, SignalSemaphores, SignalCount, SignalFence);
+			}
+			break;
+		case ERHICommandListType::Transfer:
+			if (RHI->GetTransferQueue().IsNativeFallback())
+			{
+				RHI->GetGraphicsQueue().Submit(&CmdList, 1, WaitSemaphores, WaitCount, SignalSemaphores, SignalCount, SignalFence);
+			}
+			else
+			{
+				RHI->GetTransferQueue().Submit(&CmdList, 1, WaitSemaphores, WaitCount, SignalSemaphores, SignalCount, SignalFence);
+			}
+			break;
+		default:
 			RHI->GetGraphicsQueue().Submit(&CmdList, 1, WaitSemaphores, WaitCount, SignalSemaphores, SignalCount, SignalFence);
+			break;
 		}
-		else
-		{
-			RHI->GetComputeQueue().Submit(&CmdList, 1, WaitSemaphores, WaitCount, SignalSemaphores, SignalCount, SignalFence);
-		}
-		break;
-	case ERHICommandListType::Transfer:
-		if (RHI->GetTransferQueue().IsNativeFallback())
-		{
-			RHI->GetGraphicsQueue().Submit(&CmdList, 1, WaitSemaphores, WaitCount, SignalSemaphores, SignalCount, SignalFence);
-		}
-		else
-		{
-			RHI->GetTransferQueue().Submit(&CmdList, 1, WaitSemaphores, WaitCount, SignalSemaphores, SignalCount, SignalFence);
-		}
-		break;
-	default:
-		RHI->GetGraphicsQueue().Submit(&CmdList, 1, WaitSemaphores, WaitCount, SignalSemaphores, SignalCount, SignalFence);
-		break;
-	}
+	});
 }
 
 bool FRHI::IsInitialized() const

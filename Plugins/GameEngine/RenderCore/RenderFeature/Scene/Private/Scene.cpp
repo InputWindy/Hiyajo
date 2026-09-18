@@ -246,6 +246,26 @@ void FScene::EndRender(FRender& R, FRenderContext& Frame)
 	(void)R;
 }
 
+void FScene::Present(FRender& R, FRenderContext& Frame)
+{
+	MAHO_TRACE_SCOPE("FScene::Present");
+
+	// The frame's ONE submission point: every pass recorded this frame, in the order the stage
+	// nodes registered them (that IS the declared edge order), plus anything recorded off-frame.
+	// This is where the "record now, submit once" model pays off -- the queue sees the whole frame
+	// as one ordered batch instead of a submit per pass.
+	R.SubmitRecordedPasses(Frame);
+
+	// Then the blit. Recording it here (rather than from the host's IEndFrame, where it used to
+	// live) is what turns "the present target's last writer runs first" into a declared edge: this
+	// stage is the last in the sequence, so the in-frame chain already orders it after every
+	// writer. Last writer wins -- a UI feature published the target in its own stage.
+	if (const FRDGTextureRef Target = R.GetPresentTarget(); Target.IsValid())
+	{
+		R.PresentTexture(Target);
+	}
+}
+
 void FScene::TransitionSceneColorForSampling(FRender& R)
 {
 	MAHO_TRACE_SCOPE("FScene::TransitionSceneColorForSampling");

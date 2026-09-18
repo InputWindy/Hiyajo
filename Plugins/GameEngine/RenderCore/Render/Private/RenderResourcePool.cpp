@@ -1,5 +1,6 @@
 #include "RenderResourcePool.h"
 
+#include <algorithm>
 #include <cstring>
 
 namespace Maho
@@ -732,16 +733,38 @@ void* FRHIResourcePool::AllocateFrameTransient(std::size_t Size, std::size_t Ali
 	return P;
 }
 
+void FRHIResourcePool::RetireRenderLists(const std::vector<FRHICommandList*>& Lists)
+{
+	if (Lists.empty())
+	{
+		return;
+	}
+	std::lock_guard<std::mutex> Lock(RenderListsMutex);
+	for (FRHICommandList* List : Lists)
+	{
+		const auto It = std::find(PendingRenderLists.begin(), PendingRenderLists.end(), List);
+		if (It != PendingRenderLists.end())
+		{
+			PendingRenderLists.erase(It);
+		}
+		RetiringRenderLists.push_back(List);
+	}
+}
+
 void FRHIResourcePool::BeginFrame()
 {
-	// Destroy the previous frame's submitted command lists first. They were
-	// submitted in their IEndRender stages; the host BeginFrame already waited the
-	// swapchain fence, so no list is still executing. This is the fence-aligned
-	// lifetime boundary shared with transient resource recycling below.
+	// Destroy the previous frame's SUBMITTED command lists. They were submitted at that frame's
+	// IPresent stage, and the host BeginFrame already waited the swapchain fence, so no list is
+	// still executing. This is the fence-aligned lifetime boundary shared with transient resource
+	// recycling below.
+	//
+	// Only SUBMITTED lists are destroyed here: a list recorded before the frame loop started (an
+	// asset-mirror upload at init) waits in a frame's table until that frame's IPresent submits it,
+	// and destroying it here would hand the queue a freed command buffer.
 	std::vector<FRHICommandList*> Lists;
 	{
 		std::lock_guard<std::mutex> Lock(RenderListsMutex);
-		Lists.swap(PendingRenderLists);
+		Lists.swap(RetiringRenderLists);
 	}
 	for (FRHICommandList* List : Lists)
 	{
@@ -802,6 +825,8 @@ void FRHIResourcePool::BeginFrame()
 
 void FRHIResourcePool::Shutdown()
 {
+	// Both lifetimes end here: the lists waiting to be submitted (a pass recorded in a teardown stage
+	// has no frame left to submit it) and the ones submitted but not yet recycled by a BeginFrame.
 	for (FRHICommandList* List : PendingRenderLists)
 	{
 		if (RHI)
@@ -810,6 +835,14 @@ void FRHIResourcePool::Shutdown()
 		}
 	}
 	PendingRenderLists.clear();
+	for (FRHICommandList* List : RetiringRenderLists)
+	{
+		if (RHI)
+		{
+			RHI->DestroyCommandList(List);
+		}
+	}
+	RetiringRenderLists.clear();
 
 	// PSO cache: destroy pipelines BEFORE the shader modules they reference, and
 	// shader modules BEFORE the pipeline layouts / descriptor set layouts. Each
