@@ -14,6 +14,7 @@
 #include <AssetTypes.h>
 
 #include <algorithm>
+#include <condition_variable>
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -661,6 +662,32 @@ private:
 
 	/** Record one pass: acquire a list, run the lambda on THIS thread, hand the finished list back. */
 	[[nodiscard]] FRHICommandList* RecordPass(const std::function<void(FRHICommandList&)>& PassFn);
+
+	/**
+	 * Bounded host lookahead. A frame's TAIL stage (the collector's submission point) is what turns
+	 * this frame's work into queued GPU work; nothing in the host chain otherwise stops it from
+	 * running ahead of the collector, and the ring's admission only bounds that at
+	 * MAHO_FRAMES_IN_FLIGHT. Measured cost of that unbounded lookahead: the collector's frame ends up
+	 * a constant 4 host frames behind, i.e. ~40 ms of OUTPUT latency for every interaction (a key, a
+	 * wheel notch, a drag), which reads as "the UI responds at a lower rate than the screen
+	 * refreshes" -- while continuous motion (window drag) hides it. So the host waits for exactly one
+	 * thing: the PREVIOUS frame's tail having submitted. Within-frame parallelism (the whole point of
+	 * the graph) is untouched, and the collector may still be finishing its blit / close / present
+	 * while the next host frame starts.
+	 *
+	 * It also makes the pool's frame-boundary ordering deterministic: "the previous frame's lists are
+	 * submitted" stops being a hope held together by a declared edge (measured to miss roughly once
+	 * in 3000 frames) and becomes a fact the host ensured.
+	 */
+	void WaitForPreviousFrameTail();
+
+	/** The tail stage reports its submission point here (see WaitForPreviousFrameTail). */
+	void MarkFrameTailSubmitted();
+
+	std::mutex TailMutex;
+	std::condition_variable TailCondVar;
+	std::uint32_t TailsSubmitted = 0;   // guarded by TailMutex
+	std::uint32_t TicksStarted = 0;     // guarded by TailMutex; the host's side of the gate
 
 	// -- CPU asset -> GPU mirror --
 	/** Asset FName -> RDG mirror resource (texture or buffer). Owned by the render

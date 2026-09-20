@@ -14,6 +14,7 @@
 #include "ShaderCompiler.h"
 
 #include <algorithm>
+#include <chrono>
 #include <typeindex>
 
 #if defined(_WIN32)
@@ -384,8 +385,42 @@ void FRender::BeginResourcePool()
 	}
 }
 
+void FRender::MarkFrameTailSubmitted()
+{
+	{
+		std::lock_guard<std::mutex> Lock(TailMutex);
+		++TailsSubmitted;
+	}
+	TailCondVar.notify_all();
+}
+
+void FRender::WaitForPreviousFrameTail()
+{
+	std::unique_lock<std::mutex> Lock(TailMutex);
+	if (TicksStarted > 0 && TailsSubmitted < TicksStarted)
+	{
+		// The gate can only be missed if this frame's predecessor never reached its tail stage at all
+		// (a batch rejected structurally, i.e. the render layer is already reporting an error). Report
+		// and CONTINUE: a hang here would take the whole engine down with no diagnostic, which is a
+		// worse failure than one frame with a stale output.
+		if (!TailCondVar.wait_for(Lock, std::chrono::seconds(2),
+			[this] { return TailsSubmitted >= TicksStarted; }))
+		{
+			MAHO_LOG_CORE_ERROR(
+				"FRender::Tick: previous frame's tail stage never submitted (tails={}, ticks={}) -- "
+				"continuing without the lookahead bound", TailsSubmitted, TicksStarted);
+		}
+	}
+	++TicksStarted;
+}
+
 void FRender::Tick(FEngineBase&, FEngineContext&)
 {
+	// Bound the host's lookahead to one frame (see WaitForPreviousFrameTail): the input path stays
+	// fresh, but the OUTPUT stops lagging the host by the ring depth. Deliberately NOT a graph Wait():
+	// the collector's own frames may still be finishing, so nothing inside a frame is serialized.
+	WaitForPreviousFrameTail();
+
 	// (The whole ImGui frame lifecycle -- feed / NewFrame / build / Render /
 	// GetDrawData -- moved into FUIFeature::InitViews inside the render graph below.
 	// FRender holds no ImGui state and only schedules.)
@@ -958,6 +993,10 @@ void FRender::SubmitRecordedPasses(FRenderContext& Frame)
 	{
 		ResourcePool->RetireRenderLists(Submitted);
 	}
+
+	// This frame's lists are on their way to the queue: that is the point the host's lookahead gate
+	// waits for (the blit / close / present below may still be running when the next host frame starts).
+	MarkFrameTailSubmitted();
 }
 
 void* FRender::AllocParameterBytes(std::size_t Size, std::size_t Align)
