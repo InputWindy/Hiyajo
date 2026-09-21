@@ -83,6 +83,40 @@ The engine's design intent: **each module must be self-consistent (自洽) and p
 - **The RHI is a stateless async processor.** It receives tasks and processes them; it never refuses work. Gating/refusing is application-layer logic -- do not add "exiting"-style flags to the RHI; drain the tasks instead.
 - **`FThreadPool::Flush` is a quiescence barrier** (waits `PendingCount==0 && Queue.empty()`), tolerating concurrent `Submit` from nested graphs. The old FIFO no-op barrier leaks tasks dispatched by nested graphs (e.g. the render graph's dynamic downstreams) and must not be reintroduced.
 
+## Thread Affinity (strict)
+
+Some state does not live in memory the engine may schedule freely -- it lives in a **thread**. The
+scheduling model ("a frame = its stages, dispatched to whichever pool worker is free") assumes every
+stage is thread-agnostic. A module that owns an OS handle breaks that assumption, and the failure is
+silent, intermittent, and easy to misdiagnose for days.
+
+- **`FPlatform` is the canonical case.** A Win32 window's message queue belongs to the thread that
+  **created** it, and `PeekMessage` only ever sees the **calling** thread's queue. Keys / characters /
+  wheel exist *only* as posted messages, so a pump running on any other thread asks the wrong queue and
+  finds nothing there.
+- **The symptom, worth recognizing instantly: the mouse is fine while the keyboard is not.** Mouse
+  position and buttons also survive through **global queries** (`GetCursorPos` / `GetAsyncKeyState`), so
+  they stay fresh even when the pump is on the wrong thread -- posted messages just pile up and then
+  arrive in a burst. With N pool workers the pump lands on the window's own thread about 1/N of the
+  time (measured: ~2 keys per second, 0.2-2 s of queue delay, "a tap does nothing", "a run of
+  characters appears at once", "one Backspace erases the whole line" -- and, because a press and its
+  release can then land inside one ImGui frame, ImGui concludes the key was never pressed).
+- **Rule**: a module that owns an OS handle, a message queue, or thread-scoped state must keep that
+  state on ONE fixed thread. Either the module owns that thread itself (`FThreadedServer` -- which is
+  why `FPlatform` derives from it and creates its window *and* pumps there), or the engine pins its
+  stages to one. Every other thread may only read what that thread **published**.
+- **Corollaries**: `ImmDisableIME`, `SetCapture`, `GetMessageTime`, `GetFocus`, `AttachThreadInput` are
+  all thread-scoped -- they must be called ON that thread (and a thread-wide IME disable is meaningless
+  if the pumping happens on other threads too). Window state read from anywhere else goes through
+  published caches (atomics / a small mutex), never through the OS: `CachedSurface`,
+  `CachedWidth/Height`, `bCachedShouldClose`, `CachedToolkitWindow`, refreshed by `PublishWindowState`
+  -- and published **immediately after the window is created**, not only after the first pump, or the
+  RHI finds no handle to build its swapchain from.
+- **Corollary for anything published per frame**: tag it with the frame it belongs to (see
+  `FPlatform::FInputFrame`: index + snapshot + that pump's events, one ring slot per frame, one cursor
+  per consumer). A consumer lagging by a few frames then applies every frame exactly once, in order --
+  which is what lets two ImGui contexts share one input stream instead of stealing it from each other.
+
 ## Project-Side Development Constraints (strict)
 
 When extending project-side code, follow these three rules:

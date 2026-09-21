@@ -503,6 +503,7 @@ FUIHitResult FImGuiTranslator::WidgetInputText(FUIName Id, const FUIRect& Rect, 
 
 	std::string NewText(Buffer.data());
 	if (MaxLength > 0 && NewText.size() > MaxLength) { NewText.resize(MaxLength); }
+
 	if (NewText != Text)
 	{
 		Text = std::move(NewText);

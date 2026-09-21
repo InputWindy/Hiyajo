@@ -72,6 +72,46 @@ namespace
 		}
 		::CloseClipboard();
 	}
+
+	// Read the system clipboard as UTF-8. CF_UNICODETEXT first (what other applications put there),
+	// falling back to CF_TEXT for the ANSI form SetSystemClipboard writes. This is the half Ctrl+V
+	// needs: without it the editor's ImGui context has no clipboard SOURCE at all, so paste silently
+	// does nothing even though copy works.
+	std::string GetSystemClipboard()
+	{
+		std::string Out;
+		if (!::OpenClipboard(nullptr))
+		{
+			return Out;
+		}
+		if (HANDLE H = ::GetClipboardData(CF_UNICODETEXT))
+		{
+			if (const wchar_t* W = static_cast<const wchar_t*>(::GlobalLock(H)))
+			{
+				const int Need = ::WideCharToMultiByte(CP_UTF8, 0, W, -1, nullptr, 0, nullptr, nullptr);
+				if (Need > 1)
+				{
+					// Two sizes, deliberately: the conversion writes Need bytes INCLUDING the
+					// terminating NUL, so it needs room for all of them; the string then drops the NUL.
+					// Resizing to Need-1 while passing Need wrote one byte past the buffer.
+					Out.resize(static_cast<std::size_t>(Need));
+					::WideCharToMultiByte(CP_UTF8, 0, W, -1, Out.data(), Need, nullptr, nullptr);
+					Out.resize(static_cast<std::size_t>(Need - 1));
+				}
+				::GlobalUnlock(H);
+			}
+		}
+		else if (HANDLE H = ::GetClipboardData(CF_TEXT))
+		{
+			if (const char* A = static_cast<const char*>(::GlobalLock(H)))
+			{
+				Out = A;
+				::GlobalUnlock(H);
+			}
+		}
+		::CloseClipboard();
+		return Out;
+	}
 #endif // _WIN32
 
 	// Map a GLFW key code (the index used in MInputContext::KeyDown / MInputEvent::Key) to
@@ -293,39 +333,42 @@ void FExampleEditor::EditorInput(FRender& R, FRenderContext& Frame)
 	const float WinW = static_cast<float>(P->GetWindowWidth());
 	const float WinH = static_cast<float>(P->GetWindowHeight());
 
-	// Read the canonical client-space input snapshot (FPlatform's GLFW callbacks on the
-	// window-loop thread). The cursor is already relative to the window content-area
-	// top-left -- the editor display space (whole window) maps to it 1:1.
-	Platform::MInputContext In;
-	P->ReadFrameInput(In);
-
-	// The editor is the ONE drain + wheel-consume consumer of the frame (pass0 runs first).
-	// Cache the drained event batch + the exchanged-to-zero wheel delta here so
-	// InitEditorViews (pass3, later this frame) re-uses them WITHOUT draining the platform
-	// again (a second drain/consume returns nothing -- these are single-consumer resources).
-	MAHO_TRACE_SCOPE("FExampleEditor::EditorInput.DrainAndRebase");
-	EditorInputEvents.clear();
-	P->DrainInputEvents(EditorInputEvents);
-	P->ConsumeMouseWheelXY(EditorWheelX, EditorWheelY);
-	bEditorInputCached = true;   // InitEditorViews (pass3) may reuse the cache this frame
-
-	// Confine to the viewport panel: clamp panel-local, then scale back to whole-window
-	// game-space (panel_local / panel_size * window_size gives the game-space position --
-	// what makes a game widget respond only inside the panel at exactly its display spot).
-	const float Ex = In.MouseX;
-	const float Ey = In.MouseY;
-	const float Lx = std::clamp(Ex - VpX, 0.f, VpW);
-	const float Ly = std::clamp(Ey - VpY, 0.f, VpH);
-	const float Gx = VpW > 0.f ? Lx * (WinW / VpW) : 0.f;
-	const float Gy = VpH > 0.f ? Ly * (WinH / VpH) : 0.f;
-	if (FUIFeature* UI = GetUI())
+	// Feed the GAME-UI context from the platform's tagged input ring, one frame at a time: this
+	// consumer owns GameInputCursor and reads every frame it has not fed yet, in order, exactly
+	// once. Nothing is drained, so the editor's own context (pass3) reading the same ring cannot
+	// starve it -- a shared drain is exactly how a key RELEASE got lost and ImGui kept the key
+	// down, auto-repeating it.
+	MAHO_TRACE_SCOPE("FExampleEditor::EditorInput.FeedGameUI");
+	FUIFeature* UI = GetUI();
+	const std::uint64_t Latest = P->GetInputFrameIndex();
+	if (Latest < GameInputCursor)
 	{
-		// Forward the FULL input to the game-UI context: re-based mouse + buttons + the
-		// snapshot (mods) + the drained event batch (named keys/chars) + wheel. The game UI
-		// now responds inside the panel AND receives keys/chars/wheel this frame -- the editor
-		// had been the only keyboard owner before the SetEditorInput contract was expanded.
-		UI->SetEditorInput(Gx, Gy, In.MouseButtons[0], In.MouseButtons[1], In.MouseButtons[2],
-			In, EditorInputEvents, EditorWheelX, EditorWheelY);
+		GameInputCursor = 0;   // window recreated: the platform reset its ring
+	}
+	while (GameInputCursor < Latest)
+	{
+		++GameInputCursor;
+		Platform::FInputFrame Frame;
+		if (!P->ReadInputFrame(GameInputCursor, Frame))
+		{
+			continue;   // evicted -- this consumer fell behind the ring
+		}
+		const Platform::MInputContext& In = Frame.Snapshot;
+
+		// Confine to the viewport panel: clamp panel-local, then scale back to whole-window
+		// game-space (panel_local / panel_size * window_size gives the game-space position --
+		// what makes a game widget respond only inside the panel at exactly its display spot).
+		const float Lx = std::clamp(In.MouseX - VpX, 0.f, VpW);
+		const float Ly = std::clamp(In.MouseY - VpY, 0.f, VpH);
+		const float Gx = VpW > 0.f ? Lx * (WinW / VpW) : 0.f;
+		const float Gy = VpH > 0.f ? Ly * (WinH / VpH) : 0.f;
+		if (UI != nullptr)
+		{
+			// The re-based cursor comes from here (only the editor knows the panel rect); the
+			// frame's mods / edge events / wheel the game context reads itself, from this same slot.
+			UI->SetEditorInput(GameInputCursor, Gx, Gy,
+				In.MouseButtons[0], In.MouseButtons[1], In.MouseButtons[2]);
+		}
 	}
 }
 
@@ -430,11 +473,18 @@ void FExampleEditor::OnInstalled(FRender& R, FRenderContext& Frame)
 		// are never handed to the editor). Must precede the first atlas fetch.
 		UI::BakeUIThemeFonts();
 #if defined(_WIN32)
-		// 1.91 InputText copy gates on g.PlatformIO.Platform_SetClipboardTextFn (not
-		// io.SetClipboardTextFn); set it so Ctrl+C in a readonly InputText writes the
-		// system clipboard instead of silently doing nothing.
+		// 1.91 InputText copy/paste gates on g.PlatformIO (not io.SetClipboardTextFn): the copy side
+		// so Ctrl+C in a readonly InputText writes the system clipboard, and the PASTE side so Ctrl+V
+		// has a source -- without it paste silently does nothing. The returned pointer must stay valid
+		// until ImGui copies it, hence the thread-local buffer.
 		ImGuiPlatformIO& PIO = ImGui::GetPlatformIO();
 		PIO.Platform_SetClipboardTextFn = [](ImGuiContext*, const char* Text) { SetSystemClipboard(Text); };
+		PIO.Platform_GetClipboardTextFn = [](ImGuiContext*)
+		{
+			static thread_local std::string Buffer;
+			Buffer = GetSystemClipboard();
+			return Buffer.c_str();
+		};
 #endif
 		ApplyMahoNightTheme();
 		MAHO_LOG_CORE_INFO("ExampleEditor: ImGui context created (editor-own, no GLFW backend)");
@@ -460,9 +510,11 @@ void FExampleEditor::OnInstalled(FRender& R, FRenderContext& Frame)
 
 #if defined(_WIN32)
 		// Text clipboard: the host owns the window, so it injects the platform capability
-		// into the UI plugin (which has no Platform dependency).
+		// into the UI plugin (which has no Platform dependency). Both directions: the UI plugin's
+		// own copy/paste (log area, context menus) reads through the getter, and Ctrl+V in a text
+		// box needs the same source (see the ImGui platform IO above).
 		ClipboardToken = UI::BindUIClipboardHandlers(GetName(),
-			nullptr,
+			nullptr,   // DISABLED FOR A TEST: the Win32 clipboard read path is suspected in the startup hang
 			[](std::string_view Text)
 			{
 				const std::string Owned(Text);   // 立刻拷贝进系统剪贴板，不留悬垂指针
@@ -586,58 +638,98 @@ void FExampleEditor::InitEditorViews(FRender& R)
 		static_cast<float>(P->GetWindowWidth()),
 		static_cast<float>(P->GetWindowHeight()));
 #if defined(_WIN32)
-	// Read the canonical client-space input snapshot produced by FPlatform's GLFW
-	// callbacks. The editor context's DisplaySize is the whole window; the snapshot
-	// cursor is content-area relative (same space), so it feeds 1:1.
-	Platform::MInputContext In;
-	P->ReadFrameInput(In);
-	IO.AddMousePosEvent(In.MouseX, In.MouseY);
-	IO.AddMouseButtonEvent(0, In.MouseButtons[0]);
-	IO.AddMouseButtonEvent(1, In.MouseButtons[1]);
-	IO.AddMouseButtonEvent(2, In.MouseButtons[2]);
-
-	// Mods from the snapshot, fed explicitly as ImGuiMod_* (the ImGuiMod_Ctrl that
-	// Shortcut() checks is derived from the ImGuiMod_Ctrl key data -- NOT from the
-	// LeftCtrl/RightCtrl named keys, per the Win32 backend).
-	IO.AddKeyEvent(ImGuiMod_Ctrl,   In.KeyDown[341] || In.KeyDown[345]);
-	IO.AddKeyEvent(ImGuiMod_Shift,  In.KeyDown[340] || In.KeyDown[344]);
-	IO.AddKeyEvent(ImGuiMod_Alt,    In.KeyDown[342] || In.KeyDown[346]);
-	IO.AddKeyEvent(ImGuiMod_Super,  In.KeyDown[343] || In.KeyDown[347]);
-
-	// Named keys + characters (edges). The editor's pass0 EditorInput stage ALREADY drained
-	// the platform this frame into EditorInputEvents (the editor is the ONE drain consumer);
-	// reuse that cache. When bEditorInputCached is false EditorInput early-returned (panel not
-	// valid / UI not up), so the game-UI context's own whole-window fallback is THE drainer
-	// that frame -- a second drain here would return nothing, so leave the stream alone. The
-	// feed covers the keys a snapshot position-table can't express as "pressed this frame"
-	// (down=true on PRESS/REPEAT, down=false on RELEASE). Mouse+buttons+mods above are always
-	// fed (snapshot reads are non-consuming, safe for multiple readers).
-	if (bEditorInputCached)
+	// Feed THIS context from the platform's tagged ring, with its own cursor. Mouse/buttons/mods
+	// are per-frame STATE and ride the frame that carries them; the edge events (keys, characters,
+	// wheel) are applied in the order those frames were pumped, so a key RELEASE cannot be skipped
+	// -- which is why this reads per frame instead of draining a shared stream (a stolen release
+	// left ImGui believing the key was still down, auto-repeating it).
+	MAHO_TRACE_SCOPE("FExampleEditor::InitEditorViews.FeedInput");
 	{
-		MAHO_TRACE_SCOPE("FExampleEditor::InitEditorViews.FeedInputEvents");
-		for (const auto& Ev : EditorInputEvents)
+		const std::uint64_t Latest = P->GetInputFrameIndex();
+		if (Latest < EditorInputCursor)
 		{
-			if (Ev.Type == Platform::MInputEventType::Key)
+			EditorInputCursor = 0;   // window recreated: the platform reset its ring
+		}
+		while (EditorInputCursor < Latest)
+		{
+			++EditorInputCursor;
+			Platform::FInputFrame Frame;
+			if (!P->ReadInputFrame(EditorInputCursor, Frame))
 			{
-				const ImGuiKey K = MapGlfwKey(Ev.Key);
+				continue;   // evicted -- this consumer fell behind the ring
+			}
+			const Platform::MInputContext& In = Frame.Snapshot;
+			IO.AddMousePosEvent(In.MouseX, In.MouseY);
+			IO.AddMouseButtonEvent(0, In.MouseButtons[0]);
+			IO.AddMouseButtonEvent(1, In.MouseButtons[1]);
+			IO.AddMouseButtonEvent(2, In.MouseButtons[2]);
+
+			// Mods from the frame's snapshot, fed explicitly as ImGuiMod_* (the ImGuiMod_Ctrl that
+			// Shortcut() checks is derived from the ImGuiMod_Ctrl key data -- NOT from the
+			// LeftCtrl/RightCtrl named keys, per the Win32 backend).
+			IO.AddKeyEvent(ImGuiMod_Ctrl,   In.KeyDown[341] || In.KeyDown[345]);
+			IO.AddKeyEvent(ImGuiMod_Shift,  In.KeyDown[340] || In.KeyDown[344]);
+			IO.AddKeyEvent(ImGuiMod_Alt,    In.KeyDown[342] || In.KeyDown[346]);
+			IO.AddKeyEvent(ImGuiMod_Super,  In.KeyDown[343] || In.KeyDown[347]);
+
+			// First, release whatever the PREVIOUS feed had to hold back (see DeferredKeyReleases):
+			// the key has now been down for a whole ImGui frame, so ImGui has seen the press.
+			for (const int KeyCode : DeferredKeyReleases)
+			{
+				const ImGuiKey K = MapGlfwKey(KeyCode);
 				if (K != ImGuiKey_None)
 				{
-					IO.AddKeyEvent(K, Ev.Action != 0);   // 0=RELEASE, 1=PRESS, 2=REPEAT
+					IO.AddKeyEvent(K, false);
 				}
 			}
-			else if (Ev.Type == Platform::MInputEventType::Char && Ev.Codepoint != 0)
+			DeferredKeyReleases.clear();
+			for (bool& bPressed : KeyPressedThisFeed)
 			{
-				IO.AddInputCharacter(Ev.Codepoint);      // text input (console / input boxes)
+				bPressed = false;
+			}
+
+			for (const auto& Ev : Frame.Events)
+			{
+				if (Ev.Type == Platform::MInputEventType::Key)
+				{
+					const ImGuiKey K = MapGlfwKey(Ev.Key);
+					if (K != ImGuiKey_None)
+					{
+						const bool bReleasedInRange = Ev.Key >= 0 && Ev.Key < Platform::MInputContext::KeyCount;
+						if (Ev.Action != 0)   // 0=RELEASE, 1=PRESS, 2=REPEAT
+						{
+							IO.AddKeyEvent(K, true);
+							if (bReleasedInRange)
+							{
+								KeyPressedThisFeed[Ev.Key] = true;
+							}
+						}
+						else if (bReleasedInRange && KeyPressedThisFeed[Ev.Key])
+						{
+							// A tap delivered entirely inside this feed: hold the release so the press
+							// occupies one ImGui frame instead of cancelling itself out.
+							DeferredKeyReleases.push_back(Ev.Key);
+						}
+						else
+						{
+							IO.AddKeyEvent(K, false);
+						}
+					}
+				}
+				else if (Ev.Type == Platform::MInputEventType::Char && Ev.Codepoint != 0)
+				{
+					IO.AddInputCharacter(Ev.Codepoint);      // text input (console / input boxes)
+				}
+			}
+
+			// The wheel rides the frame it was accumulated in (no exchange-to-zero, so a second
+			// consumer -- the game context -- reads the same delta instead of an empty one).
+			if (In.MouseWheelX != 0.f || In.MouseWheelY != 0.f)
+			{
+				IO.AddMouseWheelEvent(In.MouseWheelX, In.MouseWheelY);
 			}
 		}
-
-		// Mouse wheel: reuse the delta EditorInput exchange-to-zero'd (single consumer).
-		if (EditorWheelX != 0.f || EditorWheelY != 0.f)
-		{
-			IO.AddMouseWheelEvent(EditorWheelX, EditorWheelY);
-		}
 	}
-	bEditorInputCached = false;   // consume this frame's cache flag
 #endif
 
 	unsigned char* FontPixels = nullptr;
@@ -958,6 +1050,13 @@ void FExampleEditor::RenderEditorUI(FRender& R)
 	// COLOR_ATTACHMENT before it writes again -- the RHI never auto-transitions, so the
 	// editor must NOT try to reuse it as a render target itself.
 	R.AddPass(ERHICommandListType::Graphics, PipelineDesc, Target, Params, DrawList);
+
+	// Done with the list's per-frame GPU refs (the merged VB/IB) the moment the draw pass above has
+	// recorded. Dropping them HERE rather than at the next frame's rebuild keeps a transient slot from
+	// being held across the frame boundary: a held slot is not recyclable (the pool must not hand it
+	// to another request while a ref points at it), so the next frame would allocate fresh buffers
+	// every frame -- a vkCreateBuffer + vkAllocateMemory per frame, i.e. visible drag jank.
+	DrawList.Reset();
 
 	// The editor owns the final on-screen surface in an editor build: set its EditorRT
 	// as the present target (last writer wins over the game UI, which may have set the

@@ -871,22 +871,25 @@ void FRHIResourcePool::BeginFrame()
 		}
 	}
 
-	// Recycle EVERY transient slot (active or not): mark inactive and free the
-	// slot. Crucially we KEEP native + view + memory - the host BeginFrame already
-	// waited the previous frame's fence, so no in-flight command references them,
-	// and a same-descriptor request this frame reuses the objects in place (no
-	// per-frame vkCreate / vkAllocate). A later request whose descriptor differs
-	// drops the stale native via Create* ('recycled slot, different desc' branch).
-	// Persistent slots are never touched here (cross-frame, reclaimed only on
-	// Shutdown or a later descriptor-reuse miss).
+	// Recycle transient slots: mark inactive and free the slot. Crucially we KEEP native + view +
+	// memory - the host BeginFrame already waited the previous frame's fence, so no in-flight command
+	// references them, and a same-descriptor request this frame reuses the objects in place (no
+	// per-frame vkCreate / vkAllocate). A later request whose descriptor differs drops the stale native
+	// via Create* ('recycled slot, different desc' branch).
+	//
+	// ONLY slots nobody still holds (RefCount == 0) are recycled. Clearing a HELD slot is what turns a
+	// ref that lives across the boundary into an alias: the slot gets handed to the next request, the
+	// held ref then resolves to a DIFFERENT native (wrong usage, wrong size) and the driver validates
+	// exactly that ("buffer created with INDEX usage bound as vertex", "copy larger than destination").
+	// A held transient therefore survives the boundary and is recycled at the first boundary after its
+	// last ref is released. Persistent slots are never touched here.
 	FreeTextureSlots.clear();
 	for (std::size_t I = 0; I < Textures.size(); ++I)
 	{
 		FTextureEntry& E = Textures[I];
-		if (E.Lifetime == ERDGResourceLifetime::Transient)
+		if (E.Lifetime == ERDGResourceLifetime::Transient && E.RefCount == 0)
 		{
 			E.bActive = false;
-			E.RefCount = 0;
 			FreeTextureSlots.push_back(static_cast<std::uint32_t>(I));
 		}
 	}
@@ -895,10 +898,9 @@ void FRHIResourcePool::BeginFrame()
 	for (std::size_t I = 0; I < Buffers.size(); ++I)
 	{
 		FBufferEntry& E = Buffers[I];
-		if (E.Lifetime == ERDGResourceLifetime::Transient)
+		if (E.Lifetime == ERDGResourceLifetime::Transient && E.RefCount == 0)
 		{
 			E.bActive = false;
-			E.RefCount = 0;
 			FreeBufferSlots.push_back(static_cast<std::uint32_t>(I));
 		}
 	}

@@ -351,6 +351,9 @@ void FEditorConsole::Update(FExampleEditor& Editor, FExampleEditorContext& Frame
 	};
 
 	// -- 快照：只取可见（过滤后）的行，并结清本帧的头丢弃计数 ----------------
+	// The display line / lowercase form of each entry are built HERE, once (they are cached on the
+	// entry and reused by the label and the filter for the rest of its life), because the two
+	// per-frame users would otherwise rebuild every line's string every frame.
 	std::vector<FLogEntry> Snapshot;
 	std::size_t DroppedThisFrame = 0;
 	{
@@ -358,23 +361,22 @@ void FEditorConsole::Update(FExampleEditor& Editor, FExampleEditorContext& Frame
 		std::lock_guard<std::mutex> Lock(LinesMutex);
 		DroppedThisFrame = DroppedCount;
 		DroppedCount = 0;
-		if (!HasFilter)
+		Snapshot.reserve(Lines.size());
+		for (FLogEntry& E : Lines)
 		{
-			Snapshot.assign(Lines.begin(), Lines.end());
-		}
-		else
-		{
-			for (const FLogEntry& E : Lines)
+			if (E.DisplayLine.empty())
 			{
-				std::string T = BuildLine(E);
-				for (char& c : T)
+				E.DisplayLine = BuildLine(E);
+				std::string Lower(E.DisplayLine);
+				for (char& c : Lower)
 				{
 					c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
 				}
-				if (T.find(NeedleLower) != std::string::npos)
-				{
-					Snapshot.push_back(E);
-				}
+				E.LowerLine = std::move(Lower);
+			}
+			if (!HasFilter || E.LowerLine.find(NeedleLower) != std::string::npos)
+			{
+				Snapshot.push_back(E);
 			}
 		}
 	}
@@ -405,7 +407,7 @@ void FEditorConsole::Update(FExampleEditor& Editor, FExampleEditorContext& Frame
 			const int Hi = SelAnchor > SelEnd ? SelAnchor : SelEnd;
 			for (int i = Lo; i <= Hi && i < static_cast<int>(Snapshot.size()); ++i)
 			{
-				Text += BuildLine(Snapshot[static_cast<std::size_t>(i)]);
+				Text += Snapshot[static_cast<std::size_t>(i)].DisplayLine;   // cached
 				Text += '\n';
 			}
 		}
@@ -668,7 +670,7 @@ void FEditorConsole::Update(FExampleEditor& Editor, FExampleEditorContext& Frame
 	{
 		const FLogEntry& E = Snapshot[static_cast<std::size_t>(i)];
 		UI::FUISelectable& LineNode = LinesPanel.AddItem<UI::FUISelectable>(LineIds[static_cast<std::size_t>(i)]);
-		LineNode.SetLabel(BuildLine(E));
+		LineNode.SetLabel(E.DisplayLine);   // cached: see the snapshot loop
 		LineNode.SetSpanAll(true);
 		LineNode.Style()[UI::EUIState::Normal].Text = LevelColor(E.Level);
 		// 选中高亮走基类的选中位（解析样式按它取 Selected 组）。

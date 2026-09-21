@@ -385,41 +385,25 @@ void FRender::BeginResourcePool()
 	}
 }
 
-void FRender::MarkFrameTailSubmitted()
-{
-	{
-		std::lock_guard<std::mutex> Lock(TailMutex);
-		++TailsSubmitted;
-	}
-	TailCondVar.notify_all();
-}
-
-void FRender::WaitForPreviousFrameTail()
-{
-	std::unique_lock<std::mutex> Lock(TailMutex);
-	if (TicksStarted > 0 && TailsSubmitted < TicksStarted)
-	{
-		// The gate can only be missed if this frame's predecessor never reached its tail stage at all
-		// (a batch rejected structurally, i.e. the render layer is already reporting an error). Report
-		// and CONTINUE: a hang here would take the whole engine down with no diagnostic, which is a
-		// worse failure than one frame with a stale output.
-		if (!TailCondVar.wait_for(Lock, std::chrono::seconds(2),
-			[this] { return TailsSubmitted >= TicksStarted; }))
-		{
-			MAHO_LOG_CORE_ERROR(
-				"FRender::Tick: previous frame's tail stage never submitted (tails={}, ticks={}) -- "
-				"continuing without the lookahead bound", TailsSubmitted, TicksStarted);
-		}
-	}
-	++TicksStarted;
-}
-
 void FRender::Tick(FEngineBase&, FEngineContext&)
 {
-	// Bound the host's lookahead to one frame (see WaitForPreviousFrameTail): the input path stays
-	// fresh, but the OUTPUT stops lagging the host by the ring depth. Deliberately NOT a graph Wait():
-	// the collector's own frames may still be finishing, so nothing inside a frame is serialized.
-	WaitForPreviousFrameTail();
+	// SOFT lookahead bound. Waiting for the previous frame's batch to have been HANDED to the RHI
+	// server (posted), not for its submission to complete: this stage drives the OS message pump
+	// (FPlatform::ITick runs before it) and the server's FIFO has the previous frame's
+	// vkQueuePresentKHR in front of that batch, so waiting for completion lets a slow present starve
+	// the pump -- measured as key messages queued for 0.7-7.4 SECONDS, i.e. typing that dribbles in and
+	// a single Backspace walking the cursor. Waiting for the POST still bounds the host's lookahead
+	// (what the display latency needs) and can never be behind a present. Bounded in time as well, so
+	// a missing post costs one slow frame instead of a hang.
+	if (TicksSeen > 0)
+	{
+		const auto Deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(2);
+		while (FrameBatchesPosted.load(std::memory_order_acquire) < TicksSeen
+			&& std::chrono::steady_clock::now() < Deadline)
+		{
+		}
+	}
+	++TicksSeen;
 
 	// (The whole ImGui frame lifecycle -- feed / NewFrame / build / Render /
 	// GetDrawData -- moved into FUIFeature::InitViews inside the render graph below.
@@ -973,6 +957,10 @@ void FRender::SubmitRecordedPasses(FRenderContext& Frame)
 		Submitted.push_back(Pass.List);
 	}
 
+	// Mark BEFORE the marshal: this is what Tick's lookahead bound waits for, and it must never be
+	// behind the server's FIFO (the previous frame's present lives there).
+	FrameBatchesPosted.fetch_add(1, std::memory_order_release);
+
 	// ONE hop for the whole batch: the server thread runs the loop below inline (Submit's marshal
 	// is re-entrant), so the frame costs a single task and the queue still sees exactly one emitter.
 	// The batch is what `RHI::EndFrame` then queues the frame command list behind -- same queue,
@@ -993,10 +981,6 @@ void FRender::SubmitRecordedPasses(FRenderContext& Frame)
 	{
 		ResourcePool->RetireRenderLists(Submitted);
 	}
-
-	// This frame's lists are on their way to the queue: that is the point the host's lookahead gate
-	// waits for (the blit / close / present below may still be running when the next host frame starts).
-	MarkFrameTailSubmitted();
 }
 
 void* FRender::AllocParameterBytes(std::size_t Size, std::size_t Align)

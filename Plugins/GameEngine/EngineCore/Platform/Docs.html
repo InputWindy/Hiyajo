@@ -95,7 +95,8 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <h2 class="file-title">Platform.h —— 原生表面 + 输入事件</h2>
 <div class="card"><div class="doc">
 <p>平台层只提供两样东西：**原生表面**（给 RHI）与**原始输入**（给输入事件经纪 / ImGui 驱动）。「窗口」这个概念被收进单一访问函数 `IPlatform::GetNativeWindow()` 里 —— 因为不是每个平台都有窗口（无头、Android surface、iOS view），把窗口语义藏在一个访问器背后，上层就不必到处写 `<span class="kw">if</span> (headless)`。</p>
-<p>输入也刻意分成两条语义不同的通道：**可重复读的快照**（`ReadInput`：鼠标位置、按键按下状态、修饰键、焦点 —— 任何读者任何时刻读到的都一样，不消费）与**可排空的事件流**（`DrainInputEvents`：边沿 / 字符 / 按钮动作，读走即清）。滚轮是唯一的例外：它没有「持久位置」可做快照，所以累积后按读取交换清零 —— 因此 `ReadInput` 里的滚轮字段**不是**快照，单消费者要用 `ConsumeMouseWheelXY/Y`。</p>
+<p><b>线程模型（硬约束）</b>：`FPlatform` 继承 `FThreadedServer`，<b>窗口的创建与消息泵都在它自己那根常驻线程上</b>。理由是 Win32 的窗口消息队列<b>属于创建窗口的那根线程</b> —— `PeekMessage` 只看调用线程自己的队列，而键盘 / 字符 / 滚轮<b>只以消息形式存在</b>（鼠标能幸免，是因为位置与按钮还有全局查询可读）。此前窗口由「恰好抢到 IInit 的那个 worker」创建，而泵每帧被派发到<b>另一根</b> worker：24 根里 23 帧在问错的队列，于是按键以约 2 条/秒 到达、延迟 0.2–2 秒并成批涌出（「鼠标正常、键盘一股脑一串」）。帧侧只允许读 `CachedSurface` / `CachedWidth,Height` / `bCachedShouldClose` / `CachedToolkitWindow` 这几个缓存（由 `PublishWindowState` 在平台线程刷新）；任何 GLFW / Win32 窗口调用都必须经 `RunOnPlatformThread`。附注：`ImmDisableIME` 同样是 thread-scoped，所以它也在同一根线程、任何窗口存在之前（`OnInitialize`）调用。</p>
+<p>输入的模型是：<b>每帧发布一个带帧号的帧</b>（`FInputFrame` = 帧号 + 快照 + 该次泵里的边沿事件），消费者各自持<b>游标</b>按帧号读取 —— 恰好一次、按序。快照（鼠标位置/按钮、键盘按下状态、修饰键、焦点）本身仍是可重复读的；边沿 / 字符 / 滚轮是瞬时的，所以随那一帧一起发布；滚轮不再「交换清零」，因此编辑器上下文与游戏上下文<strong>都能读到同一份增量</strong>，不再有单消费者约束。旧设计是「一个可排空的事件流、谁先排空谁拿走」，那正是「错过携带按键抬起的帧 ⇒ ImGui 认为键一直按着 ⇒ 自动重复」的成因。</p>
 <p>引擎 core 完全不认识 ImGui / GLFW 类型：键码就是稳定的整数（GLFW 键码），由 UI 层自行映射 —— 这样平台层不会因为某个 UI 后端而长出一条依赖。</p>
 </div></div>
 <div class="card">
@@ -175,7 +176,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <h3><span class="kind">结构体</span> MInputContext</h3>
 <div class="sect"><div class="doc">
 <p>平台与 UI 功能之间的**中立输入快照**。写者是 Platform（它的 GLFW 回调在窗口循环线程里跑），读者是 UI 功能（渲染线程），所以它按「可重复读的状态快照」设计：任何读者拿到同一份值，什么都不消费 —— 这使多个消费者可以各自独立地读，而不需要谁先谁后的约定。</p>
-<p>例外是滚轮：它没有可持久保存的「位置」，因此按累积 + 读取交换处理，语义上也只允许单消费者（编辑器滚 Console；游戏 UI 不滚）。边沿 / 字符 / 焦点同样不属于快照 —— 它们是瞬时的，走 `DrainInputEvents`。</p>
+<p>滚轮也不会被「清掉」：它在一次泵里累积，随那一帧发布，所有读到该帧的消费者拿到同一份增量。边沿 / 字符 / 焦点同样不属于快照 —— 它们是瞬时的，随那一帧的 `Events` 一起走（见 `FInputFrame`）。</p>
 </div></div>
 <div class="sect">
 <h4>字段</h4>
@@ -183,7 +184,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">static</span> <span class="kw">constexpr</span> <span class="kw">int</span> KeyCount = 512</td><td>按键状态表长度（远大于 `GLFW_KEY_LAST`，留出余量以免键码越界写坏相邻字段）</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">float</span> MouseX = 0.0f / <span class="kw">float</span> MouseY = 0.0f</td><td>光标位置（快照）</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">bool</span> MouseButtons[3] = { <span class="kw">false</span>, <span class="kw">false</span>, <span class="kw">false</span> }</td><td>左 / 中 / 右按下状态（快照）</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">float</span> MouseWheelX = 0.0f / <span class="kw">float</span> MouseWheelY = 0.0f</td><td>自上次读取以来累积的滚轮增量（**交换清零**，因此不是快照 —— 单消费者请用 `ConsumeMouseWheelXY/Y`）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">float</span> MouseWheelX = 0.0f / <span class="kw">float</span> MouseWheelY = 0.0f</td><td>本次泵累积的滚轮增量（GLFW 刻度单位）。随这一帧发布，**不是**交换清零 —— 同一帧的每个消费者都读到同样的值</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">bool</span> KeyDown[KeyCount] = {}</td><td>键盘按下状态，按 GLFW 键码索引（下标 0..KeyCount-1）</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>std::uint16_t Mods = 0</td><td>当前 `GLFW_MOD_*`（由键 / 按钮回调推送）</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">bool</span> MouseEntered = <span class="kw">false</span></td><td>光标是否在窗口内容区内</td></tr>
@@ -218,8 +219,10 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-private">private</span></td><td>std::function&lt;GLFWwindow*()&gt; GlfwWindowFn</td><td>取工具包窗口的钩子；空后端时为空函数 ⇒ `GetToolkitWindowHandle()` 返回 `<span class="kw">nullptr</span>`</td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">mutable</span> std::mutex InputMutex</td><td>保护下面三项输入缓冲：写者是窗口循环线程（GLFW 回调），读者是渲染线程（UI 功能），因此是**跨线程**共享状态而不是单线程私有</td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>MInputContext Input</td><td>输入快照（持有该锁读写）</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td><span class="kw">mutable</span> std::vector&lt;MInputEvent&gt; InputEvents</td><td>累积的原始事件流，由 `DrainInputEvents` 排空</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td><span class="kw">mutable</span> std::vector&lt;std::string&gt; DroppedFiles</td><td>拖入的文件路径缓冲；生产者/消费者划分与 `InputEvents` 相同</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>std::vector&lt;MInputEvent&gt; FrameEvents</td><td>**本次泵**累积的边沿事件；发布时整体 move 进该帧的槽位，绝不直接交给任何消费者 —— 那正是「一个消费者偷走另一个消费者那一帧」的来源</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>FInputFrame InputRing[kInputRingSlots]</td><td>已发布的输入环形缓冲：每帧一槽 = {帧号, 快照, 该帧事件}。槽数 = `MAHO_FRAMES_IN_FLIGHT + 4`，多出的余量是给「落后几帧的消费者」的；落后更多就只能跳过（并被告知），因为把旧帧的输入套到错帧上比丢掉更糟</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>std::atomic&lt;std::uint64_t&gt; InputFramePublished</td><td>读者对齐用的「最新帧号」；写侧另有 `InputFrameCounter`</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">mutable</span> std::vector&lt;std::string&gt; DroppedFiles</td><td>拖入的文件路径缓冲；仍在 `InputMutex` 下，由 `DrainDroppedFiles` 排空（这条是真正的「排空」语义：拖放路径没有按帧对齐的必要）</td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>std::uint32_t WindowWidth = 0</td><td>窗口宽（0 = 尚未创建窗口）</td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>std::uint32_t WindowHeight = 0</td><td>窗口高</td></tr>
 </tbody></table></div>
@@ -238,12 +241,17 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">bool</span> ShouldClose() <span class="kw">const</span></td><td>是否有窗口关闭请求（无头或无事件时为 <span class="kw">false</span>）</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] std::uint32_t GetWindowWidth() <span class="kw">const</span></td><td>窗口宽（来自 `DefaultEngine.ini`）</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] std::uint32_t GetWindowHeight() <span class="kw">const</span></td><td>窗口高</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] GLFWwindow* GetToolkitWindowHandle() <span class="kw">const</span></td><td>原始工具包窗口句柄，专供 ImGui 的 glfw 后端（它要在上面挂输入回调）。这是一条**窄桥**：`GetNativeWindow()` 给的 HWND 仍是 RHI 用的那个 —— 两个用途（创建交换链 / 挂工具包回调）需要不同句柄，混用会各自失败</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> ReadInput(MInputContext&amp; Out) <span class="kw">const</span></td><td>把当前输入快照拷进 `Out`（鼠标位置/按钮、键盘按下状态、修饰键、光标在内、焦点）。任何读者每帧都可以调，**可重复读、不消费**；其中滚轮字段不是快照</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> DrainInputEvents(std::vector&lt;MInputEvent&gt;&amp; Out) <span class="kw">const</span></td><td>排空自上次调用以来累积的**完整原始事件流**（边沿、字符、光标/按钮/键/滚轮事件、光标进出、窗口焦点）：追加到 `Out` 并清空平台缓冲。它是 `ReadInput` 的增量对应物</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] GLFWwindow* GetToolkitWindowHandle() <span class="kw">const</span></td><td>原始工具包窗口句柄，专供 ImGui 的 glfw 后端（它要在上面挂输入回调）。这是一条**窄桥**：`GetNativeWindow()` 给的 HWND 仍是 RHI 用的那个 —— 两个用途（创建交换链 / 挂工具包回调）需要不同句柄，混用会各自失败。取自平台线程的缓存</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> RunOnPlatformThread(<span class="kw">const</span> std::function&lt;<span class="kw">void</span>()&gt;&amp; Fn)</td><td>在平台线程上执行 `Fn` 并等待；当调用方已在平台线程（或线程尚未启动）时**内联执行**。这是其它线程触碰 GLFW / Win32 窗口状态的**唯一途径**</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>[[nodiscard]] <span class="kw">bool</span> OnInitialize() <span class="kw">override</span></td><td>平台线程启动前的钩子：在这一根线程上、任何窗口存在之前关掉 IME（`ImmDisableIME` 是 thread-scoped）</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>[[nodiscard]] <span class="kw">const char</span>* GetThreadName() <span class="kw">override</span></td><td>线程名（进 trace）：`"FPlatform"`</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> PublishWindowState()</td><td>刷新帧侧缓存（表面句柄 / 工具包窗口 / 尺寸 / 关闭请求）：平台线程上、每次泵之后，**以及创建窗口之后立刻** —— 后者不能少，否则 RHI 建交换链时拿不到 HWND</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>std::atomic&lt;std::uint32_t&gt; CachedWidth / CachedHeight、std::atomic&lt;<span class="kw">bool</span>&gt; bCachedShouldClose、FNativeSurface CachedSurface、GLFWwindow* CachedToolkitWindow</td><td>帧侧**只读**的窗口状态缓存；`IsHeadless()` / `GetNativeWindow()` / `ShouldClose()` / 尺寸都读它，不再直接问后端（后端归平台线程）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> ReadInput(MInputContext&amp; Out) <span class="kw">const</span></td><td>把当前输入快照拷进 `Out`（鼠标位置/按钮、键盘按下状态、修饰键、光标在内、焦点）。任何读者每帧都可以调，**可重复读、不消费**；其中滚轮字段是当前泵累积的那份</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] std::uint64_t GetInputFrameIndex() <span class="kw">const</span></td><td>**最新已发布的输入帧号**（每帧 +1，单调）。消费者按它对齐：把自己还没读过的帧逐帧读掉，**恰好一次、按序**</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">bool</span> ReadInputFrame(std::uint64_t Index, FInputFrame&amp; Out) <span class="kw">const</span></td><td>读**带帧号的**那一帧：该帧的快照 + 同一次泵里的边沿事件。帧号已被环形缓冲覆盖时返回 <span class="kw">false</span>（消费者落后太多）—— 调用方要当「我跳过了输入」，绝不能当「没有输入」</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>TMulticastEvent&lt;<span class="kw">void</span>(std::uint64_t)&gt; OnInputPublished</td><td>每次泵结束时广播「刚发布的那一帧的帧号」。订阅者拿到的**不是**负载，而是自己去环形缓冲读该读的帧 —— 这正是多消费者能共存的原因：旧设计把事件批交给「谁先排空谁拿走」，于是错过携带按键 RELEASE 那一帧的消费者永远不会知道键已抬起，ImGui 便一直认为键按着并自动重复（一次 Backspace 删掉整行、一次 ← 走到最左）</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> DrainDroppedFiles(std::vector&lt;std::string&gt;&amp; Out) <span class="kw">const</span></td><td>排空自上次调用以来被拖到窗口上的文件路径（文件管理器的 OS 拖放）：追加到 `Out` 并清空缓冲。路径是**物理绝对路径**（引擎的窄字符约定）；平台不做虚拟路径映射 —— 那是 `FPaths` 在上层的事</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> ConsumeMouseWheelXY(<span class="kw">float</span>&amp; OutX, <span class="kw">float</span>&amp; OutY)</td><td>取走累积的滚轮增量（GLFW 刻度单位）并清零。**单消费者**（编辑器）</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">float</span> ConsumeMouseWheelY()</td><td>只取 Y 轴滚轮增量并清零；自上次调用以来没滚过则返回 0</td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> PreInitialize(FEngineBase&amp;) <span class="kw">override</span> {}</td><td>阶段入口（空实现）：此阶段无工作</td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> Initialize(FEngineBase&amp; Engine) <span class="kw">override</span></td><td>阶段入口：**空的启动** —— 后端惰性创建，所以这里不建窗口也不读配置</td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> PostInitialize(FEngineBase&amp;) <span class="kw">override</span> {}</td><td>阶段入口（空实现）</td></tr>

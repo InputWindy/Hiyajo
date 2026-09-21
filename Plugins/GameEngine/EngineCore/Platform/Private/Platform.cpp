@@ -4,6 +4,7 @@
 #include <ConsoleVariable.h>
 #include <Log.h>
 
+#include <chrono>
 #include <cstdio>
 
 #if !defined(MAHO_HEADLESS)
@@ -29,6 +30,8 @@
 
 #if defined(_WIN32)
 #	include <windows.h>
+#	include <imm.h>   // ImmAssociateContext: detach the IME from our window (see PollEvents)
+#	pragma comment(lib, "imm32.lib")   // ... which lives in imm32, not in the default lib set
 #endif
 
 namespace Maho::Platform
@@ -126,9 +129,9 @@ namespace
 							Self->OnFramebufferSize(FW, FH);
 						}
 					});
-					// Mouse wheel is a discrete event GLFW consumes during PollEvents, so a
-					// no-backend ImGui context can't poll it via key state. Accumulate the
-					// scroll delta here and let the owner consume it (ConsumeMouseWheelY).
+					// Mouse wheel is a discrete event GLFW consumes during the pump, so a no-backend
+					// ImGui context can't poll it via key state. Accumulate the delta here; it is
+					// published with THIS frame, so every consumer of the frame reads the same value.
 					glfwSetScrollCallback(Window, [](GLFWwindow* W, double XOff, double YOff)
 					{
 						auto* Self = static_cast<FGlfwWindow*>(glfwGetWindowUserPointer(W));
@@ -374,16 +377,107 @@ namespace
 	}
 }
 
+bool FPlatform::OnInitialize()
+{
+	// Runs ON the platform thread, before its loop starts -- i.e. before ANY window exists (GLFW's
+	// hidden helper window included), which is the documented order for disabling the IME. It has to
+	// be THIS thread: ImmDisableIME is thread-scoped, and this is the thread that will pump.
+#if defined(_WIN32)
+	::ImmDisableIME(-1);
+#endif
+	return true;
+}
+
+void FPlatform::OnShutdown()
+{
+	// Nothing to do: the window is destroyed by the IShutdown stage (DestroyWindow marshals here)
+	// before FThreadedServer::Shutdown joins this thread.
+}
+
+const char* FPlatform::GetThreadName() const
+{
+	return "FPlatform";
+}
+
+void FPlatform::RunOnPlatformThread(const std::function<void()>& Fn)
+{
+	// Inline when already on the platform thread (a task must never wait on itself), and when the
+	// thread is not running at all (construction / headless) -- else the wait below would never end.
+	if (IsServerThread() || !IsRunning())
+	{
+		Fn();
+		return;
+	}
+
+	std::mutex Done_Mutex;
+	std::condition_variable Done_Cond;
+	bool bDone = false;
+	Submit([&]
+	{
+		Fn();
+		{
+			std::lock_guard<std::mutex> L(Done_Mutex);
+			bDone = true;
+		}
+		Done_Cond.notify_all();
+	});
+	std::unique_lock<std::mutex> L(Done_Mutex);
+	Done_Cond.wait(L, [&] { return bDone; });
+}
+
+void FPlatform::PublishWindowState()
+{
+	// Called ON the platform thread after a pump: the whole window state any other thread may read.
+	// It is only ever written here, so a reader sees a coherent moment rather than a half-updated one.
+	GLFWwindow* Win = GlfwWindowFn ? GlfwWindowFn() : nullptr;
+	{
+		std::lock_guard<std::mutex> L(NativeMutex);
+		CachedToolkitWindow = Win;
+		CachedSurface = Surface ? Surface->GetNativeWindow() : FNativeSurface{};
+	}
+	if (Win != nullptr)
+	{
+#if !defined(MAHO_HEADLESS)
+		int W = 0;
+		int H = 0;
+		::glfwGetWindowSize(Win, &W, &H);
+		CachedWidth.store(static_cast<std::uint32_t>(W > 0 ? W : 0), std::memory_order_relaxed);
+		CachedHeight.store(static_cast<std::uint32_t>(H > 0 ? H : 0), std::memory_order_relaxed);
+#endif
+		bCachedShouldClose.store(QueryShouldClose ? QueryShouldClose() : false, std::memory_order_relaxed);
+	}
+	else
+	{
+		bCachedShouldClose.store(true, std::memory_order_relaxed);   // no window: nothing left to do
+	}
+}
+
 void FPlatform::Initialize(FEngineBase&, FEngineContext&)
 {
+	// The platform's OWN thread starts FIRST, because the window is created on it -- and only there.
+	// A Win32 window's message queue belongs to its creating thread (PeekMessage sees nothing else),
+	// so a window created on whichever pool worker happened to run this stage can never be pumped
+	// properly: the pump runs on a different worker nearly every frame and asks the wrong queue.
+	if (!FThreadedServer::Initialize())
+	{
+		MAHO_LOG_CORE_ERROR("FPlatform: the platform thread failed to start");
+		return;
+	}
+
 	// Window size comes from the CVars; the Config layer already pushed the
 	// [ConsoleVariables] ini values into them (r.Window.Width/Height).
-	WindowWidth = static_cast<std::uint32_t>(GCVarWindowWidth.GetValue());
-	WindowHeight = static_cast<std::uint32_t>(GCVarWindowHeight.GetValue());
+	const int Width = GCVarWindowWidth.GetValue();
+	const int Height = GCVarWindowHeight.GetValue();
+	const std::string Title(GCVarWindowTitle.GetValue());
 
 #if !defined(MAHO_HEADLESS)
-	const bool bOk = CreateWindow(WindowWidth, WindowHeight, GCVarWindowTitle.GetValue());
-	MAHO_LOG_CORE_INFO("FPlatform::Initialize - CreateWindow({}, {}) => {}", WindowWidth, WindowHeight, bOk);
+	bool bOk = false;
+	RunOnPlatformThread([this, Width, Height, &Title, &bOk] { bOk = CreateWindow(Width, Height, Title); });
+	MAHO_LOG_CORE_INFO("FPlatform::Initialize - CreateWindow({}, {}) => {}", Width, Height, bOk);
+#else
+	CachedWidth.store(static_cast<std::uint32_t>(Width), std::memory_order_relaxed);
+	CachedHeight.store(static_cast<std::uint32_t>(Height), std::memory_order_relaxed);
+	(void)Title;
 #endif
 
 	GPlatform = this;
@@ -392,12 +486,17 @@ void FPlatform::Initialize(FEngineBase&, FEngineContext&)
 void FPlatform::Shutdown(FEngineBase&, FEngineContext&)
 {
 	GPlatform = nullptr;
-	DestroyWindow();
+	DestroyWindow();                 // marshals onto the platform thread
+	FThreadedServer::Shutdown();     // ... and only then stop + join that thread
 }
 
 bool FPlatform::CreateWindow(int Width, int Height, std::string_view Title)
 {
+	// MUST run on the platform thread: the window is created here, and the thread that creates a
+	// Win32 window owns its message queue. (The IME is disabled once in OnInitialize, on that same
+	// thread and before any window -- including GLFW's hidden helper window -- exists.)
 	DestroyWindow();
+
 	FPlatformBackend Backend = CreateWindowBackend(Width, Height, Title);
 	Surface = std::move(Backend.Surface);
 	PollEventsFn = std::move(Backend.PollEvents);
@@ -405,21 +504,20 @@ bool FPlatform::CreateWindow(int Width, int Height, std::string_view Title)
 	GlfwWindowFn = std::move(Backend.GetGlfwWindow);
 	if (Backend.SetFramebufferSizeListener)
 	{
-		// GLFW fires this on-frame (during PollEvents, the engine's Tick thread) so
-		// the live framebuffer size stays current. The RHI re-creates the swapchain
-		// via VK_ERROR_OUT_OF_DATE on acquire; here we keep the ImGui DisplaySize /
-		// window-layout size in sync with the OS window.
-		Backend.SetFramebufferSizeListener([this](int Width, int Height)
+		// GLFW fires this on the platform thread, during the pump. The RHI re-creates the swapchain
+		// via VK_ERROR_OUT_OF_DATE on acquire; here the frame-side cache is what keeps ImGui's
+		// DisplaySize / the window-layout size in sync with the OS window.
+		Backend.SetFramebufferSizeListener([this](int NewWidth, int NewHeight)
 		{
-			WindowWidth = static_cast<std::uint32_t>(Width);
-			WindowHeight = static_cast<std::uint32_t>(Height);
+			CachedWidth.store(static_cast<std::uint32_t>(NewWidth), std::memory_order_relaxed);
+			CachedHeight.store(static_cast<std::uint32_t>(NewHeight), std::memory_order_relaxed);
 		});
 	}
 	if (Backend.SetMouseWheelListener)
 	{
-		// GLFW fires this on-frame (during PollEvents, the engine's Tick thread). The
-		// editor's ImGui context runs on the render thread; the delta is accumulated
-		// behind InputMutex and a reader exchanges it to zero (ConsumeMouseWheelXY).
+		// GLFW fires this on the PLATFORM thread, during the pump. The delta is accumulated behind
+		// InputMutex and published with THIS frame's slot, so both ImGui contexts (the editor's and
+		// the game's) read the same delta instead of one of them clearing it for the other.
 		Backend.SetMouseWheelListener([this](double XOff, double YOff)
 		{
 			std::lock_guard<std::mutex> L(InputMutex);
@@ -429,13 +527,14 @@ bool FPlatform::CreateWindow(int Width, int Height, std::string_view Title)
 			Ev.Type = MInputEventType::Scroll;
 			Ev.X = static_cast<float>(XOff);
 			Ev.Y = static_cast<float>(YOff);
-			InputEvents.push_back(Ev);
+			FrameEvents.push_back(Ev);
 		});
 	}
 	if (Backend.SetCursorPosListener)
 	{
-		// Pull-current cursor snapshot + a MouseMove event; the reader copies it
-		// (ReadInput) without consuming, or drains the stream (DrainInputEvents).
+		// Pull-current cursor snapshot + a MouseMove event: readers copy the snapshot (ReadInput,
+		// repeatable) or walk the published frames by index (ReadInputFrame) -- reading consumes
+		// nothing either way.
 		Backend.SetCursorPosListener([this](double X, double Y)
 		{
 			std::lock_guard<std::mutex> L(InputMutex);
@@ -445,7 +544,7 @@ bool FPlatform::CreateWindow(int Width, int Height, std::string_view Title)
 			Ev.Type = MInputEventType::MouseMove;
 			Ev.X = static_cast<float>(X);
 			Ev.Y = static_cast<float>(Y);
-			InputEvents.push_back(Ev);
+			FrameEvents.push_back(Ev);
 		});
 	}
 	if (Backend.SetMouseButtonListener)
@@ -463,7 +562,7 @@ bool FPlatform::CreateWindow(int Width, int Height, std::string_view Title)
 			Ev.Key = Button;
 			Ev.Action = static_cast<std::uint8_t>(Action);
 			Ev.Mods = static_cast<std::uint16_t>(Mods);
-			InputEvents.push_back(Ev);
+			FrameEvents.push_back(Ev);
 		});
 	}
 	if (Backend.SetKeyListener)
@@ -482,7 +581,7 @@ bool FPlatform::CreateWindow(int Width, int Height, std::string_view Title)
 			Ev.Scancode = Scancode;
 			Ev.Action = static_cast<std::uint8_t>(Action);
 			Ev.Mods = static_cast<std::uint16_t>(Mods);
-			InputEvents.push_back(Ev);
+			FrameEvents.push_back(Ev);
 		});
 	}
 	if (Backend.SetCharListener)
@@ -493,7 +592,7 @@ bool FPlatform::CreateWindow(int Width, int Height, std::string_view Title)
 			MInputEvent Ev;
 			Ev.Type = MInputEventType::Char;
 			Ev.Codepoint = Codepoint;
-			InputEvents.push_back(Ev);
+			FrameEvents.push_back(Ev);
 		});
 	}
 	if (Backend.SetCursorEnterListener)
@@ -505,7 +604,7 @@ bool FPlatform::CreateWindow(int Width, int Height, std::string_view Title)
 			MInputEvent Ev;
 			Ev.Type = MInputEventType::CursorEnter;
 			Ev.Bool = Entered;
-			InputEvents.push_back(Ev);
+			FrameEvents.push_back(Ev);
 		});
 	}
 	if (Backend.SetWindowFocusListener)
@@ -533,7 +632,7 @@ bool FPlatform::CreateWindow(int Width, int Height, std::string_view Title)
 			MInputEvent Ev;
 			Ev.Type = MInputEventType::WindowFocus;
 			Ev.Bool = Focused;
-			InputEvents.push_back(Ev);
+			FrameEvents.push_back(Ev);
 		});
 	}
 	if (Backend.SetDropFileListener)
@@ -552,6 +651,11 @@ bool FPlatform::CreateWindow(int Width, int Height, std::string_view Title)
 			DroppedFiles.push_back(std::move(Path));
 		});
 	}
+
+	// Publish the window state IMMEDIATELY: other layers (the RHI takes the native handle to create
+	// its surface/swapchain) read the cache as soon as their own init runs, which is ordered after
+	// this stage but long before the first pump. Waiting for the pump left them without a window.
+	PublishWindowState();
 	return Surface != nullptr && Surface->GetNativeWindow() != nullptr;
 }
 
@@ -563,23 +667,63 @@ bool FPlatform::CreateHeadlessContext(int Width, int Height)
 	PollEventsFn = std::move(Backend.PollEvents);
 	QueryShouldClose = std::move(Backend.ShouldClose);
 	GlfwWindowFn = std::move(Backend.GetGlfwWindow);
+	PublishWindowState();
 	return Surface != nullptr && Surface->GetNativeWindow() != nullptr;
 }
 
 void FPlatform::DestroyWindow()
 {
-	// Teardown the surface; the GLFW callbacks it owned are gone now, so drop any
-	// in-flight accumulated input (a stale event must not leak into a new window).
-	std::lock_guard<std::mutex> L(InputMutex);
-	Surface.reset();
-	PollEventsFn = {};
-	QueryShouldClose = {};
-	GlfwWindowFn = {};
-	Input = {};
-	InputEvents.clear();
-	DroppedFiles.clear();
+	// Marshall to the platform thread: this releases the surface and drops the GLFW handles, all of
+	// which belong to the thread that created the window (and the callbacks it removed were firing
+	// there).
+	RunOnPlatformThread([this]
+	{
+		// Teardown the surface; the GLFW callbacks it owned are gone now, so drop any
+		// in-flight accumulated input (a stale event must not leak into a new window).
+		std::lock_guard<std::mutex> L(InputMutex);
+		Surface.reset();
+		PollEventsFn = {};
+		QueryShouldClose = {};
+		GlfwWindowFn = {};
+		Input = {};
+		FrameEvents.clear();
+		{
+			std::lock_guard<std::mutex> N(NativeMutex);
+			CachedToolkitWindow = nullptr;
+			CachedSurface = FNativeSurface{};
+		}
+		CachedWidth.store(0, std::memory_order_relaxed);
+		CachedHeight.store(0, std::memory_order_relaxed);
+		bCachedShouldClose.store(true, std::memory_order_relaxed);
+		// Drop the published ring too: a stale frame must not be readable by a new window's consumers
+		// (they align on the index, so resetting it makes them start clean).
+		for (FInputFrame& Slot : InputRing)
+		{
+			Slot = FInputFrame{};
+		}
+		InputFrameCounter = 0;
+		InputFramePublished.store(0, std::memory_order_release);
+		DroppedFiles.clear();
+	});
 }
 
+// PollEvents is where the WINDOW's own (non-client) traffic is serviced -- the pump is called once
+// per frame, and DefWindowProc answers a caption/border hit from inside it. Two consequences worth
+// remembering, both measured on this machine and neither of them a bug in this file:
+//
+//  * A caption drag or a border resize enters a MODAL move loop inside DefWindowProc, i.e. inside
+//    glfwPollEvents, i.e. inside our frame: the pump does not return until the drag ends. Measured
+//    gates of 0.99s / 0.52s / 0.34s / 14.26s, with the render loop otherwise never exceeding ~130ms,
+//    and keystrokes typed meanwhile arriving in one burst up to 1.16s late. Any pump-in-a-while-loop
+//    app has this; an event/timer-driven one (Tk, Qt) escapes it, which is why the control test --
+//    the SAME Tk rewritten as `while: root.update()` -- froze for 606/2036/5743ms. Taking the drag
+//    over (record the grab, SetWindowPos per frame, end on button-up, ignore WM_CAPTURECHANGED) is
+//    the fix if it is ever worth losing the system's snap / maximize-on-double-click.
+//  * IME: without ImmDisableIME every keystroke is offered to the input method first (the WM_KEYDOWNs
+//    carry VK_PROCESSKEY) and characters come back only when it commits -- measured as keys queued
+//    0.6-4s and six WM_CHARs landing in one batch. The thread-wide ImmDisableIME call in CreateWindow
+//    (before any window exists) is the documented order; a per-window ImmAssociateContext(hwnd,
+//    nullptr) hung the startup here, so it stays out.
 void FPlatform::PollEvents()
 {
 	if (PollEventsFn)
@@ -618,6 +762,10 @@ void FPlatform::PollEvents()
 		}
 	}
 #endif
+
+	// Last: the window state the REST of the engine reads must be published from this thread, after
+	// the messages above have been dispatched (a size change or a close request is one of them).
+	PublishWindowState();
 }
 
 // -- engine loop stages (FEngineLayer) --
@@ -628,34 +776,78 @@ void FPlatform::BeginFrame(FEngineBase&, FEngineContext&)
 
 void FPlatform::Tick(FEngineBase& Engine, FEngineContext& Frame)
 {
-	PollEvents();   // the pump writes the LIVE copy (Input) and appends edge events
+	// The pump runs on the PLATFORM thread, marshalled (and waited on) from whatever thread this
+	// stage was dispatched to. That is the whole point: the window's messages live in the queue of
+	// the thread that created it, and PeekMessage looks nowhere else -- pumping from a random pool
+	// worker left the keys sitting in the queue for seconds and then delivered them in a burst.
+	RunOnPlatformThread([this] { PollEvents(); });
 
-	// Freeze this frame's input into the ring, then drop whatever nobody took.
+	// Publish THIS frame's input as one immutable, TAGGED slot: the snapshot plus the edge events
+	// that arrived during this same pump.
 	//
-	// Publishing HERE -- instead of leaving readers to pull the live copy -- is what makes the
-	// input consumable from ANOTHER frame graph. The UI stages are children of the render
-	// collector, so no dependency edge can ever order them against this stage: a pull races the
-	// pump. A published slot is immutable, so a reader lagging by up to k frames still sees a
-	// coherent snapshot instead of a torn one.
+	//  1. Publishing (rather than letting readers pull the live copy) is what makes the input
+	//     consumable from ANOTHER frame graph -- the UI stages are children of the render collector,
+	//     so no dependency edge can order them against this stage and a pull would race the pump.
+	//  2. Carrying the frame's INDEX is what lets several consumers share the input without stealing
+	//     it from each other: each keeps its own cursor and applies every frame exactly once, in
+	//     order. The old design handed the batch to whoever drained first, so a consumer that missed
+	//     the frame carrying a key RELEASE never learned the key came up -- ImGui then held it down
+	//     and auto-repeated it (one Backspace erasing a whole line, one arrow walking to the far left).
 	//
-	// Draining the event stream in the same breath bounds it to one frame. An un-drained stream
-	// would prepend itself to the next frame's and grow without limit, making every later frame
-	// pay a bigger DrainInputEvents copy -- input falling progressively behind the frame loop.
-	// The price is that a frame with no consumer loses that frame's key edges, which is the right
-	// trade against unbounded growth.
+	// The wheel is accumulated by the callbacks and MOVED into the slot here, so it becomes per-frame
+	// data every consumer can read instead of a single-consumer exchange-to-zero.
+	std::uint64_t Published = 0;
 	{
 		std::lock_guard<std::mutex> L(InputMutex);
-		InputRingWrite = (InputRingWrite + 1) % kInputRingSlots;
-		InputRing[InputRingWrite] = Input;
-		InputRingPublished.store(InputRingWrite, std::memory_order_release);
-		InputEvents.clear();
+		++InputFrameCounter;
+		InputRingWrite = static_cast<std::uint32_t>((InputFrameCounter - 1) % kInputRingSlots);
+		FInputFrame& Slot = InputRing[InputRingWrite];
+		Slot.Index = InputFrameCounter;
+		Slot.Snapshot = Input;
+		Slot.Events = std::move(FrameEvents);
+		FrameEvents.clear();
+		Input.MouseWheelX = 0.0f;
+		Input.MouseWheelY = 0.0f;
+		Published = InputFrameCounter;
+		InputFramePublished.store(InputFrameCounter, std::memory_order_release);
 	}
+
+	// OUTSIDE the lock: a subscriber may reach straight back in (ReadInputFrame), which is exactly
+	// why the delegate invokes its handlers outside its own lock.
+	OnInputPublished.Broadcast(Published);
 }
 
 void FPlatform::ReadFrameInput(MInputContext& Out) const
 {
 	std::lock_guard<std::mutex> L(InputMutex);
-	Out = InputRing[InputRingPublished.load(std::memory_order_acquire)];
+	const std::uint64_t Latest = InputFramePublished.load(std::memory_order_acquire);
+	if (Latest == 0)
+	{
+		Out = Input;   // nothing published yet: hand back the live copy
+		return;
+	}
+	Out = InputRing[(Latest - 1) % kInputRingSlots].Snapshot;
+}
+
+std::uint64_t FPlatform::GetInputFrameIndex() const
+{
+	return InputFramePublished.load(std::memory_order_acquire);
+}
+
+bool FPlatform::ReadInputFrame(std::uint64_t Index, FInputFrame& Out) const
+{
+	std::lock_guard<std::mutex> L(InputMutex);
+	if (Index == 0)
+	{
+		return false;
+	}
+	const FInputFrame& Slot = InputRing[(Index - 1) % kInputRingSlots];
+	if (Slot.Index != Index)
+	{
+		return false;   // evicted, or never written -- the caller fell too far behind
+	}
+	Out = Slot;
+	return true;
 }
 
 void FPlatform::EndFrame(FEngineBase&, FEngineContext&)
@@ -675,28 +867,26 @@ void FPlatform::RequestExit(FEngineBase& Engine, FEngineContext& Frame)
 
 FNativeSurface FPlatform::GetNativeWindow() const
 {
-	return Surface != nullptr ? Surface->GetNativeWindow() : nullptr;
+	// The cached handle, not a fresh call into the backend: producing it means calling into GLFW,
+	// which only the platform thread may do. The cache is refreshed at the end of every pump.
+	std::lock_guard<std::mutex> L(NativeMutex);
+	return CachedSurface;
 }
 
 bool FPlatform::ShouldClose() const
 {
-	return QueryShouldClose && QueryShouldClose();
+	// The close request is one of the messages the pump dispatches, so the answer is cached by
+	// PublishWindowState on the platform thread -- never queried through GLFW from here.
+	return bCachedShouldClose.load(std::memory_order_relaxed);
 }
 
 void FPlatform::ReadInput(MInputContext& Out) const
 {
 	std::lock_guard<std::mutex> L(InputMutex);
-	// Copy the whole snapshot (mouse pos/buttons + keyboard down-state + mods + cursor-in
-	// + focus). The wheel fields are stale accumulated values here -- consumers use
-	// ConsumeMouseWheelXY() for the delta.
+	// Copy the whole LIVE working copy (mouse pos/buttons + keyboard down-state + mods + cursor-in
+	// + focus). Its wheel fields are whatever the current pump accumulated -- a reader that wants a
+	// FRAME's input, wheel included, wants ReadFrameInput / ReadInputFrame instead.
 	Out = Input;
-}
-
-void FPlatform::DrainInputEvents(std::vector<MInputEvent>& Out) const
-{
-	std::lock_guard<std::mutex> L(InputMutex);
-	Out.insert(Out.end(), InputEvents.begin(), InputEvents.end());
-	InputEvents.clear();
 }
 
 void FPlatform::DrainDroppedFiles(std::vector<std::string>& Out) const
@@ -704,23 +894,6 @@ void FPlatform::DrainDroppedFiles(std::vector<std::string>& Out) const
 	std::lock_guard<std::mutex> L(InputMutex);
 	Out.insert(Out.end(), DroppedFiles.begin(), DroppedFiles.end());
 	DroppedFiles.clear();
-}
-
-void FPlatform::ConsumeMouseWheelXY(float& OutX, float& OutY)
-{
-	std::lock_guard<std::mutex> L(InputMutex);
-	OutX = Input.MouseWheelX;
-	OutY = Input.MouseWheelY;
-	Input.MouseWheelX = 0.0f;
-	Input.MouseWheelY = 0.0f;
-}
-
-float FPlatform::ConsumeMouseWheelY()
-{
-	std::lock_guard<std::mutex> L(InputMutex);
-	const float V = Input.MouseWheelY;
-	Input.MouseWheelY = 0.0f;
-	return V;
 }
 
 } // namespace Maho::Platform

@@ -62,6 +62,13 @@ private:
 		ELogLevel   Level;
 		std::string Category;
 		std::string Message;
+
+		/** The display line and its lowercase form, built ONCE (lazily, on the frame thread under
+		 *  the lock) and then reused. Both have per-frame users -- the node label and the filter's
+		 *  substring test -- and rebuilding them for all MaxLines every frame is what made a filtered
+		 *  console (and typing into its box) cost milliseconds per frame in Debug. */
+		mutable std::string DisplayLine;
+		mutable std::string LowerLine;
 	};
 
 	static constexpr std::size_t MaxLines = 4096;

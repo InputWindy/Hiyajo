@@ -370,20 +370,17 @@ void FUIFeature::OnInstalled(FRender& R, FRenderContext& Frame)
 	// the other's context and no registry hand-off is involved.)
 }
 
-void FUIFeature::SetEditorInput(
-	float X, float Y, bool B0, bool B1, bool B2,
-	const Platform::MInputContext& Snap,
-	const std::vector<Platform::MInputEvent>& Events,
-	float WheelX, float WheelY)
+void FUIFeature::SetEditorInput(std::uint64_t FrameIndex, float X, float Y, bool B0, bool B1, bool B2)
 {
-	// Editor-build input takeover: the editor's pass0 IEditorInput stage feeds the game
-	// context's IO with the cursor already re-based to THIS context's whole-window DisplaySize
-	// coordinates (panel-local mapped back through the panel->window scale) + button state +
-	// the FULL keyboard/char/wheel input the editor harvested from the platform this frame.
-	// BEFORE this feature's InitViews runs. The DisplaySize is left to InitViews (whole-window);
-	// only the input is injected here. Serialized behind the SAME ImGuiFrameMutex
-	// InitViews uses, so a frame is never fed while another thread is mid-ImGui-frame. No-op
-	// when the context isn't created yet.
+	// Editor-build input takeover: the editor's pass0 IEditorInput stage feeds the game context's
+	// IO with the cursor already re-based to THIS context's whole-window DisplaySize coordinates
+	// (panel-local mapped back through the panel->window scale) + button state, BEFORE this
+	// feature's InitViews runs. The DisplaySize is left to InitViews (whole-window); only the input
+	// is injected here. The frame's mods / key / character / wheel input is read straight from the
+	// platform's TAGGED ring by FrameIndex -- not handed over by the editor -- so this context reads
+	// every frame exactly once and can never be starved of a key RELEASE by the other consumer.
+	// Serialized behind the SAME ImGuiFrameMutex InitViews uses, so a frame is never fed while
+	// another thread is mid-ImGui-frame. No-op when the context isn't created yet.
 	if (!bContextCreated || m_Context == nullptr)
 	{
 		return;
@@ -396,37 +393,42 @@ void FUIFeature::SetEditorInput(
 	IO.AddMouseButtonEvent(1, B1);
 	IO.AddMouseButtonEvent(2, B2);
 
-	// Mods from the snapshot, fed explicitly as ImGuiMod_* (the ImGuiMod_Ctrl that
-	// Shortcut() checks is derived from ImGuiMod_Ctrl key data, not the named Ctrl keys).
-	IO.AddKeyEvent(ImGuiMod_Ctrl,   Snap.KeyDown[341] || Snap.KeyDown[345]);
-	IO.AddKeyEvent(ImGuiMod_Shift,  Snap.KeyDown[340] || Snap.KeyDown[344]);
-	IO.AddKeyEvent(ImGuiMod_Alt,    Snap.KeyDown[342] || Snap.KeyDown[346]);
-	IO.AddKeyEvent(ImGuiMod_Super,  Snap.KeyDown[343] || Snap.KeyDown[347]);
-
-	// Named keys + characters from the platform event batch the editor drained (the editor
-	// is the ONE consumer this frame; this context receives a COPY of that batch). Feed
-	// down=true on PRESS/REPEAT, down=false on RELEASE.
-	for (const auto& Ev : Events)
+	Platform::FPlatform* P = Platform::GetPlatform();
+	Platform::FInputFrame Frame;
+	if (P != nullptr && P->ReadInputFrame(FrameIndex, Frame))
 	{
-		if (Ev.Type == Platform::MInputEventType::Key)
+		const Platform::MInputContext& Snap = Frame.Snapshot;
+		// Mods explicitly as ImGuiMod_* (the ImGuiMod_Ctrl that Shortcut() checks is derived from
+		// ImGuiMod_Ctrl key data, not the named Ctrl keys).
+		IO.AddKeyEvent(ImGuiMod_Ctrl,   Snap.KeyDown[341] || Snap.KeyDown[345]);
+		IO.AddKeyEvent(ImGuiMod_Shift,  Snap.KeyDown[340] || Snap.KeyDown[344]);
+		IO.AddKeyEvent(ImGuiMod_Alt,    Snap.KeyDown[342] || Snap.KeyDown[346]);
+		IO.AddKeyEvent(ImGuiMod_Super,  Snap.KeyDown[343] || Snap.KeyDown[347]);
+
+		// Named keys + characters of THAT frame: down=true on PRESS/REPEAT, down=false on RELEASE.
+		for (const auto& Ev : Frame.Events)
 		{
-			const ImGuiKey K = MapGlfwKey(Ev.Key);
-			if (K != ImGuiKey_None)
+			if (Ev.Type == Platform::MInputEventType::Key)
 			{
-				IO.AddKeyEvent(K, Ev.Action != 0);   // 0=RELEASE, 1=PRESS, 2=REPEAT
+				const ImGuiKey K = MapGlfwKey(Ev.Key);
+				if (K != ImGuiKey_None)
+				{
+					IO.AddKeyEvent(K, Ev.Action != 0);   // 0=RELEASE, 1=PRESS, 2=REPEAT
+				}
+			}
+			else if (Ev.Type == Platform::MInputEventType::Char && Ev.Codepoint != 0)
+			{
+				IO.AddInputCharacter(Ev.Codepoint);      // text input
 			}
 		}
-		else if (Ev.Type == Platform::MInputEventType::Char && Ev.Codepoint != 0)
+
+		// The wheel rides its own frame (no exchange-to-zero), so both contexts can read it.
+		if (Snap.MouseWheelX != 0.f || Snap.MouseWheelY != 0.f)
 		{
-			IO.AddInputCharacter(Ev.Codepoint);      // text input
+			IO.AddMouseWheelEvent(Snap.MouseWheelX, Snap.MouseWheelY);
 		}
 	}
-
-	// Mouse wheel (the editor already exchange-to-zero'd the platform accumulation).
-	if (WheelX != 0.f || WheelY != 0.f)
-	{
-		IO.AddMouseWheelEvent(WheelX, WheelY);
-	}
+	GameInputCursor = FrameIndex;
 	bEditorInputThisFrame = true;
 }
 
@@ -541,43 +543,79 @@ void FUIFeature::InitViews(FRender& R, FRenderContext& Frame)
 	{
 		MAHO_TRACE_SCOPE("FUIFeature::InitViews.FeedInput");
 		// Whole-window fallback poll (pure game build, or the panel not yet present).
-		// Read the canonical client-space input snapshot produced by FPlatform's GLFW
-		// callbacks (fired on the window-loop thread during PollEvents). The snapshot's
-		// cursor is already relative to the window content-area top-left -- the same
-		// space as IO.DisplaySize (whole window) -- so it feeds 1:1. No Win32 global
-		// state any more; the IOContext is the single source of truth.
-		// Read the PUBLISHED frame, not the live working copy. The platform's Tick lives in a
-		// different frame graph (engine stages) than this render-collector child, so no edge can
-		// ever order the two -- pulling the live copy would race the pump, and reading a frame
-		// whose state is still being written is exactly how a click lands against stale UI state.
-		Platform::MInputContext In;
-		P->ReadFrameInput(In);
-		IO.AddMousePosEvent(In.MouseX, In.MouseY);
-		IO.AddMouseButtonEvent(0, In.MouseButtons[0]);
-		IO.AddMouseButtonEvent(1, In.MouseButtons[1]);
-		IO.AddMouseButtonEvent(2, In.MouseButtons[2]);
-
-		// Mods from the snapshot, fed explicitly as ImGuiMod_* (the ImGuiMod_Ctrl that
-		// Shortcut() checks is derived from ImGuiMod_Ctrl key data, not the named Ctrl keys).
-		IO.AddKeyEvent(ImGuiMod_Ctrl,   In.KeyDown[341] || In.KeyDown[345]);
-		IO.AddKeyEvent(ImGuiMod_Shift,  In.KeyDown[340] || In.KeyDown[344]);
-		IO.AddKeyEvent(ImGuiMod_Alt,    In.KeyDown[342] || In.KeyDown[346]);
-		IO.AddKeyEvent(ImGuiMod_Super,  In.KeyDown[343] || In.KeyDown[347]);
-
-		// Named keys + characters from the platform event stream (edges). A pure game
-		// build is the only consumer (the editor feature doesn't exist), so the whole
-		// batch is ours. Feed down=true on PRESS/REPEAT, down=false on RELEASE.
+		//
+		// Reads the platform's TAGGED input ring with this context's own cursor: every frame this
+		// context has not fed yet, in order, exactly once -- including each frame's edge events. The
+		// platform's Tick lives in a different frame graph (engine stages) than this render-collector
+		// child, so no edge can order the two; reading a PUBLISHED slot (never the live working copy)
+		// is what keeps a lagging frame coherent instead of racing the pump. And reading by INDEX
+		// instead of draining a shared stream is what lets the editor's context read the same frames
+		// without either one stealing a key RELEASE from the other.
+		const std::uint64_t Latest = P->GetInputFrameIndex();
+		if (Latest < GameInputCursor)
 		{
-			std::vector<Platform::MInputEvent> Events;
-			P->DrainInputEvents(Events);
-			for (const auto& Ev : Events)
+			GameInputCursor = 0;   // window recreated: the platform reset its ring
+		}
+		while (GameInputCursor < Latest)
+		{
+			++GameInputCursor;
+			Platform::FInputFrame Frame;
+			if (!P->ReadInputFrame(GameInputCursor, Frame))
+			{
+				continue;   // evicted -- this consumer fell behind the ring
+			}
+			const Platform::MInputContext& In = Frame.Snapshot;
+			IO.AddMousePosEvent(In.MouseX, In.MouseY);
+			IO.AddMouseButtonEvent(0, In.MouseButtons[0]);
+			IO.AddMouseButtonEvent(1, In.MouseButtons[1]);
+			IO.AddMouseButtonEvent(2, In.MouseButtons[2]);
+
+			// Mods explicitly as ImGuiMod_* (the ImGuiMod_Ctrl that Shortcut() checks is derived
+			// from ImGuiMod_Ctrl key data, not the named Ctrl keys).
+			IO.AddKeyEvent(ImGuiMod_Ctrl,   In.KeyDown[341] || In.KeyDown[345]);
+			IO.AddKeyEvent(ImGuiMod_Shift,  In.KeyDown[340] || In.KeyDown[344]);
+			IO.AddKeyEvent(ImGuiMod_Alt,    In.KeyDown[342] || In.KeyDown[346]);
+			IO.AddKeyEvent(ImGuiMod_Super,  In.KeyDown[343] || In.KeyDown[347]);
+
+			// Release what the previous feed held back (a tap's release), so each tap owns a frame.
+			for (const int KeyCode : DeferredKeyReleases)
+			{
+				const ImGuiKey K = MapGlfwKey(KeyCode);
+				if (K != ImGuiKey_None)
+				{
+					IO.AddKeyEvent(K, false);
+				}
+			}
+			DeferredKeyReleases.clear();
+			for (bool& bPressed : KeyPressedThisFeed)
+			{
+				bPressed = false;
+			}
+
+			for (const auto& Ev : Frame.Events)
 			{
 				if (Ev.Type == Platform::MInputEventType::Key)
 				{
 					const ImGuiKey K = MapGlfwKey(Ev.Key);
 					if (K != ImGuiKey_None)
 					{
-						IO.AddKeyEvent(K, Ev.Action != 0);   // 0=RELEASE, 1=PRESS, 2=REPEAT
+						const bool bInRange = Ev.Key >= 0 && Ev.Key < Platform::MInputContext::KeyCount;
+						if (Ev.Action != 0)   // 0=RELEASE, 1=PRESS, 2=REPEAT
+						{
+							IO.AddKeyEvent(K, true);
+							if (bInRange)
+							{
+								KeyPressedThisFeed[Ev.Key] = true;
+							}
+						}
+						else if (bInRange && KeyPressedThisFeed[Ev.Key])
+						{
+							DeferredKeyReleases.push_back(Ev.Key);   // hold the tap's release one feed
+						}
+						else
+						{
+							IO.AddKeyEvent(K, false);
+						}
 					}
 				}
 				else if (Ev.Type == Platform::MInputEventType::Char && Ev.Codepoint != 0)
@@ -585,12 +623,13 @@ void FUIFeature::InitViews(FRender& R, FRenderContext& Frame)
 					IO.AddInputCharacter(Ev.Codepoint);      // text input
 				}
 			}
-		}
 
-		// Mouse wheel: exchange-to-zero (single consumer here in a pure game build).
-		if (float Wx = 0.f, Wy = 0.f; (P->ConsumeMouseWheelXY(Wx, Wy), Wx != 0.f || Wy != 0.f))
-		{
-			IO.AddMouseWheelEvent(Wx, Wy);
+			// The wheel rides its own frame (no exchange-to-zero), so the editor's context and this
+			// one can both read the same delta instead of one of them seeing an empty one.
+			if (In.MouseWheelX != 0.f || In.MouseWheelY != 0.f)
+			{
+				IO.AddMouseWheelEvent(In.MouseWheelX, In.MouseWheelY);
+			}
 		}
 	}
 
@@ -994,6 +1033,14 @@ void FUIFeature::RenderUI(FRender& R, FRenderContext& Frame)
 		{
 			Scene->TransitionSceneColorForRendering(R);
 		}
+
+		// The list's per-frame GPU refs (the merged VB/IB) are DONE the moment the draw pass above
+		// has recorded: nothing reads them again. Dropping them here instead of at the next frame's
+		// rebuild matters twice over: a ref held across the frame boundary keeps its transient slot
+		// out of the pool's recycling, so the next frame would allocate fresh buffers every frame
+		// (vkCreateBuffer + vkAllocateMemory per frame -- visible jank while dragging this window),
+		// and the pool is not allowed to hand that slot to another request while it is held.
+		DrawList.Reset();
 	}
 
 	// This feature is off-screen only: it composites into its own target then sets it

@@ -95,20 +95,16 @@ public:
 	[[nodiscard]] ImGuiContext* GetImGuiContext() const { return m_Context; }
 
 	/** Editor-build input takeover. Called by the editor's pass0 IEditorInput stage, BEFORE
-	 *  this feature's InitViews: feeds the cursor (already re-based by the editor into THIS
-	 *  context's whole-window DisplaySize coordinates -- the panel-local coords are mapped back
-	 *  through the panel->window scale) plus the mouse buttons into THIS context's IO, along with
-	 *  the FULL keyboard+character+wheel input the editor already harvested from the platform
-	 *  (the editor is the ONE drain/consume consumer this frame -- see FExampleEditor). The
-	 *  DisplaySize stays whole-window (game layout never re-scales to the panel). InitViews then
-	 *  skips its own OS poll (bEditorInputThisFrame), so the game UI only responds inside the
-	 *  viewport panel but still receives keys/chars/wheel. Thread-safe (serialized with InitViews
-	 *  behind ImGuiFrameMutex). No-op when the context is not created. */
-	void SetEditorInput(
-		float X, float Y, bool B0, bool B1, bool B2,
-		const Platform::MInputContext& Snap,
-		const std::vector<Platform::MInputEvent>& Events,
-		float WheelX, float WheelY);
+	 *  this feature's InitViews: feeds the re-based cursor (the editor mapped panel-local back into
+	 *  this context's whole-window DisplaySize coordinates) plus the mouse buttons into THIS
+	 *  context's IO, and reads THAT FRAME's mods / key / character / wheel input straight from the
+	 *  platform's tagged ring by `FrameIndex` -- so this context never depends on the editor having
+	 *  handed anything over (a shared drain could lose a key RELEASE, and ImGui then held the key
+	 *  down and auto-repeated it). The DisplaySize stays whole-window (game layout never re-scales
+	 *  to the panel). InitViews then skips its own OS poll (bEditorInputThisFrame), so the game UI
+	 *  only responds inside the viewport panel but still receives keys/chars/wheel. Thread-safe
+	 *  (serialized with InitViews behind ImGuiFrameMutex). No-op when the context is not created. */
+	void SetEditorInput(std::uint64_t FrameIndex, float X, float Y, bool B0, bool B1, bool B2);
 
 private:
 	/** Lazily create the font backend (font texture + staging). Returns whether it is
@@ -147,6 +143,17 @@ private:
 	 *  InitViews reads it to decide whether to skip its own OS poll. Reset to false after
 	 *  InitViews consumes it each frame. */
 	bool bEditorInputThisFrame = false;
+	/** This context's CURSOR over the platform's tagged input ring: set back when SetEditorInput
+	 *  feeds a frame from the editor, and advanced directly by the whole-window fallback when no
+	 *  editor is up. A cursor rather than a drain, so the editor's own context can read the very
+	 *  same frames -- neither consumer can steal a key RELEASE from the other. */
+	std::uint64_t GameInputCursor = 0;
+	/** Deferred key RELEASES -- same reasoning as the editor's copy: ImGui derives "pressed" from
+	 *  the key state at frame boundaries, so a tap delivered entirely inside one feed would cancel
+	 *  itself out and never register. A release arriving in the same feed as its press is held back
+	 *  one feed, leaving the key down for exactly one ImGui frame. */
+	std::vector<int> DeferredKeyReleases;
+	bool KeyPressedThisFeed[Platform::MInputContext::KeyCount] = {};
 	/** The pass-level font texture (pool-owned persistent). Bound via FUIParameters
 	 *  every RenderUI; the sampler is a pooled clamp sampler (content-addressable). */
 	FRDGTextureRef FontTexture;

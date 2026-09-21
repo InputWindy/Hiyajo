@@ -246,19 +246,26 @@ private:
 	FSubscriptionID ResolverToken = 0;
 	FSubscriptionID ClipboardToken = 0;
 
-	// Single-frame input cache. EditorInput (pass0, runs FIRST this frame) is the ONE
-	// drain + wheel-consume consumer of the frame. It stores the drained event batch and
-	// the exchanged-to-zero wheel delta here so InitEditorViews (pass3, later in the SAME
-	// frame) can feed the editor context WITHOUT re-draining the platform -- a second
-	// drain/consume would return nothing, since these are single-consumer resources.
-	std::vector<Platform::MInputEvent> EditorInputEvents;
-	float EditorWheelX = 0.f;
-	float EditorWheelY = 0.f;
-	/** Whether EditorInput drained the platform THIS frame (the cache above is fresh). Set
-	 *  true when EditorInput gets past its guards and drains; InitEditorViews consumes the
-	 *  cache when true and otherwise leaves the stream alone (the game-UI context's own
-	 *  whole-window fallback is THE drainer that frame, and a second drain would be empty). */
-	bool bEditorInputCached = false;
+	// Input cursors -- one per consumer, over the platform's TAGGED input ring.
+	//
+	// The platform publishes a frame's input (snapshot + its edge events) under a frame INDEX. A
+	// consumer reads every frame it has not read yet, in order, EXACTLY ONCE. Two cursors, not one
+	// shared batch: the editor's own ImGui context (pass3) and the game-UI context (fed from pass0
+	// through FUIFeature::SetEditorInput) are independent readers, and neither may skip a frame the
+	// other happened to take -- the previous design drained one shared stream, so a consumer that
+	// missed the frame carrying a key RELEASE never learned the key came up, and ImGui kept it down
+	// and auto-repeated it (one Backspace erasing a whole line, one arrow walking to the far left).
+	std::uint64_t GameInputCursor = 0;     // fed to the game-UI context from EditorInput (pass0)
+	std::uint64_t EditorInputCursor = 0;   // feeds THIS editor context (pass3)
+
+	/** Deferred key RELEASES. ImGui derives "a key was pressed" from the key state at FRAME
+	 *  boundaries, so a press and its release that both land inside ONE feed cancel each other out
+	 *  and the tap never existed (measured: five Backspace taps delivered together, every one of
+	 *  them swallowed -- only a LONG press worked, because it spans a frame). A release arriving in
+	 *  the same feed as its press is therefore held back one feed, which leaves the key down for
+	 *  exactly one ImGui frame -- enough for ImGui to observe the press. */
+	std::vector<int> DeferredKeyReleases;
+	bool KeyPressedThisFeed[Platform::MInputContext::KeyCount] = {};
 
 	/** OS drop batch for the current frame (filled by EditorInput, cleared at the end of
 	 *  EditorCompose). Same single-frame contract as the input cache above. */
