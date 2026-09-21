@@ -60,7 +60,7 @@ FScene::FScene()
 
 void FScene::BeginRender(FRender& R, FRenderContext& Frame)
 {
-	MAHO_TRACE_SCOPE("FScene::BeginRender");
+	MAHO_TRACE_SCOPE(nullptr, "open the swapchain frame head");
 	// THE FRAME HEAD. Opening the swapchain frame is a frame primitive, so it happens in the frame's
 	// first stage rather than on a host stage with an implied ordering: this node waits the previous
 	// frame's tail (declared cross-frame edge in the ctor), the per-stage self edge keeps every later
@@ -81,7 +81,7 @@ FScene::~FScene()
 
 void FScene::PreUnInstall(FRender& R, FRenderContext& Frame)
 {
-	MAHO_TRACE_SCOPE("FScene::PreUnInstall");
+	MAHO_TRACE_SCOPE(nullptr, "release scene targets before unload");
 	(void)R;
 	// Drop the shared targets while OUR module is still loaded: the resource system
 	// outlives this sub-plugin, so a leftover here would be destroyed (dtor / mirror
@@ -103,7 +103,7 @@ void FScene::PreUnInstall(FRender& R, FRenderContext& Frame)
 
 void FScene::EnsureTargets(FRender& R)
 {
-	MAHO_TRACE_SCOPE("FScene::EnsureTargets");
+	MAHO_TRACE_SCOPE(nullptr, "ensure scene color and depth targets");
 	const std::uint32_t W = R.GetCanvasWidth();
 	const std::uint32_t H = R.GetCanvasHeight();
 	if (W == 0 || H == 0)
@@ -117,7 +117,7 @@ void FScene::EnsureTargets(FRender& R)
 
 	// Resize or first creation: drop the old resource-system entries (each DestroyResource
 	// broadcasts OnAssetUnloaded -> the render mirror releases + erases the old target).
-	MAHO_TRACE_SCOPE("FScene::EnsureTargets.Rebuild");
+	MAHO_TRACE_SCOPE(nullptr, "rebuild targets on resize");
 	Resource::FResourceSystem* RS = Resource::GetResourceSystem();
 	if (RS != nullptr && (SceneColor.IsValid() || SceneDepth.IsValid()))
 	{
@@ -268,7 +268,7 @@ void FScene::EndRender(FRender& R, FRenderContext& Frame)
 
 void FScene::Present(FRender& R, FRenderContext& Frame)
 {
-	MAHO_TRACE_SCOPE("FScene::Present");
+	MAHO_TRACE_SCOPE(nullptr, "present the scene color");
 
 	// The frame's ONE submission point: every pass recorded this frame, in the order the stage
 	// nodes registered them (that IS the declared edge order), plus anything recorded off-frame.
@@ -295,7 +295,7 @@ void FScene::Present(FRender& R, FRenderContext& Frame)
 
 void FScene::TransitionSceneColorForSampling(FRender& R)
 {
-	MAHO_TRACE_SCOPE("FScene::TransitionSceneColorForSampling");
+	MAHO_TRACE_SCOPE(nullptr, "transition scene color for sampling");
 	// SceneColor leaves RenderTarget -> ShaderResource so a later sampled use (the
 	// editor viewport mirror) binds it legally. AddPass submits at this call site, so
 	// the transition is queued on the graphics queue BEFORE the UI compose pass that
@@ -313,7 +313,7 @@ void FScene::TransitionSceneColorForSampling(FRender& R)
 
 void FScene::TransitionSceneColorForRendering(FRender& R)
 {
-	MAHO_TRACE_SCOPE("FScene::TransitionSceneColorForRendering");
+	MAHO_TRACE_SCOPE(nullptr, "transition scene color back to rendering");
 	// Undo the sampling flip so the next scene write can target COLOR_ATTACHMENT again.
 	if (SceneColor.IsValid() && SceneColorLayout == ESceneColorLayout::ShaderResource)
 	{

@@ -153,6 +153,14 @@ public:
 	/** Stable identity: the Name of every node this frame contributes. */
 	[[nodiscard]] virtual std::string_view GetName() const = 0;
 
+	/** The CPU-trace GROUP this frame -- and everything it drives -- is traced under: an
+	 *  architectural partition ("Engine", "Render", "RHIServer"...), which is also the timeline LANE
+	 *  its events are drawn on. Null (the default) means INHERIT: the collector that drives this frame
+	 *  decides, and the engine's own top-level loop answers "Engine". A frame that IS a driver
+	 *  declares its own -- FRender returns "Render" -- so its features inherit a lane instead of every
+	 *  one of them having to name itself. */
+	[[nodiscard]] virtual const char* GetTraceGroup() const { return nullptr; }
+
 	/** One declared edge: the target's identity parts, plus WHEN. */
 	struct FEdge
 	{
@@ -624,6 +632,12 @@ public:
 	 */
 	void SetOwnerName(const char* InOwnerName) { OwnerName = InOwnerName; }
 
+	/** The CPU-trace GROUP this graph's node bars are drawn under -- the LANE, and the fold key, for
+	 *  everything this collector drives (see FFrameExtension::GetTraceGroup, which is where a frame
+	 *  declares it). The owning builder resolves it once at creation (own declaration, else inherited
+	 *  from the installer, else "Engine"), so it is always a registered group name. */
+	void SetTraceGroup(const char* InTraceGroup) { TraceGroup = InTraceGroup; }
+
 protected:
 	/** The scheduler thread's name, and therefore the label of its row in a trace: this thread is
 	 *  where dispatch, completion notification and the reaping runs, so it is a role worth being
@@ -678,6 +692,10 @@ private:
 	/** Trace group for the nodes this graph dispatches. Static storage, empty for the host
 	 *  graph -- see SetOwnerName. */
 	const char* OwnerName = "";
+
+	/** The GROUP (timeline lane) this graph's node bars are drawn under; empty = Global. Set once at
+	 *  creation from the collector's resolved group -- see SetTraceGroup. */
+	const char* TraceGroup = "";
 
 	// A deque, NOT a vector: FTaskNode holds a std::function and is not movable in a way a
 	// vector's growth path needs, and a deque keeps references to existing elements valid --

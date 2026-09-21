@@ -660,13 +660,22 @@ D.Field("bool bStopping = false", "停止标志（`Shutdown` 置位）")
 
 D.Header("Public/Core/Profiler.h", Title="Profiler.h —— CPU 作用域追踪（MAHO_TRACE）",
          Desc="零依赖的 CPU 追踪：设 `MAHO_TRACE`（任意值）后，每个 scope 关闭时写一行\n"
-              "`[tr] ts=<us> dur=<us> tid=<泳道> name=<名字>`（手写埋点）或\n"
-              "`[tr] ts=<us> dur=<us> tid=<泳道> grp=<组> name=<帧>::<stage>`（**任务条**，由池/常驻线程开）\n"
-              "`(ts, dur, tid, name)` 正好是 Chrome Trace Event Format 的 complete-event 元组，"
-              "所以把它变成 chrome://tracing / Perfetto 直接能载的文件只是一次机械改写"
-              "（`Tools/trace_to_chrome.py`）。`ts` 是**单调时钟**上距首次追踪的微秒数，因此跨线程可比。\n"
-              "**`tid` 承载的是泳道，不是 OS 线程**：泳道 = 帧（按帧名哈希）。线程池会把一帧的节点撒到"
-              "不同 worker 上，按线程分行会把一帧的形状切碎。\n"
+              "`[tr] ts=<us> dur=<us> lane=<Group> slot=<n> worker=<k> owner=<帧名> name=<类>::<函数> tip=<说明>`（手写埋点）或\n"
+              "`[tr] ts=<us> dur=<us> lane=<Group> slot=<n> worker=<k> owner=<帧名> grp=<Group> name=<帧>::<stage> tip=<说明>`（**任务条**）\n"
+              "**分区 / 行 / 条 三层**：`lane`（Group：Engine / Render / RHIServer）是**折叠分区**（架构读法）；"
+              "`lane + owner` 是**行**（owner = 正在跑的那个帧，如 FScene / FDrawTriangleFeature），一行 = 一个帧；"
+              "**条**是该帧的 stage 链，以及它内部的手写埋点（手写埋点由 `owner=` 落到所属帧那一行）。\n"
+              "**为什么行按帧而不是按分区**：一条轨只能「嵌套或先后」地画条，而一个分区里两个互不依赖的 feature "
+              "是**真并行**；按帧分则靠引擎自己的保证自然嵌套 —— 「下一帧的同一 stage 等上一帧的同一 stage」"
+              "（实测 69 个 stage 行 × 15968 根条 **0 违例**）。\n"
+              "`slot`（在飞环槽）与 `worker`（哪根线程跑的，稠密序号）是**字段，不是分轨依据**：进悬停信息。\n"
+              "每个任务条还**镜像**一份到保留的 `Global` 分区（`lane=Global`，`grp=` 保留它自己的组），"
+              "于是「这一刻引擎在并行跑什么」有一条轨可看；两条同 `ts/dur/name/tip`，受 `MAHO_TRACE_MIN_US` 过滤时**成对**生死。\n"
+              "**起点带「嵌套深度 x 1us」的固定偏移**（thread_local 计数，scope 进出各加减一）：trace 的分辨率是 1us，"
+              "父条与它紧接着开的子条常常落在同一微秒，而时间线靠「严格递增」判层级 —— 不偏移就退化成导入报错。\n"
+              "`grp=` 同时是「任务条 vs 手写埋点」的判别位。`(ts, dur, lane, name)` 到 Chrome Trace Event Format "
+              "只差一次机械改写（`Tools/trace_to_chrome.py`，兼容改造前的 `tid=` 旧格式，并默认做「收尾 1us 隔板」"
+              "消除最后的导入报错；`--no-spacer` 保留原始时长）。`ts` 是**单调时钟**上距首次追踪的微秒数，跨线程可比。\n"
               "**行的装配是手写的**（`FLine`：memcpy + 十进制循环 + 一次 `fwrite`）。`fprintf` 曾是发射路径"
               "的大头 —— 每转换一次都要解析格式串并查 locale —— 而这里总共只有两个整数、一个泳道号和"
               "三个名字。文件以 `wb` 打开：文本模式下 CRT 每次写入都要扫描 `\\n` 并展开成 CRLF。\n"
@@ -695,44 +704,58 @@ D.Card("包含的头文件")
 D.Table("头文件", "功能")
 D.Row("Core/Export.h", "`MAHO_API` —— 它在 Maho.dll 里，任何层一个宏即可埋点，不加载插件、不跨模块调用")
 
-D.Struct("FTaskTrace", Desc="**任务身份三元组**：一份工作属于谁、在干什么。它存在的理由是"
+D.Struct("FTaskTrace", Desc="**任务身份**：一份工作属于哪个组、在干什么、跑在第几个相位。它存在的理由是"
         "**trace 开在任务边界**（`FThreadPool::RunTracedTask` / `FThreadedServer::RunLoop`）—— "
         "那是每一份工作都必经的唯一地点 —— 而身份只有**提交方**知道，所以随任务一起交出去：\n"
-        "`Pool.Submit(Lane, {\"FRender\", Stage.name(), \"Scene\"}, [this]{ ... });`\n"
-        "三个字符串都必须是**静态存储**（字面量、帧的 `GetName()`、stage 的 `type_info::name()`）："
-        "事件比任务活得久，指针要一直有效。`Name` 同时就是**泳道的键**（`FScopedTracePair` 按它哈希选行），"
-        "所以任务必然落在提交方建立的那一行上。`Name` 为空表示**不追踪** —— 没有标签的条只会往默认"
-        "泳道上堆无名块")
-D.Field("const char* Group = \"\"", "驱动这个任务的收集器（空 = 顶层）")
-D.Field("const char* Name = \"\"", "要跑它的帧 / 常驻角色名；同时也是它画在哪一行")
+        "`Pool.Submit(Lane, {\"Render\", Stage.name(), \"Scene\"}, [this]{ ... });`\n"
+        "字符串都必须是**静态存储**（字面量、已注册的组名、stage 的 `type_info::name()`）："
+        "事件比任务活得久，指针要一直有效。`Group` 决定**泳道**（空 = `Global`）；`Name` 为空表示"
+        "**不追踪** —— 没有标签的条只会往默认泳道上堆无名块")
+D.Field("const char* Group = \"\"", "任务所属的**组**（泳道）；空 = `Global`")
+D.Field("const char* Name = \"\"", "要跑它的帧 / 常驻角色名（进事件名，不再决定泳道）")
 D.Field("const char* Stage = \"\"", "它在干什么（stage 类型名、阶段标签……）")
+D.Field("std::int32_t Phase = -1", "它跑在第几个环槽：进 `slot=` 字段（-1 = 不报，如常驻线程的任务）")
 
-D.Class("FScopedTrace", Desc="RAII 单名作用域。构造取起始时间戳、析构记录 —— 于是提前 return、抛异常、"
+D.Class("FScopedTrace", Desc="RAII 手写埋点作用域。构造取起始时间戳、析构记录 —— 于是提前 return、抛异常、"
         "`break` 都仍会产生一个完整事件。关闭时它只是指针拷贝 + 一个分支：时间戳保持")
 D.SetAccess("public")
-D.Interface("explicit FScopedTrace(const char* InName)",
-            "`Name` 必须是字符串**字面量**（或其它静态存储）：事件保留指针，而名字是在 scope 关闭时才写的，"
-            "那时帧早就返回了")
-D.Interface("~FScopedTrace()", "`Start != 0` 才记录（`TraceEnabled()` 为假时它永远是 0）")
+D.Interface("explicit FScopedTrace(const char* InGroup, const char* InTip, const char* InName)",
+            "`InGroup` 传 null 表示**继承当前泳道**（帧的 stage 里就是这样，stage 已经建立过了）；"
+            "传了组则本 scope 期间**建立**那条泳道、退出时还原。`InName` 由宏用 `__FUNCTION__` 提供"
+            "（MSVC 上即 `类::函数`，静态存储，写盘时裁掉命名空间前缀）；`InTip` 可选。"
+            "起点 = `now + 嵌套深度 x 1us`（深度是 `thread_local`，进 scope 加一），"
+            "这条偏移让同微秒开出的父子条在时间线上严格有序")
+D.Interface("~FScopedTrace()", "`Start != 0` 才记录（`TraceEnabled()` 为假时它永远是 0）；先发射、再归还泳道、"
+            "深度减一。时长以**偏移后的起点**为基准，故短于偏移量的 scope 记 0 而不是回绕")
 
-D.Class("FScopedTracePair", Desc="双名作用域 —— 也是**建立泳道**的那件东西。它活着期间记录的一切都归到 "
-        "`First`：嵌套的 scope、手写的 `MAHO_TRACE_SCOPE`、以及在**别的线程**上跑的工作。"
-        "这正是「把一帧的 stage 排在同一行」的实现方式。定义在 .cpp 里，因为泳道栈是 .cpp 拥有的 "
-        "`thread_local` 状态")
+D.Class("FScopedTracePair", Desc="双名作用域 —— 也是**建立行**的那件东西。它活着期间记录的一切都归到它的"
+        "`Group`（折叠分区）+ `First`（owner = 帧）：嵌套的 scope、手写的 `MAHO_TRACE_SCOPE`、"
+        "以及在**别的线程**上跑的工作。行按帧而不是按分区，是因为一条轨只能「嵌套或先后」画条，"
+        "而同一分区里两个互不依赖的 feature 是真并行 —— 按帧则靠「同 stage 跨帧串行」自然嵌套。"
+        "定义在 .cpp 里，因为泳道/深度栈是 .cpp 拥有的 `thread_local` 状态")
 D.SetAccess("public")
-D.Interface("FScopedTracePair(const char* InGroup, const char* InFirst, const char* InSecond)",
-            "构造：记起始时间戳，把当前泳道存起来，并把本线程泳道切到 `hash(InFirst)`；析构：记录事件后还原泳道")
+D.Interface("FScopedTracePair(const char* InGroup, const char* InFirst, const char* InSecond, "
+            "const char* InTip, std::int32_t InPhase, bool bMirrorToGlobal)",
+            "构造：记起始时间戳（同样带嵌套深度偏移）、把当前 `lane/slot/owner` 三者存起来并切成"
+            "（已注册的组，`InPhase`，`InFirst`）；析构：记录事件（可选镜像到 `Global` 分区）后把三者还原、深度减一")
 
 D.Card("宏")
 D.Table("宏", "说明")
-D.Row("MAHO_TRACE_SCOPE(Name)", "单个作用域（`Name` 必须是静态存储）")
-D.Row("MAHO_TRACE_SCOPE_LANE(First, Second)", "**建立自己的泳道且没有所属收集器** —— 常驻 worker（ThreadedServer 角色），"
-       "不是被某个图驱动的帧。`Second` 是这条的工作名（`Task` / `Read` / `Compile` / `Flush` ……）")
-D.Row("MAHO_TRACE_SCOPE3(Group, First, Second)", "三元形式：收集器 :: 帧 :: stage。帧图把身份交给池，由池调用它")
-D.Row("MAHO_API void TraceEmit / TraceEmitPair / TraceFlush / TraceEnabled / TraceNowMicros / TraceTaskFloorMicros",
+D.Row("MAHO_TRACE_SCOPE(Group, Tip)", "**手写埋点**：名字由 `__FUNCTION__` 取、`Tip` 是悬停说明，`Group` 传 `nullptr`"
+       "表示**沿用当前泳道**（帧的 stage 里就这样，绝大多数调用点）；需要独立泳道时才传已注册的组名。"
+       "这就是「Group + 类名 + 函数名 + tooltip」四元信息")
+D.Row("MAHO_TRACE_SCOPE_LANE(Group, Second, Tip)", "**常驻 worker**（ThreadedServer 角色）：泳道 = 线程名"
+       "（`GetThreadName()`，如 `RHIServer` / `ResourceServer`），且**不镜像** Global —— 常驻线程不在图的并行调度里")
+D.Row("MAHO_TRACE_SCOPE3(Group, First, Second, Tip)", "任务条：组 :: 帧 :: stage 并镜像 `Global`。帧图把身份交给池，"
+       "由池调用它")
+D.Row("MAHO_API void TraceEmit / TraceEmitPair / TraceFlush / TraceEnabled / TraceNowMicros / TraceTaskFloorMicros / TraceThreadIndex",
        "手写埋点用的底层接口。`TraceEmit` 写手写埋点（**不过滤**），`TraceEmitPair` 写任务条"
-       "（**受 `MAHO_TRACE_MIN_US` 过滤**）。`TraceFlush` 在 `FEngineBase::PostMain` 收尾调用"
+       "（**受 `MAHO_TRACE_MIN_US` 过滤**，两条镜像成对生死）。`TraceThreadIndex` 给本线程一个稠密序号"
+       "（`worker=` 字段；首次调用在锁下登记，之后是 thread_local 读）。`TraceFlush` 在 `FEngineBase::PostMain` 收尾调用"
        "（**刻意不注册 `atexit`**：那会在 CRT 退出机制就绪之前自锁）")
+D.Row("MAHO_API const char* RegisterTraceGroup(const char* Name) / ResolveTraceGroup(const char* Name)",
+       "组注册表：组是泳道的键，注册处就是「组被引入的地方」（帧声明、常驻线程启动）。名字只注册一次，"
+       "重复注册返回**同一个指针**；未注册的名字首次使用**报一行并落到 `Global`** —— 拼错不该静默造出一条泳道")
 
 # ══════════════════════════════════════════════════════════════════════════════
 # Source/Public/Engine/Engine.h —— 引擎层：stage 接口 + 宿主基类

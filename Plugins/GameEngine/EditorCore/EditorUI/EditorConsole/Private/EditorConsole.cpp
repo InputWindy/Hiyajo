@@ -105,7 +105,7 @@ T& Ensure(UI::FUIBuilder& Parent, UI::FUIName Id, bool& bOutCreated)
 
 void FEditorConsole::Init(FExampleEditor&, FExampleEditorContext&)
 {
-	MAHO_TRACE_SCOPE("FEditorConsole::Init");
+	MAHO_TRACE_SCOPE(nullptr, "初始化控制台与日志订阅");
 	if (ListenerId != 0)
 	{
 		return;
@@ -297,7 +297,7 @@ void FEditorConsole::StepSuggest(int Step, const std::vector<std::string>& Match
 
 void FEditorConsole::Update(FExampleEditor& Editor, FExampleEditorContext& Frame)
 {
-	MAHO_TRACE_SCOPE("FEditorConsole::Update");
+	MAHO_TRACE_SCOPE(nullptr, "抽干事件并执行控制台命令");
 	UI::FUIView* PanelView = EnsureView(Editor);
 	if (PanelView == nullptr)
 	{
@@ -357,7 +357,7 @@ void FEditorConsole::Update(FExampleEditor& Editor, FExampleEditorContext& Frame
 	std::vector<FLogEntry> Snapshot;
 	std::size_t DroppedThisFrame = 0;
 	{
-		MAHO_TRACE_SCOPE("FEditorConsole::Update.Snapshot");
+		MAHO_TRACE_SCOPE(nullptr, "快照可见日志行");
 		std::lock_guard<std::mutex> Lock(LinesMutex);
 		DroppedThisFrame = DroppedCount;
 		DroppedCount = 0;
@@ -596,7 +596,7 @@ void FEditorConsole::Update(FExampleEditor& Editor, FExampleEditorContext& Frame
 	}
 
 	// ---- 声明期：只改本视图的树 -------------------------------------------
-	MAHO_TRACE_SCOPE("FEditorConsole::Update.Declare");
+	MAHO_TRACE_SCOPE(nullptr, "声明期：重建控制台视图树");
 	UI::FUIEditScope Scope = PanelView->Edit();
 	UI::FUIBuilder& Root = Scope.GetRoot();
 	Root.Layout().SetDirection(UI::EUIDirection::Column);
@@ -837,7 +837,7 @@ void FEditorConsole::Update(FExampleEditor& Editor, FExampleEditorContext& Frame
 
 void FEditorConsole::Shutdown(FExampleEditor& Editor, FExampleEditorContext& Frame)
 {
-	MAHO_TRACE_SCOPE("FEditorConsole::Shutdown");
+	MAHO_TRACE_SCOPE(nullptr, "解绑订阅并卸载控制台面板");
 	(void)Editor;
 
 	if (ListenerId != 0)

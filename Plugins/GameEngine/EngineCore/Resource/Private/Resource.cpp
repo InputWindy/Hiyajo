@@ -128,7 +128,7 @@ void FResourceSystem::Initialize(FEngineBase& Engine, FEngineContext& Frame)
 
 const char* FResourceSystem::GetThreadName() const
 {
-	return "ResourceIO";
+	return "ResourceServer";
 }
 
 void FResourceSystem::Shutdown(FEngineBase&, FEngineContext&)

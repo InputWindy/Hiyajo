@@ -25,8 +25,8 @@ namespace
 
 static ConsoleVariable::TAutoConsoleVariable<int> GCVarVSync(
 	"r.VSync",
-	1,
-	"0=prefer Mailbox/Immediate, 1=FIFO (vsync)");
+	0,
+	"0=prefer Mailbox/Immediate (uncapped, the default), 1=FIFO (vsync)");
 
 /** The present mode a given r.VSync value asks for, among the modes the surface offers.
  *
@@ -444,7 +444,7 @@ void FVulkanRHI::BeginFrame()
 	if (const int RequestedVSync = GCVarVSync.GetValue(); RequestedVSync != ActiveVSync)
 	{
 		ActiveVSync = RequestedVSync;
-		MAHO_TRACE_SCOPE("RHI.BeginFrame.RecreateSwapchain");
+		MAHO_TRACE_SCOPE(nullptr, "rebuild swapchain after vsync change");
 		if (!RecreateSwapchain())
 		{
 			return;
@@ -455,7 +455,7 @@ void FVulkanRHI::BeginFrame()
 	// GPU's previous frame, and the acquire is the presentation engine's. "BeginFrame costs
 	// 11 ms" is only actionable once it is known WHICH of the two owns the time.
 	{
-		MAHO_TRACE_SCOPE("RHI.BeginFrame.WaitForFences");
+		MAHO_TRACE_SCOPE(nullptr, "wait for the previous frame's fence");
 		if (!CheckVkResult(vkWaitForFences(Device, 1, &InFlightFence, VK_TRUE, UINT64_MAX), "vkWaitForFences"))
 		{
 			return;
@@ -473,13 +473,13 @@ void FVulkanRHI::BeginFrame()
 	// this frame's uploads -- keeps the deferred list length bounded to one frame.
 	if (MemoryAllocator)
 	{
-		MAHO_TRACE_SCOPE("RHI.BeginFrame.FlushDeferredFrees");
+		MAHO_TRACE_SCOPE(nullptr, "retire last frame's staging buffers");
 		MemoryAllocator->FlushDeferredFrees();
 	}
 
 	VkResult AcquireResult;
 	{
-		MAHO_TRACE_SCOPE("RHI.BeginFrame.AcquireNextImage");
+		MAHO_TRACE_SCOPE(nullptr, "acquire the next swapchain image");
 		AcquireResult = vkAcquireNextImageKHR(
 			Device,
 			Swapchain,
@@ -492,13 +492,13 @@ void FVulkanRHI::BeginFrame()
 	if (AcquireResult == VK_ERROR_OUT_OF_DATE_KHR || bFramebufferResized)
 	{
 		bFramebufferResized = false;
-		MAHO_TRACE_SCOPE("RHI.BeginFrame.RecreateSwapchain");
+		MAHO_TRACE_SCOPE(nullptr, "rebuild swapchain after out-of-date");
 		if (!RecreateSwapchain())
 		{
 			return;
 		}
 
-		MAHO_TRACE_SCOPE("RHI.BeginFrame.AcquireNextImage");
+		MAHO_TRACE_SCOPE(nullptr, "re-acquire image after swapchain rebuild");
 		AcquireResult = vkAcquireNextImageKHR(
 			Device,
 			Swapchain,
@@ -524,7 +524,7 @@ void FVulkanRHI::BeginFrame()
 	{
 		return;
 	}
-	MAHO_TRACE_SCOPE("RHI.BeginFrame.BeginCommandList");
+	MAHO_TRACE_SCOPE(nullptr, "begin the frame command buffer");
 	FrameCommandListRHI->Begin();
 }
 
@@ -656,7 +656,7 @@ void FVulkanRHI::EndFrame()
 	// + PresentTexture) before submitting.
 	if (FrameCommandListRHI != nullptr)
 	{
-		MAHO_TRACE_SCOPE("RHI.EndFrame.EndCommandList");
+		MAHO_TRACE_SCOPE(nullptr, "close the frame command buffer");
 		FrameCommandListRHI->End();
 	}
 
@@ -675,7 +675,7 @@ void FVulkanRHI::EndFrame()
 		: &RenderFinishedSemaphores[CurrentImageIndex < RenderFinishedSemaphores.size() ? CurrentImageIndex : 0];
 
 	{
-		MAHO_TRACE_SCOPE("RHI.EndFrame.QueueSubmit");
+		MAHO_TRACE_SCOPE(nullptr, "submit graphics queue work");
 		if (!CheckVkResult(vkQueueSubmit(GraphicsVkQueue, 1, &SubmitInfo, InFlightFence), "vkQueueSubmit"))
 		{
 			return;
@@ -697,14 +697,14 @@ void FVulkanRHI::EndFrame()
 		// The one call that throttles to the display: with a FIFO present mode this blocks until
 		// the presentation engine takes the image, which is where a "vsynced" frame spends its
 		// idle time.
-		MAHO_TRACE_SCOPE("RHI.EndFrame.QueuePresent");
+		MAHO_TRACE_SCOPE(nullptr, "present and wait for vsync");
 		PresentResult = vkQueuePresentKHR(PresentQueue, &PresentInfo);
 	}
 
 	if (PresentResult == VK_ERROR_OUT_OF_DATE_KHR || PresentResult == VK_SUBOPTIMAL_KHR || bFramebufferResized)
 	{
 		bFramebufferResized = false;
-		MAHO_TRACE_SCOPE("RHI.EndFrame.RecreateSwapchain");
+		MAHO_TRACE_SCOPE(nullptr, "rebuild swapchain after present failure");
 		RecreateSwapchain();
 	}
 	else if (!CheckVkResult(PresentResult, "vkQueuePresentKHR"))

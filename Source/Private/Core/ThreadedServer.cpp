@@ -90,7 +90,7 @@ void FThreadedServer::Flush()
 	// wait is waiting behind, so the two line up visually. A plain single-name scope (not a lane
 	// scope): switching lanes here would move the stall onto the server's row, which is not where
 	// the time is spent.
-	MAHO_TRACE_SCOPE("ThreadedServer::Flush");
+	MAHO_TRACE_SCOPE(nullptr, "wait for the queued work to drain");
 
 	// A barrier means "wait until the work I queued has run" -- and with no worker there is nothing
 	// that will ever run it, so waiting would hang forever. (Found the hard way: a caller that
@@ -122,6 +122,12 @@ void FThreadedServer::RunLoop()
 	// contract requires anyway.
 	const char* const ThreadName = GetThreadName();
 
+	// Register the role as a trace GROUP: the lane key is a group name, and a resident thread is the
+	// one place that introduces its own -- so this is where it enters the trace's vocabulary (and
+	// where an unregistered name, which would otherwise fall back to Global with a warning, is
+	// avoided by construction). Idempotent, and it happens before the first event below.
+	RegisterTraceGroup(ThreadName);
+
 	// Publish this thread's identity for IsServerThread(): a marshal helper on the server thread
 	// must recognize itself and run inline instead of posting a task and waiting on it forever.
 	{
@@ -134,7 +140,7 @@ void FThreadedServer::RunLoop()
 	// be INVISIBLE -- and "this resident thread exists and does nothing" is exactly the kind of
 	// finding a profile is asked for. One event per thread for the whole run.
 	{
-		MAHO_TRACE_SCOPE_LANE(ThreadName, "Started");
+		MAHO_TRACE_SCOPE_LANE(ThreadName, "Started", nullptr);
 	}
 
 	while (true)
@@ -160,7 +166,7 @@ void FThreadedServer::RunLoop()
 		// One bar per task, opened HERE rather than at the submitter's call site: this is the
 		// point every server task passes through, and the label the submitter handed over is
 		// exactly what the bar needs. The scope also tells the tracer which row this is.
-		MAHO_TRACE_SCOPE_LANE(ThreadName, Queued.Stage);
+		MAHO_TRACE_SCOPE_LANE(ThreadName, Queued.Stage, nullptr);
 		try
 		{
 			Queued.Task();

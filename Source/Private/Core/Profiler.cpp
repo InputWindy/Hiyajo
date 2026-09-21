@@ -1,11 +1,14 @@
 #include <Core/Profiler.h>
 
 #include <chrono>
+#include <atomic>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <functional>
+#include <mutex>
 #include <string_view>
+#include <thread>
+#include <vector>
 
 namespace Maho
 {
@@ -37,20 +40,66 @@ std::FILE* TraceFileHandle()
 	return File;
 }
 
-/** The lane a thread is currently inside; 0 means "no frame scope on this thread".
+/** The lane this thread is currently inside; null means "no group established here yet".
  *
- *  A lane is a FRAME, not an OS thread. The trace has to answer "what did this frame do, in what
- *  order, overlapping what" -- and the thread pool hands a frame's nodes to whichever worker is
- *  free, so a per-thread grouping scatters one frame across rows and hides exactly the shape the
- *  profile exists to show. The first name of each pair scope selects the row instead. */
-thread_local std::uint32_t GCurrentLane = 0;
+ *  A lane is a GROUP -- an architectural partition ("Engine", "Render", "RHIServer"), not an OS
+ *  thread and not a frame. The two questions the timeline answers are "which partition is busy" and
+ *  "what is the engine running in parallel": both are grouping questions, and neither is answered by
+ *  binding a row to a frame (which scatters one frame's work across lanes as the pool sees fit). */
+thread_local const char* GCurrentGroup = nullptr;
 
-/** Stable lane id for a frame name. Names are static by contract, so hashing the string is
- *  deterministic for the life of the process and needs no table. */
-std::uint32_t LaneOf(const char* FrameName)
+/** The in-flight RING SLOT this thread's current lane belongs to, or -1 when there is none.
+ *
+ *  It is what makes one group's row legible: a group has several frames in flight, and the timeline
+ *  can only place bars that nest or follow -- partial overlaps have no representation. A node sets
+ *  this from its phase, and a manual scope INHERITS it (it ran inside that node), so a group's row
+ *  becomes one row per pipeline position: "Render #0 / #1 / #2". */
+thread_local std::int32_t GCurrentSlot = -1;
+
+/** The FRAME this thread is currently inside (the node's own name), or null outside one.
+ *
+ *  A manual scope has no frame of its own -- it ran inside whatever node was executing -- and it
+ *  needs one to land on the right row: with several instances of a frame in flight, "the same row"
+ *  means the same (owner, slot) pair, so the pair sets BOTH here and the manual scope inherits both. */
+thread_local const char* GCurrentFrame = nullptr;
+
+/** How many traced scopes deep this thread is. It is added to a scope's start as `depth x 1us`.
+ *
+ *  Why an offset at all: the trace's resolution is a microsecond and a parent opens its child almost
+ *  immediately, so nested bars routinely share a timestamp -- and a reader of the timeline decides
+ *  nesting by STRICTLY increasing timestamps, so those ties come back as "partial overlap" import
+ *  errors (Perfetto then spills the child). Nudging each nesting level by a microsecond makes the
+ *  hierarchy unambiguous at the source, for a cost of a few microseconds of apparent time depth. */
+thread_local std::int32_t GDepth = 0;
+
+/** The reserved group. Registered below, so an event with no group still has one coherent row
+ *  instead of landing under a numeric id. */
+const char* kGlobalGroupName = "Global";
+
+/** The registered groups. Names are static by contract (a literal), so an entry is stable once
+ *  written, and ADDING one is the only mutation -- which is what lets the reader below walk the
+ *  table without a lock while registration (install time) takes one. */
+constexpr std::size_t kMaxTraceGroups = 64;
+const char*           GGroupNames[kMaxTraceGroups] = {};
+std::atomic<std::uint32_t> GGroupCount{ 0 };
+std::mutex                 GGroupMutex;
+
+/** Unknown names we have already complained about, so a typo costs one line, not one per event. */
+constexpr std::size_t kMaxWarnedGroups = 16;
+const char*           GWarnedGroups[kMaxWarnedGroups] = {};
+std::uint32_t         GWarnedCount = 0;
+
+/** The threads that have emitted, in the order they first did: the `worker=` index is a position in
+ *  this list. Assigned under the same lock as the group table and cached in thread-local storage by
+ *  TraceThreadIndex, so an emit costs one load. */
+constexpr std::uint32_t kUnassignedThread = 0xffffffffu;
+std::vector<std::thread::id> GThreadIds;
+std::mutex                   GThreadMutex;
+
+/** The lane a manual scope should record on: whatever this thread established, else Global. */
+const char* GroupOf()
 {
-	const std::size_t Hashed = std::hash<std::string_view>{}(std::string_view(FrameName));
-	return static_cast<std::uint32_t>(Hashed & 0x7fffffffu) + 1u;   // 0 stays "no lane"
+	return (GCurrentGroup != nullptr) ? GCurrentGroup : kGlobalGroupName;
 }
 
 /** A slice of a string, for names we only ever print. */
@@ -78,6 +127,35 @@ FNameSlice ShortStageName(const char* Raw)
 			break;
 		}
 	}
+	return FNameSlice{ View.data(), View.size() };
+}
+
+/** The usable part of a MANUAL scope's name. `__FUNCTION__` on MSVC spells the FULLY qualified name
+ *  ("Maho::FUIFeature::OnInstalled"), and a namespace is not what a bar needs on it: keep the last
+ *  two components (`Class::Function`), as a SLICE -- the same no-copy trick as ShortStageName, on a
+ *  path that runs hundreds of times a frame. */
+FNameSlice ShortScopeName(const char* Raw)
+{
+	std::string_view View(Raw);
+	for (const std::string_view Keyword : { "class ", "struct ", "enum " })
+	{
+		if (View.starts_with(Keyword))
+		{
+			View.remove_prefix(Keyword.size());
+			break;
+		}
+	}
+	const std::size_t Last = View.rfind("::");
+	if (Last == std::string_view::npos || Last == 0)
+	{
+		return FNameSlice{ View.data(), View.size() };
+	}
+	const std::size_t SecondLast = View.rfind("::", Last - 1);
+	if (SecondLast == std::string_view::npos)
+	{
+		return FNameSlice{ View.data(), View.size() };
+	}
+	View.remove_prefix(SecondLast + 2);
 	return FNameSlice{ View.data(), View.size() };
 }
 
@@ -198,56 +276,199 @@ std::uint64_t TraceNowMicros()
 	return Now - Origin;
 }
 
-void TraceEmit(const char* Name, std::uint64_t StartMicros, std::uint64_t DurMicros)
+namespace
+{
+	/** `ts`/`dur`/`lane`/`slot`/`worker`/`owner` -- the prefix both shapes share.
+	 *
+	 *  The slot is omitted when there is none to report (a resident thread's task). LANE + OWNER +
+	 *  SLOT is the ROW: the group folds into one section, and inside it each (frame, pipeline
+	 *  position) is a track -- see the header for why that nesting holds where "everything in the
+	 *  group on one track" does not. */
+	void WriteHead(FLine& Line, const char* Group, std::int32_t Slot, const char* Owner,
+		std::uint64_t StartMicros, std::uint64_t DurMicros)
+	{
+		Line.Literal("[tr] ts=");
+		Line.Decimal(StartMicros);
+		Line.Literal(" dur=");
+		Line.Decimal(DurMicros);
+		Line.Literal(" lane=");
+		Line.CString(Group);
+		if (Slot >= 0)
+		{
+			Line.Literal(" slot=");
+			Line.Decimal(static_cast<std::uint64_t>(Slot));
+		}
+		Line.Literal(" worker=");
+		Line.Decimal(TraceThreadIndex());
+		if (Owner != nullptr && Owner[0] != '\0')
+		{
+			Line.Literal(" owner=");
+			Line.CString(Owner);
+		}
+	}
+}
+
+const char* TraceGroupGlobal()
+{
+	return kGlobalGroupName;
+}
+
+std::uint32_t TraceThreadIndex()
+{
+	// Assigned once per thread and cached in thread-local storage, so an emit pays a load: the
+	// registry below only ever grows, and only the FIRST emit from a thread takes the lock.
+	thread_local std::uint32_t Cached = kUnassignedThread;
+	if (Cached != kUnassignedThread)
+	{
+		return Cached;
+	}
+	const std::thread::id Self = std::this_thread::get_id();
+	std::lock_guard<std::mutex> Lock(GThreadMutex);
+	for (std::uint32_t Index = 0; Index < static_cast<std::uint32_t>(GThreadIds.size()); ++Index)
+	{
+		if (GThreadIds[Index] == Self)
+		{
+			Cached = Index;
+			return Cached;
+		}
+	}
+	Cached = static_cast<std::uint32_t>(GThreadIds.size());
+	GThreadIds.push_back(Self);
+	return Cached;
+}
+
+const char* RegisterTraceGroup(const char* Name)
+{
+	if (Name == nullptr || Name[0] == '\0')
+	{
+		return kGlobalGroupName;
+	}
+	std::lock_guard<std::mutex> Lock(GGroupMutex);
+	const std::uint32_t Count = GGroupCount.load(std::memory_order_relaxed);
+	for (std::uint32_t Index = 0; Index < Count; ++Index)
+	{
+		if (std::strcmp(GGroupNames[Index], Name) == 0)
+		{
+			return GGroupNames[Index];   // the FIRST pointer wins, so one group is one pointer
+		}
+	}
+	if (Count >= kMaxTraceGroups)
+	{
+		std::fprintf(stderr, "[trace] group table full (%zu); '%s' falls back to Global\n",
+			kMaxTraceGroups, Name);
+		return kGlobalGroupName;
+	}
+	GGroupNames[Count] = Name;
+	GGroupCount.store(Count + 1, std::memory_order_release);
+	return Name;
+}
+
+const char* ResolveTraceGroup(const char* Name)
+{
+	if (Name == nullptr || Name[0] == '\0')
+	{
+		return kGlobalGroupName;
+	}
+	const std::uint32_t Count = GGroupCount.load(std::memory_order_acquire);
+	for (std::uint32_t Index = 0; Index < Count; ++Index)
+	{
+		if (std::strcmp(GGroupNames[Index], Name) == 0)
+		{
+			return GGroupNames[Index];
+		}
+	}
+
+	// Unknown name -- a typo, or a group nobody registered. Warn ONCE per distinct name (a lane that
+	// appears for one misspelling looks like "the timeline is wrong", which is the expensive kind of
+	// bug) and fall back to Global, never to a freshly minted lane.
+	bool bAlreadyWarned = false;
+	{
+		std::lock_guard<std::mutex> Lock(GGroupMutex);
+		for (std::uint32_t Index = 0; Index < GWarnedCount; ++Index)
+		{
+			if (std::strcmp(GWarnedGroups[Index], Name) == 0)
+			{
+				bAlreadyWarned = true;
+				break;
+			}
+		}
+		if (!bAlreadyWarned && GWarnedCount < kMaxWarnedGroups)
+		{
+			GWarnedGroups[GWarnedCount++] = Name;
+		}
+	}
+	if (!bAlreadyWarned)
+	{
+		std::fprintf(stderr, "[trace] unregistered group '%s' -- events fall back to Global "
+			"(register it where the group is introduced)\n", Name);
+	}
+	return kGlobalGroupName;
+}
+
+void TraceEmit(const char* Name, const char* Tip, std::uint64_t StartMicros, std::uint64_t DurMicros)
 {
 	FLine Line;
-	Line.Literal("[tr] ts=");
-	Line.Decimal(StartMicros);
-	Line.Literal(" dur=");
-	Line.Decimal(DurMicros);
-	Line.Literal(" tid=");
-	Line.Decimal(GCurrentLane);
+	WriteHead(Line, GroupOf(), GCurrentSlot, GCurrentFrame, StartMicros, DurMicros);
 	Line.Literal(" name=");
-	Line.CString(Name);
+	const FNameSlice Short = ShortScopeName(Name);
+	Line.Append(Short.Data, Short.Size);
+	if (Tip != nullptr && Tip[0] != '\0')
+	{
+		Line.Literal(" tip=");
+		Line.CString(Tip);
+	}
 	Line.Newline();
 	EmitLine(Line);
 }
 
-void TraceEmitPair(const char* Group, const char* First, const char* Second,
-	std::uint64_t StartMicros, std::uint64_t DurMicros)
+void TraceEmitPair(const char* Group, const char* First, const char* Second, const char* Tip,
+	std::int32_t Phase, bool bMirrorToGlobal, std::uint64_t StartMicros, std::uint64_t DurMicros)
 {
 	// The floor applies to TASK bars, and this is the only thing that produces them: a task bar is
 	// generated for EVERY task, which is exactly what makes a trace expensive, whereas a manual
-	// MAHO_TRACE_SCOPE is a human decision about what matters and is never filtered.
+	// MAHO_TRACE_SCOPE is a human decision about what matters and is never filtered. It is applied
+	// BEFORE either line is written, so the bar and its Global mirror live or die together.
 	//
 	// What filtering costs, stated once: rows are derived from events, so a frame whose every bar
-	// falls below the floor loses its ROW (its manual scopes then land under the numeric lane id).
-	// That is the intended trade -- a frame with no bar above the floor is a frame not worth a row.
+	// falls below the floor loses its ROW.
 	if (DurMicros < TraceTaskFloorMicros())
 	{
 		return;
 	}
 
+	const char* Lane = ResolveTraceGroup(Group);
 	const FNameSlice Short = ShortStageName(Second);
 
-	FLine Line;
-	Line.Literal("[tr] ts=");
-	Line.Decimal(StartMicros);
-	Line.Literal(" dur=");
-	Line.Decimal(DurMicros);
-	Line.Literal(" tid=");
-	Line.Decimal(GCurrentLane);
-	Line.Literal(" grp=");
-	if (Group != nullptr)
+	// `lane=` is what the timeline draws on and `grp=` is what tells a TASK bar from a manual scope
+	// (and what the fold grouping uses); they always agree, and the mirror keeps the node's OWN
+	// group in `grp=` while moving only the lane.
+	const auto WriteBar = [&](const char* LaneName, FLine& Line)
 	{
-		Line.CString(Group);
-	}
-	Line.Literal(" name=");
-	Line.CString(First);
-	Line.Literal("::");
-	Line.Append(Short.Data, Short.Size);
-	Line.Newline();
+		WriteHead(Line, LaneName, Phase, First, StartMicros, DurMicros);
+		Line.Literal(" grp=");
+		Line.CString(Lane);
+		Line.Literal(" name=");
+		Line.CString(First);
+		Line.Literal("::");
+		Line.Append(Short.Data, Short.Size);
+		if (Tip != nullptr && Tip[0] != '\0')
+		{
+			Line.Literal(" tip=");
+			Line.CString(Tip);
+		}
+		Line.Newline();
+	};
+
+	FLine Line;
+	WriteBar(Lane, Line);
 	EmitLine(Line);
+
+	if (bMirrorToGlobal && std::strcmp(Lane, kGlobalGroupName) != 0)
+	{
+		FLine Mirror;
+		WriteBar(kGlobalGroupName, Mirror);
+		EmitLine(Mirror);
+	}
 }
 
 void TraceFlush()
@@ -258,24 +479,80 @@ void TraceFlush()
 	}
 }
 
-FScopedTracePair::FScopedTracePair(const char* InGroup, const char* InFirst, const char* InSecond)
-	: Group(InGroup), First(InFirst), Second(InSecond)
+FScopedTrace::FScopedTrace(const char* InGroup, const char* InTip, const char* InName)
+	: Name(InName), Tip(InTip)
 {
-	if (TraceEnabled())
+	if (!TraceEnabled())
 	{
-		Start = TraceNowMicros();
-		PreviousLane = GCurrentLane;
-		GCurrentLane = LaneOf(First);
+		return;
 	}
+	Start = TraceNowMicros() + static_cast<std::uint64_t>(GDepth);
+	++GDepth;
+	if (InGroup != nullptr)
+	{
+		// A group of its own: this scope establishes the lane and restores the previous one on exit.
+		// A null group means "record on whatever lane this thread is already on" -- what a scope
+		// inside a frame's stage wants, because the stage established it.
+		ResolvedGroup = ResolveTraceGroup(InGroup);
+		PreviousGroup = GCurrentGroup;
+		GCurrentGroup = ResolvedGroup;
+	}
+}
+
+FScopedTrace::~FScopedTrace()
+{
+	if (Start == 0)
+	{
+		return;
+	}
+	// Emit FIRST (it reads the lane this scope established), then give the lane back -- and step the
+	// nesting depth back down, which is what keeps the next sibling's start on the parent's level.
+	// The duration is measured from the OFFSET start, so a scope whose body is shorter than its depth
+	// offset reports 0 rather than wrapping around.
+	const std::uint64_t Now = TraceNowMicros();
+	TraceEmit(Name, Tip, Start, (Now > Start) ? (Now - Start) : 0);
+	--GDepth;
+	if (ResolvedGroup != nullptr)
+	{
+		GCurrentGroup = PreviousGroup;
+	}
+}
+
+FScopedTracePair::FScopedTracePair(const char* InGroup, const char* InFirst, const char* InSecond,
+	const char* InTip, std::int32_t InPhase, bool bMirrorToGlobal)
+	: Group(InGroup), First(InFirst), Second(InSecond), Tip(InTip), Phase(InPhase), bMirror(bMirrorToGlobal)
+{
+	if (!TraceEnabled())
+	{
+		return;
+	}
+	Start = TraceNowMicros() + static_cast<std::uint64_t>(GDepth);
+	++GDepth;
+	PreviousGroup = GCurrentGroup;
+	GCurrentGroup = ResolveTraceGroup(InGroup);
+	// The SLOT goes with the lane: this node's bars (and every manual scope inside it) belong to
+	// pipeline position `InPhase`. -1 (a resident thread's task) clears it for the same reason --
+	// those bars belong to the thread, not to a pipeline position.
+	PreviousSlot = GCurrentSlot;
+	GCurrentSlot = InPhase;
+	// ... and so does the FRAME: a manual scope inside this node belongs to the same row, which is
+	// the (owner, slot) pair -- see GCurrentFrame.
+	PreviousFrame = GCurrentFrame;
+	GCurrentFrame = First;
 }
 
 FScopedTracePair::~FScopedTracePair()
 {
-	if (Start != 0)
+	if (Start == 0)
 	{
-		TraceEmitPair(Group, First, Second, Start, TraceNowMicros() - Start);
-		GCurrentLane = PreviousLane;
+		return;
 	}
+	const std::uint64_t Now = TraceNowMicros();
+	TraceEmitPair(Group, First, Second, Tip, Phase, bMirror, Start, (Now > Start) ? (Now - Start) : 0);
+	--GDepth;
+	GCurrentGroup = PreviousGroup;
+	GCurrentSlot = PreviousSlot;
+	GCurrentFrame = PreviousFrame;
 }
 
 } // namespace Maho

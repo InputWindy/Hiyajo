@@ -96,7 +96,7 @@ bool FRHI::Initialize(void* NativeWindowHandle, int Width, int Height, ERHIBacke
 
 const char* FRHI::GetThreadName() const
 {
-	return "RHI";
+	return "RHIServer";
 }
 
 void FRHI::ShutdownRHI()

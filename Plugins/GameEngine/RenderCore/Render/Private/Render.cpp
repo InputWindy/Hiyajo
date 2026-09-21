@@ -358,10 +358,10 @@ void FRender::BeginSwapchainFrame()
 	// two waits apart, because "the whole frame stalled here" is not actionable on its own.
 	if (IRHI* RHIp = RHI.get())
 	{
-		MAHO_TRACE_SCOPE("FRender::BeginSwapchainFrame.RHI");
+		MAHO_TRACE_SCOPE(nullptr, "begin the RHI frame head");
 		RHIp->BeginFrame();
 	}
-	MAHO_TRACE_SCOPE("FRender::BeginSwapchainFrame.ResourcePool");
+	MAHO_TRACE_SCOPE(nullptr, "advance the resource pool");
 	BeginResourcePool();
 }
 
@@ -372,7 +372,7 @@ void FRender::EndSwapchainFrame()
 	// order -- no graph drain needed to know the recording finished.
 	if (IRHI* RHIp = RHI.get())
 	{
-		MAHO_TRACE_SCOPE("FRender::EndSwapchainFrame.RHI");
+		MAHO_TRACE_SCOPE(nullptr, "close and submit the RHI frame");
 		RHIp->EndFrame();
 	}
 }

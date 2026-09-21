@@ -307,7 +307,7 @@ void FThreadPool::RunTracedTask(const FTaskTrace& Trace, const std::function<voi
 	// of work passes through, so the timeline cannot have a hole that exists only because somebody
 	// forgot to instrument themselves. The scope also establishes the lane (FScopedTracePair), so
 	// manual points inside a stage body still land on their frame's row.
-	FScopedTracePair Scope(Trace.Group, Trace.Name, Trace.Stage);
+	FScopedTracePair Scope(Trace.Group, Trace.Name, Trace.Stage, nullptr, Trace.Phase, true);
 	RunTaskSafely(Task);
 }
 

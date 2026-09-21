@@ -413,7 +413,7 @@ void FFrameGraph::Dispatch(FNodeId Id)
 	// Flush that helps drain) then draws the same bar without knowing anything about frames.
 	// All three names are static by invariant I3 (GetName must return literal storage).
 	Pool.Submit(Lane,
-		FTaskTrace{ OwnerName, Node.Key.Name.data(), Node.Key.Stage.name() },
+		FTaskTrace{ TraceGroup, Node.Key.Name.data(), Node.Key.Stage.name(), Node.Key.Phase },
 		[this, Id]()
 	{
 		// A hard crash (0xC0000005) has no stack and no exception to catch, so the last stage

@@ -48,7 +48,7 @@ UI::FUIView* FEditorViewport::EnsureView(FExampleEditor& Editor)
 
 void FEditorViewport::Shutdown(FExampleEditor& Editor, FExampleEditorContext& Frame)
 {
-	MAHO_TRACE_SCOPE("FEditorViewport::Shutdown");
+	MAHO_TRACE_SCOPE(nullptr, "解绑订阅并卸载取景区面板");
 	(void)Editor;
 
 	if (View == nullptr)
@@ -64,7 +64,7 @@ void FEditorViewport::Shutdown(FExampleEditor& Editor, FExampleEditorContext& Fr
 
 void FEditorViewport::Update(FExampleEditor& Editor, FExampleEditorContext& Frame)
 {
-	MAHO_TRACE_SCOPE("FEditorViewport::Update");
+	MAHO_TRACE_SCOPE(nullptr, "抽干事件并回读取景区状态");
 	UI::FUIView* PanelView = EnsureView(Editor);
 	if (PanelView == nullptr)
 	{
@@ -73,7 +73,7 @@ void FEditorViewport::Update(FExampleEditor& Editor, FExampleEditorContext& Fram
 
 	UI::FUIRect ImageRect{};
 	{
-		MAHO_TRACE_SCOPE("FEditorViewport::Update.Declare");
+		MAHO_TRACE_SCOPE(nullptr, "声明期：重建取景区视图树");
 		UI::FUIEditScope Scope = PanelView->Edit();
 		UI::FUIBuilder& Root = Scope.GetRoot();
 		Root.Layout().SetDirection(UI::EUIDirection::Column);

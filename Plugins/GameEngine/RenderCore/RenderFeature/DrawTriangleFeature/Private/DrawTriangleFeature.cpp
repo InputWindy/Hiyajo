@@ -78,7 +78,7 @@ void FDrawTriangleFeature::Render(FRender& R, FRenderContext& Frame)
 	// Fetch the shader modules (compile + sync) up front, so the resolved modules,
 	// bytecode hashes and entry points can be written straight into the pipeline
 	// config. Each frame returns the cached handle; Wait() is the sync-before-use.
-	MAHO_TRACE_SCOPE("FDrawTriangleFeature::Render.ResolveShader");
+	MAHO_TRACE_SCOPE(nullptr, "resolve the triangle shader modules");
 	TShaderHandle<FTriangleShader> Shader = R.TryGetShader<FTriangleShader>();
 	FRHIShaderModule* VS = nullptr;
 	FRHIShaderModule* FS = nullptr;
@@ -137,7 +137,7 @@ void FDrawTriangleFeature::Render(FRender& R, FRenderContext& Frame)
 	// produced the list.
 	const FDrawList& Draws = Scene->GetTriangleDrawList();
 	FTriangleParameters* Params = R.AllocParameters<FTriangleParameters>();
-	MAHO_TRACE_SCOPE("FDrawTriangleFeature::Render.RecordPass");
+	MAHO_TRACE_SCOPE(nullptr, "record the triangle draw pass");
 	R.AddPass(ERHICommandListType::Graphics, PipelineDesc, Target, Params,
 		[&Draws, TargetW, TargetH](FRHICommandList& Cmd)
 		{

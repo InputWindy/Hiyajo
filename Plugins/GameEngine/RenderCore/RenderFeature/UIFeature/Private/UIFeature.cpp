@@ -171,7 +171,7 @@ bool FUIFeature::EnsureUIBackend(FRender& R)
 		return true;
 	}
 
-	MAHO_TRACE_SCOPE("FUIFeature::EnsureUIBackend");
+	MAHO_TRACE_SCOPE(nullptr, "build the UI font backend");
 	// -- font texture + its ImGui id --
 	ImFontAtlas* Fonts = ImGui::GetIO().Fonts;
 	unsigned char* Pixels = nullptr;
@@ -213,7 +213,7 @@ void FUIFeature::UploadFont(FRender& R)
 	{
 		return;
 	}
-	MAHO_TRACE_SCOPE("FUIFeature::UploadFont");
+	MAHO_TRACE_SCOPE(nullptr, "upload the font atlas once");
 	// One-time font-atlas upload. The UI draw pass's lambda runs INSIDE
 	// BeginRendering, where transfer commands (vkCmdCopyBufferToImage + barriers)
 	// are illegal -- so this genuine transfer submit stays OUTSIDE a render pass. It
@@ -324,7 +324,7 @@ void FUIFeature::OnInstalled(FRender& R, FRenderContext& Frame)
 	// InitViews bails each frame.
 	if (!bContextCreated)
 	{
-		MAHO_TRACE_SCOPE("FUIFeature::OnInstalled.CreateContext");
+		MAHO_TRACE_SCOPE(nullptr, "create the game ImGui context");
 		Platform::FPlatform* P = Platform::GetPlatform();
 		if (P == nullptr || P->GetWindowWidth() == 0 || P->GetToolkitWindowHandle() == nullptr)
 		{
@@ -468,7 +468,7 @@ void FUIFeature::InitViews(FRender& R, FRenderContext& Frame)
 	//    so the IPresent blit to the backbuffer is geometry/format-consistent, rebuilt
 	//    on resize. LoadOp Clear (fully redrawn each frame) in RenderUI.
 	{
-		MAHO_TRACE_SCOPE("FUIFeature::InitViews.EnsureCompositeTarget");
+		MAHO_TRACE_SCOPE(nullptr, "ensure the UI composite target");
 		const std::uint32_t CanvasW = R.GetCanvasWidth();
 		const std::uint32_t CanvasH = R.GetCanvasHeight();
 		if (CanvasW == 0 || CanvasH == 0)
@@ -541,7 +541,7 @@ void FUIFeature::InitViews(FRender& R, FRenderContext& Frame)
 	bEditorInputThisFrame = false;
 	if (!bEditorFed)
 	{
-		MAHO_TRACE_SCOPE("FUIFeature::InitViews.FeedInput");
+		MAHO_TRACE_SCOPE(nullptr, "feed the UI context input");
 		// Whole-window fallback poll (pure game build, or the panel not yet present).
 		//
 		// Reads the platform's TAGGED input ring with this context's own cursor: every frame this
@@ -639,7 +639,7 @@ void FUIFeature::InitViews(FRender& R, FRenderContext& Frame)
 	// GetTexDataAsRGBA32() triggers that build on the first frame and returns the
 	// existing pixels afterwards (the GPU upload already happened in OnInstalled).
 	{
-		MAHO_TRACE_SCOPE("FUIFeature::InitViews.NewFrame");
+		MAHO_TRACE_SCOPE(nullptr, "start the ImGui frame");
 		unsigned char* FontPixels = nullptr;
 		int FontW = 0, FontH = 0, FontBpp = 0;
 		IO.Fonts->GetTexDataAsRGBA32(&FontPixels, &FontW, &FontH, &FontBpp);
@@ -699,7 +699,7 @@ void FUIFeature::InitViews(FRender& R, FRenderContext& Frame)
 	// window (game layout never re-scales to an editor panel), i.e. the same space the
 	// input feed above used.
 	{
-		MAHO_TRACE_SCOPE("FUIFeature::InitViews.TranslateViews");
+		MAHO_TRACE_SCOPE(nullptr, "translate the registered views");
 		UI::FUIViewFrameDesc FrameDesc;
 		FrameDesc.ImGuiContext = m_Context;
 		// 只翻游戏作用域的视图。编辑器侧声明的是另一个名字，双方各自声明、互不需要对方的头 ——
@@ -746,7 +746,7 @@ void FUIFeature::InitViews(FRender& R, FRenderContext& Frame)
 	//    buffers are the merged ImDrawData (one vertex/index array), created + uploaded
 	//    HERE (InitViews); only the FRDGBufferRefs are stored. RenderUI (later, same
 	//    graph) draws them via AddPass.
-	MAHO_TRACE_SCOPE("FUIFeature::InitViews.TranslateDrawData");
+	MAHO_TRACE_SCOPE(nullptr, "translate ImGui draw data into a draw list");
 	FDrawList& DrawList = this->DrawList;
 	DrawList.Reset();
 
@@ -989,7 +989,7 @@ void FUIFeature::RenderUI(FRender& R, FRenderContext& Frame)
 	}
 
 	{
-		MAHO_TRACE_SCOPE("FUIFeature::RenderUI.Compose");
+		MAHO_TRACE_SCOPE(nullptr, "compose the UI into its target");
 		FRHIGraphicsPipelineDesc PipelineDesc;
 		PipelineDesc.VertexShader = VS;
 		PipelineDesc.FragmentShader = FS;
@@ -1053,7 +1053,7 @@ void FUIFeature::RenderUI(FRender& R, FRenderContext& Frame)
 	// composited). So pass2 MUST STILL set the present target here; pass3 reads it as its
 	// viewport background and only THEN replaces it with EditorRT at the very end. Without
 	// this, the viewport would sample a stale/empty present target.
-	MAHO_TRACE_SCOPE("FUIFeature::RenderUI.SetPresentTarget");
+	MAHO_TRACE_SCOPE(nullptr, "publish the composite as present target");
 	R.SetPresentTarget(UIRenderTarget);
 #ifdef MAHO_EDITOR_BUILD
 	// Editor build: pass3 samples this present target as its viewport background (the
