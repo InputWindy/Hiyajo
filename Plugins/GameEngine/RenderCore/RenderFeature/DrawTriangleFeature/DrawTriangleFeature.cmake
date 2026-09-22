@@ -18,13 +18,14 @@ target_include_directories(DrawTriangleFeature PUBLIC
 	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEngine/Public"
 	"${ENGINE_DIR}/Plugins/GameEngine/RenderCore/Render/Public"
 	"${ENGINE_DIR}/Plugins/GameEngine/RenderCore/RenderFeature/Scene/Public"
+	"${ENGINE_DIR}/Plugins/Common/Log/Public"
 )
 set_target_properties(DrawTriangleFeature PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 target_compile_definitions(DrawTriangleFeature PRIVATE MAHO_DRAWTRIANGLEFEATURE_MODULE_EXPORTS)
 target_link_libraries(DrawTriangleFeature PUBLIC Maho)
 set_property(TARGET DrawTriangleFeature PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>")
 set_target_properties(DrawTriangleFeature PROPERTIES OUTPUT_NAME "FDrawTriangleFeature" PREFIX "")
-target_link_libraries(DrawTriangleFeature PUBLIC Render Scene)
+target_link_libraries(DrawTriangleFeature PUBLIC Render Scene Log)
 set_target_properties(DrawTriangleFeature PROPERTIES FOLDER "Maho/Plugins/GameEngine/RenderCore/RenderFeature")
 source_group(TREE "${CMAKE_CURRENT_LIST_DIR}" FILES ${DrawTriangleFeature_PUBLIC_HEADERS} ${DrawTriangleFeature_PRIVATE_HEADERS} ${DrawTriangleFeature_PRIVATE_SOURCES})
 # -- /MAHOGEN DrawTriangleFeature --

@@ -67,7 +67,7 @@ struct FUIShader
  */
 class MAHO_UIFEATURE_API FUIFeature : public FFrameExtension, public IPipeline<IOnInstalled, IInitViews, IRenderUI, IPreUnInstall>
 {
-MAHO_DECLARE_FRAME(FUIFeature);
+MAHO_DECLARE_FRAME_UNDER(FUIFeature, FRender);
 
 	FUIFeature();
 

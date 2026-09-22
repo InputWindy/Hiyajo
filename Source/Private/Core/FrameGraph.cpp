@@ -1,7 +1,6 @@
 #include <Core/FrameGraph.h>
 
 #include <Core/Fatal.h>
-#include <Core/Profiler.h>
 
 #include <algorithm>
 #include <cstdio>
@@ -136,9 +135,7 @@ bool FFrameGraph::Submit(std::vector<FTask> Tasks, std::string* OutReason)
 	}
 
 	// C1: qualified call -- this class's own Submit would otherwise hide the server's.
-	// Named for the trace: the scheduler's own commands are the busiest row in a profile (~30 per
-	// frame), and "Task" on all of them says nothing about which half of the work it is.
-	FThreadedServer::Submit("Submit", [this, Batch = std::move(Tasks)]() mutable
+	FThreadedServer::Submit([this, Batch = std::move(Tasks)]() mutable
 	{
 		ApplySubmit(std::move(Batch));
 	});
@@ -406,14 +403,10 @@ void FFrameGraph::Dispatch(FNodeId Id)
 	// still about to run, and "the phase is idle" would be a lie.
 	SlotInFlight[SlotIndexOf(Node.Key.Phase)].fetch_add(1, std::memory_order_acq_rel);
 
-	// The task's TRACE IDENTITY travels INSIDE the closure (TraceWrap), not as a parameter of the
-	// pool's API: the graph is the party that knows the triple {collector, frame, stage} -- that is
-	// exactly the node's identity -- so it wraps the body on its way in, and the pool stays a
-	// type-agnostic executor that runs closures. The bar still opens where the body RUNS, so every
-	// candidate runner (a worker, or a Flush that helps drain) draws the same bar.
-	// All three names are static by invariant I3 (GetName must return literal storage).
-	Pool.Submit(Lane, TraceWrap(
-		[this, Id]()
+	// The pool receives the node body as a plain closure: it runs work, it does not know what the
+	// work IS. Any instrumentation is hand-written at the call site that knows it -- a stage body
+	// opens its own bar (MAHO_TRACE_STAGE), not the graph and not the pool.
+	Pool.Submit(Lane, [this, Id]()
 	{
 		// A hard crash (0xC0000005) has no stack and no exception to catch, so the last stage
 		// ENTERED is the only thing that names the culprit -- that is what this trace exists for,
@@ -428,10 +421,6 @@ void FFrameGraph::Dispatch(FNodeId Id)
 		// complete the node, or every waiter downstream waits forever.
 		try
 		{
-			// No trace scope here: the bar for this node is opened by the pool, from the identity
-			// handed to Submit above (FThreadPool::RunTracedTask). That is strictly better than
-			// bracketing the body locally -- it also covers a node run by a Flush that helped
-			// drain, and it keeps ONE instrumentation point for all work in the process.
 			Nodes[Id].Closure();
 		}
 		catch (const std::exception& E)
@@ -450,11 +439,8 @@ void FFrameGraph::Dispatch(FNodeId Id)
 
 		// Completion bookkeeping happens ON THE SCHEDULER THREAD (state is single-owned).
 		// The body never touches the graph: it cannot even reach its own completion event.
-		// Named for the trace -- one of these per dispatched node, so it is the other half of the
-		// scheduler's command traffic.
-		FThreadedServer::Submit("Complete", [this, Id]() { OnNodeCompleted(Id); });
-	},
-		FTaskTrace{ TraceGroup, Node.Key.Name.data(), Node.Key.Stage.name(), Node.Key.Phase }));
+		FThreadedServer::Submit([this, Id]() { OnNodeCompleted(Id); });
+	});
 }
 
 void FFrameGraph::OnNodeCompleted(FNodeId Id)
@@ -463,13 +449,6 @@ void FFrameGraph::OnNodeCompleted(FNodeId Id)
 
 	// Set the completion event, then release every waiter that is now satisfied.
 	EventStates[Node.CompletionEvent].store(true, std::memory_order_release);
-
-	// Where this node ENDED is what a synchronization point is drawn from, so it is captured here,
-	// before the release loop below, and only when tracing is on (a plain read otherwise).
-	if (TraceEnabled())
-	{
-		Node.TraceEndMicros = TraceNowMicros();
-	}
 
 	std::vector<FNodeId> BecameReady;
 	for (FNodeId Waiter : Node.Successors)
@@ -483,16 +462,6 @@ void FFrameGraph::OnNodeCompleted(FNodeId Id)
 	}
 	for (FNodeId Ready : BecameReady)
 	{
-		// THIS node is the one that unblocked `Ready` -- a node may wait for several predecessors, but
-		// only the last to finish is the gate -- so this is where the sync edge is real, and one flow
-		// per released node is all a viewer needs to see who waited for whom.
-		if (TraceEnabled())
-		{
-			const FTaskNode& Next = Nodes[Ready];
-			TraceEmitFlow(TraceGroup, Node.Key.Name.data(), Node.Key.Stage.name(), Node.Key.Phase,
-				Node.TraceEndMicros,
-				TraceGroup, Next.Key.Name.data(), Next.Key.Stage.name(), Next.Key.Phase);
-		}
 		Dispatch(Ready);
 	}
 

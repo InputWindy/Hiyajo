@@ -1,5 +1,7 @@
 #include "Timer.h"
 
+#include <Trace.h>
+
 #include <algorithm>
 #include <chrono>
 #include <functional>
@@ -17,6 +19,7 @@ MAHO_TIMER_API FTimer* GetTimer()
 
 void FTimer::Initialize(FEngineBase& Engine, FEngineContext& Frame)
 {
+	MAHO_TRACE_STAGE(IInit, "Timer init", "publish the timer and reset the scope tree");
 	(void)Engine;
 	Reset();
 	GTimer = this;
@@ -24,6 +27,7 @@ void FTimer::Initialize(FEngineBase& Engine, FEngineContext& Frame)
 
 void FTimer::Shutdown(FEngineBase&, FEngineContext&)
 {
+	MAHO_TRACE_STAGE(IShutdown, "Timer shutdown", "retract the timer and drop its scopes");
 	Reset();
 	GTimer = nullptr;
 }

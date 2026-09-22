@@ -4,7 +4,6 @@
 #include <Core/Delegate.h>
 #include <Core/Fatal.h>
 #include <Core/FrameGraph.h>
-#include <Core/Profiler.h>
 #include <Engine/Frame.h>
 #include <Engine/PluginManager.h>
 #include <Engine/Query.h>
@@ -56,11 +55,10 @@ class MAHO_API IFrameCollector
 public:
 	virtual ~IFrameCollector();
 
-	/** Take the given pool as this collector's task pool, plus a lane of its own within it, plus the
-	 *  CPU-trace GROUP its nodes inherit from the installer (null = the installer declares nothing).
+	/** Take the given pool as this collector's task pool, plus a lane of its own within it.
 	 *  Called by the installing parent; never after the collector's first Execute (the graph that
 	 *  holds the pool by reference does not exist yet, and that is the point of doing it here). */
-	virtual void UseSharedPool(FThreadPool& InPool, const char* ParentTraceGroup) = 0;
+	virtual void UseSharedPool(FThreadPool& InPool) = 0;
 };
 
 // ── FFrameBuilder: layer-collection management base ─────────────────────
@@ -103,53 +101,14 @@ public:
 		}
 	}
 
-	/** IFrameCollector: share the installing parent's task pool, take a lane of our own in it, and
-	 *  remember the trace GROUP the installer hands down (what an undeclared frame inherits).
+	/** IFrameCollector: share the installing parent's task pool and take a lane of our own in it.
 	 *  Called from Install, i.e. before this collector exists as far as the graph is concerned. */
-	void UseSharedPool(FThreadPool& InPool, const char* ParentTraceGroup) override
+	void UseSharedPool(FThreadPool& InPool) override
 	{
 		// The parent's pool replaces ours entirely -- OwnedPool simply never gets workers (the
 		// pool is lazy), so nothing is doubled by having the member.
 		Pool = &InPool;
 		Lane = InPool.CreateLane();
-		InheritedTraceGroup = ParentTraceGroup;
-	}
-
-	/** The CPU-trace GROUP (timeline lane, and fold key) for this collector's nodes. Resolved LAZILY,
-	 *  once, in this order:
-	 *    1. the frame's own declaration -- `FFrameExtension::GetTraceGroup()` (FRender -> "Render");
-	 *    2. what the installing parent handed down through UseSharedPool;
-	 *    3. the engine's own top-level loop, which IS the level the host drives: "Engine".
-	 *  Registration happens here, once per collector -- which is why a group name is registered where
-	 *  it is INTRODUCED and never per event. */
-	[[nodiscard]] const char* GetTraceGroupResolved()
-	{
-		if (ResolvedTraceGroup == nullptr)
-		{
-			const auto* Self = dynamic_cast<const FFrameExtension*>(this);
-			const char* Declared = (Self != nullptr) ? Self->GetTraceGroup() : nullptr;
-			if (Declared != nullptr && Declared[0] != '\0')
-			{
-				ResolvedTraceGroup = RegisterTraceGroup(Declared);
-			}
-			else if (InheritedTraceGroup != nullptr)
-			{
-				ResolvedTraceGroup = InheritedTraceGroup;
-			}
-			else if (Self == nullptr)
-			{
-				// No frame, no installer: this IS the engine's own loop, and everything below it
-				// that declares nothing inherits this name.
-				ResolvedTraceGroup = RegisterTraceGroup("Engine");
-			}
-			else
-			{
-				// A frame nobody declared a group for and nobody handed one down: rather than invent
-				// a lane, land on the one lane that always exists.
-				ResolvedTraceGroup = TraceGroupGlobal();
-			}
-		}
-		return ResolvedTraceGroup;
 	}
 
 	/** EVERY terminal state of an install / uninstall / reload operation. Grouped by
@@ -336,7 +295,7 @@ protected:
 		// must leave the caller with nothing to clean up.
 		if (auto* Child = dynamic_cast<IFrameCollector*>(Layer.get()))
 		{
-			Child->UseSharedPool(*Pool, GetTraceGroupResolved());
+			Child->UseSharedPool(*Pool);
 		}
 
 		PendingAdded.push_back(Layer.get());
@@ -913,19 +872,12 @@ private:
 			Graph = std::make_unique<FFrameGraph>(*Pool, Lane);
 
 			// A collector IS an FFrameExtension (FRender, FGameWorld, FExampleEditor), so it can
-			// name the group its nodes are traced under -- which is what lets a viewer lay a
-			// collector's features out as that collector's sub-blocks instead of as unrelated
-			// rows. The host is NOT a frame (it only owns this builder), so the cast fails there
-			// and the group stays empty: the host's frames ARE the top level.
+			// name itself for the diagnostics that group a collector's stages. The host is NOT a
+			// frame (it only owns this builder), so the cast fails there and the owner stays empty.
 			if (auto* Self = dynamic_cast<FFrameExtension*>(this))
 			{
 				Graph->SetOwnerName(Self->GetName().data());
 			}
-
-			// The GROUP -- the lane those bars are DRAWN on, resolved once (own declaration, else
-			// inherited from the installer, else "Engine" for the engine's own loop). It is what the
-			// timeline groups by; the owner name above stays the human-readable identity.
-			Graph->SetTraceGroup(GetTraceGroupResolved());
 
 			Graph->Initialize();
 		}
@@ -1364,12 +1316,6 @@ private:
 	FThreadPool  OwnedPool;
 	FThreadPool* Pool = &OwnedPool;
 	FThreadPool::FLane Lane = FThreadPool::DefaultLane;
-
-	/** Trace-group inheritance: what the installer handed down (UseSharedPool), and the resolved
-	 *  answer computed once by GetTraceGroupResolved(). Both are registered group pointers, i.e.
-	 *  static storage -- the events outlive the frames that produced them. */
-	const char* InheritedTraceGroup = nullptr;
-	const char* ResolvedTraceGroup = nullptr;
 
 	/** Frame INSTANCE ownership. Declared AFTER Pool, deliberately: members are destroyed in
 	 *  reverse declaration order, and a collector child destroyed here flushes -- and releases its

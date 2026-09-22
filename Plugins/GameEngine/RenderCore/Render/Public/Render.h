@@ -272,10 +272,6 @@ private:
 	FRender();
 	~FRender() override;
 
-	/** FRender is a DRIVER: the frame whose graph drives every render feature. Declaring the group
-	 *  here is what puts FRender, FScene, the draw features and the editor's panels on ONE CPU-trace
-	 *  lane named "Render" -- none of them has to name itself, they inherit. */
-	[[nodiscard]] const char* GetTraceGroup() const override { return "Render"; }
 public:
 	/** CPU-asset->GPU mirror map access for UI features: the UIFeature draws each
 	 *  texture mirror as an ImGui::Image, re-resolving its set-0 CombinedImageSampler

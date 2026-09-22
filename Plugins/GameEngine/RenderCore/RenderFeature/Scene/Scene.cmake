@@ -18,6 +18,7 @@ target_include_directories(Scene PUBLIC
 	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEngine/Public"
 	"${ENGINE_DIR}/Plugins/GameEngine/RenderCore/Render/Public"
 	"${ENGINE_DIR}/Plugins/GameEngine/EngineCore/Resource/Public"
+	"${ENGINE_DIR}/Plugins/Common/Log/Public"
 )
 target_include_directories(Scene PRIVATE
 	"${ENGINE_DIR}/Plugins/GameEngine/EngineCore/Asset/Public"
@@ -27,7 +28,7 @@ target_compile_definitions(Scene PRIVATE MAHO_SCENE_MODULE_EXPORTS)
 target_link_libraries(Scene PUBLIC Maho)
 set_property(TARGET Scene PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>")
 set_target_properties(Scene PROPERTIES OUTPUT_NAME "FScene" PREFIX "")
-target_link_libraries(Scene PUBLIC Render Resource)
+target_link_libraries(Scene PUBLIC Render Resource Log)
 set_target_properties(Scene PROPERTIES FOLDER "Maho/Plugins/GameEngine/RenderCore/RenderFeature")
 source_group(TREE "${CMAKE_CURRENT_LIST_DIR}" FILES ${Scene_PUBLIC_HEADERS} ${Scene_PRIVATE_HEADERS} ${Scene_PRIVATE_SOURCES})
 # -- /MAHOGEN Scene --

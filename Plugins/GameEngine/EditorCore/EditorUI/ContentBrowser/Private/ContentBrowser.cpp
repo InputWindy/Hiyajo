@@ -1,6 +1,6 @@
 #include "ContentBrowser.h"
 
-#include <Core/Profiler.h>
+#include <Trace.h>
 #include <AssetTypes.h>
 #include <Log.h>
 #include <Paths.h>
@@ -156,7 +156,7 @@ UI::FUIView* FContentBrowser::EnsureView(FExampleEditor& Editor)
 
 void FContentBrowser::Update(FExampleEditor& Editor, FExampleEditorContext& Frame)
 {
-	MAHO_TRACE_SCOPE(nullptr, "抽干事件并回读浏览状态");
+	MAHO_TRACE_STAGE(IEditorPanel, "Browser frame", "抽干事件并回读浏览状态");
 	UI::FUIView* PanelView = EnsureView(Editor);
 	if (PanelView == nullptr)
 	{
@@ -206,7 +206,7 @@ void FContentBrowser::Update(FExampleEditor& Editor, FExampleEditorContext& Fram
 
 	// ---- 声明期：只改本视图的树 -------------------------------------------
 	{
-		MAHO_TRACE_SCOPE(nullptr, "声明期：重建浏览器视图树");
+		MAHO_TRACE_SECTION("声明期：重建浏览器视图树", nullptr);
 		UI::FUIEditScope Scope = PanelView->Edit();
 		UI::FUIBuilder& Root = Scope.GetRoot();
 		Root.Layout().SetDirection(UI::EUIDirection::Column);
@@ -472,7 +472,7 @@ bool FContentBrowser::IsAnyNodeHovered(const UI::FUIBuilder& Node) const
 
 void FContentBrowser::Rescan()
 {
-	MAHO_TRACE_SCOPE(nullptr, "重扫磁盘目录并刷新条目");
+	MAHO_TRACE_SECTION("重扫磁盘目录并刷新条目", nullptr);
 	Roots.clear();
 	std::error_code Ec;
 	Paths::FPaths* P = Paths::GetPaths();
@@ -791,7 +791,7 @@ void FContentBrowser::SetStatus(bool bError, std::string Text)
 
 void FContentBrowser::Shutdown(FExampleEditor& Editor, FExampleEditorContext& Frame)
 {
-	MAHO_TRACE_SCOPE(nullptr, "解绑订阅并卸载浏览器面板");
+	MAHO_TRACE_STAGE(IEditorShutdown, "Browser teardown", "解绑订阅并卸载浏览器面板");
 	(void)Editor;
 
 	if (View == nullptr)

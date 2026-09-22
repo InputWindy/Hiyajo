@@ -29,7 +29,7 @@ namespace Maho
  */
 class FEditorTheme : public FFrameExtension, public IPipeline<IEditorInit, IEditorPanel, IEditorShutdown>
 {
-	MAHO_DECLARE_FRAME(FEditorTheme);
+	MAHO_DECLARE_FRAME_UNDER(FEditorTheme, FRender);
 
 public:
 	void Init(FExampleEditor& Editor, FExampleEditorContext& Frame) override;

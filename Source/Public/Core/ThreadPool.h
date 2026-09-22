@@ -106,11 +106,10 @@ public:
 	[[nodiscard]] std::uint32_t GetLanePending(FLane Lane) const;
 
 private:
-	/** One queue entry: just the work. WHETHER and HOW a task is traced is not this pool's business:
-	 *  the caller that knows the identity wraps the body itself (see `Maho::TraceWrap` in
-	 *  Core/Profiler.h), so the bar is still opened where the task RUNS -- on the worker, or on the
-	 *  thread a Flush helped drain from -- while this header stays a type-agnostic execution block
-	 *  with no knowledge of the profiling layer. */
+	/** One queue entry: just the work. WHETHER and HOW a task is instrumented is not this pool's
+	 *  business and not any of this module's: the pool runs ordinary closures, so the header stays a
+	 *  type-agnostic execution block. Any bar is opened by the caller's own hand-written macro
+	 *  (Trace.h), inside the body it describes. */
 	struct FQueuedTask
 	{
 		std::function<void()> Task;

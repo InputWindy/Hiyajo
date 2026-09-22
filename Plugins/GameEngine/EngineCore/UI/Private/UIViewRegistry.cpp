@@ -3,6 +3,7 @@
 #include <UIView.h>
 
 #include <Log.h>
+#include <Trace.h>
 
 #include <Core/Fatal.h>
 
@@ -153,12 +154,14 @@ void FUIViewRegistry::WriteClipboard(std::string_view Text) const
 
 void FUIViewRegistry::Initialize(FEngineBase& Engine, FEngineContext& Frame)
 {
+	MAHO_TRACE_STAGE(IInit, "UI registry init", "publish the view registry to the process");
 	std::scoped_lock Lock(Mutex);
 	GUIRegistry = this;
 }
 
 void FUIViewRegistry::Shutdown(FEngineBase& Engine, FEngineContext& Frame)
 {
+	MAHO_TRACE_STAGE(IShutdown, "UI registry shutdown", "report and clear the capability slots");
 	// 1) 能力槽：先对账，再清空。
 	//    注册者若已经卸载（它死在别的 collector 的子树里 —— 比如 FExampleEditor 在 FRender 下），
 	//    槽里剩下的就是**已卸载模块的闭包**；留到实例析构，就会在 DLL detach 之后调用它

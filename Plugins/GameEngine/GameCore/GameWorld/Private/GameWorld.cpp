@@ -4,6 +4,7 @@
 // the private cpp so GameWorld.h stays free of world-system types.
 #include <UISystem.h>
 
+#include <Trace.h>
 #include <vector>
 
 namespace Maho
@@ -44,20 +45,40 @@ FGameWorld::~FGameWorld()
 // -- engine stage overrides (host drives these). Initialize/Tick/Shutdown carry
 // the real work; the remaining stages are empty -- FGameWorld only hosts the world
 // and schedules its systems, the per-stage ECS frame runs in Tick.
-void FGameWorld::PreInitialize(FEngineBase&, FEngineContext&) {}
+void FGameWorld::PreInitialize(FEngineBase&, FEngineContext&)
+{
+	MAHO_TRACE_STAGE(IPreInit, "World pre-init", "nothing to build before the world exists");
+}
 void FGameWorld::PostInitialize(FEngineBase&, FEngineContext&)
 {
+	MAHO_TRACE_STAGE(IPostInit, "World post-init", "the world graphs are built on first use");
 	// Nothing to build: the stage sequences are compile-time (FInputStages / FFixedStages /
 	// FPostStages) and the collector's graph is created on first use. Tick drives them.
 }
-void FGameWorld::BeginFrame(FEngineBase&, FEngineContext&) {}
-void FGameWorld::EndFrame(FEngineBase&, FEngineContext&) {}
-void FGameWorld::RequestExit(FEngineBase&, FEngineContext&) {}
-void FGameWorld::PreShutdown(FEngineBase&, FEngineContext&) {}
-void FGameWorld::PostShutdown(FEngineBase&, FEngineContext&) {}
+void FGameWorld::BeginFrame(FEngineBase&, FEngineContext&)
+{
+	MAHO_TRACE_STAGE(IBeginFrame, "World frame begin", "the world has no frame-head work");
+}
+void FGameWorld::EndFrame(FEngineBase&, FEngineContext&)
+{
+	MAHO_TRACE_STAGE(IEndFrame, "World frame end", "the world has no frame-tail work");
+}
+void FGameWorld::RequestExit(FEngineBase&, FEngineContext&)
+{
+	MAHO_TRACE_STAGE(IExit, "World exit", "the world has no exit work of its own");
+}
+void FGameWorld::PreShutdown(FEngineBase&, FEngineContext&)
+{
+	MAHO_TRACE_STAGE(IPreShutdown, "World pre-shutdown", "the world has no pre-teardown work");
+}
+void FGameWorld::PostShutdown(FEngineBase&, FEngineContext&)
+{
+	MAHO_TRACE_STAGE(IPostShutdown, "World post-shutdown", "the world has no post-teardown work");
+}
 
 void FGameWorld::Initialize(FEngineBase&, FEngineContext&)
 {
+	MAHO_TRACE_STAGE(IInit, "World init", "create the sample entity and install the systems");
 	GGameWorld = this;
 	LastFrame = std::chrono::steady_clock::now();
 	Accumulator = 0.f;
@@ -81,6 +102,7 @@ void FGameWorld::Initialize(FEngineBase&, FEngineContext&)
 
 void FGameWorld::Tick(FEngineBase&, FEngineContext&)
 {
+	MAHO_TRACE_STAGE(ITick, "World tick", "drive the input, fixed and post stage groups");
 	// Frame-start barrier: the post-fixed group is dispatched un-waited below, so it pipelines
 	// across frames into this wait -- cross-frame parallelism, same as the render graph. Must
 	// precede any frame-set change (a change under live nodes is a use of a freed node).
@@ -118,6 +140,7 @@ void FGameWorld::Tick(FEngineBase&, FEngineContext&)
 
 void FGameWorld::Shutdown(FEngineBase&, FEngineContext&)
 {
+	MAHO_TRACE_STAGE(IShutdown, "World shutdown", "drain the graph, free the pools, uninstall all");
 	// MY OWN state first, the world systems AFTER. The component pools hold objects
 	// whose destructors live in the systems' modules, and the graph's nodes point at
 	// their instances -- freeing either of those once a system's DLL is unloaded runs

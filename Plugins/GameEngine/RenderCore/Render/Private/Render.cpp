@@ -1,6 +1,6 @@
 #include "Render.h"
 
-#include <Core/Profiler.h>
+#include <Trace.h>
 #include <DrawTriangleFeature.h>
 #include <UIFeature.h>
 #include <Log.h>
@@ -132,6 +132,7 @@ FRender::~FRender() = default;
 
 void FRender::PreInitialize(FEngineBase&, FEngineContext&)
 {
+	MAHO_TRACE_STAGE(IPreInit, "Render pre-init", "install the render features i own");
 	// Pull up the render features I declare (Render.cplugin Plugins), at the
 	// earliest stage of my own lifecycle -- before any of my business init runs.
 	// The catalog resolves them by MY name; each is loaded by module base name
@@ -149,6 +150,7 @@ void FRender::PreInitialize(FEngineBase&, FEngineContext&)
 
 void FRender::Initialize(FEngineBase& Engine, FEngineContext& Frame)
 {
+	MAHO_TRACE_STAGE(IInit, "Render init", "create the RHI, the pool, the compiler and the mirror");
 	(void)Engine;
 	GRender = this;
 
@@ -211,6 +213,7 @@ void FRender::Initialize(FEngineBase& Engine, FEngineContext& Frame)
 
 void FRender::PostInitialize(FEngineBase&, FEngineContext&)
 {
+	MAHO_TRACE_STAGE(IPostInit, "Render post-init", "nothing to build: the features are already mounted");
 	// The editor feature (ExampleEditor, Type=Editor) is declared in Render.cplugin's
 	// Plugins, so InstallChildrenOf(GetName()) in PreInitialize mounts it into OUR
 	// collection -- which is where it belongs: the render graph only sees this collector,
@@ -234,10 +237,12 @@ void FRender::WaitShaderCompiles()
 
 void FRender::PreShutdown(FEngineBase&, FEngineContext&)
 {
+	MAHO_TRACE_STAGE(IPreShutdown, "Render pre-shutdown", "the render features are uninstalled in IShutdown");
 }
 
 void FRender::Shutdown(FEngineBase&, FEngineContext&)
 {
+	MAHO_TRACE_STAGE(IShutdown, "Render shutdown", "drain every async worker before tearing the layer down");
 	// Clean-exit guarantee: drain EVERY async worker BEFORE tearing anything
 	// down. The engine's shutdown graph runs the IShutdown stages concurrently,
 	// so this layer must be quiescent before we touch shared state -- the render
@@ -339,10 +344,12 @@ void FRender::Shutdown(FEngineBase&, FEngineContext&)
 
 void FRender::PostShutdown(FEngineBase&, FEngineContext&)
 {
+	MAHO_TRACE_STAGE(IPostShutdown, "Render post-shutdown", "the RHI teardown already joined its server thread");
 }
 
 void FRender::BeginFrame(FEngineBase&, FEngineContext&)
 {
+	MAHO_TRACE_STAGE(IBeginFrame, "Render frame begin", "the frame head belongs to the first render stage");
 	// EMPTY on purpose. The swapchain frame is opened by the frame's FIRST stage
 	// (FScene::IBeginRender -> BeginSwapchainFrame), inside the render graph, so its ordering is a
 	// declared edge instead of "this host stage happens to run before the batch". The host stages
@@ -358,10 +365,10 @@ void FRender::BeginSwapchainFrame()
 	// two waits apart, because "the whole frame stalled here" is not actionable on its own.
 	if (IRHI* RHIp = RHI.get())
 	{
-		MAHO_TRACE_SCOPE(nullptr, "begin the RHI frame head");
+		MAHO_TRACE_SECTION("begin the RHI frame head", nullptr);
 		RHIp->BeginFrame();
 	}
-	MAHO_TRACE_SCOPE(nullptr, "advance the resource pool");
+	MAHO_TRACE_SECTION("advance the resource pool", nullptr);
 	BeginResourcePool();
 }
 
@@ -372,7 +379,7 @@ void FRender::EndSwapchainFrame()
 	// order -- no graph drain needed to know the recording finished.
 	if (IRHI* RHIp = RHI.get())
 	{
-		MAHO_TRACE_SCOPE(nullptr, "close and submit the RHI frame");
+		MAHO_TRACE_SECTION("close and submit the RHI frame", nullptr);
 		RHIp->EndFrame();
 	}
 }
@@ -387,6 +394,7 @@ void FRender::BeginResourcePool()
 
 void FRender::Tick(FEngineBase&, FEngineContext&)
 {
+	MAHO_TRACE_STAGE(ITick, "Render tick", "bound the lookahead and dispatch the render graph");
 	// SOFT lookahead bound. Waiting for the previous frame's batch to have been HANDED to the RHI
 	// server (posted), not for its submission to complete: this stage drives the OS message pump
 	// (FPlatform::ITick runs before it) and the server's FIFO has the previous frame's
@@ -427,6 +435,7 @@ void FRender::Tick(FEngineBase&, FEngineContext&)
 
 void FRender::EndFrame(FEngineBase&, FEngineContext&)
 {
+	MAHO_TRACE_STAGE(IEndFrame, "Render frame end", "the frame tail closes the swapchain frame");
 	// EMPTY on purpose: the frame is closed by its TAIL stage (FScene::IPresent -> EndSwapchainFrame).
 	// Closing it here would need "wait for that stage", and the reason that wait existed is gone --
 	// the frame command list's only recording (the blit) happens in the same stage that closes it.
@@ -437,6 +446,7 @@ void FRender::EndFrame(FEngineBase&, FEngineContext&)
 
 void FRender::RequestExit(FEngineBase&, FEngineContext&)
 {
+	MAHO_TRACE_STAGE(IExit, "Render exit", "the render layer has no exit work of its own");
 }
 
 FRDGTextureRef FRender::CreateTexture(const FRHITextureDesc& Desc, ERDGResourceLifetime Lifetime)

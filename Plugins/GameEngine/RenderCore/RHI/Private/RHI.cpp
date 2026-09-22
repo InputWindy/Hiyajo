@@ -147,7 +147,7 @@ void FRHI::RunOnServer(std::function<void()> Fn)
 
 	// Qualified: FRHI's own Submit is the QUEUE submit (IRHI), which would hide the server's task
 	// Submit(this) overload.
-	FThreadedServer::Submit("Marshal", [Completion, Fn = std::move(Fn)]()
+	FThreadedServer::Submit([Completion, Fn = std::move(Fn)]()
 	{
 		struct FSignal
 		{

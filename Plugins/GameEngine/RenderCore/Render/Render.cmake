@@ -23,6 +23,7 @@ target_include_directories(Render PUBLIC
 	"${ENGINE_DIR}/Plugins/GameEngine/EngineCore/Resource/Public"
 	"${ENGINE_DIR}/Plugins/GameEngine/EngineCore/Asset/Public"
 	"${ENGINE_DIR}/Plugins/GameEngine/GameCore/GameWorld/Public"
+	"${ENGINE_DIR}/Plugins/Common/Log/Public"
 )
 target_include_directories(Render PRIVATE
 	"${ENGINE_DIR}/Plugins/GameEngine/RenderCore/RenderFeature/Scene/Public"
@@ -34,7 +35,7 @@ target_compile_definitions(Render PRIVATE MAHO_RENDER_MODULE_EXPORTS)
 target_link_libraries(Render PUBLIC Maho)
 set_property(TARGET Render PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>")
 set_target_properties(Render PROPERTIES OUTPUT_NAME "FRender" PREFIX "")
-target_link_libraries(Render PUBLIC RHI Platform Resource Asset GameWorld)
+target_link_libraries(Render PUBLIC RHI Platform Resource Asset GameWorld Log)
 # Building Render alone must also build the sub-plugins it installs at
 # runtime (Scene DrawTriangleFeature UIFeature ExampleEditor EditorViewport EditorConsole ContentBrowser EditorTheme) - otherwise a sub-plugin DLL left over from a
 # previous build is silently installed. A POST_BUILD script action, NOT

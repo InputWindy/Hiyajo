@@ -1,5 +1,7 @@
 #include "Text.h"
 
+#include <Trace.h>
+
 #include <nlohmann/json.hpp>
 
 namespace Maho::Text
@@ -49,6 +51,7 @@ std::string FText::Resolve() const
 
 void FTextManager::Initialize(FEngineBase& Engine, FEngineContext& Frame)
 {
+	MAHO_TRACE_STAGE(IInit, "Text init", "publish the manager and reset the catalog");
 	(void)Engine;
 	std::lock_guard<std::mutex> Lock(Mutex);
 	Catalog.clear();
@@ -58,6 +61,7 @@ void FTextManager::Initialize(FEngineBase& Engine, FEngineContext& Frame)
 
 void FTextManager::Shutdown(FEngineBase&, FEngineContext&)
 {
+	MAHO_TRACE_STAGE(IShutdown, "Text shutdown", "retract the manager and clear the catalog");
 	std::lock_guard<std::mutex> Lock(Mutex);
 	Catalog.clear();
 	GTextManager = nullptr;

@@ -1,7 +1,6 @@
 #include <Core/ThreadedServer.h>
 
 #include <Core/Fatal.h>
-#include <Core/Profiler.h>
 
 #include <stdexcept>
 #include <utility>
@@ -71,27 +70,15 @@ void FThreadedServer::Shutdown()
 
 void FThreadedServer::Submit(std::function<void()> Task)
 {
-	Submit("Task", std::move(Task));
-}
-
-void FThreadedServer::Submit(const char* Stage, std::function<void()> Task)
-{
 	{
 		std::lock_guard Lock(Mutex);
-		Queue.push_back(FQueuedTask{ Stage != nullptr ? Stage : "Task", std::move(Task) });
+		Queue.push_back(FQueuedTask{ std::move(Task) });
 	}
 	CondVar.notify_one();
 }
 
 void FThreadedServer::Flush()
 {
-	// Traced from the CALLER's side: this is where the barrier's cost is paid, and it lands on
-	// whatever lane the caller is already on -- the server's own row shows the task bar this
-	// wait is waiting behind, so the two line up visually. A plain single-name scope (not a lane
-	// scope): switching lanes here would move the stall onto the server's row, which is not where
-	// the time is spent.
-	MAHO_TRACE_SCOPE(nullptr, "wait for the queued work to drain");
-
 	// A barrier means "wait until the work I queued has run" -- and with no worker there is nothing
 	// that will ever run it, so waiting would hang forever. (Found the hard way: a caller that
 	// drained a server AFTER Shutdown -- the thread is joined, the queue is dead -- blocked for good.)
@@ -104,7 +91,7 @@ void FThreadedServer::Flush()
 	std::mutex BarrierMutex;
 	std::condition_variable BarrierCv;
 	bool bDone = false;
-	Submit("Flush", [&]
+	Submit([&]
 	{
 		std::lock_guard Lock(BarrierMutex);
 		bDone = true;
@@ -116,31 +103,11 @@ void FThreadedServer::Flush()
 
 void FThreadedServer::RunLoop()
 {
-	// The row this thread's events land on, named after the ROLE (GetThreadName). It is the
-	// thread's own lane: a server is a sequential stream of tasks, which is exactly what a lane
-	// is. Events keep the pointer, so the name must be static storage -- which GetThreadName's
-	// contract requires anyway.
-	const char* const ThreadName = GetThreadName();
-
-	// Register the role as a trace GROUP: the lane key is a group name, and a resident thread is the
-	// one place that introduces its own -- so this is where it enters the trace's vocabulary (and
-	// where an unregistered name, which would otherwise fall back to Global with a warning, is
-	// avoided by construction). Idempotent, and it happens before the first event below.
-	RegisterTraceGroup(ThreadName);
-
 	// Publish this thread's identity for IsServerThread(): a marshal helper on the server thread
 	// must recognize itself and run inline instead of posting a task and waiting on it forever.
 	{
 		std::lock_guard Lock(Mutex);
 		WorkerId = std::this_thread::get_id();
-	}
-
-	// A one-shot marker, before the first wait, so this thread's row exists even if it is never
-	// given a task. Rows are derived from events, so a server nobody submits to would otherwise
-	// be INVISIBLE -- and "this resident thread exists and does nothing" is exactly the kind of
-	// finding a profile is asked for. One event per thread for the whole run.
-	{
-		MAHO_TRACE_SCOPE_LANE(ThreadName, "Started", nullptr);
 	}
 
 	while (true)
@@ -149,10 +116,8 @@ void FThreadedServer::RunLoop()
 		{
 			std::unique_lock Lock(Mutex);
 
-			// No bar for the WAIT itself. A gap in this row already means "waiting", which is
-			// what a timeline is for, and the metadata declares the row either way -- so an
-			// idle bar would double the event count on the busiest lane to say nothing new.
-			// (The scheduler thread wakes ~30 times a frame; at 200 fps that is 6000 bars/s.)
+			// No bar for the WAIT itself -- the server runs closures and knows nothing about any
+			// profiling layer (a role that wants its work visible instruments the body it submits).
 			CondVar.wait(Lock, [this] { return bStopping || !Queue.empty(); });
 
 			if (bStopping && Queue.empty())
@@ -163,10 +128,6 @@ void FThreadedServer::RunLoop()
 			Queue.pop_front();
 		}
 
-		// One bar per task, opened HERE rather than at the submitter's call site: this is the
-		// point every server task passes through, and the label the submitter handed over is
-		// exactly what the bar needs. The scope also tells the tracer which row this is.
-		MAHO_TRACE_SCOPE_LANE(ThreadName, Queued.Stage, nullptr);
 		try
 		{
 			Queued.Task();

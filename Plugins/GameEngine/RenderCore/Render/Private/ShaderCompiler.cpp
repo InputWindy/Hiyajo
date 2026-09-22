@@ -172,7 +172,7 @@ void FShaderCompilerServer::CompileAsync(
 	const FShaderCompileDesc& Desc,
 	std::function<void(const FShaderCompileResult&)> OnDone)
 {
-	Submit("Compile", [this, Desc, OnDone = std::move(OnDone)]()
+	Submit([this, Desc, OnDone = std::move(OnDone)]()
 	{
 		FShaderCompileResult Result = CompileStage(Desc);
 		if (OnDone)

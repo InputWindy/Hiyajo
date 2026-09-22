@@ -2,5 +2,5 @@
   "FileVersion": 1,
   "Name": "Name",
   "Description": "interned string identifier pool layer",
-  "Dependencies": []
+  "Dependencies": ["Log"]
 }

@@ -18,12 +18,14 @@ target_include_directories(Name PUBLIC
 	"${ENGINE_DIR}/Source/Public"
 	"${CMAKE_CURRENT_LIST_DIR}/Public"
 	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEngine/Public"
+	"${ENGINE_DIR}/Plugins/Common/Log/Public"
 )
 set_target_properties(Name PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 target_compile_definitions(Name PRIVATE MAHO_NAME_MODULE_EXPORTS)
 target_link_libraries(Name PUBLIC Maho)
 set_property(TARGET Name PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>")
 set_target_properties(Name PROPERTIES OUTPUT_NAME "FNamePool" PREFIX "")
+target_link_libraries(Name PUBLIC Log)
 set_target_properties(Name PROPERTIES FOLDER "Maho/Plugins/Common")
 source_group(TREE "${CMAKE_CURRENT_LIST_DIR}" FILES ${Name_PUBLIC_HEADERS} ${Name_PRIVATE_HEADERS} ${Name_PRIVATE_SOURCES})
 # -- /MAHOGEN Name --

@@ -42,7 +42,7 @@
 #include <type_traits>
 
 /**
- * Frame declaration sugar -- generates StaticName() + GetName() + CreateFrame() +
+ * Frame declaration sugar -- generates StaticName() + GetName() + TraceGroupName() + CreateFrame() +
  * GetModulePath(). CreateFrame/GetModulePath are NOT engine-frame-specific: every
  * FFrameExtension-derived frame that can be dynamically loaded carries the factory + module path.
  * Usage:
@@ -52,6 +52,12 @@
  * The name comes from stringifying the type name (#FrameType); dependency declarations use
  * the same type deduction, so it is self-consistent, and it is a STRING LITERAL -- which is
  * what makes FTaskKey::Name (a string_view) safe (invariant I3).
+ *
+ * TraceGroupName() is the frame's TRACE LANE: the architectural partition its bars fold into (see
+ * Trace.h). It is a name, not an identity -- "Engine" here, i.e. the engine's own loop, and the host
+ * may override it by declaring the frame with MAHO_DECLARE_FRAME_UNDER instead. Nothing in the engine
+ * reads it: the trace is the only consumer, and it is what lets every frames' bars be read as the
+ * architecture rather than as an undifferentiated thread list.
  */
 #define MAHO_DECLARE_FRAME(FrameType)                        \
 public:                                                      \
@@ -62,6 +68,49 @@ public:                                                      \
 	std::string_view GetName() const override                \
 	{                                                        \
 		return StaticName();                                  \
+	}                                                        \
+	static const char* TraceGroupName()                      \
+	{                                                        \
+		return "Engine";                                      \
+	}                                                        \
+	static Maho::FFrameExtension* CreateFrame()                       \
+	{                                                        \
+		return new FrameType();                                \
+	}                                                        \
+	static std::string GetModulePath()                       \
+	{                                                        \
+		return Maho::ApplyModuleExtension(#FrameType);         \
+	}
+
+/**
+ * The same, for a frame INSTALLED INTO another frame (a collector: FRender owns its features, the
+ * editor owns its panels). Its bars belong to the collector's partition -- it is one of the things
+ * that collector is made of -- so it inherits the collector's lane instead of carrying one of its own.
+ *
+ *   class FScene : public FFrameExtension, public IPipeline<IBeginRender, ...>
+ *   {
+ *       MAHO_DECLARE_FRAME_UNDER(FScene, FRender);   // bars land on the FRender lane
+ *   };
+ *
+ * The group is the collector's StaticName() and is spelled here by STRINGIFYING the macro argument,
+ * not by calling Collector::StaticName(): a frame header routinely CANNOT include the collector's
+ * header (FScene.h would then drag Render.h into every consumer), and the two spellings are the same
+ * string by construction -- StaticName() IS `#FrameType`. Naming the type is therefore all this
+ * needs, and it needs no complete type at all.
+ */
+#define MAHO_DECLARE_FRAME_UNDER(FrameType, CollectorType)   \
+public:                                                      \
+	static constexpr std::string_view StaticName()           \
+	{                                                        \
+		return #FrameType;                                    \
+	}                                                        \
+	std::string_view GetName() const override                \
+	{                                                        \
+		return StaticName();                                  \
+	}                                                        \
+	static const char* TraceGroupName()                      \
+	{                                                        \
+		return #CollectorType;                                \
 	}                                                        \
 	static Maho::FFrameExtension* CreateFrame()                       \
 	{                                                        \

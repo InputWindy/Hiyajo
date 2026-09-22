@@ -21,13 +21,14 @@ target_include_directories(EditorViewport PUBLIC
 	"${ENGINE_DIR}/Plugins/GameEngine/EditorCore/ExampleEditor/Public"
 	"${ENGINE_DIR}/Plugins/GameEngine/EngineCore/UI/Public"
 	"${ENGINE_DIR}/Plugins/Common/Name/Public"
+	"${ENGINE_DIR}/Plugins/Common/Log/Public"
 )
 set_target_properties(EditorViewport PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 target_compile_definitions(EditorViewport PRIVATE MAHO_EDITORVIEWPORT_MODULE_EXPORTS)
 target_link_libraries(EditorViewport PUBLIC Maho)
 set_property(TARGET EditorViewport PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>")
 set_target_properties(EditorViewport PROPERTIES OUTPUT_NAME "FEditorViewport" PREFIX "")
-target_link_libraries(EditorViewport PUBLIC ExampleEditor UI Name)
+target_link_libraries(EditorViewport PUBLIC ExampleEditor UI Name Log)
 set_target_properties(EditorViewport PROPERTIES FOLDER "Maho/Plugins/GameEngine/EditorCore/EditorUI")
 source_group(TREE "${CMAKE_CURRENT_LIST_DIR}" FILES ${EditorViewport_PUBLIC_HEADERS} ${EditorViewport_PRIVATE_HEADERS} ${EditorViewport_PRIVATE_SOURCES})
 # -- /MAHOGEN EditorViewport --

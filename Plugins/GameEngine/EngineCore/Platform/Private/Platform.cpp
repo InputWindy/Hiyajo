@@ -3,6 +3,7 @@
 #include <Config.h>
 #include <ConsoleVariable.h>
 #include <Log.h>
+#include <Trace.h>
 
 #include <chrono>
 #include <cstdio>
@@ -454,6 +455,7 @@ void FPlatform::PublishWindowState()
 
 void FPlatform::Initialize(FEngineBase&, FEngineContext&)
 {
+	MAHO_TRACE_STAGE(IInit, "Platform init", "start the platform thread and create the window");
 	// The platform's OWN thread starts FIRST, because the window is created on it -- and only there.
 	// A Win32 window's message queue belongs to its creating thread (PeekMessage sees nothing else),
 	// so a window created on whichever pool worker happened to run this stage can never be pumped
@@ -485,6 +487,7 @@ void FPlatform::Initialize(FEngineBase&, FEngineContext&)
 
 void FPlatform::Shutdown(FEngineBase&, FEngineContext&)
 {
+	MAHO_TRACE_STAGE(IShutdown, "Platform shutdown", "destroy the window and join the platform thread");
 	GPlatform = nullptr;
 	DestroyWindow();                 // marshals onto the platform thread
 	FThreadedServer::Shutdown();     // ... and only then stop + join that thread
@@ -772,10 +775,12 @@ void FPlatform::PollEvents()
 
 void FPlatform::BeginFrame(FEngineBase&, FEngineContext&)
 {
+	MAHO_TRACE_STAGE(IBeginFrame, "Platform frame begin", "no frame-head work on the platform side");
 }
 
 void FPlatform::Tick(FEngineBase& Engine, FEngineContext& Frame)
 {
+	MAHO_TRACE_STAGE(ITick, "Platform tick", "pump the window messages and publish this frame's input");
 	// The pump runs on the PLATFORM thread, marshalled (and waited on) from whatever thread this
 	// stage was dispatched to. That is the whole point: the window's messages live in the queue of
 	// the thread that created it, and PeekMessage looks nowhere else -- pumping from a random pool
@@ -852,12 +857,14 @@ bool FPlatform::ReadInputFrame(std::uint64_t Index, FInputFrame& Out) const
 
 void FPlatform::EndFrame(FEngineBase&, FEngineContext&)
 {
+	MAHO_TRACE_STAGE(IEndFrame, "Platform frame end", "the input snapshot was frozen at tick");
 	// Nothing to do: Tick() publishes the frame's input into the ring and drains the event
 	// stream, so the state a reader observes is already frozen at that point.
 }
 
 void FPlatform::RequestExit(FEngineBase& Engine, FEngineContext& Frame)
 {
+	MAHO_TRACE_STAGE(IExit, "Platform exit", "turn the close request into an engine exit");
 	// window close request -> tell the host engine to exit the main loop.
 	if (ShouldClose())
 	{

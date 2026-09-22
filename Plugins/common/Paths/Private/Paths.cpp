@@ -1,6 +1,7 @@
 #include "Paths.h"
 
 #include <Engine/PluginManager.h>
+#include <Trace.h>
 
 #include <system_error>
 #include <utility>
@@ -74,6 +75,7 @@ FPaths* GetPaths()
 
 void FPaths::Initialize(FEngineBase&, FEngineContext&)
 {
+	MAHO_TRACE_STAGE(IInit, "Paths init", "register the Game and Engine content roots");
 	GPaths = this;
 
 	// Defaults only fill aliases nobody registered -- repeated Initialize keeps an
@@ -100,6 +102,7 @@ void FPaths::Initialize(FEngineBase&, FEngineContext&)
 
 void FPaths::Shutdown(FEngineBase&, FEngineContext&)
 {
+	MAHO_TRACE_STAGE(IShutdown, "Paths shutdown", "retract the root aliases");
 	GPaths = nullptr;
 	Roots.clear();
 }

@@ -5,6 +5,7 @@
 
 #include <ConsoleVariable.h>
 #include <Log.h>
+#include <Trace.h>
 
 #include <filesystem>
 
@@ -286,6 +287,7 @@ FScriptSystem::FScriptSystem()
 
 void FScriptSystem::Initialize(FEngineBase& Engine, FEngineContext& Frame)
 {
+	MAHO_TRACE_STAGE(IInit, "Script init", "register the language backends and start them");
 	(void)Engine;
 
 	// Default backend: Lua. Other languages register themselves (e.g. a
@@ -308,6 +310,7 @@ void FScriptSystem::Initialize(FEngineBase& Engine, FEngineContext& Frame)
 
 void FScriptSystem::Shutdown(FEngineBase&, FEngineContext&)
 {
+	MAHO_TRACE_STAGE(IShutdown, "Script shutdown", "stop every language backend and drop them");
 	GScriptSystem = nullptr;
 
 	for (auto& Language : Languages)

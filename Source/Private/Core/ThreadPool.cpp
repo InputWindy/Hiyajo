@@ -197,8 +197,9 @@ void FThreadPool::Flush(FLane Lane)
 		if (bMayHelpDrain && !Lanes[Lane].Queue.empty())
 		{
 			// Drain exactly ONE lane -- the one being waited on. That is what keeps this exact:
-			// it advances this condition and touches nothing else's. Traced like any other task,
-			// so a drained task's bar looks the same as a worker-run one.
+			// it advances this condition and touches nothing else's. The task is run exactly like
+			// any other one, so a drained task is indistinguishable from a worker-run one -- which
+			// is why nothing here (or in the worker) needs to know how a task is instrumented.
 			FQueuedTask Queued = std::move(Lanes[Lane].Queue.front());
 			Lanes[Lane].Queue.pop_front();
 			Lock.unlock();

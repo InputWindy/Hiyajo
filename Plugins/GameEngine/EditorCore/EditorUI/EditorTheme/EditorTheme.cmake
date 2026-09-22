@@ -20,13 +20,14 @@ target_include_directories(EditorTheme PUBLIC
 	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEngine/Public"
 	"${ENGINE_DIR}/Plugins/GameEngine/EditorCore/ExampleEditor/Public"
 	"${ENGINE_DIR}/Plugins/GameEngine/EngineCore/UI/Public"
+	"${ENGINE_DIR}/Plugins/Common/Log/Public"
 )
 set_target_properties(EditorTheme PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 target_compile_definitions(EditorTheme PRIVATE MAHO_EDITORTHEME_MODULE_EXPORTS)
 target_link_libraries(EditorTheme PUBLIC Maho)
 set_property(TARGET EditorTheme PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>")
 set_target_properties(EditorTheme PROPERTIES OUTPUT_NAME "FEditorTheme" PREFIX "")
-target_link_libraries(EditorTheme PUBLIC ExampleEditor UI)
+target_link_libraries(EditorTheme PUBLIC ExampleEditor UI Log)
 set_target_properties(EditorTheme PROPERTIES FOLDER "Maho/Plugins/GameEngine/EditorCore/EditorUI")
 source_group(TREE "${CMAKE_CURRENT_LIST_DIR}" FILES ${EditorTheme_PUBLIC_HEADERS} ${EditorTheme_PRIVATE_HEADERS} ${EditorTheme_PRIVATE_SOURCES})
 # -- /MAHOGEN EditorTheme --

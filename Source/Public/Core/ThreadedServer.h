@@ -18,7 +18,6 @@
 // copy per module (see Core/Export.h).
 
 #include <Core/Export.h>
-#include <Core/Profiler.h>
 
 #include <atomic>
 #include <condition_variable>
@@ -55,14 +54,8 @@ public:
 		return bRunning.load(std::memory_order_acquire);
 	}
 
-	/** Enqueue one task (non-blocking, FIFO, serial execution). Traced as "<role>::Task". */
+	/** Enqueue one task (non-blocking, FIFO, serial execution). */
 	void Submit(std::function<void()> Task);
-
-	/** Enqueue a task that names itself. The trace bar is opened where the task RUNS (the server
-	 *  thread), and its label is "<role>::<Stage>" -- the role comes from GetThreadName, so the
-	 *  caller only supplies what only IT knows: what this task is doing. `Stage` must be static
-	 *  storage. */
-	void Submit(const char* Stage, std::function<void()> Task);
 
 	/** Barrier: block until every task submitted before this call completed. */
 	void Flush();
@@ -82,11 +75,11 @@ protected:
 	[[nodiscard]] virtual const char* GetThreadName() const;
 
 private:
-	/** One queue entry: the work plus the label to draw it under. The role half of the label is
-	 *  the server's own (GetThreadName), so only the stage is stored per task. */
+	/** One queue entry: just the work. A resident role that wants its own work visible in a profile
+	 *  instruments the BODY it enqueues (Trace.h) -- this server runs closures and knows nothing
+	 *  about tracing. */
 	struct FQueuedTask
 	{
-		const char*           Stage = "Task";
 		std::function<void()> Task;
 	};
 

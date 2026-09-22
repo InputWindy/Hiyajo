@@ -35,7 +35,7 @@ MAHO_SCENE_API FScene* GetScene();
  */
 class MAHO_SCENE_API FScene : public FFrameExtension, public IPipeline<IBeginRender, IRender, IEndRender, IPresent, IPreUnInstall>
 {
-	MAHO_DECLARE_FRAME(FScene);
+	MAHO_DECLARE_FRAME_UNDER(FScene, FRender);
 
 public:
 	FScene();

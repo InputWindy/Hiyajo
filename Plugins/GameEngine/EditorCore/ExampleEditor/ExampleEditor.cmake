@@ -22,6 +22,7 @@ target_include_directories(ExampleEditor PUBLIC
 	"${ENGINE_DIR}/Plugins/GameEngine/RenderCore/RenderFeature/Scene/Public"
 	"${ENGINE_DIR}/Plugins/GameEngine/EngineCore/UI/Public"
 	"${ENGINE_DIR}/Plugins/GameEngine/RenderCore/RenderFeature/UIFeature/Public"
+	"${ENGINE_DIR}/Plugins/Common/Log/Public"
 )
 target_include_directories(ExampleEditor PRIVATE
 	"${ENGINE_DIR}/Plugins/GameEngine/RenderCore/RenderFeature/UIFeature/Public"
@@ -31,7 +32,7 @@ target_compile_definitions(ExampleEditor PRIVATE MAHO_EXAMPLEEDITOR_MODULE_EXPOR
 target_link_libraries(ExampleEditor PUBLIC Maho)
 set_property(TARGET ExampleEditor PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>")
 set_target_properties(ExampleEditor PROPERTIES OUTPUT_NAME "FExampleEditor" PREFIX "")
-target_link_libraries(ExampleEditor PUBLIC Render Scene UI UIFeature)
+target_link_libraries(ExampleEditor PUBLIC Render Scene UI UIFeature Log)
 # Building ExampleEditor alone must also build the sub-plugins it installs at
 # runtime (EditorViewport EditorConsole ContentBrowser EditorTheme) - otherwise a sub-plugin DLL left over from a
 # previous build is silently installed. A POST_BUILD script action, NOT

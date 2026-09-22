@@ -1,6 +1,7 @@
 #include "Config.h"
 
 #include <ConsoleVariable.h>
+#include <Trace.h>
 
 #include <fstream>
 #include <string>
@@ -41,6 +42,7 @@ namespace
 
 void FConfig::Initialize(FEngineBase&, FEngineContext&)
 {
+	MAHO_TRACE_STAGE(IInit, "Config init", "load the ini files and push the CVars");
 	GConfig = this;
 	Sections.clear();
 
@@ -60,6 +62,7 @@ void FConfig::Initialize(FEngineBase&, FEngineContext&)
 
 void FConfig::Shutdown(FEngineBase&, FEngineContext&)
 {
+	MAHO_TRACE_STAGE(IShutdown, "Config shutdown", "drop the loaded ini sections");
 	GConfig = nullptr;
 	Sections.clear();
 }

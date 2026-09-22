@@ -45,7 +45,7 @@ namespace Maho
  */
 class FEditorConsole : public FFrameExtension, public IPipeline<IEditorInit, IEditorPanel, IEditorShutdown>
 {
-	MAHO_DECLARE_FRAME(FEditorConsole);
+	MAHO_DECLARE_FRAME_UNDER(FEditorConsole, FRender);
 
 public:
 	void Init(FExampleEditor& Editor, FExampleEditorContext& Frame) override;

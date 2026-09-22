@@ -153,14 +153,6 @@ public:
 	/** Stable identity: the Name of every node this frame contributes. */
 	[[nodiscard]] virtual std::string_view GetName() const = 0;
 
-	/** The CPU-trace GROUP this frame -- and everything it drives -- is traced under: an
-	 *  architectural partition ("Engine", "Render", "RHIServer"...), which is also the timeline LANE
-	 *  its events are drawn on. Null (the default) means INHERIT: the collector that drives this frame
-	 *  decides, and the engine's own top-level loop answers "Engine". A frame that IS a driver
-	 *  declares its own -- FRender returns "Render" -- so its features inherit a lane instead of every
-	 *  one of them having to name itself. */
-	[[nodiscard]] virtual const char* GetTraceGroup() const { return nullptr; }
-
 	/** One declared edge: the target's identity parts, plus WHEN. */
 	struct FEdge
 	{
@@ -538,11 +530,6 @@ struct FTaskNode
 	std::function<void()> Closure;
 
 	std::atomic<bool>    bDispatched{ false };
-
-	/** When this node's body finished, in trace microseconds (0 when tracing is off). It is what a
-	 *  SYNCHRONIZATION POINT is anchored to: the node that completes last is the one that releases a
-	 *  waiter, and the flow arrow has to start where that node ended -- see TraceEmitFlow. */
-	std::uint64_t        TraceEndMicros = 0;
 };
 
 /**
@@ -628,20 +615,12 @@ public:
 	void Wait();
 
 	/**
-	 * The collector whose frame set this graph drives, as the trace group for every node it
-	 * dispatches (see Core/Profiler.h). Purely diagnostic, and set ONCE before Initialize():
-	 * a collector's own stages are the top-level rows, and the frames IT drives are its
-	 * sub-blocks, which is exactly the relation the group records. Left empty by the host
-	 * graph, whose frames ARE the top level. The string must be static storage (a frame name
-	 * from MAHO_DECLARE_FRAME is).
+	 * The collector whose frame set this graph drives. Purely diagnostic, and set ONCE before
+	 * Initialize(): a collector's own stages are the top-level rows, and the frames IT drives are its
+	 * sub-blocks. Left empty by the host graph, whose frames ARE the top level. The string must be
+	 * static storage (a frame name from MAHO_DECLARE_FRAME is).
 	 */
 	void SetOwnerName(const char* InOwnerName) { OwnerName = InOwnerName; }
-
-	/** The CPU-trace GROUP this graph's node bars are drawn under -- the LANE, and the fold key, for
-	 *  everything this collector drives (see FFrameExtension::GetTraceGroup, which is where a frame
-	 *  declares it). The owning builder resolves it once at creation (own declaration, else inherited
-	 *  from the installer, else "Engine"), so it is always a registered group name. */
-	void SetTraceGroup(const char* InTraceGroup) { TraceGroup = InTraceGroup; }
 
 protected:
 	/** The scheduler thread's name, and therefore the label of its row in a trace: this thread is
@@ -694,13 +673,9 @@ private:
 	FThreadPool&      Pool;
 	FThreadPool::FLane Lane;
 
-	/** Trace group for the nodes this graph dispatches. Static storage, empty for the host
-	 *  graph -- see SetOwnerName. */
+	/** The name of the collector whose frame set this graph drives -- see SetOwnerName. Static
+	 *  storage, empty for the host graph. */
 	const char* OwnerName = "";
-
-	/** The GROUP (timeline lane) this graph's node bars are drawn under; empty = Global. Set once at
-	 *  creation from the collector's resolved group -- see SetTraceGroup. */
-	const char* TraceGroup = "";
 
 	// A deque, NOT a vector: FTaskNode holds a std::function and is not movable in a way a
 	// vector's growth path needs, and a deque keeps references to existing elements valid --

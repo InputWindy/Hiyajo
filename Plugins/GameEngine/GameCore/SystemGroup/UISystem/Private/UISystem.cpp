@@ -3,6 +3,7 @@
 #include <UIViewRegistry.h>
 #include <Widgets/FUIText.h>
 
+#include <Trace.h>
 #include <cstdio>
 
 namespace Maho
@@ -16,11 +17,13 @@ FUISystem* GUISystem = nullptr;
 
 void FUISystem::OnInstalled(FGameWorld& World, FGameWorldContext& Frame)
 {
+	MAHO_TRACE_STAGE(IOnInstalled, "UI system install", "publish the system to the world");
 	GUISystem = this;
 }
 
 void FUISystem::ProcessInput(FGameWorld&, FGameWorldContext&)
 {
+	MAHO_TRACE_STAGE(IProcessInput, "UI system input", "the tree is fed by the translation layer");
 	// Input hook -- the world's IProcessInput stage. UI input is delivered to the tree by
 	// the translation layer (the render side owns the context), so there is nothing to
 	// poll here; the stage stays as a declared-but-empty capability.
@@ -88,6 +91,7 @@ void FUISystem::BuildDemoTree(UI::FUIBuilder& Root)
 
 void FUISystem::Update(FGameWorld& World, FGameWorldContext& Frame)
 {
+	MAHO_TRACE_STAGE(IUpdate, "UI system update", "drain the events and re-declare the demo tree");
 	UI::FUIView* View = EnsureDemoView(World);
 	if (View == nullptr)
 	{
@@ -114,6 +118,7 @@ void FUISystem::Update(FGameWorld& World, FGameWorldContext& Frame)
 
 void FUISystem::PreUnInstall(FGameWorld& World, FGameWorldContext& Frame)
 {
+	MAHO_TRACE_STAGE(IPreUnInstall, "UI system teardown", "unregister the view and drop the widget");
 	// 关表先于释放树：注册表只持裸指针，视图必须先注销再被销毁。
 	// 顺序由 FGameWorld 声明（它才是驱动本阶段的层）：`BlockOn("FUIViewRegistry", IShutdown)`
 	// 让注册表的 IShutdown 排在本层 IShutdown（→ 本系统的 PreUnInstall）之后。此处判空只是

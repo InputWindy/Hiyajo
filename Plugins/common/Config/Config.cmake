@@ -19,13 +19,14 @@ target_include_directories(Config PUBLIC
 	"${CMAKE_CURRENT_LIST_DIR}/Public"
 	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEngine/Public"
 	"${ENGINE_DIR}/Plugins/Common/ConsoleVariable/Public"
+	"${ENGINE_DIR}/Plugins/Common/Log/Public"
 )
 set_target_properties(Config PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 target_compile_definitions(Config PRIVATE MAHO_CONFIG_MODULE_EXPORTS)
 target_link_libraries(Config PUBLIC Maho)
 set_property(TARGET Config PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>")
 set_target_properties(Config PROPERTIES OUTPUT_NAME "FConfig" PREFIX "")
-target_link_libraries(Config PUBLIC ConsoleVariable)
+target_link_libraries(Config PUBLIC ConsoleVariable Log)
 set_target_properties(Config PROPERTIES FOLDER "Maho/Plugins/Common")
 source_group(TREE "${CMAKE_CURRENT_LIST_DIR}" FILES ${Config_PUBLIC_HEADERS} ${Config_PRIVATE_HEADERS} ${Config_PRIVATE_SOURCES})
 # -- /MAHOGEN Config --

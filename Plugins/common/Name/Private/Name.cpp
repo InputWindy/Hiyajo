@@ -1,5 +1,7 @@
 #include "Name.h"
 
+#include <Trace.h>
+
 namespace Maho::Name
 {
 
@@ -12,12 +14,14 @@ FNamePool* GetNamePool()
 
 void FNamePool::Initialize(FEngineBase&, FEngineContext&)
 {
+	MAHO_TRACE_STAGE(IInit, "Name init", "publish the interned string pool");
 	GNamePool = this;
 	free();
 }
 
 void FNamePool::Shutdown(FEngineBase&, FEngineContext&)
 {
+	MAHO_TRACE_STAGE(IShutdown, "Name shutdown", "retract the pool and drop its strings");
 	GNamePool = nullptr;
 	free();
 }

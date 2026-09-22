@@ -21,7 +21,7 @@ namespace Maho
  */
 class FEditorViewport : public FFrameExtension, public IPipeline<IEditorPanel, IEditorShutdown>
 {
-	MAHO_DECLARE_FRAME(FEditorViewport);
+	MAHO_DECLARE_FRAME_UNDER(FEditorViewport, FRender);
 
 public:
 	/** Declaration phase (host `NewFrame` before): rebuild this view's tree, then

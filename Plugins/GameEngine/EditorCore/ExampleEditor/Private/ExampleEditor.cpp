@@ -11,7 +11,7 @@
 #include <utility>
 #include <variant>
 #include <vector>
-#include <Core/Profiler.h>
+#include <Trace.h>
 #include <Log.h>
 #include <Name.h>
 #include <Platform.h>
@@ -301,6 +301,7 @@ FExampleEditor::FExampleEditor()
 
 void FExampleEditor::EditorInput(FRender& R, FRenderContext& Frame)
 {
+	MAHO_TRACE_STAGE(IEditorInput, "Editor input", "feed the game UI input");
 	// Editor-build input takeover: taste the Win32 cursor, confine it to the viewport panel
 	// (clamp panel-local) and map it BACK to the game UI's whole-window coordinate space, then
 	// feed the game-UI context BEFORE its InitViews NewFrame()s it (ordered via the ctor
@@ -338,7 +339,7 @@ void FExampleEditor::EditorInput(FRender& R, FRenderContext& Frame)
 	// once. Nothing is drained, so the editor's own context (pass3) reading the same ring cannot
 	// starve it -- a shared drain is exactly how a key RELEASE got lost and ImGui kept the key
 	// down, auto-repeating it.
-	MAHO_TRACE_SCOPE(nullptr, "feed the game UI input");
+	MAHO_TRACE_SECTION("feed the game UI input", nullptr);
 	FUIFeature* UI = GetUI();
 	const std::uint64_t Latest = P->GetInputFrameIndex();
 	if (Latest < GameInputCursor)
@@ -374,7 +375,7 @@ void FExampleEditor::EditorInput(FRender& R, FRenderContext& Frame)
 
 bool FExampleEditor::EnsureUIBackend(FRender& R)
 {
-	MAHO_TRACE_SCOPE(nullptr, "create the editor font texture");
+	MAHO_TRACE_SECTION("create the editor font texture", nullptr);
 	if (bUIInit)
 	{
 		return true;
@@ -446,6 +447,7 @@ void FExampleEditor::UploadFont(FRender& R)
 
 void FExampleEditor::OnInstalled(FRender& R, FRenderContext& Frame)
 {
+	MAHO_TRACE_STAGE(IOnInstalled, "Editor install", "create the editor's own ImGui context");
 	// THIS feature owns the editor's OWN ImGui context -- fully isolated from the game's
 	// UIFeature context. Created at install, before anything touches GetIO(); it becomes
 	// the current context for the rest of frame setup (the game feature switches back to
@@ -455,7 +457,6 @@ void FExampleEditor::OnInstalled(FRender& R, FRenderContext& Frame)
 	// with anything.
 	if (m_Context == nullptr)
 	{
-		MAHO_TRACE_SCOPE(nullptr, "create the editor's own ImGui context");
 		Platform::FPlatform* P = Platform::GetPlatform();
 		if (P == nullptr || P->GetWindowWidth() == 0 || P->GetToolkitWindowHandle() == nullptr)
 		{
@@ -543,7 +544,7 @@ void FExampleEditor::OnInstalled(FRender& R, FRenderContext& Frame)
 
 void FExampleEditor::InstallEditorComponents()
 {
-	MAHO_TRACE_SCOPE(nullptr, "install the editor component plugins");
+	MAHO_TRACE_SECTION("install the editor component plugins", nullptr);
 	// Editor components (viewport, console, theme) are declaratively listed in
 	// ExampleEditor.cplugin Plugins and installed into this host's collector by
 	// module base name at the next safe point (their IEditorInit graph runs on
@@ -580,7 +581,7 @@ void FExampleEditor::InitEditorViews(FRender& R)
 
 	// Rebuild the editor composite target (EditorRT) to the current canvas.
 	{
-		MAHO_TRACE_SCOPE(nullptr, "rebuild the editor composite target");
+		MAHO_TRACE_SECTION("rebuild the editor composite target", nullptr);
 		const std::uint32_t CanvasW = R.GetCanvasWidth();
 		const std::uint32_t CanvasH = R.GetCanvasHeight();
 		if (CanvasW == 0 || CanvasH == 0)
@@ -643,7 +644,7 @@ void FExampleEditor::InitEditorViews(FRender& R)
 	// wheel) are applied in the order those frames were pumped, so a key RELEASE cannot be skipped
 	// -- which is why this reads per frame instead of draining a shared stream (a stolen release
 	// left ImGui believing the key was still down, auto-repeating it).
-	MAHO_TRACE_SCOPE(nullptr, "feed the editor context input");
+	MAHO_TRACE_SECTION("feed the editor context input", nullptr);
 	{
 		const std::uint64_t Latest = P->GetInputFrameIndex();
 		if (Latest < EditorInputCursor)
@@ -756,7 +757,7 @@ void FExampleEditor::InitEditorViews(FRender& R)
 	}
 
 	// Translate ImDrawData -> FDrawList (merged vertex/index buffers uploaded here).
-	MAHO_TRACE_SCOPE(nullptr, "translate ImGui draw data");
+	MAHO_TRACE_SECTION("translate ImGui draw data", nullptr);
 	FDrawList& Out = this->DrawList;
 	Out.Reset();
 	std::size_t TotalVerts = 0, TotalIndices = 0;
@@ -905,7 +906,7 @@ void FExampleEditor::InitEditorViews(FRender& R)
 
 void FExampleEditor::DrawEditorPanels()
 {
-	MAHO_TRACE_SCOPE(nullptr, "draw the dockspace and editor panels");
+	MAHO_TRACE_SECTION("draw the dockspace and editor panels", nullptr);
 	// Docking host: a fullscreen dockspace behind the editor windows (host-owned frame
 	// shell). Each component plugin draws its own window inside it.
 	ImGuiViewport* VP = ImGui::GetMainViewport();
@@ -944,7 +945,7 @@ UI::FUIName FExampleEditor::EditorRenderScope()
 
 void FExampleEditor::UpdateEditorPanels()
 {
-	MAHO_TRACE_SCOPE(nullptr, "drain and update the editor panels");
+	MAHO_TRACE_SECTION("drain and update the editor panels", nullptr);
 	// 先抽干：上一帧翻译线程入队的交互事件交回各自所有者线程（回调内可再次 Edit()）。
 	// 只抽本编辑器作用域的视图：注册表是全进程共享的，游戏侧视图归游戏自己的翻译循环，由它的
 	// 所有者（UISystem）在自己的更新期抽干 —— 越作用域抽干会把事件投递到别的所有者线程上。
@@ -1066,6 +1067,7 @@ void FExampleEditor::RenderEditorUI(FRender& R)
 
 void FExampleEditor::EditorCompose(FRender& R, FRenderContext& Frame)
 {
+	MAHO_TRACE_STAGE(IEditorCompose, "Editor compose", "build the editor frame and take over the present target");
 	// Pass3 -- the editor's whole frame in a single graph stage (after the game-UI
 	// composite IRenderUI, before the frame's IPresent). Split into two private steps:
 	// InitViews builds the ImGui frame (feed + NewFrame + panels + Render + translate),
@@ -1091,6 +1093,7 @@ bool FExampleEditor::ConsumeDroppedFiles(std::vector<std::string>& Out)
 
 void FExampleEditor::PreUnInstall(FRender& R, FRenderContext& Frame)
 {
+	MAHO_TRACE_STAGE(IPreUnInstall, "Editor teardown", "hand back the UI capabilities and release the editor surface");
 	// Hand back the two capability tokens this module registered into the UI layer. The slots
 	// live on FUIViewRegistry -- a frame, not a file-scope static -- so their destruction is
 	// driven by the graph; but the FUNCTIONS they hold are lambdas whose code lives in THIS
@@ -1134,7 +1137,7 @@ void FExampleEditor::PreUnInstall(FRender& R, FRenderContext& Frame)
 
 void FExampleEditor::ShutdownEditorComponents()
 {
-	MAHO_TRACE_SCOPE(nullptr, "uninstall the editor component plugins");
+	MAHO_TRACE_SECTION("uninstall the editor component plugins", nullptr);
 	// Uninstall by module base name + suffix -- symmetric with Install(...). The
 	// layer's GetName() is "FEditorConsole", but TryUninstall resolves either form,
 	// so this guarantees the component's IEditorShutdown (EditorConsole unbinding

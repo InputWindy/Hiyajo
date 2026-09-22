@@ -33,7 +33,7 @@ struct FTriangleShader
  */
 class FDrawTriangleFeature : public FFrameExtension, public IPipeline<IRender>
 {
-MAHO_DECLARE_FRAME(FDrawTriangleFeature);
+MAHO_DECLARE_FRAME_UNDER(FDrawTriangleFeature, FRender);
 
 	FDrawTriangleFeature();
 	~FDrawTriangleFeature() override;

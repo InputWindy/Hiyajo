@@ -5,7 +5,8 @@
   "Dependencies": [
     "Render",
     "Scene",
-    "UI"
+    "UI",
+    "Log"
   ],
   "PrivateIncludes": [
     "DrawTriangleFeature"

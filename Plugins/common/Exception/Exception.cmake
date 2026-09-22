@@ -18,12 +18,14 @@ target_include_directories(Exception PUBLIC
 	"${ENGINE_DIR}/Source/Public"
 	"${CMAKE_CURRENT_LIST_DIR}/Public"
 	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEngine/Public"
+	"${ENGINE_DIR}/Plugins/Common/Log/Public"
 )
 set_target_properties(Exception PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 target_compile_definitions(Exception PRIVATE MAHO_EXCEPTION_MODULE_EXPORTS)
 target_link_libraries(Exception PUBLIC Maho)
 set_property(TARGET Exception PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>")
 set_target_properties(Exception PROPERTIES OUTPUT_NAME "FException" PREFIX "")
+target_link_libraries(Exception PUBLIC Log)
 set_target_properties(Exception PROPERTIES FOLDER "Maho/Plugins/Common")
 source_group(TREE "${CMAKE_CURRENT_LIST_DIR}" FILES ${Exception_PUBLIC_HEADERS} ${Exception_PRIVATE_HEADERS} ${Exception_PRIVATE_SOURCES})
 # -- /MAHOGEN Exception --

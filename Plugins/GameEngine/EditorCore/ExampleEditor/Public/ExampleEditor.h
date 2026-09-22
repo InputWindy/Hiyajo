@@ -155,7 +155,7 @@ protected:
 	}
 
 private:
-	MAHO_DECLARE_FRAME(FExampleEditor);
+	MAHO_DECLARE_FRAME_UNDER(FExampleEditor, FRender);
 
 	FExampleEditor();
 

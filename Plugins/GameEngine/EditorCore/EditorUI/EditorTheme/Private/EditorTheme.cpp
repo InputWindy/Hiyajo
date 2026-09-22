@@ -1,6 +1,6 @@
 #include "EditorTheme.h"
 
-#include <Core/Profiler.h>
+#include <Trace.h>
 #include <ExampleEditorTheme.h>
 
 #include <UIViewRegistry.h>
@@ -77,7 +77,7 @@ void FEditorTheme::ReloadDefaults()
 
 void FEditorTheme::Init(FExampleEditor& Editor, FExampleEditorContext& Frame)
 {
-	MAHO_TRACE_SCOPE(nullptr, "初始化主题面板视图");
+	MAHO_TRACE_STAGE(IEditorInit, "Theme install", "初始化主题面板视图");
 	(void)Editor;
 
 	std::strncpy(PathBuffer, GetEditorThemeDefaultPath(), sizeof(PathBuffer) - 1);
@@ -118,7 +118,7 @@ UI::FUIView* FEditorTheme::EnsureView(FExampleEditor& Editor)
 
 void FEditorTheme::Shutdown(FExampleEditor& Editor, FExampleEditorContext& Frame)
 {
-	MAHO_TRACE_SCOPE(nullptr, "解绑订阅并卸载主题面板");
+	MAHO_TRACE_STAGE(IEditorShutdown, "Theme teardown", "解绑订阅并卸载主题面板");
 	(void)Editor;
 
 	if (View == nullptr)
@@ -134,7 +134,7 @@ void FEditorTheme::Shutdown(FExampleEditor& Editor, FExampleEditorContext& Frame
 
 void FEditorTheme::Update(FExampleEditor& Editor, FExampleEditorContext& Frame)
 {
-	MAHO_TRACE_SCOPE(nullptr, "抽干事件并回读主题值");
+	MAHO_TRACE_STAGE(IEditorPanel, "Theme frame", "抽干事件并回读主题值");
 	UI::FUIView* PanelView = EnsureView(Editor);
 	if (PanelView == nullptr)
 	{
@@ -207,7 +207,7 @@ void FEditorTheme::Update(FExampleEditor& Editor, FExampleEditorContext& Frame)
 	}
 
 	// -- 声明期：只改本视图的树 -------------------------------------------
-	MAHO_TRACE_SCOPE(nullptr, "声明期：重建主题面板视图树");
+	MAHO_TRACE_SECTION("声明期：重建主题面板视图树", nullptr);
 	UI::FUIEditScope Scope = PanelView->Edit();
 	UI::FUIBuilder& Root = Scope.GetRoot();
 	Root.Layout().SetDirection(UI::EUIDirection::Column);

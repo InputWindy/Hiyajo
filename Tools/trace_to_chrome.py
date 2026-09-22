@@ -1,12 +1,19 @@
 #!/usr/bin/env python3
 """Convert a Maho CPU trace into Chrome Trace Event Format.
 
-Input  : Profile_trace.txt -- the "[tr] ..." lines the engine writes when MAHO_TRACE is set (see
-         Source/Public/Core/Profiler.h). Two shapes, distinguished by the grp= field:
+NOTE -- this is the FALLBACK path, not the normal one. The engine now writes Perfetto's own protobuf
+itself (Plugins/Common/Log/Private/Trace.cpp: FProtoWriter, track_descriptor / track_event packets,
+flows as flow_ids/terminating_flow_ids), so the ordinary answer to "I want a timeline" is to open
+Profile_trace.perfetto_trace directly -- no converter, no timestamp-to-slice guessing, and the arrow
+ownership is written into the file instead of being re-derived here. Keep this script for the two
+cases the native path does not cover: reading an OLD text trace (something already captured before the
+native writer existed), and wanting the JSON itself for a tool that only eats JSON.
 
-             [tr] ... lane=<Group> slot=<n> worker=<k> owner=<Frame> name=<Class>::<Function> tip=<text>
-             [tr] ... lane=<Group> slot=<n> worker=<k> owner=<Frame> grp=<Group> name=<Frame>::<Stage> ...
-             [tr] ... lane=Global  ... (the same node, mirrored; the mirror keeps its ORIGIN group)
+Input  : Profile_trace.txt -- the "[tr] ..." lines the engine writes when MAHO_TRACE is set (see
+         Plugins/Common/Log/Public/Trace.h). Select it with MAHO_TRACE_FORMAT=0 (text only) or 2 (both).
+
+             [tr] ts=<us> dur=<us> lane=<Group> worker=<k> owner=<Track> [stage=<Short>] [func=<Fn>] name=<Label> [tip=<text>]
+             [tr] flow ts=<us> lane=<Group> owner=<Track> stage=<Short> from=<Target> fromStage=<Short> off=<0|-1>
 
 Output : a JSON file that chrome://tracing and https://ui.perfetto.dev load directly.
 
@@ -14,8 +21,9 @@ HOW THE ROWS ARE BUILT:
 
   * `lane` (the GROUP: "Engine", "Render", "RHIServer") becomes the Perfetto PROCESS: one collapsible
     section per architectural partition, so the left panel reads as the architecture.
-  * `owner` (the frame that was running, or a resident thread's role name) becomes the TRACK inside it,
-    so a partition's rows are the things that make it up: FScene, FDrawTriangleFeature, FUIFeature, ...
+  * `owner` (the TRACK) becomes the TRACK inside it: a frame's static name for a stage bar (FScene,
+    FDrawTriangleFeature, FUIFeature, ...), the lane itself for a resident thread or a free scope.
+    A partition's rows are then the things that make it up.
 
   That pairing is what a timeline can actually draw. A track may only NEST bars or SEQUENCE them --
   never overlap them -- and any offence is reported as an import error and moved onto a spill track.
@@ -24,13 +32,15 @@ HOW THE ROWS ARE BUILT:
   (group, owner) nest by construction. Per GROUP alone is NOT safe: two independent features of one
   frame really do run at the same time, and no row can show that.
 
-  `slot` (in-flight ring slot) and `worker` (which thread ran it) travel in args: they answer "which
-  pipeline position" and "who ran it" on hover, without deciding layout.
+  `worker` (which thread ran it) travels in args: a stage is dispatched to whichever pool worker is
+  free, so the thread answers "who ran it" on hover without deciding layout.
 
-Event names keep the owner: a node bar is `<Frame>::<Stage>`, a manual scope is `Class::Function`.
+Event names keep the engine's own wording: a stage bar keeps the label the engine wrote for it (a
+hand-written stage label, or a legacy `<Frame>::<Stage>`), a section/scope the label or function it
+was opened with.
 
 Usage:
-    maho_python.bat Tools/trace_to_chrome.py [input.txt] [output.json] [--no-global]
+    maho_python.bat Tools/trace_to_chrome.py [input.txt] [output.json]
 
 With no arguments it reads ./Profile_trace.txt (the working directory the engine runs in) and
 writes the matching .json beside it.
@@ -42,37 +52,37 @@ import re
 import sys
 
 # -- the current format -------------------------------------------------------------------------
-NEW_NODE = re.compile(
+# ONE regex for every form of bar: a stage BODY writes `stage=` and no `func=`; a SECTION inside a
+# stage writes both (it INHERITS the ambient stage, which is what puts it on the stage's row) and is
+# named by a hand-written label; a SCOPE writes neither and is named by its function. Every field
+# after `lane` is optional, so a trace from before the group rework still matches: there `grp=` is
+# the node's ORIGIN group (what the older Global mirror kept) and `slot=` the in-flight ring slot.
+BAR = re.compile(
     r"^\[tr\] ts=(\d+) dur=(\d+) lane=(\S+)(?: slot=(\d+))?(?: worker=(\d+))?(?: owner=(\S+))?"
-    r" grp=(\S*) name=(.+?)(?: tip=(.*))?$")
-NEW_SCOPE = re.compile(
-    r"^\[tr\] ts=(\d+) dur=(\d+) lane=(\S+)(?: slot=(\d+))?(?: worker=(\d+))?(?: owner=(\S+))?"
-    r"(?: func=(\S+))? name=(.+?)(?: tip=(.*))?$")
+    r"(?: grp=(\S*))?(?: stage=(\S+))?(?: func=(\S+))? name=(.+?)(?: tip=(.*))?$")
 
-# -- synchronization points: a flow from the gate's row to the row it released -------------------
+# -- a declared dependency edge, written by the stage bar that waited for the other one ----------
+# `from` is the target frame's name and `off` the declared frame offset (0 = this -1 = the
+# previous one); both describe an edge whose ends only exist as BARS, so the reader binds them.
 FLOW = re.compile(
-    r"^\[tr\] flow a_ts=(\d+) a_lane=(\S+)(?: a_slot=(\d+))?(?: a_owner=(\S+))?(?: a_name=(\S+))?"
-    r" b_ts=(\d+) b_lane=(\S+)(?: b_slot=(\d+))?(?: b_owner=(\S+))?(?: b_name=(\S+))?$")
+    r"^\[tr\] flow ts=(\d+) lane=(\S+) owner=(\S+) stage=(\S+) from=(\S+) fromStage=(\S+)"
+    r" off=(-?\d+)$")
 
 # -- files from before the group rework: a numeric lane id, and the frame name in the event -------
-OLD_NODE = re.compile(r"^\[tr\] ts=(\d+) dur=(\d+) tid=(\d+) grp=(\S*) name=(.+)$")
-OLD_SCOPE = re.compile(r"^\[tr\] ts=(\d+) dur=(\d+) tid=(\d+) name=(.+)$")
+OLD_NODE = re.compile(r"^\[tr\] ts=(\d+) dur=(\d+) tid=(\d+) grp=(\S*) name=(.+?)(?: tip=(.*))?$")
+OLD_SCOPE = re.compile(r"^\[tr\] ts=(\d+) dur=(\d+) tid=(\d+) name=(.+?)(?: tip=(.*))?$")
 
 # The fold section for events that belong to no group of their own.
 ROOT_NAME = "Maho"
 ROOT = 1
 
-# The reserved group every graph node is mirrored onto.
-GLOBAL = "Global"
 
-
-def convert(src: pathlib.Path, dst: pathlib.Path, drop_global: bool,
-            drops: set | None = None, spacer: bool = True,
-            with_flows: bool = True) -> tuple[int, int, int, int]:
+def convert(src: pathlib.Path, dst: pathlib.Path, drops: set | None = None,
+            spacer: bool = True, with_flows: bool = True) -> tuple[int, int, int, int, int]:
     # Every event, normalized to:
-    #   (ts, dur, group, owner, slot, worker, is_node, name, tip, origin)
+    #   (ts, dur, group, owner, worker, is_node, name, tip, origin, stage, func)
     records = []
-    flows = []      # (a_ts, a_group, a_owner, b_ts, b_group, b_owner)
+    flows = []      # (ts, lane, owner, stage, from_name, from_stage)
     # Old files only: which frame a numeric lane belonged to (derived from the node events).
     old_lane_frame = {}
 
@@ -80,46 +90,47 @@ def convert(src: pathlib.Path, dst: pathlib.Path, drop_global: bool,
         for line in handle:
             text = line.strip()
             if (m := FLOW.match(text)) is not None:
-                flows.append((int(m.group(1)), m.group(2), m.group(4) or m.group(2), m.group(5),
-                              int(m.group(6)), m.group(7), m.group(9) or m.group(7), m.group(10)))
+                # `off=` is KEPT: it is what separates the two kinds of edge. `off=0` is a stage ordered
+                # against another stage of the SAME frame (the in-frame chain, or a declared edge inside
+                # one frame); `off=-1` is the cross-frame pipeline edge ("this frame's first stage after
+                # the last frame's last one") -- the only ordering the scheduler does not give for free,
+                # and the only arrow worth drawing on a timeline. See the drawing loop for the filter.
+                flows.append((int(m.group(1)), m.group(2), m.group(3), m.group(4), m.group(5),
+                              m.group(6), int(m.group(7))))
                 continue
-            if (m := NEW_NODE.match(text)) is not None:
+            if (m := BAR.match(text)) is not None:
                 lane, owner = m.group(3), m.group(6) or ""
-                records.append((int(m.group(1)), int(m.group(2)), lane, owner, int(m.group(4) or -1),
-                                int(m.group(5) or -1), True, m.group(8), m.group(9) or "",
-                                m.group(7) or ROOT_NAME, ""))
-            elif (m := NEW_SCOPE.match(text)) is not None:
-                # A scope carries no group of its own: it ran inside whatever the lane already was,
-                # and it inherits that node's owner and slot too, which is what puts it on the same row.
-                # `func=` appears when the bar is named by a hand-written section instead.
-                lane = m.group(3)
-                records.append((int(m.group(1)), int(m.group(2)), lane, m.group(6) or "", int(m.group(4) or -1),
-                                int(m.group(5) or -1), False, m.group(8), m.group(9) or "", lane,
-                                m.group(7) or ""))
+                stage, func = m.group(8) or "", m.group(9) or ""
+                # A stage BODY is the one form that writes `stage=` and no `func=`. A section inside a
+                # stage inherits that stage's name, but it is named by a hand-written label, so `func=`
+                # is what tells the two apart. `grp=` marks a pre-rework node bar, which carries no
+                # stage of its own.
+                is_node = (m.group(7) is not None) or (bool(stage) and not func)
+                records.append((int(m.group(1)), int(m.group(2)), lane, owner,
+                                int(m.group(5) or -1), is_node, m.group(10), m.group(11) or "",
+                                m.group(7) or lane, stage, func))
             elif (m := OLD_NODE.match(text)) is not None:
                 frame, _, stage = m.group(5).partition("::")
                 old_lane_frame[m.group(3)] = frame
-                records.append((int(m.group(1)), int(m.group(2)), m.group(4) or ROOT_NAME, frame, -1,
-                                -1, True, m.group(5), "", m.group(4) or ROOT_NAME, ""))
+                records.append((int(m.group(1)), int(m.group(2)), m.group(4) or ROOT_NAME, frame,
+                                -1, True, m.group(5), m.group(6) or "", m.group(4) or ROOT_NAME,
+                                stage, ""))
             elif (m := OLD_SCOPE.match(text)) is not None:
-                records.append((int(m.group(1)), int(m.group(2)), "", m.group(4), -1, -1, False,
-                                m.group(4), "", "", ""))
+                records.append((int(m.group(1)), int(m.group(2)), "", m.group(4), -1, False,
+                                m.group(4), m.group(5) or "", "", "", ""))
             else:
                 continue
 
     # A manual scope in an old file: give it the frame of the lane it landed on, so it stays on the
     # same row it used to.
     resolved = []
-    for ts, dur, group, owner, slot, worker, is_node, name, tip, origin, func in records:
+    for ts, dur, group, owner, worker, is_node, name, tip, origin, stage, func in records:
         if not is_node and not group:
             owner = old_lane_frame.get(owner, owner)
             group = ROOT_NAME
             origin = ROOT_NAME
-        resolved.append((ts, dur, group, owner, slot, worker, is_node, name, tip, origin, func))
+        resolved.append((ts, dur, group, owner, worker, is_node, name, tip, origin, stage, func))
     records = resolved
-
-    if drop_global:
-        records = [r for r in records if r[2] != GLOBAL]
 
     # Whole groups can be filtered out by name: a section nobody reads is noise, and (for a group
     # whose bars come from more than one thread, e.g. a scheduler that is also called by workers) it
@@ -170,17 +181,18 @@ def convert(src: pathlib.Path, dst: pathlib.Path, drop_global: bool,
         metadata("thread_name", pid, tid, {"name": owner})
         metadata("thread_sort_index", pid, tid, {"sort_index": tid})
 
-    for ts, dur, group, owner, slot, worker, is_node, name, tip, origin, func in records:
+    for ts, dur, group, owner, worker, is_node, name, tip, origin, stage, func in records:
         pid, tid = track[(group, owner or group)]
         if is_node:
-            # A node bar keeps its full `<Frame>::<Stage>` name; the halves go to args as well, where
-            # a hover shows them with the pipeline slot and the partition it belongs to.
-            frame, _, stage = name.partition("::")
-            args = {"frame": frame, "stage": stage, "group": origin}
+            # A node bar keeps its full name; the stage key, the row it ran on and the partition it
+            # belongs to go to args, where a hover shows them.
+            args = {"group": origin}
+            if stage:
+                args["stage"] = stage
             if tip:
                 args["tip"] = tip
-            if slot >= 0:
-                args["slot"] = slot
+            if owner:
+                args["owner"] = owner
             if worker >= 0:
                 args["worker"] = worker
             events.append({
@@ -193,10 +205,13 @@ def convert(src: pathlib.Path, dst: pathlib.Path, drop_global: bool,
                 # The bar is named by a hand-written SECTION, so this is where it actually lives --
                 # the one thing the old `__FUNCTION__` naming gave for free.
                 args["func"] = func
+            if stage:
+                # The stage it was opened inside: a section belongs to a stage's row but is not a node.
+                args["stage"] = stage
             if tip:
                 args["tip"] = tip
-            if slot >= 0:
-                args["slot"] = slot
+            if owner:
+                args["owner"] = owner
             if worker >= 0:
                 args["worker"] = worker
             events.append({
@@ -247,6 +262,11 @@ def convert(src: pathlib.Path, dst: pathlib.Path, drop_global: bool,
             if not moved:
                 break
 
+    # A one-microsecond bar contains no integer instant, so a flow event can never be placed strictly
+    # inside it: the viewer would report no containing slice and pile the arrow onto whichever slice
+    # happens to have id 0. Widening is resolved per endpoint below (after the spacer pass, so it can
+    # see whether there is room) -- NOT here, where it would re-create what the spacer removes.
+
     # -- spacer pass (DEFAULT ON; --no-spacer keeps the raw timing) ---------------------------------
     # A partial overlap (A starts first, B starts inside A and ends after it) cannot be drawn, so
     # Perfetto reports it and spills B. The repair is the least destructive one available: A's END is
@@ -268,56 +288,192 @@ def convert(src: pathlib.Path, dst: pathlib.Path, drop_global: bool,
                 if trimmed < first_end:
                     first["dur"] = max(1, trimmed - first["ts"])
 
-    # -- synchronization points as FLOW arrows ------------------------------------------------------
-    # Both ends are BOUND TO THEIR BARS, which is why the line carries their names: a viewer draws a
-    # flow only between slices it can bind to, and timestamps alone are not enough -- the gate's end is
-    # a hair BEFORE its bar closes, and the released node is announced a few microseconds BEFORE its
-    # own bar opens. So the arrow starts inside the gate's bar (1us before its end) and finishes inside
-    # the released bar (at its start).
-    def BindBar(row, name, ts, b_before):
-        bars = per_track.get(row)
-        if not bars or not name:
+    # -- declared dependencies as FLOW arrows -------------------------------------------------------
+    # Both ends are BOUND TO ACTUAL BARS, because a viewer draws a flow only between slices it can
+    # attach to, and a timestamp alone is not enough: the hint carries the two ends as (lane, owner,
+    # stage), and the bar it names may be several frames away. So the arrow is pinned to the START of
+    # each of the two STAGE bars -- the one instant a bar is certainly the innermost slice there (the
+    # tie-break pass above keeps children off their parent's first microsecond).
+    #
+    # Only a stage body is a candidate: a section inherits its stage's name (that is how it lands on
+    # the row), so binding by stage alone would happily hook the arrow onto a section inside the bar.
+    graph_bars: dict[tuple[int, int], list] = {
+        row: [bar for bar in bars if bar["cat"] == "graph"] for row, bars in per_track.items()}
+
+    def BindBar(row, stage, ts, b_before):
+        bars = graph_bars.get(row)
+        if not bars or not stage:
             return None
         best = None
         for bar in bars:
-            if bar["name"] != name:
+            if bar["args"].get("stage") != stage:
                 continue
             if (bar["ts"] <= ts) if b_before else (bar["ts"] >= ts):
-                if best is None or (abs(bar["ts"] - ts) < abs(best["ts"] - ts)):
+                if best is None or abs(bar["ts"] - ts) < abs(best["ts"] - ts):
                     best = bar
         return best
 
     drawn_flows = 0
-    for index, flow in enumerate(flows if with_flows else []):
-        a_ts, a_group, a_owner, a_name, b_ts, b_group, b_owner, b_name = flow
-        a_row = track.get((a_group, a_owner))
-        b_row = track.get((b_group, b_owner))
-        if a_row is None or b_row is None:
-            continue   # an endpoint's section was dropped (--drop / --no-global)
-        gate = BindBar(a_row, a_name, a_ts, True)
-        released = BindBar(b_row, b_name, b_ts, False)
-        if gate is None or released is None:
+    skipped_flows = 0
+    one_shot_flows = 0
+    chain_flows = 0
+    unanchored_flows = 0
+
+    # A flow event must sit STRICTLY inside its bar (`start < ts < end`): that is how a viewer decides
+    # which slice the arrow belongs to, and a ts equal to the bar's start is reported as "no slice"
+    # (slice_out = 0) -- every unattached arrow then piles onto whichever slice carries id 0. So each
+    # endpoint is placed at +1us, which needs the bar to be >= 2us wide; a bar the spacer pass trimmed
+    # to 1us is widened ONLY when the next bar on its row leaves the room, and the arrow is dropped
+    # when it does not -- an arrow that cannot be attached is worse than a missing arrow.
+    row_starts: dict[tuple, list[int]] = {
+        row: sorted(bar["ts"] for bar in bars) for row, bars in per_track.items()}
+
+    def AnchorIn(bar, row):
+        if bar["dur"] >= 2:
+            return bar["ts"] + 1
+        for start in row_starts.get(row, ()):
+            if start > bar["ts"]:
+                if start - bar["ts"] >= 3:
+                    bar["dur"] = 2
+                    return bar["ts"] + 1
+                return None
+        bar["dur"] = 2
+        return bar["ts"] + 1
+    # ONE-SHOT stages (init / install / teardown) run once, so a loop stage that declares a dependency
+    # on one is ordered by it only in the frame the install happened -- after that the edge is a no-op
+    # the graph keeps re-creating, and its arrow would span the whole session (an install hint at ts~0
+    # bound to a frame 1.2s later reads as a floating arrowhead with its line off-screen).
+    #
+    # Two rules, both needed: a stage that never repeats on its row is one-shot, and -- the sharper
+    # one -- an arrow longer than a few of its row's OWN frames is not a frame-local edge at all. The
+    # row's period is the median gap between its bars, so this needs no threshold tuned per stage.
+    stage_repeats: dict[tuple, int] = {}
+    for row, row_bars in graph_bars.items():
+        for bar in row_bars:
+            key = (row, bar["args"].get("stage"))
+            stage_repeats[key] = stage_repeats.get(key, 0) + 1
+
+    row_period: dict[tuple, int] = {}
+    for row, row_bars in graph_bars.items():
+        starts = sorted(bar["ts"] for bar in row_bars)
+        if len(starts) < 8:
             continue
-        events.append({"name": f"{a_name} -> {b_name}" if a_name and b_name else "sync",
-                       "cat": "sync", "ph": "s", "id": index + 1,
-                       # Both ends sit at the START of the bar they belong to, which is the one instant
-                       # that bar is certainly the INNERMOST slice there (the tie-break pass above keeps
-                       # children off their parent's first microsecond). A viewer attaches a flow to the
-                       # slice under the point, so this is what makes the arrow read stage -> stage
-                       # instead of hooking onto whatever hand-written scope happened to be innermost at
-                       # the gate's last microsecond.
-                       "ts": gate["ts"], "pid": a_row[0], "tid": a_row[1]})
-        events.append({"name": "sync", "cat": "sync", "ph": "f", "id": index + 1,
-                       "ts": released["ts"], "pid": b_row[0], "tid": b_row[1]})
+        # The row's frame period is the gap that RECURS: inside one frame the gaps are irregular (the
+        # stages differ in length) while the gap between frames is steady, so the modal 100us bucket
+        # is the period. A median would average the two and end up cutting real frame-local arrows.
+        buckets: dict[int, int] = {}
+        for a, b in zip(starts, starts[1:]):
+            if b - a >= 100:
+                key = (b - a) // 100
+                buckets[key] = buckets.get(key, 0) + 1
+        if buckets:
+            best = max(buckets.items(), key=lambda kv: kv[1])[0]
+            row_period[row] = (best + 1) * 100
+
+    for index, flow in enumerate(flows if with_flows else []):
+        ts, lane, owner, stage, from_name, from_stage, off = flow
+        # ONLY THE CROSS-FRAME PIPELINE EDGE IS DRAWN. Everything else -- the in-frame chain and the
+        # same-frame declared edges -- is either already readable from the bar order or paints a whole
+        # row solid at three arrows per frame, which is what turned this timeline into a brown mass.
+        # What is left is the one ordering the scheduler does not give for free: `off=-1`, the edge that
+        # makes frame N+1 wait for frame N, i.e. the pipeline itself.
+        if off == 0:
+            chain_flows += 1
+            continue
+        emitter_row = track.get((lane, owner))
+        # The input lives on the TARGET frame's row, in this stage's own lane: a declared edge never
+        # crosses a partition, and `from=` is the target frame's name, not a lane.
+        target_row = track.get((lane, from_name))
+        if (stage_repeats.get((emitter_row, stage), 0) < 2
+                or stage_repeats.get((target_row, from_stage), 0) < 2):
+            one_shot_flows += 1
+            continue
+        emitter = BindBar(emitter_row, stage, ts, False) if emitter_row else None
+        producer = BindBar(target_row, from_stage, ts, True) if target_row else None
+        if emitter is None or producer is None:
+            # An endpoint's bar is gone -- its group was dropped, or MAHO_TRACE_MIN_US filtered the
+            # stage out (a dropped bar takes its flow hints with it, so this is the honest count).
+            skipped_flows += 1
+            continue
+        period = row_period.get(emitter_row)
+        span_us = abs(emitter["ts"] - producer["ts"])
+        # A frame-local arrow is at most a few frames long; a one-shot stage's arrow is hundreds (and
+        # during the startup pause a real frame can be long). The 100ms floor is what covers the rows
+        # that have NO period at all -- an engine-core row holds one or two install bars, so a period
+        # cannot be computed there and the span rule must not be skipped: those rows are exactly where
+        # the session-spanning arrows come from (their producer sits at ts~0).
+        limit = max(4 * period, 100_000) if period else 100_000
+        if span_us > limit:
+            one_shot_flows += 1
+            continue
+        # IN-FRAME CHAIN arrows are dropped: producer and consumer are stages of the SAME frame on the
+        # SAME row, and the bars are already laid out in exactly that order -- an arrow adds nothing but
+        # ink, and three of them per frame paint the row solid. What survives on a row is the CROSS-FRAME
+        # arrow (off=-1: "this frame's first stage after the last frame's last one"), whose span is one
+        # frame: that one IS the pipeline, and it is one arrow per frame, not a texture.
+        if period is not None and emitter_row == target_row:
+            span = abs(emitter["ts"] - producer["ts"])
+            if not (period // 2 <= span <= 2 * period):
+                chain_flows += 1
+                continue
+        # `s` on the producer (the input the stage waited for), `f` on the stage that waited: the
+        # arrow then reads input -> stage, which is the direction the dependency was declared.
+        #
+        # `cat` MUST match the category of the slices on both ends (they are all stage bars, i.e.
+        # "graph"): a flow event whose category names a different track than the slices it points at
+        # cannot be attached to them, and the viewer then falls back to pairing by timestamp across the
+        # whole timeline -- which is how a frame-local edge turns into a line to some unrelated slice.
+        # Event form: `ph: "s"` on the producer, `ph: "f"` on the consumer, one `id` per flow. NO `cat`:
+        # a category makes the viewer look for a category track, and a flow whose category does not match
+        # the slices' is parsed but never attached -- `slice_out` stays 0 and the arrow has no ends. The
+        # two tss are inside their bars (see AnchorIn) so the lookup has something to find.
         drawn_flows += 1
+        flow_id = index + 1
+        s_ts = AnchorIn(producer, target_row)
+        f_ts = AnchorIn(emitter, emitter_row)
+        if s_ts is None or f_ts is None:
+            unanchored_flows += 1
+            continue
+        events.append({"name": f"{from_name}::{from_stage} -> {stage}" if from_name and from_stage
+                       else "sync", "ph": "s", "id": flow_id,
+                       "ts": s_ts, "pid": target_row[0], "tid": target_row[1]})
+        events.append({"name": "sync", "ph": "f", "id": flow_id,
+                       "ts": f_ts, "pid": emitter_row[0], "tid": emitter_row[1]})
+
+    if one_shot_flows:
+        print(f"[trace]   {one_shot_flows} flow hint(s) skipped: a one-shot (init/install/teardown) "
+              f"stage at one end, so the arrow would span the session instead of a frame")
+    if chain_flows:
+        print(f"[trace]   {chain_flows} in-frame chain hint(s) skipped: same row, a fraction of a "
+              f"frame apart -- the bars already read in that order, the arrows only painted it solid")
+
+    # A SELF-IDENTIFYING marker, on its own row at the very top. Two conversions of the same raw trace
+    # have IDENTICAL bars -- only the flows differ -- so nothing in the timeline tells a viewer which
+    # one it is showing, and a viewer that restored a cached copy keeps showing the older arrows. This
+    # slice names this conversion by file + counters: if it is not on screen, the trace on screen is
+    # not this file.
+    # A SELF-IDENTIFYING marker, at the very END of the timeline and on a row of its own. Two
+    # conversions of the same raw trace have IDENTICAL bars -- only the flows differ -- so nothing in
+    # the timeline tells a viewer which one it is showing. Its ts must NOT be 0: a viewer treats
+    # slice id 0 as "no slice", and any flow event it cannot attach to a bar is reported against
+    # slice 0 -- which is how a marker at ts~0 "collected" hundreds of unrelated arrows.
+    rev_tid = 999
+    rev_ts = max((e["ts"] for e in events if e.get("ph") == "X"), default=0) + 1000
+    events.append({"name": "thread_name", "ph": "M", "pid": ROOT, "tid": rev_tid,
+                   "args": {"name": "TRACE REV"}})
+    events.append({"name": "thread_sort_index", "ph": "M", "pid": ROOT, "tid": rev_tid,
+                   "args": {"sort_index": 9999}})
+    events.append({
+        "name": f"TRACE-REV {dst.name} flows={drawn_flows} one-shot-dropped={one_shot_flows}",
+        "cat": "meta", "ph": "X", "ts": rev_ts, "dur": 1, "pid": ROOT, "tid": rev_tid,
+        "args": {"file": dst.name, "flows": drawn_flows, "one_shot_dropped": one_shot_flows}})
 
     payload = {"traceEvents": events, "displayTimeUnit": "ms"}
     dst.write_text(json.dumps(payload), encoding="utf-8")
-    return len(events), len(group_pid), len(track), drawn_flows
+    return len(events), len(group_pid), len(track), drawn_flows, skipped_flows
 
 
 def main() -> int:
-    drop_global = "--no-global" in sys.argv
     # The spacer pass is ON by default: a trace that imports without errors is worth more than the
     # last microsecond of a bar that overlapped the next one. --no-spacer restores the raw timing.
     spacer = "--no-spacer" not in sys.argv
@@ -336,18 +492,16 @@ def main() -> int:
         print(f"[trace] no such trace: {src}")
         return 1
 
-    count, groups, lanes, flows_drawn = convert(src, dst, drop_global, drops, spacer, with_flows)
+    count, groups, lanes, flows_drawn, flows_skipped = convert(src, dst, drops, spacer, with_flows)
     if count == 0:
         print(f"[trace] {src} had no [tr] lines -- was MAHO_TRACE set for that run?")
         return 1
 
     skipped = "" if spacer else ", raw timing (no spacer)"
-    if drop_global:
-        skipped += ", Global mirror dropped"
     if drops:
         skipped += f", dropped {','.join(sorted(drops))}"
-    print(f"[trace] {count} events ({flows_drawn} flow arrows), {lanes} track(s), "
-          f"{groups} group(s){skipped} -> {dst}")
+    print(f"[trace] {count} events ({flows_drawn} flow arrows, {flows_skipped} skipped), "
+          f"{lanes} track(s), {groups} group(s){skipped} -> {dst}")
     return 0
 
 

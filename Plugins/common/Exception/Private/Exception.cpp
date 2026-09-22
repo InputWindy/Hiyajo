@@ -1,5 +1,7 @@
 #include "Exception.h"
 
+#include <Trace.h>
+
 namespace Maho::Exception
 {
 
@@ -12,12 +14,14 @@ MAHO_EXCEPTION_API FException* GetExceptionCenter()
 
 void FException::Initialize(FEngineBase&, FEngineContext&)
 {
+	MAHO_TRACE_STAGE(IInit, "Exception init", "publish the exception center");
 	OnException.RemoveAll();
 	GExceptionCenter = this;
 }
 
 void FException::Shutdown(FEngineBase&, FEngineContext&)
 {
+	MAHO_TRACE_STAGE(IShutdown, "Exception shutdown", "retract the exception center");
 	GExceptionCenter = nullptr;
 	OnException.RemoveAll();
 }

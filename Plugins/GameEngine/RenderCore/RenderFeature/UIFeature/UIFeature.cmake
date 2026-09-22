@@ -21,6 +21,7 @@ target_include_directories(UIFeature PUBLIC
 	"${ENGINE_DIR}/Plugins/GameEngine/RenderCore/Render/Public"
 	"${ENGINE_DIR}/Plugins/GameEngine/RenderCore/RenderFeature/Scene/Public"
 	"${ENGINE_DIR}/Plugins/GameEngine/EngineCore/UI/Public"
+	"${ENGINE_DIR}/Plugins/Common/Log/Public"
 )
 target_include_directories(UIFeature PRIVATE
 	"${ENGINE_DIR}/Plugins/GameEngine/RenderCore/RenderFeature/DrawTriangleFeature/Public"
@@ -30,7 +31,7 @@ target_compile_definitions(UIFeature PRIVATE MAHO_UIFEATURE_MODULE_EXPORTS)
 target_link_libraries(UIFeature PUBLIC Maho)
 set_property(TARGET UIFeature PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>")
 set_target_properties(UIFeature PROPERTIES OUTPUT_NAME "FUIFeature" PREFIX "")
-target_link_libraries(UIFeature PUBLIC Render Scene UI)
+target_link_libraries(UIFeature PUBLIC Render Scene UI Log)
 set_target_properties(UIFeature PROPERTIES FOLDER "Maho/Plugins/GameEngine/RenderCore/RenderFeature")
 source_group(TREE "${CMAKE_CURRENT_LIST_DIR}" FILES ${UIFeature_PUBLIC_HEADERS} ${UIFeature_PRIVATE_HEADERS} ${UIFeature_PRIVATE_SOURCES})
 # -- /MAHOGEN UIFeature --

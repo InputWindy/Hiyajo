@@ -3,7 +3,7 @@
 // this TU - the header only sees the forward declaration.
 #include "Log.h"
 
-#include <Core/Profiler.h>
+#include <Trace.h>
 #include <ConsoleVariable.h>
 
 #include <spdlog/spdlog.h>
@@ -21,7 +21,7 @@ namespace Maho
  *  process loads); `r.Trace` overrides it from then on.
  *
  *  Note it is NOT a sink of the engine logger: a trace is tens of megabytes and wants its own file,
- *  not a rotating one -- see Core/Profiler.h for where the trace's lines actually go. */
+ *  not a rotating one -- see Trace.h for where the trace's lines actually go. */
 static ConsoleVariable::TAutoConsoleVariable<int> GCVarTrace(
 	"r.Trace",
 	(std::getenv("MAHO_TRACE") != nullptr) ? 1 : 0,
@@ -40,6 +40,7 @@ FLog::~FLog() = default;   // full type spdlog::logger is visible here
 
 void FLog::Initialize(FEngineBase& Engine, FEngineContext& Frame)
 {
+	MAHO_TRACE_STAGE(IInit, "Log init", "bring up the stdout + rotating file sinks");
 	// stdout (color) + rotating file - GUI apps (WIN32 subsystem) have no
 	// console, so the file sink is the durable log destination.
 	auto ConsoleSink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
@@ -66,20 +67,36 @@ void FLog::Initialize(FEngineBase& Engine, FEngineContext& Frame)
 
 void FLog::Tick(FEngineBase&, FEngineContext&)
 {
+	MAHO_TRACE_STAGE(ITick, "Log tick", "apply the trace CVar");
 	// Polled, not subscribed: the CVar system has no change callback, so this stage is what makes
 	// `r.Trace` take effect without a restart. A load, a compare, and -- only on a real change -- one
 	// relaxed store inside Core's switch; on a quiet frame it is the load.
+	//
+	// The FIRST tick must not turn OFF what MAHO_TRACE asked for: the CVar's value is not a reliable
+	// statement about the environment's wish (a 0 there means "this CVar has nothing to say"), and a
+	// run started with the env var must record from its very first event. From the second tick on the
+	// CVar is authoritative, so `r.Trace 0` really stops the recording.
 	const int Requested = GCVarTrace.GetValue();
 	if (Requested != LastTraceRequest)
 	{
+		const bool bFirstTick = (LastTraceRequest < 0);
 		LastTraceRequest = Requested;
-		TraceSetEnabled(Requested != 0);
+		if (!bFirstTick || Requested != 0)
+		{
+			TraceSetEnabled(Requested != 0);
+		}
 	}
 }
 
 void FLog::Shutdown(FEngineBase&, FEngineContext&)
 {
+	MAHO_TRACE_STAGE(IShutdown, "Log shutdown", "flush the trace file and stop spdlog");
 	GLog = nullptr;
+	// The trace file is one of this plugin's own diagnostics, so the OWNER closes it: events are
+	// written straight through as they close, and this flushes what stdio still holds. It must run
+	// BEFORE spdlog::shutdown() -- a teardown that logs must never find a dead logger, and the trace
+	// is flushed while this module is still fully alive. Costs nothing when MAHO_TRACE was never set.
+	TraceFlush();
 	// Subscribers (e.g. the Editor Console) unbind themselves in their own Shutdown,
 	// so this strand should already be empty. RemoveAll is a safety net only; it drops
 	// any remaining subscriptions. This now relies on each module's self-consistent

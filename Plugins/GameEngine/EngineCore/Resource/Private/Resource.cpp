@@ -2,6 +2,7 @@
 
 #include <Name.h>
 #include <Paths.h>
+#include <Trace.h>
 
 #include <atomic>
 #include <fstream>
@@ -121,6 +122,7 @@ FOnTransferDone FResourceSystem::MakeTransferDone(std::string AssetPath)
 
 void FResourceSystem::Initialize(FEngineBase& Engine, FEngineContext& Frame)
 {
+	MAHO_TRACE_STAGE(IInit, "Resource init", "start the async resource IO thread");
 	(void)Engine;
 	FThreadedServer::Initialize();   // start the async load thread
 	GResourceSystem = this;
@@ -133,6 +135,7 @@ const char* FResourceSystem::GetThreadName() const
 
 void FResourceSystem::Shutdown(FEngineBase&, FEngineContext&)
 {
+	MAHO_TRACE_STAGE(IShutdown, "Resource shutdown", "join the IO thread and report leftovers");
 	GResourceSystem = nullptr;
 	FThreadedServer::Shutdown();   // stop + join the IO thread
 	{
@@ -177,6 +180,7 @@ void FResourceSystem::Shutdown(FEngineBase&, FEngineContext&)
 
 void FResourceSystem::Tick(FEngineBase& Engine, FEngineContext& Frame)
 {
+	MAHO_TRACE_STAGE(ITick, "Resource tick", "apply the transfers the IO thread finished");
 	(void)Engine;
 	ProcessReadyIO();   // poll transfers + decode on the game thread
 }
@@ -184,7 +188,7 @@ void FResourceSystem::Tick(FEngineBase& Engine, FEngineContext& Frame)
 FTransferHandle FResourceSystem::RequestLoad(std::string Path)
 {
 	auto State = std::make_shared<FTransferState>();
-	Submit("Read", [State, Path = std::move(Path)]()
+	Submit([State, Path = std::move(Path)]()
 	{
 		FBulkData Bulk;
 		std::ifstream Stream(Path, std::ios::binary);
@@ -243,7 +247,7 @@ bool FResourceSystem::EnqueueExport(
 {
 	auto State = std::make_shared<FTransferState>();
 	const std::string Dest = std::move(DestinationPath);
-	Submit("Write", [State, Dest, Bytes = std::move(Bytes)]()
+	Submit([State, Dest, Bytes = std::move(Bytes)]()
 	{
 		const bool bWritten = WriteBytes(Dest, Bytes);
 		if (bWritten)

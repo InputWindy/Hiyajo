@@ -559,7 +559,7 @@ exit /b 0
 
 
 _MODULE_MACRO_RE = re.compile(
-	r"MAHO_DECLARE_(?:FRAME|ENGINE)\s*\(\s*([A-Za-z_]\w*)"
+	r"MAHO_DECLARE_(?:FRAME|ENGINE)(?:_UNDER)?\s*\(\s*([A-Za-z_]\w*)"
 )
 
 
