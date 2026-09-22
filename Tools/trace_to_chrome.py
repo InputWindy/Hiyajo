@@ -47,7 +47,12 @@ NEW_NODE = re.compile(
     r" grp=(\S*) name=(.+?)(?: tip=(.*))?$")
 NEW_SCOPE = re.compile(
     r"^\[tr\] ts=(\d+) dur=(\d+) lane=(\S+)(?: slot=(\d+))?(?: worker=(\d+))?(?: owner=(\S+))?"
-    r" name=(.+?)(?: tip=(.*))?$")
+    r"(?: func=(\S+))? name=(.+?)(?: tip=(.*))?$")
+
+# -- synchronization points: a flow from the gate's row to the row it released -------------------
+FLOW = re.compile(
+    r"^\[tr\] flow a_ts=(\d+) a_lane=(\S+)(?: a_slot=(\d+))?(?: a_owner=(\S+))?(?: a_name=(\S+))?"
+    r" b_ts=(\d+) b_lane=(\S+)(?: b_slot=(\d+))?(?: b_owner=(\S+))?(?: b_name=(\S+))?$")
 
 # -- files from before the group rework: a numeric lane id, and the frame name in the event -------
 OLD_NODE = re.compile(r"^\[tr\] ts=(\d+) dur=(\d+) tid=(\d+) grp=(\S*) name=(.+)$")
@@ -62,47 +67,55 @@ GLOBAL = "Global"
 
 
 def convert(src: pathlib.Path, dst: pathlib.Path, drop_global: bool,
-            drops: set | None = None, spacer: bool = True) -> tuple[int, int, int]:
+            drops: set | None = None, spacer: bool = True,
+            with_flows: bool = True) -> tuple[int, int, int, int]:
     # Every event, normalized to:
     #   (ts, dur, group, owner, slot, worker, is_node, name, tip, origin)
     records = []
+    flows = []      # (a_ts, a_group, a_owner, b_ts, b_group, b_owner)
     # Old files only: which frame a numeric lane belonged to (derived from the node events).
     old_lane_frame = {}
 
     with src.open("r", encoding="utf-8", errors="replace") as handle:
         for line in handle:
             text = line.strip()
+            if (m := FLOW.match(text)) is not None:
+                flows.append((int(m.group(1)), m.group(2), m.group(4) or m.group(2), m.group(5),
+                              int(m.group(6)), m.group(7), m.group(9) or m.group(7), m.group(10)))
+                continue
             if (m := NEW_NODE.match(text)) is not None:
                 lane, owner = m.group(3), m.group(6) or ""
                 records.append((int(m.group(1)), int(m.group(2)), lane, owner, int(m.group(4) or -1),
                                 int(m.group(5) or -1), True, m.group(8), m.group(9) or "",
-                                m.group(7) or ROOT_NAME))
+                                m.group(7) or ROOT_NAME, ""))
             elif (m := NEW_SCOPE.match(text)) is not None:
                 # A scope carries no group of its own: it ran inside whatever the lane already was,
                 # and it inherits that node's owner and slot too, which is what puts it on the same row.
+                # `func=` appears when the bar is named by a hand-written section instead.
                 lane = m.group(3)
                 records.append((int(m.group(1)), int(m.group(2)), lane, m.group(6) or "", int(m.group(4) or -1),
-                                int(m.group(5) or -1), False, m.group(7), m.group(8) or "", lane))
+                                int(m.group(5) or -1), False, m.group(8), m.group(9) or "", lane,
+                                m.group(7) or ""))
             elif (m := OLD_NODE.match(text)) is not None:
                 frame, _, stage = m.group(5).partition("::")
                 old_lane_frame[m.group(3)] = frame
                 records.append((int(m.group(1)), int(m.group(2)), m.group(4) or ROOT_NAME, frame, -1,
-                                -1, True, m.group(5), "", m.group(4) or ROOT_NAME))
+                                -1, True, m.group(5), "", m.group(4) or ROOT_NAME, ""))
             elif (m := OLD_SCOPE.match(text)) is not None:
                 records.append((int(m.group(1)), int(m.group(2)), "", m.group(4), -1, -1, False,
-                                m.group(4), "", ""))
+                                m.group(4), "", "", ""))
             else:
                 continue
 
     # A manual scope in an old file: give it the frame of the lane it landed on, so it stays on the
     # same row it used to.
     resolved = []
-    for ts, dur, group, owner, slot, worker, is_node, name, tip, origin in records:
+    for ts, dur, group, owner, slot, worker, is_node, name, tip, origin, func in records:
         if not is_node and not group:
             owner = old_lane_frame.get(owner, owner)
             group = ROOT_NAME
             origin = ROOT_NAME
-        resolved.append((ts, dur, group, owner, slot, worker, is_node, name, tip, origin))
+        resolved.append((ts, dur, group, owner, slot, worker, is_node, name, tip, origin, func))
     records = resolved
 
     if drop_global:
@@ -122,13 +135,11 @@ def convert(src: pathlib.Path, dst: pathlib.Path, drop_global: bool,
     # One track per (group, owner); groups by first event, owners by first event as well, so the
     # layout is stable and needs no separate ordering data. An event with no owner (an old file)
     # falls back to the group name.
-    def row(r) -> tuple[str, str]:
-        return (r[2], r[3] or r[2])
-
     first_ts: dict[tuple[str, str], int] = {}
-    for r in records:
-        key = row(r)
-        first_ts[key] = min(first_ts.get(key, r[0]), r[0])
+    for record in records:
+        ts, group, owner = record[0], record[2], record[3]
+        key = (group, owner or group)
+        first_ts[key] = min(first_ts.get(key, ts), ts)
 
     track: dict[tuple[str, str], tuple[int, int]] = {}
     for group in sorted(group_pid):
@@ -159,7 +170,7 @@ def convert(src: pathlib.Path, dst: pathlib.Path, drop_global: bool,
         metadata("thread_name", pid, tid, {"name": owner})
         metadata("thread_sort_index", pid, tid, {"sort_index": tid})
 
-    for ts, dur, group, owner, slot, worker, is_node, name, tip, origin in records:
+    for ts, dur, group, owner, slot, worker, is_node, name, tip, origin, func in records:
         pid, tid = track[(group, owner or group)]
         if is_node:
             # A node bar keeps its full `<Frame>::<Stage>` name; the halves go to args as well, where
@@ -178,6 +189,10 @@ def convert(src: pathlib.Path, dst: pathlib.Path, drop_global: bool,
             })
         else:
             args = {"group": origin}
+            if func:
+                # The bar is named by a hand-written SECTION, so this is where it actually lives --
+                # the one thing the old `__FUNCTION__` naming gave for free.
+                args["func"] = func
             if tip:
                 args["tip"] = tip
             if slot >= 0:
@@ -253,9 +268,52 @@ def convert(src: pathlib.Path, dst: pathlib.Path, drop_global: bool,
                 if trimmed < first_end:
                     first["dur"] = max(1, trimmed - first["ts"])
 
+    # -- synchronization points as FLOW arrows ------------------------------------------------------
+    # Both ends are BOUND TO THEIR BARS, which is why the line carries their names: a viewer draws a
+    # flow only between slices it can bind to, and timestamps alone are not enough -- the gate's end is
+    # a hair BEFORE its bar closes, and the released node is announced a few microseconds BEFORE its
+    # own bar opens. So the arrow starts inside the gate's bar (1us before its end) and finishes inside
+    # the released bar (at its start).
+    def BindBar(row, name, ts, b_before):
+        bars = per_track.get(row)
+        if not bars or not name:
+            return None
+        best = None
+        for bar in bars:
+            if bar["name"] != name:
+                continue
+            if (bar["ts"] <= ts) if b_before else (bar["ts"] >= ts):
+                if best is None or (abs(bar["ts"] - ts) < abs(best["ts"] - ts)):
+                    best = bar
+        return best
+
+    drawn_flows = 0
+    for index, flow in enumerate(flows if with_flows else []):
+        a_ts, a_group, a_owner, a_name, b_ts, b_group, b_owner, b_name = flow
+        a_row = track.get((a_group, a_owner))
+        b_row = track.get((b_group, b_owner))
+        if a_row is None or b_row is None:
+            continue   # an endpoint's section was dropped (--drop / --no-global)
+        gate = BindBar(a_row, a_name, a_ts, True)
+        released = BindBar(b_row, b_name, b_ts, False)
+        if gate is None or released is None:
+            continue
+        events.append({"name": f"{a_name} -> {b_name}" if a_name and b_name else "sync",
+                       "cat": "sync", "ph": "s", "id": index + 1,
+                       # Both ends sit at the START of the bar they belong to, which is the one instant
+                       # that bar is certainly the INNERMOST slice there (the tie-break pass above keeps
+                       # children off their parent's first microsecond). A viewer attaches a flow to the
+                       # slice under the point, so this is what makes the arrow read stage -> stage
+                       # instead of hooking onto whatever hand-written scope happened to be innermost at
+                       # the gate's last microsecond.
+                       "ts": gate["ts"], "pid": a_row[0], "tid": a_row[1]})
+        events.append({"name": "sync", "cat": "sync", "ph": "f", "id": index + 1,
+                       "ts": released["ts"], "pid": b_row[0], "tid": b_row[1]})
+        drawn_flows += 1
+
     payload = {"traceEvents": events, "displayTimeUnit": "ms"}
     dst.write_text(json.dumps(payload), encoding="utf-8")
-    return len(events), len(group_pid), len(track)
+    return len(events), len(group_pid), len(track), drawn_flows
 
 
 def main() -> int:
@@ -263,6 +321,7 @@ def main() -> int:
     # The spacer pass is ON by default: a trace that imports without errors is worth more than the
     # last microsecond of a bar that overlapped the next one. --no-spacer restores the raw timing.
     spacer = "--no-spacer" not in sys.argv
+    with_flows = "--no-flows" not in sys.argv
     drops: set = set()
     for arg in sys.argv[1:]:
         if arg.startswith("--drop="):
@@ -277,7 +336,7 @@ def main() -> int:
         print(f"[trace] no such trace: {src}")
         return 1
 
-    count, groups, lanes = convert(src, dst, drop_global, drops, spacer)
+    count, groups, lanes, flows_drawn = convert(src, dst, drop_global, drops, spacer, with_flows)
     if count == 0:
         print(f"[trace] {src} had no [tr] lines -- was MAHO_TRACE set for that run?")
         return 1
@@ -287,7 +346,8 @@ def main() -> int:
         skipped += ", Global mirror dropped"
     if drops:
         skipped += f", dropped {','.join(sorted(drops))}"
-    print(f"[trace] {count} events, {lanes} track(s), {groups} group(s){skipped} -> {dst}")
+    print(f"[trace] {count} events ({flows_drawn} flow arrows), {lanes} track(s), "
+          f"{groups} group(s){skipped} -> {dst}")
     return 0
 
 

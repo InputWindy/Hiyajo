@@ -139,15 +139,10 @@ std::uint32_t FThreadPool::GetLanePending(FLane Lane) const
 
 void FThreadPool::Submit(std::function<void()> Task)
 {
-	Submit(DefaultLane, FTaskTrace{}, std::move(Task));
+	Submit(DefaultLane, std::move(Task));
 }
 
-void FThreadPool::Submit(FTaskTrace Trace, std::function<void()> Task)
-{
-	Submit(DefaultLane, Trace, std::move(Task));
-}
-
-void FThreadPool::Submit(FLane Lane, FTaskTrace Trace, std::function<void()> Task)
+void FThreadPool::Submit(FLane Lane, std::function<void()> Task)
 {
 	EnsureThreads(NumThreads);
 
@@ -159,7 +154,7 @@ void FThreadPool::Submit(FLane Lane, FTaskTrace Trace, std::function<void()> Tas
 		ReportError("FThreadPool::Submit: unknown lane, falling back to the default lane");
 		Lane = DefaultLane;
 	}
-	Lanes[Lane].Queue.push_back(FQueuedTask{ Trace, std::move(Task) });
+	Lanes[Lane].Queue.push_back(FQueuedTask{ std::move(Task) });
 	Lanes[Lane].Pending += 1;
 	NotifyWorkAvailableLocked();
 }
@@ -207,7 +202,7 @@ void FThreadPool::Flush(FLane Lane)
 			FQueuedTask Queued = std::move(Lanes[Lane].Queue.front());
 			Lanes[Lane].Queue.pop_front();
 			Lock.unlock();
-			RunTracedTask(Queued.Trace, Queued.Task);
+			RunTaskSafely(Queued.Task);
 			Lock.lock();
 			Lanes[Lane].Pending -= 1;
 			NotifyProgressLocked();
@@ -294,23 +289,6 @@ void FThreadPool::RunTaskSafely(const std::function<void()>& Task)
 	GRunningPool = Previous;
 }
 
-void FThreadPool::RunTracedTask(const FTaskTrace& Trace, const std::function<void()>& Task)
-{
-	if (Trace.Name[0] == '\0')
-	{
-		RunTaskSafely(Task);
-		return;
-	}
-
-	// The single instrumentation point for everything the engine executes. It lives HERE, at the
-	// task boundary, rather than at each submitter's call site: this is the one place every piece
-	// of work passes through, so the timeline cannot have a hole that exists only because somebody
-	// forgot to instrument themselves. The scope also establishes the lane (FScopedTracePair), so
-	// manual points inside a stage body still land on their frame's row.
-	FScopedTracePair Scope(Trace.Group, Trace.Name, Trace.Stage, nullptr, Trace.Phase, true);
-	RunTaskSafely(Task);
-}
-
 void FThreadPool::WorkerLoop()
 {
 	while (true)
@@ -330,7 +308,7 @@ void FThreadPool::WorkerLoop()
 			}
 		}
 
-		RunTracedTask(Queued.Trace, Queued.Task);
+		RunTaskSafely(Queued.Task);
 
 		{
 			std::lock_guard Lock(Mutex);

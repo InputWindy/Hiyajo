@@ -64,6 +64,7 @@
 #include <Core/Export.h>
 
 #include <cstdint>
+#include <functional>
 
 namespace Maho
 {
@@ -101,8 +102,11 @@ MAHO_API const char* RegisterTraceGroup(const char* Name);
  *  and `""` mean "no group of my own" and resolve to `Global` without a warning. */
 MAHO_API const char* ResolveTraceGroup(const char* Name);
 
-/** Record one completed MANUAL scope (never filtered). Called by FScopedTrace's destructor. */
-MAHO_API void TraceEmit(const char* Name, const char* Tip,
+/** Record one completed MANUAL scope (never filtered). Called by FScopedTrace's destructor.
+ *  `Func` is optional: the enclosing function's own name, for scopes whose NAME is a hand-written
+ *  section label instead (see MAHO_TRACE_SCOPE_SECTION) -- it rides along so a hover still says
+ *  where the section lives. */
+MAHO_API void TraceEmit(const char* Name, const char* Tip, const char* Func,
 	std::uint64_t StartMicros, std::uint64_t DurMicros);
 
 /** Record one TASK bar -- `Group :: First :: Second`, optionally mirrored onto `Global` (same
@@ -118,6 +122,23 @@ MAHO_API void TraceEmit(const char* Name, const char* Tip,
  *  which is what makes a bar hoverable back to the frame and the in-flight slot it belonged to. */
 MAHO_API void TraceEmitPair(const char* Group, const char* First, const char* Second, const char* Tip,
 	std::int32_t Phase, bool bMirrorToGlobal, std::uint64_t StartMicros, std::uint64_t DurMicros);
+
+/** Record one SYNCHRONIZATION POINT: `Gate` reached its end, and that is what released `Next`.
+ *
+ *  It is the one dependency a scheduler actually ENFORCED -- a node may wait for several predecessors,
+ *  but only the last one to finish unblocks it -- so this is ONE record per dispatched node, not one
+ *  per declared edge (which would be hundreds of lines per frame and no more information). A viewer
+ *  draws it as a FLOW arrow from the gate's row to the released node's row, which is what turns "these
+ *  two bars are far apart" into "this one waited for that one".
+ *
+ *  Both halves are the `{group, owner, slot}` triple that decides the ROW (see the top of this header),
+ *  plus the gate's END timestamp: the released node starts at the moment of this call. All strings must
+ *  be static storage. Emitted lines look like:
+ *
+ *      [tr] flow a_ts=<us> a_lane=<g> a_owner=<o> a_slot=<n> b_ts=<us> b_lane=<g> b_owner=<o> b_slot=<n> */
+MAHO_API void TraceEmitFlow(const char* GateGroup, const char* GateOwner, const char* GateStage,
+	std::int32_t GateSlot, std::uint64_t GateEndMicros,
+	const char* NextGroup, const char* NextOwner, const char* NextStage, std::int32_t NextSlot);
 
 /** Flush every thread's pending events to the trace file. Called at exit; callable by hand so a
  *  host can snapshot mid-run (each call appends whatever is buffered). */
@@ -146,6 +167,25 @@ struct FTaskTrace
 	std::int32_t Phase = -1;  // the ring slot it ran in; -1 = no phase to report
 };
 
+/** Wrap a task body so that ITS bar is opened where the task RUNS -- without the executor having to
+ *  know anything about tracing.
+ *
+ *  This is what keeps the pool and the resident workers type-agnostic: they enqueue and run ordinary
+ *  closures, while the party that KNOWS the identity (the submitter -- the frame graph, the role that
+ *  owns a server) wraps the body on its way in. The bar still opens at the task boundary, on whichever
+ *  thread runs it (a pool worker, or the thread a Flush helped drain from), so nothing the old
+ *  hard-wired hook bought is lost.
+ *
+ *  This form MIRRORS onto Global (a graph node does). With tracing off -- or when the identity has no
+ *  Name -- the body is returned UNCHANGED: no wrapper, no allocation, nothing. */
+MAHO_API std::function<void()> TraceWrap(std::function<void()> Body, const FTaskTrace& Identity);
+
+/** The same, for a RESIDENT WORKER's task: its own lane (the role name), and no Global mirror --
+ *  a resident thread is not part of the graph's parallel schedule. Registration of the role's group
+ *  happens here too (idempotent), which is why a server never has to mention the trace at all. */
+MAHO_API std::function<void()> TraceWrapResident(std::function<void()> Body, const char* Role,
+	const char* Stage);
+
 /** RAII scope for a MANUAL point. Takes the start timestamp on construction and records on
  *  destruction -- so an early return, an exception, or a break all still produce a complete event.
  *
@@ -159,7 +199,11 @@ struct FTaskTrace
 class MAHO_API FScopedTrace
 {
 public:
-	explicit FScopedTrace(const char* InGroup, const char* InTip, const char* InName);
+	/** `InName` is what the bar shows, `InFunc` is where it came from (optional, for a bar whose
+	 *  name is a hand-written section label rather than the function's own -- see
+	 *  MAHO_TRACE_SCOPE_SECTION). */
+	explicit FScopedTrace(const char* InGroup, const char* InTip, const char* InName,
+		const char* InFunc = nullptr);
 	~FScopedTrace();
 
 	FScopedTrace(const FScopedTrace&) = delete;
@@ -170,6 +214,7 @@ public:
 private:
 	const char*   Name = nullptr;
 	const char*   Tip = nullptr;
+	const char*   Func = nullptr;
 	const char*   ResolvedGroup = nullptr;   // null when the lane is inherited
 	const char*   PreviousGroup = nullptr;
 	std::uint64_t Start = 0;
@@ -228,6 +273,20 @@ private:
  */
 #define MAHO_TRACE_SCOPE(Group, Tip) \
 	::Maho::FScopedTrace MAHO_TRACE_CONCAT(_MahoScope, __LINE__)(Group, Tip, __FUNCTION__)
+
+/**
+ * A manual scope whose bar is named by a HAND-WRITTEN SECTION instead of the enclosing function.
+ *
+ * `__FUNCTION__` is the right name for a scope that IS the function's body, but it makes every scope
+ * inside one function carry that same name -- three instruments in `FUIFeature::InitViews` all read
+ * "FUIFeature::InitViews", which is unreadable on a timeline (they are told apart only by their
+ * tooltip). This form names each one for what it does; the function still rides along in `func=`, so a
+ * hover keeps saying where the section lives.
+ *
+ *   MAHO_TRACE_SCOPE_SECTION("Render", "translate views", "把注册的视图翻译成 ImGui 命令");
+ */
+#define MAHO_TRACE_SCOPE_SECTION(Group, Section, Tip) \
+	::Maho::FScopedTrace MAHO_TRACE_CONCAT(_MahoSection, __LINE__)(Group, Tip, Section, __FUNCTION__)
 
 /**
  * The TASK form: `Group :: First :: Second` on the group's lane, MIRRORED onto Global because every

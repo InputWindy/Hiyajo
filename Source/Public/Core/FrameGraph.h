@@ -538,6 +538,11 @@ struct FTaskNode
 	std::function<void()> Closure;
 
 	std::atomic<bool>    bDispatched{ false };
+
+	/** When this node's body finished, in trace microseconds (0 when tracing is off). It is what a
+	 *  SYNCHRONIZATION POINT is anchored to: the node that completes last is the one that releases a
+	 *  waiter, and the flow arrow has to start where that node ended -- see TraceEmitFlow. */
+	std::uint64_t        TraceEndMicros = 0;
 };
 
 /**

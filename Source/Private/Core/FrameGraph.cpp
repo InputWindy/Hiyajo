@@ -406,14 +406,13 @@ void FFrameGraph::Dispatch(FNodeId Id)
 	// still about to run, and "the phase is idle" would be a lie.
 	SlotInFlight[SlotIndexOf(Node.Key.Phase)].fetch_add(1, std::memory_order_acq_rel);
 
-	// The task's TRACE IDENTITY travels with it into the pool, which is where the bar is opened
-	// (see FThreadPool::RunTracedTask). The graph is the party that knows the triple
-	// {collector, frame, stage} -- that is exactly the node's identity -- so it hands it over at
-	// Submit instead of instrumenting its own call site: every candidate runner (a worker, or a
-	// Flush that helps drain) then draws the same bar without knowing anything about frames.
+	// The task's TRACE IDENTITY travels INSIDE the closure (TraceWrap), not as a parameter of the
+	// pool's API: the graph is the party that knows the triple {collector, frame, stage} -- that is
+	// exactly the node's identity -- so it wraps the body on its way in, and the pool stays a
+	// type-agnostic executor that runs closures. The bar still opens where the body RUNS, so every
+	// candidate runner (a worker, or a Flush that helps drain) draws the same bar.
 	// All three names are static by invariant I3 (GetName must return literal storage).
-	Pool.Submit(Lane,
-		FTaskTrace{ TraceGroup, Node.Key.Name.data(), Node.Key.Stage.name(), Node.Key.Phase },
+	Pool.Submit(Lane, TraceWrap(
 		[this, Id]()
 	{
 		// A hard crash (0xC0000005) has no stack and no exception to catch, so the last stage
@@ -454,7 +453,8 @@ void FFrameGraph::Dispatch(FNodeId Id)
 		// Named for the trace -- one of these per dispatched node, so it is the other half of the
 		// scheduler's command traffic.
 		FThreadedServer::Submit("Complete", [this, Id]() { OnNodeCompleted(Id); });
-	});
+	},
+		FTaskTrace{ TraceGroup, Node.Key.Name.data(), Node.Key.Stage.name(), Node.Key.Phase }));
 }
 
 void FFrameGraph::OnNodeCompleted(FNodeId Id)
@@ -463,6 +463,13 @@ void FFrameGraph::OnNodeCompleted(FNodeId Id)
 
 	// Set the completion event, then release every waiter that is now satisfied.
 	EventStates[Node.CompletionEvent].store(true, std::memory_order_release);
+
+	// Where this node ENDED is what a synchronization point is drawn from, so it is captured here,
+	// before the release loop below, and only when tracing is on (a plain read otherwise).
+	if (TraceEnabled())
+	{
+		Node.TraceEndMicros = TraceNowMicros();
+	}
 
 	std::vector<FNodeId> BecameReady;
 	for (FNodeId Waiter : Node.Successors)
@@ -476,6 +483,16 @@ void FFrameGraph::OnNodeCompleted(FNodeId Id)
 	}
 	for (FNodeId Ready : BecameReady)
 	{
+		// THIS node is the one that unblocked `Ready` -- a node may wait for several predecessors, but
+		// only the last to finish is the gate -- so this is where the sync edge is real, and one flow
+		// per released node is all a viewer needs to see who waited for whom.
+		if (TraceEnabled())
+		{
+			const FTaskNode& Next = Nodes[Ready];
+			TraceEmitFlow(TraceGroup, Node.Key.Name.data(), Node.Key.Stage.name(), Node.Key.Phase,
+				Node.TraceEndMicros,
+				TraceGroup, Next.Key.Name.data(), Next.Key.Stage.name(), Next.Key.Phase);
+		}
 		Dispatch(Ready);
 	}
 

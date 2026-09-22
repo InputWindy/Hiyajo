@@ -405,10 +405,19 @@ const char* ResolveTraceGroup(const char* Name)
 	return kGlobalGroupName;
 }
 
-void TraceEmit(const char* Name, const char* Tip, std::uint64_t StartMicros, std::uint64_t DurMicros)
+void TraceEmit(const char* Name, const char* Tip, const char* Func,
+	std::uint64_t StartMicros, std::uint64_t DurMicros)
 {
 	FLine Line;
 	WriteHead(Line, GroupOf(), GCurrentSlot, GCurrentFrame, StartMicros, DurMicros);
+	if (Func != nullptr && Func[0] != '\0')
+	{
+		// Where the section lives, for a bar named by a hand-written label rather than by its
+		// function. Only present when the caller had a different name to give.
+		Line.Literal(" func=");
+		const FNameSlice FuncShort = ShortScopeName(Func);
+		Line.Append(FuncShort.Data, FuncShort.Size);
+	}
 	Line.Literal(" name=");
 	const FNameSlice Short = ShortScopeName(Name);
 	Line.Append(Short.Data, Short.Size);
@@ -479,8 +488,104 @@ void TraceFlush()
 	}
 }
 
-FScopedTrace::FScopedTrace(const char* InGroup, const char* InTip, const char* InName)
-	: Name(InName), Tip(InTip)
+std::function<void()> TraceWrap(std::function<void()> Body, const FTaskTrace& Identity)
+{
+	if (!TraceEnabled() || Identity.Name == nullptr || Identity.Name[0] == '\0')
+	{
+		// Nothing to trace: the caller's body, untouched -- no wrapper, no allocation.
+		return Body;
+	}
+
+	// The identity is a few static pointers, so it is copied INTO the closure and travels with the
+	// task; the bar opens inside the wrapper, i.e. at the moment the body actually runs.
+	return [Identity, Body = std::move(Body)]()
+	{
+		FScopedTracePair Scope(Identity.Group, Identity.Name, Identity.Stage, nullptr, Identity.Phase, true);
+		Body();
+	};
+}
+
+std::function<void()> TraceWrapResident(std::function<void()> Body, const char* Role, const char* Stage)
+{
+	if (!TraceEnabled() || Role == nullptr || Role[0] == '\0')
+	{
+		return Body;
+	}
+
+	// The lane's group is introduced with the role, so registering it here (idempotent) is the reason
+	// a resident server never has to mention the trace at all.
+	const char* const Group = RegisterTraceGroup(Role);
+	return [Group, Stage, Body = std::move(Body)]()
+	{
+		// mirror = false: a resident thread is not part of the graph's parallel schedule, and the
+		// phase is -1 because there is no in-flight slot to report.
+		FScopedTracePair Scope(Group, Group, Stage, nullptr, -1, false);
+		Body();
+	};
+}
+
+void TraceEmitFlow(const char* GateGroup, const char* GateOwner, const char* GateStage,
+	std::int32_t GateSlot, std::uint64_t GateEndMicros,
+	const char* NextGroup, const char* NextOwner, const char* NextStage, std::int32_t NextSlot)
+{
+	if (!TraceEnabled())
+	{
+		return;
+	}
+
+	// One line, both endpoints fully described: the ROW each end belongs to, the BAR each end is
+	// (composed exactly like a node bar, so a reader can bind them) and the gate's end timestamp.
+	// The released node's start is the moment of this call -- a few microseconds before its own bar
+	// opens, which is why the NAME travels: the reader re-anchors the arrow's far end to the bar it
+	// belongs to instead of trusting the timestamp.
+	const std::uint64_t Now = TraceNowMicros();
+	const FNameSlice GateShort = (GateStage != nullptr) ? ShortStageName(GateStage) : FNameSlice{};
+	const FNameSlice NextShort = (NextStage != nullptr) ? ShortStageName(NextStage) : FNameSlice{};
+
+	FLine Line;
+	Line.Literal("[tr] flow a_ts=");
+	Line.Decimal(GateEndMicros);
+	Line.Literal(" a_lane=");
+	Line.CString(GateGroup);
+	if (GateSlot >= 0)
+	{
+		Line.Literal(" a_slot=");
+		Line.Decimal(static_cast<std::uint64_t>(GateSlot));
+	}
+	if (GateOwner != nullptr && GateOwner[0] != '\0')
+	{
+		Line.Literal(" a_owner=");
+		Line.CString(GateOwner);
+		Line.Literal(" a_name=");
+		Line.CString(GateOwner);
+		Line.Literal("::");
+		Line.Append(GateShort.Data, GateShort.Size);
+	}
+	Line.Literal(" b_ts=");
+	Line.Decimal(Now);
+	Line.Literal(" b_lane=");
+	Line.CString(NextGroup);
+	if (NextSlot >= 0)
+	{
+		Line.Literal(" b_slot=");
+		Line.Decimal(static_cast<std::uint64_t>(NextSlot));
+	}
+	if (NextOwner != nullptr && NextOwner[0] != '\0')
+	{
+		Line.Literal(" b_owner=");
+		Line.CString(NextOwner);
+		Line.Literal(" b_name=");
+		Line.CString(NextOwner);
+		Line.Literal("::");
+		Line.Append(NextShort.Data, NextShort.Size);
+	}
+	Line.Newline();
+	EmitLine(Line);
+}
+
+FScopedTrace::FScopedTrace(const char* InGroup, const char* InTip, const char* InName,
+	const char* InFunc)
+	: Name(InName), Tip(InTip), Func(InFunc)
 {
 	if (!TraceEnabled())
 	{
@@ -510,7 +615,7 @@ FScopedTrace::~FScopedTrace()
 	// The duration is measured from the OFFSET start, so a scope whose body is shorter than its depth
 	// offset reports 0 rather than wrapping around.
 	const std::uint64_t Now = TraceNowMicros();
-	TraceEmit(Name, Tip, Start, (Now > Start) ? (Now - Start) : 0);
+	TraceEmit(Name, Tip, Func, Start, (Now > Start) ? (Now - Start) : 0);
 	--GDepth;
 	if (ResolvedGroup != nullptr)
 	{

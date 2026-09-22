@@ -639,7 +639,7 @@ void FUIFeature::InitViews(FRender& R, FRenderContext& Frame)
 	// GetTexDataAsRGBA32() triggers that build on the first frame and returns the
 	// existing pixels afterwards (the GPU upload already happened in OnInstalled).
 	{
-		MAHO_TRACE_SCOPE(nullptr, "start the ImGui frame");
+		MAHO_TRACE_SCOPE_SECTION(nullptr, "InitViews: NewFrame", "start the ImGui frame");
 		unsigned char* FontPixels = nullptr;
 		int FontW = 0, FontH = 0, FontBpp = 0;
 		IO.Fonts->GetTexDataAsRGBA32(&FontPixels, &FontW, &FontH, &FontBpp);
@@ -699,7 +699,7 @@ void FUIFeature::InitViews(FRender& R, FRenderContext& Frame)
 	// window (game layout never re-scales to an editor panel), i.e. the same space the
 	// input feed above used.
 	{
-		MAHO_TRACE_SCOPE(nullptr, "translate the registered views");
+		MAHO_TRACE_SCOPE_SECTION(nullptr, "InitViews: TranslateViews", "translate the registered views");
 		UI::FUIViewFrameDesc FrameDesc;
 		FrameDesc.ImGuiContext = m_Context;
 		// 只翻游戏作用域的视图。编辑器侧声明的是另一个名字，双方各自声明、互不需要对方的头 ——
@@ -746,7 +746,7 @@ void FUIFeature::InitViews(FRender& R, FRenderContext& Frame)
 	//    buffers are the merged ImDrawData (one vertex/index array), created + uploaded
 	//    HERE (InitViews); only the FRDGBufferRefs are stored. RenderUI (later, same
 	//    graph) draws them via AddPass.
-	MAHO_TRACE_SCOPE(nullptr, "translate ImGui draw data into a draw list");
+			MAHO_TRACE_SCOPE_SECTION(nullptr, "InitViews: DrawList", "translate ImGui draw data into a draw list");
 	FDrawList& DrawList = this->DrawList;
 	DrawList.Reset();
 
