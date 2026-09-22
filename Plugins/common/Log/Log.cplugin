@@ -2,5 +2,7 @@
   "FileVersion": 1,
   "Name": "Log",
   "Description": "",
-  "Dependencies": []
+  "Dependencies": [
+    "ConsoleVariable"
+  ]
 }

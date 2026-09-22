@@ -69,8 +69,16 @@
 namespace Maho
 {
 
-/** Recording is on. Reads MAHO_TRACE once; the answer never changes while the process lives. */
+/** Recording is on. The initial answer comes from MAHO_TRACE (read once while the process loads),
+ *  and a runtime switch may flip it -- see TraceSetEnabled. Cheap enough for a hot path: one relaxed
+ *  atomic load. */
 MAHO_API bool TraceEnabled();
+
+/** Flip recording at runtime. The `r.Trace` CVar drives this, and it cannot live in Core: Core must
+ *  not depend on the ConsoleVariable plugin, so the plugin owns the CVar and calls in here. Turning
+ *  it ON mid-run starts recording from that moment (the file is opened lazily on the first event);
+ *  turning it OFF simply stops. Neither needs a restart, and the switch is per PROCESS. */
+MAHO_API void TraceSetEnabled(bool bEnabled);
 
 /** Monotonic microseconds since the trace origin (the first traced call). The `ts` we emit. */
 MAHO_API std::uint64_t TraceNowMicros();

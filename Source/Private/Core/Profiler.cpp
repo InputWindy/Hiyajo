@@ -237,12 +237,22 @@ void EmitLine(const FLine& Line)
 
 } // namespace
 
+/** The process-wide recording switch: MAHO_TRACE decides its initial value (read once, while the
+ *  process loads), and the `r.Trace` CVar -- declared by the Log plugin, which owns the profiler's
+ *  file sink -- flips it at runtime. One atomic, read relaxed on every scope. */
+std::atomic<bool> GTraceEnabled{ std::getenv("MAHO_TRACE") != nullptr };
+
 bool TraceEnabled()
 {
-	// Read ONCE, like MAHO_TRACE_STAGES: no getenv on the hot path, and the answer is stable for
-	// the process -- a trace that switched on halfway through would have no meaningful origin.
-	static const bool bOn = (std::getenv("MAHO_TRACE") != nullptr);
-	return bOn;
+	// A relaxed load on a hot path. The switch is process-wide and may flip at runtime (`r.Trace`),
+	// so it is one file-scope atomic that both this and TraceSetEnabled touch; its INITIAL value still
+	// comes from MAHO_TRACE, so a run can be traced from its very first event with no config at all.
+	return GTraceEnabled.load(std::memory_order_relaxed);
+}
+
+void TraceSetEnabled(bool bEnabled)
+{
+	GTraceEnabled.store(bEnabled, std::memory_order_relaxed);
 }
 
 std::uint64_t TraceTaskFloorMicros()

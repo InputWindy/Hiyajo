@@ -18,12 +18,14 @@ target_include_directories(Log PUBLIC
 	"${ENGINE_DIR}/Source/Public"
 	"${CMAKE_CURRENT_LIST_DIR}/Public"
 	"${CMAKE_CURRENT_SOURCE_DIR}/Plugins/ExampleEngine/Public"
+	"${ENGINE_DIR}/Plugins/Common/ConsoleVariable/Public"
 )
 set_target_properties(Log PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 target_compile_definitions(Log PRIVATE MAHO_LOG_MODULE_EXPORTS)
 target_link_libraries(Log PUBLIC Maho)
 set_property(TARGET Log PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>")
 set_target_properties(Log PROPERTIES OUTPUT_NAME "FLog" PREFIX "")
+target_link_libraries(Log PUBLIC ConsoleVariable)
 set_target_properties(Log PROPERTIES FOLDER "Maho/Plugins/Common")
 source_group(TREE "${CMAKE_CURRENT_LIST_DIR}" FILES ${Log_PUBLIC_HEADERS} ${Log_PRIVATE_HEADERS} ${Log_PRIVATE_SOURCES})
 # -- /MAHOGEN Log --

@@ -58,7 +58,7 @@ struct FLogMessage
  *
  *   Engine.Install<FLog>();   // install early in PreMain   (or Install(ApplyModuleExtension("FLog")))
  */
-class FLog : public FFrameExtension, public IPipeline<IInit, IShutdown>
+class FLog : public FFrameExtension, public IPipeline<IInit, ITick, IShutdown>
 {
 public:
 	MAHO_DECLARE_FRAME(FLog);
@@ -113,14 +113,19 @@ public:
 	// Shutdown so this strand is empty before the Log layer tears down.
 	TMulticastEvent<void(const FLogMessage&)> OnLog;
 private:
-	// -- engine init/shutdown stages (scheduler-only) --
+	// -- engine stages (scheduler-only) --
 	void Initialize(FEngineBase& Engine, FEngineContext& Frame) override;
+	void Tick(FEngineBase& Engine, FEngineContext& Frame) override;
 	void Shutdown(FEngineBase& Engine, FEngineContext& Frame) override;
 
 	void LogLine(ELogLevel Level, std::string Message);
 	void LogLine(ELogLevel Level, std::string Category, std::string Message);
 
 	std::shared_ptr<spdlog::logger> Logger;   // incomplete type; dtor in Log.cpp
+
+	/** Last `r.Trace` value this layer applied, so Tick only touches the profiler's switch when the
+	 *  CVar actually changed (-1 = nothing applied yet, which forces the first Tick to sync it). */
+	int LastTraceRequest = -1;
 
 };
 

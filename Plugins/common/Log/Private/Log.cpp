@@ -3,12 +3,29 @@
 // this TU - the header only sees the forward declaration.
 #include "Log.h"
 
+#include <Core/Profiler.h>
+#include <ConsoleVariable.h>
+
 #include <spdlog/spdlog.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
 #include <spdlog/sinks/rotating_file_sink.h>
 
+#include <cstdlib>
+
 namespace Maho
 {
+
+/** The CPU profiler's runtime switch. It is DECLARED HERE because Core must not depend on a plugin:
+ *  Core exposes `TraceSetEnabled` and this plugin, which already owns the process's log sinks, is the
+ *  one place that knows a CVar. MAHO_TRACE still decides the initial value (Core reads it while the
+ *  process loads); `r.Trace` overrides it from then on.
+ *
+ *  Note it is NOT a sink of the engine logger: a trace is tens of megabytes and wants its own file,
+ *  not a rotating one -- see Core/Profiler.h for where the trace's lines actually go. */
+static ConsoleVariable::TAutoConsoleVariable<int> GCVarTrace(
+	"r.Trace",
+	(std::getenv("MAHO_TRACE") != nullptr) ? 1 : 0,
+	"1 = record a CPU trace (same as MAHO_TRACE=1), 0 = off. Takes effect immediately.");
 
 FLog* GLog = nullptr;
 
@@ -45,6 +62,19 @@ void FLog::Initialize(FEngineBase& Engine, FEngineContext& Frame)
 	Logger->set_level(Lv);
 
 	GLog = this;
+}
+
+void FLog::Tick(FEngineBase&, FEngineContext&)
+{
+	// Polled, not subscribed: the CVar system has no change callback, so this stage is what makes
+	// `r.Trace` take effect without a restart. A load, a compare, and -- only on a real change -- one
+	// relaxed store inside Core's switch; on a quiet frame it is the load.
+	const int Requested = GCVarTrace.GetValue();
+	if (Requested != LastTraceRequest)
+	{
+		LastTraceRequest = Requested;
+		TraceSetEnabled(Requested != 0);
+	}
 }
 
 void FLog::Shutdown(FEngineBase&, FEngineContext&)
