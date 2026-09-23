@@ -1,6 +1,7 @@
 #include "ShaderCompiler.h"
 
 #include <Log.h>
+#include <Trace.h>
 
 #ifdef MAHO_WITH_GLSLANG
 #include <glslang/Public/ShaderLang.h>
@@ -15,6 +16,11 @@ namespace Maho
 
 namespace
 {
+
+/** This role's trace lane: the row the compiler thread's own work lands on. The same string
+ *  GetThreadName() answers, kept as a literal so a task body can be named without capturing the
+ *  server (the RHI's device names its lane the same way). */
+constexpr const char* kShaderCompilerLane = "ShaderCompiler";
 
 #ifdef MAHO_WITH_GLSLANG
 
@@ -172,14 +178,21 @@ void FShaderCompilerServer::CompileAsync(
 	const FShaderCompileDesc& Desc,
 	std::function<void(const FShaderCompileResult&)> OnDone)
 {
-	Submit([this, Desc, OnDone = std::move(OnDone)]()
+	Submit([this, Desc, OnDone = std::move(OnDone)]() { ProcessCompileJob(Desc, OnDone); });
+}
+
+void FShaderCompilerServer::ProcessCompileJob(const FShaderCompileDesc& Desc,
+	std::function<void(const FShaderCompileResult&)> OnDone)
+{
+	// The compiler thread's own bar: its lane with itself as the row. A NAMED member rather than the
+	// submitting lambda, because a scope bar takes its name from __FUNCTION__ and a timeline should
+	// read "FShaderCompilerServer::ProcessCompileJob", not "<lambda_1>::operator()".
+	MAHO_TRACE_SCOPE(kShaderCompilerLane, "compile the shader stage");
+	FShaderCompileResult Result = CompileStage(Desc);
+	if (OnDone)
 	{
-		FShaderCompileResult Result = CompileStage(Desc);
-		if (OnDone)
-		{
-			OnDone(Result);
-		}
-	});
+		OnDone(Result);
+	}
 }
 
 void FShaderCompilerServer::FlushCompiles()

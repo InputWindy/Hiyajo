@@ -154,6 +154,24 @@ std::uint32_t TraceThreadIndex()
 	return Cached;
 }
 
+/** The lane every bar is ALSO filed under, next to the frame's own partition: the POOL's own group. */
+const char* kPoolLane = "ThreadPool";
+
+/** A salt for the pool group's flow ids, so one edge's twin arrow never shares an id with the frame
+ *  group's own (an id with four endpoints draws a tangle, not two arrows). XOR keeps the mapping
+ *  one-to-one, so distinct edges stay distinct -- and the top bit is deliberately left CLEAR, because
+ *  that bit is what pins every id into the range Perfetto will not mistake for an interning id. */
+constexpr std::uint64_t kPoolFlowSalt = 0x5E3779B97F4A7C15ull;
+
+/** The row a bar gets in the pool's group: the thread that ran it. Built once per thread (same dense
+ *  index the `worker=` field carries) and reused -- this is on the emit path, which runs tens of
+ *  thousands of times a second while tracing is on. */
+const char* TraceThreadRowName()
+{
+	thread_local const std::string Name = "Thread " + std::to_string(TraceThreadIndex());
+	return Name.c_str();
+}
+
 /**
  * One line, assembled by hand into a stack buffer.
  *
@@ -499,6 +517,10 @@ struct FWaitKey
 	std::int32_t Offset = 0;
 };
 
+/** "This record has no twin in the pool's group." An INDEX, not a pointer: the queue moves as it
+ *  grows, and the twin link has to survive that. */
+constexpr std::size_t kNoTwin = SIZE_MAX;
+
 /** One bar, queued STRUCTURALLY rather than as a finished packet.
  *
  *  Why not build the packet here: a flow id can only be minted once BOTH ends are known, and at emit
@@ -521,6 +543,9 @@ struct FQueuedRecord
 	/** Filled by the join: ids that open a flow here, and ids that close one here. */
 	std::vector<std::uint64_t> FlowIds;
 	std::vector<std::uint64_t> Terminating;
+	/** The record's twin in the POOL's group (same bar, row = the thread that ran it), or kNoTwin.
+	 *  Written when the two are queued, and read by the join to put the same arrows on both. */
+	std::size_t MirrorIndex = kNoTwin;
 };
 
 /** One declared edge, copied out of the frame's declaration table while the frame is still alive. */
@@ -561,6 +586,10 @@ std::string ProtoGroupKey(std::string_view Owner, std::string_view Stage, std::u
  *  An edge whose two ends sit on the SAME ROW (lane + owner) is dropped: that is a bar talking to its
  *  own row, which the viewer draws as a loop that says nothing (and the stage's own chain is the
  *  degenerate case of exactly that).
+ *
+ *  A kept edge is drawn TWICE: once between the frame rows, and once between the two bars' TWINS in
+ *  the pool's group -- provided the two ends ran on different THREADS, which is the only thing that
+ *  group's rows can say. The twins get an id of their own, so a flow never has four endpoints.
  */
 void ProtoJoinFlows(std::vector<FQueuedRecord>& Queue)
 {
@@ -600,6 +629,33 @@ void ProtoJoinFlows(std::vector<FQueuedRecord>& Queue)
 		return &Queue[It->second[static_cast<std::size_t>(Target)]];
 	};
 
+	// The pool-group twin of a record -- the same bar, on the row of the thread that ran it.
+	auto Twin = [&Queue](const FQueuedRecord& Record) -> FQueuedRecord*
+	{
+		return (Record.MirrorIndex < Queue.size()) ? &Queue[Record.MirrorIndex] : nullptr;
+	};
+
+	// Draw one edge, on the frame rows and (when it also changes THREAD) on their twins. The twin pair
+	// gets its own id: sharing the frame group's id would make one flow with four endpoints.
+	auto DrawEdge = [&Twin](FQueuedRecord& Producer, FQueuedRecord& Consumer, std::uint64_t Id)
+	{
+		Producer.FlowIds.push_back(Id);
+		Consumer.Terminating.push_back(Id);
+
+		FQueuedRecord* const ProducerTwin = Twin(Producer);
+		FQueuedRecord* const ConsumerTwin = Twin(Consumer);
+		if (ProducerTwin == nullptr || ConsumerTwin == nullptr
+			|| ProducerTwin->TrackUuid == ConsumerTwin->TrackUuid)
+		{
+			// Same thread: the pool group's rows are threads, so that arrow would be a loop inside one
+			// of ITS rows -- the same noise the same-row rule drops above, one level down.
+			return;
+		}
+		const std::uint64_t PoolId = Id ^ kPoolFlowSalt;
+		ProducerTwin->FlowIds.push_back(PoolId);
+		ConsumerTwin->Terminating.push_back(PoolId);
+	};
+
 	for (std::size_t i = 0; i < Queue.size(); ++i)
 	{
 		FQueuedRecord& Record = Queue[i];
@@ -617,9 +673,7 @@ void ProtoJoinFlows(std::vector<FQueuedRecord>& Queue)
 					// covers both. What is worth drawing is the edge that changes row.
 					continue;
 				}
-				const std::uint64_t Id = FProtoWriter::FlowIdFor(Wait.Owner, Wait.Stage);
-				Producer->FlowIds.push_back(Id);
-				Record.Terminating.push_back(Id);
+				DrawEdge(*Producer, Record, FProtoWriter::FlowIdFor(Wait.Owner, Wait.Stage));
 			}
 		}
 		else
@@ -633,13 +687,18 @@ void ProtoJoinFlows(std::vector<FQueuedRecord>& Queue)
 				{
 					continue;
 				}
-				const std::uint64_t Id = FProtoWriter::FlowIdFor(Record.Owner, Record.Stage);
-				Record.FlowIds.push_back(Id);
-				Consumer->Terminating.push_back(Id);
+				DrawEdge(Record, *Consumer, FProtoWriter::FlowIdFor(Record.Owner, Record.Stage));
 			}
 		}
 	}
 }
+
+/** Perfetto's `TracePacket.timestamp` (field 8) is in NANOSECONDS; the engine's clock is microseconds
+ *  (`TraceNowMicros`). This is the ONE place the two units meet, and the whole trace's time axis
+ *  depends on getting it right: written as microseconds, every bar comes out 1000x too short and the
+ *  ruler is 1000x too tight -- which is exactly how this was found (a 2.5ms `Render tick` displayed as
+ *  2.548us, and its Start time 2.316395ms for a raw value of 2316400: nanoseconds, /1e9). */
+constexpr std::uint64_t kNanosPerMicro = 1000;
 
 /** The queued records, turned into packets and written. Called with the queue already sorted. */
 void ProtoWriteRecords(const std::vector<FQueuedRecord>& Queue)
@@ -657,7 +716,7 @@ void ProtoWriteRecords(const std::vector<FQueuedRecord>& Queue)
 			Record.Terminating.data(), Record.Terminating.size());
 
 		FProtoWriter Packet;
-		Packet.VarintField(8, Record.Ts);
+		Packet.VarintField(8, Record.Ts * kNanosPerMicro);
 		Packet.VarintField(10, kProtoSeq);
 		Packet.BytesField(11, Event.Bytes, Event.Used);
 
@@ -672,18 +731,30 @@ void ProtoWriteRecords(const std::vector<FQueuedRecord>& Queue)
  *  which is also why nothing here can overlap or need trimming.
  *
  *  This only QUEUES; the packets are assembled at TraceFlush, once every end of every edge is in.
- *  See FQueuedRecord. */
-void ProtoEmitSlice(const char* Lane, const char* Owner, const FNameSlice& Stage, const char* Name,
+ *  See FQueuedRecord.
+ *
+ *  `bPoolMirror` is for the bars that belong to a RESIDENT thread (the SCOPE form): those are not the
+ *  pool's work, so they are not filed under the pool's group. Everything else -- every stage bar -- is
+ *  mirrored there as well. */
+void ProtoEmitSlice(const char* Lane, const char* Owner, const FNameSlice& Stage, const FNameSlice& Name,
 	std::uint64_t Ts, bool bBegin, std::vector<FWaitKey> WaitsFor = {},
-	std::vector<FWaitKey> Blocks = {})
+	std::vector<FWaitKey> Blocks = {}, bool bPoolMirror = true)
 {
 	// Bars are emitted from every pool worker, so the row registry and the queue both need the lock.
 	if (TraceFormat() == 0)
 	{
 		return;
 	}
+
+	// This thread's row name in the pool's group. Resolved BEFORE the lock on purpose: it walks the
+	// thread registry, which takes the SAME mutex the queue does -- asking for it here would be a
+	// recursive lock (MSVC reports that as "resource deadlock would occur").
+	const char* const ThreadRow = TraceThreadRowName();
+
 	std::lock_guard<std::mutex> Lock(GThreadMutex);
-	FQueuedRecord& Item = ProtoQueue().emplace_back();
+	std::vector<FQueuedRecord>& Queue = ProtoQueue();
+	const std::size_t PrimaryIndex = Queue.size();
+	FQueuedRecord& Item = Queue.emplace_back();
 	Item.Ts = Ts;
 	Item.Type = bBegin ? 1 : 2;
 	// The row is resolved NOW, and the names are copied NOW: the emitting frame, and the module that
@@ -691,9 +762,47 @@ void ProtoEmitSlice(const char* Lane, const char* Owner, const FNameSlice& Stage
 	Item.TrackUuid = ProtoTrackUuid(Lane, Owner);
 	Item.Owner.assign(Owner);
 	Item.Stage.assign(Stage.Data, Stage.Size);
-	Item.Name.assign((Name != nullptr) ? Name : "");
+	Item.Name = (Name.Data != nullptr && Name.Size > 0) ? std::string(Name.Data, Name.Size)
+													   : std::string{};
 	Item.WaitsFor = std::move(WaitsFor);
 	Item.Blocks   = std::move(Blocks);
+
+	if (!bPoolMirror)
+	{
+		return;
+	}
+
+	// MIRROR -- the same bar, filed under the POOL's group as well. The engine runs every graph on ONE
+	// shared FThreadPool, so lining the bars up by the THREAD that ran them is what makes the stage
+	// work of every frame read as a single timeline: the frame groups answer "which frame", this one
+	// answers "which thread, and what else was it doing". The row no longer says where the bar came
+	// from, so the NAME carries the frame it belongs to.
+	//
+	// Its arrows are added by the join, as the twins of the frame group's own: the twin link is the
+	// index below, since a twin never declares anything (its row is a thread, and no declared edge
+	// could resolve against that).
+	std::string PoolName(Owner != nullptr ? Owner : "");
+	if (Name.Data != nullptr && Name.Size > 0)
+	{
+		if (!PoolName.empty())
+		{
+			PoolName += ' ';
+		}
+		PoolName.append(Name.Data, Name.Size);
+	}
+
+	const std::size_t MirrorIndex = Queue.size();
+	FQueuedRecord& Mirror = Queue.emplace_back();
+	Mirror.Ts = Ts;
+	Mirror.Type = bBegin ? 1 : 2;
+	Mirror.TrackUuid = ProtoTrackUuid(kPoolLane, ThreadRow);
+	Mirror.Owner.assign(ThreadRow);
+	Mirror.Stage.assign(Stage.Data, Stage.Size);
+	Mirror.Name = std::move(PoolName);
+
+	// Written by INDEX, after both records exist: an intervening emplace_back can move the vector, so
+	// the primary's reference is not usable for this.
+	Queue[PrimaryIndex].MirrorIndex = MirrorIndex;
 }
 
 /** Write one assembled line, or nothing at all when it overflowed. */
@@ -890,7 +999,8 @@ FStageTrace::FStageTrace(const FFrameExtension* InFrame, const std::type_info& I
 	// The NATIVE begin is a SECOND, raw reading: `Start` carries a depth offset (the text path needs it
 	// so nested bars do not look simultaneous), and mixing it with a raw END produced END-before-BEGIN,
 	// which the viewer reports as MISPLACED_END_EVENT. Two raw readings cannot invert.
-	ProtoEmitSlice(Group, Track, StageShort, Label, TraceNowMicros(), true, std::move(WaitsFor));
+	ProtoEmitSlice(Group, Track, StageShort, FNameSlice{ Label, std::strlen(Label) },
+		TraceNowMicros(), true, std::move(WaitsFor));
 }
 
 FStageTrace::~FStageTrace()
@@ -904,6 +1014,7 @@ FStageTrace::~FStageTrace()
 	const std::uint64_t Now = TraceNowMicros();
 	const std::uint64_t Dur = (Now > Start) ? (Now - Start) : 0;
 	const FNameSlice    StageShort = ShortStageName(Stage.name());
+	const FNameSlice    LabelSlice{ Label, std::strlen(Label) };
 	// The edges I BLOCK (`BlockOn`): the arrow leaves THIS bar, so the id is opened here. The target
 	// stays ignorant of the edge by design -- it only ever receives the terminating id -- which is also
 	// why these do not live with my own `Edges`: a reverse declaration is filed under MY stage in the
@@ -921,7 +1032,7 @@ FStageTrace::~FStageTrace()
 	}
 	// The native bar closes here, unconditionally: BEGIN/END must pair, and the native path has no
 	// duration floor (there is nothing to filter -- a bar that is short is simply short).
-	ProtoEmitSlice(Group, Track, StageShort, Label, Now, false, {}, std::move(Blocks));
+	ProtoEmitSlice(Group, Track, StageShort, LabelSlice, Now, false, {}, std::move(Blocks));
 
 	// The floor applies to STAGE bars and to nothing else: a stage bar is generated for EVERY stage
 	// of EVERY frame, which is exactly what makes a trace expensive, whereas a section or a scope is
@@ -929,7 +1040,6 @@ FStageTrace::~FStageTrace()
 	// needs both ends to exist.
 	if (Dur >= TraceTaskFloorMicros())
 	{
-		const FNameSlice LabelSlice{ Label, std::strlen(Label) };
 		FLine Line;
 		WriteHead(Line, Group, Track, Start, Dur);
 		WriteTail(Line, StageShort, FNameSlice{}, LabelSlice, Tip);
@@ -1014,6 +1124,14 @@ FScopeTrace::FScopeTrace(const char* InGroup, const char* InTip, const char* InF
 
 	Start = TraceNowMicros() + static_cast<std::uint64_t>(GDepth);
 	++GDepth;
+
+	// The NATIVE bar too, and this is the form it exists for: a resident worker gets a group of its
+	// OWN with a single row (its role). It declares no edges -- a scope has no declaration table to
+	// read -- so it never carries an arrow, which is what a worker's own timeline should look like;
+	// and it is NOT mirrored into the pool's group, because a resident thread is not the pool. The
+	// raw reading matches the END below, for the reason spelled out in FStageTrace.
+	ProtoEmitSlice(Group, Group, FStaticName{}, ShortScopeName(Func), TraceNowMicros(), true, {}, {},
+		false);
 }
 
 FScopeTrace::~FScopeTrace()
@@ -1025,6 +1143,9 @@ FScopeTrace::~FScopeTrace()
 
 	const std::uint64_t Now = TraceNowMicros();
 	const FNameSlice    FuncShort = ShortScopeName(Func);
+
+	// The native bar closes with the same name it opened with (see the constructor).
+	ProtoEmitSlice(Group, Group, FStaticName{}, FuncShort, Now, false, {}, {}, false);
 
 	// No floor here: a hand-written scope is never filtered (see the header).
 	FLine Line;

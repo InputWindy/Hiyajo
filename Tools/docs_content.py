@@ -716,7 +716,27 @@ D.Row("Profile_trace.perfetto_trace", "**原生**：Perfetto 自己的 protobuf�
       "`parent_uuid` / `thread{pid, tid, thread_name}`；靠 pid 相等归到那个 process 之下）。"
       "一根条 = `TYPE_SLICE_BEGIN` + `TYPE_SLICE_END` 一对包 ⇒ **从不写时长**，所以条不可能重叠、"
       "也不需要收尾隔板。这就是**常规路径**：直接打开它，没有转换器，也没有「这个时间戳属于哪根条」"
-      "的猜")
+      "的猜。\n"
+      "**时间戳的单位是纳秒**（Perfetto 的 `TracePacket.timestamp` 本来就按 ns 读），而引擎的钟是**微秒**"
+      "（`TraceNowMicros`）—— 换算只发生在**写包那一处**（`ts * kNanosPerMicro`），内部排序、门槛、"
+      "文本路径全是微秒。填错的症状很隐蔽：所有相对关系都对，但每根条短 1000 倍、整根时间轴紧 1000 倍"
+      "（实测：2.5ms 的 `Render tick` 显示成 2.548µs，而它的 Start time 2.316395ms 对应原始值 2316400）。\n"
+      "除帧自己的分区之外，**每根 stage 条还会多写一条镜像：`lane = ThreadPool`、行 = 执行它的线程**"
+      "（见下）")
+
+D.Card("`ThreadPool` 组 —— 每根 stage 条都还有一份「按线程」的镜像（只进原生）")
+D.Row("lane=`ThreadPool`，行=`Thread <n>`，名字=`<帧名> <标签>`",
+      "整个引擎只有**一个** `FThreadPool` 给所有 FrameGraph 用，而泳道 = 分区（帧组）回答的是「**哪个帧**」"
+      "—— 想看清「所有 stage 节点在时序上是怎么被执行的」，就得有一个按**执行线程**排列的视图："
+      "于是每根 stage 条在原生文件里**再写一条镜像**，`lane = ThreadPool`、行 = 跑它的那个线程"
+      "（`Thread <n>`，n 就是 `worker=` 那个稠密序号）、名字 = `<帧名> <标签>`（这一组的行不再说明来源，"
+      "所以名字里带上帧）。\n"
+      "镜像与本体**同 ts、同 BEGIN/END 配对**；**箭头**由 join 在定出帧组的边之后**再写一份到两个镜像条上**，"
+      "但**只画两端线程不同的那条** —— 同一线程的箭头在这一组里只是某个行内部的环，和帧组"
+      "「不画同一行」是同一个理由（这一组的行就是线程）。镜像对用的是**独立的一段 id**（`^ kPoolFlowSalt`，"
+      "XOR 保一一对应、且不动最高位），否则一条 flow 会带上四个端点、画出一团乱线。\n"
+      "只有原生文件有这份镜像 —— **文本路径不镜像**，体积不动；镜像的 `ThreadPool` 是个固定字面量，"
+      "与帧自己声明的分区同名也不会冲突（帧的分区名来自 `TraceGroupName()`）")
 
 D.Card("箭头 —— 声明的依赖变成时间线上的 flow")
 D.Table("形式", "说明")
@@ -770,7 +790,11 @@ D.Row("MAHO_TRACE_SECTION(Label, Tip)", "**stage 里手写的段落**（stage �
       "埋点因此各有各的名字，而不叫同一个 `__FUNCTION__`")
 D.Row("MAHO_TRACE_SCOPE(Group, Tip)", "**自带一条 lane 的 scope**：常驻线程的任务体，或没有帧驱动的"
       "自由代码。`Group` 同时是 lane 与 owner（`FThreadedServer` 角色传 `GetThreadName()`），于是"
-      "常驻线程在时间线上就是「一个概念、一行」；条名取自 `__FUNCTION__`")
+      "常驻线程在时间线上就是「一个概念、一行」；条名取自 `__FUNCTION__`（所以要埋进**具名函数**里，"
+      "别埋进提交用的 lambda，否则条名会读成 `<lambda_1>::operator()`）。\n"
+      "这份也进**原生**：`lane = owner = Group` ⇒ 每个常驻角色（`RHIServer` / `ShaderCompiler` / "
+      "`ResourceServer` …）在自己的 process 下**只有一条泳道**；它**不带箭头**（scope 没有声明表），"
+      "也**不镜像进 `ThreadPool` 组** —— 那一组是图节点的 worker，常驻线程不是池子")
 D.Row("MAHO_TRACE_CONCAT(A, B)", "用 `__LINE__` 拼出唯一变量名 —— 于是同一个作用域里也能放多个埋点")
 
 D.Card("导出的接口（MAHO_LOG_API）")

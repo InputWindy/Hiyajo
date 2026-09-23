@@ -34,6 +34,12 @@
 // `name` is the human label (a hand-written section name, or the stage's own label). `func` is where
 // the bar lives. `tip` is optional.
 //
+// THE POOL'S OWN GROUP. Every bar is also filed, in the NATIVE file only, under lane "ThreadPool" with
+// the thread that ran it as its row -- the engine runs every graph on one shared pool, so that is the
+// one view where the stage work of every frame lines up by thread. Its bars name the frame they came
+// from (their row no longer says it), and carry the edges that CROSS a thread: that group's rows ARE
+// threads, so a handoff that stayed on one of them would just be a loop inside a row.
+//
 // THE FLOW HINTS -- what makes the dependency graph visible. A stage knows the edges it DECLARED
 // (FFrameExtension::GetDependencies), so when its bar closes it emits one line per declared
 // dependency, each describing where this bar's input came from:

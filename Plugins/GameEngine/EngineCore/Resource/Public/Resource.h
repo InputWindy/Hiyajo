@@ -260,6 +260,12 @@ private:
 	const FResource* RegisterResource(std::string AssetPath, std::unique_ptr<FResource> Resource);
 	FTransferHandle RequestLoad(std::string Path);
 	void ProcessReadyIO();
+
+	/** The IO thread's two legs, as MEMBERS rather than the submitting lambdas: a trace scope takes its
+	 *  bar's name from __FUNCTION__, so the resident thread's row reads the role, not "<lambda_1>". */
+	void LoadAssetBytes(std::shared_ptr<FTransferState> State, std::string Path);
+	void WriteAssetBytes(std::shared_ptr<FTransferState> State, std::string Destination,
+		std::vector<std::uint8_t> Bytes);
 	static bool WriteBytes(std::string_view PhysicalPath, std::span<const std::uint8_t> Bytes);
 
 	class FImpl;

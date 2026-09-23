@@ -17,6 +17,11 @@ namespace Maho::Resource
 
 FResourceSystem* GResourceSystem = nullptr;
 
+/** This role's trace lane: the row the IO thread's own work lands on. The same string
+ *  GetThreadName() answers, kept as a literal because the task bodies below are lambdas and should
+ *  not have to keep the system alive just to be named (the RHI's device names its lane the same way). */
+constexpr const char* kResourceServerLane = "ResourceServer";
+
 MAHO_RESOURCE_API FResourceSystem* GetResourceSystem()
 {
 	return GResourceSystem;
@@ -188,30 +193,36 @@ void FResourceSystem::Tick(FEngineBase& Engine, FEngineContext& Frame)
 FTransferHandle FResourceSystem::RequestLoad(std::string Path)
 {
 	auto State = std::make_shared<FTransferState>();
-	Submit([State, Path = std::move(Path)]()
-	{
-		FBulkData Bulk;
-		std::ifstream Stream(Path, std::ios::binary);
-		if (Stream)
-		{
-			Bulk.Bytes.assign(
-				(std::istreambuf_iterator<char>(Stream)),
-				std::istreambuf_iterator<char>());
-		}
-		{
-			std::lock_guard Lock(State->Mutex);
-			State->Bulk = std::move(Bulk);
-		}
-		if (!State->Bulk.Bytes.empty())
-		{
-			State->bSucceeded.store(true, std::memory_order_release);
-		}
-		else
-		{
-			State->bFailed.store(true, std::memory_order_release);
-		}
-	});
+	Submit([this, State, Path = std::move(Path)]() { LoadAssetBytes(State, std::move(Path)); });
 	return FTransferHandle{ std::move(State) };
+}
+
+void FResourceSystem::LoadAssetBytes(std::shared_ptr<FTransferState> State, std::string Path)
+{
+	// The IO thread's own bar: its lane with itself as the row. A NAMED member rather than the
+	// submitting lambda, because a scope bar takes its name from __FUNCTION__ and a timeline should
+	// read "FResourceSystem::LoadAssetBytes", not "<lambda_1>::operator()".
+	MAHO_TRACE_SCOPE(kResourceServerLane, "read the asset bytes off disk");
+	FBulkData Bulk;
+	std::ifstream Stream(Path, std::ios::binary);
+	if (Stream)
+	{
+		Bulk.Bytes.assign(
+			(std::istreambuf_iterator<char>(Stream)),
+			std::istreambuf_iterator<char>());
+	}
+	{
+		std::lock_guard Lock(State->Mutex);
+		State->Bulk = std::move(Bulk);
+	}
+	if (!State->Bulk.Bytes.empty())
+	{
+		State->bSucceeded.store(true, std::memory_order_release);
+	}
+	else
+	{
+		State->bFailed.store(true, std::memory_order_release);
+	}
 }
 
 std::vector<std::uint8_t> FResourceSystem::ReadAssetFile(std::string_view SourcePath)
@@ -247,23 +258,31 @@ bool FResourceSystem::EnqueueExport(
 {
 	auto State = std::make_shared<FTransferState>();
 	const std::string Dest = std::move(DestinationPath);
-	Submit([State, Dest, Bytes = std::move(Bytes)]()
+	Submit([this, State, Dest, Bytes = std::move(Bytes)]()
 	{
-		const bool bWritten = WriteBytes(Dest, Bytes);
-		if (bWritten)
-		{
-			State->bSucceeded.store(true, std::memory_order_release);
-		}
-		else
-		{
-			State->bFailed.store(true, std::memory_order_release);
-		}
+		WriteAssetBytes(State, Dest, std::move(Bytes));
 	});
 
 	std::lock_guard Lock(Impl->Mutex);
 	Impl->PendingExports[Name::FName(Dest)] = FPendingExport{
 		FTransferHandle{ std::move(State) }, std::move(AssetName) };
 	return true;
+}
+
+void FResourceSystem::WriteAssetBytes(std::shared_ptr<FTransferState> State, std::string Destination,
+	std::vector<std::uint8_t> Bytes)
+{
+	// The IO thread's write leg -- a named member for the same reason as LoadAssetBytes above.
+	MAHO_TRACE_SCOPE(kResourceServerLane, "write the asset bytes to disk");
+	const bool bWritten = WriteBytes(Destination, Bytes);
+	if (bWritten)
+	{
+		State->bSucceeded.store(true, std::memory_order_release);
+	}
+	else
+	{
+		State->bFailed.store(true, std::memory_order_release);
+	}
 }
 
 const FResource* FResourceSystem::RegisterResource(std::string AssetPath, std::unique_ptr<FResource> Resource)

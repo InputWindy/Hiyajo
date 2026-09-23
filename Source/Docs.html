@@ -1301,8 +1301,14 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <thead><tr><th>文件</th><th>说明</th></tr></thead>
 <tbody>
 <tr><td>Profile_trace.txt</td><td>**文本**：一根条一行、一根箭头一行，grep 得动，也是**崩溃场景的兜底** —— 进程崩掉时原生文件未必收得完整。`(ts, dur, lane, name)` 到 Chrome Trace Event Format 只差一次机械改写，所以 `Tools/trace_to_chrome.py` 仍能把它变成 chrome:<span class="cm">//tracing / Perfetto 直接加载的 JSON（它是**兜底路径**：旧文本 trace，或只吃 JSON 的工具）。`MAHO_TRACE_MIN_US` **只管这一路**</span></td></tr>
-<tr><td>Profile_trace.perfetto_trace</td><td>**原生**：Perfetto 自己的 protobuf，由插件**自己写**（`Private/Trace.cpp` 的 `FProtoWriter`：手搓 varint，字段号是从一个真的 `.perfetto_trace` 上读回来的）。一根 lane 一个 `track_descriptor`（一个 **PROCESS**：`uuid` / `name` / `process{pid, process_name}`），lane 里每个 owner 再一个（它里面的 **THREAD**：`uuid` / `name` / `parent_uuid` / `thread{pid, tid, thread_name}`；靠 pid 相等归到那个 process 之下）。一根条 = `TYPE_SLICE_BEGIN` + `TYPE_SLICE_END` 一对包 ⇒ **从不写时长**，所以条不可能重叠、也不需要收尾隔板。这就是**常规路径**：直接打开它，没有转换器，也没有「这个时间戳属于哪根条」的猜</td></tr>
+<tr><td>Profile_trace.perfetto_trace</td><td>**原生**：Perfetto 自己的 protobuf，由插件**自己写**（`Private/Trace.cpp` 的 `FProtoWriter`：手搓 varint，字段号是从一个真的 `.perfetto_trace` 上读回来的）。一根 lane 一个 `track_descriptor`（一个 **PROCESS**：`uuid` / `name` / `process{pid, process_name}`），lane 里每个 owner 再一个（它里面的 **THREAD**：`uuid` / `name` / `parent_uuid` / `thread{pid, tid, thread_name}`；靠 pid 相等归到那个 process 之下）。一根条 = `TYPE_SLICE_BEGIN` + `TYPE_SLICE_END` 一对包 ⇒ **从不写时长**，所以条不可能重叠、也不需要收尾隔板。这就是**常规路径**：直接打开它，没有转换器，也没有「这个时间戳属于哪根条」的猜。
+**时间戳的单位是纳秒**（Perfetto 的 `TracePacket.timestamp` 本来就按 ns 读），而引擎的钟是**微秒**（`TraceNowMicros`）—— 换算只发生在**写包那一处**（`ts * kNanosPerMicro`），内部排序、门槛、文本路径全是微秒。填错的症状很隐蔽：所有相对关系都对，但每根条短 1000 倍、整根时间轴紧 1000 倍（实测：2.5ms 的 `Render tick` 显示成 2.548µs，而它的 Start time 2.316395ms 对应原始值 2316400）。
+除帧自己的分区之外，**每根 stage 条还会多写一条镜像：`lane = ThreadPool`、行 = 执行它的线程**（见下）</td></tr>
 </tbody></table>
+</div>
+<div class="card">
+<h3 class="card-title">`ThreadPool` 组 —— 每根 stage 条都还有一份「按线程」的镜像（只进原生）</h3>
+
 </div>
 <div class="card">
 <h3 class="card-title">箭头 —— 声明的依赖变成时间线上的 flow</h3>
@@ -1347,7 +1353,8 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tbody>
 <tr><td>MAHO_TRACE_STAGE(StageType, Label, Tip)</td><td>**stage body 的第一条语句**（这根条就是帧图那个节点的条，必须盖住整个 body）。它**建立行**：lane = 帧**类型**的 `TraceGroupName()`、owner = 它的 `StaticName()`、stage = `typeid(StageType)` 的短名；关闭时写一根条，再按它声明的边写箭头。`<span class="kw">this</span>` 必须是帧（配合 `MAHO_DECLARE_FRAME` / `MAHO_DECLARE_FRAME_UNDER`，见 `Engine/Frame.h`）</td></tr>
 <tr><td>MAHO_TRACE_SECTION(Label, Tip)</td><td>**stage 里手写的段落**（stage 调用的任何 helper 里也行）。它**什么都不建立**：继承环境行，所以落在正在跑的那个帧上、嵌在那根 stage 条里面；另带 `func=__FUNCTION__`，于是悬停仍然说得清这段埋点住在哪。条名是手写标签 —— 同一个函数里的多个埋点因此各有各的名字，而不叫同一个 `__FUNCTION__`</td></tr>
-<tr><td>MAHO_TRACE_SCOPE(Group, Tip)</td><td>**自带一条 lane 的 scope**：常驻线程的任务体，或没有帧驱动的自由代码。`Group` 同时是 lane 与 owner（`FThreadedServer` 角色传 `GetThreadName()`），于是常驻线程在时间线上就是「一个概念、一行」；条名取自 `__FUNCTION__`</td></tr>
+<tr><td>MAHO_TRACE_SCOPE(Group, Tip)</td><td>**自带一条 lane 的 scope**：常驻线程的任务体，或没有帧驱动的自由代码。`Group` 同时是 lane 与 owner（`FThreadedServer` 角色传 `GetThreadName()`），于是常驻线程在时间线上就是「一个概念、一行」；条名取自 `__FUNCTION__`（所以要埋进**具名函数**里，别埋进提交用的 lambda，否则条名会读成 `&lt;lambda_1&gt;::<span class="kw">operator</span>()`）。
+这份也进**原生**：`lane = owner = Group` ⇒ 每个常驻角色（`RHIServer` / `ShaderCompiler` / `ResourceServer` …）在自己的 process 下**只有一条泳道**；它**不带箭头**（scope 没有声明表），也**不镜像进 `ThreadPool` 组** —— 那一组是图节点的 worker，常驻线程不是池子</td></tr>
 <tr><td>MAHO_TRACE_CONCAT(A, B)</td><td>用 `__LINE__` 拼出唯一变量名 —— 于是同一个作用域里也能放多个埋点</td></tr>
 </tbody></table>
 </div>
