@@ -557,6 +557,10 @@ std::string ProtoGroupKey(std::string_view Owner, std::string_view Stage, std::u
  *
  *  An id is keyed by the PRODUCER's identity -- owner + stage, and deliberately NOT the lane: a
  *  cross-partition edge has a different lane at each end, so the id has to meet in the middle.
+ *
+ *  An edge whose two ends sit on the SAME ROW (lane + owner) is dropped: that is a bar talking to its
+ *  own row, which the viewer draws as a loop that says nothing (and the stage's own chain is the
+ *  degenerate case of exactly that).
  */
 void ProtoJoinFlows(std::vector<FQueuedRecord>& Queue)
 {
@@ -605,8 +609,12 @@ void ProtoJoinFlows(std::vector<FQueuedRecord>& Queue)
 			for (const FWaitKey& Wait : Record.WaitsFor)
 			{
 				FQueuedRecord* Producer = Lookup(Wait, 2, Ordinal[i]);
-				if (Producer == nullptr)
+				if (Producer == nullptr || Producer->TrackUuid == Record.TrackUuid)
 				{
+					// The other end is missing -- or it is on MY OWN ROW. An arrow that leaves a row
+					// and lands back on it says nothing: a stage's own chain (a stage waiting on
+					// itself, the degenerate case) is a row-internal loop too, so the ROW comparison
+					// covers both. What is worth drawing is the edge that changes row.
 					continue;
 				}
 				const std::uint64_t Id = FProtoWriter::FlowIdFor(Wait.Owner, Wait.Stage);
@@ -621,7 +629,7 @@ void ProtoJoinFlows(std::vector<FQueuedRecord>& Queue)
 			for (const FWaitKey& Block : Record.Blocks)
 			{
 				FQueuedRecord* Consumer = Lookup(Block, 1, Ordinal[i]);
-				if (Consumer == nullptr)
+				if (Consumer == nullptr || Consumer->TrackUuid == Record.TrackUuid)
 				{
 					continue;
 				}
