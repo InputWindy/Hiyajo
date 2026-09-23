@@ -13,6 +13,7 @@
 #include <mutex>
 #include <string_view>
 #include <thread>
+#include <utility>
 #include <vector>
 
 namespace Maho
@@ -304,13 +305,22 @@ struct FProtoWriter
 		BytesField(Field, Text, std::strlen(Text));
 	}
 
-	/** A TrackEvent. `FlowId` (field 36, `flow_ids`) STARTS a flow here; `TerminatingIds` (field 48,
-	 *  `terminating_flow_ids`) END one here without continuing it. That pair is what makes an arrow:
-	 *  the producer's END carries the id, the consumer's BEGIN terminates it, and a terminating id with
-	 *  no flow open is simply ignored -- so the chain yields exactly one arrow per edge per frame,
-	 *  pointing from the previous frame's producer to this frame's consumer. */
+	/** A field from a name that is only ever a SLICE (a shortened stage name, an event label): the
+	 *  length is already known, so nothing is scanned for a terminator. */
+	void SliceField(unsigned Field, std::string_view Text)
+	{
+		BytesField(Field, Text.data(), Text.size());
+	}
+
+	/** A TrackEvent. `FlowIds` (field 36, `flow_ids`) STARTS one or more flows here; `TerminatingIds`
+	 *  (field 48, `terminating_flow_ids`) ENDS them here without continuing them. That pair is what
+	 *  makes an arrow: the producer's END carries the id, the consumer's BEGIN terminates it, and a
+	 *  terminating id with no flow open is simply ignored.
+	 *
+	 *  Both are LISTS because one bar can take part in several edges: a stage may be the input of more
+	 *  than one target (and of a reverse edge too). */
 	static void BuildTrackEvent(FProtoWriter& Out, std::uint32_t Type, std::uint64_t TrackUuid,
-		const char* Category, const char* Name, std::uint64_t FlowId,
+		const char* Category, std::string_view Name, const std::uint64_t* FlowIds, std::size_t FlowCount,
 		const std::uint64_t* TerminatingIds = nullptr, std::size_t TerminatingCount = 0)
 	{
 		Out.VarintField(9, Type);
@@ -319,13 +329,13 @@ struct FProtoWriter
 		{
 			Out.StringField(22, Category);
 		}
-		if (Name != nullptr && Name[0] != '\0')
+		if (!Name.empty())
 		{
-			Out.StringField(23, Name);
+			Out.SliceField(23, Name);
 		}
-		if (FlowId != 0)
+		for (std::size_t i = 0; i < FlowCount; ++i)
 		{
-			Out.VarintField(36, FlowId);
+			Out.VarintField(36, FlowIds[i]);
 		}
 		for (std::size_t i = 0; i < TerminatingCount; ++i)
 		{
@@ -333,14 +343,14 @@ struct FProtoWriter
 		}
 	}
 
-	/** A stable id for "this owner's stage is the input of that stage": both ends derive it from the
-	 *  names they already have, so neither has to know the other. FNV-1a, and pinned to a 64-bit range
-	 *  Perfetto will not confuse with a real interning id. */
-	static std::uint64_t FlowIdFor(std::string_view Lane, std::string_view Owner,
-		std::string_view Stage)
+	/** A stable id for "this PRODUCER's bar": both ends of an edge derive it from the producer's row
+	 *  identity alone, so neither has to know the other's instance. The LANE is deliberately not part of
+	 *  it -- a cross-partition edge has a different lane at each end. FNV-1a, pinned into the 64-bit
+	 *  range Perfetto will not confuse with a real interning id. */
+	static std::uint64_t FlowIdFor(std::string_view Owner, std::string_view Stage)
 	{
 		std::uint64_t Hash = 1469598103934665603ull;
-		for (std::string_view Part : { Lane, Owner, Stage })
+		for (std::string_view Part : { Owner, Stage })
 		{
 			for (char Ch : Part)
 			{
@@ -473,34 +483,191 @@ std::uint64_t ProtoTrackUuid(const char* Lane, const char* Owner)
 	return Uuid;
 }
 
-/** Packets are queued and written at TraceFlush, SORTED by timestamp. Workers emit concurrently, so
- *  writing straight through hands the viewer a file whose timestamps are out of order -- it drops the
- *  packets that arrive too late (its "DATA LOSSES" card) and a dropped END leaves its bar running to
- *  the edge of the screen. Descriptors are written directly (timestamp 0), so they stay first. */
-struct FQueuedPacket
+/** One declared edge as the JOIN needs it: the other end's row identity, and how many frames away it
+ *  is.
+ *
+ *  The names are COPIED, not referenced. A bar is emitted while its own frame is alive, but the join
+ *  runs once the run is over -- and the names are static data in the module that spells them, which
+ *  does NOT have to still be mapped by then. Measured, a full 45% of the queued rows held an owner
+ *  (and lane) address that could no longer be read at flush time, and the join died inside `strlen`
+ *  on it. Anything the flush needs has to be taken while the emitter is still there -- the row id is
+ *  resolved at the same moment, for the same reason. */
+struct FWaitKey
 {
-	std::uint64_t      Ts = 0;
-	std::vector<char>  Bytes;
+	std::string  Owner{};
+	std::string  Stage{};
+	std::int32_t Offset = 0;
 };
 
-std::vector<FQueuedPacket>& ProtoQueue()
+/** One bar, queued STRUCTURALLY rather than as a finished packet.
+ *
+ *  Why not build the packet here: a flow id can only be minted once BOTH ends are known, and at emit
+ *  time neither end knows the other. A frame sees only its OWN declaration table -- that is the
+ *  architecture's rule, the consumer declares the edge -- so a producer cannot even learn that it has
+ *  a consumer. The trace is the one place that holds every bar and every declaration, so the join
+ *  happens at TraceFlush. */
+struct FQueuedRecord
 {
-	static std::vector<FQueuedPacket> Queue;
+	std::uint64_t Ts        = 0;
+	std::uint8_t  Type      = 0;         // 1 = TYPE_SLICE_BEGIN, 2 = TYPE_SLICE_END
+	std::uint64_t TrackUuid = 0;         // the row, resolved at emit: see the note on FWaitKey
+	std::string   Owner{};               // the frame that ran this bar
+	std::string   Stage{};               // the short stage name: half of the row's identity
+	std::string   Name{};                // the label the bar is drawn with
+	/** The edges I WAIT for (a non-reverse declaration): I am the CONSUMER, each target is a producer. */
+	std::vector<FWaitKey> WaitsFor;
+	/** The edges I BLOCK (`BlockOn`): I am the PRODUCER, each target is a consumer. */
+	std::vector<FWaitKey> Blocks;
+	/** Filled by the join: ids that open a flow here, and ids that close one here. */
+	std::vector<std::uint64_t> FlowIds;
+	std::vector<std::uint64_t> Terminating;
+};
+
+/** One declared edge, copied out of the frame's declaration table while the frame is still alive. */
+FWaitKey ProtoWaitKey(const FFrameExtension::FEdge& Edge)
+{
+	const FStaticName Target = ShortStageName(Edge.TargetStage.name());
+	return FWaitKey{ std::string(Edge.TargetName), std::string(Target.Data, Target.Size),
+		Edge.FrameOffset };
+}
+
+std::vector<FQueuedRecord>& ProtoQueue()
+{
+	static std::vector<FQueuedRecord> Queue;
 	return Queue;
 }
 
-void ProtoQueuePacket(std::uint64_t Ts, const FProtoWriter& Wrapped)
+/** The group a record belongs to: owner + stage + TYPE.
+ *
+ *  The type is part of the key on purpose. One stage emits exactly one BEGIN and one END per frame, so
+ *  ordering ONE group by timestamp makes a record's position in it its FRAME INSTANCE number -- which
+ *  is what turns a declared `FrameOffset` into "the same bar, N frames away". Merging BEGINs and ENDs
+ *  into a single group would pair a BEGIN with an ordinal that counts two records per frame. */
+std::string ProtoGroupKey(std::string_view Owner, std::string_view Stage, std::uint8_t Type)
 {
-	FQueuedPacket& Item = ProtoQueue().emplace_back();
-	Item.Ts = Ts;
-	Item.Bytes.assign(Wrapped.Bytes, Wrapped.Bytes + Wrapped.Used);
+	std::string Key(Owner);
+	Key += '\x1f';
+	Key.append(Stage.data(), Stage.size());
+	Key += '\x1f';
+	Key += static_cast<char>('0' + Type);
+	return Key;
+}
+
+/** Pair every declared edge with the bar at the other end, and mint one flow id per pair.
+ *
+ *  An id is keyed by the PRODUCER's identity -- owner + stage, and deliberately NOT the lane: a
+ *  cross-partition edge has a different lane at each end, so the id has to meet in the middle.
+ */
+void ProtoJoinFlows(std::vector<FQueuedRecord>& Queue)
+{
+	// 1) Group, then order each group by timestamp: position in the group == frame instance number.
+	std::map<std::string, std::vector<std::size_t>> Groups;
+	for (std::size_t i = 0; i < Queue.size(); ++i)
+	{
+		Groups[ProtoGroupKey(Queue[i].Owner, Queue[i].Stage, Queue[i].Type)].push_back(i);
+	}
+	std::vector<std::size_t> Ordinal(Queue.size(), 0);
+	for (auto& Pair : Groups)
+	{
+		std::vector<std::size_t>& Members = Pair.second;
+		std::stable_sort(Members.begin(), Members.end(),
+			[&Queue](std::size_t A, std::size_t B) { return Queue[A].Ts < Queue[B].Ts; });
+		for (std::size_t Position = 0; Position < Members.size(); ++Position)
+		{
+			Ordinal[Members[Position]] = Position;
+		}
+	}
+
+	// 2) Resolve one declared key against a known instance index. Null when the other end is not in
+	//    this flush at all (a frame older than the trace, or a stage that has not reached its turn).
+	auto Lookup = [&Queue, &Groups](const FWaitKey& Key, std::uint8_t Type,
+		std::size_t MyOrdinal) -> FQueuedRecord*
+	{
+		const std::int64_t Target = static_cast<std::int64_t>(MyOrdinal) + Key.Offset;
+		if (Target < 0)
+		{
+			return nullptr;
+		}
+		const auto It = Groups.find(ProtoGroupKey(Key.Owner, Key.Stage, Type));
+		if (It == Groups.end() || static_cast<std::size_t>(Target) >= It->second.size())
+		{
+			return nullptr;
+		}
+		return &Queue[It->second[static_cast<std::size_t>(Target)]];
+	};
+
+	for (std::size_t i = 0; i < Queue.size(); ++i)
+	{
+		FQueuedRecord& Record = Queue[i];
+		if (Record.Type == 1)
+		{
+			// I am a CONSUMER: the arrow leaves the producer's END and lands on my BEGIN.
+			for (const FWaitKey& Wait : Record.WaitsFor)
+			{
+				FQueuedRecord* Producer = Lookup(Wait, 2, Ordinal[i]);
+				if (Producer == nullptr)
+				{
+					continue;
+				}
+				const std::uint64_t Id = FProtoWriter::FlowIdFor(Wait.Owner, Wait.Stage);
+				Producer->FlowIds.push_back(Id);
+				Record.Terminating.push_back(Id);
+			}
+		}
+		else
+		{
+			// I am a PRODUCER (`BlockOn`: I run first). The id is keyed by me -- the one end that knows
+			// the edge exists -- and the consumer only receives it.
+			for (const FWaitKey& Block : Record.Blocks)
+			{
+				FQueuedRecord* Consumer = Lookup(Block, 1, Ordinal[i]);
+				if (Consumer == nullptr)
+				{
+					continue;
+				}
+				const std::uint64_t Id = FProtoWriter::FlowIdFor(Record.Owner, Record.Stage);
+				Record.FlowIds.push_back(Id);
+				Consumer->Terminating.push_back(Id);
+			}
+		}
+	}
+}
+
+/** The queued records, turned into packets and written. Called with the queue already sorted. */
+void ProtoWriteRecords(const std::vector<FQueuedRecord>& Queue)
+{
+	std::FILE* File = TraceProtoHandle();
+	if (File == nullptr)
+	{
+		return;
+	}
+	for (const FQueuedRecord& Record : Queue)
+	{
+		FProtoWriter Event;
+		FProtoWriter::BuildTrackEvent(Event, Record.Type, Record.TrackUuid, "maho", Record.Name,
+			Record.FlowIds.data(), Record.FlowIds.size(),
+			Record.Terminating.data(), Record.Terminating.size());
+
+		FProtoWriter Packet;
+		Packet.VarintField(8, Record.Ts);
+		Packet.VarintField(10, kProtoSeq);
+		Packet.BytesField(11, Event.Bytes, Event.Used);
+
+		FProtoWriter Wrapped;
+		Wrapped.BytesField(1, Packet.Bytes, Packet.Used);
+		std::fwrite(Wrapped.Bytes, 1, Wrapped.Used, File);
+	}
+	std::fflush(File);
 }
 
 /** One bar: BEGIN in the stage's constructor, END in its destructor -- no duration is ever written,
- *  which is also why nothing here can overlap or need trimming. */
-void ProtoEmitSlice(const char* Lane, const char* Owner, const char* Name, const char* FlowKey,
-	std::uint64_t Ts, bool bBegin, const std::uint64_t* TerminatingIds = nullptr,
-	std::size_t TerminatingCount = 0)
+ *  which is also why nothing here can overlap or need trimming.
+ *
+ *  This only QUEUES; the packets are assembled at TraceFlush, once every end of every edge is in.
+ *  See FQueuedRecord. */
+void ProtoEmitSlice(const char* Lane, const char* Owner, const FNameSlice& Stage, const char* Name,
+	std::uint64_t Ts, bool bBegin, std::vector<FWaitKey> WaitsFor = {},
+	std::vector<FWaitKey> Blocks = {})
 {
 	// Bars are emitted from every pool worker, so the row registry and the queue both need the lock.
 	if (TraceFormat() == 0)
@@ -508,21 +675,17 @@ void ProtoEmitSlice(const char* Lane, const char* Owner, const char* Name, const
 		return;
 	}
 	std::lock_guard<std::mutex> Lock(GThreadMutex);
-	FProtoWriter Event;
-	// The END packet carries this bar's own flow id, keyed by the STAGE (not by the label): that is
-	// what a consumer can reproduce from the edge it declared, and what makes the two ends meet.
-	const std::uint64_t OwnId = bBegin ? 0 : FProtoWriter::FlowIdFor(Lane, Owner, FlowKey);
-	FProtoWriter::BuildTrackEvent(Event, bBegin ? 1u : 2u, ProtoTrackUuid(Lane, Owner), "maho",
-		Name, OwnId, TerminatingIds, TerminatingCount);
-
-	FProtoWriter Packet;
-	Packet.VarintField(8, Ts);
-	Packet.VarintField(10, kProtoSeq);
-	Packet.BytesField(11, Event.Bytes, Event.Used);
-
-	FProtoWriter Wrapped;
-	Wrapped.BytesField(1, Packet.Bytes, Packet.Used);
-	ProtoQueuePacket(Ts, Wrapped);
+	FQueuedRecord& Item = ProtoQueue().emplace_back();
+	Item.Ts = Ts;
+	Item.Type = bBegin ? 1 : 2;
+	// The row is resolved NOW, and the names are copied NOW: the emitting frame, and the module that
+	// spells its names, do not have to be alive when the flush runs (see FWaitKey).
+	Item.TrackUuid = ProtoTrackUuid(Lane, Owner);
+	Item.Owner.assign(Owner);
+	Item.Stage.assign(Stage.Data, Stage.Size);
+	Item.Name.assign((Name != nullptr) ? Name : "");
+	Item.WaitsFor = std::move(WaitsFor);
+	Item.Blocks   = std::move(Blocks);
 }
 
 /** Write one assembled line, or nothing at all when it overflowed. */
@@ -641,22 +804,23 @@ std::uint64_t TraceNowMicros()
 
 void TraceFlush()
 {
-	// The native file is written HERE, sorted: see FQueuedPacket for why the queue exists at all.
+	// The native file is written HERE: the flow ids can only be minted once every bar of the frame is
+	// in (FQueuedRecord), and the packets have to leave in timestamp order. Descriptors are written
+	// directly, as they are discovered, so they stay ahead of the packets that reference them.
 	{
 		std::lock_guard<std::mutex> Lock(GThreadMutex);
-		std::vector<FQueuedPacket>& Queue = ProtoQueue();
+		std::vector<FQueuedRecord>& Queue = ProtoQueue();
 		if (!Queue.empty())
 		{
+			ProtoJoinFlows(Queue);
 			std::stable_sort(Queue.begin(), Queue.end(),
-				[](const FQueuedPacket& A, const FQueuedPacket& B) { return A.Ts < B.Ts; });
-			if (std::FILE* File = TraceProtoHandle())
-			{
-				for (const FQueuedPacket& Item : Queue)
+				[](const FQueuedRecord& A, const FQueuedRecord& B)
 				{
-					std::fwrite(Item.Bytes.data(), 1, Item.Bytes.size(), File);
-				}
-				std::fflush(File);
-			}
+					// Equal timestamps are the norm for two bars in the same microsecond, and a BEGIN
+					// must come first there -- otherwise the viewer reports MISPLACED_END_EVENT.
+					return A.Ts != B.Ts ? A.Ts < B.Ts : A.Type < B.Type;
+				});
+			ProtoWriteRecords(Queue);
 			Queue.clear();
 		}
 	}
@@ -697,29 +861,28 @@ FStageTrace::FStageTrace(const FFrameExtension* InFrame, const std::type_info& I
 	GCurrentTrack = Track;
 	GCurrentStage = ShortStageName(Stage.name());
 
-	// The edges this stage WAITS for: the cross-frame ones (|offset| >= 1) are the pipeline, and each
-	// becomes a flow that ENDS here. A same-frame edge (offset 0) is the in-frame chain, which is not
-	// drawn -- the bars are already laid out in that order.
-	std::uint64_t Terminating[8];
-	std::size_t   TerminatingCount = 0;
+	// The edges this stage WAITS for, queued as raw KEYS: the id cannot be minted here, because whether
+	// the other end exists -- and which of its frame instances it is -- is only knowable once every bar
+	// of the frame is in. The frame offset travels with the key; that is the whole answer to "which
+	// instance". Only the FORWARD declarations live in this table -- the reverse ones (`BlockOn`, where
+	// I am the producer instead) are in the frame's separate dependents table, and are queued at the
+	// END: the arrow leaves MY end, so that is the record the id belongs on.
 	const FStaticName StageShort = ShortStageName(Stage.name());
+	std::vector<FWaitKey> WaitsFor;
 	if (Edges != nullptr)
 	{
 		for (const FFrameExtension::FEdge& Edge : *Edges)
 		{
-			if (Edge.FrameOffset != 0 && TerminatingCount < 8)
-			{
-				const FStaticName Target = ShortStageName(Edge.TargetStage.name());
-				Terminating[TerminatingCount++] = FProtoWriter::FlowIdFor(Group,
-					std::string_view(Edge.TargetName.data(), Edge.TargetName.size()),
-					std::string_view(Target.Data, Target.Size));
-			}
+			WaitsFor.push_back(ProtoWaitKey(Edge));
 		}
 	}
 
 	Start = TraceNowMicros() + static_cast<std::uint64_t>(GDepth);
 	++GDepth;
-	ProtoEmitSlice(Group, Track, Label, StageShort.Data, Start, true, Terminating, TerminatingCount);
+	// The NATIVE begin is a SECOND, raw reading: `Start` carries a depth offset (the text path needs it
+	// so nested bars do not look simultaneous), and mixing it with a raw END produced END-before-BEGIN,
+	// which the viewer reports as MISPLACED_END_EVENT. Two raw readings cannot invert.
+	ProtoEmitSlice(Group, Track, StageShort, Label, TraceNowMicros(), true, std::move(WaitsFor));
 }
 
 FStageTrace::~FStageTrace()
@@ -732,10 +895,25 @@ FStageTrace::~FStageTrace()
 
 	const std::uint64_t Now = TraceNowMicros();
 	const std::uint64_t Dur = (Now > Start) ? (Now - Start) : 0;
+	const FNameSlice    StageShort = ShortStageName(Stage.name());
+	// The edges I BLOCK (`BlockOn`): the arrow leaves THIS bar, so the id is opened here. The target
+	// stays ignorant of the edge by design -- it only ever receives the terminating id -- which is also
+	// why these do not live with my own `Edges`: a reverse declaration is filed under MY stage in the
+	// dependents table, and nothing on the other side ever learns that it is a consumer.
+	std::vector<FWaitKey> Blocks;
+	if (Frame != nullptr)
+	{
+		for (const auto& Dependent : Frame->GetDependents())
+		{
+			if (Dependent.first == Stage && Dependent.second.bReverse)
+			{
+				Blocks.push_back(ProtoWaitKey(Dependent.second));
+			}
+		}
+	}
 	// The native bar closes here, unconditionally: BEGIN/END must pair, and the native path has no
 	// duration floor (there is nothing to filter -- a bar that is short is simply short).
-	ProtoEmitSlice(Group, Track, Label, ShortStageName(Stage.name()).Data, Now, false);
-	const FNameSlice    StageShort = ShortStageName(Stage.name());
+	ProtoEmitSlice(Group, Track, StageShort, Label, Now, false, {}, std::move(Blocks));
 
 	// The floor applies to STAGE bars and to nothing else: a stage bar is generated for EVERY stage
 	// of EVERY frame, which is exactly what makes a trace expensive, whereas a section or a scope is

@@ -725,11 +725,19 @@ D.Row("[tr] flow ts=<us> lane=<group> owner=<track> stage=<short> from=<目标�
       "各写一行，帧内链的前驱也写一行（它不在 `GetDependencies()` 里，是编译期推出来的）")
 D.Row("flow_ids（字段 36） / terminating_flow_ids（字段 48）",
       "**原生形式**：生产者的 **END** 包带上 `flow_ids`，消费者的 **BEGIN** 包带上 "
-      "`terminating_flow_ids`（没有开着的 flow 时它被忽略 ⇒ 每条边每帧恰好一个箭头）。"
-      "`id = FNV-1a(lane | owner | stage)`，**两端各自独立算出来** —— 箭头的归属因此是结构性的，"
-      "从不靠时间戳倒推")
-D.Row("原生只画 `FrameOffset != 0` 的边", "**跨帧流水线**才画箭头：下一帧的消费者等上一帧的生产者。"
-      "帧内的 stage 链（off = 0）不画 —— 那条链的先后本来就已经由条的位置表达出来了")
+      "`terminating_flow_ids`（没有开着的 flow 时它被忽略 ⇒ 每条边每帧恰好一个箭头）。\n"
+      "`id = FNV-1a(owner | stage)`，由**生产者的身份**定键，**两端各自独立算不出来** —— 一个帧只看得见"
+      "**自己**的声明表（依赖方向由消费者声明，见 `Core/FrameGraph.h`），所以生产者根本不知道自己的消费者"
+      "是谁、是哪一帧的实例。于是发射时**只入队结构化记录**（条的身份 + 它声明的边 + 帧偏移），"
+      "`TraceFlush` 里由 trace 自己**join**：按 `(owner, stage, BEGIN/END)` 分组、组内按 ts 排序，"
+      "**组内序号就是帧实例号**，`FrameOffset` 一加就落到那一帧的条上，两端写同一个 id。\n"
+      "流经的**名字在发射时就拷进记录**（不存指针）：名字是模块里的静态数据，而 join 发生在跑完之后，"
+      "那时那个模块未必还映射着（实测一次 45% 的待 join 行指向已读不到的内存，join 死在 `strlen` 上）。"
+      "行 id 同样在发射时解析，理由一样")
+D.Row("原生画的是**声明的边**（含同帧、含反向）",
+      "`off = 0` 的跨 stage 依赖（例如渲染 tick 等平台的消息泵）同样是真实依赖，照画；"
+      "`BlockOn` 那类**反向声明**画成「我的 END → 被放行者的 BEGIN」（声明方即生产者）。"
+      "**不画**的是帧内链那类**结构**边，以及本帧跨到自己的**自身**边 —— 它们不是声明出来的东西")
 
 D.Card("包含的头文件")
 D.Table("头文件", "功能")
@@ -772,9 +780,12 @@ D.Row("void TraceSetEnabled(bool bEnabled)", "**运行期开关**，由 `r.Trace
 D.Row("std::uint64_t TraceNowMicros()", "距追踪原点（第一次被追踪的调用）的**单调**微秒数 —— 也就是 "
       "`ts`。原点先取再读钟：顺序反了会让第一个事件的 `ts` 下溢")
 D.Row("std::uint64_t TraceTaskFloorMicros()", "`MAHO_TRACE_MIN_US` 的解析结果（只读一次）：stage 条的门槛")
-D.Row("void TraceFlush()", "把各线程挂着的原生包**按时间戳排序后**写出（worker 并发发射，直写会让时间戳"
-      "乱序，查看器把迟到的那几个当「DATA LOSSES」丢掉；丢一个 END，那根条会一直画到屏幕边缘）。"
-      "描述符的时间戳是 0、直接写，所以它们始终在最前面。进程收尾时调用，也可以手工调来中途快照")
+D.Row("void TraceFlush()", "**原生文件在这里才拼包写出**：各线程发射时只入队结构化记录，flush 时"
+      "**先 join**（给每条声明的边配到另一端、定出 flow id）、再**按时间戳排序**写出（worker 并发发射，"
+      "直写会让时间戳乱序，查看器把迟到的那几个当「DATA LOSSES」丢掉；丢一个 END，那根条会一直画到屏幕"
+      "边缘；同 ts 时 BEGIN 在前，否则报 MISPLACED_END_EVENT）。"
+      "描述符的时间戳是 0、在发射时直接写，所以它们始终在最前面。进程收尾时调用，也可以手工调来中途快照"
+      "（快照会把队列切成两段：跨过切口的箭头缺一根，但**不会画错** —— 序号是窗口内相对算的）")
 
 D.Struct("FStaticName", Desc="**静态字符串的一片** —— 事件里每个名字都是它（字面量、stage 的 "
         "`type_info::name()`、`__FUNCTION__`）。裁命名空间与缩短都是**切片**，从不拷贝：这条路一秒钟"
@@ -791,12 +802,15 @@ D.SetAccess("public")
 D.Interface("FStageTrace(const FFrameExtension* InFrame, const std::type_info& InStage, const char* InGroup, "
             "const char* InTrack, const char* InLabel, const char* InTip, const std::type_info* InPrevStage)",
             "构造：记起始时间戳（带嵌套深度偏移）、把当前 `lane/owner/stage` 三者存起来再换成自己的"
-            "（lane = 帧类型的分区名，owner = 帧的静态名，stage = 短 stage 名），并在**同一时刻**把该 stage "
-            "声明的边解析一次（帧在构造里写完声明、整个 stage 调用期间不变，所以这里只存指针）")
-D.Interface("~FStageTrace()", "`Start != 0` 才记录：写条 → 按声明的边写箭头（文本，各自一行）/ 带 "
-            "`terminating_flow_ids` 的 BEGIN（原生）→ 把三个字段还原、深度减一。时长以**偏移后的起点**"
-            "为基准，故短于偏移量的 scope 记 0 而不是回绕")
-D.Field("const FFrameExtension* Frame", "开这根条的那个帧（`GetDependencies()` 从这里取）")
+            "（lane = 帧类型的分区名，owner = 帧的静态名，stage = 短 stage 名），并**在同一时刻**把该 stage "
+            "声明的边**拷成入队的 key**（帧在构造里写完声明、整个 stage 调用期间不变；拷而不是存指针，"
+            "因为名字所属的模块到 flush 时未必还在）")
+D.Interface("~FStageTrace()", "`Start != 0` 才记录：写条 → 按声明的边写箭头（文本，各自一行）/ "
+            "把本 stage 的 BEGIN 记录入队（原生，带它**等待**的边）与 END 记录入队（原生，带它**挡住**的"
+            "反向边）→ 把三个字段还原、深度减一。flow id 不在这一层定：它要等两端都在了才由 `TraceFlush` "
+            "的 join 定出来。时长以**偏移后的起点**为基准，故短于偏移量的 scope 记 0 而不是回绕")
+D.Field("const FFrameExtension* Frame", "开这根条的那个帧（`GetDependencies()` / `GetDependents()` "
+        "从这里取）")
 D.Field("const std::vector<FFrameExtension::FEdge>* Edges", "**这个 stage** 声明的边；存指针而不是副本")
 D.Field("const std::type_info* PrevStage", "调度器在这个 stage 之前跑的那个 stage = 帧内链的**结构边**，"
         "**编译期**从帧自己的 stage 列表推出来（`StagePredecessorOf`）—— 结构边不出现在 "

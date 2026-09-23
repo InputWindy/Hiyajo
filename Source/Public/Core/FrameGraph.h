@@ -153,12 +153,18 @@ public:
 	/** Stable identity: the Name of every node this frame contributes. */
 	[[nodiscard]] virtual std::string_view GetName() const = 0;
 
-	/** One declared edge: the target's identity parts, plus WHEN. */
+	/** One declared edge: the target's identity parts, plus WHEN -- and WHICH WAY. */
 	struct FEdge
 	{
 		std::string_view TargetName{};
 		std::type_index  TargetStage{ typeid(void) };
 		std::int32_t     FrameOffset = 0;   // 0 = this frame, -1 = the previous one
+		/** The declaration's own direction, which the graph already knows (it is what `FDiagnostic`
+		 *  reports and what the builder branches on) and which this struct used to discard: false =
+		 *  `WaitFor` (the target runs FIRST, I wait for it), true = `BlockOn` (I run first, the target
+		 *  is blocked by me). A consumer of the edge that must tell "input" from "output" -- the trace
+		 *  drawing an arrow -- cannot recover it any other way. */
+		bool             bReverse    = false;
 	};
 
 	// -- the minimal ability: declare edges (the sugar below is just spelling) ------
@@ -318,7 +324,7 @@ public:
 			TTarget& OnStage()
 			{
 				Self.AddDependent(typeid(TMyStage),
-					FEdge{ TTargetFrame::StaticName(), typeid(TTargetStage), Offset });
+					FEdge{ TTargetFrame::StaticName(), typeid(TTargetStage), Offset, /*bReverse=*/true });
 				return *this;
 			}
 
@@ -345,7 +351,7 @@ public:
 			TNamedTarget& OnStage()
 			{
 				Self.AddDependent(typeid(TMyStage),
-					FEdge{ TargetName, typeid(TTargetStage), Offset });
+					FEdge{ TargetName, typeid(TTargetStage), Offset, /*bReverse=*/true });
 				return *this;
 			}
 
