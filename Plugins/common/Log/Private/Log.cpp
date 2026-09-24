@@ -38,7 +38,18 @@ MAHO_LOG_API FLog* GetLog()
 
 FLog::FLog() = default;
 
-FLog::~FLog() = default;   // full type spdlog::logger is visible here
+FLog::~FLog()
+{
+	// The LAST bars of a run close AFTER FLog::Shutdown's flush: every other frame's shutdown stages
+	// (`Platform shutdown`, `Resource shutdown`, `World shutdown`) and this frame's own
+	// `Log shutdown` run after it, so their ENDs would reach the file with no partner -- in Perfetto
+	// those bars stick to the right edge with no end time. Drain once more HERE: this is the last
+	// point where the trace's code is provably still mapped. (The engine's uninstall sweep frees the
+	// plugin DLLs -- FAssembly::~FAssembly -- so an exit-time callback registered from a plugin would
+	// be calling into unmapped memory by then, which is exactly how the first attempt at this failed
+	// silently.) The full type spdlog::logger is visible here, so the member destructs properly too.
+	TraceFlush();
+}
 
 void FLog::Initialize(FEngineBase& Engine, FEngineContext& Frame)
 {

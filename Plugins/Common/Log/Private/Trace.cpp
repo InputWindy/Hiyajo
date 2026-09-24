@@ -754,6 +754,7 @@ void ProtoEmitSlice(const char* Lane, const char* Owner, const FNameSlice& Stage
 	const char* const ThreadRow = TraceThreadRowName();
 
 	std::lock_guard<std::mutex> Lock(GThreadMutex);
+
 	std::vector<FQueuedRecord>& Queue = ProtoQueue();
 	const std::size_t PrimaryIndex = Queue.size();
 	FQueuedRecord& Item = Queue.emplace_back();
@@ -1007,7 +1008,7 @@ FStageTrace::FStageTrace(const FFrameExtension* InFrame, const std::type_info& I
 
 FStageTrace::~FStageTrace()
 {
-	if (Start == 0)
+	if (Start == kNotTracing)
 	{
 		// Tracing was off when this scope opened.
 		return;
@@ -1138,7 +1139,7 @@ FScopeTrace::FScopeTrace(const char* InGroup, const char* InTip, const char* InF
 
 FScopeTrace::~FScopeTrace()
 {
-	if (Start == 0)
+	if (Start == kNotTracing)
 	{
 		return;
 	}
@@ -1181,7 +1182,7 @@ FSectionTrace::FSectionTrace(const char* InLabel, const char* InTip, const char*
 
 FSectionTrace::~FSectionTrace()
 {
-	if (Start == 0)
+	if (Start == kNotTracing)
 	{
 		return;
 	}

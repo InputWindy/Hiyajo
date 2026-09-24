@@ -109,6 +109,14 @@ MAHO_LOG_API void TraceFlush();
 
 #if MAHO_WITH_TRACE
 
+/** The "this scope is not recording" sentinel for a trace scope's start stamp.
+ *
+ *  It MUST NOT be 0: the trace clock's origin is set by the first call, so the very first bar of a
+ *  process legitimately starts at 0 -- and using 0 as the sentinel silently swallowed that bar's END
+ *  (the bar never closed: `FLog Log init` showed up with no end time, and with no line in the text
+ *  file either, because the text path also writes on END). */
+inline constexpr std::uint64_t kNotTracing = ~std::uint64_t{0};
+
 /** A slice of a STATIC string -- what every name in an event is (a literal, a stage's
  *  `type_info::name()`, `__FUNCTION__`). The shorten-and-strip-namespace work is a slice, never a
  *  copy: this runs on the emit path, tens of thousands of times a second once tracing is on. */
@@ -163,7 +171,7 @@ private:
 	const char*     PreviousTrack = nullptr;
 	FStaticName     PreviousStage{};
 
-	std::uint64_t Start = 0;
+	std::uint64_t Start = kNotTracing;
 };
 
 /** RAII scope for MAHO_TRACE_SCOPE -- a lane of its OWN.
@@ -194,7 +202,7 @@ private:
 	const char*     PreviousTrack = nullptr;
 	FStaticName     PreviousStage{};
 
-	std::uint64_t Start = 0;
+	std::uint64_t Start = kNotTracing;
 };
 
 /** RAII scope for MAHO_TRACE_SECTION -- a hand-labelled section INSIDE a stage.
@@ -227,7 +235,7 @@ private:
 	const char*   Track = nullptr;
 	FStaticName   Stage{};
 
-	std::uint64_t Start = 0;
+	std::uint64_t Start = kNotTracing;
 };
 
 #endif // MAHO_WITH_TRACE
