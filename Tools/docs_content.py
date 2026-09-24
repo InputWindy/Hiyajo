@@ -250,7 +250,8 @@ D.Table("格", "隔离什么")
 D.Row("Debug × Editor", "今天的日常态：断言/追踪/日志/校验层全开 + 编辑器（面板/主题/视口/控制台/浏览器）全在")
 D.Row("Debug × Runtime", "运行时调试态：诊断全开，但没有编辑器插件（可视化面板不存在）")
 D.Row("Release × Runtime", "性能态（内测/试玩）：`CHECK`/`ENSURE` 留、慢速检查与容器审计关、追踪/日志留、校验层默认关")
-D.Row("Release × Editor", "**编辑器发行版**（给美术/QA）：优化的库 + 诊断保留 + 编辑器插件在")
+D.Row("Release × Editor", "**编辑器发行版**（给美术/QA）：优化的库 + 诊断保留 + 编辑器插件在。"
+      "**「发行版要带日志/诊断」的形态一律发 Release**（本变更不做逐能力覆盖通道，见 design OQ8）")
 D.Row("Shipping × Runtime", "**对外发行（零成本）**：`CHECK`/`ENSURE`/追踪/日志/统计/校验层/运行时着色器编译"
       "一律不编；CVar 只留标了 `ECVarFlags::Shipping` 的项（画质档位这类要现场切的**可读写**）")
 D.Row("Shipping × Editor", "**非法**：生成期报错，`BuildConfig.h` 另有一道 `#error`（编辑器发行版请用 "

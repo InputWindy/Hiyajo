@@ -224,7 +224,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td>Debug × Editor</td><td>今天的日常态：断言/追踪/日志/校验层全开 + 编辑器（面板/主题/视口/控制台/浏览器）全在</td></tr>
 <tr><td>Debug × Runtime</td><td>运行时调试态：诊断全开，但没有编辑器插件（可视化面板不存在）</td></tr>
 <tr><td>Release × Runtime</td><td>性能态（内测/试玩）：`CHECK`/`ENSURE` 留、慢速检查与容器审计关、追踪/日志留、校验层默认关</td></tr>
-<tr><td>Release × Editor</td><td>**编辑器发行版**（给美术/QA）：优化的库 + 诊断保留 + 编辑器插件在</td></tr>
+<tr><td>Release × Editor</td><td>**编辑器发行版**（给美术/QA）：优化的库 + 诊断保留 + 编辑器插件在。**「发行版要带日志/诊断」的形态一律发 Release**（本变更不做逐能力覆盖通道，见 design OQ8）</td></tr>
 <tr><td>Shipping × Runtime</td><td>**对外发行（零成本）**：`CHECK`/`ENSURE`/追踪/日志/统计/校验层/运行时着色器编译一律不编；CVar 只留标了 `ECVarFlags::Shipping` 的项（画质档位这类要现场切的**可读写**）</td></tr>
 <tr><td>Shipping × Editor</td><td>**非法**：生成期报错，`BuildConfig.h` 另有一道 `#error`（编辑器发行版请用 `Release × Editor`；Editor 工程的配置列表里也不含 Shipping）</td></tr>
 </tbody></table>
