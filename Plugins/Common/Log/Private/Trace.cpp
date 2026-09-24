@@ -808,19 +808,75 @@ void ProtoEmitSlice(const char* Lane, const char* Owner, const FNameSlice& Stage
 	Queue[PrimaryIndex].MirrorIndex = MirrorIndex;
 }
 
-/** Write one assembled line, or nothing at all when it overflowed. */
+/** Text lines are STAGED and written in blocks, never one write per bar.
+ *
+ *  The text path used to call `fwrite` once per closed bar, which puts every emitting thread in the
+ *  same CRT file lock -- and stdio flushes its buffer INSIDE that lock, so a single slow write (a
+ *  write-back pile-up, or an antivirus scanning the file being written) freezes every thread that is
+ *  closing a bar at that moment. Measured on the release editor: a 5.37 ms window in which NO lane
+ *  emitted anything at all, and 47 ms windows where four unrelated stages stretched to the same wall
+ *  time. With staging, the lock is only ever held for a memcpy, and one bar in N pays for the write.
+ *
+ *  The block size is the crash-fallback trade-off: the text file exists so a crash still has the
+ *  lines, and 64 KB is a few hundred lines (tens of milliseconds of tracing). */
+constexpr std::size_t kTextStageBytes = 64 * 1024;
+std::vector<char>     GTextPending;
+
+/** Hand a staged block to the file. MUST be called with the lock NOT held: writing under it is the
+ *  very thing this staging exists to avoid. */
+void WriteTextBlock(std::vector<char>& Bytes)
+{
+	if (Bytes.empty())
+	{
+		return;
+	}
+	if (std::FILE* File = TraceFileHandle())
+	{
+		std::fwrite(Bytes.data(), 1, Bytes.size(), File);
+	}
+	Bytes.clear();
+}
+
+/** Stage one assembled line, or nothing at all when it overflowed. */
 void EmitLine(const FLine& Line)
 {
 	if (TraceFormat() == 1)
 	{
 		return;   // native only: the text file is one of the two ways out, not the only one
 	}
-	std::FILE* File = TraceFileHandle();
-	if (File == nullptr || Line.bOverflow)
+	if (Line.bOverflow)
+	{
+		// The line did not fit: writing half of it would corrupt the file for every reader of it.
+		return;
+	}
+	// Open the file on the FIRST line (not at the first block): the text path is the crash fallback,
+	// so it has to exist from the moment tracing does.
+	if (TraceFileHandle() == nullptr)
 	{
 		return;
 	}
-	std::fwrite(Line.Bytes, 1, Line.Used, File);
+
+	std::vector<char> Ready;
+	{
+		std::lock_guard<std::mutex> Lock(GThreadMutex);
+		GTextPending.insert(GTextPending.end(), Line.Bytes, Line.Bytes + Line.Used);
+		if (GTextPending.size() >= kTextStageBytes)
+		{
+			Ready.swap(GTextPending);
+		}
+	}
+	WriteTextBlock(Ready);
+}
+
+/** Drain what is staged. Called by the flushes; the write happens outside the lock (see EmitLine). */
+void FlushTextStage()
+{
+	std::vector<char> Ready;
+	{
+		std::lock_guard<std::mutex> Lock(GThreadMutex);
+		Ready.swap(GTextPending);
+	}
+	WriteTextBlock(Ready);
 }
 
 /** `ts`/`dur`/`lane`/`worker`/`owner` -- the prefix every bar shares.
@@ -924,6 +980,10 @@ std::uint64_t TraceNowMicros()
 
 void TraceFlush()
 {
+	// The staged TEXT lines go out first: the text file is the crash fallback, so it has to be as
+	// complete as possible before the (much bigger) native batch is assembled and written.
+	FlushTextStage();
+
 	// The native file is written HERE: the flow ids can only be minted once every bar of the frame is
 	// in (FQueuedRecord), and the packets have to leave in timestamp order. Descriptors are written
 	// directly, as they are discovered, so they stay ahead of the packets that reference them.
