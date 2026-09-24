@@ -758,7 +758,9 @@ D.Row("MAHO_TRACE_MIN_US=<n>",
 D.Row("MAHO_TRACE_STAGES",
       "帧图节点的 enter/exit 括注（见 `Source/Private/Core/FrameGraph.cpp`）。它只为一个失败模式存在："
       "硬崩（0xC0000005）没有栈、也抛不出任何 C++ 能接的东西，于是「最后进入而没退出」的那个 stage "
-      "就是唯一能指出真凶的线索")
+      "就是唯一能指出真凶的线索。**它属于追踪设施 ⇒ 也由 `MAHO_WITH_TRACE` 决定编不编**：Shipping 下"
+      "连开关都不存在（实测同一个 `MAHO_TRACE_STAGES=1`，Debug 打 282 行 `[fg]`，Shipping 0 行），"
+      "调用点保留但退化成读常量 + 空调用，优化器直接折掉")
 
 D.Card("两种输出（由 `MAHO_TRACE_FORMAT` 选）")
 D.Table("文件", "说明")

@@ -1347,7 +1347,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td>MAHO_TRACE_MIN_US=&lt;n&gt;</td><td>**stage 条的时长门槛**（默认 0 = 全留）。stage 条是为**每一个**帧的**每一个** stage 生成的，所以它们才是让 trace 变贵的东西；手写 SECTION / SCOPE 是人对「什么重要」的判断，**永不被过滤**。
 代价说清楚：行是从事件派生出来的，所以一个帧若全部分条都低于门槛，它会**连行一起消失**（随后手写埋点落在数字 lane id 下），而被丢掉的条**把它的箭头一起带走**（箭头两端都得存在）；原生输出**没有门槛** —— BEGIN/END 必须成对，条短就只是短。
 实测（ExampleEngine，Debug，12s）：门槛 0 → 339501 条 / 23.3MB；门槛 200us → 157985 条 / 11.3MB，留下的正好是有分量的那些（`FUIFeature::IInitViews` / `IRenderUI` / `FRender::IEndFrame` …）。</td></tr>
-<tr><td>MAHO_TRACE_STAGES</td><td>帧图节点的 enter/exit 括注（见 `Source/Private/Core/FrameGraph.cpp`）。它只为一个失败模式存在：硬崩（0xC0000005）没有栈、也抛不出任何 C++ 能接的东西，于是「最后进入而没退出」的那个 stage 就是唯一能指出真凶的线索</td></tr>
+<tr><td>MAHO_TRACE_STAGES</td><td>帧图节点的 enter/exit 括注（见 `Source/Private/Core/FrameGraph.cpp`）。它只为一个失败模式存在：硬崩（0xC0000005）没有栈、也抛不出任何 C++ 能接的东西，于是「最后进入而没退出」的那个 stage 就是唯一能指出真凶的线索。**它属于追踪设施 ⇒ 也由 `MAHO_WITH_TRACE` 决定编不编**：Shipping 下连开关都不存在（实测同一个 `MAHO_TRACE_STAGES=1`，Debug 打 282 行 `[fg]`，Shipping 0 行），调用点保留但退化成读常量 + 空调用，优化器直接折掉</td></tr>
 </tbody></table>
 </div>
 <div class="card">

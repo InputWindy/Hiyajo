@@ -25,7 +25,14 @@ namespace
 	 * body is bracketed (enter/exit) rather than merely logged at dispatch, which makes "the
 	 * last enter with no exit" the answer. Note it is not a substitute for a stack -- it names
 	 * the stage, not the line -- but it narrows a 34-DLL program to one call site.
+	 *
+	 * The switch is the configuration's, not the environment's: it belongs to the trace facility,
+	 * so `MAHO_WITH_TRACE == 0` (Shipping) compiles the whole thing out -- there is no debugging
+	 * the release build needs to bracket for. The call sites stay put: in Shipping they read a
+	 * constant and call nothing, which the optimizer removes.
 	 */
+#if MAHO_WITH_TRACE
+
 	bool StageTraceEnabled()
 	{
 		static const bool bOn = (std::getenv("MAHO_TRACE_STAGES") != nullptr);
@@ -38,6 +45,21 @@ namespace
 			static_cast<int>(Key.Name.size()), Key.Name.data(), Key.Stage.name(), Key.Phase);
 		std::fflush(stderr);
 	}
+
+#else
+
+	/** Shipping: not compiled, not switchable. */
+	bool StageTraceEnabled()
+	{
+		return false;
+	}
+
+	/** Shipping: not compiled. */
+	void TraceStage(const char*, const FTaskKey&)
+	{
+	}
+
+#endif // MAHO_WITH_TRACE
 
 	/** The phase index IS the slot index now: the space is exactly the ring [0, K). */
 	std::int32_t SlotIndexOf(std::int32_t Phase)
