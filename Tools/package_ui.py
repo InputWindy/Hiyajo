@@ -36,7 +36,23 @@ _PLATFORMS = [
 	("Xbox", False),
 ]
 
-_CONFIGS = ("Release", "Debug", "RelWithDebInfo", "MinSizeRel")
+def _configs_for(cproject: Path | None) -> tuple[str, ...]:
+	"""The configurations THIS project can be packaged as -- the generator's rule, mirrored here.
+
+	(Tools/maho_tools.py decides the same thing when it writes the solution:) a `Runtime` project has
+	Debug / Release / Shipping, and Shipping comes first because packaging usually means "ship it";
+	an `Editor` project has no Shipping cell at all -- an editor needs the very facilities Shipping
+	removes -- so offering it would only produce a failed build. Deriving the list keeps it from
+	drifting away from the matrix (it used to be a hard-coded tuple that still named the two
+	configurations the solution no longer defines).
+	"""
+	if cproject is not None and cproject.is_file():
+		try:
+			if str(read_cproject(cproject).get("BuildType", "Runtime")).strip() == "Editor":
+				return ("Release", "Debug")
+		except Exception:  # noqa: BLE001 -- unreadable/odd project: fall back to the safe pair
+			return ("Release", "Debug")
+	return ("Shipping", "Release", "Debug")
 
 
 def _discover_cproject(project_dir: Path) -> Path | None:
@@ -64,7 +80,7 @@ class PackageApp(tk.Tk):
 
 		self.var_cproject = tk.StringVar(value=str(initial_cproject) if initial_cproject else "")
 		self.var_platform = tk.StringVar(value="Win64")
-		self.var_config = tk.StringVar(value="Release")
+		self.var_config = tk.StringVar(value=_configs_for(initial_cproject)[0])
 		self.var_regen = tk.BooleanVar(value=False)
 		self.var_open = tk.BooleanVar(value=True)
 		self._busy = False
@@ -90,6 +106,8 @@ class PackageApp(tk.Tk):
 		ttk.Label(frm, text=".cproject").grid(row=1, column=0, sticky="w", **pad)
 		ent_cproject = ttk.Entry(frm, textvariable=self.var_cproject)
 		ent_cproject.grid(row=1, column=1, sticky="ew", **pad)
+		# A typed path changes which configurations are legal, so refresh when the field is left.
+		ent_cproject.bind("<FocusOut>", lambda _e: self._refresh_summary())
 		btn_browse = ttk.Button(frm, text="Browse…", command=self._browse_cproject)
 		btn_browse.grid(row=1, column=2, sticky="e", **pad)
 
@@ -109,9 +127,16 @@ class PackageApp(tk.Tk):
 		plat_box.bind("<<ComboboxSelected>>", lambda _e: self._refresh_summary())
 
 		ttk.Label(frm, text="Configuration").grid(row=4, column=0, sticky="w", **pad)
-		cfg = ttk.Combobox(frm, textvariable=self.var_config, values=_CONFIGS, state="readonly", width=24)
+		cfg = ttk.Combobox(
+			frm,
+			textvariable=self.var_config,
+			values=_configs_for(Path(self.var_cproject.get().strip()) if self.var_cproject.get().strip() else None),
+			state="readonly",
+			width=24,
+		)
 		cfg.grid(row=4, column=1, sticky="w", **pad)
 		cfg.bind("<<ComboboxSelected>>", lambda _e: self._refresh_summary())
+		self.cfg_box = cfg
 
 		opts = ttk.Frame(frm)
 		opts.grid(row=5, column=0, columnspan=3, sticky="w", **pad)
@@ -181,6 +206,7 @@ class PackageApp(tk.Tk):
 		)
 		if path:
 			self.var_cproject.set(path)
+			self._refresh_summary()
 
 	def _set_summary(self, content: str) -> None:
 		self.txt_summary.configure(state=tk.NORMAL)
@@ -213,6 +239,13 @@ class PackageApp(tk.Tk):
 	def _refresh_summary(self) -> None:
 		cproject_str = self.var_cproject.get().strip()
 		platform = self.var_platform.get()
+		# The allowed configurations follow the project (a Runtime project has Shipping, an Editor
+		# project does not). If the current pick stopped being legal -- the user switched projects --
+		# move to the first one that is, rather than letting the build fail on an unknown config.
+		allowed = _configs_for(Path(cproject_str) if cproject_str else None)
+		self.cfg_box.configure(values=allowed)
+		if self.var_config.get() not in allowed:
+			self.var_config.set(allowed[0])
 		config = self.var_config.get()
 		enabled = dict(_PLATFORMS).get(platform, False)
 
