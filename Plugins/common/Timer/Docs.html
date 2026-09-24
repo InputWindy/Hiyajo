@@ -141,7 +141,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table>
 </div>
 <div class="ent e-class" id="Public__Timer_h-0">
-<h3><span class="kind">类</span> FTimer <span class="base">: FFrameExtension, IPipeline&lt;IPreInit, IInit, IPostInit, IPreShutdown, IShutdown, IPostShutdown&gt;</span></h3>
+<h3><span class="kind">类</span> FTimer <span class="base">: FFrameExtension, IPipeline&lt;IInit, IShutdown&gt;</span></h3>
 <div class="sect"><div class="doc">
 <p>计时器本体 —— **一个帧**（挂 6 个 stage）：`Initialize` 发布全局访问点，`Shutdown` 撤销。</p>
 <p>**为什么是帧而不是纯静态**：计时树对当前作用域栈（`Current`）有状态，而这份状态必须只有一份、且有明确的生命周期；交给有依赖排序的帧持有，「谁在谁之前计时」才有确定性。</p>
@@ -162,12 +162,8 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> EndScope()</td><td>弹出当前作用域：累计本次耗时到 `TotalSeconds`、更新 `MaxSeconds` 与 `Count`，再把 `Current` 退回 `Parent`</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Reset()</td><td>清空全部累计数据（回到只有根节点的初始状态）—— 采样的起点由调用方决定</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] std::string DumpToString() <span class="kw">const</span></td><td>把计时树格式化成文本（毫秒），形如 `Render: 1.23 ms (n calls, avg, max)`。**为什么返回字符串而不是直接打印**：输出目的地由调用方决定（日志、编辑器面板、控制台），计时器不替它们选 sink</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> PreInitialize(FEngineBase&amp;) <span class="kw">override</span></td><td>空：本帧不需要更早的时钟点</td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> Initialize(FEngineBase&amp; Engine) <span class="kw">override</span></td><td>发布全局访问点（`GetTimer()` 从这里开始非空）</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> PostInitialize(FEngineBase&amp;) <span class="kw">override</span></td><td>空</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> PreShutdown(FEngineBase&amp;) <span class="kw">override</span></td><td>空</td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> Shutdown(FEngineBase&amp; Engine) <span class="kw">override</span></td><td>撤销全局访问点 —— 在所有计时使用者结束之后（依赖图保证）</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> PostShutdown(FEngineBase&amp;) <span class="kw">override</span></td><td>空</td></tr>
 <tr><td><span class="acc a-protected">protected</span></td><td>FTimer() = <span class="kw">default</span></td><td><span class="kw">protected</span> 构造：实例只由本模块的帧工厂 / 宿主流程创建，外部只能经 `GetTimer()` 取用</td></tr>
 </tbody></table></div>
 <div class="sect">

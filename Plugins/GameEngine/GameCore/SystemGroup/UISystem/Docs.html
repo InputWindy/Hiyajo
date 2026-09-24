@@ -144,7 +144,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table></div>
 </div>
 <div class="ent e-class" id="Public__UISystem_h-1">
-<h3><span class="kind">类</span> FUISystem <span class="base">: FFrameExtension + IPipeline&lt;IOnInstalled, IProcessInput, IUpdate, IPreUnInstall&gt;</span></h3>
+<h3><span class="kind">类</span> FUISystem <span class="base">: FFrameExtension + IPipeline&lt;IOnInstalled, IUpdate, IPreUnInstall&gt;</span></h3>
 <div class="sect"><div class="doc">
 <p>世界系统本身：两个基类（`FFrameExtension` 声明层 + `IPipeline&lt;...&gt;` 有序子 stage 列表）。它只挂世界真正会派发的那四个子 stage —— stage 列表就是它的能力声明，多挂一个（比如 `IFixedUpdate`）会让世界的固定步进序列给它派发节点，而它并没有固定步进的语义。</p>
 <p>**四个 stage 里的实际内容**：`OnInstalled` 发布全局访问器；`Update` 是唯一有逻辑的（建立/复用视图 → 回传事件 → 独占写重新声明树）；`ProcessInput` 是声明出来但空的能力（UI 输入由翻译层直接投递给树，游戏侧没有可轮询的东西）；`PreUnInstall` 注销视图。</p>
@@ -160,7 +160,6 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <h4>接口</h4>
 <table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> OnInstalled(FGameWorld&amp; World) <span class="kw">override</span></td><td>装入安全点：登记全局访问器（跨 DLL 走函数，避免每模块一份静态变量）。**不在这里建视图** —— 此刻 UI 注册表可能还没就位（游戏世界与渲染特性的初始化顺序不固定），视图延到第一帧 `Update` 里建</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> ProcessInput(FGameWorld&amp; World) <span class="kw">override</span></td><td>空的已声明 stage：UI 输入由**翻译层**直接投递给树（上下文归渲染侧所有），游戏侧没有要轮询的东西；保留这个 stage 是为了让能力列表完整可读</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Update(FGameWorld&amp; World) <span class="kw">override</span></td><td>一帧的全部工作量：① `EnsureDemoView`（未就位就返回，**下一帧再试**）；② 采样帧率（`World.GetDeltaSeconds()`，指数平滑 —— 纯读数）；③ `DrainEvents()` —— 交互事件先回传，翻译线程只入队、真正的回调在所有者线程（这里）执行，回调内可以再次 `Edit()`；④ 在 `Edit()` 独占写作用域里重新声明整棵树（同 id 同类型 = 复用）</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> PreUnInstall(FGameWorld&amp; World) <span class="kw">override</span></td><td>卸出安全点：**先把视图从注册表注销，再让它被销毁** —— 注册表只持裸指针，顺序反了就是悬垂指针。顺序本身由 `FGameWorld` 声明（它才是驱动本阶段的层）：世界把 `IShutdown` 阻塞在 `FUIViewRegistry` 上，本系统的 `PreUnInstall` 才有「注册表还活着」这个前提。**注销只靠本系统自持的 `DemoView`，不查组件池** —— `FGameWorld::Shutdown` 为防跨模块析构，在驱动本阶段之前就清空了组件池，那时从组件取视图必然取不到，注销会静默丢失、视图残留到注册表关闭。随后销毁演示实体、清全局访问器</td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>UI::FUIView* EnsureDemoView(FGameWorld&amp; World)</td><td>建立（只一次）演示控件的实体 + 组件 + 持久视图，声明它的翻译作用域并注册进注册表。注册表未就位就返回 <span class="kw">nullptr</span>、由调用方下一帧重试 —— 因为游戏世界与渲染特性的初始化顺序**不是**固定的（声明前向依赖反而会让图编译失败）</td></tr>

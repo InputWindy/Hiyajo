@@ -124,7 +124,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table>
 </div>
 <div class="ent e-class" id="Public__Exception_h-0">
-<h3><span class="kind">类</span> FException <span class="base">: FFrameExtension, IPipeline&lt;IPreInit, IInit, IPostInit, IPreShutdown, IShutdown, IPostShutdown&gt;</span></h3>
+<h3><span class="kind">类</span> FException <span class="base">: FFrameExtension, IPipeline&lt;IInit, IShutdown&gt;</span></h3>
 <div class="sect"><div class="doc">
 <p>异常中心本体 —— **一个帧**（挂 6 个 stage），建立与拆除由调度图排序。</p>
 <p>**为什么是帧而不是全局对象**：订阅者要在自己的 `IShutdown` 里解绑，而「先解绑再释放」这件事只有依赖图能保证；全局对象的销毁顺序是无序的，那会让广播撞上已销毁的订阅者。</p>
@@ -141,12 +141,8 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td>MAHO_DECLARE_FRAME(FException)</td><td>声明帧身份：稳定的字符串字面量名字 + `CreateFrame` 工厂 —— **名字是字面量**才让「按名字引用」这件事在模块卸载后依然安全</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> ReportException(std::string_view Message)</td><td>上报一条非致命异常（广播给 `OnException`）。`Message` 是视图 ⇒ 实现内部会拷成 `std::string` 再广播，因为订阅者可能把消息留存到本帧之后</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> ReportException(<span class="kw">const</span> std::exception&amp; Error)</td><td>从标准异常上报：转发 `what()`。**为什么值得单独一个重载**：`<span class="kw">catch</span>` 现场几乎总能拿到一个 `std::exception`，有这个重载就不必到处手写 `e.what()`，也避免了「忘了取 what() 只报类型名」这种信息量极低的上报</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> PreInitialize(FEngineBase&amp;) <span class="kw">override</span></td><td>空：本帧不需要更早的时钟点</td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> Initialize(FEngineBase&amp; Engine) <span class="kw">override</span></td><td>发布全局访问中心（`GetExceptionCenter()` 从这里开始非空）</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> PostInitialize(FEngineBase&amp;) <span class="kw">override</span></td><td>空</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> PreShutdown(FEngineBase&amp;) <span class="kw">override</span></td><td>空</td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> Shutdown(FEngineBase&amp; Engine) <span class="kw">override</span></td><td>清除全局访问中心 —— 对称于 `Initialize`；此后 `GetExceptionCenter()` 返回 `<span class="kw">nullptr</span>`，调用方的判空分支因此是**必需的**，而不是防御性写法</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> PostShutdown(FEngineBase&amp;) <span class="kw">override</span></td><td>空</td></tr>
 </tbody></table></div>
 </div>
 </div>

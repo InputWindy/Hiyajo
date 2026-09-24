@@ -204,7 +204,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table></div>
 </div>
 <div class="ent e-class" id="Public__Platform_h-4">
-<h3><span class="kind">类</span> FPlatform <span class="base">: FFrameExtension + IPipeline&lt;IPreInit, IInit, IPostInit, IBeginFrame, ITick, IEndFrame, IExit, IPreShutdown, IShutdown, IPostShutdown&gt;</span></h3>
+<h3><span class="kind">类</span> FPlatform <span class="base">: FFrameExtension + IPipeline&lt;IInit, IPostInit, ITick, IEndFrame, IExit, IShutdown&gt;</span></h3>
 <div class="sect"><div class="doc">
 <p>平台系统（一个引擎帧）：原生表面 + 事件。**它挂在完整阶段序列上**，因为引擎循环正是通过它推进的：`Tick` → 泵事件 + `ShouldClose` → 请求引擎退出；`BeginFrame`/`EndFrame` 则把「泵事件」放在帧的两端，让输入在整帧内保持稳定。</p>
 <p>后端是**惰性创建**的：`Initialize` 不做任何事，`CreateWindow` / `CreateHeadlessContext` 才按平台选后端（GLFW 或 EGL pbuffer），`DestroyWindow` 可以随时切回无头 —— 于是「无表面」是一个正常状态而不是错误状态，这也解释了 `GetNativeWindow()` 为什么会返回 `<span class="kw">nullptr</span>`。</p>
@@ -252,16 +252,12 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">bool</span> ReadInputFrame(std::uint64_t Index, FInputFrame&amp; Out) <span class="kw">const</span></td><td>读**带帧号的**那一帧：该帧的快照 + 同一次泵里的边沿事件。帧号已被环形缓冲覆盖时返回 <span class="kw">false</span>（消费者落后太多）—— 调用方要当「我跳过了输入」，绝不能当「没有输入」</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>TMulticastEvent&lt;<span class="kw">void</span>(std::uint64_t)&gt; OnInputPublished</td><td>每次泵结束时广播「刚发布的那一帧的帧号」。订阅者拿到的**不是**负载，而是自己去环形缓冲读该读的帧 —— 这正是多消费者能共存的原因：旧设计把事件批交给「谁先排空谁拿走」，于是错过携带按键 RELEASE 那一帧的消费者永远不会知道键已抬起，ImGui 便一直认为键按着并自动重复（一次 Backspace 删掉整行、一次 ← 走到最左）</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> DrainDroppedFiles(std::vector&lt;std::string&gt;&amp; Out) <span class="kw">const</span></td><td>排空自上次调用以来被拖到窗口上的文件路径（文件管理器的 OS 拖放）：追加到 `Out` 并清空缓冲。路径是**物理绝对路径**（引擎的窄字符约定）；平台不做虚拟路径映射 —— 那是 `FPaths` 在上层的事</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> PreInitialize(FEngineBase&amp;) <span class="kw">override</span> {}</td><td>阶段入口（空实现）：此阶段无工作</td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> Initialize(FEngineBase&amp; Engine) <span class="kw">override</span></td><td>阶段入口：**空的启动** —— 后端惰性创建，所以这里不建窗口也不读配置</td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> PostInitialize(FEngineBase&amp;) <span class="kw">override</span> {}</td><td>阶段入口（空实现）</td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> Shutdown(FEngineBase&amp; Engine) <span class="kw">override</span></td><td>阶段入口：按与初始化对称的顺序拆掉后端。平台是「表面」的提供者，所以它的 Shutdown 必须晚于使用表面的渲染层（那条次序由消费方声明依赖表达）</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> BeginFrame(FEngineBase&amp; Engine) <span class="kw">override</span></td><td>阶段入口：帧首（泵事件的第一个落点）</td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> Tick(FEngineBase&amp; Engine) <span class="kw">override</span></td><td>阶段入口：每帧的核心 —— `PollEvents` + `ShouldClose` → `Engine.RequestExit()`</td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> EndFrame(FEngineBase&amp; Engine) <span class="kw">override</span></td><td>阶段入口：帧尾（泵事件的第二个落点）</td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> RequestExit(FEngineBase&amp; Engine) <span class="kw">override</span></td><td>阶段入口：`IExit` 阶段，响应退出请求</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> PreShutdown(FEngineBase&amp;) <span class="kw">override</span> {}</td><td>阶段入口（空实现）</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> PostShutdown(FEngineBase&amp;) <span class="kw">override</span> {}</td><td>阶段入口（空实现）</td></tr>
 </tbody></table></div>
 </div>
 </div></div>

@@ -186,7 +186,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table></div>
 </div>
 <div class="ent e-class" id="Public__Resource_h-3">
-<h3><span class="kind">类</span> FResourceSystem <span class="base">: FFrameExtension + IPipeline&lt;IPreInit, IInit, IPostInit, IBeginFrame, ITick, IEndFrame, IPreShutdown, IShutdown, IPostShutdown&gt; + FThreadedServer</span></h3>
+<h3><span class="kind">类</span> FResourceSystem <span class="base">: FFrameExtension + IPipeline&lt;IInit, ITick, IShutdown&gt; + FThreadedServer</span></h3>
 <div class="sect"><div class="doc">
 <p>资源系统：异步**传输服务器** + 类型化导入导出 + `FName` 目录。它挂在完整阶段序列上，因为异步传输的收尾必须落在确定的那一帧：`Initialize` 起 IO 线程，`Tick`（每帧）在**游戏线程**应用就绪的传输结果，`Shutdown` 停线程并清空目录。</p>
 <p>**为什么 `Tick` 才应用结果**：解码广播（带完成回调）会调用监听者（渲染镜像）并最终决定是否 `ReleaseBulk`，这些都必须发生在单一游戏线程上，否则监听者要在 IO 线程里碰 GPU。</p>
@@ -216,15 +216,9 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FResource* FindMutable(std::string_view AssetPath)</td><td>可变查找，专供内部的回填路径（导出的 `Readback`）；不存在返回 <span class="kw">nullptr</span></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">const</span> FResource* TryLoad(std::string_view AssetPath)</td><td>「先查目录，还没有就返回 <span class="kw">nullptr</span>」—— 名字直说它**不**发起加载（没有隐式同步 IO，异步导入必须显式调用）</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> ForEachResource(<span class="kw">const</span> std::function&lt;<span class="kw">void</span>(<span class="kw">const</span> Name::FName&amp;, <span class="kw">const</span> FResource&amp;)&gt;&amp; Fn) <span class="kw">const</span></td><td>按目录顺序遍历已加载资源。**遍历期间整个目录锁被持有**，所以 `Fn` 不许回到资源系统内部（不许在回调里 `Find`/`Import`）—— 这是刻意的强约束，换来的是一条不会中途变化的快照</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> PreInitialize(FEngineBase&amp;) <span class="kw">override</span> {}</td><td>阶段入口（空实现）</td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> Initialize(FEngineBase&amp; Engine) <span class="kw">override</span></td><td>阶段入口：启动 IO 线程（异步机制从这里开始可用）</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> PostInitialize(FEngineBase&amp;) <span class="kw">override</span> {}</td><td>阶段入口（空实现）</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> BeginFrame(FEngineBase&amp;) <span class="kw">override</span> {}</td><td>阶段入口（空实现）</td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> Tick(FEngineBase&amp; Engine) <span class="kw">override</span></td><td>阶段入口：在游戏线程应用就绪的 IO 结果并广播 —— 所有监听者回调都发生在这一个点上</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> EndFrame(FEngineBase&amp;) <span class="kw">override</span> {}</td><td>阶段入口（空实现）</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> PreShutdown(FEngineBase&amp;) <span class="kw">override</span> {}</td><td>阶段入口（空实现）</td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> Shutdown(FEngineBase&amp; Engine) <span class="kw">override</span></td><td>阶段入口：停 IO 线程并清空目录（对称于 Initialize）。作为本层自己的异步队列，它必须**自己排空**，不能指望调度器替它等</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> PostShutdown(FEngineBase&amp;) <span class="kw">override</span> {}</td><td>阶段入口（空实现）</td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>FResourceSystem()</td><td>私有构造：资源系统是**帧**（由 `FFrameBuilder` 装载/卸载），而不是随便 <span class="kw">new</span> 的普通对象</td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">bool</span> EnqueueImport(std::string SourcePath, std::string AssetPath, std::function&lt;<span class="kw">void</span>(std::span&lt;<span class="kw">const</span> std::uint8_t&gt;)&gt; OnBulkReady)</td><td>把「读文件」排给 IO 线程；字节就绪后在游戏线程回调 `OnBulkReady`（那里才造实例 + 解码）</td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>std::vector&lt;std::uint8_t&gt; ReadAssetFile(std::string_view SourcePath)</td><td>同步整文件读取（`FPaths` 解析 + ifstream）。**实现在 .cpp 里，头因此不引入 &lt;fstream&gt; / &lt;Paths&gt;**；失败返回空</td></tr>

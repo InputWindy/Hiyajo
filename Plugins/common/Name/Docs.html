@@ -156,7 +156,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table></div>
 </div>
 <div class="ent e-class" id="Public__Name_h-1">
-<h3><span class="kind">类</span> FNamePool <span class="base">: FFrameExtension, IPipeline&lt;IPreInit, IInit, IPostInit, IPreShutdown, IShutdown, IPostShutdown&gt;</span></h3>
+<h3><span class="kind">类</span> FNamePool <span class="base">: FFrameExtension, IPipeline&lt;IInit, IPostInit, IShutdown&gt;</span></h3>
 <div class="sect"><div class="doc">
 <p>全局驻留池 —— **一个帧**（挂 6 个 stage），因此上线 / 下线由调度图排序：所有 `Intern` 都发生在它 `Initialize` 之后、`Shutdown` 之前。</p>
 <p>**为什么「只增不减」**：释放驻留记录会和 `FName` 的值语义直接冲突 —— id 可以活得比一次回收更久（它已被拷进别的对象 / 写进存档）。因此本设计的取舍是：池在生命期内只增长，换来 id 永久有效。</p>
@@ -173,12 +173,9 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <h4>接口</h4>
 <table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
 <tr><td><span class="acc a-private">private</span></td><td>MAHO_DECLARE_FRAME(FNamePool)</td><td>声明帧身份（稳定字面量名字 + `CreateFrame` 工厂），宿主可断言它先于使用者就绪</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> PreInitialize(FEngineBase&amp;) <span class="kw">override</span></td><td>空：本帧不需要更早的时钟点</td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> Initialize(FEngineBase&amp;) <span class="kw">override</span></td><td>发布全局池访问点（`GetNamePool()` 从这里开始非空）</td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> PostInitialize(FEngineBase&amp;) <span class="kw">override</span></td><td>空</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> PreShutdown(FEngineBase&amp;) <span class="kw">override</span></td><td>空</td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> Shutdown(FEngineBase&amp;) <span class="kw">override</span></td><td>清空并撤销全局访问点。**注意顺序**：池的释放发生在所有使用者之后（依赖图保证），因为 `FName` 的 `ToString()` 需要池还在</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> PostShutdown(FEngineBase&amp;) <span class="kw">override</span></td><td>空</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>FName Intern(std::string_view Str)</td><td>驻留一个字符串并返回其规范 `FName`（线程安全）。已存在则直接返回旧 id —— **同一个文本永远映射到同一个 id**，这是 `==` 能 O(1) 的前提</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] std::string_view StringForId(std::uint32_t Id) <span class="kw">const</span></td><td>`Intern` 的逆：取该 id 对应的文本。**只增不减**的设计让返回值可以安全地做成视图</td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> free()</td><td>释放池内容（被 `Shutdown` 调用）：清两份容器，保证再次 `Initialize` 从空开始</td></tr>

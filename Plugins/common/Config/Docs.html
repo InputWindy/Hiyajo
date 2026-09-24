@@ -142,7 +142,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table>
 </div>
 <div class="ent e-class" id="Public__Config_h-0">
-<h3><span class="kind">类</span> FConfig <span class="base">: FFrameExtension, IPipeline&lt;IPreInit, IInit, IPostInit, IPreShutdown, IShutdown, IPostShutdown&gt;</span></h3>
+<h3><span class="kind">类</span> FConfig <span class="base">: FFrameExtension, IPipeline&lt;IInit, IShutdown&gt;</span></h3>
 <div class="sect"><div class="doc">
 <p>配置服务本体。**它是一个帧**（挂 6 个 stage），因此它的建立与拆除由调度图排序，而不是靠某个全局构造顺序。</p>
 <p>**为什么不持有锁**：配置在初始化阶段装载完就不再变化（`SetString` 是给启动流程覆盖用的），读路径上不需要同步原语 —— 为此付出的代价是「运行期跨线程写配置」不受保护，这也是刻意的约束。</p>
@@ -156,12 +156,8 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <h4>接口</h4>
 <table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
 <tr><td><span class="acc a-private">private</span></td><td>MAHO_DECLARE_FRAME(FConfig)</td><td>声明帧身份：给出稳定的字符串字面量名字与 `CreateFrame` 工厂，让 `FFrameBuilder` 能按名字引它、按模块路径装载它（**名字是字面量**才使身份键安全）</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> PreInitialize(FEngineBase&amp;) <span class="kw">override</span></td><td>空：见上面的 stage 分工表</td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> Initialize(FEngineBase&amp;) <span class="kw">override</span></td><td>服务上线：让 `GetConfig()` 指向本实例</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> PostInitialize(FEngineBase&amp;) <span class="kw">override</span></td><td>空</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> PreShutdown(FEngineBase&amp;) <span class="kw">override</span></td><td>空</td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> Shutdown(FEngineBase&amp;) <span class="kw">override</span></td><td>服务下线：清空全局访问点（对称于 `Initialize`，避免析构后仍被 `GetConfig()` 拿到）</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> PostShutdown(FEngineBase&amp;) <span class="kw">override</span></td><td>空</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">bool</span> Load(std::string_view Path)</td><td>解析一个 INI 文件：`[Section]` 开新段，`Key=Value` 填键；返回是否装载成功。重复 `Load` 的语义是**并入**（后到者覆盖同名键）</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] std::optional&lt;std::string&gt; GetString(std::string_view Section, std::string_view Key) <span class="kw">const</span></td><td>取字符串；不存在返回 `nullopt`（调用方必须显式处理「没配」）</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] std::int64_t GetInt(std::string_view Section, std::string_view Key, std::int64_t Default = 0) <span class="kw">const</span></td><td>按整数解析；键缺失或解析失败时给 `Default`。**为什么给默认值**：数值配置绝大多数有合理缺省，逼调用方写 `optional` 分支只会把「用默认」这件事写得更啰嗦</td></tr>

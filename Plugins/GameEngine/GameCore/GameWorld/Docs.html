@@ -372,7 +372,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table></div>
 </div>
 <div class="ent e-class" id="Public__GameWorld_h-7">
-<h3><span class="kind">类</span> FGameWorld <span class="base">: FFrameExtension + IPipeline&lt;10 个引擎 stage&gt; + FFrameBuilder&lt;FGameWorld&gt;</span></h3>
+<h3><span class="kind">类</span> FGameWorld <span class="base">: FFrameExtension + IPipeline&lt;IInit, ITick, IShutdown&gt; + FFrameBuilder&lt;FGameWorld&gt;</span></h3>
 <div class="sect"><div class="doc">
 <p>世界帧：两个基类（`FFrameExtension` 声明层 + `IPipeline&lt;...&gt;` 有序 stage 列表），外加**第三个** —— `FFrameBuilder&lt;FGameWorld&gt;` 使它同时是子收集器，拥有自己的图、自己的线程池、自己的世界系统实例。</p>
 <p>它**全部 10 个引擎 stage 都实现**（接口是纯虚的，一个都不能漏），但只有 `Initialize` / `Tick` / `Shutdown` 有内容：世界只负责托管与调度，ECS 的一帧在 `Tick` 里展开。</p>
@@ -404,11 +404,8 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> SetFixedStep(<span class="kw">float</span> Seconds)</td><td>设置固定步长（秒）；改小时会让累加器一次跑更多步</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">float</span> GetFixedStep() <span class="kw">const</span></td><td>当前固定步长（默认 1/60 s）</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">float</span> GetDeltaSeconds() <span class="kw">const</span></td><td>上一帧的真实经过时间（固定步进累加用它）</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> PreInitialize(FEngineBase&amp;) <span class="kw">override</span> / <span class="kw">void</span> PostInitialize(...) <span class="kw">override</span></td><td>空实现：stage 序列是编译期类型，子图在首次使用时才建，没有东西要在 init 阶段准备</td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> Initialize(FEngineBase&amp;) <span class="kw">override</span></td><td>登记全局访问器、起表计时、把累加器清零，做一次对象模型自检（建实体 → 挂 `FTransform` → 读回），最后 `Install&lt;FUISystem&gt;()` 装入世界系统</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> BeginFrame(FEngineBase&amp;) <span class="kw">override</span> / <span class="kw">void</span> EndFrame(...) <span class="kw">override</span></td><td>空实现：世界不在引擎的帧边界做事，一切都发生在 `Tick` 里</td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> Tick(FEngineBase&amp;) <span class="kw">override</span></td><td>世界的一帧，四步：① `Wait()` 帧首栅栏（上一帧的 post 组是**不等**就派发的，在这里被收掉，同时保证后面改帧集时没有活节点在路上 —— 改动一个在使用中的帧集 = 用已释放的节点）；② `FlushPendingUpdates&lt;IOnInstalled, IPreUnInstall&gt;()` **安全点**（系统装卸唯一发生的地方，此刻图上空，收集器自己会发现帧集变了并重查）；③ 算 dt；④ `Execute&lt;FInputStages&gt;()` + 立即 `Wait`、`Execute&lt;FFixedStages&gt;()` + 每步 `Wait`、再 `Execute&lt;FPostStages&gt;()`（**不 trailing wait** ⇒ 与下一帧帧首 `Wait` 流水）</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> PreShutdown(FEngineBase&amp;) <span class="kw">override</span> / <span class="kw">void</span> PostShutdown(...) <span class="kw">override</span></td><td>空实现：真正的排空在 `Shutdown` 里，两侧不需要额外的钩子</td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> Shutdown(FEngineBase&amp;) <span class="kw">override</span></td><td>顺序是这条函数的关键：① `Wait()` 排空；② **先清自己的 `ComponentPools`** —— 池里的对象的析构函数活在世界系统的模块里，图的节点也指着它们的实例，晚一步就会在已卸载的模块里跑代码（硬 AV，不是泄漏）；③ 再 `UninstallAll()` + `FlushPendingUpdates` 逐个卸出系统 —— **走上 teardown 流水线**，每个系统的 `IPreUnInstall` 会在实例销毁前跑（裸的成员析构会跳过它、漏掉跨模块订阅）；**按名字**卸出，因为名字比模块活得久；④ 清掉全局访问器</td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">template</span> &lt;<span class="kw">typename</span> C&gt; TComponentPool&lt;C&gt;* GetOrAddPool()</td><td>私有：在异构池集合里按 `dynamic_cast` 找 C 的池，没有就新建再返回裸指针。**类型擦除的代价就在这里**：世界不是类模板，只能用 RTTI 找回类型</td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">template</span> &lt;<span class="kw">typename</span> C&gt; TComponentPool&lt;C&gt;* GetPool()</td><td>私有：只查找不创建（`GetComponent` / `RemoveComponent` / `GetAllWithComponent` 都走它）</td></tr>

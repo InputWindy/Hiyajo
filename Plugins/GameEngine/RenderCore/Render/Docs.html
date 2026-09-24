@@ -618,7 +618,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table></div>
 </div>
 <div class="ent e-class" id="Public__Render_h-12">
-<h3><span class="kind">类</span> FRender <span class="base">: FFrameExtension, IPipeline&lt;IPreInit, IInit, IPostInit, IBeginFrame, ITick, IEndFrame, IPreShutdown, IShutdown, IPostShutdown&gt;, FFrameBuilder&lt;FRender&gt;</span></h3>
+<h3><span class="kind">类</span> FRender <span class="base">: FFrameExtension, IPipeline&lt;IPreInit, IInit, IPostInit, IBeginFrame, ITick, IEndFrame, IShutdown&gt;, FFrameBuilder&lt;FRender&gt;</span></h3>
 <div class="sect"><div class="doc">
 <p>渲染子系统：宿主引擎里的一个层（装载 `IInit` / `ITick` 等），同时是渲染特性自己的层收集器。它也是 RDG 资源池的门面。</p>
 <p>**它自己不干活**：帧工作由 stage 序列（`FRenderStages`）驱动，`FRender::Tick` 只是把序列交给 `Execute&lt;...&gt;()`；交换链的帧生命期（取值 / 结束 + 呈现）挂在 `BeginFrame` / `EndFrame` 这两个**引擎 stage** 上，`EndFrame` 先 `Wait()` 图的栅栏再 `RHI-&gt;EndFrame()`，于是呈现一定等到所有提交完成。</p>
@@ -669,9 +669,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> PreInitialize(FEngineBase&amp;) <span class="kw">override</span></td><td>（引擎 stage `IPreInit`）最早的准备</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Initialize(FEngineBase&amp; Engine) <span class="kw">override</span></td><td>（引擎 stage `IInit`）起 RHI（有窗口才起）+ 着色器服务器 + 资源池，装载自己的渲染特性，并登记资产事件订阅</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> PostInitialize(FEngineBase&amp; Engine) <span class="kw">override</span></td><td>（`IPostInit`）初始化收尾</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> PreShutdown(FEngineBase&amp;) <span class="kw">override</span></td><td>（`IPreShutdown`）卸载特性前的准备</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Shutdown(FEngineBase&amp; Engine) <span class="kw">override</span></td><td>（`IShutdown`）卸订阅 → 排空异步工作 → 关设备 → 释放池。**先排空自己的异步工作**（着色器编译、录制任务的池）再拆，这是层与调度器的契约</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> PostShutdown(FEngineBase&amp;) <span class="kw">override</span></td><td>（`IPostShutdown`）收尾</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> BeginFrame(FEngineBase&amp;) <span class="kw">override</span></td><td>（引擎 stage `IBeginFrame`）**空**。交换链帧的开始是帧头 stage 的事（`FScene::IBeginRender` → `BeginSwapchainFrame`），放在图里让它的顺序成为声明边，而不是「这个宿主 stage 恰好在批之前跑」</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Tick(FEngineBase&amp; Engine) <span class="kw">override</span></td><td>（引擎 stage `ITick`）**跑渲染图**：把 `FRenderStages` 交给 `Execute&lt;...&gt;()` （重查帧集 / 建批 / 提交）。**不再有帧首排空**：帧边界是收集器图里的声明边，逐帧排空只会把环按平；静默归变更路径（`FlushPendingUpdates` 在有变更时完整 `Wait()`）</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> EndFrame(FEngineBase&amp;) <span class="kw">override</span></td><td>（引擎 stage `IEndFrame`）**空**：帧由它的**尾 stage** 关闭（`FScene::IPresent` → `EndSwapchainFrame`）。在这里关就需要「等那个 stage」，而那个等待的理由已经不存在 —— 帧命令缓冲唯一的录制（blit）与关闭在同一 stage 里</td></tr>

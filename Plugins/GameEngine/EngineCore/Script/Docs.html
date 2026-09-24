@@ -148,7 +148,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table></div>
 </div>
 <div class="ent e-class" id="Public__Script_h-1">
-<h3><span class="kind">类</span> FScriptSystem <span class="base">: FFrameExtension + IPipeline&lt;IPreInit, IInit, IPostInit, IPreShutdown, IShutdown, IPostShutdown&gt;</span></h3>
+<h3><span class="kind">类</span> FScriptSystem <span class="base">: FFrameExtension + IPipeline&lt;IInit, IShutdown&gt;</span></h3>
 <div class="sect"><div class="doc">
 <p>脚本宿主：管多个语言后端，并把便利接口转发给**活动语言**（第一个注册的）。**它只挂初始化/关闭这几个阶段，没有 Tick** —— 因为脚本不会被引擎自动调用：是谁想调（游戏逻辑、编辑器面板）谁就调 `Call` / `DoFile`，这使脚本的调用时机由调用方掌握，而不是被帧循环强加一遍。</p>
 <p>后端所有权在宿主：`RegisterLanguage` 即接管 `unique_ptr`，`Shutdown` 时按相反顺序逐个拆 —— 语言之间的依赖（如 Python 里嵌 Lua 表）于是有一个确定的拆除次序，而不是随静态析构乱序。</p>
@@ -178,12 +178,8 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">bool</span> Call(<span class="kw">const</span> <span class="kw">char</span>* FunctionName, <span class="kw">float</span> Arg0)</td><td>在活动语言上调用全局函数（一个 <span class="kw">float</span> 参数）</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">bool</span> DoFile(<span class="kw">const</span> <span class="kw">char</span>* FilePath)</td><td>在活动语言上执行脚本文件</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">void</span>* TryGetState()</td><td>活动语言的不透明状态（`sol::state*` / `PyObject*` / …）；用于绑定代码。名字里的 `Try` 是在提示「可能没有活动语言」</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> PreInitialize(FEngineBase&amp;) <span class="kw">override</span> {}</td><td>阶段入口（空实现）</td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> Initialize(FEngineBase&amp; Engine) <span class="kw">override</span></td><td>阶段入口：把每个已注册后端带起来（含把排队的类型绑定器跑完）</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> PostInitialize(FEngineBase&amp;) <span class="kw">override</span> {}</td><td>阶段入口（空实现）</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> PreShutdown(FEngineBase&amp;) <span class="kw">override</span> {}</td><td>阶段入口（空实现）</td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> Shutdown(FEngineBase&amp; Engine) <span class="kw">override</span></td><td>阶段入口：逐个 `Shutdown` 后端并释放（与初始化对称）。顺序在这里由宿主单点决定，避免「谁先析构」变成静态初始化顺序问题</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> PostShutdown(FEngineBase&amp;) <span class="kw">override</span> {}</td><td>阶段入口（空实现）</td></tr>
 </tbody></table></div>
 </div>
 <div class="ent e-macro" id="Public__Script_h-2">
