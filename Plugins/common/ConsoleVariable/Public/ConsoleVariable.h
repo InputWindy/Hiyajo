@@ -26,6 +26,11 @@ enum class ECVarFlags : std::uint32_t
 	None = 0,
 	Cheat = 1u << 0,     // cheat-only
 	ReadOnly = 1u << 1,  // cannot be changed at runtime
+	/** Stays part of a SHIPPING build: quality / gameplay settings a player switches at runtime.
+	 *  Everything NOT carrying this flag is a development knob, and a Shipping build does not
+	 *  register it (the variable degrades to a constant -- see TAutoConsoleVariable). The safe
+	 *  default is "not registered nowhere": a setting that must survive release must say so. */
+	Shipping = 1u << 2,
 };
 
 [[nodiscard]] constexpr bool HasFlag(ECVarFlags Flags, ECVarFlags Test)
@@ -112,21 +117,30 @@ template <> struct TCVarType<bool>        { static constexpr ECVarType Value = E
 template <> struct TCVarType<std::string> { static constexpr ECVarType Value = ECVarType::String; };
 
 /**
- 	 * Static console variable - registers on construction (static init), like
+ 	* Static console variable - registers on construction (static init), like
  * UE's TAutoConsoleVariable.
  *
  *   static TAutoConsoleVariable<int> CVarMaxFPS("r.MaxFPS", 60, "Max FPS");
+ *   static TAutoConsoleVariable<int> CVarQuality("r.Quality", 2, "quality tier", ECVarFlags::Shipping);
  *
- *   const int MaxFPS = CVarMaxFPS.GetValue();
- *   CVarMaxFPS.Set(120);
+ * A SHIPPING build registers only the variables flagged `ECVarFlags::Shipping` (see
+ * Core/BuildConfig.h: a release carries what the product needs, not the development knobs). An
+ * unregistered variable is not gone -- `GetValue`/`Set` keep working on its own copy, so a setting
+ * a release pruned reads as its default instead of breaking the build.
  */
 template <typename T>
 class TAutoConsoleVariable
 {
 public:
 	TAutoConsoleVariable(std::string_view InName, T Default, std::string_view Description, ECVarFlags Flags = ECVarFlags::None)
-		: Name(InName)
+		: Name(InName), Value(Default)
 	{
+#if defined(MAHO_BUILD_SHIPPING)
+		if (!HasFlag(Flags, ECVarFlags::Shipping))
+		{
+			return;   // development knob: no registry entry, its own value is the whole story
+		}
+#endif
 		Handle = FConsoleVariable::Get().Register(
 			InName,
 			TCVarType<T>::Value,
@@ -137,16 +151,27 @@ public:
 
 	[[nodiscard]] T GetValue() const
 	{
+		if (Handle == nullptr)
+		{
+			return Value;   // pruned by the build configuration: the local copy IS the value
+		}
 		if constexpr (std::is_same_v<T, int>)         return Handle->GetInt();
 		else if constexpr (std::is_same_v<T, float>)  return Handle->GetFloat();
 		else if constexpr (std::is_same_v<T, bool>)   return Handle->GetBool();
 		else                                          return Handle->GetString();
 	}
 
-	void Set(T Value)
+	void Set(T NewValue)
 	{
-		Handle->Set(ToString(Value));
+		Value = NewValue;
+		if (Handle == nullptr)
+		{
+			return;
+		}
+		Handle->Set(ToString(NewValue));
 	}
+
+	[[nodiscard]] bool IsRegistered() const { return Handle != nullptr; }
 
 	[[nodiscard]] std::string_view GetName() const { return Name; }
 
@@ -159,6 +184,7 @@ private:
 	}
 
 	std::string Name;
+	T Value;
 	IConsoleVariable* Handle = nullptr;
 };
 
