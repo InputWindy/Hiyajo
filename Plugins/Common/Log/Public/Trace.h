@@ -1,5 +1,7 @@
 #pragma once
 
+#include <Core/BuildConfig.h>
+
 // Trace -- CPU scope tracing for the profiling UI. It lives in the LOG plugin: the log plugin owns
 // the process's diagnostics (the sinks + the `r.Trace` CVar), and the trace file is one of them, so
 // the engine core keeps no tracing vocabulary at all.
@@ -104,6 +106,8 @@ MAHO_LOG_API std::uint64_t TraceTaskFloorMicros();
 /** Flush every thread's pending events to the trace file. Called at exit; callable by hand so a
  *  host can snapshot mid-run (each call appends whatever is buffered). */
 MAHO_LOG_API void TraceFlush();
+
+#if MAHO_WITH_TRACE
 
 /** A slice of a STATIC string -- what every name in an event is (a literal, a stage's
  *  `type_info::name()`, `__FUNCTION__`). The shorten-and-strip-namespace work is a slice, never a
@@ -226,6 +230,8 @@ private:
 	std::uint64_t Start = 0;
 };
 
+#endif // MAHO_WITH_TRACE
+
 } // namespace Maho
 
 /** Unique name for the scope object (a plain counter, so it works at any scope). */
@@ -286,6 +292,15 @@ inline const std::type_info* StagePredecessorOf(const TFrame*, const std::type_i
 
 } // namespace Maho
 
+// -- the three macros -------------------------------------------------------------------
+//
+// IN SHIPPING THEY EXPAND TO NOTHING, which is the whole point of the capability macro: no scope
+// object, no clock read, no string, no call -- the instrumentation is not in the binary at all. The
+// price is the same one the check macros pay (Core/Fatal.h): a macro whose arguments carry side
+// effects would lose them, so instrument with statements, not with expressions that must run.
+
+#if MAHO_WITH_TRACE
+
 /**
  * Trace a STAGE body. Put it as the FIRST statement of the body: the bar it opens is the stage's bar
  * (the node bar of the frame graph), and it must cover the whole body.
@@ -305,7 +320,6 @@ inline const std::type_info* StagePredecessorOf(const TFrame*, const std::type_i
 	::Maho::FStageTrace MAHO_TRACE_CONCAT(_MahoStageTrace, __LINE__)(                \
 		this, typeid(StageType), TraceGroupName(), StaticName().data(), Label, Tip,  \
 		::Maho::StagePredecessorOf(this, typeid(StageType)))
-
 /**
  * Trace one hand-labelled SECTION inside a stage (or inside any helper a stage calls). It inherits
  * the ambient row, so it lands on the frame that is running and nests inside that stage's bar.
@@ -330,3 +344,16 @@ inline const std::type_info* StagePredecessorOf(const TFrame*, const std::type_i
  */
 #define MAHO_TRACE_SCOPE(Group, Tip) \
 	::Maho::FScopeTrace MAHO_TRACE_CONCAT(_MahoScopeTrace, __LINE__)(Group, Tip, __FUNCTION__)
+
+#else // MAHO_WITH_TRACE
+
+/** Shipping: the instrumentation is not compiled. */
+#define MAHO_TRACE_STAGE(StageType, Label, Tip) ((void)0)
+
+/** Shipping: the instrumentation is not compiled. */
+#define MAHO_TRACE_SECTION(Label, Tip) ((void)0)
+
+/** Shipping: the instrumentation is not compiled. */
+#define MAHO_TRACE_SCOPE(Group, Tip) ((void)0)
+
+#endif // MAHO_WITH_TRACE

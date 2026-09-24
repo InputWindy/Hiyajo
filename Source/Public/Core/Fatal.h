@@ -1,5 +1,6 @@
 #pragma once
 
+#include <Core/BuildConfig.h>
 #include <Core/Export.h>
 
 #include <cstdio>
@@ -19,6 +20,12 @@ MAHO_API void InstallFatalHandlers();
 } // namespace Maho
 
 // -- UE-style check/ensure macros -------------------------------------------------------
+//
+// WHICH OF THEM EXIST IS THE BUILD CONFIGURATION'S BUSINESS (`MAHO_DO_*`, see Core/BuildConfig.h):
+// Debug/Release keep the checks, Shipping compiles them out entirely -- the expression is not even
+// evaluated, so it must not carry side effects (use MAHO_VERIFY for anything that must run).
+
+#if MAHO_DO_CHECK
 
 /**
  * MAHO_CHECK -- hard invariant. False -> ReportFatal (crash). The expression is
@@ -41,6 +48,16 @@ MAHO_API void InstallFatalHandlers();
 		}                                                                             \
 	} while (0)
 
+#else
+
+/** Shipping: nothing at all -- the expression is not evaluated (that is the point). */
+#define MAHO_CHECK(Expr) ((void)0)
+
+/** Shipping: nothing at all -- the expression is not evaluated. */
+#define MAHO_CHECKF(Expr, Fmt, ...) ((void)0)
+
+#endif // MAHO_DO_CHECK
+
 /**
  * MAHO_VERIFY -- like MAHO_CHECK but the expression is ALWAYS evaluated (side
  * effects preserved even when assertions are off).
@@ -51,6 +68,8 @@ MAHO_API void InstallFatalHandlers();
 			::Maho::ReportFatal("MAHO_VERIFY failed: " #Expr " at " __FILE__);       \
 		}                                                                             \
 	} while (0)
+
+#if MAHO_DO_ENSURE
 
 /**
  * MAHO_ENSURE -- soft invariant. False -> report ONCE (no crash), then continue.
@@ -65,7 +84,15 @@ MAHO_API void InstallFatalHandlers();
 		}                                                                             \
 	} while (0)
 
-/** MAHO_ENSURE_NOT_NULL -- soft null guard: report once when null, then skip. */
+#else
+
+/** Shipping: the report is gone too -- but the guard below still has to read. */
+#define MAHO_ENSURE(Expr) ((void)0)
+
+#endif // MAHO_DO_ENSURE
+
+/** MAHO_ENSURE_NOT_NULL -- soft null guard: report once when null, then skip.
+ *  Built on MAHO_ENSURE, so the null check itself survives Shipping (only the report goes). */
 #define MAHO_ENSURE_NOT_NULL(PtrExpr, Name)                                           \
 	MAHO_ENSURE((PtrExpr) != nullptr);                                                \
 	for (auto* Name = (PtrExpr); Name != nullptr; Name = nullptr)

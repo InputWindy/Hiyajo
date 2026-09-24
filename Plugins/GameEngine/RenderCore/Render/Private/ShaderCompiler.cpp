@@ -3,7 +3,7 @@
 #include <Log.h>
 #include <Trace.h>
 
-#ifdef MAHO_WITH_GLSLANG
+#if MAHO_WITH_GLSLANG
 #include <glslang/Public/ShaderLang.h>
 #include <SPIRV/GlslangToSpv.h>
 #endif
@@ -22,7 +22,7 @@ namespace
  *  server (the RHI's device names its lane the same way). */
 constexpr const char* kShaderCompilerLane = "ShaderCompiler";
 
-#ifdef MAHO_WITH_GLSLANG
+#if MAHO_WITH_GLSLANG
 
 EShLanguage ToGlslangStage(ERHIShaderStage Stage)
 {
@@ -155,14 +155,14 @@ FShaderCompilerServer::FShaderCompilerServer() = default;
 FShaderCompilerServer::~FShaderCompilerServer()
 {
 	Shutdown();
-#ifdef MAHO_WITH_GLSLANG
+#if MAHO_WITH_GLSLANG
 	glslang::FinalizeProcess();
 #endif
 }
 
 bool FShaderCompilerServer::Initialize()
 {
-#ifdef MAHO_WITH_GLSLANG
+#if MAHO_WITH_GLSLANG
 	glslang::InitializeProcess();
 	MAHO_LOG_CORE_INFO("FShaderCompilerServer: glslang initialized");
 #endif
@@ -205,7 +205,7 @@ FShaderCompileResult FShaderCompilerServer::CompileStage(const FShaderCompileDes
 	FShaderCompileResult Result;
 	Result.bSuccess = false;
 
-#ifdef MAHO_WITH_GLSLANG
+#if MAHO_WITH_GLSLANG
 	if (Desc.Source.empty())
 	{
 		Result.ErrorLog = "FShaderCompilerServer: empty source";

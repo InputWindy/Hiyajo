@@ -489,7 +489,7 @@ add_custom_command(TARGET EntryPoint POST_BUILD
 # runtime they all resolve each other (both Maho.dll and the plugin DLLs must
 # sit next to the EntryPoint exe). Multi-config (MSVC): per-config suffix.
 set(_MAHO_BIN "${{CMAKE_BINARY_DIR}}/Binaries/")
-foreach(_Cfg Debug Release RelWithDebInfo MinSizeRel)
+foreach(_Cfg Debug Release Shipping)
 	string(TOUPPER "${{_Cfg}}" _CfgUp)
 	set_target_properties(Maho PROPERTIES "RUNTIME_OUTPUT_DIRECTORY_${{_CfgUp}}" "${{_MAHO_BIN}}/${{_Cfg}}")
 	set_target_properties(EntryPoint PROPERTIES "RUNTIME_OUTPUT_DIRECTORY_${{_CfgUp}}" "${{_MAHO_BIN}}/${{_Cfg}}")
@@ -1076,6 +1076,115 @@ def _write_plugin_catalog(
 	return catalog
 
 
+# -- build configuration matrix ---------------------------------------------------------
+#
+# TWO ORTHOGONAL AXES (spec: openspec/changes/add-build-configuration): BuildType picks the TARGET
+# (Runtime|Editor), Configuration picks the DIAGNOSTICS (Debug|Release|Shipping). Everything else --
+# axis macros, behavior macros (MAHO_DO_*) and capability macros (MAHO_WITH_*) -- is DERIVED HERE and
+# injected as the single global definition site. Nothing else may define them: a plugin .cmake that
+# tries is a hard error (see _reject_handwritten_config_defs), which is what keeps the matrix
+# reviewable instead of drifting back into a pile of switches.
+
+BUILD_TYPES = ("Runtime", "Editor")
+BUILD_CONFIGURATIONS = ("Debug", "Release", "Shipping")
+
+# Which cells are self-contradictory: an editor needs the very facilities Shipping removes.
+ILLEGAL_CELLS = {("Editor", "Shipping")}
+
+_CONF_GENEX = "$<CONFIG:Debug>,$<CONFIG:Release>,$<CONFIG:Shipping>"
+
+
+def _config_def(name: str, debug: str, release: str, shipping: str) -> str:
+	"""One macro whose value depends on the configuration, as a single CMake argument.
+
+	Emitted per configuration with a fallback for the ones the generator does not know, so the
+	argument is NEVER empty (a bare "-D" would reach the compiler) and an unknown configuration is
+	reported in C++ rather than silently taking a default.
+	"""
+	return (
+		f"$<$<CONFIG:Debug>:{name}={debug}>"
+		f"$<$<CONFIG:Release>:{name}={release}>"
+		f"$<$<CONFIG:Shipping>:{name}={shipping}>"
+		f"$<$<NOT:$<OR:{_CONF_GENEX}>>:{name}={debug}>"
+	)
+
+
+def _build_config_block(build_type: str, configuration: str) -> str:
+	"""The compile-definition block for one declared cell (the axes), as CMake source."""
+	defs = [
+		# -- axis: exactly one configuration, plus the guard for "not one of ours"
+		(
+			"$<$<CONFIG:Debug>:MAHO_BUILD_DEBUG=1>"
+			"$<$<CONFIG:Release>:MAHO_BUILD_RELEASE=1>"
+			"$<$<CONFIG:Shipping>:MAHO_BUILD_SHIPPING=1>"
+			f"$<$<NOT:$<OR:{_CONF_GENEX}>>:MAHO_BUILD_UNSUPPORTED=1>"
+		),
+	]
+	if build_type == "Editor":
+		# The target axis is per PROJECT (a project is generated for one target), so it is plain.
+		defs.append("MAHO_EDITOR_BUILD")
+	# -- behavior: which checks exist (Debug keeps all, Release drops the expensive ones,
+	#    Shipping drops the checks themselves)
+	defs.append(_config_def("MAHO_DO_CHECK", "1", "1", "0"))
+	defs.append(_config_def("MAHO_DO_ENSURE", "1", "1", "0"))
+	defs.append(_config_def("MAHO_DO_SLOW_CHECK", "1", "0", "0"))
+	defs.append(_config_def("MAHO_DO_CONTAINER_CHECKS", "1", "0", "0"))
+	# -- capability: which facilities exist (defaults; a project may override them)
+	defs.append(_config_def("MAHO_WITH_TRACE", "1", "1", "0"))
+	defs.append(_config_def("MAHO_WITH_LOGGING", "1", "1", "0"))
+	defs.append(_config_def("MAHO_WITH_CRASH_REPORT", "1", "1", "1"))
+	defs.append(_config_def("MAHO_WITH_RHI_VALIDATION", "1", "0", "0"))
+	defs.append(_config_def("MAHO_WITH_GLSLANG", "1", "1", "0"))
+	defs.append(_config_def("MAHO_WITH_STATS", "1", "1", "0"))
+	# The configurations the solution offers. Shipping is NOT offered for an Editor project: the
+	# combination is self-contradictory, so it should not even be selectable (Core/BuildConfig.h
+	# still rejects it, for a hand-edited toolchain).
+	configs = "Debug;Release" if build_type == "Editor" else "Debug;Release;Shipping"
+	body = "\n".join(f"\t{d}" for d in defs)
+	return (
+		f"# -- build configuration matrix (derived; spec: openspec/changes/add-build-configuration)\n"
+		f"# BuildType={build_type}, Configuration={configuration}. Values are per configuration, so this\n"
+		f"# one generated project builds all of them; Core/BuildConfig.h owns the fallbacks + guards.\n"
+		f'set(CMAKE_CONFIGURATION_TYPES "{configs}" CACHE STRING "Maho configurations" FORCE)\n'
+		f"# Shipping is Release's optimization with the diagnostics removed by the macros below -- the\n"
+		f"# difference is not a compiler flag, so the flags are simply Release's.\n"
+		f'set(CMAKE_CXX_FLAGS_SHIPPING "${{CMAKE_CXX_FLAGS_RELEASE}}")\n'
+		f'set(CMAKE_EXE_LINKER_FLAGS_SHIPPING "${{CMAKE_EXE_LINKER_FLAGS_RELEASE}}")\n'
+		f'set(CMAKE_SHARED_LINKER_FLAGS_SHIPPING "${{CMAKE_SHARED_LINKER_FLAGS_RELEASE}}")\n'
+		f"add_compile_definitions(\n{body}\n)\n"
+	)
+
+
+def _reject_handwritten_config_defs(infos: dict[str, Any], names: list[str]) -> None:
+	"""Refuse a plugin .cmake that defines a build-configuration macro by hand.
+
+	Those macros have exactly one owner (this file): a second definition site is how the matrix rots
+	-- the define stops matching the axes, and nobody notices until a Shipping build ships with its
+	checks still in. A CMake *variable* such as MAHO_BUILD_DIR (Tools/build_subplugins.cmake) is not a
+	compile definition and is not affected.
+	"""
+	pattern = re.compile(r"compile_definitions\s*\(([^)]*)\)", re.IGNORECASE | re.DOTALL)
+	offenders: list[str] = []
+	for name in names:
+		info = infos.get(name)
+		if not info or not info.get("disk_dir"):
+			continue
+		cmake_file = Path(info["disk_dir"]) / f"{info['dir_name']}.cmake"
+		if not cmake_file.is_file():
+			continue
+		text = cmake_file.read_text(encoding="utf-8", errors="replace")
+		for match in pattern.finditer(text):
+			if re.search(r"\bMAHO_(BUILD|DO|WITH)_", match.group(1)):
+				line = text[: match.start()].count("\n") + 1
+				offenders.append(f"{cmake_file}:{line}")
+	if offenders:
+		raise ValueError(
+			"Build-configuration macros are derived by the generator, not written by hand "
+			"(spec: openspec/changes/add-build-configuration). Definition found in:\n  "
+			+ "\n  ".join(offenders)
+		)
+
+
 def _write_cmake_lists(
 	project_dir: Path,
 	project_name: str,
@@ -1096,9 +1205,26 @@ def _write_cmake_lists(
 	if not isinstance(build_type, str) or not build_type.strip():
 		build_type = "Runtime"
 	build_type = build_type.strip()
-	if build_type not in ("Runtime", "Editor"):
+	if build_type not in BUILD_TYPES:
 		raise ValueError(
 			f"Invalid .cproject BuildType (must be Runtime|Editor, got {build_type!r})"
+		)
+	# Configuration is the OTHER axis (default Debug): it decides which diagnostics exist, and the
+	# generator derives every behavior/capability macro from the pair -- see _build_config_block.
+	configuration = cproject_data.get("Configuration", "Debug")
+	if not isinstance(configuration, str) or not configuration.strip():
+		configuration = "Debug"
+	configuration = configuration.strip()
+	if configuration not in BUILD_CONFIGURATIONS:
+		raise ValueError(
+			"Invalid .cproject Configuration "
+			f"(must be {'|'.join(BUILD_CONFIGURATIONS)}, got {configuration!r})"
+		)
+	if (build_type, configuration) in ILLEGAL_CELLS:
+		raise ValueError(
+			f"Invalid .cproject cell: BuildType={build_type} x Configuration={configuration}. "
+			"An editor needs the facilities Shipping removes -- ship an editor with "
+			"'BuildType=Editor, Configuration=Release'."
 		)
 	infos = _all_plugin_infos(engine_root, project_dir)
 	if build_type == "Runtime":
@@ -1137,7 +1263,8 @@ def _write_cmake_lists(
 		else ""
 	)
 
-	global_defs = "add_compile_definitions(MAHO_EDITOR_BUILD)" if build_type == "Editor" else ""
+	_reject_handwritten_config_defs(infos, selected)
+	global_defs = _build_config_block(build_type, configuration)
 	# Engine layer type = the host plugin's MAHO_DECLARE_ENGINE first arg (a
 	# generated project is always F{project_name}); fall back to the plain name.
 	engine_layer_type = _layer_type_from_plugin(host_dir) or project_name

@@ -200,10 +200,12 @@ private:
 
 	/** Is this pointer still in the collection the result came from? Unload erases a layer
 	 *  from the source BEFORE releasing it, so "gone from the source" == freed. Debug-only:
-	 *  in a release build this is just a null check (the audit costs a scan per element). */
+	 *  in the other configurations this is just a null check (the audit costs a scan per
+	 *  element). The switch is the build configuration's, not the toolchain's: see
+	 *  Core/BuildConfig.h (MAHO_DO_CONTAINER_CHECKS). */
 	[[nodiscard]] bool CheckStillLive(TBase* Ptr) const
 	{
-#ifndef NDEBUG
+#if MAHO_DO_CONTAINER_CHECKS
 		if (Ptr == nullptr)
 		{
 			return false;

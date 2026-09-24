@@ -1,5 +1,6 @@
 ﻿#include "VulkanRHI.h"
 
+#include <Core/BuildConfig.h>
 #include "VulkanResources.h"
 
 #include <ConsoleVariable.h>
@@ -80,10 +81,12 @@ static ConsoleVariable::TAutoConsoleVariable<int> GCVarMinSwapchainImages(
 	2,
 	"Reported minimum swapchain image count (ImGui / present contract)");
 
+#if MAHO_WITH_RHI_VALIDATION
 static ConsoleVariable::TAutoConsoleVariable<int> GCVarRHIValidation(
 	"r.RHI.Validation",
 	1,
 	"0=off, 1=on (Khronos validation layers + debug messenger)");
+#endif // MAHO_WITH_RHI_VALIDATION
 
 /** Vulkan validation messenger callback -- routes every message to the Maho log. */
 VKAPI_ATTR VkBool32 VKAPI_CALL GValidationCallback(
@@ -765,6 +768,10 @@ bool FVulkanRHI::CreateInstance()
 	std::vector<const char*> InstanceExtensions(GInstanceExtensions, GInstanceExtensions + std::size(GInstanceExtensions));
 	std::vector<const char*> InstanceLayers;
 
+	// The validation layer is a DIAGNOSTIC FACILITY, so it is the build configuration that decides
+	// whether the code exists at all (Debug on, Release off by default, Shipping not compiled --
+	// see Core/BuildConfig.h and MAHO_WITH_RHI_VALIDATION).
+#if MAHO_WITH_RHI_VALIDATION
 	const bool bValidation = GCVarRHIValidation.GetValue() != 0;
 	if (bValidation)
 	{
@@ -794,6 +801,7 @@ bool FVulkanRHI::CreateInstance()
 				"Vulkan validation requested (r.RHI.Validation=1) but VK_LAYER_KHRONOS_validation is not installed");
 		}
 	}
+#endif // MAHO_WITH_RHI_VALIDATION
 
 	VkInstanceCreateInfo CreateInfo{};
 	CreateInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
@@ -808,10 +816,12 @@ bool FVulkanRHI::CreateInstance()
 		return false;
 	}
 
+#if MAHO_WITH_RHI_VALIDATION
 	if (bValidation)
 	{
 		CreateDebugMessenger();
 	}
+#endif // MAHO_WITH_RHI_VALIDATION
 
 	MAHO_LOG_CORE_INFO("Vulkan instance created");
 	return true;

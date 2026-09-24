@@ -3,6 +3,7 @@
   "ProjectName": "ExampleEngine",
   "EngineDirectory": "../..",
   "BuildType": "Editor",
+  "Configuration": "Debug",
   "Plugins": [
     {
       "Name": "Archive",

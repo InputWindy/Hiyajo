@@ -175,7 +175,11 @@ if(_RENDER_HAS_GLSLANG)
 		MachineIndependent
 		SPIRV
 	)
-	target_compile_definitions(Render PRIVATE MAHO_WITH_GLSLANG=1)
+	# NOTE: no MAHO_WITH_GLSLANG here. That macro is a build-CONFIGURATION capability (runtime shader
+	# compilation exists in Debug/Release, not in Shipping) and is derived by the generator from the
+	# .cproject axes -- a hand-written definition would silently override it (spec:
+	# openspec/changes/add-build-configuration, and Tools/maho_tools.py rejects one). The LINK stays
+	# unconditional: a build dependency is not a configuration.
 	target_include_directories(Render PRIVATE
 		"${glslang_SOURCE_DIR}"
 		"${glslang_BINARY_DIR}"

@@ -19,6 +19,8 @@
 namespace Maho
 {
 
+#if MAHO_WITH_TRACE
+
 namespace
 {
 
@@ -1195,5 +1197,36 @@ FSectionTrace::~FSectionTrace()
 
 	--GDepth;
 }
+
+#else // MAHO_WITH_TRACE
+
+// Shipping: none of the trace machinery is compiled -- no writer, no queue, no proto, no scope
+// objects. What survives is the SWITCH SURFACE the rest of the engine still calls: the CVar driver
+// and FLog's shutdown (the log plugin owns the trace, so the trace's absence must not break it).
+
+bool TraceEnabled()
+{
+	return false;
+}
+
+void TraceSetEnabled(bool /*bEnabled*/)
+{
+}
+
+std::uint64_t TraceTaskFloorMicros()
+{
+	return 0;
+}
+
+std::uint64_t TraceNowMicros()
+{
+	return 0;
+}
+
+void TraceFlush()
+{
+}
+
+#endif // MAHO_WITH_TRACE
 
 } // namespace Maho
