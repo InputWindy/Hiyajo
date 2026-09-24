@@ -142,7 +142,7 @@ private:
  * std::vector of raw bytes.
  */
 class FResourceSystem
-	: public FFrameExtension, public IPipeline<IPreInit, IInit, IPostInit, IBeginFrame, ITick, IEndFrame, IExit, IPreShutdown, IShutdown, IPostShutdown>
+	: public FFrameExtension, public IPipeline<IInit, ITick, IShutdown>
 	, public FThreadedServer
 {
 public:
@@ -231,16 +231,9 @@ private:
 	[[nodiscard]] const char* GetThreadName() const override;
 
 	// -- engine pipeline stages (scheduler-only) --
-	void PreInitialize(FEngineBase&, FEngineContext&) override {}
 	void Initialize(FEngineBase& Engine, FEngineContext& Frame) override;
-	void PostInitialize(FEngineBase&, FEngineContext&) override {}
-	void BeginFrame(FEngineBase&, FEngineContext&) override {}
 	void Tick(FEngineBase& Engine, FEngineContext& Frame) override;
-	void EndFrame(FEngineBase&, FEngineContext&) override {}
-	void RequestExit(FEngineBase&, FEngineContext&) override {}
-	void PreShutdown(FEngineBase&, FEngineContext&) override {}
 	void Shutdown(FEngineBase& Engine, FEngineContext& Frame) override;
-	void PostShutdown(FEngineBase&, FEngineContext&) override {}
 
 	FResourceSystem();
 

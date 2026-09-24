@@ -402,7 +402,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <h2 class="file-title">Render.h —— 渲染 stage 能力面 + FRender</h2>
 <div class="card"><div class="doc">
 <p>渲染层对特性的**全部词汇**：11 个 stage 接口 + 帧类型 `FRender` + 着色器句柄 `TShaderHandle`。</p>
-<p>**FRender 是两层身份**：对宿主引擎它是一个 layer（装载 `IInit` / `ITick` / `IExit` 等引擎 stage）；对渲染特性它是**自己的收集器**（特性实现 `IBeginRender` / `IRender` / `IEndRender` / `IPresent`，全部装在 FRender 里并由它调度）。**专属线程在它拥有的部件内部**：RHI（`FRHI`）是渲染服务器、着色器编译器是另一个 `FThreadedServer` —— `FRender` 自己**不是**服务器。宿主只把 FRender 看作一个 layer。</p>
+<p>**FRender 是两层身份**：对宿主引擎它是一个 layer（装载 `IInit` / `ITick` 等引擎 stage）；对渲染特性它是**自己的收集器**（特性实现 `IBeginRender` / `IRender` / `IEndRender` / `IPresent`，全部装在 FRender 里并由它调度）。**专属线程在它拥有的部件内部**：RHI（`FRHI`）是渲染服务器、着色器编译器是另一个 `FThreadedServer` —— `FRender` 自己**不是**服务器。宿主只把 FRender 看作一个 layer。</p>
 <p>**FRender 同时就是 RDG 资源池的门面**：特性经 `CreateTexture` / `CreateBuffer` 拿 `FRDG*Ref`，原生对象活在池里跨帧复用；交换链后缓冲**只被帧特性碰**（经 `RHI-&gt;PresentTexture`）。</p>
 <p>**stage 序列为什么是这个顺序**（`FRenderStages`）：`IInitViews` 先建视图与上传几何（后续 pass 的输入），`IBeginRender` 做帧首准备（列表 / 常量），`IRender` 才是 pass，`IEndRender` 收尾，`IPostProcess` 做全屏后处理，`IRenderUI` 合成 UI，`IPresent` 最后 blit 上屏。编辑器构建额外插 `IEditorInput`（最前，抢输入）与 `IEditorCompose`（UI 之后、present 之前，把编辑器覆盖层画在最上面）。**一个没被任何已装特性实现的 stage 完全不产生节点**（没有空节点）。</p>
 </div></div>
@@ -618,9 +618,9 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table></div>
 </div>
 <div class="ent e-class" id="Public__Render_h-12">
-<h3><span class="kind">类</span> FRender <span class="base">: FFrameExtension, IPipeline&lt;IPreInit, IInit, IPostInit, IBeginFrame, ITick, IEndFrame, IExit, IPreShutdown, IShutdown, IPostShutdown&gt;, FFrameBuilder&lt;FRender&gt;</span></h3>
+<h3><span class="kind">类</span> FRender <span class="base">: FFrameExtension, IPipeline&lt;IPreInit, IInit, IPostInit, IBeginFrame, ITick, IEndFrame, IPreShutdown, IShutdown, IPostShutdown&gt;, FFrameBuilder&lt;FRender&gt;</span></h3>
 <div class="sect"><div class="doc">
-<p>渲染子系统：宿主引擎里的一个层（装载 `IInit` / `ITick` / `IExit` 等），同时是渲染特性自己的层收集器。它也是 RDG 资源池的门面。</p>
+<p>渲染子系统：宿主引擎里的一个层（装载 `IInit` / `ITick` 等），同时是渲染特性自己的层收集器。它也是 RDG 资源池的门面。</p>
 <p>**它自己不干活**：帧工作由 stage 序列（`FRenderStages`）驱动，`FRender::Tick` 只是把序列交给 `Execute&lt;...&gt;()`；交换链的帧生命期（取值 / 结束 + 呈现）挂在 `BeginFrame` / `EndFrame` 这两个**引擎 stage** 上，`EndFrame` 先 `Wait()` 图的栅栏再 `RHI-&gt;EndFrame()`，于是呈现一定等到所有提交完成。</p>
 </div></div>
 <div class="sect">
@@ -677,7 +677,6 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> EndFrame(FEngineBase&amp;) <span class="kw">override</span></td><td>（引擎 stage `IEndFrame`）**空**：帧由它的**尾 stage** 关闭（`FScene::IPresent` → `EndSwapchainFrame`）。在这里关就需要「等那个 stage」，而那个等待的理由已经不存在 —— 帧命令缓冲唯一的录制（blit）与关闭在同一 stage 里</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> BeginSwapchainFrame()</td><td>**帧头**（由 `FScene::IBeginRender` 调）：`RHI-&gt;BeginFrame()`（等上一帧栅栏 + 复位 + 取镜像 + 开帧命令缓冲）+ 推进资源池。凡是「取命令列表 / 从池分配」的 stage 都必须排在它之后 —— 与 `IPresent` 那条纪律同形，只是从帧的另一端</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> EndSwapchainFrame()</td><td>**帧尾**（由 `FScene::IPresent` 在提交完本帧 pass、录完 blit 之后调）：关帧命令缓冲 + 提交 + 呈现</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> RequestExit(FEngineBase&amp; Engine) <span class="kw">override</span></td><td>（引擎 stage `IExit`）收到退出请求时的处理</td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">template</span> &lt;<span class="kw">typename</span> T&gt; <span class="kw">friend</span> <span class="kw">class</span> TShaderHandle</td><td>`TShaderHandle` 靠这个友元驱动着色器编译：它能触达私有的 `GetOrCreateShaderModule` / `WaitShaderCompiles`</td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> AddPass(ERHICommandListType PassType, FRHIGraphicsPipelineDesc PipelineDesc, <span class="kw">const</span> FRenderPassDesc&amp; Pass, std::function&lt;<span class="kw">void</span>(FRHICommandList&amp;)&gt; PassFn)</td><td>**PSO 解析版 pass（内部实现点）**：解析管线（走池的 PSO 缓存）→ 开动态渲染 → **隐式绑定图形管线** → 跑绘制 lambda。特性既不查管线 / 布局，也不自己 `BindGraphicsPipeline`。公开的编译期 FParameters 模板最终转发到这里</td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>FShaderCompilerServer* GetShaderCompiler() <span class="kw">const</span></td><td>异步编译服务器（内部：特性只经 `TryGetShader&lt;T&gt;` 触达着色器）</td></tr>

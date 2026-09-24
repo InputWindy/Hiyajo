@@ -146,7 +146,7 @@ public:
  *   Platform.CreateWindow(1280, 720, "MyGame");
  *   Engine.Install<FPlatform>();   // or Install(ApplyModuleExtension("FPlatform"))
  */
-class FPlatform : public FFrameExtension, public FThreadedServer, public IPipeline<IPreInit, IInit, IPostInit, IBeginFrame, ITick, IEndFrame, IExit, IPreShutdown, IShutdown, IPostShutdown>
+class FPlatform : public FFrameExtension, public FThreadedServer, public IPipeline<IInit, IPostInit, ITick, IEndFrame, IExit, IShutdown>
 {
 public:
 	MAHO_DECLARE_FRAME(FPlatform);
@@ -234,16 +234,12 @@ public:
 
 private:
 	// -- engine pipeline stages (scheduler-only) --
-	void PreInitialize(FEngineBase&, FEngineContext&) override {}
 	void Initialize(FEngineBase& Engine, FEngineContext& Frame) override;
 	void PostInitialize(FEngineBase&, FEngineContext&) override {}
 	void Shutdown(FEngineBase& Engine, FEngineContext& Frame) override;
-	void BeginFrame(FEngineBase& Engine, FEngineContext& Frame) override;
 	void Tick(FEngineBase& Engine, FEngineContext& Frame) override;
 	void EndFrame(FEngineBase& Engine, FEngineContext& Frame) override;
 	void RequestExit(FEngineBase& Engine, FEngineContext& Frame) override;
-	void PreShutdown(FEngineBase&, FEngineContext&) override {}
-	void PostShutdown(FEngineBase&, FEngineContext&) override {}
 
 	// -- the platform's OWN thread (FThreadedServer) ---------------------------------------------
 	//

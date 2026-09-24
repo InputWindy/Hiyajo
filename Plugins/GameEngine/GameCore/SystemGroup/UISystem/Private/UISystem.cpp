@@ -21,14 +21,6 @@ void FUISystem::OnInstalled(FGameWorld& World, FGameWorldContext& Frame)
 	GUISystem = this;
 }
 
-void FUISystem::ProcessInput(FGameWorld&, FGameWorldContext&)
-{
-	MAHO_TRACE_STAGE(IProcessInput, "UI system input", "the tree is fed by the translation layer");
-	// Input hook -- the world's IProcessInput stage. UI input is delivered to the tree by
-	// the translation layer (the render side owns the context), so there is nothing to
-	// poll here; the stage stays as a declared-but-empty capability.
-}
-
 UI::FUIView* FUISystem::EnsureDemoView(FGameWorld& World)
 {
 	if (DemoWidget.IsValid())

@@ -32,7 +32,7 @@ MAHO_EXCEPTION_API FException* GetExceptionCenter();
  *   });
  *   Exception::GetExceptionCenter()->ReportException("failed to load texture");
  */
-class FException : public FFrameExtension, public IPipeline<IPreInit, IInit, IPostInit, IPreShutdown, IShutdown, IPostShutdown>
+class FException : public FFrameExtension, public IPipeline<IInit, IShutdown>
 {
 public:
 	MAHO_DECLARE_FRAME(FException);
@@ -48,12 +48,8 @@ public:
 
 private:
 	// -- engine pipeline stages (scheduler-only) --
-	void PreInitialize(FEngineBase&, FEngineContext&) override {}
 	void Initialize(FEngineBase& Engine, FEngineContext& Frame) override;
-	void PostInitialize(FEngineBase&, FEngineContext&) override {}
-	void PreShutdown(FEngineBase&, FEngineContext&) override {}
 	void Shutdown(FEngineBase& Engine, FEngineContext& Frame) override;
-	void PostShutdown(FEngineBase&, FEngineContext&) override {}
 };
 
 } // namespace Exception

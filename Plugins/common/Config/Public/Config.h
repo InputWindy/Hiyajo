@@ -21,18 +21,14 @@ namespace Config
  *   GetConfig()->GetString("/Script/Engine.Engine", "GameName");
  */
 class FConfig
-	: public FFrameExtension, public IPipeline<IPreInit, IInit, IPostInit, IPreShutdown, IShutdown, IPostShutdown>
+	: public FFrameExtension, public IPipeline<IInit, IShutdown>
 {
 	MAHO_DECLARE_FRAME(FConfig);
 
 private:
 	// -- engine layer stages (scheduler-only) --
-	void PreInitialize(FEngineBase&, FEngineContext&) override {}
 	void Initialize(FEngineBase&, FEngineContext&) override;
-	void PostInitialize(FEngineBase&, FEngineContext&) override {}
-	void PreShutdown(FEngineBase&, FEngineContext&) override {}
 	void Shutdown(FEngineBase&, FEngineContext&) override;
-	void PostShutdown(FEngineBase&, FEngineContext&) override {}
 
 public:
 	bool Load(std::string_view Path);

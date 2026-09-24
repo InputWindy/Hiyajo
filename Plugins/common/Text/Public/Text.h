@@ -73,7 +73,7 @@ MAHO_TEXT_API FTextManager* GetTextManager();
 
 /** Localization manager: current culture + translation catalog (engine layer). */
 class FTextManager
-	: public FFrameExtension, public IPipeline<IPreInit, IInit, IPostInit, IPreShutdown, IShutdown, IPostShutdown>
+	: public FFrameExtension, public IPipeline<IInit, IShutdown>
 {
 public:
 	MAHO_DECLARE_FRAME(FTextManager);
@@ -95,12 +95,8 @@ public:
 
 private:
 	// -- engine pipeline stages (scheduler-only) --
-	void PreInitialize(FEngineBase&, FEngineContext&) override {}
 	void Initialize(FEngineBase& Engine, FEngineContext& Frame) override;
-	void PostInitialize(FEngineBase&, FEngineContext&) override {}
-	void PreShutdown(FEngineBase&, FEngineContext&) override {}
 	void Shutdown(FEngineBase& Engine, FEngineContext& Frame) override;
-	void PostShutdown(FEngineBase&, FEngineContext&) override {}
 
 protected:
 	FTextManager() = default;

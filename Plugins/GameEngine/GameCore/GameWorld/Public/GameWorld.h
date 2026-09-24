@@ -106,7 +106,7 @@ public:
  * via Install<...>() and receive the world (FGameWorld&) at each stage.
  */
 class MAHO_GAMEWORLD_API FGameWorld
-	: public FFrameExtension, public IPipeline<IPreInit, IInit, IPostInit, IBeginFrame, ITick, IEndFrame, IExit, IPreShutdown, IShutdown, IPostShutdown>
+	: public FFrameExtension, public IPipeline<IInit, ITick, IShutdown>
 	, public FFrameBuilder<FGameWorld>
 {
 public:
@@ -191,16 +191,9 @@ private:
 	// engine stage overrides (the host drives these; the ECS frame runs in Tick).
 	// FGameWorld inherits all ten engine stages and overrides every one (PerFrame etc.
 	// are empty) -- the stage interfaces are pure virtual, so all must be implemented.
-	void PreInitialize(FEngineBase&, FEngineContext&) override;
 	void Initialize(FEngineBase&, FEngineContext&) override;
-	void PostInitialize(FEngineBase&, FEngineContext&) override;
-	void BeginFrame(FEngineBase&, FEngineContext&) override;
 	void Tick(FEngineBase&, FEngineContext&) override;
-	void EndFrame(FEngineBase&, FEngineContext&) override;
-	void RequestExit(FEngineBase&, FEngineContext&) override;
-	void PreShutdown(FEngineBase&, FEngineContext&) override;
 	void Shutdown(FEngineBase&, FEngineContext&) override;
-	void PostShutdown(FEngineBase&, FEngineContext&) override;
 
 	template <typename C>
 	TComponentPool<C>* GetOrAddPool()

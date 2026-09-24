@@ -16,18 +16,15 @@ namespace Paths
 
 /** Path resolution engine layer - engine/project root aliases -> physical paths. */
 class FPaths
-	: public FFrameExtension, public IPipeline<IPreInit, IInit, IPostInit, IPreShutdown, IShutdown, IPostShutdown>
+	: public FFrameExtension, public IPipeline<IInit, IPostInit, IShutdown>
 {
 	MAHO_DECLARE_FRAME(FPaths);
 
 private:
 	// -- engine layer stages (scheduler-only) --
-	void PreInitialize(FEngineBase&, FEngineContext&) override {}
 	void Initialize(FEngineBase&, FEngineContext&) override;
 	void PostInitialize(FEngineBase&, FEngineContext&) override {}
-	void PreShutdown(FEngineBase&, FEngineContext&) override {}
 	void Shutdown(FEngineBase&, FEngineContext&) override;
-	void PostShutdown(FEngineBase&, FEngineContext&) override {}
 
 public:
 	/** Register a root alias (e.g. "Engine" - <engine dir>). */
