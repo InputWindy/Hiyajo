@@ -35,7 +35,8 @@ constexpr const char* kRHIServerLane = "RHIServer";
 static ConsoleVariable::TAutoConsoleVariable<int> GCVarVSync(
 	"r.VSync",
 	0,
-	"0=prefer Mailbox/Immediate (uncapped, the default), 1=FIFO (vsync)");
+	"0=prefer Mailbox/Immediate (uncapped, the default), 1=FIFO (vsync)",
+	ConsoleVariable::ECVarFlags::Shipping);
 
 /** The present mode a given r.VSync value asks for, among the modes the surface offers.
  *

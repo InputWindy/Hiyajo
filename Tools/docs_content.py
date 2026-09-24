@@ -228,6 +228,59 @@ D.Field("std::unique_ptr<void, FModuleDeleter> Module",
         "模块句柄的唯一持有者：析构即 `FreeLibrary` / `dlclose`。空 = 未装载。")
 
 # ══════════════════════════════════════════════════════════════════════════════
+# Source/Public/Core/BuildConfig.h —— 构建配置矩阵
+# ══════════════════════════════════════════════════════════════════════════════
+
+D.Header("Public/Core/BuildConfig.h", Title="BuildConfig.h —— 构建配置矩阵（配置 × 目标）",
+         Desc="把「在什么构建下隔离什么」变成**两条正交轴 + 一张 6 格矩阵 + 一套派生规则**。"
+              "轴的唯一来源是 `.cproject`，全部宏由 `Tools/maho_tools.py` 的 `_build_config_block` "
+              "在生成期派生注入（按配置的 `$<CONFIG:...>` 生成式 ⇒ **一份生成工程覆盖三档**），"
+              "本头是**唯一读取点**：机读的宏 + `#error` 守卫 + 外部构建的回退。"
+              "规范在 `openspec/changes/add-build-configuration/`。")
+
+D.Card("两条正交轴（`.cproject` 声明）")
+D.Table("轴", "取值", "它决定")
+D.Row("BuildType", "`Runtime | Editor`", "**目标**：Runtime 在生成期丢掉 `Type=Editor` 插件（DLL/头都不编）"
+      "⇒ 同时给出 `MAHO_EDITOR_BUILD`")
+D.Row("Configuration", "`Debug | Release | Shipping`", "**诊断**：哪些检查/设施存在 ⇒ `MAHO_BUILD_*`，"
+      "并派生下面两类宏")
+
+D.Card("6 格矩阵（逐格隔离什么）")
+D.Table("格", "隔离什么")
+D.Row("Debug × Editor", "今天的日常态：断言/追踪/日志/校验层全开 + 编辑器（面板/主题/视口/控制台/浏览器）全在")
+D.Row("Debug × Runtime", "运行时调试态：诊断全开，但没有编辑器插件（可视化面板不存在）")
+D.Row("Release × Runtime", "性能态（内测/试玩）：`CHECK`/`ENSURE` 留、慢速检查与容器审计关、追踪/日志留、校验层默认关")
+D.Row("Release × Editor", "**编辑器发行版**（给美术/QA）：优化的库 + 诊断保留 + 编辑器插件在")
+D.Row("Shipping × Runtime", "**对外发行（零成本）**：`CHECK`/`ENSURE`/追踪/日志/统计/校验层/运行时着色器编译"
+      "一律不编；CVar 只留标了 `ECVarFlags::Shipping` 的项（画质档位这类要现场切的**可读写**）")
+D.Row("Shipping × Editor", "**非法**：生成期报错，`BuildConfig.h` 另有一道 `#error`（编辑器发行版请用 "
+      "`Release × Editor`；Editor 工程的配置列表里也不含 Shipping）")
+
+D.Card("宏的三种归属（都只在这一个头里被读取）")
+D.Table("类", "宏", "谁定 / 可否覆盖")
+D.Row("轴", "`MAHO_BUILD_DEBUG｜RELEASE｜SHIPPING`、`MAHO_EDITOR_BUILD`", "`.cproject` 两个字段；"
+      "**谁都不许覆盖**（它们就是轴本身）")
+D.Row("行为", "`MAHO_DO_CHECK` / `_ENSURE` / `_SLOW_CHECK` / `_CONTAINER_CHECKS`",
+      "由 `Configuration` 派生；插件不得手写")
+D.Row("能力", "`MAHO_WITH_TRACE` / `_LOGGING` / `_CRASH_REPORT` / `_RHI_VALIDATION` / `_GLSLANG` / `_STATS`",
+      "有派生默认值，**项目可覆盖**（覆盖走 `.cproject`/`.cplugin`，不写在 `.cmake` 里）")
+D.Row("被拒绝的写法", "插件 `.cmake` 里出现上面任何一族的编译定义",
+      "生成期报错并指出文件:行号（第二处定义是矩阵腐烂的入口）；`MAHO_BUILD_DIR` 这类 CMake "
+      "**变量**不受影响")
+
+D.Card("守卫与回退")
+D.Table("东西", "说明")
+D.Row("`#error` × 3", "未知档（`MAHO_BUILD_UNSUPPORTED`）、非法格（`Shipping × Editor`）—— 立刻暴露，"
+      "而不是静默走默认")
+D.Row("外部构建的回退", "不经生成器的译单元（工具、外部测试工程）拿到的是**诊断打开**的一侧："
+      "行为像 Debug，而不是悄悄丢掉正在被验证的那些检查")
+D.Row("`FBuildInfo::Config` / `Target`", "把当前格编译成字符串常量，崩溃头或报告行直接用它 —— "
+      "它由宏拼出来，所以**不可能**与代码实际做的事不一致")
+D.Row("相关", "`Core/Fatal.h`（`MAHO_DO_*` 编掉断言）、`Log/Trace.h`（`MAHO_WITH_TRACE` 编掉追踪机制）、"
+      "`Log/Log.h`（`MAHO_WITH_LOGGING` 编掉日志体）、`RHI/VulkanRHI.cpp`（`MAHO_WITH_RHI_VALIDATION`）、"
+      "`ConsoleVariable`（`ECVarFlags::Shipping` 决定发行版保留哪些可调项）")
+
+# ══════════════════════════════════════════════════════════════════════════════
 # Source/Public/Core/Delegate.h —— 多播事件积木
 # ══════════════════════════════════════════════════════════════════════════════
 

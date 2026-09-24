@@ -1,5 +1,10 @@
 #pragma once
 
+#include <Core/BuildConfig.h>
+
+// fmt stays unconditional: the passthrough templates below name fmt::format_string in their
+// SIGNATURES, and call sites (e.g. `MAHO_IF_NOT_NULL(GetLog(), L) { L->Warn("..."); }`) must keep
+// compiling in every configuration. What the configuration removes is the BODY -- see the templates.
 #include <spdlog/fmt/fmt.h>
 
 #include "LogApi.h"
@@ -67,35 +72,64 @@ public:
 	~FLog() override;
 
 	// -- logging passthroughs (perfect-forward, fmt compile-time checked) --
+	//
+	// IN SHIPPING (MAHO_WITH_LOGGING == 0) THE BODIES DISAPPEAR: the call sites still compile (the
+	// signatures keep fmt::format_string), but no message is formatted, delivered or sunk. And since
+	// Shipping does not publish `GetLog()` either, the usual `MAHO_IF_NOT_NULL(GetLog(), L)` sites do
+	// not even reach here.
 	template <typename... Args>
 	void Trace(fmt::format_string<Args...> Fmt, Args&&... A)
 	{
+#if MAHO_WITH_LOGGING
 		LogLine(ELogLevel::Trace, fmt::format(Fmt, std::forward<Args>(A)...));
+#else
+		(void)Fmt;
+#endif
 	}
 	template <typename... Args>
 	void Debug(fmt::format_string<Args...> Fmt, Args&&... A)
 	{
+#if MAHO_WITH_LOGGING
 		LogLine(ELogLevel::Debug, fmt::format(Fmt, std::forward<Args>(A)...));
+#else
+		(void)Fmt;
+#endif
 	}
 	template <typename... Args>
 	void Info(fmt::format_string<Args...> Fmt, Args&&... A)
 	{
+#if MAHO_WITH_LOGGING
 		LogLine(ELogLevel::Info, fmt::format(Fmt, std::forward<Args>(A)...));
+#else
+		(void)Fmt;
+#endif
 	}
 	template <typename... Args>
 	void Warn(fmt::format_string<Args...> Fmt, Args&&... A)
 	{
+#if MAHO_WITH_LOGGING
 		LogLine(ELogLevel::Warn, fmt::format(Fmt, std::forward<Args>(A)...));
+#else
+		(void)Fmt;
+#endif
 	}
 	template <typename... Args>
 	void Error(fmt::format_string<Args...> Fmt, Args&&... A)
 	{
+#if MAHO_WITH_LOGGING
 		LogLine(ELogLevel::Error, fmt::format(Fmt, std::forward<Args>(A)...));
+#else
+		(void)Fmt;
+#endif
 	}
 	template <typename... Args>
 	void Critical(fmt::format_string<Args...> Fmt, Args&&... A)
 	{
+#if MAHO_WITH_LOGGING
 		LogLine(ELogLevel::Critical, fmt::format(Fmt, std::forward<Args>(A)...));
+#else
+		(void)Fmt;
+#endif
 	}
 
 	// -- category-aware logging (UE Output Log style) -------------------------
@@ -105,7 +139,13 @@ public:
 	template <typename... Args>
 	void Log(ELogLevel Level, std::string_view Category, fmt::format_string<Args...> Fmt, Args&&... A)
 	{
+#if MAHO_WITH_LOGGING
 		LogLine(Level, std::string(Category), fmt::format(Fmt, std::forward<Args>(A)...));
+#else
+		(void)Level;
+		(void)Category;
+		(void)Fmt;
+#endif
 	}
 
 	// Live log stream, delivered by Broadcast() on the emitting thread. Thread-safe

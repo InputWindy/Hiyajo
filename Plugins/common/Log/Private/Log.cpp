@@ -6,9 +6,11 @@
 #include <Trace.h>
 #include <ConsoleVariable.h>
 
+#if MAHO_WITH_LOGGING
 #include <spdlog/spdlog.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
 #include <spdlog/sinks/rotating_file_sink.h>
+#endif
 
 #include <cstdlib>
 
@@ -41,6 +43,7 @@ FLog::~FLog() = default;   // full type spdlog::logger is visible here
 void FLog::Initialize(FEngineBase& Engine, FEngineContext& Frame)
 {
 	MAHO_TRACE_STAGE(IInit, "Log init", "bring up the stdout + rotating file sinks");
+#if MAHO_WITH_LOGGING
 	// stdout (color) + rotating file - GUI apps (WIN32 subsystem) have no
 	// console, so the file sink is the durable log destination.
 	auto ConsoleSink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
@@ -61,6 +64,13 @@ void FLog::Initialize(FEngineBase& Engine, FEngineContext& Frame)
 		Lv = spdlog::level::from_str(LogLevel);
 	}
 	Logger->set_level(Lv);
+#else
+	// SHIPPING: no logger, no sinks, no log file. `GetLog()` is published anyway: it is the engine's
+	// "this layer was driven" observable (tools and tests read it that way), and that must not depend
+	// on the configuration. What is gone is the work -- see the gated bodies in Log.h.
+	(void)Engine;
+	(void)Frame;
+#endif // MAHO_WITH_LOGGING
 
 	GLog = this;
 }
@@ -103,8 +113,10 @@ void FLog::Shutdown(FEngineBase&, FEngineContext&)
 	// teardown (register → unregister pairing), not on leaking the storage to dodge a
 	// cross-DLL destructor.
 	OnLog.RemoveAll();
+#if MAHO_WITH_LOGGING
 	spdlog::shutdown();
 	Logger.reset();
+#endif
 }
 
 void FLog::LogLine(ELogLevel Level, std::string Message)
@@ -114,6 +126,7 @@ void FLog::LogLine(ELogLevel Level, std::string Message)
 
 void FLog::LogLine(ELogLevel Level, std::string Category, std::string Message)
 {
+#if MAHO_WITH_LOGGING
 	// Deliver to live listeners unconditionally (independent of spdlog state),
 	// then forward to the sink if the logger is up.
 	const FLogMessage Msg{ Level, std::move(Category), std::move(Message) };
@@ -132,6 +145,13 @@ void FLog::LogLine(ELogLevel Level, std::string Category, std::string Message)
 	case ELogLevel::Error:    Logger->error(Msg.Message); break;
 	case ELogLevel::Critical: Logger->critical(Msg.Message); break;
 	}
+#else
+	// SHIPPING: nothing to do -- no subscribers (no editor), no sink. Kept as a definition because
+	// the header's passthrough templates still name it in their (now empty) bodies.
+	(void)Level;
+	(void)Category;
+	(void)Message;
+#endif // MAHO_WITH_LOGGING
 }
 
 } // namespace Maho

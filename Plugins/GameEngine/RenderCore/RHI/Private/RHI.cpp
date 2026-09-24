@@ -23,17 +23,20 @@ namespace
 static ConsoleVariable::TAutoConsoleVariable<int> GCVarRHIWidth(
 	"r.RHI.Framebuffer.Width",
 	1280,
-	"RHI framebuffer width (used until a real window is bound)");
+	"RHI framebuffer width (used until a real window is bound)",
+	ConsoleVariable::ECVarFlags::Shipping);
 
 static ConsoleVariable::TAutoConsoleVariable<int> GCVarRHIHeight(
 	"r.RHI.Framebuffer.Height",
 	720,
-	"RHI framebuffer height (used until a real window is bound)");
+	"RHI framebuffer height (used until a real window is bound)",
+	ConsoleVariable::ECVarFlags::Shipping);
 
 static ConsoleVariable::TAutoConsoleVariable<std::string> GCVarRHIBackend(
 	"r.RHI.Backend",
 	"vulkan",
-	"RHI backend name (vulkan)");
+	"RHI backend name (vulkan)",
+	ConsoleVariable::ECVarFlags::Shipping);
 
 [[nodiscard]] ERHIBackend BackendFromName(std::string_view Name)
 {

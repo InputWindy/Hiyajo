@@ -97,13 +97,13 @@ FPlatform::FPlatform()
 namespace
 {
 	static ConsoleVariable::TAutoConsoleVariable<int> GCVarWindowWidth(
-		"r.Window.Width", 1280, "Platform window width");
+		"r.Window.Width", 1280, "Platform window width", ConsoleVariable::ECVarFlags::Shipping);
 
 	static ConsoleVariable::TAutoConsoleVariable<int> GCVarWindowHeight(
-		"r.Window.Height", 720, "Platform window height");
+		"r.Window.Height", 720, "Platform window height", ConsoleVariable::ECVarFlags::Shipping);
 
 	static ConsoleVariable::TAutoConsoleVariable<std::string> GCVarWindowTitle(
-		"r.Window.Title", "Maho", "Platform window title");
+		"r.Window.Title", "Maho", "Platform window title", ConsoleVariable::ECVarFlags::Shipping);
 
 #if !defined(MAHO_HEADLESS)
 			// -- GLFW backend (desktop: Windows / Linux, windowed) --
