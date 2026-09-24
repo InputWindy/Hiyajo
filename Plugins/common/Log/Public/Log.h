@@ -138,6 +138,12 @@ private:
 //
 //   MAHO_LOG_CORE_INFO("init {}", name);
 //   MAHO_LOG_CORE_ERROR("boom: code={}", code);
+//
+// IN SHIPPING (MAHO_WITH_LOGGING == 0, see Core/BuildConfig.h) THEY EXPAND TO NOTHING: logging is a
+// diagnostic the release build does not carry, so the arguments are not even evaluated (do not put
+// required side effects in a log call). ReportFatal/ReportError still work -- a crash must stay
+// explicable.
+#if MAHO_WITH_LOGGING
 #define MAHO_LOG_CORE_TRACE(...)    MAHO_ENSURE_NOT_NULL(::Maho::GetLog(), L) L->Trace(__VA_ARGS__);
 #define MAHO_LOG_CORE_DEBUG(...)    MAHO_ENSURE_NOT_NULL(::Maho::GetLog(), L) L->Debug(__VA_ARGS__);
 #define MAHO_LOG_CORE_INFO(...)     MAHO_ENSURE_NOT_NULL(::Maho::GetLog(), L) L->Info(__VA_ARGS__);
@@ -147,3 +153,19 @@ private:
 // Category-aware variant (UE Output Log style) - tag rides on the message:
 //   MAHO_LOG(ELogLevel::Info, "LogRender", "init {}", id);
 #define MAHO_LOG(Level, Category, ...) MAHO_ENSURE_NOT_NULL(::Maho::GetLog(), L) L->Log(Level, Category, __VA_ARGS__);
+#else
+/** Shipping: the log is not compiled; nothing here is evaluated. */
+#define MAHO_LOG_CORE_TRACE(...) ((void)0)
+/** Shipping: the log is not compiled; nothing here is evaluated. */
+#define MAHO_LOG_CORE_DEBUG(...) ((void)0)
+/** Shipping: the log is not compiled; nothing here is evaluated. */
+#define MAHO_LOG_CORE_INFO(...) ((void)0)
+/** Shipping: the log is not compiled; nothing here is evaluated. */
+#define MAHO_LOG_CORE_WARN(...) ((void)0)
+/** Shipping: the log is not compiled; nothing here is evaluated. */
+#define MAHO_LOG_CORE_ERROR(...) ((void)0)
+/** Shipping: the log is not compiled; nothing here is evaluated. */
+#define MAHO_LOG_CORE_CRITICAL(...) ((void)0)
+/** Shipping: the log is not compiled; nothing here is evaluated. */
+#define MAHO_LOG(Level, Category, ...) ((void)0)
+#endif // MAHO_WITH_LOGGING
