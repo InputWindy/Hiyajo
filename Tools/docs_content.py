@@ -363,7 +363,11 @@ D.Row("[[noreturn]] void ReportFatal(const char* Message)",
 D.Row("void ReportError(const char* Message)",
       "**非致命**：写 stderr + `Saved/Logs/Fatal.log`，然后返回。坏插件 / 单点失败用它隔离。")
 D.Row("void InstallFatalHandlers()",
-      "安装 `std::terminate` 处理器；进程入口（`Maho::Main`）第一件事调它，只装一次。")
+      "进程入口（`Maho::Main`）第一件事调它，只装一次。装四类『把崩溃说出来』的钩子：`std::terminate`"
+      "（C++ 异常 / noexcept 违背）、CRT 非法参数、`SIGABRT`、以及 SEH 过滤器 —— 后三类各打一段**原始栈**"
+      "（模块偏移，配 `dumpbin /disasm` + 最近的公开符号即可定位，见 trace flush 崩溃的定位方式）。"
+      "为什么必须自己接：CRT 的非法参数默认走 `__fastfail`，**SEH 与 terminate 都够不着**（症状就是"
+      "『0xc0000409 in ucrtbase』什么都不说）")
 
 D.Card("宏")
 D.Table("宏", "说明")
