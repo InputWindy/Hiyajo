@@ -1,9 +1,9 @@
 #include "UISystem.h"
 
+#include <ConsoleVariable.h>
 #include <UIViewRegistry.h>
 #include <Widgets/FUIText.h>
 
-#include <Log.h>
 #include <Trace.h>
 #include <cstdio>
 
@@ -11,6 +11,19 @@ namespace Maho
 {
 namespace GameWorld
 {
+
+/** `r.stat.hud` -- the top-left frame-rate HUD. A development stat, so NOT `ECVarFlags::Shipping`:
+ *  a Shipping build does not register it and the value falls back to the local default below --
+ *  which is 1 in Debug/Release (the HUD is on unless somebody switches it off) and 0 in Shipping
+ *  (a release ships without a debug overlay, and with no CVar to switch it on). */
+#if MAHO_BUILD_SHIPPING
+static constexpr int kStatHudDefault = 0;
+#else
+static constexpr int kStatHudDefault = 1;
+#endif
+
+static ConsoleVariable::TAutoConsoleVariable<int> GCVarStatHud(
+	"r.stat.hud", kStatHudDefault, "1 = draw the top-left frame-rate HUD, 0 = hide it");
 
 // Global accessor target (cross-DLL, mirrors Resource::GResourceSystem). Set at
 // OnInstalled, cleared at PreUnInstall.
@@ -50,10 +63,9 @@ UI::FUIView* FUISystem::EnsureDemoView(FGameWorld& World)
 
 	std::shared_ptr<UI::FUIView> View =
 		std::make_shared<UI::FUIView>(UI::FUIName("GameUI"), UI::EUIOwnership::CrossThread);
-	// 外壳开窗：旧演示是 "Game UI" 标题 + NoResize，位置/尺寸按显示区比例给
-	// （位置只在首次生效，之后可由标题栏拖动 —— 与旧 `FUIWidget` 锚点语义一致）。
-	View->SetWindowShell(true, "Game UI", {}, {}, UI::EUIShellFlags::NoResize);
-	View->SetShellFractions(UI::FUIVector2{ 0.05f, 0.05f }, UI::FUIVector2{ 0.30f, 0.25f });
+	// 外壳（窗口）由 `Update` 按 `r.stat.hud` 每帧声明 —— 外壳开关是"结构声明"，必须在
+	// `Edit()` 区间内改（见 UIView.h）。此处只给初始值，免得视图第一帧没有外壳可翻。
+	View->SetWindowShell(true, "FPS", {}, {}, UI::EUIShellFlags::NoResize);
 	// 声明本视图归游戏的翻译循环：与 `FUIFeature` 的翻译入口是同一个名字（同一个字面量 =
 	// 同一个作用域）。本系统因此不必知道任何 ImGui 上下文 —— 游戏侧不感知渲染侧。
 	View->SetRenderScope(FUISystem::GameRenderScope());
@@ -69,25 +81,16 @@ UI::FUIView* FUISystem::EnsureDemoView(FGameWorld& World)
 	return DemoView.get();
 }
 
-void FUISystem::BuildDemoTree(UI::FUIBuilder& Root)
+void FUISystem::BuildDemoTree(UI::FUIBuilder& Root, bool bVisible)
 {
-	Root.Layout().SetDirection(UI::EUIDirection::Column);
-	Root.Layout().SetSpacing(4.f);
-
 	// 节点 Id 稳定：同 Id 同类型重声明 = 复用（运行期状态跨帧存活）。
-	{
-		// 帧率读数：FPS + 帧时间（ms）。没有 profiler 时，这一行就是"是不是帧率低"的答案。
-		char Line[64];
-		std::snprintf(Line, sizeof(Line), "FPS %.1f   (%.2f ms)",
-			static_cast<double>(SmoothedFps),
-			SmoothedFps > 0.f ? 1000.0 / static_cast<double>(SmoothedFps) : 0.0);
-		Root.AddItem<UI::FUIText>(UI::FUIName("GameUI.Fps")).SetText(Line);
-	}
-	Root.AddItem<UI::FUIText>(UI::FUIName("GameUI.Label")).SetText("Game UI placeholder");
-
-	Root.AddItem<UI::FUIText>(UI::FUIName("GameUI.Hint"))
-		.SetText("Drag this window by its title bar.")
-		.SetWrap(true);
+	char Line[64] = {};
+	std::snprintf(Line, sizeof(Line), "FPS %.1f   (%.2f ms)",
+		static_cast<double>(SmoothedFps),
+		SmoothedFps > 0.f ? 1000.0 / static_cast<double>(SmoothedFps) : 0.0);
+	// 关闭 = 【隐藏】而不是"停止声明"：`AddItem` 只按 Id 复用、从不剪枝（"未声明者移除"是 `[]`
+	// 块语义的事），少声明一次节点并不会让它从树里消失 —— 那正是"关了 HUD 还剩一行字"。
+	Root.AddItem<UI::FUIText>(UI::FUIName("GameUI.Fps")).SetText(Line).SetVisible(bVisible);
 }
 
 void FUISystem::Update(FGameWorld& World, FGameWorldContext& Frame)
@@ -105,23 +108,32 @@ void FUISystem::Update(FGameWorld& World, FGameWorldContext& Frame)
 	{
 		const float Instant = 1.f / Delta;
 		SmoothedFps = (SmoothedFps <= 0.f) ? Instant : (SmoothedFps * 0.9f + Instant * 0.1f);
-		// 同一份读数每秒落一行日志：屏幕上的数字要盯小字，这一行让 Release 的 `Logs/Maho.log` 里
-		// 直接能查帧率（读帧率不该依赖 trace 开着）。
-		if (++FpsLogFrames >= 60)
-		{
-			FpsLogFrames = 0;
-			MAHO_LOG_CORE_INFO("FPS {:.1f} ({:.2f} ms)", static_cast<double>(SmoothedFps),
-				1000.0 / static_cast<double>(SmoothedFps));
-		}
 	}
 
 	// 交互事件先回传：翻译线程只入队，真正的回调在所有者线程（此处）执行，回调内可再次 Edit()。
 	View->DrainEvents();
 
 	// 声明期：独占写（std::shared_mutex）。翻译线程持共享读时本段会等它翻完这一帧，反之亦然。
+	// `r.stat.hud` 只决定两件"声明"：外壳开不开、那行字可不可见。位置/尺寸用【非零】比例锚点 ——
+	// 翻译层只在 `PosFraction > 0` 时才采纳比例（`{0,0}` 会掉进 ImGui 的默认窗口落位，那正是
+	// "HUD 看着不在左上角"的原因）。
+	const bool bHud = GCVarStatHud.GetValue() != 0;
 	{
 		UI::FUIEditScope Scope = View->Edit();
-		BuildDemoTree(Scope.GetRoot());
+		if (bHud)
+		{
+			// 左上角 HUD：无标题栏 / 不可拖动缩放 / 无滚动条 / 不写 ini（位置归代码管）。
+			View->SetWindowShell(true, "FPS", {}, {},
+				UI::EUIShellFlags::NoTitleBar | UI::EUIShellFlags::NoMove | UI::EUIShellFlags::NoResize |
+				UI::EUIShellFlags::NoScrollbar | UI::EUIShellFlags::NoSavedSettings);
+			View->SetShellFractions(UI::FUIVector2{ 0.008f, 0.012f }, UI::FUIVector2{ 0.16f, 0.055f });
+		}
+		else
+		{
+			// 关掉：外壳收掉（无壳时翻译层只铺一层透明叠加窗口），那行字也置为不可见。
+			View->SetWindowShell(false, "FPS", {}, {}, UI::EUIShellFlags::None);
+		}
+		BuildDemoTree(Scope.GetRoot(), bHud);
 	}
 }
 

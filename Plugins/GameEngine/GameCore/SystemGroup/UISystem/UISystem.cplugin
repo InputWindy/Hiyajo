@@ -5,6 +5,7 @@
   "Dependencies": [
     "GameWorld",
     "UI",
-    "Log"
+    "Log",
+    "ConsoleVariable"
   ]
 }

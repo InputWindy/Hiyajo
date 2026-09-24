@@ -60,8 +60,10 @@ private:
 	 *  between the game world and the render features is not fixed). */
 	UI::FUIView* EnsureDemoView(FGameWorld& World);
 
-	/** Re-declare the demo tree (called from inside a live `Edit()` scope). */
-	void BuildDemoTree(UI::FUIBuilder& Root);
+	/** Re-declare the demo tree (called from inside a live `Edit()` scope). `bVisible`
+	 *  comes from `r.stat.hud` -- the HUD is HIDDEN, never "not declared" (AddItem reuses
+	 *  by id and never prunes, so a skipped declaration would leave the old node on screen). */
+	void BuildDemoTree(UI::FUIBuilder& Root, bool bVisible);
 
 	FEntity DemoWidget;
 
@@ -72,11 +74,8 @@ private:
 	 *  对象活到注销完成（池被清后引用计数仍 >= 1）。 */
 	std::shared_ptr<UI::FUIView> DemoView;
 
-	/** 平滑后的帧率（`Update` 每帧从 `World.GetDeltaSeconds()` 采样）。仅用于演示读数。 */
+	/** 平滑后的帧率（`Update` 每帧从 `World.GetDeltaSeconds()` 采样）。HUD 的唯一读数来源。 */
 	float SmoothedFps = 0.f;
-
-	/** 距上次把帧率写进日志过了几帧（每 60 帧一行，见 `Update`）。 */
-	std::uint32_t FpsLogFrames = 0;
 };
 
 /** Global accessor to the UI system (cross-DLL, mirrors Resource::GetResourceSystem()).

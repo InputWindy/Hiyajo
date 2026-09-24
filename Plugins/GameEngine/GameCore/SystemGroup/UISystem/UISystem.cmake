@@ -21,13 +21,14 @@ target_include_directories(UISystem PUBLIC
 	"${ENGINE_DIR}/Plugins/GameEngine/GameCore/GameWorld/Public"
 	"${ENGINE_DIR}/Plugins/GameEngine/EngineCore/UI/Public"
 	"${ENGINE_DIR}/Plugins/Common/Log/Public"
+	"${ENGINE_DIR}/Plugins/Common/ConsoleVariable/Public"
 )
 set_target_properties(UISystem PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 target_compile_definitions(UISystem PRIVATE MAHO_UISYSTEM_MODULE_EXPORTS)
 target_link_libraries(UISystem PUBLIC Maho)
 set_property(TARGET UISystem PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>")
 set_target_properties(UISystem PROPERTIES OUTPUT_NAME "FUISystem" PREFIX "")
-target_link_libraries(UISystem PUBLIC GameWorld UI Log)
+target_link_libraries(UISystem PUBLIC GameWorld UI Log ConsoleVariable)
 set_target_properties(UISystem PROPERTIES FOLDER "Maho/Plugins/GameEngine/GameCore/SystemGroup")
 source_group(TREE "${CMAKE_CURRENT_LIST_DIR}" FILES ${UISystem_PUBLIC_HEADERS} ${UISystem_PRIVATE_HEADERS} ${UISystem_PRIVATE_SOURCES})
 # -- /MAHOGEN UISystem --
