@@ -3,6 +3,7 @@
 #include <UIViewRegistry.h>
 #include <Widgets/FUIText.h>
 
+#include <Log.h>
 #include <Trace.h>
 #include <cstdio>
 
@@ -19,6 +20,14 @@ void FUISystem::OnInstalled(FGameWorld& World, FGameWorldContext& Frame)
 {
 	MAHO_TRACE_STAGE(IOnInstalled, "UI system install", "publish the system to the world");
 	GUISystem = this;
+}
+
+void FUISystem::ProcessInput(FGameWorld&, FGameWorldContext&)
+{
+	MAHO_TRACE_STAGE(IProcessInput, "UI system input", "the tree is fed by the translation layer");
+	// Input hook -- the world's IProcessInput stage. UI input is delivered to the tree by
+	// the translation layer (the render side owns the context), so there is nothing to
+	// poll here; the stage stays as a declared-but-empty capability.
 }
 
 UI::FUIView* FUISystem::EnsureDemoView(FGameWorld& World)
@@ -96,6 +105,14 @@ void FUISystem::Update(FGameWorld& World, FGameWorldContext& Frame)
 	{
 		const float Instant = 1.f / Delta;
 		SmoothedFps = (SmoothedFps <= 0.f) ? Instant : (SmoothedFps * 0.9f + Instant * 0.1f);
+		// 同一份读数每秒落一行日志：屏幕上的数字要盯小字，这一行让 Release 的 `Logs/Maho.log` 里
+		// 直接能查帧率（读帧率不该依赖 trace 开着）。
+		if (++FpsLogFrames >= 60)
+		{
+			FpsLogFrames = 0;
+			MAHO_LOG_CORE_INFO("FPS {:.1f} ({:.2f} ms)", static_cast<double>(SmoothedFps),
+				1000.0 / static_cast<double>(SmoothedFps));
+		}
 	}
 
 	// 交互事件先回传：翻译线程只入队，真正的回调在所有者线程（此处）执行，回调内可再次 Edit()。

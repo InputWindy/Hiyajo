@@ -43,8 +43,39 @@ FGameWorld::~FGameWorld()
 }
 
 // -- engine stage overrides (host drives these). Initialize/Tick/Shutdown carry
-// the real work; FGameWorld only hosts the world and schedules its systems, the
-// per-stage ECS frame runs in Tick.
+// the real work; the remaining stages are empty -- FGameWorld only hosts the world
+// and schedules its systems, the per-stage ECS frame runs in Tick.
+void FGameWorld::PreInitialize(FEngineBase&, FEngineContext&)
+{
+	MAHO_TRACE_STAGE(IPreInit, "World pre-init", "nothing to build before the world exists");
+}
+void FGameWorld::PostInitialize(FEngineBase&, FEngineContext&)
+{
+	MAHO_TRACE_STAGE(IPostInit, "World post-init", "the world graphs are built on first use");
+	// Nothing to build: the stage sequences are compile-time (FInputStages / FFixedStages /
+	// FPostStages) and the collector's graph is created on first use. Tick drives them.
+}
+void FGameWorld::BeginFrame(FEngineBase&, FEngineContext&)
+{
+	MAHO_TRACE_STAGE(IBeginFrame, "World frame begin", "the world has no frame-head work");
+}
+void FGameWorld::EndFrame(FEngineBase&, FEngineContext&)
+{
+	MAHO_TRACE_STAGE(IEndFrame, "World frame end", "the world has no frame-tail work");
+}
+void FGameWorld::RequestExit(FEngineBase&, FEngineContext&)
+{
+	MAHO_TRACE_STAGE(IExit, "World exit", "the world has no exit work of its own");
+}
+void FGameWorld::PreShutdown(FEngineBase&, FEngineContext&)
+{
+	MAHO_TRACE_STAGE(IPreShutdown, "World pre-shutdown", "the world has no pre-teardown work");
+}
+void FGameWorld::PostShutdown(FEngineBase&, FEngineContext&)
+{
+	MAHO_TRACE_STAGE(IPostShutdown, "World post-shutdown", "the world has no post-teardown work");
+}
+
 void FGameWorld::Initialize(FEngineBase&, FEngineContext&)
 {
 	MAHO_TRACE_STAGE(IInit, "World init", "create the sample entity and install the systems");

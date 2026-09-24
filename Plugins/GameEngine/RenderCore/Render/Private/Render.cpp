@@ -235,6 +235,11 @@ void FRender::WaitShaderCompiles()
 	}
 }
 
+void FRender::PreShutdown(FEngineBase&, FEngineContext&)
+{
+	MAHO_TRACE_STAGE(IPreShutdown, "Render pre-shutdown", "the render features are uninstalled in IShutdown");
+}
+
 void FRender::Shutdown(FEngineBase&, FEngineContext&)
 {
 	MAHO_TRACE_STAGE(IShutdown, "Render shutdown", "drain every async worker before tearing the layer down");
@@ -337,6 +342,11 @@ void FRender::Shutdown(FEngineBase&, FEngineContext&)
 	// its PreUnInstall, ordered here by the collect/shutdown graph.)
 }
 
+void FRender::PostShutdown(FEngineBase&, FEngineContext&)
+{
+	MAHO_TRACE_STAGE(IPostShutdown, "Render post-shutdown", "the RHI teardown already joined its server thread");
+}
+
 void FRender::BeginFrame(FEngineBase&, FEngineContext&)
 {
 	MAHO_TRACE_STAGE(IBeginFrame, "Render frame begin", "the frame head belongs to the first render stage");
@@ -432,6 +442,11 @@ void FRender::EndFrame(FEngineBase&, FEngineContext&)
 	// This is also what un-pins the frame loop: the host may run ahead of the collector by the ring
 	// depth, and the RHI's single-depth frame state is protected by the collector's own cross-frame
 	// edge (frame head @N+1 waits frame tail @N) instead of by a barrier on this chain.
+}
+
+void FRender::RequestExit(FEngineBase&, FEngineContext&)
+{
+	MAHO_TRACE_STAGE(IExit, "Render exit", "the render layer has no exit work of its own");
 }
 
 FRDGTextureRef FRender::CreateTexture(const FRHITextureDesc& Desc, ERDGResourceLifetime Lifetime)

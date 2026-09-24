@@ -14,6 +14,11 @@ namespace Maho
 /** Non-fatal error report: stderr + Saved/Logs/Fatal.log, no abort. */
 MAHO_API void ReportError(const char* Message);
 
+/** Record a soft invariant that broke SILENTLY, then break into the debugger when one is attached.
+ *  The record happens either way (`ReportError`'s two sinks), the break is a debugger affordance
+ *  only -- a run without a debugger continues. See `MAHO_ENSURE_BREAK`. */
+MAHO_API void ReportEnsureBreak(const char* Message);
+
 /** Install std::terminate handler once (call from process entry before anything else). */
 MAHO_API void InstallFatalHandlers();
 
@@ -84,10 +89,37 @@ MAHO_API void InstallFatalHandlers();
 		}                                                                             \
 	} while (0)
 
+/**
+ * MAHO_ENSURE_BREAK -- MAHO_ENSURE that ALSO breaks into the debugger the first time it fires.
+ *
+ * For failures that are SILENT BY DESIGN (the scheduler skipping a frame, a sequence reusing another
+ * one's query) a log line is not enough: nobody reads it until after the bug bit, and by then the
+ * evidence is a frame that simply has no bars. This reports once (stderr + Saved/Logs/Fatal.log, so a
+ * RELEASE run still keeps the record) and then BREAKS -- but only when a debugger is attached, so a
+ * build without one keeps running instead of turning a warning into a crash. Execution always
+ * continues: this changes what you see, never what the engine does.
+ *
+ * Shipping (MAHO_DO_ENSURE == 0) compiles the whole thing out, arguments included.
+ */
+#define MAHO_ENSURE_BREAK(Expr, Fmt, ...)                                             \
+	do {                                                                              \
+		static bool MAHO_EnsureBreakOnce = false;                                     \
+		if (!(Expr) && !MAHO_EnsureBreakOnce) {                                       \
+			MAHO_EnsureBreakOnce = true;                                              \
+			char MAHO_EnsureBreakMsg[512];                                            \
+			std::snprintf(MAHO_EnsureBreakMsg, sizeof(MAHO_EnsureBreakMsg), Fmt,      \
+				##__VA_ARGS__);                                                        \
+			::Maho::ReportEnsureBreak(MAHO_EnsureBreakMsg);                           \
+		}                                                                             \
+	} while (0)
+
 #else
 
 /** Shipping: the report is gone too -- but the guard below still has to read. */
 #define MAHO_ENSURE(Expr) ((void)0)
+
+/** Shipping: compiled out entirely -- no check, no argument evaluation, no cost. */
+#define MAHO_ENSURE_BREAK(Expr, Fmt, ...) ((void)0)
 
 #endif // MAHO_DO_ENSURE
 

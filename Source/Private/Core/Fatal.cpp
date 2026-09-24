@@ -218,4 +218,20 @@ void ReportError(const char* Message)
 	AppendFatalLogFile(Text);
 }
 
+void ReportEnsureBreak(const char* Message)
+{
+	// The durable half first: a silent skip has to leave a record even in a RELEASE run (that is the
+	// whole point -- nobody reads it live, they read it after the frame with no bars appeared).
+	ReportError(Message);
+
+#if defined(_WIN32) && defined(_MSC_VER)
+	// The debugger half: only if somebody is actually watching. Without this guard a warning macro
+	// would itself become a new crash source in every unattended run.
+	if (IsDebuggerPresent())
+	{
+		__debugbreak();
+	}
+#endif
+}
+
 } // namespace Maho

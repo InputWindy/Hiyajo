@@ -79,7 +79,7 @@ public:
  *   Script::GetScriptSystem()->DoFile("main.lua");      // host loads scripts
  *   Script::GetScriptSystem()->Call("OnUpdate", dt);    // host drives per frame
  */
-class FScriptSystem : public FFrameExtension, public IPipeline<IInit, IShutdown>
+class FScriptSystem : public FFrameExtension, public IPipeline<IPreInit, IInit, IPostInit, IPreShutdown, IShutdown, IPostShutdown>
 {
 public:
 	MAHO_DECLARE_FRAME(FScriptSystem);
@@ -165,8 +165,12 @@ public:
 
 private:
 	// -- engine pipeline stages (scheduler-only) --
+	void PreInitialize(FEngineBase&, FEngineContext&) override {}
 	void Initialize(FEngineBase& Engine, FEngineContext& Frame) override;
+	void PostInitialize(FEngineBase&, FEngineContext&) override {}
+	void PreShutdown(FEngineBase&, FEngineContext&) override {}
 	void Shutdown(FEngineBase& Engine, FEngineContext& Frame) override;
+	void PostShutdown(FEngineBase&, FEngineContext&) override {}
 
 	std::vector<std::unique_ptr<IScriptLanguage>> Languages;
 	IScriptLanguage* Active = nullptr;

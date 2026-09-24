@@ -54,15 +54,18 @@ private:
 
 /** Global interned string pool - an engine layer service. */
 class FNamePool
-	: public FFrameExtension, public IPipeline<IInit, IPostInit, IShutdown>
+	: public FFrameExtension, public IPipeline<IPreInit, IInit, IPostInit, IPreShutdown, IShutdown, IPostShutdown>
 {
 	MAHO_DECLARE_FRAME(FNamePool);
 
 private:
 	// -- engine layer stages (scheduler-only) --
+	void PreInitialize(FEngineBase&, FEngineContext&) override {}
 	void Initialize(FEngineBase&, FEngineContext&) override;
 	void PostInitialize(FEngineBase&, FEngineContext&) override {}
+	void PreShutdown(FEngineBase&, FEngineContext&) override {}
 	void Shutdown(FEngineBase&, FEngineContext&) override;
+	void PostShutdown(FEngineBase&, FEngineContext&) override {}
 
 public:
 	/** Intern a string - returns the canonical FName (thread-safe). */

@@ -891,12 +891,48 @@ private:
 	}
 
 	/** Re-run the frame-set query when the topology changed. Takes the stage list as a
-	 *  TTypeList so the pack expands into Select<...>, which takes the stages directly. */
+	 *  TTypeList so the pack expands into Select<...>, which takes the stages directly.
+	 *
+	 *  ONE cache serves ALL sequences, so the first sequence to run after a topology change is the one
+	 *  whose predicate fills it -- and every later sequence reuses that answer. That is correct only
+	 *  while every frame mounts every sequence; a frame that mounts sequence B but not sequence A is
+	 *  silently NOT DRIVEN once A ran first (measured: a world system mounting IProcessInput+IUpdate
+	 *  stopped running IUpdate the moment IProcessInput left its pipeline -- no bar, no log, nothing).
+	 *  A silent skip is un-debuggable, so reusing the cache for a DIFFERENT sequence says so, loudly,
+	 *  once per site: see MAHO_ENSURE_BREAK (report + break under a debugger, Shipping compiles it out).
+	 *  The fix -- one frame set per sequence -- is separate work. */
 	template <typename... TStages>
 	void ExpandLoopFrames(TTypeList<TStages...>)
 	{
 		if (!bLoopDirty)
 		{
+#if MAHO_DO_ENSURE
+			// Reuse is the normal case: a collector runs several sequences per frame. It becomes a
+			// SILENT SKIP only when this sequence would have selected a frame the cache does not hold
+			// -- that frame mounts this sequence, is installed, and is simply never asked. Ask the
+			// same query again and compare (diagnostic builds only; Shipping compiles this out).
+			const std::vector<FFrameExtension*> WouldSelect = Select<TStages...>();
+			for (FFrameExtension* Candidate : WouldSelect)
+			{
+				bool bCached = false;
+				for (FFrameExtension* Cached : LoopFrames)
+				{
+					if (Cached == Candidate)
+					{
+						bCached = true;
+						break;
+					}
+				}
+				if (!bCached)
+				{
+					const std::string_view Name = Candidate->GetName();
+					MAHO_ENSURE_BREAK(false,
+						"FrameBuilder: frame %.*s mounts this stage sequence but is not in the frame set "
+						"cached by an earlier one -- it is silently NOT DRIVEN (see ExpandLoopFrames)",
+						static_cast<int>(Name.size()), Name.data());
+				}
+			}
+#endif
 			return;
 		}
 		bLoopDirty = false;

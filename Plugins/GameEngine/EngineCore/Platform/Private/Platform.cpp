@@ -773,6 +773,11 @@ void FPlatform::PollEvents()
 
 // -- engine loop stages (FEngineLayer) --
 
+void FPlatform::BeginFrame(FEngineBase&, FEngineContext&)
+{
+	MAHO_TRACE_STAGE(IBeginFrame, "Platform frame begin", "no frame-head work on the platform side");
+}
+
 void FPlatform::Tick(FEngineBase& Engine, FEngineContext& Frame)
 {
 	MAHO_TRACE_STAGE(ITick, "Platform tick", "pump the window messages and publish this frame's input");

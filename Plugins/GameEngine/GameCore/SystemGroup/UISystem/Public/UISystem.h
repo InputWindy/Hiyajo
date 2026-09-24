@@ -40,12 +40,13 @@ struct FUIWidget
  * No ImGui here: the game declares trees through the UI plugin's builder API, and the
  * translation layer (owned by the render feature) maps them to ImGui.
  */
-class MAHO_UISYSTEM_API FUISystem : public FFrameExtension, public IPipeline<IOnInstalled, IUpdate, IPreUnInstall>
+class MAHO_UISYSTEM_API FUISystem : public FFrameExtension, public IPipeline<IOnInstalled, IProcessInput, IUpdate, IPreUnInstall>
 {
 	MAHO_DECLARE_FRAME(FUISystem);
 
 public:
 	void OnInstalled(FGameWorld& World, FGameWorldContext& Frame) override;
+	void ProcessInput(FGameWorld& World, FGameWorldContext& Frame) override;
 	void Update(FGameWorld& World, FGameWorldContext& Frame) override;
 	void PreUnInstall(FGameWorld& World, FGameWorldContext& Frame) override;
 
@@ -73,6 +74,9 @@ private:
 
 	/** 平滑后的帧率（`Update` 每帧从 `World.GetDeltaSeconds()` 采样）。仅用于演示读数。 */
 	float SmoothedFps = 0.f;
+
+	/** 距上次把帧率写进日志过了几帧（每 60 帧一行，见 `Update`）。 */
+	std::uint32_t FpsLogFrames = 0;
 };
 
 /** Global accessor to the UI system (cross-DLL, mirrors Resource::GetResourceSystem()).
