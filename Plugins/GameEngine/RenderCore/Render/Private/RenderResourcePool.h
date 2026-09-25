@@ -26,13 +26,22 @@ namespace Maho
  *     slot goes inactive but its native + memory are KEPT (reused by a later
  *     same-descriptor request) until the pool Shutdown. Descriptor mismatch is
  *     never reclaimed (it is a long-lived target).
- *   - Transient: identity = descriptor within a frame. Same-Persistent reuse
- *     during a frame, BUT at BeginFrame every transient slot is recycled
- *     (inactive) WITHOUT destroying native + memory, so next frame's
- *     same-descriptor request reuses them. The native is rebuilt ONLY when the
- *     descriptor changes (a recycled slot with a different desc is dropped and a
- *     fresh native is created). Recycling happens ONLY after the host waited the
- *     previous frame's fence, so no in-flight command references them.
+ *   - Transient: identity = descriptor within a FRAME, and the frame is the hard
+ *     lifetime. At BeginFrame EVERY transient slot is recycled: it goes inactive and
+ *     back on the free list, its refcount is zeroed, and its Generation advances --
+ *     while native + memory are KEPT, so the next frame's same-descriptor request
+ *     reuses them in place (that is the "no per-frame vkCreate / vkAllocate" step).
+ *     The native is rebuilt only when the descriptor changed (a recycled slot with a
+ *     different desc is condemned and a fresh native created). Recycling happens ONLY
+ *     after the host waited the previous frame's fence, so no in-flight command
+ *     references them.
+ *     A handle minted in an earlier frame no longer resolves: it carries the
+ *     generation it was minted with, Get*() finds a different one and REPORTS the
+ *     expired handle instead of returning a native. Crossing a frame boundary with a
+ *     live transient handle is therefore a detected error, never a silent alias --
+ *     which is exactly why the pool can recycle unconditionally (an earlier
+ *     "refcount == 0" gate could not: a handle nobody ever released kept its slot
+ *     out of circulation forever, so every frame allocated a fresh slot + native).
  *
  * This is the "no per-frame vkCreate/vkAllocate" step. The NEXT layer (VMA
  * aliasing of non-overlapping transients) will need size/alignment +
@@ -172,6 +181,11 @@ private:
 		ERDGResourceLifetime Lifetime = ERDGResourceLifetime::Persistent;
 		std::uint32_t RefCount = 0;
 		bool bActive = false;
+		/** Occupant generation: advanced every time a TRANSIENT slot is recycled at the frame
+		 *  boundary. A handle carries the generation it was minted with, so a handle that outlives
+		 *  its frame fails to resolve (Get*) instead of silently aliasing the next occupant.
+		 *  Persistent slots never advance it (their handles are valid until the pool shuts down). */
+		std::uint32_t Generation = 0;
 	};
 
 	struct FBufferEntry
@@ -181,6 +195,8 @@ private:
 		ERDGResourceLifetime Lifetime = ERDGResourceLifetime::Persistent;
 		std::uint32_t RefCount = 0;
 		bool bActive = false;
+		/** See FTextureEntry::Generation. */
+		std::uint32_t Generation = 0;
 	};
 
 	// PSO cache entries: the descriptor that produced the native. Reuse = find an

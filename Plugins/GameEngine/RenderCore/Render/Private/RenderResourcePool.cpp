@@ -1,5 +1,7 @@
 #include "RenderResourcePool.h"
 
+#include <Core/Fatal.h>
+
 #include <algorithm>
 #include <cstring>
 
@@ -359,7 +361,7 @@ FRDGTextureRef FRHIResourcePool::CreateTexture(const FRHITextureDesc& Desc, ERDG
 		FTextureEntry& E = Textures[static_cast<std::size_t>(Reuse)];
 		E.bActive = true;
 		E.RefCount = 1;
-		return FRDGTextureRef(this, static_cast<std::uint32_t>(Reuse));
+		return FRDGTextureRef(this, static_cast<std::uint32_t>(Reuse), E.Generation);
 	}
 
 	const std::uint32_t Slot = AllocTextureSlot();
@@ -391,7 +393,7 @@ FRDGTextureRef FRHIResourcePool::CreateTexture(const FRHITextureDesc& Desc, ERDG
 		Entry.View = RHI->CreateTextureView(ViewDesc);
 	}
 
-	return FRDGTextureRef(this, Slot);
+	return FRDGTextureRef(this, Slot, Entry.Generation);
 }
 
 FRDGBufferRef FRHIResourcePool::CreateBuffer(const FRHIBufferDesc& Desc, ERDGResourceLifetime Lifetime)
@@ -402,7 +404,7 @@ FRDGBufferRef FRHIResourcePool::CreateBuffer(const FRHIBufferDesc& Desc, ERDGRes
 		FBufferEntry& E = Buffers[static_cast<std::size_t>(Reuse)];
 		E.bActive = true;
 		E.RefCount = 1;
-		return FRDGBufferRef(this, static_cast<std::uint32_t>(Reuse));
+		return FRDGBufferRef(this, static_cast<std::uint32_t>(Reuse), E.Generation);
 	}
 
 	const std::uint32_t Slot = AllocBufferSlot();
@@ -420,7 +422,7 @@ FRDGBufferRef FRHIResourcePool::CreateBuffer(const FRHIBufferDesc& Desc, ERDGRes
 	Entry.RefCount = 1;
 	Entry.bActive = true;
 	Entry.Native = RHI ? RHI->CreateBuffer(Desc) : nullptr;
-	return FRDGBufferRef(this, Slot);
+	return FRDGBufferRef(this, Slot, Entry.Generation);
 }
 
 // -- command list --------------------------------------------------------------
@@ -685,40 +687,71 @@ FRHIDescriptorSet* FRHIResourcePool::GetOrCreateMutableDescriptorSet(
 
 // -- release -------------------------------------------------------------------
 
+namespace
+{
+
+/** A transient handle that outlived its frame: the pool already recycled the slot at the boundary,
+ *  so the generation it carries no longer matches the live occupant. Reported once per call site --
+ *  MAHO_ENSURE_BREAK writes a durable record (stderr + Saved/Logs/Fatal.log) and breaks into the
+ *  debugger when one is attached, so the mistake is loud in a run that has a debugger and still
+ *  leaves evidence in one that does not. Resolution then returns nothing rather than the next
+ *  occupant's native: the old silent aliasing is exactly what this generation exists to kill. */
+void ReportExpiredTransientHandle(const char* Kind, std::uint32_t Slot, std::uint32_t HandleGen,
+	std::uint32_t LiveGen)
+{
+	MAHO_ENSURE_BREAK(false,
+		"RDG %s handle outlived its frame: slot %u carries handle generation %u while the live "
+		"occupant is generation %u -- a Transient handle is valid only for the frame that minted "
+		"it (see RDG.h / RenderResourcePool.h)",
+		Kind, Slot, HandleGen, LiveGen);
+}
+
+} // namespace
+
 void FRHIResourcePool::ReleaseTexture(FRDGTextureRef& Ref)
 {
-	if (!Ref.IsValid())
+	if (!Ref.IsValid() || Ref.Id >= Textures.size())
 	{
 		return;
 	}
 	FTextureEntry& E = Textures[Ref.Id];
-	if (E.RefCount > 0)
+	// A handle minted before the last frame boundary no longer refers to this slot's occupant --
+	// BeginFrame already reclaimed it, so there is nothing left to release (and nothing to
+	// decrement: the live occupant's refcount is not this caller's to drop).
+	if (E.Generation == Ref.Generation)
 	{
-		E.RefCount -= 1;
-	}
-	if (E.RefCount == 0)
-	{
-		E.bActive = false;
-		// Native + view are KEPT (both lifetimes) so a later same-descriptor
-		// request reuses them. Transients are additionally recycled by BeginFrame.
+		if (E.RefCount > 0)
+		{
+			E.RefCount -= 1;
+		}
+		if (E.RefCount == 0)
+		{
+			E.bActive = false;
+			// Native + view are KEPT (both lifetimes) so a later same-descriptor request reuses
+			// them. A transient is additionally recycled at every frame boundary regardless of
+			// this count -- see BeginFrame.
+		}
 	}
 	Ref.Reset();
 }
 
 void FRHIResourcePool::ReleaseBuffer(FRDGBufferRef& Ref)
 {
-	if (!Ref.IsValid())
+	if (!Ref.IsValid() || Ref.Id >= Buffers.size())
 	{
 		return;
 	}
 	FBufferEntry& E = Buffers[Ref.Id];
-	if (E.RefCount > 0)
+	if (E.Generation == Ref.Generation)
 	{
-		E.RefCount -= 1;
-	}
-	if (E.RefCount == 0)
-	{
-		E.bActive = false;
+		if (E.RefCount > 0)
+		{
+			E.RefCount -= 1;
+		}
+		if (E.RefCount == 0)
+		{
+			E.bActive = false;
+		}
 	}
 	Ref.Reset();
 }
@@ -731,7 +764,13 @@ FRHITexture* FRHIResourcePool::GetTexture(const FRDGTextureRef& Ref) const
 	{
 		return nullptr;
 	}
-	return Textures[Ref.Id].Native;
+	const FTextureEntry& E = Textures[Ref.Id];
+	if (E.Generation != Ref.Generation)
+	{
+		ReportExpiredTransientHandle("texture", Ref.Id, Ref.Generation, E.Generation);
+		return nullptr;
+	}
+	return E.Native;
 }
 
 FRHITextureView* FRHIResourcePool::GetTextureView(const FRDGTextureRef& Ref)
@@ -740,13 +779,29 @@ FRHITextureView* FRHIResourcePool::GetTextureView(const FRDGTextureRef& Ref)
 	{
 		return nullptr;
 	}
-	return Textures[Ref.Id].View;
+	const FTextureEntry& E = Textures[Ref.Id];
+	if (E.Generation != Ref.Generation)
+	{
+		ReportExpiredTransientHandle("texture view", Ref.Id, Ref.Generation, E.Generation);
+		return nullptr;
+	}
+	return E.View;
 }
 
 const FRHITextureDesc& FRHIResourcePool::GetTextureDesc(const FRDGTextureRef& Ref) const
 {
 	static const FRHITextureDesc Empty{};
-	return (!Ref.IsValid() || Ref.Id >= Textures.size()) ? Empty : Textures[Ref.Id].Desc;
+	if (!Ref.IsValid() || Ref.Id >= Textures.size())
+	{
+		return Empty;
+	}
+	const FTextureEntry& E = Textures[Ref.Id];
+	if (E.Generation != Ref.Generation)
+	{
+		ReportExpiredTransientHandle("texture desc", Ref.Id, Ref.Generation, E.Generation);
+		return Empty;
+	}
+	return E.Desc;
 }
 
 FRHIBuffer* FRHIResourcePool::GetBuffer(const FRDGBufferRef& Ref) const
@@ -755,7 +810,13 @@ FRHIBuffer* FRHIResourcePool::GetBuffer(const FRDGBufferRef& Ref) const
 	{
 		return nullptr;
 	}
-	return Buffers[Ref.Id].Native;
+	const FBufferEntry& E = Buffers[Ref.Id];
+	if (E.Generation != Ref.Generation)
+	{
+		ReportExpiredTransientHandle("buffer", Ref.Id, Ref.Generation, E.Generation);
+		return nullptr;
+	}
+	return E.Native;
 }
 
 // -- frame recycle -------------------------------------------------------------
@@ -871,24 +932,26 @@ void FRHIResourcePool::BeginFrame()
 		}
 	}
 
-	// Recycle transient slots: mark inactive and free the slot. Crucially we KEEP native + view +
-	// memory - the host BeginFrame already waited the previous frame's fence, so no in-flight command
-	// references them, and a same-descriptor request this frame reuses the objects in place (no
-	// per-frame vkCreate / vkAllocate). A later request whose descriptor differs drops the stale native
-	// via Create* ('recycled slot, different desc' branch).
+	// Recycle transient slots: mark inactive and free the slot while KEEPING native + view + memory
+	// (the host BeginFrame already waited the previous frame's fence, so no in-flight command
+	// references them) -- a same-descriptor request this frame then reuses the objects in place, with
+	// no per-frame vkCreate / vkAllocate. A later request whose descriptor differs drops the stale
+	// native via Create* ('recycled slot, different desc' branch).
 	//
-	// ONLY slots nobody still holds (RefCount == 0) are recycled. Clearing a HELD slot is what turns a
-	// ref that lives across the boundary into an alias: the slot gets handed to the next request, the
-	// held ref then resolves to a DIFFERENT native (wrong usage, wrong size) and the driver validates
-	// exactly that ("buffer created with INDEX usage bound as vertex", "copy larger than destination").
-	// A held transient therefore survives the boundary and is recycled at the first boundary after its
-	// last ref is released. Persistent slots are never touched here.
+	// UNCONDITIONALLY: the frame IS a transient's lifetime, so a slot nobody released still gets
+	// recycled. Advancing the generation is what makes that safe -- the handle from the frame that
+	// just ended stops resolving (Get* reports it) instead of aliasing whatever native takes the slot
+	// next, which the old `RefCount == 0` gate could only avoid by keeping the slot out of
+	// circulation forever (every frame minted a fresh slot + native: 4 buffers/frame, ~200 KB/frame,
+	// unbounded growth). Persistent slots are never touched here.
 	FreeTextureSlots.clear();
 	for (std::size_t I = 0; I < Textures.size(); ++I)
 	{
 		FTextureEntry& E = Textures[I];
-		if (E.Lifetime == ERDGResourceLifetime::Transient && E.RefCount == 0)
+		if (E.Lifetime == ERDGResourceLifetime::Transient)
 		{
+			++E.Generation;
+			E.RefCount = 0;
 			E.bActive = false;
 			FreeTextureSlots.push_back(static_cast<std::uint32_t>(I));
 		}
@@ -898,8 +961,10 @@ void FRHIResourcePool::BeginFrame()
 	for (std::size_t I = 0; I < Buffers.size(); ++I)
 	{
 		FBufferEntry& E = Buffers[I];
-		if (E.Lifetime == ERDGResourceLifetime::Transient && E.RefCount == 0)
+		if (E.Lifetime == ERDGResourceLifetime::Transient)
 		{
+			++E.Generation;
+			E.RefCount = 0;
 			E.bActive = false;
 			FreeBufferSlots.push_back(static_cast<std::uint32_t>(I));
 		}

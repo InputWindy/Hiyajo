@@ -79,7 +79,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div id="app">
   <div id="side">
     <h1>Maho 引擎源码</h1>
-    <div class="search" title="左侧扫描 Source/**/*.h：7 个头文件 · 已声明 7 个 · 41 个实体 / 296 个成员 ｜ 内容在 Tools/docs_content.py 里逐条声明">
+    <div class="search" title="左侧扫描 Source/**/*.h：7 个头文件 · 已声明 7 个 · 41 个实体 / 298 个成员 ｜ 内容在 Tools/docs_content.py 里逐条声明">
       <input id="q" type="search" placeholder="搜索头文件…  （如 Frame、Core、Entry）" autocomplete="off">
     </div>
     <div id="tree"><ul>
@@ -104,11 +104,12 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div class="hdr">Private/RenderResourcePool.h</div>
 <h2 class="file-title">RenderResourcePool.h —— RDG 资源池（原子分配层）</h2>
 <div class="card"><div class="doc">
-<p>持有 `FRDG*Ref` 背后的原生 `FRHITexture` / `FRHIBuffer`。这是**原子分配层**：它只根据「生命期类别 + 描述 + 引用计数」决定原生对象（与显存）**何时**被创建、复用、释放；它不知道 pass、布局转换或帧处理顺序 —— 那些层建在它上面。</p>
+<p>持有 `FRDG*Ref` 背后的原生 `FRHITexture` / `FRHIBuffer`。这是**原子分配层**：它只根据「生命期类别 + 描述 + 引用计数 + 槽位代次」决定原生对象（与显存）**何时**被创建、复用、释放；它不知道 pass、布局转换或帧处理顺序 —— 那些层建在它上面。</p>
 <p>分配契约（稳定，上层能力都建在它上面）：</p>
 <p>**Persistent** = 身份即描述。首次请求在某个槽位建原生；引用计数 &gt; 0 时槽位活跃；降到 0 就转为不活跃，但**原生 + 显存保留**（供后来同描述的请求复用）直到池 Shutdown；**描述不再匹配的 Persistent 槽位永不被回收**（它是长生命周期目标）。</p>
-<p>**Transient** = 帧内身份即描述。帧内与 Persistent 同样复用；但 `BeginFrame` 会把每个 transient 槽位置为不活跃（**不销毁原生与显存**），于是下一帧同描述的请求直接拿回去。**只有描述变了才重建**（不活跃槽位遇到不同描述 ⇒ 丢掉旧原生、建新的）。回收只发生在宿主等过上一帧栅栏之后 ⇒ 没有在飞命令还在引用它们。</p>
-<p>这就是「没有每帧 `vkCreate` / `vkAllocate`」的那一步。下一层（非重叠 transient 的 VMA 别名）需要尺寸 / 对齐 + 引用图，并且要把「建原生」与「绑显存」拆开 —— 这两件事现在都还没暴露。</p>
+<p>**Transient** = 帧内身份即描述，**帧就是硬生命期**。`BeginFrame` 把每个 transient 槽位**无条件**回收：置为不活跃、引用计数清零、代次前进，槽位回到空闲表 —— 而**原生 + 显存保留**，于是下一帧同描述的请求原地复用（这就是「没有每帧 `vkCreate` / `vkAllocate`」的那一步）。**只有描述变了才重建**（回收槽位遇到不同描述 ⇒ 先升天旧原生、再建新的）。回收只发生在宿主等过上一帧栅栏之后 ⇒ 没有在飞命令还在引用它们。</p>
+<p>**代次（generation）是无条件回收的前提**：句柄带着签发时的代次，帧边界一过它就解析不出东西（解析点上报「句柄跨帧了」并返回空），而不是像旧实现那样靠「引用计数 == 0」—— 那个闸门没人减计数就永远不开，槽位永久失去流通，结果每帧新建一个槽位 + 原生（实测 4 个缓冲/帧、约 200 KB/帧、2 分钟 20 GB 无界增长）。**Persistent** 槽位永不参与这里的回收，代次也不前进（句柄有效到池 Shutdown）。</p>
+<p>下一层（非重叠 transient 的 VMA 别名）需要尺寸 / 对齐 + 引用图，并且要把「建原生」与「绑显存」拆开 —— 这两件事现在都还没暴露。</p>
 </div></div>
 <div class="card">
 <h3 class="card-title">包含的头文件</h3>
@@ -157,8 +158,8 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">explicit</span> FRHIResourcePool(IRHI* InRHI)</td><td>构造：只绑 RHI（不建任何资源）</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>FRDGTextureRef CreateTexture(<span class="kw">const</span> FRHITextureDesc&amp; Desc, ERDGResourceLifetime Lifetime)</td><td>要一块纹理：先找可复用的不活跃槽（描述 + 生命期类别都匹配），命中就复活，否则新建原生 + 视图并占一个槽</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>FRDGBufferRef CreateBuffer(<span class="kw">const</span> FRHIBufferDesc&amp; Desc, ERDGResourceLifetime Lifetime)</td><td>要一块缓冲（同上逻辑）</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> ReleaseTexture(FRDGTextureRef&amp; Ref)</td><td>归还纹理引用（计数减一；清零入参引用）</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> ReleaseBuffer(FRDGBufferRef&amp; Ref)</td><td>归还缓冲引用</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> ReleaseTexture(FRDGTextureRef&amp; Ref)</td><td>归还纹理引用（计数减一；清零入参引用）。**跨帧的旧句柄是空操作**：帧边界已经无条件回收了那个槽位，计数不属于调用方，且代次不匹配 ⇒ 只清句柄</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> ReleaseBuffer(FRDGBufferRef&amp; Ref)</td><td>归还缓冲引用（同上，代次不匹配则只清句柄）</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FRHICommandList* AcquireRenderList()</td><td>**要一张全新的图形命令列表**给渲染特性的 pass。池登记它（未提交），**提交点**（帧尾 `IPresent` 的 `SubmitRecordedPasses`）调 `RetireRenderLists` 接手，它在**下一个 `BeginFrame`**（宿主等过上一帧的交换链栅栏之后）被销毁 —— 与 transient 资源同一条「按栅栏对齐的生命期」规则：已提交的列表可能还在 GPU 上执行。<br>**只在提交后销毁**这条不是洁癖：帧循环之前就录好的列表（初始化期的镜像上传）要等到帧 0 的 `IPresent` 才提交，早销毁就是给队列一张已释放的命令缓冲</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> RetireRenderLists(<span class="kw">const</span> std::vector&lt;FRHICommandList*&gt;&amp; Lists)</td><td>把**刚提交**的列表从 pending 移到 retiring（下一个 `BeginFrame` 销毁）</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> CondemnTexture(FRHITexture* Native, FRHITextureView* View) / CondemnBuffer(FRHIBuffer*)</td><td>槽位被**不同描述**复用时，旧原生不再立刻销毁，而是**缓一帧**（`FlushCondemned` 在下一个 `BeginFrame` 执行）。理由：池在帧头回收而列表在帧尾提交，中间那一帧里立刻销毁就会销毁一个还可能挂在待提交列表上的原生 —— 实测报成 `VkBuffer destroyed`（VUID-vkQueueSubmit-pCommandBuffers-00070）</td></tr>
@@ -173,7 +174,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FRHITextureView* GetTextureView(<span class="kw">const</span> FRDGTextureRef&amp; Ref)</td><td>引用 → 原生纹理视图（附件 / 描述符绑定用）</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">const</span> FRHITextureDesc&amp; GetTextureDesc(<span class="kw">const</span> FRDGTextureRef&amp; Ref) <span class="kw">const</span></td><td>引用 → **创建时那份描述**（格式 / 尺寸）。特性据此解析渲染目标，不必伸手去 RHI / 交换链</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FRHIBuffer* GetBuffer(<span class="kw">const</span> FRDGBufferRef&amp; Ref) <span class="kw">const</span></td><td>引用 → 原生缓冲</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> BeginFrame()</td><td>**帧边界的两件事**：回收全部 transient 槽位（保留原生 + 显存，绝不每帧销毁）+ 销毁上一帧提交的命令列表。由宿主在**等过上一帧栅栏之后**的帧首调用</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> BeginFrame()</td><td>**帧边界的三件事**：**无条件**回收全部 transient 槽位（代次前进 + 计数清零 + 回空闲表，**保留原生 + 显存**，绝不每帧销毁）+ 销毁上一帧提交的命令列表 + 清扫没人再请求的描述符 set。由宿主在**等过上一帧栅栏之后**的帧首调用</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Shutdown()</td><td>销毁全部原生资源（关池）。顺序：管线 → 着色器模块 → 管线布局 → set 布局（**set 布局必须比引用它的管线布局活得久**）→ 采样器 / set / 纹理 / 缓冲</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">template</span> &lt;<span class="kw">typename</span> TParameters&gt; [[nodiscard]] TParameters* AllocParameters()</td><td>从池的**帧内**分配器 bump 分配一个宏声明的参数结构并 placement-<span class="kw">new</span>。返回的指针**只在当前帧有效**（bump 分配器在下一个 `BeginFrame` 复位）⇒ 特性必须在分配它的那一帧里消费掉。对应 UE 的 `GraphBuilder.AllocateParameters&lt;T&gt;()`：调用方永不管理这块内存，**帧边界就是生命期**</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">void</span>* AllocateFrameTransient(std::size_t Size, std::size_t Align)</td><td>从帧内 bump 池分配 `Size` 字节、按 `Align` 对齐。当前块放不下就**增长池（从不释放）**；每个块在下一个 `BeginFrame` 复位其 used 高水位（整池回收给下一帧）。`FRender::AllocParameters&lt;T&gt;()` 经非模板桥转发到这里，好让公开的渲染头（只前向声明池）永远不在不完整类型上实例化成员模板</td></tr>
@@ -205,7 +206,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div class="card"><div class="doc">
 <p>渲染特性的**声明词汇**：它想用一块离屏资源、想渲染到某个目标、想把哪些资源绑给着色器，全在这里声明 —— 但**一个 RHI 对象都看不到**。</p>
 <p>两条关键设计：</p>
-<p>**引用是池句柄**（`FRDGTextureRef` / `FRDGBufferRef` = 池指针 + 槽位号）：原生的 `FRHITexture` / `FRHIBuffer` 活在资源池里跨帧复用，特性只持引用；`GetRHI()` / `GetView()` 是**当前帧内有效的解析点**（帧外调用没有意义）。</p>
+<p>**引用是池句柄**（`FRDGTextureRef` / `FRDGBufferRef` = 池指针 + 槽位号 + **代次**）：原生的 `FRHITexture` / `FRHIBuffer` 活在资源池里跨帧复用，特性只持引用；`GetRHI()` / `GetView()` 是**当前帧内有效的解析点**（帧外调用没有意义 —— transient 句柄只属于签发它的那一帧，跨帧使用会被代次校验逮住并上报，而不是静默指到别人身上）。</p>
 <p>**输入与输出分两半**（`FPassParameter` 输入 vs `FRenderTarget` 输出）：两者方向相反，所以并排成一个 `FRenderPassDesc`，而**不合并** —— 渲染目标里塞绑定会让「渲染到哪」与「读什么」的边界含混。</p>
 </div></div>
 <div class="card">
@@ -229,7 +230,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <thead><tr><th>枚举值</th><th>说明</th></tr></thead>
 <tbody>
 <tr><td>Persistent</td><td>跨帧、身份稳定（按描述命中复用）。原生 + 显存活到池 Shutdown，**不按帧回收**</td></tr>
-<tr><td>Transient</td><td>帧内。原生 + 显存**跨帧保留并复用**（没有每帧 `vkCreate` / `vkAllocate`）：下一帧同描述请求直接拿回；只有描述变了才重建</td></tr>
+<tr><td>Transient</td><td>**一帧之命**：原生 + 显存取描述命中复用（没有每帧 `vkCreate` / `vkAllocate`），但槽位在每个 `BeginFrame` **无条件回收**（代次前进）⇒ 句柄只在签发它的那一帧有效，跨帧使用会被解析点检出并上报，而不是静默别名到下一个占用者身上</td></tr>
 </tbody></table>
 </div>
 <div class="card">
@@ -249,47 +250,49 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div class="ent e-class" id="Public__RDG_h-0">
 <h3><span class="kind">类</span> FRDGTextureRef</h3>
 <div class="sect"><div class="doc">
-<p>离屏纹理的非 RHI 引用（池 + 槽位号）。默认构造 = 空引用；拷贝便宜（两个整数），所以可以按值传进绘制协议。</p>
+<p>离屏纹理的非 RHI 引用（池 + 槽位号 + 代次）。默认构造 = 空引用；拷贝便宜（三个整数），所以可以按值传进绘制协议。**代次**让「帧就是 transient 的生命期」可以被强制：帧边界一过，上一帧签发的句柄解析不出东西（上报 + 返回空），而不是静默指到槽位的下一个占用者。</p>
 </div></div>
 <div class="sect">
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
 <tr><td><span class="acc a-private">private</span></td><td>FRHIResourcePool* Pool = <span class="kw">nullptr</span></td><td>签发它的池（身份的一半）</td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>std::uint32_t Id = ~0u</td><td>槽位号（`~0u` = 空）</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>std::uint32_t Generation = 0</td><td>签发时槽位的代次；帧边界回收会让它过期 ⇒ 跨帧句柄可被检出</td></tr>
 </tbody></table></div>
 <div class="sect">
 <h4>接口</h4>
 <table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
 <tr><td><span class="acc a-public">public</span></td><td>FRDGTextureRef() = <span class="kw">default</span></td><td>空引用（`IsValid()` 为假）</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">bool</span> IsValid() <span class="kw">const</span></td><td>池非空且槽位有效</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">bool</span> IsValid() <span class="kw">const</span></td><td>池非空且槽位有效（**结构性**判断；代次是否还有效由解析点说了算）</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Reset()</td><td>清成空引用（不释放原生资源）</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FRHITexture* GetRHI() <span class="kw">const</span></td><td>**仅当前帧有效**的解析点到池里的原生纹理（帧外无意义）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FRHITexture* GetRHI() <span class="kw">const</span></td><td>**仅当前帧有效**的解析点到池里的原生纹理；transient 句柄跨帧后解析为空并上报</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FRHITextureView* GetView() <span class="kw">const</span></td><td>同上，解析到池里的纹理视图</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] ERHIFormat GetFormat() <span class="kw">const</span></td><td>创建时的格式（池回读缓存的描述）—— 特性据此确定目标格式，不必去问交换链 / RHI</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] std::uint32_t GetWidth() <span class="kw">const</span></td><td>创建时的宽</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] std::uint32_t GetHeight() <span class="kw">const</span></td><td>创建时的高</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td>FRDGTextureRef(FRHIResourcePool* InPool, std::uint32_t InId)</td><td>私有构造：只有池能签发引用（`FRHIResourcePool` 是 <span class="kw">friend</span>）</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>FRDGTextureRef(FRHIResourcePool* InPool, std::uint32_t InId, std::uint32_t InGeneration)</td><td>私有构造：只有池能签发引用（`FRHIResourcePool` 是 <span class="kw">friend</span>），并且只有池知道当前代次</td></tr>
 </tbody></table></div>
 </div>
 <div class="ent e-class" id="Public__RDG_h-1">
 <h3><span class="kind">类</span> FRDGBufferRef</h3>
 <div class="sect"><div class="doc">
-<p>池化 GPU 缓冲的非 RHI 引用。解析语义与 `FRDGTextureRef` 相同。</p>
+<p>池化 GPU 缓冲的非 RHI 引用。解析语义与 `FRDGTextureRef` 相同（含代次与帧域生命期）。</p>
 </div></div>
 <div class="sect">
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
 <tr><td><span class="acc a-private">private</span></td><td>FRHIResourcePool* Pool = <span class="kw">nullptr</span></td><td>签发它的池</td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>std::uint32_t Id = ~0u</td><td>槽位号（`~0u` = 空）</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>std::uint32_t Generation = 0</td><td>签发时槽位的代次（transient 跨帧即过期）</td></tr>
 </tbody></table></div>
 <div class="sect">
 <h4>接口</h4>
 <table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
 <tr><td><span class="acc a-public">public</span></td><td>FRDGBufferRef() = <span class="kw">default</span></td><td>空引用</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">bool</span> IsValid() <span class="kw">const</span></td><td>池非空且槽位有效</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">bool</span> IsValid() <span class="kw">const</span></td><td>池非空且槽位有效（结构性判断）</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Reset()</td><td>清成空引用（不释放原生资源）</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FRHIBuffer* GetRHI() <span class="kw">const</span></td><td>当前帧内解析点到原生缓冲</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td>FRDGBufferRef(FRHIResourcePool* InPool, std::uint32_t InId)</td><td>私有构造：只有池能签发</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FRHIBuffer* GetRHI() <span class="kw">const</span></td><td>当前帧内解析点到原生缓冲；跨帧句柄解析为空并上报</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>FRDGBufferRef(FRHIResourcePool* InPool, std::uint32_t InId, std::uint32_t InGeneration)</td><td>私有构造：只有池能签发</td></tr>
 </tbody></table></div>
 </div>
 <div class="ent e-struct" id="Public__RDG_h-2">
@@ -402,7 +405,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <h2 class="file-title">Render.h —— 渲染 stage 能力面 + FRender</h2>
 <div class="card"><div class="doc">
 <p>渲染层对特性的**全部词汇**：11 个 stage 接口 + 帧类型 `FRender` + 着色器句柄 `TShaderHandle`。</p>
-<p>**FRender 是两层身份**：对宿主引擎它是一个 layer（装载 `IInit` / `ITick` 等引擎 stage）；对渲染特性它是**自己的收集器**（特性实现 `IBeginRender` / `IRender` / `IEndRender` / `IPresent`，全部装在 FRender 里并由它调度）。**专属线程在它拥有的部件内部**：RHI（`FRHI`）是渲染服务器、着色器编译器是另一个 `FThreadedServer` —— `FRender` 自己**不是**服务器。宿主只把 FRender 看作一个 layer。</p>
+<p>**FRender 是两层身份**：对宿主引擎它是一个 layer（装载 `IInit` / `ITick` / `IExit` 等引擎 stage）；对渲染特性它是**自己的收集器**（特性实现 `IBeginRender` / `IRender` / `IEndRender` / `IPresent`，全部装在 FRender 里并由它调度）。**专属线程在它拥有的部件内部**：RHI（`FRHI`）是渲染服务器、着色器编译器是另一个 `FThreadedServer` —— `FRender` 自己**不是**服务器。宿主只把 FRender 看作一个 layer。</p>
 <p>**FRender 同时就是 RDG 资源池的门面**：特性经 `CreateTexture` / `CreateBuffer` 拿 `FRDG*Ref`，原生对象活在池里跨帧复用；交换链后缓冲**只被帧特性碰**（经 `RHI-&gt;PresentTexture`）。</p>
 <p>**stage 序列为什么是这个顺序**（`FRenderStages`）：`IInitViews` 先建视图与上传几何（后续 pass 的输入），`IBeginRender` 做帧首准备（列表 / 常量），`IRender` 才是 pass，`IEndRender` 收尾，`IPostProcess` 做全屏后处理，`IRenderUI` 合成 UI，`IPresent` 最后 blit 上屏。编辑器构建额外插 `IEditorInput`（最前，抢输入）与 `IEditorCompose`（UI 之后、present 之前，把编辑器覆盖层画在最上面）。**一个没被任何已装特性实现的 stage 完全不产生节点**（没有空节点）。</p>
 </div></div>
@@ -618,9 +621,9 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table></div>
 </div>
 <div class="ent e-class" id="Public__Render_h-12">
-<h3><span class="kind">类</span> FRender <span class="base">: FFrameExtension, IPipeline&lt;IPreInit, IInit, IPostInit, IBeginFrame, ITick, IEndFrame, IShutdown&gt;, FFrameBuilder&lt;FRender&gt;</span></h3>
+<h3><span class="kind">类</span> FRender <span class="base">: FFrameExtension, IPipeline&lt;IPreInit, IInit, IPostInit, IBeginFrame, ITick, IEndFrame, IExit, IPreShutdown, IShutdown, IPostShutdown&gt;, FFrameBuilder&lt;FRender&gt;</span></h3>
 <div class="sect"><div class="doc">
-<p>渲染子系统：宿主引擎里的一个层（装载 `IInit` / `ITick` 等），同时是渲染特性自己的层收集器。它也是 RDG 资源池的门面。</p>
+<p>渲染子系统：宿主引擎里的一个层（装载 `IInit` / `ITick` / `IExit` 等），同时是渲染特性自己的层收集器。它也是 RDG 资源池的门面。</p>
 <p>**它自己不干活**：帧工作由 stage 序列（`FRenderStages`）驱动，`FRender::Tick` 只是把序列交给 `Execute&lt;...&gt;()`；交换链的帧生命期（取值 / 结束 + 呈现）挂在 `BeginFrame` / `EndFrame` 这两个**引擎 stage** 上，`EndFrame` 先 `Wait()` 图的栅栏再 `RHI-&gt;EndFrame()`，于是呈现一定等到所有提交完成。</p>
 </div></div>
 <div class="sect">
@@ -669,12 +672,15 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> PreInitialize(FEngineBase&amp;) <span class="kw">override</span></td><td>（引擎 stage `IPreInit`）最早的准备</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Initialize(FEngineBase&amp; Engine) <span class="kw">override</span></td><td>（引擎 stage `IInit`）起 RHI（有窗口才起）+ 着色器服务器 + 资源池，装载自己的渲染特性，并登记资产事件订阅</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> PostInitialize(FEngineBase&amp; Engine) <span class="kw">override</span></td><td>（`IPostInit`）初始化收尾</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> PreShutdown(FEngineBase&amp;) <span class="kw">override</span></td><td>（`IPreShutdown`）卸载特性前的准备</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Shutdown(FEngineBase&amp; Engine) <span class="kw">override</span></td><td>（`IShutdown`）卸订阅 → 排空异步工作 → 关设备 → 释放池。**先排空自己的异步工作**（着色器编译、录制任务的池）再拆，这是层与调度器的契约</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> PostShutdown(FEngineBase&amp;) <span class="kw">override</span></td><td>（`IPostShutdown`）收尾</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> BeginFrame(FEngineBase&amp;) <span class="kw">override</span></td><td>（引擎 stage `IBeginFrame`）**空**。交换链帧的开始是帧头 stage 的事（`FScene::IBeginRender` → `BeginSwapchainFrame`），放在图里让它的顺序成为声明边，而不是「这个宿主 stage 恰好在批之前跑」</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Tick(FEngineBase&amp; Engine) <span class="kw">override</span></td><td>（引擎 stage `ITick`）**跑渲染图**：把 `FRenderStages` 交给 `Execute&lt;...&gt;()` （重查帧集 / 建批 / 提交）。**不再有帧首排空**：帧边界是收集器图里的声明边，逐帧排空只会把环按平；静默归变更路径（`FlushPendingUpdates` 在有变更时完整 `Wait()`）</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> EndFrame(FEngineBase&amp;) <span class="kw">override</span></td><td>（引擎 stage `IEndFrame`）**空**：帧由它的**尾 stage** 关闭（`FScene::IPresent` → `EndSwapchainFrame`）。在这里关就需要「等那个 stage」，而那个等待的理由已经不存在 —— 帧命令缓冲唯一的录制（blit）与关闭在同一 stage 里</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> BeginSwapchainFrame()</td><td>**帧头**（由 `FScene::IBeginRender` 调）：`RHI-&gt;BeginFrame()`（等上一帧栅栏 + 复位 + 取镜像 + 开帧命令缓冲）+ 推进资源池。凡是「取命令列表 / 从池分配」的 stage 都必须排在它之后 —— 与 `IPresent` 那条纪律同形，只是从帧的另一端</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> EndSwapchainFrame()</td><td>**帧尾**（由 `FScene::IPresent` 在提交完本帧 pass、录完 blit 之后调）：关帧命令缓冲 + 提交 + 呈现</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> RequestExit(FEngineBase&amp; Engine) <span class="kw">override</span></td><td>（引擎 stage `IExit`）收到退出请求时的处理</td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">template</span> &lt;<span class="kw">typename</span> T&gt; <span class="kw">friend</span> <span class="kw">class</span> TShaderHandle</td><td>`TShaderHandle` 靠这个友元驱动着色器编译：它能触达私有的 `GetOrCreateShaderModule` / `WaitShaderCompiles`</td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> AddPass(ERHICommandListType PassType, FRHIGraphicsPipelineDesc PipelineDesc, <span class="kw">const</span> FRenderPassDesc&amp; Pass, std::function&lt;<span class="kw">void</span>(FRHICommandList&amp;)&gt; PassFn)</td><td>**PSO 解析版 pass（内部实现点）**：解析管线（走池的 PSO 缓存）→ 开动态渲染 → **隐式绑定图形管线** → 跑绘制 lambda。特性既不查管线 / 布局，也不自己 `BindGraphicsPipeline`。公开的编译期 FParameters 模板最终转发到这里</td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>FShaderCompilerServer* GetShaderCompiler() <span class="kw">const</span></td><td>异步编译服务器（内部：特性只经 `TryGetShader&lt;T&gt;` 触达着色器）</td></tr>

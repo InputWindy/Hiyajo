@@ -38,6 +38,14 @@ enum class ERDGResourceLifetime : std::uint8_t
  * native FRHITexture lives in FRender's resource pool; GetRHI()/GetView() are
  * transient resolution points valid only during the current frame's recording.
  * Features never create/destroy the native object directly.
+ *
+ * TRANSIENT handles are FRAME-SCOPED. The pool advances a slot's generation every time it
+ * recycles a transient at the frame boundary, and this handle carries the generation it was
+ * minted with -- so a handle that crosses the boundary stops resolving (the pool reports it as
+ * an expired handle) instead of silently aliasing whatever native occupies the slot next. That
+ * is what lets the pool recycle transients unconditionally: the frame is the lifetime, and a
+ * stale handle is DETECTED rather than tolerated. Persistent handles (and transient ones used
+ * within their own frame) are unaffected.
  */
 class MAHO_RENDER_API FRDGTextureRef
 {
@@ -71,19 +79,21 @@ public:
 private:
 	friend class FRHIResourcePool;
 
-	FRDGTextureRef(FRHIResourcePool* InPool, std::uint32_t InId)
+	FRDGTextureRef(FRHIResourcePool* InPool, std::uint32_t InId, std::uint32_t InGeneration)
 		: Pool(InPool)
 		, Id(InId)
+		, Generation(InGeneration)
 	{
 	}
 
 	FRHIResourcePool* Pool = nullptr;
 	std::uint32_t Id = ~0u;
+	std::uint32_t Generation = 0;
 };
 
 /**
  * RDG buffer handle - non-RHI reference to a pooled GPU buffer. Same transient
- * resolution semantics as FRDGTextureRef.
+ * resolution semantics as FRDGTextureRef (including the frame-scoped generation).
  */
 class MAHO_RENDER_API FRDGBufferRef
 {
@@ -106,14 +116,16 @@ public:
 private:
 	friend class FRHIResourcePool;
 
-	FRDGBufferRef(FRHIResourcePool* InPool, std::uint32_t InId)
+	FRDGBufferRef(FRHIResourcePool* InPool, std::uint32_t InId, std::uint32_t InGeneration)
 		: Pool(InPool)
 		, Id(InId)
+		, Generation(InGeneration)
 	{
 	}
 
 	FRHIResourcePool* Pool = nullptr;
 	std::uint32_t Id = ~0u;
+	std::uint32_t Generation = 0;
 };
 
 /**

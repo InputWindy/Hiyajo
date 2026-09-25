@@ -72,8 +72,11 @@ public:
 	/** Clear every field back to empty/zero (GPU buffer refs, push constants,
 	 *  batches), KEEPING the batch vectors' capacity. Used when the list is a reused
 	 *  member filled per frame, so a re-filled list does not accumulate the
-	 *  previous frame's batches. The GPU buffers are transient pool resources --
-	 *  Reset only drops the refs, it never frees them. */
+	 *  previous frame's batches. The GPU buffers are TRANSIENT pool resources: their
+	 *  lifetime is the frame that minted them, so the pool reclaims them at the frame
+	 *  boundary whether or not this list is reset -- Reset only drops the (already
+	 *  expired-by-then) handle, and holding one past the boundary is a detected error
+	 *  rather than a silent alias (see RDG.h). */
 	void Reset()
 	{
 		VertexBuffer = FRDGBufferRef{};
