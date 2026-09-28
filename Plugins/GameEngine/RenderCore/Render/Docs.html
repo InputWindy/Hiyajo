@@ -79,7 +79,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div id="app">
   <div id="side">
     <h1>Maho 引擎源码</h1>
-    <div class="search" title="左侧扫描 Source/**/*.h：7 个头文件 · 已声明 7 个 · 41 个实体 / 298 个成员 ｜ 内容在 Tools/docs_content.py 里逐条声明">
+    <div class="search" title="左侧扫描 Source/**/*.h：7 个头文件 · 已声明 7 个 · 41 个实体 / 299 个成员 ｜ 内容在 Tools/docs_content.py 里逐条声明">
       <input id="q" type="search" placeholder="搜索头文件…  （如 Frame、Core、Entry）" autocomplete="off">
     </div>
     <div id="tree"><ul>
@@ -652,6 +652,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] std::uint32_t GetCanvasWidth() <span class="kw">const</span></td><td>画布宽 = 交换链几何（场景颜色目标按它建）</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] std::uint32_t GetCanvasHeight() <span class="kw">const</span></td><td>画布高</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] ERHIFormat GetSwapchainFormat() <span class="kw">const</span></td><td>交换链格式（离屏目标按它建）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">bool</span> IsTextureFormatSupported(ERHIFormat Format, ERHITextureUsage Usage) <span class="kw">const</span></td><td>**能力查询**：特性不碰 IRHI，所以经这里问设备某个 RHI 格式能否按给定用途使用（场景色目标在建之前用它自检，不支持就报错并本帧跳过）</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> PresentTexture(<span class="kw">const</span> FRDGTextureRef&amp; Texture)</td><td>把场景颜色的 RDG 纹理 blit 到交换链后缓冲（帧特性的上屏点）</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> SetPresentTarget(<span class="kw">const</span> FRDGTextureRef&amp; Texture)</td><td>设置本帧**最终**上屏目标。任何合成最后屏幕表面的 UI 特性在绘制后调用它，帧特性的 `IPresent` 再把它 blit 上屏。**最后写者胜**：运行时构建里游戏 UI 设 GameRT，编辑器构建里编辑器 UI 合成后设 EditorRT —— 于是编辑器表面才是被呈现的那个</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FRDGTextureRef GetPresentTarget() <span class="kw">const</span></td><td>当前上屏目标（空 = 本帧不上屏）</td></tr>
@@ -693,9 +694,9 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> OnAssetMirrorImported(<span class="kw">const</span> Name::FName&amp; AssetName, Resource::FOnTransferDone Done)</td><td>「资产已导入」监听：把 CPU 资产镜像到 GPU（上传像素），然后经 `Done` 报告完成，好让资源系统丢掉 CPU 数据块</td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> OnAssetMirrorUnloaded(<span class="kw">const</span> Name::FName&amp; AssetName, Resource::FOnTransferDone Done)</td><td>「资产已卸载」监听：释放 GPU 镜像并擦掉表项</td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> OnAssetMirrorCreated(<span class="kw">const</span> Name::FName&amp; AssetName, <span class="kw">const</span> Resource::FResource&amp; Resource)</td><td>「资产已创建」监听（资源系统 `CreateResource`）：按资源的描述字段建一个 Persistent GPU 镜像（**不传像素** —— 它是运行期占位），用资产名做键。特性经 `GetMirror(FName)` 解析。帧内（transient）GPU 资源不走这条路</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td>[[nodiscard]] <span class="kw">bool</span> ReadbackMirror(<span class="kw">const</span> Name::FName&amp; AssetName, Resource::FResource&amp; OutResource)</td><td>GPU 回填（`SetReadback` 提供者）：导出前把 GPU 镜像解码回资源的 CPU 字段。没有镜像、或当前 RHI 没有 CPU 回读路径时返回 <span class="kw">false</span></td></tr>
-<tr><td><span class="acc a-private">private</span></td><td>[[nodiscard]] <span class="kw">static</span> ERHIFormat FormatMirror(Resource::ETexturePixelFormat Fmt, <span class="kw">bool</span> bSRGB)</td><td>资产像素格式 → RHI 格式（镜像的格式映射点）</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td>[[nodiscard]] <span class="kw">static</span> ERHITextureDimension DimensionMirror(Resource::ETextureDimension Dim)</td><td>资产纹理维度 → RHI 维度</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>[[nodiscard]] <span class="kw">bool</span> ReadbackMirror(<span class="kw">const</span> Name::FName&amp; AssetName, Resource::FResource&amp; OutResource)</td><td>GPU 回填（`SetReadback` 提供者）：导出前经 RHI 的**阻塞**回读（提交 + 等栅栏）把镜像像素取回 CPU，写进资源的 `GetPixelsMutable()`。没有镜像 / 资源不是纹理 / 格式没有 CPU 布局时返回 <span class="kw">false</span> 并报错；**不要在帧内调**</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>[[nodiscard]] <span class="kw">static</span> ERHIFormat FormatMirror(Resource::ETexturePixelFormat Fmt, <span class="kw">bool</span> bSRGB)</td><td>资产像素格式 → RHI 格式（镜像的格式映射点）。`RGBA8`/`BGRA8` 两个通道序都支持，sRGB 由第二个参数决定 ⇒ 场景色镜像能与 BGRA/SRGB 交换链**逐位一致**（present blit 要求）</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>[[nodiscard]] <span class="kw">static</span> ERHITextureDimension DimensionMirror(Resource::ETextureDimension Dim)</td><td>资产纹理维度 → RHI 维度（`TexCubeArray` → `CubeArray`，不再降级成 2D 数组）</td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">bool</span> UploadTextureMirror(<span class="kw">const</span> Name::FName&amp; AssetName, Resource::FTexture&amp; Tex)</td><td>按资产的 CPU 像素建一个 Persistent RDG 纹理并上传（经一块 transient staging 缓冲，一次传输提交），并把镜像存进表</td></tr>
 </tbody></table></div>
 <div class="sect">

@@ -79,7 +79,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div id="app">
   <div id="side">
     <h1>Maho 引擎源码</h1>
-    <div class="search" title="左侧扫描 Source/**/*.h：3 个头文件 · 已声明 3 个 · 26 个实体 / 191 个成员 ｜ 内容在 Tools/docs_content.py 里逐条声明">
+    <div class="search" title="左侧扫描 Source/**/*.h：3 个头文件 · 已声明 3 个 · 26 个实体 / 192 个成员 ｜ 内容在 Tools/docs_content.py 里逐条声明">
       <input id="q" type="search" placeholder="搜索头文件…  （如 Frame、Core、Entry）" autocomplete="off">
     </div>
     <div id="tree"><ul>
@@ -250,6 +250,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
 <tr><td><span class="acc a-public">public</span></td><td>Unknown = 0</td><td>未知（默认值，importer 必须覆盖它）</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>RGBA8</td><td>8 位四通道（解码路径的默认输出）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>BGRA8</td><td>8 位四通道、B/R 交换。**Win32 交换链的原生通道序**（`B8G8R8A8_*`），场景色镜像要用它才能与后缓冲逐位一致；sRGB 与否由 `FTexture::IsSRGB()` 单独携带</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>RGBA16F / RGBA32F</td><td>半精度 / 单精度浮点四通道</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>R8 / RG8 / RGB8</td><td>单 / 双 / 三通道 8 位</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>BlockCompressed</td><td>块压缩（具体 BC 格式见后几项）</td></tr>

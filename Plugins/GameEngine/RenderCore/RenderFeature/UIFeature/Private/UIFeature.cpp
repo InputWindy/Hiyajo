@@ -245,9 +245,15 @@ void FUIFeature::UploadFont(FRender& R)
 			}
 			Cmd.UpdateBuffer(Staging.GetRHI(), 0,
 				static_cast<std::uint64_t>(FontW) * FontH * 4, Pixels);
-			Cmd.TransitionTexture(FontTexture.GetRHI(), ERHIResourceState::Common, ERHIResourceState::CopyDst);
-			Cmd.CopyBufferToTexture(Staging.GetRHI(), FontTexture.GetRHI(), 0);
-			Cmd.TransitionTexture(FontTexture.GetRHI(), ERHIResourceState::CopyDst, ERHIResourceState::ShaderResource);
+			// The copy carries its own transitions (Common -> CopySrc -> ShaderResource): the
+			// atlas is sampled by the UI fragment shader immediately after, which is exactly what
+			// DstState::After names -- so the hand-written TransitionTexture pair is gone.
+			Cmd.CopyBufferToTexture(
+				Staging.GetRHI(),
+				0,
+				FontTexture.GetRHI(),
+				FRHITextureCopyRegion{ 0, 0, 1, {} },
+				FRHIResourceStatePair{ ERHIResourceState::Common, ERHIResourceState::ShaderResource });
 		}
 		bFontUploaded = true;
 	});
