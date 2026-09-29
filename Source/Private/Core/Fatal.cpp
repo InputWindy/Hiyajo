@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <ctime>
 #include <exception>
 #include <filesystem>
@@ -104,7 +105,9 @@ namespace
 
 /** Raw return addresses, newest first, printed as a list. Without a PDB the numbers are the point:
  *  a crash that says WHERE (a module offset) is already most of the way to a cause -- symbolise with
- *  `dumpbin /disasm` + the nearest public symbol, which is how the trace's flush crash was found. */
+ *  `dumpbin /disasm` + the nearest public symbol, which is how the trace's flush crash was found.
+ *  Each frame is ALSO resolved to `module+offset`: a raw address is useless across runs (ASLR moves
+ *  every module), while the offset survives and points straight at the symbol. */
 void PrintAddressStack(const char* Why)
 {
 	void* Frames[40] = {};
@@ -112,7 +115,22 @@ void PrintAddressStack(const char* Why)
 	std::fprintf(stderr, "Maho CRASH (%s): %u frames\n", Why, static_cast<unsigned>(Count));
 	for (USHORT i = 0; i < Count; ++i)
 	{
-		std::fprintf(stderr, "  #%02u %p\n", static_cast<unsigned>(i), Frames[i]);
+		char Where[MAX_PATH + 32] = "?";
+		char ModulePath[MAX_PATH] = {};
+		HMODULE Module = nullptr;
+		if (GetModuleHandleExW(
+				GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+				reinterpret_cast<LPCWSTR>(Frames[i]), &Module) != 0
+			&& Module != nullptr
+			&& GetModuleFileNameA(Module, ModulePath, MAX_PATH) != 0)
+		{
+			const char* Name = std::strrchr(ModulePath, '\\');
+			Name = (Name != nullptr) ? Name + 1 : ModulePath;
+			const unsigned long long Offset = static_cast<unsigned long long>(
+				reinterpret_cast<std::uintptr_t>(Frames[i]) - reinterpret_cast<std::uintptr_t>(Module));
+			std::snprintf(Where, sizeof(Where), "%s+0x%llX", Name, Offset);
+		}
+		std::fprintf(stderr, "  #%02u %p  %s\n", static_cast<unsigned>(i), Frames[i], Where);
 	}
 	std::fflush(stderr);
 	std::abort();
