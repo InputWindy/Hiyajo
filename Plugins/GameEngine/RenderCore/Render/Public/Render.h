@@ -299,13 +299,6 @@ public:
 	[[nodiscard]] std::uint32_t GetCanvasWidth() const;
 	[[nodiscard]] std::uint32_t GetCanvasHeight() const;
 	[[nodiscard]] ERHIFormat GetSwapchainFormat() const;
-	/**
-	 * Device capability query for a texture format/usage pair. Features reach the RHI only
-	 * through FRender (they must not see IRHI), so this is their one way to ask "can this
-	 * attachment/sampled format actually be created here?" before declaring a target --
-	 * e.g. FScene validating the swapchain-format mirror it is about to create.
-	 */
-	[[nodiscard]] bool IsTextureFormatSupported(ERHIFormat Format, ERHITextureUsage Usage) const;
 	/** Blit a scene-color RDG texture to the swapchain backbuffer (the frame's IPresent point). */
 	void PresentTexture(const FRDGTextureRef& Texture);
 

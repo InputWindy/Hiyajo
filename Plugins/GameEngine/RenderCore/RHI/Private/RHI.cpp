@@ -554,40 +554,6 @@ std::uint32_t FRHI::GetFramebufferHeight() const
 	return RHI ? RHI->GetFramebufferHeight() : 0;
 }
 
-bool FRHI::IsFormatSupported(ERHIFormat Format, ERHITextureUsage Usage) const
-{
-	// MARSHALLED. The device owns the format tables (`vkGetPhysicalDeviceFormatProperties`), and the
-	// device is only ever touched by the server thread: a caller on a render worker asking this
-	// directly would race the server's own frame work inside the same driver instance. Callers are
-	// frame-stage code (e.g. a scene feature deciding its target format), so they are never on the
-	// server thread.
-	bool bSupported = false;
-	const_cast<FRHI*>(this)->RunOnServer([this, Format, Usage, &bSupported]
-	{
-		bSupported = RHI ? RHI->IsFormatSupported(Format, Usage) : false;
-	});
-	return bSupported;
-}
-
-bool FRHI::ReadbackTexture(
-	FRHITexture* Src,
-	const FRHITextureCopyRegion& Region,
-	void* Out,
-	std::uint64_t OutSize,
-	ERHIResourceState PreserveState)
-{
-	// MARSHALLED, and it has to be: this path CREATES a command list, SUBMITS it and WAITS on a fence.
-	// Done from a render worker it would submit on the graphics queue concurrently with the server
-	// thread's own frame submit -- the one thing the server exists to serialize (see RunOnServer).
-	// `Out` is written inside the marshalled body, so it is complete by the time this returns.
-	bool bOk = false;
-	RunOnServer([this, Src, &Region, &Out, OutSize, PreserveState, &bOk]
-	{
-		bOk = RHI ? RHI->ReadbackTexture(Src, Region, Out, OutSize, PreserveState) : false;
-	});
-	return bOk;
-}
-
 FRHIQueryPool* FRHI::CreateQueryPool(ERHIQueryType Type, std::uint32_t QueryCount)
 {
 	return RHI ? RHI->CreateQueryPool(Type, QueryCount) : nullptr;

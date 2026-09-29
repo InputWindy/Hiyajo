@@ -147,29 +147,6 @@ struct FRHIExtent3D
 	}
 };
 
-/**
- * A texture subresource region for a copy. Extent {0,0,0} means "the whole mip level"
- * (the extent is then derived from the texture desc at the region's MipLevel).
- */
-struct FRHITextureCopyRegion
-{
-	std::uint32_t MipLevel = 0;
-	std::uint32_t BaseArrayLayer = 0;
-	std::uint32_t LayerCount = 1;
-	FRHIExtent3D Extent{};
-};
-
-/**
- * The layouts a copy finds the resource in (Before) and must leave it in (After).
- * A copy that carries its own transitions records both barriers itself, so the caller
- * no longer hand-writes a TransitionTexture pair around every upload/readback.
- */
-struct FRHIResourceStatePair
-{
-	ERHIResourceState Before = ERHIResourceState::Common;
-	ERHIResourceState After = ERHIResourceState::Common;
-};
-
 struct FRHITextureDesc
 {
 	ERHIFormat Format = ERHIFormat::Unknown;

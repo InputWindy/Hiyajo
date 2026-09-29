@@ -78,7 +78,6 @@ enum class ERHITextureDimension : std::uint8_t
 	Tex2D = 0,
 	Tex2DArray,
 	Cube,
-	CubeArray,
 	Tex3D,
 };
 

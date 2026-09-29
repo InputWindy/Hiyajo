@@ -4,50 +4,10 @@
 
 #include "VulkanMemory.h"
 
-#include <algorithm>
 #include <vulkan/vulkan.h>
 
 namespace Maho
 {
-
-/**
- * The concrete texel extent a copy region covers at its own mip level. A region Extent of
- * {0,0,0} means "the whole mip level", so the level's size is derived from the texture desc;
- * for a 3D texture the level's depth IS the slice count (Vulkan wants layerCount 1 for those).
- * Shared by the backend's copy path and its readback, so the two cannot disagree about how
- * many bytes a region is.
- */
-[[nodiscard]] inline FRHIExtent3D ResolveCopyExtent(
-	const FRHITextureDesc& Desc, const FRHITextureCopyRegion& Region)
-{
-	const std::uint32_t Mip = Region.MipLevel;
-	FRHIExtent3D Extent;
-	Extent.Width = (std::max)(1u, Desc.Extent.Width >> Mip);
-	Extent.Height = (std::max)(1u, Desc.Extent.Height >> Mip);
-	Extent.Depth = (std::max)(1u, Desc.Extent.Depth >> Mip);
-
-	if (Region.Extent.Width != 0)
-	{
-		Extent.Width = Region.Extent.Width;
-	}
-	if (Region.Extent.Height != 0)
-	{
-		Extent.Height = Region.Extent.Height;
-	}
-	if (Region.Extent.Depth != 0)
-	{
-		Extent.Depth = Region.Extent.Depth;
-	}
-	return Extent;
-}
-
-/** Vulkan image-subresource layerCount for a region: a 3D image addresses its slices through
- *  the copy extent, so it always declares ONE layer. */
-[[nodiscard]] inline std::uint32_t ResolveCopyLayerCount(
-	const FRHITextureDesc& Desc, const FRHITextureCopyRegion& Region)
-{
-	return Desc.Dimension == ERHITextureDimension::Tex3D ? 1u : Region.LayerCount;
-}
 
 class FVulkanBuffer final : public FRHIBuffer
 {

@@ -137,33 +137,6 @@ struct IRHI
 	[[nodiscard]] virtual std::uint32_t GetFramebufferWidth() const = 0;
 	[[nodiscard]] virtual std::uint32_t GetFramebufferHeight() const = 0;
 
-	/**
-	 * Can the device use Format for the given texture usage bits? A surface format being
-	 * presentable says nothing about it being a valid color-attachment / sampled format, so
-	 * a layer that declares an off-screen target asks this instead of assuming.
-	 */
-	[[nodiscard]] virtual bool IsFormatSupported(ERHIFormat Format, ERHITextureUsage Usage) const = 0;
-
-	/**
-	 * BLOCKING texture -> CPU readback. Stages through a GPU->CPU buffer, records
-	 * copy-to-transfer-src + the copy + the transition back to PreserveState, submits on the
-	 * graphics queue and WAITS on a fresh fence, then maps the buffer and memcpy's into Out.
-	 *
-	 * It stalls the caller for the whole GPU round trip, so it belongs to an export /
-	 * screenshot path, NEVER to a per-frame one. The caller must also not call it for a
-	 * texture whose producing frame has not finished: the copy carries the needed texture
-	 * transitions, but nothing orders it after that frame's submission.
-	 *
-	 * Returns false (with a log) for a format with no known texel size or when OutSize is
-	 * smaller than the region requires.
-	 */
-	virtual bool ReadbackTexture(
-		FRHITexture* Src,
-		const FRHITextureCopyRegion& Region,
-		void* Out,
-		std::uint64_t OutSize,
-		ERHIResourceState PreserveState = ERHIResourceState::ShaderResource) = 0;
-
 	// GPU queries (occlusion / timestamp)
 	[[nodiscard]] virtual FRHIQueryPool* CreateQueryPool(ERHIQueryType Type, std::uint32_t QueryCount) = 0;
 	virtual void DestroyQueryPool(FRHIQueryPool* Pool) = 0;
@@ -316,15 +289,6 @@ public:
 	// -- IRHI swapchain accessors (forward to the private IDynamicRHI) --
 	[[nodiscard]] std::uint32_t GetFramebufferWidth() const override;
 	[[nodiscard]] std::uint32_t GetFramebufferHeight() const override;
-
-	// -- IRHI format / readback capability (forward to the private IDynamicRHI) --
-	[[nodiscard]] bool IsFormatSupported(ERHIFormat Format, ERHITextureUsage Usage) const override;
-	bool ReadbackTexture(
-		FRHITexture* Src,
-		const FRHITextureCopyRegion& Region,
-		void* Out,
-		std::uint64_t OutSize,
-		ERHIResourceState PreserveState) override;
 
 	[[nodiscard]] FRHIQueryPool* CreateQueryPool(ERHIQueryType Type, std::uint32_t QueryCount) override;
 	void DestroyQueryPool(FRHIQueryPool* Pool) override;

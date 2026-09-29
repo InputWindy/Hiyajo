@@ -73,28 +73,6 @@ namespace
 	}
 }
 
-[[nodiscard]] VkImageLayout ToVkImageLayout(ERHIResourceState State)
-{
-	switch (State)
-	{
-	case ERHIResourceState::CopySrc:
-		return VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-	case ERHIResourceState::CopyDst:
-		return VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-	case ERHIResourceState::ShaderResource:
-		return VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-	case ERHIResourceState::RenderTarget:
-		return VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-	case ERHIResourceState::DepthWrite:
-		return VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-	case ERHIResourceState::Present:
-		return VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-	case ERHIResourceState::Common:
-	default:
-		return VK_IMAGE_LAYOUT_UNDEFINED;
-	}
-}
-
 [[nodiscard]] VkDescriptorType ToVkDescriptorType(ERHIDescriptorType Type)
 {
 	// ERHIDescriptorType is dense and skips Vulkan texel-buffer enums - never static_cast.
@@ -251,53 +229,7 @@ void FVulkanCommandList::CopyBuffer(FRHIBuffer* Src, std::uint64_t SrcOffset, FR
 	vkCmdCopyBuffer(Buffer, SrcVk->GetVkBuffer(), DstVk->GetVkBuffer(), 1, &Region);
 }
 
-void FVulkanCommandList::TransitionTextureRange(
-	FRHITexture* Texture,
-	ERHIResourceState OldState,
-	ERHIResourceState NewState,
-	std::uint32_t MipLevel,
-	std::uint32_t MipCount,
-	std::uint32_t BaseArrayLayer,
-	std::uint32_t LayerCount,
-	VkImageAspectFlags AspectMask)
-{
-	auto* Tex = static_cast<FVulkanTexture*>(Texture);
-	if (Tex == nullptr || !bRecording)
-	{
-		return;
-	}
-
-	VkImageMemoryBarrier Barrier{};
-	Barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-	Barrier.oldLayout = ToVkImageLayout(OldState);
-	Barrier.newLayout = ToVkImageLayout(NewState);
-	Barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-	Barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-	Barrier.image = Tex->GetVkImage();
-	Barrier.subresourceRange.aspectMask = AspectMask;
-	Barrier.subresourceRange.baseMipLevel = MipLevel;
-	Barrier.subresourceRange.levelCount = MipCount;
-	Barrier.subresourceRange.baseArrayLayer = BaseArrayLayer;
-	Barrier.subresourceRange.layerCount = LayerCount;
-	Barrier.srcAccessMask = ToVkAccess(OldState);
-	Barrier.dstAccessMask = ToVkAccess(NewState);
-
-	vkCmdPipelineBarrier(
-		Buffer,
-		ToVkPipelineStage(OldState),
-		ToVkPipelineStage(NewState),
-		0,
-		0, nullptr,
-		0, nullptr,
-		1, &Barrier);
-}
-
-void FVulkanCommandList::CopyBufferToTexture(
-	FRHIBuffer* Src,
-	std::uint64_t SrcOffset,
-	FRHITexture* Dst,
-	const FRHITextureCopyRegion& Region,
-	const FRHIResourceStatePair& DstState)
+void FVulkanCommandList::CopyBufferToTexture(FRHIBuffer* Src, FRHITexture* Dst, std::uint64_t SrcOffset)
 {
 	auto* SrcVk = static_cast<FVulkanBuffer*>(Src);
 	auto* DstVk = static_cast<FVulkanTexture*>(Dst);
@@ -307,33 +239,16 @@ void FVulkanCommandList::CopyBufferToTexture(
 	}
 
 	const FRHITextureDesc& Desc = DstVk->GetDesc();
-	const FRHIExtent3D Extent = ResolveCopyExtent(Desc, Region);
-	const std::uint32_t LayerCount = ResolveCopyLayerCount(Desc, Region);
-	// Aspect comes from the texture's usage, exactly as TransitionTexture derives it.
-	const VkImageAspectFlags Aspect = RHIEnumHas(Desc.Usage, ERHITextureUsage::DepthStencil)
-		? VK_IMAGE_ASPECT_DEPTH_BIT
-		: VK_IMAGE_ASPECT_COLOR_BIT;
-
-	// The copy owns its transitions: the destination enters as DstState::Before and leaves as
-	// DstState::After, with the transfer-dst layout in between. Callers no longer hand-write a
-	// TransitionTexture pair around this call.
-	if (DstState.Before != ERHIResourceState::CopyDst)
-	{
-		TransitionTextureRange(Dst, DstState.Before, ERHIResourceState::CopyDst,
-			Region.MipLevel, 1, Region.BaseArrayLayer, LayerCount, Aspect);
-	}
-
-	VkBufferImageCopy Copy{};
-	Copy.bufferOffset = SrcOffset;
-	// Tightly packed source rows: bufferRowLength / bufferImageHeight 0 mean "as the image says".
-	Copy.bufferRowLength = 0;
-	Copy.bufferImageHeight = 0;
-	Copy.imageSubresource.aspectMask = Aspect;
-	Copy.imageSubresource.mipLevel = Region.MipLevel;
-	Copy.imageSubresource.baseArrayLayer = Region.BaseArrayLayer;
-	Copy.imageSubresource.layerCount = LayerCount;
-	Copy.imageOffset = { 0, 0, 0 };
-	Copy.imageExtent = { Extent.Width, Extent.Height, Extent.Depth };
+	VkBufferImageCopy Region{};
+	Region.bufferOffset = SrcOffset;
+	Region.bufferRowLength = 0;
+	Region.bufferImageHeight = 0;
+	Region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	Region.imageSubresource.mipLevel = 0;
+	Region.imageSubresource.baseArrayLayer = 0;
+	Region.imageSubresource.layerCount = Desc.ArrayLayers;
+	Region.imageOffset = { 0, 0, 0 };
+	Region.imageExtent = { Desc.Extent.Width, Desc.Extent.Height, Desc.Extent.Depth };
 
 	vkCmdCopyBufferToImage(
 		Buffer,
@@ -341,153 +256,11 @@ void FVulkanCommandList::CopyBufferToTexture(
 		DstVk->GetVkImage(),
 		VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
 		1,
-		&Copy);
-
-	if (DstState.After != ERHIResourceState::CopyDst)
-	{
-		TransitionTextureRange(Dst, ERHIResourceState::CopyDst, DstState.After,
-			Region.MipLevel, 1, Region.BaseArrayLayer, LayerCount, Aspect);
-	}
+		&Region);
 }
 
-void FVulkanCommandList::CopyTextureToBuffer(
-	FRHITexture* Src,
-	const FRHITextureCopyRegion& Region,
-	FRHIBuffer* Dst,
-	std::uint64_t DstOffset,
-	const FRHIResourceStatePair& SrcState)
+void FVulkanCommandList::CopyTextureToBuffer(FRHITexture* /*Src*/, FRHIBuffer* /*Dst*/, std::uint64_t /*DstOffset*/)
 {
-	auto* SrcVk = static_cast<FVulkanTexture*>(Src);
-	auto* DstVk = static_cast<FVulkanBuffer*>(Dst);
-	if (SrcVk == nullptr || DstVk == nullptr || !bRecording)
-	{
-		return;
-	}
-
-	const FRHITextureDesc& Desc = SrcVk->GetDesc();
-	const FRHIExtent3D Extent = ResolveCopyExtent(Desc, Region);
-	const std::uint32_t LayerCount = ResolveCopyLayerCount(Desc, Region);
-	const VkImageAspectFlags Aspect = RHIEnumHas(Desc.Usage, ERHITextureUsage::DepthStencil)
-		? VK_IMAGE_ASPECT_DEPTH_BIT
-		: VK_IMAGE_ASPECT_COLOR_BIT;
-
-	// Same self-transitioning contract as the upload, on the source side: Before -> CopySrc.
-	if (SrcState.Before != ERHIResourceState::CopySrc)
-	{
-		TransitionTextureRange(Src, SrcState.Before, ERHIResourceState::CopySrc,
-			Region.MipLevel, 1, Region.BaseArrayLayer, LayerCount, Aspect);
-	}
-
-	VkBufferImageCopy Copy{};
-	Copy.bufferOffset = DstOffset;
-	Copy.bufferRowLength = 0;
-	Copy.bufferImageHeight = 0;
-	Copy.imageSubresource.aspectMask = Aspect;
-	Copy.imageSubresource.mipLevel = Region.MipLevel;
-	Copy.imageSubresource.baseArrayLayer = Region.BaseArrayLayer;
-	Copy.imageSubresource.layerCount = LayerCount;
-	Copy.imageOffset = { 0, 0, 0 };
-	Copy.imageExtent = { Extent.Width, Extent.Height, Extent.Depth };
-
-	vkCmdCopyImageToBuffer(
-		Buffer,
-		SrcVk->GetVkImage(),
-		VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-		DstVk->GetVkBuffer(),
-		1,
-		&Copy);
-
-	if (SrcState.After != ERHIResourceState::CopySrc)
-	{
-		TransitionTextureRange(Src, ERHIResourceState::CopySrc, SrcState.After,
-			Region.MipLevel, 1, Region.BaseArrayLayer, LayerCount, Aspect);
-	}
-}
-
-void FVulkanCommandList::CopyTexture(
-	FRHITexture* Src,
-	const FRHITextureCopyRegion& SrcRegion,
-	FRHITexture* Dst,
-	const FRHITextureCopyRegion& DstRegion,
-	const FRHIResourceStatePair& SrcState,
-	const FRHIResourceStatePair& DstState)
-{
-	auto* SrcVk = static_cast<FVulkanTexture*>(Src);
-	auto* DstVk = static_cast<FVulkanTexture*>(Dst);
-	if (SrcVk == nullptr || DstVk == nullptr || !bRecording)
-	{
-		return;
-	}
-
-	const FRHITextureDesc& SrcDesc = SrcVk->GetDesc();
-	const FRHITextureDesc& DstDesc = DstVk->GetDesc();
-	const FRHIExtent3D SrcExtent = ResolveCopyExtent(SrcDesc, SrcRegion);
-	const FRHIExtent3D DstExtent = ResolveCopyExtent(DstDesc, DstRegion);
-	const std::uint32_t SrcLayers = ResolveCopyLayerCount(SrcDesc, SrcRegion);
-	const std::uint32_t DstLayers = ResolveCopyLayerCount(DstDesc, DstRegion);
-
-	// vkCmdCopyImage copies one extent for both sides, so a mismatch is a caller error and a
-	// silent partial copy is exactly the failure this check exists to prevent.
-	if (SrcExtent != DstExtent || SrcLayers != DstLayers)
-	{
-		MAHO_LOG_CORE_ERROR(
-			"FVulkanCommandList::CopyTexture: region mismatch (src {}x{}x{} x{}, dst {}x{}x{} x{})",
-			SrcExtent.Width, SrcExtent.Height, SrcExtent.Depth, SrcLayers,
-			DstExtent.Width, DstExtent.Height, DstExtent.Depth, DstLayers);
-		return;
-	}
-
-	const VkImageAspectFlags SrcAspect = RHIEnumHas(SrcDesc.Usage, ERHITextureUsage::DepthStencil)
-		? VK_IMAGE_ASPECT_DEPTH_BIT
-		: VK_IMAGE_ASPECT_COLOR_BIT;
-	const VkImageAspectFlags DstAspect = RHIEnumHas(DstDesc.Usage, ERHITextureUsage::DepthStencil)
-		? VK_IMAGE_ASPECT_DEPTH_BIT
-		: VK_IMAGE_ASPECT_COLOR_BIT;
-
-	// Both sides carry their own state pair, each around the copy's own transfer layout.
-	if (SrcState.Before != ERHIResourceState::CopySrc)
-	{
-		TransitionTextureRange(Src, SrcState.Before, ERHIResourceState::CopySrc,
-			SrcRegion.MipLevel, 1, SrcRegion.BaseArrayLayer, SrcLayers, SrcAspect);
-	}
-	if (DstState.Before != ERHIResourceState::CopyDst)
-	{
-		TransitionTextureRange(Dst, DstState.Before, ERHIResourceState::CopyDst,
-			DstRegion.MipLevel, 1, DstRegion.BaseArrayLayer, DstLayers, DstAspect);
-	}
-
-	VkImageCopy Copy{};
-	Copy.srcSubresource.aspectMask = SrcAspect;
-	Copy.srcSubresource.mipLevel = SrcRegion.MipLevel;
-	Copy.srcSubresource.baseArrayLayer = SrcRegion.BaseArrayLayer;
-	Copy.srcSubresource.layerCount = SrcLayers;
-	Copy.srcOffset = { 0, 0, 0 };
-	Copy.dstSubresource.aspectMask = DstAspect;
-	Copy.dstSubresource.mipLevel = DstRegion.MipLevel;
-	Copy.dstSubresource.baseArrayLayer = DstRegion.BaseArrayLayer;
-	Copy.dstSubresource.layerCount = DstLayers;
-	Copy.dstOffset = { 0, 0, 0 };
-	Copy.extent = { SrcExtent.Width, SrcExtent.Height, SrcExtent.Depth };
-
-	vkCmdCopyImage(
-		Buffer,
-		SrcVk->GetVkImage(),
-		VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-		DstVk->GetVkImage(),
-		VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-		1,
-		&Copy);
-
-	if (SrcState.After != ERHIResourceState::CopySrc)
-	{
-		TransitionTextureRange(Src, ERHIResourceState::CopySrc, SrcState.After,
-			SrcRegion.MipLevel, 1, SrcRegion.BaseArrayLayer, SrcLayers, SrcAspect);
-	}
-	if (DstState.After != ERHIResourceState::CopyDst)
-	{
-		TransitionTextureRange(Dst, ERHIResourceState::CopyDst, DstState.After,
-			DstRegion.MipLevel, 1, DstRegion.BaseArrayLayer, DstLayers, DstAspect);
-	}
 }
 
 void FVulkanCommandList::FillBuffer(FRHIBuffer* InBuffer, std::uint64_t Offset, std::uint64_t Size, std::uint32_t Data)
@@ -615,13 +388,56 @@ void FVulkanCommandList::TransitionTexture(FRHITexture* Texture, ERHIResourceSta
 		return;
 	}
 
-	// Public behavior is unchanged (EVERY mip, EVERY layer, aspect from the usage) -- it is now
-	// the whole-range case of the per-subresource helper the copy operations use.
+	auto ToLayout = [](ERHIResourceState State) -> VkImageLayout
+	{
+		switch (State)
+		{
+		case ERHIResourceState::CopySrc:
+			return VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+		case ERHIResourceState::CopyDst:
+			return VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+		case ERHIResourceState::ShaderResource:
+			return VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		case ERHIResourceState::RenderTarget:
+			return VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+		case ERHIResourceState::DepthWrite:
+			return VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+		case ERHIResourceState::Present:
+			return VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+		case ERHIResourceState::Common:
+		default:
+			return VK_IMAGE_LAYOUT_UNDEFINED;
+		}
+	};
+
 	const FRHITextureDesc& Desc = Tex->GetDesc();
-	const VkImageAspectFlags Aspect = RHIEnumHas(Desc.Usage, ERHITextureUsage::DepthStencil)
-		? VK_IMAGE_ASPECT_DEPTH_BIT
-		: VK_IMAGE_ASPECT_COLOR_BIT;
-	TransitionTextureRange(Texture, OldState, NewState, 0, Desc.MipLevels, 0, Desc.ArrayLayers, Aspect);
+	const bool bDepth = RHIEnumHas(Desc.Usage, ERHITextureUsage::DepthStencil);
+	VkImageMemoryBarrier Barrier{};
+	Barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+	Barrier.oldLayout = ToLayout(OldState);
+	Barrier.newLayout = ToLayout(NewState);
+	Barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	Barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	Barrier.image = Tex->GetVkImage();
+	Barrier.subresourceRange.aspectMask = bDepth ? VK_IMAGE_ASPECT_DEPTH_BIT : VK_IMAGE_ASPECT_COLOR_BIT;
+	Barrier.subresourceRange.baseMipLevel = 0;
+	Barrier.subresourceRange.levelCount = Desc.MipLevels;
+	Barrier.subresourceRange.baseArrayLayer = 0;
+	Barrier.subresourceRange.layerCount = Desc.ArrayLayers;
+	Barrier.srcAccessMask = ToVkAccess(OldState);
+	Barrier.dstAccessMask = ToVkAccess(NewState);
+
+	vkCmdPipelineBarrier(
+		Buffer,
+		ToVkPipelineStage(OldState),
+		ToVkPipelineStage(NewState),
+		0,
+		0,
+		nullptr,
+		0,
+		nullptr,
+		1,
+		&Barrier);
 }
 
 void FVulkanCommandList::BeginRenderPass(

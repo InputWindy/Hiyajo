@@ -117,21 +117,6 @@ public:
 	[[nodiscard]] virtual std::uint32_t GetFramebufferWidth() const = 0;
 	[[nodiscard]] virtual std::uint32_t GetFramebufferHeight() const = 0;
 
-	/** Device capability query: can Format be used for the given texture usage bits?
-	 *  Unknown formats answer false. */
-	[[nodiscard]] virtual bool IsFormatSupported(ERHIFormat Format, ERHITextureUsage Usage) const = 0;
-
-	/** BLOCKING texture -> CPU readback (submit + fence wait => stalls the caller). Export /
-	 *  screenshot path only, never per-frame. PreserveState is the texture's layout before and
-	 *  after the copy; the readback records both transitions. Returns false (and logs) for an
-	 *  unknown format or when OutSize is too small for the region. */
-	virtual bool ReadbackTexture(
-		FRHITexture* Src,
-		const FRHITextureCopyRegion& Region,
-		void* Out,
-		std::uint64_t OutSize,
-		ERHIResourceState PreserveState = ERHIResourceState::ShaderResource) = 0;
-
 	// GPU queries (occlusion / timestamp)
 	[[nodiscard]] virtual FRHIQueryPool* CreateQueryPool(ERHIQueryType Type, std::uint32_t QueryCount) = 0;
 	virtual void DestroyQueryPool(FRHIQueryPool* Pool) = 0;

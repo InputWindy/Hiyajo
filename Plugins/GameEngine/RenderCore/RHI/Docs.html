@@ -79,7 +79,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div id="app">
   <div id="side">
     <h1>Maho 引擎源码</h1>
-    <div class="search" title="左侧扫描 Source/**/*.h：10 个头文件 · 已声明 10 个 · 85 个实体 / 841 个成员 ｜ 内容在 Tools/docs_content.py 里逐条声明">
+    <div class="search" title="左侧扫描 Source/**/*.h：10 个头文件 · 已声明 10 个 · 85 个实体 / 838 个成员 ｜ 内容在 Tools/docs_content.py 里逐条声明">
       <input id="q" type="search" placeholder="搜索头文件…  （如 Frame、Core、Entry）" autocomplete="off">
     </div>
     <div id="tree"><ul>
@@ -1127,9 +1127,8 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> Begin() = 0</td><td>开始录制（必须与 `End` 配对）</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> End() = 0</td><td>结束录制（此后才能提交）</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> CopyBuffer(FRHIBuffer* Src, std::uint64_t SrcOffset, FRHIBuffer* Dst, std::uint64_t DstOffset, std::uint64_t Size) = 0</td><td>缓冲间拷贝（传输命令；图形 / 计算列表也允许）</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> CopyBufferToTexture(FRHIBuffer* Src, std::uint64_t SrcOffset, FRHITexture* Dst, <span class="kw">const</span> FRHITextureCopyRegion&amp; Region, <span class="kw">const</span> FRHIResourceStatePair&amp; DstState = { ERHIResourceState::Common, ERHIResourceState::ShaderResource }) = 0</td><td>缓冲 → 纹理（上传贴图的常用入口）。**拷贝自带状态转换**：目标按 `DstState` 进、出（内部经 `CopyDst` 布局），调用方不再手写一前一后两次 `TransitionTexture`；`Region` 指明 mip / 层范围 / extent（`{0,0,0}` = 整个 mip）</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> CopyTextureToBuffer(FRHITexture* Src, <span class="kw">const</span> FRHITextureCopyRegion&amp; Region, FRHIBuffer* Dst, std::uint64_t DstOffset, <span class="kw">const</span> FRHIResourceStatePair&amp; SrcState = { ERHIResourceState::ShaderResource, ERHIResourceState::ShaderResource }) = 0</td><td>纹理 → 缓冲（回读 / 截图）。同上自带状态转换（源经 `CopySrc` 布局）</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> CopyTexture(FRHITexture* Src, <span class="kw">const</span> FRHITextureCopyRegion&amp; SrcRegion, FRHITexture* Dst, <span class="kw">const</span> FRHITextureCopyRegion&amp; DstRegion, <span class="kw">const</span> FRHIResourceStatePair&amp; SrcState = ..., <span class="kw">const</span> FRHIResourceStatePair&amp; DstState = ...) = 0</td><td>纹理 → 纹理（`vkCmdCopyImage`）：两侧各自带状态对。**两侧 extent / 层数必须一致**（不匹配直接报错返回，不做静默部分拷贝）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> CopyBufferToTexture(FRHIBuffer* Src, FRHITexture* Dst, std::uint64_t SrcOffset) = 0</td><td>缓冲 → 纹理（上传贴图的常用入口）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> CopyTextureToBuffer(FRHITexture* Src, FRHIBuffer* Dst, std::uint64_t DstOffset) = 0</td><td>纹理 → 缓冲（回读 / 截图）</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> FillBuffer(FRHIBuffer* Buffer, std::uint64_t Offset, std::uint64_t Size, std::uint32_t Data) = 0</td><td>用 32 位模式填充缓冲（清零 / 填初值，比上传便宜）</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> UpdateBuffer(FRHIBuffer* Buffer, std::uint64_t Offset, std::uint64_t Size, <span class="kw">const</span> <span class="kw">void</span>* Data) = 0</td><td>把 CPU 数据写进缓冲。**host 可见就直写、设备本地就走 staging 拷贝**——这个选择在后端内部完成，调用点不需要知道；`Data` 只需活到录制结束（直写路径）或拷贝命令完成（staging 路径，由延迟回收保证）</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> TransitionBuffer(FRHIBuffer* Buffer, ERHIResourceState OldState, ERHIResourceState NewState) = 0</td><td>缓冲状态转换（屏障）。**必须显式声明**：引擎没有全局状态追踪，漏一次转换就是「读到的内容是上一帧的」这类静默错误</td></tr>
@@ -1293,9 +1292,8 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tbody>
 <tr><td>Tex2D = 0</td><td>普通 2D 纹理（离屏目标 / 贴图）</td></tr>
 <tr><td>Tex2DArray</td><td>2D 数组（按索引切换层）</td></tr>
-<tr><td>Cube</td><td>立方体贴图（`ArrayLayers` 必须是 6 的倍数；视图为 `CUBE` / `CUBE_ARRAY`）</td></tr>
-<tr><td>CubeArray</td><td>立方体数组（`ArrayLayers = 6*N`）</td></tr>
-<tr><td>Tex3D</td><td>体纹理（三轴采样；`Extent.Depth` 是深度，上传/回读按深度片数算区域）</td></tr>
+<tr><td>Cube</td><td>立方体贴图（6 层 + 立方采样）</td></tr>
+<tr><td>Tex3D</td><td>体纹理（三轴采样）</td></tr>
 </tbody></table>
 </div>
 <div class="card">
@@ -2417,8 +2415,6 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> RunOnServer(std::function&lt;<span class="kw">void</span>()&gt; Fn) = 0</td><td>**唯一的 marshal 入口**：把 `Fn` 放到 RHI 服务器线程上跑并等它完成。队列因此只有一条发射线程（`vkQueueSubmit` / `vkWaitForFences` / `vkResetFences` / `vkQueuePresentKHR` 全在它上面），「提交保持串行」不再是调用方的承诺。**可重入**：从服务器线程再调则内联执行（否则会自己等自己）</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> <span class="kw">bool</span> IsServerThread() <span class="kw">const</span> = 0</td><td>调用方是否就是服务器线程</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> WaitIdle() = 0</td><td>设备空闲：等所有已提交 GPU 工作完成。**销毁可能被在飞命令缓冲引用的资源之前必须调**（引擎关闭 / 交换链拆除）</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> <span class="kw">bool</span> IsFormatSupported(ERHIFormat Format, ERHITextureUsage Usage) <span class="kw">const</span> = 0</td><td>**能力协商**：问设备这个格式能不能按 `Usage` 里的用途使用（后端查 `vkGetPhysicalDeviceFormatProperties`，把用途位映射到 format feature 位；`Unknown` 一律 <span class="kw">false</span>）。调用方（如场景色目标）在建资源之前问一次，而不是建完在深处失败</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">bool</span> ReadbackTexture(FRHITexture* Src, <span class="kw">const</span> FRHITextureCopyRegion&amp; Region, <span class="kw">void</span>* Out, std::uint64_t OutSize, ERHIResourceState PreserveState = ERHIResourceState::ShaderResource) = 0</td><td>**GPU → CPU 回读（阻塞）**：内部建 host 可见 staging、录一张一次性命令表、提交并**等栅栏**、map 后 memcpy 出来；纹理按 `PreserveState` 进出。导出 / 截图路径，**绝不可每帧调**；纹理所属那一帧尚未结束时也不要调</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> PresentTexture(FRHITexture* Src) = 0</td><td>把离屏纹理 blit 到当前交换链后缓冲（在帧命令缓冲上做）。**必须在所有场景录制之后、`EndFrame` 之前**调用；交换链的渲染通道 / 帧缓冲始终是 RHI 私有的</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> ERHIFormat GetSwapchainFormat() <span class="kw">const</span> = 0</td><td>当前交换链格式 —— 离屏目标必须与它一致（blit 要求格式相同）</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> <span class="kw">bool</span> IsInitialized() <span class="kw">const</span> = 0</td><td>设备是否已就绪</td></tr>

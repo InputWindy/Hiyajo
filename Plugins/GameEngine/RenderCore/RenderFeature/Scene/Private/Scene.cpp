@@ -129,18 +129,13 @@ void FScene::EnsureTargets(FRender& R)
 	{
 		// SceneColor: mirror the swapchain's backbuffer format so the present blit is
 		// consistent with the backbuffer (an offscreen RT may differ, but keep it simple).
-		// BOTH channel orders are handled with the sRGB flag carried through: a swapchain that
-		// came back as BGRA8/sRGB (the common Win32 case) must not be degraded, because the
-		// mirror's format has to match the backbuffer's for the blit.
 		const ERHIFormat SwFmt = R.GetSwapchainFormat();
-		Resource::ETexturePixelFormat ColorFmt = Resource::ETexturePixelFormat::Unknown;
+		Resource::ETexturePixelFormat ColorFmt = Resource::ETexturePixelFormat::RGBA8;
 		bool bSRGB = false;
 		switch (SwFmt)
 		{
 			case ERHIFormat::R8G8B8A8_SRGB:  ColorFmt = Resource::ETexturePixelFormat::RGBA8; bSRGB = true; break;
 			case ERHIFormat::R8G8B8A8_UNORM: ColorFmt = Resource::ETexturePixelFormat::RGBA8; bSRGB = false; break;
-			case ERHIFormat::B8G8R8A8_SRGB:  ColorFmt = Resource::ETexturePixelFormat::BGRA8; bSRGB = true; break;
-			case ERHIFormat::B8G8R8A8_UNORM: ColorFmt = Resource::ETexturePixelFormat::BGRA8; bSRGB = false; break;
 			default:
 				MAHO_LOG_CORE_WARN("FScene: unsupported swapchain format for scene color; using RGBA8_UNORM");
 				ColorFmt = Resource::ETexturePixelFormat::RGBA8;
@@ -148,29 +143,15 @@ void FScene::EnsureTargets(FRender& R)
 				break;
 		}
 
-		// The color mirror is a render attachment, a sampled source and the blit source at once,
-		// so the device is asked BEFORE the target is declared (features reach the RHI only
-		// through FRender). A format the driver cannot use for these usages would otherwise fail
-		// deeper in CreateTexture with nothing pointing back at the target that asked for it.
-		constexpr ERHITextureUsage ColorUsage =
-			ERHITextureUsage::ColorAttachment | ERHITextureUsage::Sampled | ERHITextureUsage::TransferSrc;
-		if (!R.IsTextureFormatSupported(SwFmt, ColorUsage))
-		{
-			MAHO_LOG_CORE_ERROR(
-				"FScene: swapchain format unsupported for scene color mirror; scene color disabled this frame");
-		}
-		else
-		{
-			Resource::TResourceCreateDesc<Resource::FTexture2D>::FConfig ColorCfg;
-			ColorCfg.Format = ColorFmt;
-			ColorCfg.Width = W;
-			ColorCfg.Height = H;
-			ColorCfg.ArrayLayers = 1;
-			ColorCfg.MipCount = 1;
-			ColorCfg.bSRGB = bSRGB;
-			ColorCfg.Usage = Resource::ETextureMirrorUsage::ColorTarget;
-			RS->CreateResource<Resource::FTexture2D>(kSceneColorName, ColorCfg);
-		}
+		Resource::TResourceCreateDesc<Resource::FTexture2D>::FConfig ColorCfg;
+		ColorCfg.Format = ColorFmt;
+		ColorCfg.Width = W;
+		ColorCfg.Height = H;
+		ColorCfg.ArrayLayers = 1;
+		ColorCfg.MipCount = 1;
+		ColorCfg.bSRGB = bSRGB;
+		ColorCfg.Usage = Resource::ETextureMirrorUsage::ColorTarget;
+		RS->CreateResource<Resource::FTexture2D>(kSceneColorName, ColorCfg);
 
 		Resource::TResourceCreateDesc<Resource::FTexture2D>::FConfig DepthCfg;
 		DepthCfg.Format = Resource::ETexturePixelFormat::D32Sfloat;

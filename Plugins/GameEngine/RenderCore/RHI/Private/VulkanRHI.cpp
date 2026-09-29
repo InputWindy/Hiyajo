@@ -140,39 +140,6 @@ VkImageAspectFlags GetImageAspectForFormat(ERHIFormat Format)
 	}
 }
 
-/** Texel size of an ERHIFormat, used to size a readback staging buffer. 0 = no known layout. */
-[[nodiscard]] std::uint32_t GetFormatBytesPerPixel(ERHIFormat Format)
-{
-	switch (Format)
-	{
-	case ERHIFormat::R8G8B8A8_UNORM:
-	case ERHIFormat::R8G8B8A8_SRGB:
-	case ERHIFormat::B8G8R8A8_UNORM:
-	case ERHIFormat::B8G8R8A8_SRGB:
-	case ERHIFormat::R32_SFLOAT:
-	case ERHIFormat::R16G16_SFLOAT:
-	case ERHIFormat::D24_UNORM_S8_UINT:
-	case ERHIFormat::D32_SFLOAT:
-		return 4;
-	case ERHIFormat::R32G32_SFLOAT:
-	case ERHIFormat::R16G16B16A16_SFLOAT:
-		return 8;
-	case ERHIFormat::R32G32B32_SFLOAT:
-		return 12;
-	case ERHIFormat::R32G32B32A32_SFLOAT:
-		return 16;
-	case ERHIFormat::R8_UNORM:
-		return 1;
-	case ERHIFormat::R8G8_UNORM:
-	case ERHIFormat::R16_SFLOAT:
-		return 2;
-	case ERHIFormat::R8G8B8_UNORM:
-		return 3;
-	default:
-		return 0;
-	}
-}
-
 constexpr const char* GInstanceExtensions[] =
 {
 	VK_KHR_SURFACE_EXTENSION_NAME,
@@ -575,174 +542,25 @@ void FVulkanRHI::BeginFrame()
 
 ERHIFormat FVulkanRHI::GetSwapchainFormat() const
 {
-	// Carried through VERBATIM (sRGB included) by the single ToRHIFormat mapper: the off-screen
-	// scene target must match the backbuffer exactly (the present blit needs identical formats),
-	// so a lossy mapping here used to degrade the scene mirror to a different channel order /
-	// transfer function than the swapchain it was meant to mirror.
-	return ToRHIFormat(SwapchainImageFormat);
-}
-
-bool FVulkanRHI::IsFormatSupported(ERHIFormat Format, ERHITextureUsage Usage) const
-{
-	if (PhysicalDevice == VK_NULL_HANDLE)
+	// The swapchain picks B8G8R8A8_SRGB when available; the off-screen scene
+	// target must match exactly (blit requires identical formats).
+	if (SwapchainImageFormat == VK_FORMAT_B8G8R8A8_SRGB)
 	{
-		return false;
+		return ERHIFormat::B8G8R8A8_SRGB;
 	}
-
-	const VkFormat VkFmt = ToVkFormat(Format);
-	if (VkFmt == VK_FORMAT_UNDEFINED)
+	if (SwapchainImageFormat == VK_FORMAT_B8G8R8A8_UNORM)
 	{
-		// An Unknown (or unmapped) format is never supported: the caller decides what to do.
-		return false;
+		return ERHIFormat::B8G8R8A8_UNORM;
 	}
-
-	VkFormatProperties Props{};
-	vkGetPhysicalDeviceFormatProperties(PhysicalDevice, VkFmt, &Props);
-
-	VkFormatFeatureFlags Required = 0;
-	if (RHIEnumHas(Usage, ERHITextureUsage::ColorAttachment))
+	if (SwapchainImageFormat == VK_FORMAT_R8G8B8A8_SRGB)
 	{
-		Required |= VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT;
+		return ERHIFormat::R8G8B8A8_UNORM;
 	}
-	if (RHIEnumHas(Usage, ERHITextureUsage::DepthStencil))
+	if (SwapchainImageFormat == VK_FORMAT_R8G8B8A8_UNORM)
 	{
-		Required |= VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT;
+		return ERHIFormat::R8G8B8A8_UNORM;
 	}
-	if (RHIEnumHas(Usage, ERHITextureUsage::Sampled))
-	{
-		Required |= VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT;
-	}
-	if (RHIEnumHas(Usage, ERHITextureUsage::Storage))
-	{
-		Required |= VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT;
-	}
-	if (RHIEnumHas(Usage, ERHITextureUsage::TransferSrc))
-	{
-		Required |= VK_FORMAT_FEATURE_BLIT_SRC_BIT | VK_FORMAT_FEATURE_TRANSFER_SRC_BIT;
-	}
-	if (RHIEnumHas(Usage, ERHITextureUsage::TransferDst))
-	{
-		Required |= VK_FORMAT_FEATURE_BLIT_DST_BIT | VK_FORMAT_FEATURE_TRANSFER_DST_BIT;
-	}
-
-	// Every requested capability has to be present; an empty request (Usage == None) is trivially
-	// satisfied, which matches "the format exists on this device".
-	return (Props.optimalTilingFeatures & Required) == Required;
-}
-
-bool FVulkanRHI::ReadbackTexture(
-	FRHITexture* Src,
-	const FRHITextureCopyRegion& Region,
-	void* Out,
-	std::uint64_t OutSize,
-	ERHIResourceState PreserveState)
-{
-	// BLOCKING by construction: record a one-shot list, submit it, WAIT on a fresh fence, then
-	// map the staging buffer. Correct for an export / screenshot, wrong for anything per-frame.
-	if (!bInitialized || Device == VK_NULL_HANDLE
-		|| MemoryAllocator == nullptr || !MemoryAllocator->IsValid())
-	{
-		MAHO_LOG_CORE_ERROR("FVulkanRHI::ReadbackTexture: device not initialized");
-		return false;
-	}
-	if (Src == nullptr || Out == nullptr)
-	{
-		MAHO_LOG_CORE_ERROR("FVulkanRHI::ReadbackTexture: null source texture or destination");
-		return false;
-	}
-
-	auto* SrcVk = static_cast<FVulkanTexture*>(Src);
-	const FRHITextureDesc& Desc = SrcVk->GetDesc();
-
-	if (Region.MipLevel >= Desc.MipLevels || Region.BaseArrayLayer >= Desc.ArrayLayers)
-	{
-		MAHO_LOG_CORE_ERROR("FVulkanRHI::ReadbackTexture: region out of range (mip {} of {}, layer {} of {})",
-			Region.MipLevel, Desc.MipLevels, Region.BaseArrayLayer, Desc.ArrayLayers);
-		return false;
-	}
-
-	const std::uint32_t BytesPerPixel = GetFormatBytesPerPixel(Desc.Format);
-	if (BytesPerPixel == 0)
-	{
-		MAHO_LOG_CORE_ERROR("FVulkanRHI::ReadbackTexture: no texel size for the source format");
-		return false;
-	}
-
-	const FRHIExtent3D Extent = ResolveCopyExtent(Desc, Region);
-	const std::uint32_t LayerCount = ResolveCopyLayerCount(Desc, Region);
-	const std::uint64_t Needed = static_cast<std::uint64_t>(Extent.Width) * Extent.Height
-		* Extent.Depth * LayerCount * BytesPerPixel;
-	if (OutSize < Needed)
-	{
-		MAHO_LOG_CORE_ERROR("FVulkanRHI::ReadbackTexture: destination too small ({} < {})", OutSize, Needed);
-		return false;
-	}
-
-	// GPU -> CPU staging buffer. The RAII wrapper owns the VkBuffer + allocation for the duration
-	// of this function, so it outlives both the submit and the mapping below.
-	VkBufferCreateInfo BufferInfo{};
-	BufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-	BufferInfo.size = Needed;
-	BufferInfo.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-	BufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-
-	const VmaAllocationCreateInfo AllocInfo = FVulkanMemoryAllocator::MakeAllocationInfo(ERHIMemoryUsage::GPUToCPU);
-	VkBuffer ReadbackBuffer = VK_NULL_HANDLE;
-	VmaAllocation ReadbackAllocation = nullptr;
-	if (!MemoryAllocator->CreateBuffer(BufferInfo, AllocInfo, ReadbackBuffer, ReadbackAllocation))
-	{
-		MAHO_LOG_CORE_ERROR("FVulkanRHI::ReadbackTexture: staging buffer allocation failed ({} bytes)", Needed);
-		return false;
-	}
-
-	FRHIBufferDesc BufferDesc;
-	BufferDesc.Size = Needed;
-	BufferDesc.Usage = ERHIBufferUsage::TransferDst;
-	BufferDesc.MemoryUsage = ERHIMemoryUsage::GPUToCPU;
-	FVulkanBuffer ReadbackTarget(BufferDesc, ReadbackBuffer, ReadbackAllocation, MemoryAllocator.get());
-
-	// One-shot command list through the normal factory (it owns its own command pool, so the
-	// frame's recording state is untouched). The copy records its own transitions: the texture
-	// enters as PreserveState, is copied, and is left in PreserveState again.
-	FRHICommandList* CmdList = CreateCommandList(ERHICommandListType::Graphics);
-	if (CmdList == nullptr)
-	{
-		MAHO_LOG_CORE_ERROR("FVulkanRHI::ReadbackTexture: command list creation failed");
-		return false;
-	}
-
-	CmdList->Begin();
-	CmdList->CopyTextureToBuffer(
-		Src, Region, &ReadbackTarget, 0, FRHIResourceStatePair{ PreserveState, PreserveState });
-	CmdList->End();
-
-	FRHIFence* Fence = CreateFence(false);
-	if (Fence == nullptr)
-	{
-		DestroyCommandList(CmdList);
-		MAHO_LOG_CORE_ERROR("FVulkanRHI::ReadbackTexture: fence creation failed");
-		return false;
-	}
-
-	GetGraphicsQueue().Submit(&CmdList, 1, nullptr, 0, nullptr, 0, Fence);
-	WaitForFence(Fence, UINT64_MAX);
-	// The fence is signaled, so the command buffer is no longer in flight: it can be freed, and
-	// the staging buffer's contents are stable.
-	DestroyFence(Fence);
-	DestroyCommandList(CmdList);
-
-	FRHIMemoryAllocation Staging{};
-	Staging.Native = ReadbackAllocation;
-	void* Mapped = MemoryAllocator->Map(Staging);
-	if (Mapped == nullptr)
-	{
-		MAHO_LOG_CORE_ERROR("FVulkanRHI::ReadbackTexture: staging buffer is not host-visible/mappable");
-		return false;
-	}
-	std::memcpy(Out, Mapped, static_cast<std::size_t>(Needed));
-	MemoryAllocator->Unmap(Staging);
-
-	return true;
+	return ERHIFormat::B8G8R8A8_UNORM;
 }
 
 void FVulkanRHI::PresentTexture(FRHITexture* Src)
@@ -1507,61 +1325,26 @@ bool FVulkanRHI::CreateSwapchain()
 	std::vector<VkSurfaceFormatKHR> Formats(FormatCount);
 	vkGetPhysicalDeviceSurfaceFormatsKHR(PhysicalDevice, Surface, &FormatCount, Formats.data());
 
-	// Rank the candidates by CAPABILITY instead of trusting a hardcoded pair: a format is a
-	// candidate only when the surface actually reports it AND the device can use it as a color
-	// attachment that can be blitted to/from (which is exactly what PresentTexture does with the
-	// backbuffer). The surface's own color space is kept for whichever format wins.
-	static constexpr VkFormat PreferredSwapchainFormats[] =
-	{
-		VK_FORMAT_B8G8R8A8_SRGB,
-		VK_FORMAT_R8G8B8A8_SRGB,
-		VK_FORMAT_B8G8R8A8_UNORM,
-		VK_FORMAT_R8G8B8A8_UNORM,
-	};
-	constexpr VkFormatFeatureFlags RequiredFeatures =
-		VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT | VK_FORMAT_FEATURE_BLIT_SRC_BIT | VK_FORMAT_FEATURE_BLIT_DST_BIT;
-
-	SwapchainImageFormat = VK_FORMAT_UNDEFINED;
+	SwapchainImageFormat = VK_FORMAT_B8G8R8A8_SRGB;
 	VkColorSpaceKHR ColorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
+	bool bFormatFound = false;
 
-	for (const VkFormat Candidate : PreferredSwapchainFormats)
+	for (const VkSurfaceFormatKHR& Format : Formats)
 	{
-		const VkSurfaceFormatKHR* Match = nullptr;
-		for (const VkSurfaceFormatKHR& Format : Formats)
+		if (Format.format == VK_FORMAT_B8G8R8A8_SRGB &&
+			Format.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
 		{
-			if (Format.format == Candidate)
-			{
-				Match = &Format;
-				break;
-			}
+			SwapchainImageFormat = Format.format;
+			ColorSpace = Format.colorSpace;
+			bFormatFound = true;
+			break;
 		}
-		if (Match == nullptr)
-		{
-			continue;
-		}
-
-		VkFormatProperties Props{};
-		vkGetPhysicalDeviceFormatProperties(PhysicalDevice, Candidate, &Props);
-		if ((Props.optimalTilingFeatures & RequiredFeatures) != RequiredFeatures)
-		{
-			continue;
-		}
-
-		SwapchainImageFormat = Match->format;
-		ColorSpace = Match->colorSpace;
-		break;
 	}
 
-	if (SwapchainImageFormat == VK_FORMAT_UNDEFINED && !Formats.empty())
+	if (!bFormatFound && !Formats.empty())
 	{
-		// Nothing on the preference list works here: take what the surface offers and SAY SO.
-		// A presentable format is blittable enough to display, it is just not one this renderer
-		// knows how to mirror, and a swapchain that cannot be created is worse than an odd format.
 		SwapchainImageFormat = Formats[0].format;
 		ColorSpace = Formats[0].colorSpace;
-		MAHO_LOG_CORE_WARN(
-			"FVulkanRHI::CreateSwapchain: no preferred surface format available; using the surface's first entry (VkFormat {})",
-			static_cast<int>(SwapchainImageFormat));
 	}
 
 	std::uint32_t PresentModeCount = 0;
@@ -2229,50 +2012,6 @@ VkFormat FVulkanRHI::ToVkFormat(ERHIFormat Format)
 	}
 }
 
-ERHIFormat FVulkanRHI::ToRHIFormat(VkFormat Format)
-{
-	// The single VkFormat -> ERHIFormat mapper: every conversion in this backend goes through
-	// here so two answer-sites cannot disagree (the swapchain query used to map sRGB away).
-	switch (Format)
-	{
-	case VK_FORMAT_R8G8B8A8_UNORM:
-		return ERHIFormat::R8G8B8A8_UNORM;
-	case VK_FORMAT_R8G8B8A8_SRGB:
-		return ERHIFormat::R8G8B8A8_SRGB;
-	case VK_FORMAT_B8G8R8A8_UNORM:
-		return ERHIFormat::B8G8R8A8_UNORM;
-	case VK_FORMAT_B8G8R8A8_SRGB:
-		return ERHIFormat::B8G8R8A8_SRGB;
-	case VK_FORMAT_R32_SFLOAT:
-		return ERHIFormat::R32_SFLOAT;
-	case VK_FORMAT_R32G32_SFLOAT:
-		return ERHIFormat::R32G32_SFLOAT;
-	case VK_FORMAT_R32G32B32_SFLOAT:
-		return ERHIFormat::R32G32B32_SFLOAT;
-	case VK_FORMAT_R16G16_SFLOAT:
-		return ERHIFormat::R16G16_SFLOAT;
-	case VK_FORMAT_D24_UNORM_S8_UINT:
-		return ERHIFormat::D24_UNORM_S8_UINT;
-	case VK_FORMAT_D32_SFLOAT:
-		return ERHIFormat::D32_SFLOAT;
-	case VK_FORMAT_R16G16B16A16_SFLOAT:
-		return ERHIFormat::R16G16B16A16_SFLOAT;
-	case VK_FORMAT_R32G32B32A32_SFLOAT:
-		return ERHIFormat::R32G32B32A32_SFLOAT;
-	case VK_FORMAT_R8_UNORM:
-		return ERHIFormat::R8_UNORM;
-	case VK_FORMAT_R8G8_UNORM:
-		return ERHIFormat::R8G8_UNORM;
-	case VK_FORMAT_R8G8B8_UNORM:
-		return ERHIFormat::R8G8B8_UNORM;
-	case VK_FORMAT_R16_SFLOAT:
-		return ERHIFormat::R16_SFLOAT;
-	default:
-		// No lossy default: an unmapped Vulkan format is Unknown, and the caller decides.
-		return ERHIFormat::Unknown;
-	}
-}
-
 VkDescriptorType FVulkanRHI::ToVkDescriptorType(ERHIDescriptorType Type)
 {
 	// ERHIDescriptorType is dense and skips Vulkan texel-buffer enums - never static_cast.
@@ -2371,45 +2110,9 @@ FRHITexture* FVulkanRHI::CreateTexture(const FRHITextureDesc& Desc)
 		return nullptr;
 	}
 
-	// The dimension decides the image TYPE: cube / cube-array / 2D-array all live in a 2D image,
-	// while a volume texture does not. Before this, every dimension was created as
-	// VK_IMAGE_TYPE_2D, which quietly turned a cube into a 2D array of six faces and a 3D
-	// texture into its first slice.
-	VkImageType ImageType = VK_IMAGE_TYPE_2D;
-	VkImageCreateFlags ImageFlags = 0;
-	switch (Desc.Dimension)
-	{
-	case ERHITextureDimension::Tex3D:
-		ImageType = VK_IMAGE_TYPE_3D;
-		if (Desc.ArrayLayers != 1)
-		{
-			MAHO_LOG_CORE_ERROR(
-				"FVulkanRHI::CreateTexture: 3D texture requires ArrayLayers == 1 (got {})", Desc.ArrayLayers);
-			return nullptr;
-		}
-		break;
-	case ERHITextureDimension::Cube:
-	case ERHITextureDimension::CubeArray:
-		// A cube image is 6*N layers of a 2D image carrying CUBE_COMPATIBLE; any other layer
-		// count is a descriptor that cannot describe whole faces.
-		if (Desc.ArrayLayers == 0 || Desc.ArrayLayers % 6 != 0)
-		{
-			MAHO_LOG_CORE_ERROR(
-				"FVulkanRHI::CreateTexture: cube texture requires 6*N array layers (got {})", Desc.ArrayLayers);
-			return nullptr;
-		}
-		ImageFlags |= VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
-		break;
-	case ERHITextureDimension::Tex2DArray:
-	case ERHITextureDimension::Tex2D:
-	default:
-		break;
-	}
-
 	VkImageCreateInfo ImageInfo{};
 	ImageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-	ImageInfo.flags = ImageFlags;
-	ImageInfo.imageType = ImageType;
+	ImageInfo.imageType = VK_IMAGE_TYPE_2D;
 	ImageInfo.format = ToVkFormat(Desc.Format);
 	ImageInfo.extent = { Desc.Extent.Width, Desc.Extent.Height, Desc.Extent.Depth };
 	ImageInfo.mipLevels = Desc.MipLevels;
@@ -3342,57 +3045,17 @@ FRHITextureView* FVulkanRHI::CreateTextureView(const FRHITextureViewDesc& Desc)
 	}
 
 	auto* VkTex = static_cast<FVulkanTexture*>(Desc.Texture);
-	const FRHITextureDesc& TexDesc = VkTex->GetDesc();
-
-	// The view type is derived from the TEXTURE's dimension, never hardcoded: a view over a cube
-	// image must be a CUBE view, or the sampler reads six faces as a flat 2D array.
-	VkImageViewType ViewType = VK_IMAGE_VIEW_TYPE_2D;
-	std::uint32_t LayerCount = Desc.ArrayLayerCount;
-	switch (TexDesc.Dimension)
-	{
-	case ERHITextureDimension::Tex2DArray:
-		ViewType = VK_IMAGE_VIEW_TYPE_2D_ARRAY;
-		break;
-	case ERHITextureDimension::Cube:
-	case ERHITextureDimension::CubeArray:
-		ViewType = TexDesc.Dimension == ERHITextureDimension::Cube
-			? VK_IMAGE_VIEW_TYPE_CUBE
-			: VK_IMAGE_VIEW_TYPE_CUBE_ARRAY;
-		// A cube view covers whole faces, so its layer range follows the image's 6*N rule.
-		if (LayerCount == 0)
-		{
-			LayerCount = TexDesc.ArrayLayers;
-		}
-		if (LayerCount == 0 || LayerCount % 6 != 0
-			|| Desc.BaseArrayLayer + LayerCount > TexDesc.ArrayLayers)
-		{
-			MAHO_LOG_CORE_ERROR(
-				"FVulkanRHI::CreateTextureView: cube view needs a 6*N layer range inside the image (base {}, count {}, image layers {})",
-				Desc.BaseArrayLayer, LayerCount, TexDesc.ArrayLayers);
-			return nullptr;
-		}
-		break;
-	case ERHITextureDimension::Tex3D:
-		ViewType = VK_IMAGE_VIEW_TYPE_3D;
-		// Vulkan requires a 3D view to address exactly one layer.
-		LayerCount = 1;
-		break;
-	case ERHITextureDimension::Tex2D:
-	default:
-		ViewType = VK_IMAGE_VIEW_TYPE_2D;
-		break;
-	}
 
 	VkImageViewCreateInfo Info{};
 	Info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
 	Info.image = VkTex->GetVkImage();
 	Info.format = ToVkFormat(Desc.Format);
-	Info.viewType = ViewType;
+	Info.viewType = VK_IMAGE_VIEW_TYPE_2D;
 	Info.subresourceRange.aspectMask = GetImageAspectForFormat(Desc.Format);
 	Info.subresourceRange.baseMipLevel = Desc.BaseMip;
 	Info.subresourceRange.levelCount = Desc.MipCount;
 	Info.subresourceRange.baseArrayLayer = Desc.BaseArrayLayer;
-	Info.subresourceRange.layerCount = LayerCount;
+	Info.subresourceRange.layerCount = Desc.ArrayLayerCount;
 
 	VkImageView View = VK_NULL_HANDLE;
 	if (!CheckVkResult(vkCreateImageView(Device, &Info, nullptr, &View), "vkCreateImageView"))
