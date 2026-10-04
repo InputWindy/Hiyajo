@@ -67,8 +67,35 @@ public:
 		FRHIBuffer* Dst,
 		std::uint64_t DstOffset,
 		std::uint64_t Size) = 0;
-	virtual void CopyBufferToTexture(FRHIBuffer* Src, FRHITexture* Dst, std::uint64_t SrcOffset) = 0;
-	virtual void CopyTextureToBuffer(FRHITexture* Src, FRHIBuffer* Dst, std::uint64_t DstOffset) = 0;
+	/**
+	 * Buffer -> texture copy. The copy OWNS its layout transitions: DstState::Before is the
+	 * layout the destination is in on entry, DstState::After the layout it must be left in.
+	 * Callers therefore do NOT hand-write TransitionTexture around it (see UIFeature's font
+	 * atlas upload and FRender's mirror upload).
+	 */
+	virtual void CopyBufferToTexture(
+		FRHIBuffer* Src,
+		std::uint64_t SrcOffset,
+		FRHITexture* Dst,
+		const FRHITextureCopyRegion& Region,
+		const FRHIResourceStatePair& DstState = { ERHIResourceState::Common, ERHIResourceState::ShaderResource }) = 0;
+	/** Texture -> buffer copy (readback / screenshot). Transitions Src from SrcState::Before
+	 *  to CopySrc and back to SrcState::After around the copy. */
+	virtual void CopyTextureToBuffer(
+		FRHITexture* Src,
+		const FRHITextureCopyRegion& Region,
+		FRHIBuffer* Dst,
+		std::uint64_t DstOffset,
+		const FRHIResourceStatePair& SrcState = { ERHIResourceState::ShaderResource, ERHIResourceState::ShaderResource }) = 0;
+	/** Texture -> texture copy, both regions explicit. Each side carries its own
+	 *  state pair; the layer count of a 3D source/target is its depth slice count. */
+	virtual void CopyTexture(
+		FRHITexture* Src,
+		const FRHITextureCopyRegion& SrcRegion,
+		FRHITexture* Dst,
+		const FRHITextureCopyRegion& DstRegion,
+		const FRHIResourceStatePair& SrcState = { ERHIResourceState::ShaderResource, ERHIResourceState::ShaderResource },
+		const FRHIResourceStatePair& DstState = { ERHIResourceState::Common, ERHIResourceState::ShaderResource }) = 0;
 	virtual void FillBuffer(FRHIBuffer* Buffer, std::uint64_t Offset, std::uint64_t Size, std::uint32_t Data) = 0;
 	/**
 	 * Upload CPU data into a buffer (recorded into the list it is called on).

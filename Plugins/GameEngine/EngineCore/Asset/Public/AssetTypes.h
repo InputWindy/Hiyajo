@@ -66,6 +66,9 @@ enum class ETexturePixelFormat : std::uint8_t
 	DXT5,
 	BC7,
 	D32Sfloat,
+	/** 8-bit BGRA (swapped-channel) format: what an off-screen mirror of a BGRA swapchain uses.
+	 *  Appended BEFORE Count so every previously serialized value keeps its number. */
+	BGRA8,
 	Count,
 };
 

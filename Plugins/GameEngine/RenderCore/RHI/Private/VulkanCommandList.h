@@ -106,8 +106,25 @@ public:
 
 	virtual void CopyBuffer(FRHIBuffer* Src, std::uint64_t SrcOffset, FRHIBuffer* Dst, std::uint64_t DstOffset, std::uint64_t Size) override;
 	virtual void UpdateBuffer(FRHIBuffer* Buffer, std::uint64_t Offset, std::uint64_t Size, const void* Data) override;
-	virtual void CopyBufferToTexture(FRHIBuffer* Src, FRHITexture* Dst, std::uint64_t SrcOffset) override;
-	virtual void CopyTextureToBuffer(FRHITexture* Src, FRHIBuffer* Dst, std::uint64_t DstOffset) override;
+	virtual void CopyBufferToTexture(
+		FRHIBuffer* Src,
+		std::uint64_t SrcOffset,
+		FRHITexture* Dst,
+		const FRHITextureCopyRegion& Region,
+		const FRHIResourceStatePair& DstState) override;
+	virtual void CopyTextureToBuffer(
+		FRHITexture* Src,
+		const FRHITextureCopyRegion& Region,
+		FRHIBuffer* Dst,
+		std::uint64_t DstOffset,
+		const FRHIResourceStatePair& SrcState) override;
+	virtual void CopyTexture(
+		FRHITexture* Src,
+		const FRHITextureCopyRegion& SrcRegion,
+		FRHITexture* Dst,
+		const FRHITextureCopyRegion& DstRegion,
+		const FRHIResourceStatePair& SrcState,
+		const FRHIResourceStatePair& DstState) override;
 	virtual void FillBuffer(FRHIBuffer* Buffer, std::uint64_t Offset, std::uint64_t Size, std::uint32_t Data) override;
 	virtual void TransitionBuffer(FRHIBuffer* Buffer, ERHIResourceState OldState, ERHIResourceState NewState) override;
 	virtual void TransitionTexture(FRHITexture* Texture, ERHIResourceState OldState, ERHIResourceState NewState) override;
@@ -199,6 +216,21 @@ public:
 private:
 	void AssertType(ERHICommandListType Allowed) const;
 	void AssertNotTransfer() const;
+
+	/**
+	 * Transition ONE subresource range (a mip range plus a layer range, with an explicit aspect
+	 * mask). The public TransitionTexture is the "every mip, every layer" case of this; the copies
+	 * record per-subresource transitions so a single-mip upload never barriers the whole image.
+	 */
+	void TransitionTextureRange(
+		FRHITexture* Texture,
+		ERHIResourceState OldState,
+		ERHIResourceState NewState,
+		std::uint32_t MipLevel,
+		std::uint32_t MipCount,
+		std::uint32_t BaseArrayLayer,
+		std::uint32_t LayerCount,
+		VkImageAspectFlags AspectMask);
 
 	ERHICommandListType Type = ERHICommandListType::Graphics;
 	VkDevice Device = VK_NULL_HANDLE;

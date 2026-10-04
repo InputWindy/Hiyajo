@@ -245,9 +245,19 @@ void FUIFeature::UploadFont(FRender& R)
 			}
 			Cmd.UpdateBuffer(Staging.GetRHI(), 0,
 				static_cast<std::uint64_t>(FontW) * FontH * 4, Pixels);
-			Cmd.TransitionTexture(FontTexture.GetRHI(), ERHIResourceState::Common, ERHIResourceState::CopyDst);
-			Cmd.CopyBufferToTexture(Staging.GetRHI(), FontTexture.GetRHI(), 0);
-			Cmd.TransitionTexture(FontTexture.GetRHI(), ERHIResourceState::CopyDst, ERHIResourceState::ShaderResource);
+			// The copy carries its own transitions (Common -> CopySrc -> ShaderResource): the
+			// atlas is sampled by the UI fragment shader immediately after, which is exactly what
+			// DstState::After names -- so the hand-written TransitionTexture pair is gone.
+			Cmd.CopyBufferToTexture(
+				Staging.GetRHI(),
+				0,
+				FontTexture.GetRHI(),
+				// {0,0,0} = the WHOLE mip level. Written out because the region's extent does NOT
+				// inherit the "1 = one texel" meaning it could be mistaken for: an extent of 1,1,1
+				// (which is what `FRHIExtent3D{}` produces) silently uploads a single texel, i.e. an
+				// EMPTY font atlas, i.e. an invisible UI.
+				FRHITextureCopyRegion{ 0, 0, 1, { 0u, 0u, 0u } },
+				FRHIResourceStatePair{ ERHIResourceState::Common, ERHIResourceState::ShaderResource });
 		}
 		bFontUploaded = true;
 	});

@@ -554,6 +554,21 @@ std::uint32_t FRHI::GetFramebufferHeight() const
 	return RHI ? RHI->GetFramebufferHeight() : 0;
 }
 
+bool FRHI::IsFormatSupported(ERHIFormat Format, ERHITextureUsage Usage) const
+{
+	return RHI ? RHI->IsFormatSupported(Format, Usage) : false;
+}
+
+bool FRHI::ReadbackTexture(
+	FRHITexture* Src,
+	const FRHITextureCopyRegion& Region,
+	void* Out,
+	std::uint64_t OutSize,
+	ERHIResourceState PreserveState)
+{
+	return RHI ? RHI->ReadbackTexture(Src, Region, Out, OutSize, PreserveState) : false;
+}
+
 FRHIQueryPool* FRHI::CreateQueryPool(ERHIQueryType Type, std::uint32_t QueryCount)
 {
 	return RHI ? RHI->CreateQueryPool(Type, QueryCount) : nullptr;

@@ -31,6 +31,13 @@ public:
 
 	virtual void PresentTexture(FRHITexture* Src) override;
 	[[nodiscard]] virtual ERHIFormat GetSwapchainFormat() const override;
+	[[nodiscard]] virtual bool IsFormatSupported(ERHIFormat Format, ERHITextureUsage Usage) const override;
+	virtual bool ReadbackTexture(
+		FRHITexture* Src,
+		const FRHITextureCopyRegion& Region,
+		void* Out,
+		std::uint64_t OutSize,
+		ERHIResourceState PreserveState) override;
 
 	[[nodiscard]] virtual bool IsInitialized() const override;
 
@@ -180,6 +187,10 @@ private:
 	[[nodiscard]] static VkBufferUsageFlags ToVkBufferUsage(ERHIBufferUsage Usage);
 	[[nodiscard]] static VkImageUsageFlags ToVkImageUsage(ERHITextureUsage Usage);
 	[[nodiscard]] static VkFormat ToVkFormat(ERHIFormat Format);
+	/** The ONE VkFormat -> ERHIFormat mapper (inverse of ToVkFormat). Unknown / unmapped
+	 *  Vulkan formats answer ERHIFormat::Unknown -- never a lossy guess at a similar format,
+	 *  because that is how a swapchain's sRGB-ness used to disappear on the way out. */
+	[[nodiscard]] static ERHIFormat ToRHIFormat(VkFormat Format);
 	[[nodiscard]] static VkDescriptorType ToVkDescriptorType(ERHIDescriptorType Type);
 	[[nodiscard]] static VkFilter ToVkFilter(ERHIFilter Filter);
 	[[nodiscard]] static VkSamplerAddressMode ToVkAddressMode(ERHIAddressMode Mode);

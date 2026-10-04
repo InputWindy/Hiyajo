@@ -437,9 +437,17 @@ void FExampleEditor::UploadFont(FRender& R)
 				return;
 			}
 			Cmd.UpdateBuffer(Staging.GetRHI(), 0, static_cast<std::uint64_t>(FontW) * FontH * 4, Pixels);
-			Cmd.TransitionTexture(FontTexture.GetRHI(), ERHIResourceState::Common, ERHIResourceState::CopyDst);
-			Cmd.CopyBufferToTexture(Staging.GetRHI(), FontTexture.GetRHI(), 0);
-			Cmd.TransitionTexture(FontTexture.GetRHI(), ERHIResourceState::CopyDst, ERHIResourceState::ShaderResource);
+			// The copy carries its own transitions (Common -> CopySrc -> ShaderResource): the
+			// editor atlas is sampled by its UI fragment shader right after, which is what
+			// DstState::After names -- the manual TransitionTexture pair is gone.
+			Cmd.CopyBufferToTexture(
+				Staging.GetRHI(),
+				0,
+				FontTexture.GetRHI(),
+				// See FUIFeature's upload: {0,0,0} = the whole mip level (an extent of 1 uploads ONE
+				// texel and leaves the atlas empty).
+				FRHITextureCopyRegion{ 0, 0, 1, { 0u, 0u, 0u } },
+				FRHIResourceStatePair{ ERHIResourceState::Common, ERHIResourceState::ShaderResource });
 		}
 		bFontUploaded = true;
 	});

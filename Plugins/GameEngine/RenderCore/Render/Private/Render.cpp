@@ -1062,6 +1062,12 @@ ERHIFormat FRender::GetSwapchainFormat() const
 	return RHI ? RHI->GetSwapchainFormat() : ERHIFormat::Unknown;
 }
 
+bool FRender::IsTextureFormatSupported(ERHIFormat Format, ERHITextureUsage Usage) const
+{
+	// Features never see IRHI; this narrow accessor is the whole of their capability surface.
+	return RHI ? RHI->IsFormatSupported(Format, Usage) : false;
+}
+
 void FRender::PresentTexture(const FRDGTextureRef& Texture)
 {
 	if (RHI && ResourcePool)
@@ -1107,6 +1113,10 @@ ERHIFormat FRender::FormatMirror(Resource::ETexturePixelFormat Fmt, bool bSRGB)
 	{
 		case Resource::ETexturePixelFormat::RGBA8:
 			return bSRGB ? ERHIFormat::R8G8B8A8_SRGB : ERHIFormat::R8G8B8A8_UNORM;
+		// BGRA8 is the swapchain's own channel order on most Win32 surfaces, so a mirror of a
+		// BGRA backbuffer keeps the pair {BGRA8, bSRGB} and lands on the matching RHI format.
+		case Resource::ETexturePixelFormat::BGRA8:
+			return bSRGB ? ERHIFormat::B8G8R8A8_SRGB : ERHIFormat::B8G8R8A8_UNORM;
 		case Resource::ETexturePixelFormat::RGBA16F:
 			return ERHIFormat::R16G16B16A16_SFLOAT;
 		case Resource::ETexturePixelFormat::RGBA32F:
@@ -1130,6 +1140,74 @@ ERHIFormat FRender::FormatMirror(Resource::ETexturePixelFormat Fmt, bool bSRGB)
 	}
 }
 
+namespace
+{
+/** A cube / cube-array mirror needs ArrayLayers == 6*N (N >= 1). The RHI rejects anything else
+ *  (VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT requires whole cube faces), and a silently created wrong
+ *  texture is worse than a reported failure. */
+[[nodiscard]] bool IsValidCubeLayerCount(ERHITextureDimension Dim, std::uint32_t Layers)
+{
+	const bool bCube = (Dim == ERHITextureDimension::Cube || Dim == ERHITextureDimension::CubeArray);
+	return !bCube || (Layers != 0 && Layers % 6 == 0);
+}
+
+/** RHI format name for logs. The mirror's format is the observable that proves a swapchain-format
+ *  mirror came out as the intended BGRA/sRGB (or RGBA) pair, so it is worth naming in the log. */
+[[nodiscard]] const char* FormatName(ERHIFormat Format)
+{
+	switch (Format)
+	{
+		case ERHIFormat::R8G8B8A8_UNORM: return "R8G8B8A8_UNORM";
+		case ERHIFormat::R8G8B8A8_SRGB:  return "R8G8B8A8_SRGB";
+		case ERHIFormat::B8G8R8A8_UNORM: return "B8G8R8A8_UNORM";
+		case ERHIFormat::B8G8R8A8_SRGB:  return "B8G8R8A8_SRGB";
+		case ERHIFormat::R16G16B16A16_SFLOAT: return "R16G16B16A16_SFLOAT";
+		case ERHIFormat::R32G32B32A32_SFLOAT: return "R32G32B32A32_SFLOAT";
+		case ERHIFormat::R8_UNORM: return "R8_UNORM";
+		case ERHIFormat::R8G8_UNORM: return "R8G8_UNORM";
+		case ERHIFormat::R8G8B8_UNORM: return "R8G8B8_UNORM";
+		case ERHIFormat::R16_SFLOAT: return "R16_SFLOAT";
+		case ERHIFormat::D32_SFLOAT: return "D32_SFLOAT";
+		case ERHIFormat::D24_UNORM_S8_UINT: return "D24_UNORM_S8_UINT";
+		default: return "Unknown";
+	}
+}
+
+/** Texel size of an RHI format. 0 = no CPU-side layout known here, which the readback treats
+ *  as "cannot size the destination" and reports instead of guessing. */
+[[nodiscard]] std::uint32_t BytesPerPixelMirror(ERHIFormat Format)
+{
+	switch (Format)
+	{
+		case ERHIFormat::R8G8B8A8_UNORM:
+		case ERHIFormat::R8G8B8A8_SRGB:
+		case ERHIFormat::B8G8R8A8_UNORM:
+		case ERHIFormat::B8G8R8A8_SRGB:
+		case ERHIFormat::R32_SFLOAT:
+		case ERHIFormat::R16G16_SFLOAT:
+		case ERHIFormat::D24_UNORM_S8_UINT:
+		case ERHIFormat::D32_SFLOAT:
+			return 4;
+		case ERHIFormat::R32G32_SFLOAT:
+		case ERHIFormat::R16G16B16A16_SFLOAT:
+			return 8;
+		case ERHIFormat::R32G32B32_SFLOAT:
+			return 12;
+		case ERHIFormat::R32G32B32A32_SFLOAT:
+			return 16;
+		case ERHIFormat::R8_UNORM:
+			return 1;
+		case ERHIFormat::R8G8_UNORM:
+		case ERHIFormat::R16_SFLOAT:
+			return 2;
+		case ERHIFormat::R8G8B8_UNORM:
+			return 3;
+		default:
+			return 0;
+	}
+}
+} // namespace
+
 ERHITextureDimension FRender::DimensionMirror(Resource::ETextureDimension Dim)
 {
 	switch (Dim)
@@ -1141,8 +1219,9 @@ ERHITextureDimension FRender::DimensionMirror(Resource::ETextureDimension Dim)
 		case Resource::ETextureDimension::TexCube:
 			return ERHITextureDimension::Cube;
 		case Resource::ETextureDimension::Tex2DArray:
-		case Resource::ETextureDimension::TexCubeArray:
 			return ERHITextureDimension::Tex2DArray;
+		case Resource::ETextureDimension::TexCubeArray:
+			return ERHITextureDimension::CubeArray;
 		// 1D has no RHI dimension; fall back to 2D with height 1.
 		default:
 			return ERHITextureDimension::Tex2D;
@@ -1173,6 +1252,15 @@ bool FRender::UploadTextureMirror(const Name::FName& AssetName, Resource::FTextu
 	Desc.ArrayLayers = Tex.GetArrayLayers();
 	Desc.Usage = ERHITextureUsage::Sampled | ERHITextureUsage::TransferDst;
 	Desc.MemoryUsage = ERHIMemoryUsage::GPUOnly;
+
+	// Cube mirrors must describe whole cube faces (6*N layers); fail loudly instead of
+	// handing the RHI a descriptor that silently produces a wrong texture.
+	if (!IsValidCubeLayerCount(Desc.Dimension, Desc.ArrayLayers))
+	{
+		MAHO_LOG_CORE_ERROR("FRender: mirror upload rejected (cube dimension needs 6*N layers, got {})",
+			Desc.ArrayLayers);
+		return false;
+	}
 
 	FRDGTextureRef TexRef = CreateTexture(Desc, ERDGResourceLifetime::Persistent);
 	if (!TexRef.IsValid() || TexRef.GetRHI() == nullptr)
@@ -1223,9 +1311,18 @@ bool FRender::UploadTextureMirror(const Name::FName& AssetName, Resource::FTextu
 	AddPass(ERHICommandListType::Graphics, [=](FRHICommandList& Cmd)
 	{
 		Cmd.UpdateBuffer(RHIStaging, 0, PixelBytes, PixelsData);
-		Cmd.TransitionTexture(RHITex, ERHIResourceState::Common, ERHIResourceState::CopyDst);
-		Cmd.CopyBufferToTexture(RHIStaging, RHITex, 0);
-		Cmd.TransitionTexture(RHITex, ERHIResourceState::CopyDst, ERHIResourceState::ShaderResource);
+		// One copy, one region: the copy carries its own Common -> CopySrc -> ShaderResource
+		// transitions, so the mirror is samplable when the recorded list runs. A hand-written
+		// TransitionTexture pair around it is now redundant (and was the only reason this
+		// lambda knew the destination's layout at all).
+		Cmd.CopyBufferToTexture(
+			RHIStaging,
+			0,
+			RHITex,
+			// {0,0,0} = the whole mip level (see the UI uploads: an extent of 1,1,1 uploads a single
+			// texel instead of the image).
+			FRHITextureCopyRegion{ 0, 0, 1, { 0u, 0u, 0u } },
+			FRHIResourceStatePair{ ERHIResourceState::Common, ERHIResourceState::ShaderResource });
 	});
 	return true;
 }
@@ -1328,6 +1425,15 @@ void FRender::OnAssetMirrorCreated(const Name::FName& AssetName, const Resource:
 	}
 	Desc.MemoryUsage = ERHIMemoryUsage::GPUOnly;
 
+	// Same cube sanity check as the upload path: reject a wrong layer count instead of
+	// creating a texture whose faces do not line up.
+	if (!IsValidCubeLayerCount(Desc.Dimension, Desc.ArrayLayers))
+	{
+		MAHO_LOG_CORE_ERROR("FRender: mirror create rejected asset={} (cube dimension needs 6*N layers, got {})",
+			AssetName.ToString(), Desc.ArrayLayers);
+		return;
+	}
+
 	FRDGTextureRef TexRef = CreateTexture(Desc, ERDGResourceLifetime::Persistent);
 	if (!TexRef.IsValid() || TexRef.GetRHI() == nullptr)
 	{
@@ -1353,18 +1459,77 @@ void FRender::OnAssetMirrorCreated(const Name::FName& AssetName, const Resource:
 		}
 	}
 
-	MAHO_LOG_CORE_INFO("FRender: mirror created asset={} ({}x{}, {})", AssetName.ToString(),
-		Tex->GetWidth(), Tex->GetHeight(), Tex->IsSRGB() ? "sRGB" : "linear");
+	MAHO_LOG_CORE_INFO("FRender: mirror created asset={} ({}x{}, {}, RHI format {})", AssetName.ToString(),
+		Tex->GetWidth(), Tex->GetHeight(), Tex->IsSRGB() ? "sRGB" : "linear", FormatName(Fmt));
 }
 
-bool FRender::ReadbackMirror(const Name::FName& /*AssetName*/, Resource::FResource& /*OutResource*/)
+bool FRender::ReadbackMirror(const Name::FName& AssetName, Resource::FResource& OutResource)
 {
-	// GPU -> CPU fill-back before an export. The RHI currently exposes no CPU
-	// readback path to FRender (only CopyTextureToBuffer into a GPU buffer +
-	// a private allocator Map), so this returns false: the mirror keeps the CPU
-	// bulk dropped, and a pending export of a dropped resource is a known gap.
-	// TODO: add an RHI readback API and decode the mirror here.
-	return false;
+	// GPU -> CPU fill-back before an export: resolve the Persistent mirror, copy its pixels into
+	// a host-visible buffer through the RHI's BLOCKING readback (submit + fence wait -- the export
+	// path, never per-frame), then hand the bytes to the resource's CPU payload.
+	auto* Texture = dynamic_cast<Resource::FTexture*>(&OutResource);
+	if (Texture == nullptr)
+	{
+		MAHO_LOG_CORE_ERROR("FRender: readback asset={} (resource is not a texture)", AssetName.ToString());
+		return false;
+	}
+
+	const FRDGResourceRef* Mirror = GetMirror(AssetName);
+	const FRDGTextureRef* TexRef = Mirror != nullptr ? std::get_if<FRDGTextureRef>(Mirror) : nullptr;
+	if (TexRef == nullptr || !TexRef->IsValid() || TexRef->GetRHI() == nullptr)
+	{
+		MAHO_LOG_CORE_ERROR("FRender: readback asset={} (no texture mirror)", AssetName.ToString());
+		return false;
+	}
+
+	IRHI* RHIp = RHI.get();
+	if (RHIp == nullptr)
+	{
+		MAHO_LOG_CORE_ERROR("FRender: readback asset={} (RHI unavailable)", AssetName.ToString());
+		return false;
+	}
+
+	FRHITexture* RHITex = TexRef->GetRHI();
+	const FRHITextureDesc& Desc = RHITex->GetDesc();
+
+	// Mip 0 only: the CPU payload is a single-level snapshot (the asset decode path fills one
+	// level too), so the region names the whole layer range at level 0.
+	FRHITextureCopyRegion Region;
+	Region.MipLevel = 0;
+	Region.BaseArrayLayer = 0;
+	Region.LayerCount = Desc.ArrayLayers;
+	Region.Extent = Desc.Extent;
+
+	const std::uint32_t BytesPerPixel = BytesPerPixelMirror(Desc.Format);
+	if (BytesPerPixel == 0)
+	{
+		MAHO_LOG_CORE_ERROR("FRender: readback asset={} (no CPU layout for RHI format {})",
+			AssetName.ToString(), FormatName(Desc.Format));
+		return false;
+	}
+
+	const std::uint64_t ByteCount =
+		static_cast<std::uint64_t>(Desc.Extent.Width)
+		* Desc.Extent.Height
+		* Desc.Extent.Depth
+		* Desc.ArrayLayers
+		* BytesPerPixel;
+
+	std::vector<std::uint8_t>& Pixels = Texture->GetPixelsMutable();
+	Pixels.assign(static_cast<std::size_t>(ByteCount), 0);
+
+	if (!RHIp->ReadbackTexture(
+			RHITex, Region, Pixels.data(), ByteCount, ERHIResourceState::ShaderResource))
+	{
+		Pixels.clear();
+		MAHO_LOG_CORE_ERROR("FRender: readback asset={} failed ({} bytes)", AssetName.ToString(), ByteCount);
+		return false;
+	}
+
+	MAHO_LOG_CORE_INFO("FRender: readback asset={} ({} bytes, RHI format {})",
+		AssetName.ToString(), ByteCount, FormatName(Desc.Format));
+	return true;
 }
 
 } // namespace Maho

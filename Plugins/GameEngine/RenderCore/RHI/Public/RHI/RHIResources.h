@@ -147,6 +147,39 @@ struct FRHIExtent3D
 	}
 };
 
+/**
+ * A texture subresource region for a copy. Extent {0,0,0} means "the whole mip level"
+ * (the extent is then derived from the texture desc at the region's MipLevel).
+ */
+struct FRHITextureCopyRegion
+{
+	std::uint32_t MipLevel = 0;
+	std::uint32_t BaseArrayLayer = 0;
+	std::uint32_t LayerCount = 1;
+	/**
+	 * {0,0,0} = the WHOLE mip level (see ResolveCopyExtent).
+	 *
+	 * NOT FRHIExtent3D's own 1,1,1 defaults: those are right for a texture desc and wrong here,
+	 * where a non-zero extent means "exactly this many texels". Inheriting them made the natural
+	 * "the whole texture" spelling (`FRHITextureCopyRegion{ 0, 0, 1, {} }`) resolve to ONE texel --
+	 * for the UI font atlases that meant an EMPTY atlas and, with ImGui's alpha blend, an invisible
+	 * interface: every draw was issued correctly and nothing ever appeared (the grey-screen hunt).
+	 * Callers should still pass { 0u, 0u, 0u } explicitly.
+	 */
+	FRHIExtent3D Extent{ 0u, 0u, 0u };
+};
+
+/**
+ * The layouts a copy finds the resource in (Before) and must leave it in (After).
+ * A copy that carries its own transitions records both barriers itself, so the caller
+ * no longer hand-writes a TransitionTexture pair around every upload/readback.
+ */
+struct FRHIResourceStatePair
+{
+	ERHIResourceState Before = ERHIResourceState::Common;
+	ERHIResourceState After = ERHIResourceState::Common;
+};
+
 struct FRHITextureDesc
 {
 	ERHIFormat Format = ERHIFormat::Unknown;
