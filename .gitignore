@@ -18,3 +18,10 @@ Packaged/
 # Per-plugin doc source (Docs.py): a LOCAL draft. The artifact that ships is the rendered
 # <plugin>/Docs.html next to it, so the pages still build on a fresh clone.
 Docs.py
+
+# Runtime output written next to the executable's working directory (logs, editor layout,
+# whole-process profile dumps). None of it is source.
+/Logs/
+/Profile_trace.txt
+/EditorLayout.ini
+/imgui.ini
