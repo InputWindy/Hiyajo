@@ -1,0 +1,11 @@
+{
+  "FileVersion": 1,
+  "Name": "MeshFeature",
+  "Description": "First real mesh draw path: camera view-projection + per-object transform + vertex/index buffers + depth.",
+  "Dependencies": [
+    "Render",
+    "Scene",
+    "Log",
+    "GameWorld"
+  ]
+}

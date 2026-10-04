@@ -14,12 +14,14 @@
   "PrivateIncludes": [
     "Scene",
     "DrawTriangleFeature",
-    "UIFeature"
+    "UIFeature",
+    "MeshFeature"
   ],
   "Plugins": [
     "Scene",
     "DrawTriangleFeature",
     "UIFeature",
+    "MeshFeature",
     "ExampleEditor"
   ]
 }
