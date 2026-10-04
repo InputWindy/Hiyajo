@@ -1,0 +1,11 @@
+{
+  "FileVersion": 1,
+  "Name": "MeshRenderSystem",
+  "Description": "Game-side world system: publishes the ECS mesh-render entities as an immutable frame snapshot for the render side.",
+  "Dependencies": [
+    "GameWorld",
+    "PrimitiveRegistry",
+    "Name",
+    "Log"
+  ]
+}

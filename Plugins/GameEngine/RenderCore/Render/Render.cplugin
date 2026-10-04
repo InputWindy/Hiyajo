@@ -15,13 +15,15 @@
     "Scene",
     "DrawTriangleFeature",
     "UIFeature",
-    "MeshFeature"
+    "MeshFeature",
+    "PrimitiveRegistry"
   ],
   "Plugins": [
     "Scene",
     "DrawTriangleFeature",
     "UIFeature",
     "MeshFeature",
+    "PrimitiveRegistry",
     "ExampleEditor"
   ]
 }

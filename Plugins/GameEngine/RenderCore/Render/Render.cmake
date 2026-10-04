@@ -31,6 +31,7 @@ target_include_directories(Render PRIVATE
 	"${ENGINE_DIR}/Plugins/GameEngine/RenderCore/RenderFeature/DrawTriangleFeature/Public"
 	"${ENGINE_DIR}/Plugins/GameEngine/RenderCore/RenderFeature/UIFeature/Public"
 	"${ENGINE_DIR}/Plugins/GameEngine/RenderCore/RenderFeature/MeshFeature/Public"
+	"${ENGINE_DIR}/Plugins/GameEngine/RenderCore/RenderFeature/PrimitiveRegistry/Public"
 )
 set_target_properties(Render PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 target_compile_definitions(Render PRIVATE MAHO_RENDER_MODULE_EXPORTS)
@@ -39,7 +40,7 @@ set_property(TARGET Render PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR
 set_target_properties(Render PROPERTIES OUTPUT_NAME "FRender" PREFIX "")
 target_link_libraries(Render PUBLIC RHI Platform Resource Asset GameWorld Log ConsoleVariable)
 # Building Render alone must also build the sub-plugins it installs at
-# runtime (Scene DrawTriangleFeature UIFeature MeshFeature ExampleEditor EditorViewport EditorConsole ContentBrowser EditorTheme) - otherwise a sub-plugin DLL left over from a
+# runtime (Scene DrawTriangleFeature UIFeature MeshFeature PrimitiveRegistry ExampleEditor EditorViewport EditorConsole ContentBrowser EditorTheme) - otherwise a sub-plugin DLL left over from a
 # previous build is silently installed. A POST_BUILD script action, NOT
 # add_dependencies(Render, <sub>): a sub-plugin links Render, so that edge
 # would close a target cycle and CMake refuses to generate (cycles are
@@ -50,7 +51,7 @@ target_link_libraries(Render PUBLIC RHI Platform Resource Asset GameWorld Log Co
 # It carries no sources and no output of its own, so it is parked under
 # ThirdParty/CodeGen — a code-gen artifact of Render, not a plugin of it.
 add_custom_target(Render_SubPlugins)
-add_dependencies(Render_SubPlugins Scene DrawTriangleFeature UIFeature MeshFeature ExampleEditor EditorViewport EditorConsole ContentBrowser EditorTheme)
+add_dependencies(Render_SubPlugins Scene DrawTriangleFeature UIFeature MeshFeature PrimitiveRegistry ExampleEditor EditorViewport EditorConsole ContentBrowser EditorTheme)
 set_target_properties(Render_SubPlugins PROPERTIES FOLDER "ThirdParty/CodeGen")
 add_custom_command(TARGET Render POST_BUILD
 	COMMAND "${CMAKE_COMMAND}"
@@ -60,7 +61,7 @@ add_custom_command(TARGET Render POST_BUILD
 		"-DMAHO_IN_SOLUTION_BUILD=$(BuildingSolutionFile)"
 		"-DMAHO_SUBPLUGIN_BUILD=$(MahoSubPluginBuild)"
 		-P "${ENGINE_DIR}/Tools/build_subplugins.cmake"
-	COMMENT "Render: ensuring enabled sub-plugins are up to date (Scene DrawTriangleFeature UIFeature MeshFeature ExampleEditor EditorViewport EditorConsole ContentBrowser EditorTheme)"
+	COMMENT "Render: ensuring enabled sub-plugins are up to date (Scene DrawTriangleFeature UIFeature MeshFeature PrimitiveRegistry ExampleEditor EditorViewport EditorConsole ContentBrowser EditorTheme)"
 	VERBATIM
 )
 set_target_properties(Render PROPERTIES FOLDER "Maho/Plugins/GameEngine/RenderCore")

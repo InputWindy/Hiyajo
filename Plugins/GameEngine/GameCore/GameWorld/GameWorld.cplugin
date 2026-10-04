@@ -8,10 +8,12 @@
     "Log"
   ],
   "Plugins": [
-    "UISystem"
+    "UISystem",
+    "MeshRenderSystem"
   ],
   "PrivateIncludes": [
     "UISystem",
+    "MeshRenderSystem",
     "UI"
   ]
 }

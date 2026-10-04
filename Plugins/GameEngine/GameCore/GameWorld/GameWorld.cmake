@@ -24,6 +24,7 @@ target_include_directories(GameWorld PUBLIC
 )
 target_include_directories(GameWorld PRIVATE
 	"${ENGINE_DIR}/Plugins/GameEngine/GameCore/SystemGroup/UISystem/Public"
+	"${ENGINE_DIR}/Plugins/GameEngine/GameCore/SystemGroup/MeshRenderSystem/Public"
 	"${ENGINE_DIR}/Plugins/GameEngine/EngineCore/UI/Public"
 )
 set_target_properties(GameWorld PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
@@ -33,7 +34,7 @@ set_property(TARGET GameWorld PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_
 set_target_properties(GameWorld PROPERTIES OUTPUT_NAME "FGameWorld" PREFIX "")
 target_link_libraries(GameWorld PUBLIC Resource Asset Log)
 # Building GameWorld alone must also build the sub-plugins it installs at
-# runtime (UISystem) - otherwise a sub-plugin DLL left over from a
+# runtime (UISystem MeshRenderSystem) - otherwise a sub-plugin DLL left over from a
 # previous build is silently installed. A POST_BUILD script action, NOT
 # add_dependencies(GameWorld, <sub>): a sub-plugin links GameWorld, so that edge
 # would close a target cycle and CMake refuses to generate (cycles are
@@ -44,7 +45,7 @@ target_link_libraries(GameWorld PUBLIC Resource Asset Log)
 # It carries no sources and no output of its own, so it is parked under
 # ThirdParty/CodeGen — a code-gen artifact of GameWorld, not a plugin of it.
 add_custom_target(GameWorld_SubPlugins)
-add_dependencies(GameWorld_SubPlugins UISystem)
+add_dependencies(GameWorld_SubPlugins UISystem MeshRenderSystem)
 set_target_properties(GameWorld_SubPlugins PROPERTIES FOLDER "ThirdParty/CodeGen")
 add_custom_command(TARGET GameWorld POST_BUILD
 	COMMAND "${CMAKE_COMMAND}"
@@ -54,7 +55,7 @@ add_custom_command(TARGET GameWorld POST_BUILD
 		"-DMAHO_IN_SOLUTION_BUILD=$(BuildingSolutionFile)"
 		"-DMAHO_SUBPLUGIN_BUILD=$(MahoSubPluginBuild)"
 		-P "${ENGINE_DIR}/Tools/build_subplugins.cmake"
-	COMMENT "GameWorld: ensuring enabled sub-plugins are up to date (UISystem)"
+	COMMENT "GameWorld: ensuring enabled sub-plugins are up to date (UISystem MeshRenderSystem)"
 	VERBATIM
 )
 set_target_properties(GameWorld PROPERTIES FOLDER "Maho/Plugins/GameEngine/GameCore")

@@ -1,0 +1,9 @@
+{
+  "FileVersion": 1,
+  "Name": "PrimitiveRegistry",
+  "Description": "Render-side mirror table: the game side publishes an immutable per-frame snapshot of ECS mesh-render entities, the render side reads the latest one.",
+  "Dependencies": [
+    "Name",
+    "Log"
+  ]
+}
