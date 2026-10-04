@@ -1299,6 +1299,20 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table>
 </div>
 <div class="card">
+<h3 class="card-title">FRHITextureCopyRegion</h3>
+<div class="doc">
+<p>一次拷贝覆盖的子资源范围（`MipLevel` / `BaseArrayLayer` / `LayerCount` / `Extent`）。**`Extent = {0,0,0}` 表示「整幅 mip」**（见 `ResolveCopyExtent`），非零则是「恰好这么多纹素」。</p>
+<p>**它刻意不沿用 `FRHIExtent3D` 的 `{1,1,1}` 默认** —— 那是纹理描述该有的默认值，放在这里等于「**只拷 1 个纹素**」。历史事故：`FRHITextureCopyRegion{ 0, 0, 1, {} }`（本意「整幅」）被解析成 1×1，字体图集因此只写进一个纹素、整屏均匀灰，而绘制指令 / 描述符集 / 管线 / present 全程正常（见 `AGENTS.md` 的 Toolchain Traps）。**调用方请显式写出 `{ 0u, 0u, 0u }`**</p>
+</div>
+<table>
+<thead><tr><th>字段</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td>MipLevel</td><td>目标 mip；`Extent` 的全 0 语义是相对该 mip 的尺寸</td></tr>
+<tr><td>BaseArrayLayer / LayerCount</td><td>层范围；3D 纹理按深度片数解释（`ResolveCopyLayerCount` 恒返回 1）</td></tr>
+<tr><td>Extent</td><td>`{0,0,0}` = 整幅 mip；非零 = 恰好这么多纹素（**别依赖默认值**）</td></tr>
+</tbody></table>
+</div>
+<div class="card">
 <h3 class="card-title">ERHIBufferUsage</h3>
 <div class="doc">
 <p>缓冲用途位掩码。**必须如实声明**：用法位在建缓冲时就固定，事后再要一个没声明的用途只能重建资源。</p>
