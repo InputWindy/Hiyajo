@@ -720,6 +720,19 @@ private:
 	 *  no mirror or the current RHI lacks a CPU readback path. */
 	[[nodiscard]] bool ReadbackMirror(const Name::FName& AssetName, Resource::FResource& OutResource);
 
+	/**
+	 * `r.TakeScreenShot`: when armed (value 1) the NEXT presented frame is captured and written to
+	 * `Saved/Screenshots/Shot_<timestamp>.png`, then the CVar resets itself to 0 (arm it again for
+	 * another shot). Called from PresentTexture, i.e. right before the blit.
+	 *
+	 * The capture itself is the RHI's: it copies the BACKBUFFER right after the present blit -- the
+	 * one image whose layout the RHI owns end to end (it is TRANSFER_DST there by construction) --
+	 * and hands the pixels back one frame boundary later, after the fence. That is why this needs no
+	 * layout bookkeeping and no stall: an off-screen target would require knowing what layout its
+	 * owner left it in, and this engine tracks no such state (every transition is hand-written).
+	 */
+	void CaptureScreenshotIfRequested();
+
 	[[nodiscard]] static ERHIFormat FormatMirror(Resource::ETexturePixelFormat Fmt, bool bSRGB);
 	[[nodiscard]] static ERHITextureDimension DimensionMirror(Resource::ETextureDimension Dim);
 

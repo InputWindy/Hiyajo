@@ -12,9 +12,13 @@
 #include <RHI/RHIEnums.h>
 #include "RenderResourcePool.h"
 #include "ShaderCompiler.h"
+#include "ScreenshotWriter.h"
 
+#include <ConsoleVariable.h>
 #include <algorithm>
 #include <chrono>
+#include <ctime>
+#include <filesystem>
 #include <typeindex>
 
 #if defined(_WIN32)
@@ -29,6 +33,14 @@ MAHO_RENDER_API FRender* GetRender()
 {
 	return GRender;
 }
+
+/** `r.TakeScreenShot` -- arm the next presented frame for a PNG capture (see
+ *  FRender::CaptureScreenshotIfRequested). A development knob, so it is NOT flagged
+ *  `ECVarFlags::Shipping`: a Shipping build does not register it and the value falls back to the
+ *  local default (0), i.e. no capture code path runs there. The value is one-shot: the capture
+ *  resets it to 0, so `r.TakeScreenShot 1` is required per shot. */
+static ConsoleVariable::TAutoConsoleVariable<int> GCVarTakeScreenShot("r.TakeScreenShot", 0,
+	"1 = capture the next presented frame to Saved/Screenshots/Shot_<timestamp>.png (resets to 0)");
 
 FRender::FRender()
 {
@@ -1070,6 +1082,10 @@ bool FRender::IsTextureFormatSupported(ERHIFormat Format, ERHITextureUsage Usage
 
 void FRender::PresentTexture(const FRDGTextureRef& Texture)
 {
+	// Arm the capture FIRST: it records inside the RHI's PresentTexture call below (right after the
+	// blit), so it has to be requested before that call reaches the server thread.
+	CaptureScreenshotIfRequested();
+
 	if (RHI && ResourcePool)
 	{
 		RHI->PresentTexture(ResourcePool->GetTexture(Texture));
@@ -1207,6 +1223,80 @@ namespace
 	}
 }
 } // namespace
+
+void FRender::CaptureScreenshotIfRequested()
+{
+	if (GCVarTakeScreenShot.GetValue() == 0)
+	{
+		return;
+	}
+	// One-shot: reset before arming, so a failed capture still needs a fresh arm and a slow capture
+	// can never queue up behind itself.
+	GCVarTakeScreenShot.Set(0);
+
+	if (RHI == nullptr)
+	{
+		MAHO_LOG_CORE_ERROR("FRender: screenshot requested but the RHI is unavailable");
+		return;
+	}
+
+	// The sink runs on the RHI server thread one frame boundary later (after the fence that covers
+	// the copy). It only turns bytes into a file -- no engine state is touched from there.
+	RHI->RequestBackbufferCapture([](std::uint32_t Width, std::uint32_t Height, ERHIFormat Format,
+		const void* Pixels)
+	{
+		if (Pixels == nullptr || Width == 0 || Height == 0)
+		{
+			MAHO_LOG_CORE_ERROR("FRender: screenshot sink got no pixels");
+			return;
+		}
+
+		// The captured bytes are in the SWAPCHAIN format; PNG wants RGBA.
+		const bool bBgra = Format == ERHIFormat::B8G8R8A8_UNORM || Format == ERHIFormat::B8G8R8A8_SRGB;
+		const bool bRgba = Format == ERHIFormat::R8G8B8A8_UNORM || Format == ERHIFormat::R8G8B8A8_SRGB;
+		if (!bBgra && !bRgba)
+		{
+			MAHO_LOG_CORE_ERROR("FRender: screenshot unsupported for RHI format {}", FormatName(Format));
+			return;
+		}
+
+		const std::size_t ByteCount = static_cast<std::size_t>(Width) * Height * 4;
+		const auto* SrcBytes = static_cast<const std::uint8_t*>(Pixels);
+		std::vector<std::uint8_t> Rgba(SrcBytes, SrcBytes + ByteCount);
+		if (bBgra)
+		{
+			for (std::size_t I = 0; I + 3 < Rgba.size(); I += 4)
+			{
+				std::swap(Rgba[I], Rgba[I + 2]);
+			}
+		}
+
+		namespace fs = std::filesystem;
+		std::error_code ErrorCode;
+		fs::create_directories("Saved/Screenshots", ErrorCode);
+
+		const std::time_t Now = std::time(nullptr);
+		std::tm Local{};
+#if defined(_WIN32)
+		localtime_s(&Local, &Now);
+#else
+		localtime_r(&Now, &Local);
+#endif
+		char FileName[128] = {};
+		std::snprintf(FileName, sizeof(FileName), "Saved/Screenshots/Shot_%04d%02d%02d_%02d%02d%02d.png",
+			Local.tm_year + 1900, Local.tm_mon + 1, Local.tm_mday,
+			Local.tm_hour, Local.tm_min, Local.tm_sec);
+
+		if (!Render::Detail::WritePngRGBA(FileName, Width, Height, Rgba.data()))
+		{
+			MAHO_LOG_CORE_ERROR("FRender: screenshot write failed ({})", FileName);
+			return;
+		}
+
+		MAHO_LOG_CORE_INFO("FRender: screenshot saved {} ({}x{}, RHI format {})", FileName, Width, Height,
+			FormatName(Format));
+	});
+}
 
 ERHITextureDimension FRender::DimensionMirror(Resource::ETextureDimension Dim)
 {

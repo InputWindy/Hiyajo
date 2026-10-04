@@ -8,7 +8,8 @@
     "Resource",
     "Asset",
     "GameWorld",
-    "Log"
+    "Log",
+    "ConsoleVariable"
   ],
   "PrivateIncludes": [
     "Scene",

@@ -76,6 +76,21 @@ struct IRHI
 	 */
 	virtual void PresentTexture(FRHITexture* Src) = 0;
 
+	/**
+	 * Ask for the NEXT presented frame to be handed back on the CPU.
+	 *
+	 * Captured at the ONE place whose image layout this layer owns end to end: the swapchain image,
+	 * right after the present blit (TRANSFER_DST -> TRANSFER_SRC -> copy -> PRESENT_SRC). That is why
+	 * it needs no layout bookkeeping from the caller -- an off-screen target would have to be in a
+	 * KNOWN layout, and "what layout is that texture in right now" is exactly the thing this engine
+	 * does not track (every existing transition is hand-written by its owner).
+	 *
+	 * `Sink` runs on the server thread ONE frame boundary later (after the fence that covers the
+	 * recording), so the pixels are stable and the caller pays no stall. One-shot: the request
+	 * clears itself before the sink runs. Passing an empty sink cancels a pending request.
+	 */
+	virtual void RequestBackbufferCapture(FBackbufferCaptureSink Sink) = 0;
+
 	/** Current swapchain image format (off-screen scene targets must match it for blit). */
 	[[nodiscard]] virtual ERHIFormat GetSwapchainFormat() const = 0;
 
@@ -266,6 +281,7 @@ public:
 	void RunOnServer(std::function<void()> Fn) override;
 	[[nodiscard]] bool IsServerThread() const override;
 	void PresentTexture(FRHITexture* Src) override;
+	void RequestBackbufferCapture(FBackbufferCaptureSink Sink) override;
 	[[nodiscard]] ERHIFormat GetSwapchainFormat() const override;
 
 	// -- IRHI device methods (forward to the private IDynamicRHI) --

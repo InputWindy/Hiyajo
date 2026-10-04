@@ -48,6 +48,9 @@ public:
 	/** Blit an off-screen texture to the current swapchain backbuffer. */
 	virtual void PresentTexture(FRHITexture* Src) = 0;
 
+	/** Arm / cancel the next presented frame's CPU capture. See IRHI::RequestBackbufferCapture. */
+	virtual void RequestBackbufferCapture(FBackbufferCaptureSink Sink) = 0;
+
 	[[nodiscard]] virtual ERHIFormat GetSwapchainFormat() const = 0;
 
 	[[nodiscard]] virtual bool IsInitialized() const = 0;

@@ -5,11 +5,22 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <vector>
 
 namespace Maho
 {
+
+/**
+ * CPU-side sink for a captured backbuffer: tightly packed pixels in the SWAPCHAIN's format
+ * (B8G8R8A8_SRGB on a Win32 window), top-down, no row padding. Runs on the RHI server thread.
+ *
+ * Lives here rather than in RHIServer.h because both the public server surface and the private
+ * device headers name it -- this is the one RHI header every side already includes.
+ */
+using FBackbufferCaptureSink = std::function<void(
+	std::uint32_t Width, std::uint32_t Height, ERHIFormat Format, const void* Pixels)>;
 
 struct FRHIMemoryAllocation
 {

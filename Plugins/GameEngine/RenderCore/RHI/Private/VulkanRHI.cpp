@@ -340,6 +340,19 @@ void FVulkanRHI::Shutdown()
 
 	if (MemoryAllocator)
 	{
+		// The capture staging is owned by this layer and is NOT in the deferred list (it is a
+		// long-lived member), so free it here -- vkDeviceWaitIdle above guarantees no copy is
+		// still reading it, and the allocator's leak assert must not see it.
+		if (CaptureStagingBuffer != VK_NULL_HANDLE)
+		{
+			MemoryAllocator->DestroyBuffer(CaptureStagingBuffer, CaptureStagingAllocation);
+			CaptureStagingBuffer = VK_NULL_HANDLE;
+			CaptureStagingAllocation = nullptr;
+			CaptureStagingBytes = 0;
+		}
+		PendingCaptureSink = nullptr;
+		bCaptureRecorded = false;
+
 		// Drain the deferred staging-buffer frees (queued by UpdateBuffer's GPU-only
 		// upload path) BEFORE the allocator is destroyed. The flush normally runs at
 		// the NEXT BeginFrame; at shutdown there is no next frame, so free them here
@@ -511,6 +524,32 @@ void FVulkanRHI::BeginFrame()
 	{
 		return;
 	}
+
+	// A capture recorded by the previous frame's PresentTexture is done being written: the fence above
+	// covers that submit. Hand the pixels to the sink now -- on this thread, before this frame records
+	// anything -- so the frame owner never blocks on a readback.
+	if (bCaptureRecorded && PendingCaptureSink && CaptureStagingAllocation != nullptr)
+	{
+		MAHO_TRACE_SCOPE(kRHIServerLane, "flush the backbuffer capture");
+		FRHIMemoryAllocation Staging{};
+		Staging.Native = CaptureStagingAllocation;
+		if (void* Mapped = MemoryAllocator != nullptr ? MemoryAllocator->Map(Staging) : nullptr)
+		{
+			PendingCaptureSink(SwapchainExtent.width, SwapchainExtent.height,
+				ToRHIFormat(SwapchainImageFormat), Mapped);
+			MemoryAllocator->Unmap(Staging);
+		}
+		else
+		{
+			MAHO_LOG_CORE_ERROR("FVulkanRHI: capture staging is not host-visible/mappable");
+		}
+		PendingCaptureSink = nullptr;
+	}
+	else if (bCaptureRecorded)
+	{
+		MAHO_LOG_CORE_ERROR("FVulkanRHI: capture was recorded but cannot be delivered");
+	}
+	bCaptureRecorded = false;
 
 	// Now that the previous frame's fence is signaled, every async-upload staging
 	// buffer whose copy was recorded into that frame is done being read by the GPU.
@@ -745,6 +784,50 @@ bool FVulkanRHI::ReadbackTexture(
 	return true;
 }
 
+void FVulkanRHI::RequestBackbufferCapture(FBackbufferCaptureSink Sink)
+{
+	// One-shot: the sink is consumed by the next PresentTexture + BeginFrame pair. Passing an empty
+	// sink cancels a pending request (the frame owner may decide the frame is not worth capturing).
+	PendingCaptureSink = std::move(Sink);
+}
+
+bool FVulkanRHI::bEnsureCaptureStaging(std::uint64_t NeededBytes)
+{
+	if (MemoryAllocator == nullptr || !MemoryAllocator->IsValid())
+	{
+		return false;
+	}
+	if (CaptureStagingBuffer != VK_NULL_HANDLE && CaptureStagingBytes >= NeededBytes)
+	{
+		return true;
+	}
+
+	// Recreate when the frame's extent changed. Safe to destroy outright: the previous capture's copy
+	// was retired by the fence wait at the last BeginFrame, and only the flush reads it.
+	if (CaptureStagingBuffer != VK_NULL_HANDLE)
+	{
+		MemoryAllocator->DestroyBuffer(CaptureStagingBuffer, CaptureStagingAllocation);
+		CaptureStagingBuffer = VK_NULL_HANDLE;
+		CaptureStagingAllocation = nullptr;
+		CaptureStagingBytes = 0;
+	}
+
+	VkBufferCreateInfo BufferInfo{};
+	BufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+	BufferInfo.size = NeededBytes;
+	BufferInfo.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+	BufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+	const VmaAllocationCreateInfo AllocInfo = FVulkanMemoryAllocator::MakeAllocationInfo(ERHIMemoryUsage::GPUToCPU);
+	if (!MemoryAllocator->CreateBuffer(BufferInfo, AllocInfo, CaptureStagingBuffer, CaptureStagingAllocation))
+	{
+		MAHO_LOG_CORE_ERROR("FVulkanRHI: capture staging allocation failed ({} bytes)", NeededBytes);
+		return false;
+	}
+	CaptureStagingBytes = NeededBytes;
+	return true;
+}
+
 void FVulkanRHI::PresentTexture(FRHITexture* Src)
 {
 	if (!bInitialized)
@@ -823,12 +906,59 @@ void FVulkanRHI::PresentTexture(FRHITexture* Src)
 		DstImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
 		1, &Blit, VK_FILTER_LINEAR);
 
-	// Transition the swapchain image to present-src before submit.
-	TransitionImage(DstImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-		VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-		VK_ACCESS_TRANSFER_WRITE_BIT, 0,
-		VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
-		1, 1);
+	// The backbuffer now holds exactly the presented image. If a capture is armed, read it back HERE:
+	// this is the one image whose layout this layer owns end to end (PERMANENTLY in TRANSFER_DST two
+	// lines above), so the copy needs no assumption about anyone else's layout bookkeeping. The
+	// pixels are handed to the sink at the next BeginFrame, after the fence that covers this submit.
+	bool bCaptured = false;
+	if (PendingCaptureSink && MemoryAllocator != nullptr && MemoryAllocator->IsValid())
+	{
+		const std::uint64_t Needed = static_cast<std::uint64_t>(SwapchainExtent.width)
+			* SwapchainExtent.height * GetFormatBytesPerPixel(ToRHIFormat(SwapchainImageFormat));
+		if (Needed > 0 && bEnsureCaptureStaging(Needed))
+		{
+			TransitionImage(DstImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+				VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+				VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT,
+				VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+				1, 1);
+
+			VkBufferImageCopy Copy{};
+			Copy.bufferOffset = 0;
+			Copy.bufferRowLength = 0;
+			Copy.bufferImageHeight = 0;
+			Copy.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			Copy.imageSubresource.mipLevel = 0;
+			Copy.imageSubresource.baseArrayLayer = 0;
+			Copy.imageSubresource.layerCount = 1;
+			Copy.imageOffset = { 0, 0, 0 };
+			Copy.imageExtent = { SwapchainExtent.width, SwapchainExtent.height, 1 };
+			vkCmdCopyImageToBuffer(CommandBuffer, DstImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+				CaptureStagingBuffer, 1, &Copy);
+
+			TransitionImage(DstImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+				VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+				VK_ACCESS_TRANSFER_READ_BIT, 0,
+				VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+				1, 1);
+			bCaptured = true;
+		}
+		else
+		{
+			MAHO_LOG_CORE_ERROR("FVulkanRHI: capture requested but the staging buffer could not be sized");
+		}
+	}
+
+	if (!bCaptured)
+	{
+		// Transition the swapchain image to present-src before submit.
+		TransitionImage(DstImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+			VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+			VK_ACCESS_TRANSFER_WRITE_BIT, 0,
+			VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+			1, 1);
+	}
+	bCaptureRecorded = bCaptured;
 
 	// Return the source to color-attachment so the next frame can render into it.
 	TransitionImage(SrcImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
@@ -1614,7 +1744,8 @@ bool FVulkanRHI::CreateSwapchain()
 	CreateInfo.imageColorSpace = ColorSpace;
 	CreateInfo.imageExtent = SwapchainExtent;
 	CreateInfo.imageArrayLayers = 1;
-	CreateInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+	CreateInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT
+		| VK_IMAGE_USAGE_TRANSFER_SRC_BIT;   // TRANSFER_SRC: the screenshot capture reads it
 	CreateInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
 	CreateInfo.preTransform = Capabilities.currentTransform;
 	CreateInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;

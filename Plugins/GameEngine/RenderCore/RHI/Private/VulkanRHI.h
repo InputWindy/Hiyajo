@@ -30,6 +30,11 @@ public:
 	virtual void WaitIdle() override;
 
 	virtual void PresentTexture(FRHITexture* Src) override;
+
+	/** Arm / cancel the capture recorded inside the next PresentTexture and flushed one boundary
+	 *  later. See IRHI::RequestBackbufferCapture. */
+	virtual void RequestBackbufferCapture(FBackbufferCaptureSink Sink) override;
+
 	[[nodiscard]] virtual ERHIFormat GetSwapchainFormat() const override;
 	[[nodiscard]] virtual bool IsFormatSupported(ERHIFormat Format, ERHITextureUsage Usage) const override;
 	virtual bool ReadbackTexture(
@@ -244,6 +249,22 @@ private:
 	VkSemaphore ImageAvailableSemaphore = VK_NULL_HANDLE;
 	std::vector<VkSemaphore> RenderFinishedSemaphores;   // one per swapchain image (indexed by CurrentImageIndex)
 	VkFence InFlightFence = VK_NULL_HANDLE;
+
+	/**
+	 * Backbuffer capture (see RequestBackbufferCapture). The sink is armed by the frame owner; the
+	 * copy is recorded inside PresentTexture (where the backbuffer's layout is known to be
+	 * TRANSFER_DST after the blit) and the sink runs at the NEXT BeginFrame, i.e. after the fence
+	 * that covers it -- no stall, and the pixels are stable.
+	 */
+	FBackbufferCaptureSink PendingCaptureSink;
+	bool bCaptureRecorded = false;
+	VkBuffer CaptureStagingBuffer = VK_NULL_HANDLE;
+	VmaAllocation CaptureStagingAllocation = nullptr;
+	std::uint64_t CaptureStagingBytes = 0;
+
+	/** Make sure the capture staging buffer can hold `NeededBytes` (recreated when the frame's
+	 *  extent changed). Returns false when the allocation failed. */
+	bool bEnsureCaptureStaging(std::uint64_t NeededBytes);
 
 	std::uint32_t GraphicsQueueFamilyIndex = 0;
 	std::uint32_t PresentQueueFamilyIndex = 0;
