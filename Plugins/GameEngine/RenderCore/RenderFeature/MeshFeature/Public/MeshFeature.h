@@ -1,12 +1,33 @@
 #pragma once
 
 #include "MeshFeatureApi.h"
+#include <AssetTypes.h>
 #include <Engine/Frame.h>
 #include <Maho.h>
 #include <Render.h>
 
+#include <memory>
+#include <string>
+#include <vector>
+
 namespace Maho
 {
+
+/**
+ * A code-built `FStaticMesh`. The geometry ctor is protected, and a project-side derived resource
+ * type is the intended extension point (AGENTS.md's module-boundary rule: a derived type that
+ * crosses a DLL boundary is exported from its own module -- hence the API tag here).
+ *
+ * Batch 2.2 is about the PATH, not the source: the feature no longer generates its own vertex
+ * stream, it interleaves an `FStaticMesh`'s SoA arrays and uploads that. The data below is a
+ * stand-in until the `.casset` importer supplies real geometry.
+ */
+class MAHO_MESHFEATURE_API FCubeMesh final : public Resource::FStaticMesh
+{
+public:
+	FCubeMesh(std::string Path, std::vector<float> Positions, std::vector<float> Normals,
+		std::vector<float> UVs, std::vector<std::uint32_t> Indices);
+};
 
 /**
  * Interleaved mesh vertex: position, normal, uv.
@@ -65,6 +86,10 @@ private:
 	FRDGBufferRef CubeVertices;
 	FRDGBufferRef CubeIndices;
 	std::uint32_t CubeIndexCount = 0;
+
+	/** The geometry source (see `FCubeMesh`): swapped for a real imported `FStaticMesh` in a later
+	 *  pass without the upload path below changing. */
+	std::unique_ptr<FCubeMesh> CubeMesh;
 
 	/** Procedural spin angle, advanced by the world's delta each frame. */
 	float SpinAngle = 0.f;

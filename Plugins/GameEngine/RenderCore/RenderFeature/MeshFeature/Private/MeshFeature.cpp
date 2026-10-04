@@ -126,11 +126,13 @@ void main()
 	}
 
 	/**
-	 * A unit cube as 24 vertices (4 per face, so each face carries its own normal -- flat shading
-	 * without a geometry stage) plus 36 indices. Procedural on purpose: batch 2.1 is about the PATH
-	 * (buffers, camera, transform, depth), not about the asset pipeline (that is 2.2).
+	 * A unit cube as SoA arrays matching `FStaticMesh`'s payload: 24 positions/normals (4 per face, so
+	 * each face carries its own normal -- flat shading without a geometry stage), 48 UV floats and 36
+	 * indices. Procedural on purpose: this stands in for the `.casset` importer, and the feature
+	 * interleaves it exactly as it would interleave imported data.
 	 */
-	void BuildCube(std::vector<FMeshVertex>& OutVertices, std::vector<std::uint32_t>& OutIndices)
+	void BuildCubeSoA(std::vector<float>& OutPositions, std::vector<float>& OutNormals,
+		std::vector<float>& OutUVs, std::vector<std::uint32_t>& OutIndices)
 	{
 		struct FFace
 		{
@@ -149,25 +151,25 @@ void main()
 			{ 0.f, -1.f, 0.f, 1.f, 0.f, 0.f, 0.f, 0.f, 1.f },     // -Y
 		};
 
-		OutVertices.clear();
+		OutPositions.clear();
+		OutNormals.clear();
+		OutUVs.clear();
 		OutIndices.clear();
 		for (const FFace& Face : Faces)
 		{
-			const std::uint32_t Base = static_cast<std::uint32_t>(OutVertices.size());
+			const std::uint32_t Base = static_cast<std::uint32_t>(OutPositions.size() / 3);
 			for (int Corner = 0; Corner < 4; ++Corner)
 			{
 				const float U = (Corner == 1 || Corner == 2) ? 1.0f : 0.0f;
 				const float V = (Corner >= 2) ? 1.0f : 0.0f;
-				FMeshVertex Vertex;
-				Vertex.X = Face.NX * H + Face.TX * (U - 0.5f) + Face.BX * (V - 0.5f);
-				Vertex.Y = Face.NY * H + Face.TY * (U - 0.5f) + Face.BY * (V - 0.5f);
-				Vertex.Z = Face.NZ * H + Face.TZ * (U - 0.5f) + Face.BZ * (V - 0.5f);
-				Vertex.NX = Face.NX;
-				Vertex.NY = Face.NY;
-				Vertex.NZ = Face.NZ;
-				Vertex.U = U;
-				Vertex.V = V;
-				OutVertices.push_back(Vertex);
+				OutPositions.push_back(Face.NX * H + Face.TX * (U - 0.5f) + Face.BX * (V - 0.5f));
+				OutPositions.push_back(Face.NY * H + Face.TY * (U - 0.5f) + Face.BY * (V - 0.5f));
+				OutPositions.push_back(Face.NZ * H + Face.TZ * (U - 0.5f) + Face.BZ * (V - 0.5f));
+				OutNormals.push_back(Face.NX);
+				OutNormals.push_back(Face.NY);
+				OutNormals.push_back(Face.NZ);
+				OutUVs.push_back(U);
+				OutUVs.push_back(V);
 			}
 			OutIndices.push_back(Base + 0);
 			OutIndices.push_back(Base + 1);
@@ -189,6 +191,13 @@ const char* FMeshShader::GetVertexSource()       { return kVertexShader; }
 const char* FMeshShader::GetFragmentSource()     { return kFragmentShader; }
 const char* FMeshShader::GetVertexEntryPoint()   { return "main"; }
 const char* FMeshShader::GetFragmentEntryPoint() { return "main"; }
+
+FCubeMesh::FCubeMesh(std::string Path, std::vector<float> Positions, std::vector<float> Normals,
+	std::vector<float> UVs, std::vector<std::uint32_t> Indices)
+	: Resource::FStaticMesh(std::move(Path), std::string(), std::move(Positions), std::move(Normals),
+		  std::move(UVs), std::move(Indices))
+{
+}
 
 FMeshFeature::FMeshFeature()
 {
@@ -212,9 +221,48 @@ void FMeshFeature::EnsureCubeBuffers(FRender& R)
 		return;
 	}
 
-	std::vector<FMeshVertex> Vertices;
+	std::vector<float> Positions;
+	std::vector<float> Normals;
+	std::vector<float> UVs;
 	std::vector<std::uint32_t> Indices;
-	BuildCube(Vertices, Indices);
+	BuildCubeSoA(Positions, Normals, UVs, Indices);
+	if (CubeMesh == nullptr)
+	{
+		CubeMesh = std::make_unique<FCubeMesh>("Mesh.Cube", Positions, Normals, UVs, Indices);
+	}
+
+	// The geometry now comes from the ASSET: everything below is asset -> GPU. Interleaving happens
+	// here because the RHI's vertex attributes carry no binding index (binding 0 is implicit), so an
+	// SoA layout cannot be bound as separate streams.
+	const Resource::FStaticMesh& Mesh = *CubeMesh;
+	const std::vector<float>& SrcPositions = Mesh.GetPositions();
+	const std::vector<float>& SrcNormals = Mesh.GetNormals();
+	const std::vector<float>& SrcUVs = Mesh.GetUVs();
+	const std::vector<std::uint32_t>& SrcIndices = Mesh.GetIndices();
+
+	const std::size_t VertexCount = SrcPositions.size() / 3;
+	std::vector<FMeshVertex> Vertices;
+	Vertices.reserve(VertexCount);
+	for (std::size_t Index = 0; Index < VertexCount; ++Index)
+	{
+		FMeshVertex Vertex;
+		Vertex.X = SrcPositions[Index * 3 + 0];
+		Vertex.Y = SrcPositions[Index * 3 + 1];
+		Vertex.Z = SrcPositions[Index * 3 + 2];
+		if (SrcNormals.size() >= VertexCount * 3)
+		{
+			Vertex.NX = SrcNormals[Index * 3 + 0];
+			Vertex.NY = SrcNormals[Index * 3 + 1];
+			Vertex.NZ = SrcNormals[Index * 3 + 2];
+		}
+		if (SrcUVs.size() >= VertexCount * 2)
+		{
+			Vertex.U = SrcUVs[Index * 2 + 0];
+			Vertex.V = SrcUVs[Index * 2 + 1];
+		}
+		Vertices.push_back(Vertex);
+	}
+	Indices = SrcIndices;
 
 	// PERSISTENT, not Transient: these live for the feature's whole lifetime. A Transient handle is
 	// frame-scoped by design (the pool advances its generation at every frame boundary), so holding
@@ -253,8 +301,8 @@ void FMeshFeature::EnsureCubeBuffers(FRender& R)
 	});
 
 	CubeIndexCount = static_cast<std::uint32_t>(Indices.size());
-	MAHO_LOG_CORE_INFO("MeshFeature: cube uploaded ({} vertices, {} indices)",
-		static_cast<unsigned>(Vertices.size()), CubeIndexCount);
+	MAHO_LOG_CORE_INFO("MeshFeature: mesh '{}' uploaded ({} vertices, {} indices, stride {})",
+		Mesh.GetPath(), static_cast<unsigned>(Vertices.size()), CubeIndexCount, sizeof(FMeshVertex));
 }
 
 void FMeshFeature::Render(FRender& R, FRenderContext&)
