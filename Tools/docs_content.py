@@ -742,7 +742,14 @@ D.Header("Plugins/Common/Log/Public/Trace.h", Title="Trace.h —— CPU 作用�
 
 D.Card("环境开关（各自只读一次）")
 D.Table("开关", "说明")
-D.Row("MAHO_TRACE", "任意值即**初始开启**。它只决定初值：运行期由 `r.Trace`（Log 插件的 CVar）覆盖，"
+D.Row("MAHO_TRACE", "**读的是值，不是「有没有设」**：未设 / 空 / `0` / `false` / `off` / `no`"
+      "（大小写不敏感，两端空白忽略）= 关，其余值 = 开（`MAHO_TRACE=1` 是「从第一个事件就记录」）。\n"
+      "为什么必须解析值：只测「有没有设」时，启动器为「这轮别记录」而设的 `MAHO_TRACE=0` 会把记录**打开**"
+      "—— 这不是观感问题：记录中的每次发条都会进内存队列（见 `Trace.cpp` 的 `ProtoQueue`，只有退出时的 "
+      "`TraceFlush` 才排空），实测 **10.2 KB/帧**，~1900 fps 跑 150 s 就是 **3.9 GB**，外加一个几 GB 的 "
+      "`Profile_trace.txt`。同设施另外两个开关（`MAHO_TRACE_FORMAT` / `MAHO_TRACE_MIN_US`）本就解析值，"
+      "`r.Trace` 的说明也写着「等同于 `MAHO_TRACE=1`」，所以这里的契约就是**值**。\n"
+      "它只决定初值：运行期由 `r.Trace`（Log 插件的 CVar，默认值同样走这个解析）覆盖，"
       "随时可开可关、不必重启，且是**进程级**。关闭时 `FStageTrace` / `FScopeTrace` / `FSectionTrace` "
       "的构造只剩几次指针拷贝加一个分支（一个 relaxed 原子读）")
 D.Row("MAHO_TRACE_FORMAT", "**写哪几个文件**：`0` = 只要文本，`1` = 只要原生，`2` = 两个都写（**默认**）。"

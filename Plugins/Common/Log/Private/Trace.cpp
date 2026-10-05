@@ -931,8 +931,14 @@ void WriteTail(FLine& Line, const FNameSlice& Stage, const FNameSlice& Func, con
 
 /** The process-wide recording switch: MAHO_TRACE decides its initial value (read once, while the
  *  process loads), and the `r.Trace` CVar -- declared by the Log plugin, which owns the profiler's
- *  file sink -- flips it at runtime. One atomic, read relaxed on every scope. */
-std::atomic<bool> GTraceEnabled{ std::getenv("MAHO_TRACE") != nullptr };
+ *  file sink -- flips it at runtime. One atomic, read relaxed on every scope.
+ *
+ *  The VALUE of the variable is what is read (`MAHO_TRACE=0` is OFF), never its mere presence. With a
+ *  presence-only test a launcher that sets `MAHO_TRACE=0` to KEEP the run untraced turned recording
+ *  ON, and a recording run buffers every bar it emits until exit (ProtoQueue below) -- measured
+ *  10.2 KB per frame, 3.9 GB over 150 s at ~1900 fps, on top of a multi-GB Profile_trace.txt. See
+ *  ParseTraceEnvSwitch in the header, which is the single reader of the variable. */
+std::atomic<bool> GTraceEnabled{ TraceEnabledByEnvironment() };
 
 bool TraceEnabled()
 {

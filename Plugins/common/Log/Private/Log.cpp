@@ -19,14 +19,20 @@ namespace Maho
 
 /** The CPU profiler's runtime switch. It is DECLARED HERE because Core must not depend on a plugin:
  *  Core exposes `TraceSetEnabled` and this plugin, which already owns the process's log sinks, is the
- *  one place that knows a CVar. MAHO_TRACE still decides the initial value (Core reads it while the
- *  process loads); `r.Trace` overrides it from then on.
+ *  one place that knows a CVar. MAHO_TRACE still decides the initial value -- the trace facility reads
+ *  and PARSES it while the process loads (`MAHO_TRACE=1` records, `MAHO_TRACE=0` does not; see
+ *  Trace.h); `r.Trace` overrides it from then on.
+ *
+ *  The default below must come from that SAME parser, it is not decoration: `FLog::Tick` deliberately
+ *  skips its first application of the CVar (so a run started with the env var records from its very
+ *  first event), which means a wrong default here re-enables recording on the first tick even though
+ *  the switch in Core had correctly read `MAHO_TRACE=0` as "off".
  *
  *  Note it is NOT a sink of the engine logger: a trace is tens of megabytes and wants its own file,
  *  not a rotating one -- see Trace.h for where the trace's lines actually go. */
 static ConsoleVariable::TAutoConsoleVariable<int> GCVarTrace(
 	"r.Trace",
-	(std::getenv("MAHO_TRACE") != nullptr) ? 1 : 0,
+	TraceEnabledByEnvironment() ? 1 : 0,
 	"1 = record a CPU trace (same as MAHO_TRACE=1), 0 = off. Takes effect immediately.");
 
 FLog* GLog = nullptr;

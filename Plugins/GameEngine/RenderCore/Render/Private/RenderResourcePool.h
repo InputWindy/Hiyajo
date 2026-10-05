@@ -42,6 +42,13 @@ namespace Maho
  *     which is exactly why the pool can recycle unconditionally (an earlier
  *     "refcount == 0" gate could not: a handle nobody ever released kept its slot
  *     out of circulation forever, so every frame allocated a fresh slot + native).
+ *   - ONE slot = at most ONE live resource per frame. A slot handed to a caller
+ *     (fresh from the free list, or a REUSE of a recycled same-descriptor slot) is
+ *     taken OFF the frame's free list, and Alloc*Slot never hands out a slot whose
+ *     entry is still bActive. Without that, one slot could carry two occupants in a
+ *     frame, the generation would not change, and the first caller's handle would
+ *     silently resolve to the second caller's native (a draw binding a buffer it
+ *     never asked for -- see the comment on Alloc*Slot in the .cpp).
  *
  * This is the "no per-frame vkCreate/vkAllocate" step. The NEXT layer (VMA
  * aliasing of non-overlapping transients) will need size/alignment +
@@ -278,6 +285,25 @@ private:
 	void FlushCondemned();
 
 	IRHI* RHI = nullptr;
+
+	/** Guards EVERY table below that a recorded pass may touch: the texture/buffer slots + their free
+	 *  lists, the condemned natives, the PSO caches, the descriptor-set tables and FrameCounter.
+	 *
+	 *  Why it must exist: a feature records on a POOL WORKER, and two features whose stages share a
+	 *  dependency are dispatched to two different workers AT THE SAME TIME -- `MeshFeature::IRender`,
+	 *  `DrawTriangleFeature::IRender` and `UIFeature::IRenderUI` all wait only for `FScene::IEndRender`,
+	 *  so they are ready in the same instant and both allocate from THIS pool. Without the lock, one
+	 *  worker's `push_back`/`erase` runs inside another's `std::find(begin(), end())` +
+	 *  `It != end()`: the second comparison sees an iterator the first one ORPHANED, so Release
+	 *  corrupts the table silently while Debug reports `vector iterators incompatible`
+	 *  (observed 2026-10-05: RenderResourcePool.cpp:215, `TakeOffFreeList` <- `CreateBuffer` <-
+	 *  `FMeshFeature::Render`, the other worker being UIFeature's per-frame buffer upload).
+	 *
+	 *  Allocation (native creation) happens under this lock. Lock order is
+	 *  TableMutex -> RenderListsMutex -> FrameAllocMutex (see BeginFrame/Shutdown); nothing takes them
+	 *  in the opposite order. */
+	mutable std::mutex TableMutex;
+
 	std::vector<FTextureEntry> Textures;
 	std::vector<std::uint32_t> FreeTextureSlots;
 	std::vector<FBufferEntry> Buffers;

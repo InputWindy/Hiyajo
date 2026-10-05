@@ -1047,12 +1047,27 @@ void FVulkanRHI::Resize(int Width, int Height)
 
 	FramebufferWidth = Width;
 	FramebufferHeight = Height;
-	bFramebufferResized = true;
 
-	if (bInitialized)
+	if (!bInitialized)
 	{
-		RecreateSwapchain();
+		// No device yet: nothing to rebuild, remember the request for the first frame.
+		bFramebufferResized = true;
+		return;
 	}
+
+	// The "please rebuild at the frame boundary" flag is deliberately CLEARED here, not set: this call
+	// already rebuilds the swapchain in place (below), so a flag left standing would make the next
+	// BeginFrame rebuild a SECOND time -- and BeginFrame rebuilds only AFTER it has acquired an image,
+	// i.e. after ImageAvailableSemaphore was signaled by that acquire. Rebuilding then throws the
+	// acquired image away and re-acquires with the SAME binary semaphore, which signals it twice with
+	// no intervening wait (invalid: a binary semaphore may not have two pending signals), and the
+	// frame submit that waits for it consumes only one -- leaving a pending signal that hangs the queue
+	// until the driver reports VK_ERROR_DEVICE_LOST on a later submit. Rebuilt from a normal resize
+	// notification the acquire is the only place a stale swapchain is discovered, and it is the safe
+	// one: on VK_ERROR_OUT_OF_DATE_KHR the presentation engine has NOT signaled the semaphore (the
+	// spec leaves it unsignaled and returns no image), so the re-acquire after the rebuild is correct.
+	bFramebufferResized = false;
+	RecreateSwapchain();
 }
 
 bool FVulkanRHI::IsInitialized() const

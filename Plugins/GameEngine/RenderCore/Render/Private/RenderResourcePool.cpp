@@ -205,12 +205,45 @@ FRHIBuffer* FRDGBufferRef::GetRHI() const
 
 // -- slot allocation -----------------------------------------------------------
 
+namespace
+{
+	/** Drop Slot from a frame free list (it is live now). Linear on purpose: the lists hold a few
+	 *  dozen slots and the erase happens once per reuse, not per frame. */
+	void TakeOffFreeList(std::vector<std::uint32_t>& FreeList, std::uint32_t Slot)
+	{
+		const auto It = std::find(FreeList.begin(), FreeList.end(), Slot);
+		if (It != FreeList.end())
+		{
+			FreeList.erase(It);
+		}
+	}
+}
+
+// A slot is only ever handed out by ONE of these, and a slot already OWNED (bActive) is never handed
+// out again in the same frame. The free list is minted wholesale at the frame head (BeginFrame pushes
+// every transient slot), while the REUSE path (CreateTexture/CreateBuffer descriptor match) activates
+// a slot without taking it off the list -- so a bare pop() could pop a slot a feature already got
+// earlier in this frame.
+//
+// That aliasing is SILENT: the occupant generation only advances at the frame boundary, so the earlier
+// handle still resolves (Get* sees the same generation) and returns the NEW occupant's native. The
+// symptom is exactly "a draw binds a buffer it never asked for" -- observed 2026-10-05 as the UI's
+// 1840-byte merged vertex buffer resolving to a 64-byte uniform buffer while its upload copied 1840
+// bytes into a 324-byte index buffer (validation: pOffsets[0] (320) larger than the buffer size (64),
+// vkCmdBindVertexBuffers usage VERTEX missing, vkCmdCopyBuffer size over the destination). The vertex
+// fetch then reads out of bounds and the GPU faults -> VK_ERROR_DEVICE_LOST one frame after a window
+// resize, because the resize is what changes the transient descriptors and forces these slow-path
+// allocations in the first place.
 std::uint32_t FRHIResourcePool::AllocTextureSlot()
 {
-	if (!FreeTextureSlots.empty())
+	while (!FreeTextureSlots.empty())
 	{
 		const std::uint32_t Slot = FreeTextureSlots.back();
 		FreeTextureSlots.pop_back();
+		if (Slot >= Textures.size() || Textures[Slot].bActive)
+		{
+			continue;   // owned by a live handle this frame: never hand it out twice
+		}
 		return Slot;
 	}
 	Textures.emplace_back();
@@ -219,10 +252,14 @@ std::uint32_t FRHIResourcePool::AllocTextureSlot()
 
 std::uint32_t FRHIResourcePool::AllocBufferSlot()
 {
-	if (!FreeBufferSlots.empty())
+	while (!FreeBufferSlots.empty())
 	{
 		const std::uint32_t Slot = FreeBufferSlots.back();
 		FreeBufferSlots.pop_back();
+		if (Slot >= Buffers.size() || Buffers[Slot].bActive)
+		{
+			continue;   // owned by a live handle this frame: never hand it out twice
+		}
 		return Slot;
 	}
 	Buffers.emplace_back();
@@ -352,6 +389,8 @@ void FRHIResourcePool::DestroyBufferEntry(FBufferEntry& Entry)
 
 FRDGTextureRef FRHIResourcePool::CreateTexture(const FRHITextureDesc& Desc, ERDGResourceLifetime Lifetime)
 {
+	std::lock_guard<std::mutex> Lock(TableMutex);
+
 	// Reuse first: an inactive slot with the same descriptor + lifetime class.
 	// For a transient this is how we avoid per-frame vkCreate/vkAllocate (the
 	// slot keeps its native + memory across frames and is merely re-activated).
@@ -361,6 +400,9 @@ FRDGTextureRef FRHIResourcePool::CreateTexture(const FRHITextureDesc& Desc, ERDG
 		FTextureEntry& E = Textures[static_cast<std::size_t>(Reuse)];
 		E.bActive = true;
 		E.RefCount = 1;
+		// Live now, so it must leave the frame's free list -- otherwise a later slow-path allocation
+		// in this same frame could pop it (see AllocTextureSlot).
+		TakeOffFreeList(FreeTextureSlots, static_cast<std::uint32_t>(Reuse));
 		return FRDGTextureRef(this, static_cast<std::uint32_t>(Reuse), E.Generation);
 	}
 
@@ -398,12 +440,17 @@ FRDGTextureRef FRHIResourcePool::CreateTexture(const FRHITextureDesc& Desc, ERDG
 
 FRDGBufferRef FRHIResourcePool::CreateBuffer(const FRHIBufferDesc& Desc, ERDGResourceLifetime Lifetime)
 {
+	std::lock_guard<std::mutex> Lock(TableMutex);
+
 	const std::int32_t Reuse = FindReusableBuffer(Desc, Lifetime);
 	if (Reuse >= 0)
 	{
 		FBufferEntry& E = Buffers[static_cast<std::size_t>(Reuse)];
 		E.bActive = true;
 		E.RefCount = 1;
+		// Live now, so it must leave the frame's free list (see AllocBufferSlot). Missing this is what
+		// made the UI's merged vertex buffer alias the camera uniform buffer after a resize.
+		TakeOffFreeList(FreeBufferSlots, static_cast<std::uint32_t>(Reuse));
 		return FRDGBufferRef(this, static_cast<std::uint32_t>(Reuse), E.Generation);
 	}
 
@@ -446,6 +493,8 @@ FRHICommandList* FRHIResourcePool::AcquireRenderList()
 
 FRHIShaderModule* FRHIResourcePool::GetOrCreateShaderModule(const FRHIShaderModuleDesc& Desc)
 {
+	std::lock_guard<std::mutex> Lock(TableMutex);
+
 	// Shader module identity is the CONTENT (bytecode copy + stage + entry point),
 	// not the pointer: modules are rebuilt from identical bytes across passes and
 	// must share one native. The bytecode is copied so the lookup does not depend
@@ -486,6 +535,8 @@ FRHIShaderModule* FRHIResourcePool::GetOrCreateShaderModule(const FRHIShaderModu
 
 FRHIPipelineLayout* FRHIResourcePool::GetOrCreatePipelineLayout(const FRHIPipelineLayoutDesc& Desc)
 {
+	std::lock_guard<std::mutex> Lock(TableMutex);
+
 	for (const FPipelineLayoutEntry& E : PipelineLayouts)
 	{
 		if (E.Native != nullptr && PipelineLayoutDescEqual(E.Desc, Desc))
@@ -503,6 +554,8 @@ FRHIPipelineLayout* FRHIResourcePool::GetOrCreatePipelineLayout(const FRHIPipeli
 
 FRHIDescriptorSetLayout* FRHIResourcePool::GetOrCreateDescriptorSetLayout(const FRHIDescriptorSetLayoutDesc& Desc)
 {
+	std::lock_guard<std::mutex> Lock(TableMutex);
+
 	for (const FDescriptorSetLayoutEntry& E : DescriptorSetLayouts)
 	{
 		if (E.Native != nullptr && DescriptorSetLayoutDescEqual(E.Desc, Desc))
@@ -520,6 +573,8 @@ FRHIDescriptorSetLayout* FRHIResourcePool::GetOrCreateDescriptorSetLayout(const 
 
 FRHIGraphicsPipeline* FRHIResourcePool::GetOrCreateGraphicsPipeline(const FRHIGraphicsPipelineDesc& Desc)
 {
+	std::lock_guard<std::mutex> Lock(TableMutex);
+
 	for (const FGraphicsPipelineEntry& E : GraphicsPipelines)
 	{
 		if (E.Native != nullptr && GraphicsPipelineDescEqual(E.Desc, Desc))
@@ -539,6 +594,8 @@ FRHIGraphicsPipeline* FRHIResourcePool::GetOrCreateGraphicsPipeline(const FRHIGr
 
 FRHISampler* FRHIResourcePool::CreateSampler(const FRHISamplerDesc& Desc)
 {
+	std::lock_guard<std::mutex> Lock(TableMutex);
+
 	for (const FSamplerEntry& E : Samplers)
 	{
 		if (E.Native != nullptr && SamplerDescEqual(E.Desc, Desc))
@@ -567,6 +624,8 @@ FRHIDescriptorSet* FRHIResourcePool::GetOrCreateDescriptorSet(
 	{
 		return nullptr;
 	}
+
+	std::lock_guard<std::mutex> Lock(TableMutex);
 
 	std::vector<FRHIDescriptorWrite> KeyWrites(Writes, Writes + WriteCount);
 	for (FDescriptorSetEntry& E : DescriptorSets)
@@ -632,6 +691,8 @@ FRHIDescriptorSet* FRHIResourcePool::GetOrCreateMutableDescriptorSet(
 	{
 		return nullptr;
 	}
+
+	std::lock_guard<std::mutex> Lock(TableMutex);
 
 	// CONTENT is part of the key (the same comparison the immutable path uses; it already ignores
 	// .Set, which is what we are looking up). An identical (layout, writes) IS the same set, so
@@ -710,6 +771,8 @@ void ReportExpiredTransientHandle(const char* Kind, std::uint32_t Slot, std::uin
 
 void FRHIResourcePool::ReleaseTexture(FRDGTextureRef& Ref)
 {
+	std::lock_guard<std::mutex> Lock(TableMutex);
+
 	if (!Ref.IsValid() || Ref.Id >= Textures.size())
 	{
 		return;
@@ -737,6 +800,8 @@ void FRHIResourcePool::ReleaseTexture(FRDGTextureRef& Ref)
 
 void FRHIResourcePool::ReleaseBuffer(FRDGBufferRef& Ref)
 {
+	std::lock_guard<std::mutex> Lock(TableMutex);
+
 	if (!Ref.IsValid() || Ref.Id >= Buffers.size())
 	{
 		return;
@@ -760,6 +825,8 @@ void FRHIResourcePool::ReleaseBuffer(FRDGBufferRef& Ref)
 
 FRHITexture* FRHIResourcePool::GetTexture(const FRDGTextureRef& Ref) const
 {
+	std::lock_guard<std::mutex> Lock(TableMutex);
+
 	if (!Ref.IsValid() || Ref.Id >= Textures.size())
 	{
 		return nullptr;
@@ -775,6 +842,8 @@ FRHITexture* FRHIResourcePool::GetTexture(const FRDGTextureRef& Ref) const
 
 FRHITextureView* FRHIResourcePool::GetTextureView(const FRDGTextureRef& Ref)
 {
+	std::lock_guard<std::mutex> Lock(TableMutex);
+
 	if (!Ref.IsValid() || Ref.Id >= Textures.size())
 	{
 		return nullptr;
@@ -790,6 +859,8 @@ FRHITextureView* FRHIResourcePool::GetTextureView(const FRDGTextureRef& Ref)
 
 const FRHITextureDesc& FRHIResourcePool::GetTextureDesc(const FRDGTextureRef& Ref) const
 {
+	std::lock_guard<std::mutex> Lock(TableMutex);
+
 	static const FRHITextureDesc Empty{};
 	if (!Ref.IsValid() || Ref.Id >= Textures.size())
 	{
@@ -806,6 +877,8 @@ const FRHITextureDesc& FRHIResourcePool::GetTextureDesc(const FRDGTextureRef& Re
 
 FRHIBuffer* FRHIResourcePool::GetBuffer(const FRDGBufferRef& Ref) const
 {
+	std::lock_guard<std::mutex> Lock(TableMutex);
+
 	if (!Ref.IsValid() || Ref.Id >= Buffers.size())
 	{
 		return nullptr;
@@ -884,6 +957,11 @@ void FRHIResourcePool::RetireRenderLists(const std::vector<FRHICommandList*>& Li
 
 void FRHIResourcePool::BeginFrame()
 {
+	// The tables are swept here while features may be allocating from them on pool workers: this is a
+	// WRITER, so it takes the table lock first (lock order: TableMutex -> RenderListsMutex ->
+	// FrameAllocMutex).
+	std::lock_guard<std::mutex> Lock(TableMutex);
+
 	// Destroy the previous frame's SUBMITTED command lists. They were submitted at that frame's
 	// IPresent stage, and the host BeginFrame already waited the swapchain fence, so no list is
 	// still executing. This is the fence-aligned lifetime boundary shared with transient resource
@@ -989,6 +1067,9 @@ void FRHIResourcePool::BeginFrame()
 
 void FRHIResourcePool::Shutdown()
 {
+	// Same lock order as BeginFrame: tables, then the render-list tables, then the frame allocator.
+	std::lock_guard<std::mutex> Lock(TableMutex);
+
 	// Natives condemned in the last frame go with everything else (no frame boundary is left to
 	// flush them on).
 	FlushCondemned();

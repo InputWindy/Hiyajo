@@ -77,6 +77,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 #include <string_view>
 #include <type_traits>
 #include <typeindex>
@@ -84,6 +85,64 @@
 
 namespace Maho
 {
+
+/** Does a MAHO_TRACE-family value ask for recording? The VALUE decides, not the mere presence of the
+ *  variable: unset, empty, `0`, `false`, `off` and `no` (case-insensitive, surrounding blanks
+ *  ignored) all mean OFF; anything else means ON.
+ *
+ *  Why the value has to be read rather than merely detected. A presence-only test (`getenv(...) !=
+ *  nullptr`) made `MAHO_TRACE=0` -- what a launcher sets to mean "do not record" -- turn recording ON,
+ *  and that is not a cosmetic mistake: a recording run buffers every bar it emits (see ProtoQueue in
+ *  Trace.cpp, drained only by TraceFlush at exit), so a run that ASKED for no trace grew by a measured
+ *  10.2 KB per frame -- 3.9 GB over 150 s at ~1900 fps -- plus a multi-GB Profile_trace.txt on disk.
+ *  The sibling switches of this same facility (MAHO_TRACE_FORMAT, MAHO_TRACE_MIN_US) parse their value
+ *  too, and the `r.Trace` CVar documents itself as "the same as MAHO_TRACE=1" -- so the value is the
+ *  contract here, and `MAHO_TRACE=1` remains the way to record from the very first event. */
+inline bool ParseTraceEnvSwitch(const char* RawValue)
+{
+	std::string_view Value = (RawValue != nullptr) ? std::string_view(RawValue) : std::string_view{};
+	while (!Value.empty() && (Value.front() == ' ' || Value.front() == '\t'))
+	{
+		Value.remove_prefix(1);
+	}
+	while (!Value.empty() && (Value.back() == ' ' || Value.back() == '\t'))
+	{
+		Value.remove_suffix(1);
+	}
+	if (Value.empty())
+	{
+		return false;
+	}
+
+	// No locale, no allocation: the only comparisons this has to get right are the four off-words.
+	const auto EqualsNoCase = [](std::string_view A, std::string_view B)
+	{
+		if (A.size() != B.size())
+		{
+			return false;
+		}
+		for (std::size_t I = 0; I < A.size(); ++I)
+		{
+			const char C = (A[I] >= 'A' && A[I] <= 'Z') ? static_cast<char>(A[I] + ('a' - 'A')) : A[I];
+			if (C != B[I])
+			{
+				return false;
+			}
+		}
+		return true;
+	};
+
+	return !(EqualsNoCase(Value, "0") || EqualsNoCase(Value, "false")
+		|| EqualsNoCase(Value, "off") || EqualsNoCase(Value, "no"));
+}
+
+/** MAHO_TRACE as a switch: the variable's VALUE, parsed (see ParseTraceEnvSwitch). This is the ONE
+ *  reader of MAHO_TRACE, so the recording switch in Core and the `r.Trace` CVar's default can never
+ *  disagree about what the run asked for. */
+inline bool TraceEnabledByEnvironment()
+{
+	return ParseTraceEnvSwitch(std::getenv("MAHO_TRACE"));
+}
 
 /** Recording is on. The initial answer comes from MAHO_TRACE (read once while the process loads),
  *  and a runtime switch may flip it -- see TraceSetEnabled. Cheap enough for a hot path: one relaxed
