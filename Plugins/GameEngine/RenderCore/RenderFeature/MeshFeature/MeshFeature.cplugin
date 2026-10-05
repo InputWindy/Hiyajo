@@ -1,11 +1,11 @@
 {
   "FileVersion": 1,
   "Name": "MeshFeature",
-  "Description": "First real mesh draw path: camera view-projection + per-object transform + vertex/index buffers + depth.",
+  "Description": "Actor-manager mesh pass: consumes the primitive+camera mirror table, caches geometry per mesh name, one draw pass per actor.",
   "Dependencies": [
     "Render",
     "Scene",
     "Log",
-    "GameWorld"
+    "PrimitiveRegistry"
   ]
 }

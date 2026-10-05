@@ -4,8 +4,12 @@
 #include <AssetTypes.h>
 #include <Engine/Frame.h>
 #include <Maho.h>
+#include <Name.h>
+#include <PrimitiveRegistry.h>
 #include <Render.h>
 
+#include <cstdint>
+#include <map>
 #include <memory>
 #include <string>
 #include <vector>
@@ -18,9 +22,9 @@ namespace Maho
  * type is the intended extension point (AGENTS.md's module-boundary rule: a derived type that
  * crosses a DLL boundary is exported from its own module -- hence the API tag here).
  *
- * Batch 2.2 is about the PATH, not the source: the feature no longer generates its own vertex
- * stream, it interleaves an `FStaticMesh`'s SoA arrays and uploads that. The data below is a
- * stand-in until the `.casset` importer supplies real geometry.
+ * It is now the PROVIDER for the built-in mesh name `Mesh.Cube` (see the provider table in
+ * MeshFeature.cpp): TODO route it through the asset system (`.casset` importer) so a mesh NAME
+ * resolves to a real imported asset instead of a procedural stand-in.
  */
 class MAHO_MESHFEATURE_API FCubeMesh final : public Resource::FStaticMesh
 {
@@ -53,20 +57,23 @@ struct FMeshShader
 };
 
 /**
- * Batch 2.1 -- the first real mesh draw path.
+ * The mesh pass: an ACTOR MANAGER fed by the mirror table -- deliberately DUMB about the game.
  *
- * What is NEW here, against the demo triangle (`FDrawTriangleFeature`) and the UI passes:
- *   - a VERTEX BUFFER + INDEX BUFFER (Persistent pool buffers, uploaded once), instead of in-shader
- *     generated geometry or a per-frame merged ImGui buffer;
- *   - a CAMERA: a per-frame Transient uniform buffer holding the view-projection matrix, bound
- *     through a `UniformBuffer` descriptor (the only descriptor type the RHI actually writes today);
- *   - a PER-OBJECT transform: the object matrix travels in the push-constant block, packed from the
- *     same `ShaderParameterStruct` that declares the pipeline layout -- so no descriptor set churn
- *     per object;
- *   - DEPTH WRITE on (the demo triangle leaves it off): required for anything to occlude anything.
+ * It knows no entity, no component, no transform, no camera: each frame it reads
  *
- * The geometry is procedural for now: the asset path (`FStaticMesh` -> GPU) is batch 2.2, materials
- * are 2.3, per-instance data 2.4.
+ *   - `FPrimitiveRegistry::ReadLatest()`       -> what to draw (mesh name + object matrix + actor id)
+ *   - `FPrimitiveRegistry::ReadLatestCamera()` -> the view-projection to draw it with
+ *
+ * and nothing else. Everything semantic (TRS composition, fov/near/far, which entity is the eye)
+ * lives on the game side; this feature consumes 16 floats per object and one 4x4 for the frame.
+ *
+ * GPU geometry is cached BY MESH NAME (never per entity): two actors with the same mesh share one
+ * vertex/index buffer pair, and the buffers are created lazily from the built-in provider table the
+ * first time a name shows up (TODO: resolve names through the asset system instead).
+ *
+ * Rendering-wise nothing changed against the previous revision: same shader, same persistent VA/IB,
+ * same per-frame Transient view-projection UBO, same per-object push-constant matrix, same depth
+ * test+write -- only the SOURCE of the per-object matrix and of the camera moved to the game side.
  */
 class MAHO_MESHFEATURE_API FMeshFeature : public FFrameExtension, public IPipeline<IInitViews, IRender, IPreUnInstall>
 {
@@ -80,19 +87,47 @@ public:
 	void PreUnInstall(FRender& R, FRenderContext& Frame) override;
 
 private:
-	/** Build the cube's vertex/index buffers once (idempotent; Persistent so they survive frames). */
-	void EnsureCubeBuffers(FRender& R);
+	/** GPU geometry for one mesh name (Persistent: it outlives the frame that created it). */
+	struct FMeshBuffers
+	{
+		FRDGBufferRef Vertices;
+		FRDGBufferRef Indices;
+		std::uint32_t IndexCount = 0;
+	};
 
-	FRDGBufferRef CubeVertices;
-	FRDGBufferRef CubeIndices;
-	std::uint32_t CubeIndexCount = 0;
+	/** Get-or-create the geometry for a mesh name; nullptr when the name has no provider today. */
+	const FMeshBuffers* EnsureMesh(FRender& R, Name::FName MeshName);
 
-	/** The geometry source (see `FCubeMesh`): swapped for a real imported `FStaticMesh` in a later
-	 *  pass without the upload path below changing. */
+	/** Make the actor set match this frame's snapshot: actors appear/disappear with their ids. */
+	void SyncActors(const std::vector<FRenderPrimitive>& Snapshot);
+
+	/** Diagnostics: how many primitives / which camera channel this frame's read got, reported
+	 *  ONCE per state change (a per-frame line is not a report -- the publish counter changes every
+	 *  frame and would drown it). */
+	void ReportRead(std::size_t PrimitiveCount, bool bCamera, std::uint64_t Publishes);
+
+	/** mesh name -> GPU geometry (shared by every actor using that mesh). */
+	std::map<Name::FName, FMeshBuffers> Meshes;
+
+	/** The current actors, keyed by the game side's `ActorId`, holding the frame's object matrix. */
+	std::map<std::uint32_t, FRenderPrimitive> Actors;
+
+	/** The procedural provider geometry behind `Mesh.Cube` (see `FCubeMesh`). */
 	std::unique_ptr<FCubeMesh> CubeMesh;
 
-	/** Procedural spin angle, advanced by the world's delta each frame. */
-	float SpinAngle = 0.f;
+	/** Mesh names that had no provider, so each one is reported once instead of once per frame. */
+	std::vector<Name::FName> UnresolvedMeshes;
+
+	/** Frames seen without a camera -- a startup race must not be reported as "the game has no
+	 *  camera", but a real one must be reported (exactly once). */
+	std::uint32_t FramesWithoutCamera = 0;
+	bool bReportedNoCamera = false;
+
+	/** Diagnostics: frames rendered, and the signature of the last reported read. */
+	std::uint32_t FramesSeen = 0;
+	bool bReportedNoRegistry = false;
+	std::size_t ReportedPrimitives = static_cast<std::size_t>(-1);
+	bool bReportedCamera = false;
 };
 
 } // namespace Maho

@@ -88,6 +88,10 @@
     {
       "Name": "GameWorld",
       "Enabled": true
+    },
+    {
+      "Name": "PrimitiveRegistry",
+      "Enabled": true
     }
   ]
 }

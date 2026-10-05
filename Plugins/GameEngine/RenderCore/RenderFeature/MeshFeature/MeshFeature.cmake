@@ -21,14 +21,14 @@ target_include_directories(MeshFeature PUBLIC
 	"${ENGINE_DIR}/Plugins/GameEngine/RenderCore/Render/Public"
 	"${ENGINE_DIR}/Plugins/GameEngine/RenderCore/RenderFeature/Scene/Public"
 	"${ENGINE_DIR}/Plugins/Common/Log/Public"
-	"${ENGINE_DIR}/Plugins/GameEngine/GameCore/GameWorld/Public"
+	"${ENGINE_DIR}/Plugins/GameEngine/RenderCore/RenderFeature/PrimitiveRegistry/Public"
 )
 set_target_properties(MeshFeature PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 target_compile_definitions(MeshFeature PRIVATE MAHO_MESHFEATURE_MODULE_EXPORTS)
 target_link_libraries(MeshFeature PUBLIC Maho)
 set_property(TARGET MeshFeature PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>")
 set_target_properties(MeshFeature PROPERTIES OUTPUT_NAME "FMeshFeature" PREFIX "")
-target_link_libraries(MeshFeature PUBLIC Render Scene Log GameWorld)
+target_link_libraries(MeshFeature PUBLIC Render Scene Log PrimitiveRegistry)
 set_target_properties(MeshFeature PROPERTIES FOLDER "Maho/Plugins/GameEngine/RenderCore/RenderFeature")
 source_group(TREE "${CMAKE_CURRENT_LIST_DIR}" FILES ${MeshFeature_PUBLIC_HEADERS} ${MeshFeature_PRIVATE_HEADERS} ${MeshFeature_PRIVATE_SOURCES})
 # -- /MAHOGEN MeshFeature --

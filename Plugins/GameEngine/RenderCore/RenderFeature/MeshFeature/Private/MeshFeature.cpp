@@ -1,13 +1,13 @@
 #include "MeshFeature.h"
 
-#include <GameWorld.h>
 #include <Log.h>
 #include <Scene.h>
 #include <ShaderParameterStruct.h>
 #include <Trace.h>
 
-#include <cmath>
+#include <algorithm>
 #include <cstring>
+#include <utility>
 #include <vector>
 
 namespace Maho
@@ -55,75 +55,6 @@ void main()
 			ERHIDescriptorType::UniformBuffer)
 		SHADER_PARAMETER_ARRAY(float, ObjectMatrix, 16)
 	END_SHADER_PARAMETER_STRUCT()
-
-	// -- matrices: column-major (GLSL mat4 memory order), M[column * 4 + row] ----------------
-
-	void MakePerspective(float FovYRadians, float Aspect, float Near, float Far, float* M)
-	{
-		std::memset(M, 0, sizeof(float) * 16);
-		const float F = 1.0f / std::tan(FovYRadians * 0.5f);
-		M[0] = F / Aspect;
-		// Vulkan clip space is Y-DOWN, so the world's +Y must be flipped here or the image is upside
-		// down. Z maps to [0,1] (Vulkan), which is what picks this form over the GL [-1,1] one.
-		M[5] = -F;
-		M[10] = Far / (Near - Far);
-		M[11] = -1.0f;
-		M[14] = (Far * Near) / (Near - Far);
-	}
-
-	void MakeTranslation(float X, float Y, float Z, float* M)
-	{
-		std::memset(M, 0, sizeof(float) * 16);
-		M[0] = M[5] = M[10] = M[15] = 1.0f;
-		M[12] = X;
-		M[13] = Y;
-		M[14] = Z;
-	}
-
-	void MakeRotationY(float Angle, float* M)
-	{
-		const float C = std::cos(Angle);
-		const float S = std::sin(Angle);
-		std::memset(M, 0, sizeof(float) * 16);
-		M[0] = C;
-		M[2] = -S;
-		M[5] = 1.0f;
-		M[8] = S;
-		M[10] = C;
-		M[15] = 1.0f;
-	}
-
-	void MakeRotationX(float Angle, float* M)
-	{
-		const float C = std::cos(Angle);
-		const float S = std::sin(Angle);
-		std::memset(M, 0, sizeof(float) * 16);
-		M[0] = 1.0f;
-		M[5] = C;
-		M[6] = S;
-		M[9] = -S;
-		M[10] = C;
-		M[15] = 1.0f;
-	}
-
-	/** Out = A * B (both column-major). */
-	void Multiply(const float* A, const float* B, float* Out)
-	{
-		float R[16] = {};
-		for (int Col = 0; Col < 4; ++Col)
-		{
-			for (int Row = 0; Row < 4; ++Row)
-			{
-				float Sum = 0.0f;
-				for (int K = 0; K < 4; ++K)
-				{
-					Sum += A[K * 4 + Row] * B[Col * 4 + K];
-				}
-				R[Col * 4 + Row] = Sum;
-			}
-		}
-		std::memcpy(Out, R, sizeof(R));
-	}
 
 	/**
 	 * A unit cube as SoA arrays matching `FStaticMesh`'s payload: 24 positions/normals (4 per face, so
@@ -185,6 +116,10 @@ void main()
 	{
 		float ViewProj[16];
 	};
+
+	/** How many camera-less frames count as "the game never published one" instead of "this frame the
+	 *  game side had not run yet" (the two collectors are not ordered, so frame 0 races). */
+	constexpr std::uint32_t kNoCameraGraceFrames = 120;
 } // namespace
 
 const char* FMeshShader::GetVertexSource()       { return kVertexShader; }
@@ -206,34 +141,59 @@ FMeshFeature::FMeshFeature()
 	// wrong frame's table (see FDrawTriangleFeature for the long version).
 	MyStage<IRender>().IsWaiting<Scene::FScene>().ForStage<IEndRender>();
 	MyStage<IRender>().IsBlocking<Scene::FScene>().OnStage<IPresent>();
+
+	// The DEMO triangle (`FDrawTriangleFeature`) is a fullscreen triangle that writes NO depth, so the
+	// two `IRender` passes are a plain painter's-order pair and the graph orders nothing: whoever
+	// records second wins. Without this edge the mesh is covered by the triangle about half the runs
+	// (the cube was gone in one screenshot and in front in the next -- same binary). Declared from the
+	// side that knows it, BY NAME, so this feature keeps no build dependency on the demo plugin
+	// (`FUIFeature` declares the same edge the same way).
+	MyStage<IRender>().IsWaiting("FDrawTriangleFeature").ForStage<IRender>();
 }
 
-void FMeshFeature::InitViews(FRender& R, FRenderContext&)
+void FMeshFeature::InitViews(FRender&, FRenderContext&)
 {
-	MAHO_TRACE_STAGE(IInitViews, "Mesh view init", "upload the cube's vertex/index buffers once");
-	EnsureCubeBuffers(R);
+	// Nothing is uploaded here any more: geometry is created LAZILY by mesh name, on the first frame
+	// an actor names it (EnsureMesh). Keeping the stage mounted documents "this feature owns render
+	// resources", and it is the hook a future asset-path preload would use.
+	MAHO_TRACE_STAGE(IInitViews, "Mesh view init", "geometry is created lazily per mesh name (see EnsureMesh)");
 }
 
-void FMeshFeature::EnsureCubeBuffers(FRender& R)
+const FMeshFeature::FMeshBuffers* FMeshFeature::EnsureMesh(FRender& R, Name::FName MeshName)
 {
-	if (CubeVertices.IsValid() && CubeIndices.IsValid())
+	if (const auto It = Meshes.find(MeshName); It != Meshes.end())
 	{
-		return;
+		return &It->second;
 	}
 
+	// -- provider table: mesh NAME -> source geometry ------------------------------------------------
+	// TODO: route this through the asset system (a `Mesh.Cube` name should resolve to an imported
+	// `.casset`), at which point this table becomes "the built-in/no-file fallback" it already is.
 	std::vector<float> Positions;
 	std::vector<float> Normals;
 	std::vector<float> UVs;
 	std::vector<std::uint32_t> Indices;
-	BuildCubeSoA(Positions, Normals, UVs, Indices);
+	if (MeshName == Name::FName("Mesh.Cube"))
+	{
+		BuildCubeSoA(Positions, Normals, UVs, Indices);
+	}
+	else
+	{
+		return nullptr;   // unknown name: reported once by the caller, not per frame
+	}
+
 	if (CubeMesh == nullptr)
 	{
 		CubeMesh = std::make_unique<FCubeMesh>("Mesh.Cube", Positions, Normals, UVs, Indices);
 	}
 
-	// The geometry now comes from the ASSET: everything below is asset -> GPU. Interleaving happens
-	// here because the RHI's vertex attributes carry no binding index (binding 0 is implicit), so an
-	// SoA layout cannot be bound as separate streams.
+	// The geometry comes from the ASSET: everything below is asset -> GPU. Interleaving happens here
+	// because the RHI's vertex attributes carry no binding index (binding 0 is implicit), so an SoA
+	// layout cannot be bound as separate streams. The interleaved SELF is cached (not rebuilt per
+	// frame) even though it is not a render resource -- a name that shows up once should be uploaded
+	// once.
+	FMeshBuffers Buffers;
+
 	const Resource::FStaticMesh& Mesh = *CubeMesh;
 	const std::vector<float>& SrcPositions = Mesh.GetPositions();
 	const std::vector<float>& SrcNormals = Mesh.GetNormals();
@@ -262,7 +222,7 @@ void FMeshFeature::EnsureCubeBuffers(FRender& R)
 		}
 		Vertices.push_back(Vertex);
 	}
-	Indices = SrcIndices;
+	std::vector<std::uint32_t> IndexData = SrcIndices;
 
 	// PERSISTENT, not Transient: these live for the feature's whole lifetime. A Transient handle is
 	// frame-scoped by design (the pool advances its generation at every frame boundary), so holding
@@ -271,27 +231,29 @@ void FMeshFeature::EnsureCubeBuffers(FRender& R)
 	VertexDesc.Size = static_cast<std::uint64_t>(Vertices.size()) * sizeof(FMeshVertex);
 	VertexDesc.Usage = ERHIBufferUsage::Vertex | ERHIBufferUsage::TransferDst;
 	VertexDesc.MemoryUsage = ERHIMemoryUsage::CPUToGPU;
-	CubeVertices = R.CreateBuffer(VertexDesc, ERDGResourceLifetime::Persistent);
+	Buffers.Vertices = R.CreateBuffer(VertexDesc, ERDGResourceLifetime::Persistent);
 
 	FRHIBufferDesc IndexDesc;
-	IndexDesc.Size = static_cast<std::uint64_t>(Indices.size()) * sizeof(std::uint32_t);
+	IndexDesc.Size = static_cast<std::uint64_t>(IndexData.size()) * sizeof(std::uint32_t);
 	IndexDesc.Usage = ERHIBufferUsage::Index | ERHIBufferUsage::TransferDst;
 	IndexDesc.MemoryUsage = ERHIMemoryUsage::CPUToGPU;
-	CubeIndices = R.CreateBuffer(IndexDesc, ERDGResourceLifetime::Persistent);
+	Buffers.Indices = R.CreateBuffer(IndexDesc, ERDGResourceLifetime::Persistent);
 
-	if (!CubeVertices.IsValid() || !CubeIndices.IsValid())
+	if (!Buffers.Vertices.IsValid() || !Buffers.Indices.IsValid())
 	{
-		MAHO_LOG_CORE_ERROR("MeshFeature: cube buffer creation failed");
-		return;
+		MAHO_LOG_CORE_ERROR("MeshFeature: GPU buffers for mesh '{}' could not be created", Mesh.GetPath());
+		return nullptr;
 	}
 
 	// One transfer pass, recorded off the frame graph's pass table: UpdateBuffer writes a host-visible
 	// buffer directly, otherwise it stages the copy. It is submitted by the next IPresent, so the
 	// buffers must be Persistent (see above) -- a frame-external pass outlives a Transient slot.
+	// Registered BEFORE the actor passes that will use it (this runs inside IRender, while the draws
+	// are recorded right after), and the frame's table is submitted in registration order.
 	const std::vector<FMeshVertex> VertexCopy = Vertices;
-	const std::vector<std::uint32_t> IndexCopy = Indices;
-	const FRDGBufferRef VertexRef = CubeVertices;
-	const FRDGBufferRef IndexRef = CubeIndices;
+	const std::vector<std::uint32_t> IndexCopy = IndexData;
+	const FRDGBufferRef VertexRef = Buffers.Vertices;
+	const FRDGBufferRef IndexRef = Buffers.Indices;
 	R.AddPass(ERHICommandListType::Graphics, [VertexRef, IndexRef, VertexCopy, IndexCopy](FRHICommandList& Cmd)
 	{
 		Cmd.UpdateBuffer(VertexRef.GetRHI(), 0,
@@ -300,19 +262,79 @@ void FMeshFeature::EnsureCubeBuffers(FRender& R)
 			static_cast<std::uint64_t>(IndexCopy.size()) * sizeof(std::uint32_t), IndexCopy.data());
 	});
 
-	CubeIndexCount = static_cast<std::uint32_t>(Indices.size());
+	Buffers.IndexCount = static_cast<std::uint32_t>(IndexData.size());
 	MAHO_LOG_CORE_INFO("MeshFeature: mesh '{}' uploaded ({} vertices, {} indices, stride {})",
-		Mesh.GetPath(), static_cast<unsigned>(Vertices.size()), CubeIndexCount, sizeof(FMeshVertex));
+		Mesh.GetPath(), static_cast<unsigned>(Vertices.size()), Buffers.IndexCount, sizeof(FMeshVertex));
+
+	const auto Inserted = Meshes.emplace(MeshName, Buffers);
+	return &Inserted.first->second;
+}
+
+void FMeshFeature::SyncActors(const std::vector<FRenderPrimitive>& Snapshot)
+{
+	std::map<std::uint32_t, FRenderPrimitive> Next;
+	for (const FRenderPrimitive& Primitive : Snapshot)
+	{
+		// Later duplicates of the same id win: the game side owns identity, this side only mirrors it.
+		Next[Primitive.ActorId] = Primitive;
+	}
+
+	if (Next.size() != Actors.size())
+	{
+		MAHO_LOG_CORE_INFO("MeshFeature: actor set is now {} (was {})", Next.size(), Actors.size());
+	}
+	Actors.swap(Next);   // geometry is keyed by mesh name and lives on, so disappearing actors just stop
+}
+
+void FMeshFeature::ReportRead(std::size_t PrimitiveCount, bool bCamera, std::uint64_t Publishes)
+{
+	if (PrimitiveCount == ReportedPrimitives && bCamera == bReportedCamera)
+	{
+		return;   // state unchanged (the publish counter is a per-line reading, not part of the key)
+	}
+	ReportedPrimitives = PrimitiveCount;
+	bReportedCamera = bCamera;
+
+	MAHO_LOG_CORE_INFO("MeshFeature: read {} primitive(s) from the mirror table, camera={} (mirror publishes={})",
+		PrimitiveCount, bCamera ? "published" : "MISSING", Publishes);
 }
 
 void FMeshFeature::Render(FRender& R, FRenderContext&)
 {
-	MAHO_TRACE_STAGE(IRender, "Mesh pass", "upload the view constants and record the cube draw");
+	MAHO_TRACE_STAGE(IRender, "Mesh pass", "read the mirror table and record one pass per actor");
+
+	++FramesSeen;
+
+	// The mirror table: what to draw + the camera to draw it with. It is the ONLY game/render
+	// interface -- this feature knows no entity, no component and no transform.
+	FPrimitiveRegistry* Registry = GetPrimitiveRegistry();
+	if (Registry == nullptr)
+	{
+		// Not a race this time: this is "the table's IInit has not run" (a different collector, no
+		// ordering edge). Reported the first time and again when it clears -- a feature that never
+		// reads anything must leave a trace of why, not just draw nothing.
+		if (!bReportedNoRegistry)
+		{
+			bReportedNoRegistry = true;
+			MAHO_LOG_CORE_WARN("MeshFeature: GetPrimitiveRegistry() is NULL (frame {}) -- the mirror table frame "
+				"has not initialized; nothing is read or drawn this frame", FramesSeen);
+		}
+		return;
+	}
+	if (bReportedNoRegistry)
+	{
+		bReportedNoRegistry = false;
+		MAHO_LOG_CORE_INFO("MeshFeature: primitive registry available (frame {}) -- reading the mirror table",
+			FramesSeen);
+	}
+
+	std::shared_ptr<const std::vector<FRenderPrimitive>> Snapshot = Registry->ReadLatest();
+	std::shared_ptr<const FRenderCamera> Camera = Registry->ReadLatestCamera();
 
 	Scene::FScene* Scene = Scene::GetScene();
-	if (Scene == nullptr || !Scene->GetSceneColor().IsValid() || !CubeVertices.IsValid())
+	if (Scene == nullptr || !Scene->GetSceneColor().IsValid())
 	{
-		return;   // scene target or geometry not ready this frame
+		return;   // scene target not ready this frame
 	}
 
 	const std::uint32_t TargetW = Scene->GetSceneColor().GetWidth();
@@ -323,42 +345,34 @@ void FMeshFeature::Render(FRender& R, FRenderContext&)
 		return;
 	}
 
-	const float Delta = GameWorld::GetGameWorld() != nullptr
-		? GameWorld::GetGameWorld()->GetDeltaSeconds()
-		: 0.f;
-	SpinAngle += Delta * 0.6f;
-
-	// Camera: fixed eye pulled back along +Z looking down -Z, so the "view" is just a translation.
-	// Perspective, not ortho -- this is the first place in the engine that needs one.
-	FViewConstants ViewConstants{};
-	float Projection[16] = {};
-	float View[16] = {};
-	MakePerspective(1.0471975512f /*60 deg*/, static_cast<float>(TargetW) / static_cast<float>(TargetH),
-		0.1f, 100.0f, Projection);
-	MakeTranslation(0.f, 0.f, -3.0f, View);
-	Multiply(Projection, View, ViewConstants.ViewProj);
-
-	// The per-frame uniform buffer is TRANSIENT: a fresh slot each frame, recycled only after the
-	// frame's fence, so writing it while the previous frame is still reading is safe by construction.
-	FRHIBufferDesc UniformDesc;
-	UniformDesc.Size = sizeof(FViewConstants);
-	UniformDesc.Usage = ERHIBufferUsage::Uniform;
-	UniformDesc.MemoryUsage = ERHIMemoryUsage::CPUToGPU;
-	const FRDGBufferRef ViewBuffer = R.CreateBuffer(UniformDesc, ERDGResourceLifetime::Transient);
-	if (!ViewBuffer.IsValid())
+	SyncActors(Snapshot ? *Snapshot : std::vector<FRenderPrimitive>{});
+	if (Actors.empty())
 	{
-		MAHO_LOG_CORE_ERROR("MeshFeature: view-constant buffer creation failed");
-		return;
+		ReportRead(0, Camera != nullptr, Registry->GetPublishCount());
+		return;   // the game side says there is nothing to draw (an empty list is not an error)
 	}
 
-	// Per-object transform: rotate about Y (spin) with a fixed tilt about X, so all three axes of the
-	// matrix are exercised and the spin is visible.
-	float RotY[16] = {};
-	float RotX[16] = {};
-	float ObjectMatrix[16] = {};
-	MakeRotationY(SpinAngle, RotY);
-	MakeRotationX(0.42f, RotX);
-	Multiply(RotY, RotX, ObjectMatrix);
+	if (Camera == nullptr)
+	{
+		ReportRead(Actors.size(), false, Registry->GetPublishCount());
+		// No camera -> NO draw (a zero/hardcoded camera would silently show the wrong thing). Reported
+		// ONCE after a grace period: frame 0 legitimately races the game side, a camera that never
+		// arrives (or disappears later) does not, and either way a per-frame log is not a report.
+		++FramesWithoutCamera;
+		if (!bReportedNoCamera && FramesWithoutCamera > kNoCameraGraceFrames)
+		{
+			bReportedNoCamera = true;
+			MAHO_LOG_CORE_ERROR(
+				"MeshFeature: {} actors and no camera published for {} frames -- skipping the draw "
+				"(the game side must publish a camera; reported once)", Actors.size(), FramesWithoutCamera);
+		}
+		return;
+	}
+	// A camera arrived: the grace period restarts, and a LATER disappearance gets its own report.
+	FramesWithoutCamera = 0;
+	bReportedNoCamera = false;
+
+	ReportRead(Actors.size(), true, Registry->GetPublishCount());
 
 	TShaderHandle<FMeshShader> Shader = R.TryGetShader<FMeshShader>();
 	FRHIShaderModule* VS = nullptr;
@@ -371,6 +385,23 @@ void FMeshFeature::Render(FRender& R, FRenderContext&)
 	if (VS == nullptr || FS == nullptr)
 	{
 		MAHO_LOG_CORE_ERROR("MeshFeature: shader not ready");
+		return;
+	}
+
+	// The camera's view-projection, straight from the snapshot -- no matrix math on this side.
+	FViewConstants ViewConstants{};
+	std::memcpy(ViewConstants.ViewProj, Camera->ViewProj, sizeof(ViewConstants.ViewProj));
+
+	// The per-frame uniform buffer is TRANSIENT: a fresh slot each frame, recycled only after the
+	// frame's fence, so writing it while the previous frame is still reading is safe by construction.
+	FRHIBufferDesc UniformDesc;
+	UniformDesc.Size = sizeof(FViewConstants);
+	UniformDesc.Usage = ERHIBufferUsage::Uniform;
+	UniformDesc.MemoryUsage = ERHIMemoryUsage::CPUToGPU;
+	const FRDGBufferRef ViewBuffer = R.CreateBuffer(UniformDesc, ERDGResourceLifetime::Transient);
+	if (!ViewBuffer.IsValid())
+	{
+		MAHO_LOG_CORE_ERROR("MeshFeature: view-constant buffer creation failed");
 		return;
 	}
 
@@ -412,43 +443,77 @@ void FMeshFeature::Render(FRender& R, FRenderContext&)
 	PipelineDesc.bDepthTest = true;
 	PipelineDesc.bDepthWrite = true;   // the demo triangle leaves this off; a mesh needs it
 
-	FMeshParameters* Params = R.AllocParameters<FMeshParameters>();
-	Params->ViewConstants = ViewBuffer;
-	// The push block is filled BEFORE AddPass: the typed path packs it into the pipeline's push range
-	// while it records, so writing it from inside the lambda below could be too late.
-	std::memcpy(Params->ObjectMatrix, ObjectMatrix, sizeof(ObjectMatrix));
-
-	// Buffers are captured BY VALUE (the lambda may run when the pass is submitted, not here), and the
-	// view-constant upload rides in the same list as the draw, so it is ordered before it.
-	const FRDGBufferRef VertexRef = CubeVertices;
-	const FRDGBufferRef IndexRef = CubeIndices;
-	const std::uint32_t IndexCount = CubeIndexCount;
-	MAHO_TRACE_SECTION("record the mesh draw pass", nullptr);
-	R.AddPass(ERHICommandListType::Graphics, PipelineDesc, Target, Params,
-		[VertexRef, IndexRef, IndexCount, ViewBuffer, ViewConstants, TargetW, TargetH](FRHICommandList& Cmd)
+	for (const auto& [ActorId, Primitive] : Actors)
+	{
+		// Geometry is per MESH NAME: several actors sharing one mesh share one buffer pair.
+		const FMeshBuffers* Mesh = EnsureMesh(R, Primitive.Mesh);
+		if (Mesh == nullptr)
 		{
-			Cmd.UpdateBuffer(ViewBuffer.GetRHI(), 0, sizeof(FViewConstants), &ViewConstants);
+			if (std::find(UnresolvedMeshes.begin(), UnresolvedMeshes.end(), Primitive.Mesh) == UnresolvedMeshes.end())
+			{
+				UnresolvedMeshes.push_back(Primitive.Mesh);
+				MAHO_LOG_CORE_ERROR("MeshFeature: actor {} names mesh '{}', which has no provider -- skipped",
+					ActorId, std::string(Primitive.Mesh.ToString()));
+			}
+			continue;
+		}
 
-			Cmd.SetViewport(0.0f, 0.0f, static_cast<float>(TargetW), static_cast<float>(TargetH));
-			Cmd.SetScissor(0, 0, TargetW, TargetH);
-			Cmd.BindVertexBuffer(0, VertexRef.GetRHI(), 0);
-			Cmd.BindIndexBuffer(IndexRef.GetRHI(), 0, true);
-			Cmd.DrawIndexed(IndexCount, 1, 0, 0, 0);
-		});
+		FMeshParameters* Params = R.AllocParameters<FMeshParameters>();
+		if (Params == nullptr)
+		{
+			continue;
+		}
+		Params->ViewConstants = ViewBuffer;
+		// The push block is filled BEFORE AddPass: the typed path packs it into the pipeline's push
+		// range while it records, so writing it from inside the lambda below could be too late. One
+		// AllocParameters call per actor -- the pool is a bump allocator, so each actor's matrix has
+		// its own storage.
+		std::memcpy(Params->ObjectMatrix, Primitive.ObjectMatrix, sizeof(Primitive.ObjectMatrix));
+
+		// Buffers are captured BY VALUE (the lambda may run when the pass is submitted, not here), and
+		// the view-constant upload rides in EVERY actor's list: passes record in parallel, so an
+		// upload that only lived in one of them would not be ordered against the others. The value is
+		// identical in each, so the redundancy is free of consequence.
+		const FRDGBufferRef VertexRef = Mesh->Vertices;
+		const FRDGBufferRef IndexRef = Mesh->Indices;
+		const std::uint32_t IndexCount = Mesh->IndexCount;
+		MAHO_TRACE_SECTION("record the mesh draw pass", nullptr);
+		R.AddPass(ERHICommandListType::Graphics, PipelineDesc, Target, Params,
+			[VertexRef, IndexRef, IndexCount, ViewBuffer, ViewConstants, TargetW, TargetH](FRHICommandList& Cmd)
+			{
+				Cmd.UpdateBuffer(ViewBuffer.GetRHI(), 0, sizeof(FViewConstants), &ViewConstants);
+
+				Cmd.SetViewport(0.0f, 0.0f, static_cast<float>(TargetW), static_cast<float>(TargetH));
+				Cmd.SetScissor(0, 0, TargetW, TargetH);
+				Cmd.BindVertexBuffer(0, VertexRef.GetRHI(), 0);
+				Cmd.BindIndexBuffer(IndexRef.GetRHI(), 0, true);
+				Cmd.DrawIndexed(IndexCount, 1, 0, 0, 0);
+			});
+	}
 }
 
 void FMeshFeature::PreUnInstall(FRender& R, FRenderContext&)
 {
 	MAHO_TRACE_STAGE(IPreUnInstall, "Mesh feature teardown", "release the geometry buffers");
-	if (CubeVertices.IsValid())
+
+	// The geometry cache outlives individual actors (it is keyed by mesh name), so it is released
+	// here, once -- not when the last actor using it disappears.
+	for (auto& [MeshName, Buffers] : Meshes)
 	{
-		R.ReleaseBuffer(CubeVertices);
+		if (Buffers.Vertices.IsValid())
+		{
+			R.ReleaseBuffer(Buffers.Vertices);
+		}
+		if (Buffers.Indices.IsValid())
+		{
+			R.ReleaseBuffer(Buffers.Indices);
+		}
+		Buffers.IndexCount = 0;
 	}
-	if (CubeIndices.IsValid())
-	{
-		R.ReleaseBuffer(CubeIndices);
-	}
-	CubeIndexCount = 0;
+	Meshes.clear();
+	Actors.clear();
+	UnresolvedMeshes.clear();
+	CubeMesh.reset();
 }
 
 } // namespace Maho

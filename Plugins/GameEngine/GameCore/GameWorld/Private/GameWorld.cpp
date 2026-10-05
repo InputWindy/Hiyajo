@@ -3,6 +3,7 @@
 // UISystem is a peer WORLD SYSTEM installed here (sub-landlord). Include only in
 // the private cpp so GameWorld.h stays free of world-system types.
 #include <UISystem.h>
+#include <MeshRenderSystem.h>
 
 #include <Trace.h>
 #include <vector>
@@ -98,6 +99,13 @@ void FGameWorld::Initialize(FEngineBase&, FEngineContext&)
 	// placeholder) and registers the view in the UI view registry, which the render
 	// feature translates once per frame.
 	Install<GameWorld::FUISystem>();
+
+	// MeshRenderSystem is the game side of the render mirror: it owns the mesh/camera/script
+	// components, drives the Lua gameplay, and publishes the frame's primitives + camera. It is
+	// installed into THIS collector (the world's own), so its IOnInstalled/IUpdate/IPreUnInstall run
+	// in the world's stage groups -- the render side is a different collector and reads the mirror
+	// table instead (no ordering edge between the two).
+	Install<GameWorld::FMeshRenderSystem>();
 }
 
 void FGameWorld::Tick(FEngineBase&, FEngineContext&)

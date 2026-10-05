@@ -23,7 +23,6 @@
     "DrawTriangleFeature",
     "UIFeature",
     "MeshFeature",
-    "PrimitiveRegistry",
     "ExampleEditor"
   ]
 }

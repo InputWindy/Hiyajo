@@ -32,14 +32,28 @@ struct FGameWorldContext
 };
 
 /**
- * Sample component (demonstrates the object model; add your own component structs
- * / classes in your systems).
+ * Transform component - a FULL TRS, still a plain POD.
+ *
+ * `X/Y/Z` stay the POSITION (source compatible with the old position-only sample: `FTransform{1,2,3}`
+ * still compiles and still means "position 1,2,3"). Rotation is Euler radians, scale defaults to 1.
+ *
+ * The COMPOSITION of these numbers into a matrix is game semantics and therefore lives on the GAME
+ * side (see `MeshRenderSystem`): the object model stays a data record, and the render side only ever
+ * sees the 16 floats it was handed.
  */
 struct FTransform
 {
-	float X = 0.f;
+	float X = 0.f;              // position
 	float Y = 0.f;
 	float Z = 0.f;
+
+	float RotationX = 0.f;      // Euler radians, applied X then Y then Z (R = Rz * Ry * Rx)
+	float RotationY = 0.f;
+	float RotationZ = 0.f;
+
+	float ScaleX = 1.f;         // 1 == "no scaling" (so a bare FTransform is an identity transform)
+	float ScaleY = 1.f;
+	float ScaleZ = 1.f;
 };
 
 // -- ECS world sub-stage interfaces (implemented by the world's systems) ----------

@@ -19,7 +19,18 @@ FPrimitiveRegistry* GetPrimitiveRegistry()
 	return GPrimitiveRegistry;
 }
 
-FPrimitiveRegistry::FPrimitiveRegistry() = default;
+FPrimitiveRegistry::FPrimitiveRegistry()
+{
+	// The two frames are installed by the SAME batch (both are root children of the host, see
+	// PluginManager.json), so their IInit nodes are dispatched concurrently and nothing orders them.
+	// `MAHO_LOG_CORE_INFO` below calls `GetLog()`, which FLog publishes in ITS IInit -- hence the edge:
+	// "my IInit waits for FLog@IInit, this frame". Without it the log call inside a Debug build trips
+	// `MAHO_ENSURE_NOT_NULL` (a hard break) and in Release it silently prints nothing.
+	// Any layer that logs during IInit declares this same edge; the direction is declared by the
+	// consumer, never by FLog.
+	MyStage<IInit>().IsWaiting<FLog>().ForStage<IInit>();
+}
+
 FPrimitiveRegistry::~FPrimitiveRegistry() = default;
 
 void FPrimitiveRegistry::Initialize(FEngineBase&, FEngineContext&)
@@ -33,6 +44,7 @@ void FPrimitiveRegistry::Shutdown(FEngineBase&, FEngineContext&)
 	{
 		std::lock_guard<std::mutex> Lock(Mutex);
 		Latest.reset();
+		LatestCamera.reset();
 		PublishCount = 0;
 	}
 	GPrimitiveRegistry = nullptr;
@@ -58,6 +70,21 @@ std::uint64_t FPrimitiveRegistry::GetPublishCount() const
 {
 	std::lock_guard<std::mutex> Lock(Mutex);
 	return PublishCount;
+}
+
+void FPrimitiveRegistry::PublishCamera(FRenderCamera Camera)
+{
+	// Same construction as Publish(): build the immutable value off the lock, then swap the pointer.
+	// No publish counter here -- the camera rides along with the primitive channel, and a second
+	// counter would only invite "which one is the frame counter?" questions.
+	std::lock_guard<std::mutex> Lock(Mutex);
+	LatestCamera = std::make_shared<const FRenderCamera>(Camera);
+}
+
+std::shared_ptr<const FRenderCamera> FPrimitiveRegistry::ReadLatestCamera() const
+{
+	std::lock_guard<std::mutex> Lock(Mutex);
+	return LatestCamera;
 }
 
 } // namespace Maho

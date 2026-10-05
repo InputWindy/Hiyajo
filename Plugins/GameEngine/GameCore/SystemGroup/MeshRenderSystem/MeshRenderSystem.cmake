@@ -22,13 +22,15 @@ target_include_directories(MeshRenderSystem PUBLIC
 	"${ENGINE_DIR}/Plugins/GameEngine/RenderCore/RenderFeature/PrimitiveRegistry/Public"
 	"${ENGINE_DIR}/Plugins/Common/Name/Public"
 	"${ENGINE_DIR}/Plugins/Common/Log/Public"
+	"${ENGINE_DIR}/Plugins/GameEngine/EngineCore/Script/Public"
+	"${ENGINE_DIR}/Plugins/GameEngine/EngineCore/Platform/Public"
 )
 set_target_properties(MeshRenderSystem PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 target_compile_definitions(MeshRenderSystem PRIVATE MAHO_MESHRENDERSYSTEM_MODULE_EXPORTS)
 target_link_libraries(MeshRenderSystem PUBLIC Maho)
 set_property(TARGET MeshRenderSystem PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>")
 set_target_properties(MeshRenderSystem PROPERTIES OUTPUT_NAME "FMeshRenderSystem" PREFIX "")
-target_link_libraries(MeshRenderSystem PUBLIC GameWorld PrimitiveRegistry Name Log)
+target_link_libraries(MeshRenderSystem PUBLIC GameWorld PrimitiveRegistry Name Log Script Platform)
 set_target_properties(MeshRenderSystem PROPERTIES FOLDER "Maho/Plugins/GameEngine/GameCore/SystemGroup")
 source_group(TREE "${CMAKE_CURRENT_LIST_DIR}" FILES ${MeshRenderSystem_PUBLIC_HEADERS} ${MeshRenderSystem_PRIVATE_HEADERS} ${MeshRenderSystem_PRIVATE_SOURCES})
 # -- /MAHOGEN MeshRenderSystem --
