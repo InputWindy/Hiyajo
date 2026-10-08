@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Core/BuildConfig.h>
+#include <Core/TypeList.h>
 
 // Trace -- CPU scope tracing for the profiling UI. It lives in the LOG plugin: the log plugin owns
 // the process's diagnostics (the sinks + the `r.Trace` CVar), and the trace file is one of them, so
@@ -307,31 +308,21 @@ private:
 
 /**
  * The stage the scheduler runs BEFORE `Stage` inside the frame that owns it, or null when nothing
- * does. Deduced at COMPILE TIME from the frame's own `IPipeline<TStages...>` base -- that list names
- * exactly the stages the frame mounts, in the order the scheduler chains them, so the predecessor in
- * it IS the in-frame chain edge.
+ * does. Deduced at COMPILE TIME from the frame's own `IPipeline<TStages...>` base (`TFrameStageList`,
+ * Core/TypeList.h) -- that list names exactly the stages the frame mounts, in the order it chains
+ * them, so the predecessor in it IS the in-frame chain edge the frame declares for itself
+ * (`MAHO_FRAME_STAGE_CHAIN` in Engine/Frame.h expands the very same adjacent pairs).
  *
- * Why deduce instead of ask: a frame never DECLARES that edge (`FFrameBridge::Build` emits it as a
- * structural edge), so it cannot appear in GetDependencies() and the arrow would be missing from
- * every stage inside a frame. The list is the frame's own declaration, so this is not a guess.
+ * Why deduce instead of read back: the trace wants the predecessor of the stage whose bar it is
+ * opening, and the declaration lives on the NEXT stage's entry (an edge is stored on the consumer).
+ * Reading it back would mean scanning GetDependencies() of every stage for "whichever one names me",
+ * and the answer would still be a search rather than the frame's own ordered list.
  *
  * The fallback covers a host (FEngineBase) whose lifecycle stages are not a pipeline list: it simply
  * reports "no predecessor" instead of failing to compile.
  */
 namespace Maho
 {
-
-template <typename TFrame, typename = void>
-struct TFrameStageList
-{
-	using Type = TTypeList<>;
-};
-
-template <typename TFrame>
-struct TFrameStageList<TFrame, std::void_t<typename TFrame::TStages>>
-{
-	using Type = typename TFrame::TStages;
-};
 
 template <typename... S>
 inline const std::type_info* StagePredecessorIn(TTypeList<S...>, const std::type_info& Stage)
