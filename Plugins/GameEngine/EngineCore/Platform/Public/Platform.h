@@ -294,12 +294,22 @@ private:
 	 *  the key was still down). */
 	std::vector<MInputEvent> FrameEvents;
 
-	/** Published input ring: one slot per in-flight frame PLUS margin. The margin exists because
-	 *  consumers read by INDEX now: a reader may be a couple of frames behind (a stage of a child
-	 *  collector runs in its own frame graph), and the ring must still hold the frame it owes itself.
-	 *  A consumer that falls further than this SKIPS frames -- and gets told, because silently
-	 *  applying an older frame's input is worse than dropping it. */
-	static constexpr std::uint32_t kInputRingSlots = MAHO_FRAMES_IN_FLIGHT + 4;
+	/** Published input ring: one slot per in-flight frame PLUS a measured margin.
+	 *
+	 *  The margin is NOT for stalls -- production is 1:1 with the frame loop (the publish happens in
+	 *  `FPlatform::Tick`, and the pump is marshalled onto the platform thread *and waited on*), so a
+	 *  stalled frame publishes nothing and no backlog can accumulate.
+	 *
+	 *  It is for the STRUCTURAL offset between the two graphs: this stage publishes in the engine graph,
+	 *  while the consumers (the UI stages) are children of the render collector and the render frames
+	 *  PIPELINE -- so a consumer's cursor sits a few frames behind the producer by construction, not by
+	 *  being late. Measured (Release, steady state): with the ring at exactly `MAHO_FRAMES_IN_FLIGHT` a
+	 *  consumer reading by index was repeatedly 3 frames behind and its input frames were EVICTED, i.e.
+	 *  the ring had to hold the offset plus headroom. Keep the offset in the ring's name, not in a magic
+	 *  number: a consumer that falls behind by more than this SKIPS frames and is TOLD (ReadInputFrame),
+	 *  because silently applying an older frame's input to the wrong frame is worse than dropping it. */
+	static constexpr std::uint32_t kInputConsumersPipelineOffset = 3;
+	static constexpr std::uint32_t kInputRingSlots = MAHO_FRAMES_IN_FLIGHT + kInputConsumersPipelineOffset;
 	FInputFrame InputRing[kInputRingSlots];
 	std::uint32_t InputRingWrite = 0;
 	std::uint64_t InputFrameCounter = 0;                      // writer-owned

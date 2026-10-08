@@ -81,12 +81,6 @@ public:
 	 *  it as the viewport background via imgui::image. Null until InitViews creates it
 	 *  on the first frame with a valid canvas. */
 	[[nodiscard]] FRDGTextureRef GetUIRenderTarget() const { return UIRenderTarget; }
-	/** Editor-build handoff: flip UIRenderTarget from COLOR_ATTACHMENT (where the UI just
-	 *  wrote it) to SHADER_READ_ONLY so pass3 can imgui::image it as the viewport present
-	 *  target (the RHI never auto-transitions and descriptor writes hardcode SHADER_READ_ONLY).
-	 *  Called at the END of RenderUI when the present target is sampled downstream. No-op if
-	 *  it is not currently COLOR_ATTACHMENT. */
-	void TransitionUIRenderTargetForSampling(FRender& R);
 
 	/** This feature's OWN ImGui context. In an editor build the editor feature (pass0
 	 *  IEditorInput) needs the GAME context's IO to feed re-based input into, so it fetches
@@ -164,14 +158,11 @@ private:
 	 *  surface is fully redrawn each frame); Present() blits it to the swapchain. Pool-owned
 	 *  persistent, released at PreUnInstall. */
 	FRDGTextureRef UIRenderTarget;
-	/** Layout tracker for UIRenderTarget. It doubles as both a dynamic-rendering color
-	 *  attachment (RenderUI draws it) AND, in an editor build, a sampled mirror (pass3's
-	 *  viewport imgui::image of the present target). The two uses need opposite layouts and
-	 *  the RHI never auto-transitions, so the layout is flipped each frame: RenderUI leaves
-	 *  it in COLOR_ATTACHMENT, then TransitionUIRenderTargetForSampling() flips it to
-	 *  SHADER_READ_ONLY so pass3 can sample it; RenderUI's head flips it back before any
-	 *  write. A fresh target (never transitioned) is Common and is brought up once. */
-	bool bUIRenderTargetLayoutSR = false;
+	/** No layout bookkeeping here: UIRenderTarget's layout is owned by the RHI's per-texture
+	 *  state machine. RenderUI writes it as a color attachment (BeginRendering brings it into
+	 *  the attachment layout from whatever it was in), and a downstream sampled read (pass3's
+	 *  viewport imgui::image of the present target) requests the sampled state through its own
+	 *  pass -- the derived read set -- so that transition lands in pass3's command buffer. */
 	/** The translated ImDrawData->FDrawList for the CURRENT frame. Filled at InitViews
 	 *  (the whole ImGui frame lifecycle lives there; GPU buffers are uploaded here),
 	 *  drawn at RenderUI (same graph, self-progression). A member so the merged

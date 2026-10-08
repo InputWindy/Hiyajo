@@ -6,6 +6,7 @@
     "Render",
     "Scene",
     "Log",
-    "PrimitiveRegistry"
+    "PrimitiveRegistry",
+    "ShaderLibrary"
   ]
 }

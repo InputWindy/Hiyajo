@@ -619,17 +619,11 @@ void FExampleEditor::InitEditorViews(FRender& R)
 				MAHO_LOG_CORE_ERROR("ExampleEditor: EditorRT creation failed");
 				return;
 			}
-			// EditorRT leaves create as UNDEFINED but is used as a dynamic-rendering color
-			// attachment (BeginRendering declares COLOR_ATTACHMENT and never auto-transitions).
-			// Bring it to COLOR_ATTACHMENT_OPTIMAL once, now, so RenderUI's BeginRendering and
-			// PresentTexture's "is a color attachment" barrier find it legal.
-			{
-				FRHITexture* RT = EditorRT.GetRHI();
-				R.AddPass(ERHICommandListType::Graphics, [RT](FRHICommandList& Cmd)
-				{
-					Cmd.TransitionTexture(RT, ERHIResourceState::Common, ERHIResourceState::RenderTarget);
-				});
-			}
+			// EditorRT leaves create as UNDEFINED; no promotion pass is recorded for it. It is
+			// used as a dynamic-rendering color attachment, and RenderEditorUI's BeginRendering
+			// requests that state from the RHI's per-texture tracker -- and PresentTexture
+			// requests the state IT needs. A hand-recorded Common -> RenderTarget pass here would
+			// be a second source of truth for a layout the RHI already tracks.
 		}
 	}
 
@@ -1052,12 +1046,11 @@ void FExampleEditor::RenderEditorUI(FRender& R)
 	PipelineDesc.AttachmentBlends = { Blend };
 
 	// The editor draws only its own ImGui content into EditorRT, and its viewport window
-	// samples the live present target (the game composite UIRenderTarget, flipped to
-	// SHADER_READ_ONLY by pass2 for exactly this sampled read). Sample it here. No layout
-	// re-flip is needed: this frame presents EditorRT (below), so UIRenderTarget stays in
-	// SHADER_READ_ONLY until the game UI's next RenderUI head flips it back to
-	// COLOR_ATTACHMENT before it writes again -- the RHI never auto-transitions, so the
-	// editor must NOT try to reuse it as a render target itself.
+	// samples the live present target (the game composite UIRenderTarget). That sampled read is
+	// declared by THIS pass's draw list (the present-target ImTextureID resolves to a per-batch
+	// CombinedImageSampler binding of GetPresentTarget()), so AddPass' read set requests the
+	// sampled state in this very command buffer, right before the draws -- no layout hand-off from
+	// the game UI's pass, and none back: EditorRT is the present target after this pass.
 	R.AddPass(ERHICommandListType::Graphics, PipelineDesc, Target, Params, DrawList);
 
 	// Done with the list's per-frame GPU refs (the merged VB/IB) the moment the draw pass above has

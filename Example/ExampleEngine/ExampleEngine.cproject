@@ -92,6 +92,10 @@
     {
       "Name": "PrimitiveRegistry",
       "Enabled": true
+    },
+    {
+      "Name": "ShaderLibrary",
+      "Enabled": true
     }
   ]
 }

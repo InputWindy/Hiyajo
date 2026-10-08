@@ -96,7 +96,6 @@ void FScene::PreUnInstall(FRender& R, FRenderContext& Frame)
 	}
 	SceneColor = {};
 	SceneDepth = {};
-	SceneColorLayout = ESceneColorLayout::Undefined;
 	CachedWidth = 0;
 	CachedHeight = 0;
 }
@@ -193,19 +192,11 @@ void FScene::EnsureTargets(FRender& R)
 		}
 	}
 
-	// Dynamic rendering needs the attachments in the correct layout before the
-	// first BeginRendering. The transition is recorded at the START of this
-	// feature's own command list (the first list to use the targets), not the
-	// frame buffer -- see Render().
-	bTargetsNeedTransition = true;
-	// SceneColor was just (re)created: its native is born VK_IMAGE_LAYOUT_UNDEFINED,
-	// but SceneColorLayout still holds the PREVIOUS target's value (RenderTarget after
-	// a normal frame). If it is not reset here, the reactive Common -> RenderTarget
-	// transition in Render() is skipped and every frame afterwards renders into an
-	// image the validator still tracks as UNDEFINED (VUID-vkCmdBeginRendering-
-	// pRenderingInfo-09592), and the downstream sampling flip chain desyncs. Depth is
-	// already handled by bTargetsNeedTransition; color needs its own flag reset.
-	SceneColorLayout = ESceneColorLayout::Undefined;
+	// No layout bookkeeping survives here: both of these targets are render ATTACHMENTS, so
+	// BeginRendering requests their attachment state from the RHI's per-texture tracker (a fresh
+	// native's tracked layout is UNDEFINED, which is exactly the oldLayout a first transition
+	// needs). The sampled side is the READING pass's business: its own read set requests the
+	// sampled state, in its own command buffer -- see FUIFeature::RenderUI.
 
 	CachedWidth = W;
 	CachedHeight = H;
@@ -219,40 +210,19 @@ void FScene::Render(FRender& R, FRenderContext& Frame)
 	// the list, Begin/End it, and submits at this call site -- so the clear runs in
 	// the IRender stage). Draw features target the scene after me: their IRender is
 	// ordered after my IEndRender (stage deps), which is after this submit, so the
-	// clear reaches the queue before every draw. Fresh targets get their initial
-	// layout transition at the start.
+	// clear reaches the queue before every draw.
+	//
+	// No transition is recorded before BeginRendering any more: BeginRendering requests the
+	// color/depth ATTACHMENT state itself, and the RHI derives the barrier from what the
+	// texture is actually in (UNDEFINED for a fresh target, SHADER_READ_ONLY if a downstream
+	// pass sampled it last frame). A LoadOp::Load pass therefore keeps its contents, because
+	// the barrier's oldLayout is the TRACKED layout rather than an assumption.
 	if (!SceneColor.IsValid())
 	{
 		return;
 	}
 	R.AddPass(ERHICommandListType::Graphics, [&](FRHICommandList& Cmd)
 	{
-		// SceneColor is both a render target (this clear / downstream draws) and, in an
-		// editor build, a sampled mirror (the viewport reads it as SHADER_READ_ONLY). The
-		// two uses need opposite layouts, so the layout is toggled each frame: an editor
-		// UI compose pass flips it to SHADER_READ_ONLY (via TransitionSceneColorForSampling)
-		// and back; here we flip it back to COLOR_ATTACHMENT before any scene write. A
-		// fresh target (never transitioned) is Common/UNDEFINED and must be brought up once.
-		if (SceneColor.GetRHI() != nullptr)
-		{
-			if (SceneColorLayout == ESceneColorLayout::ShaderResource)
-			{
-				Cmd.TransitionTexture(SceneColor.GetRHI(), ERHIResourceState::ShaderResource, ERHIResourceState::RenderTarget);
-			}
-			else if (SceneColorLayout == ESceneColorLayout::Undefined)
-			{
-				Cmd.TransitionTexture(SceneColor.GetRHI(), ERHIResourceState::Common, ERHIResourceState::RenderTarget);
-			}
-			// RenderTarget: already there, no-op.
-			SceneColorLayout = ESceneColorLayout::RenderTarget;
-		}
-
-		if (bTargetsNeedTransition && SceneDepth.GetRHI() != nullptr)
-		{
-			bTargetsNeedTransition = false;
-			Cmd.TransitionTexture(SceneDepth.GetRHI(), ERHIResourceState::Common, ERHIResourceState::DepthWrite);
-		}
-
 		FRHIRenderingAttachmentInfo Color;
 		Color.View = SceneColor.GetView();
 		Color.LoadOp = ERHILoadOp::Clear;
@@ -314,39 +284,6 @@ void FScene::Present(FRender& R, FRenderContext& Frame)
 	// order now, while the cross-frame edge in the ctor is what keeps the next frame's head off
 	// this frame's opened swapchain state (one frame buffer, one fence, one acquired image).
 	R.EndSwapchainFrame();
-}
-
-void FScene::TransitionSceneColorForSampling(FRender& R)
-{
-	MAHO_TRACE_SECTION("transition scene color for sampling", nullptr);
-	// SceneColor leaves RenderTarget -> ShaderResource so a later sampled use (the
-	// editor viewport mirror) binds it legally. AddPass submits at this call site, so
-	// the transition is queued on the graphics queue BEFORE the UI compose pass that
-	// samples it -- same queue, ordered submit, validation-layer layout tracking agrees.
-	if (SceneColor.IsValid() && SceneColorLayout == ESceneColorLayout::RenderTarget)
-	{
-		FRHITexture* Tex = SceneColor.GetRHI();
-		R.AddPass(ERHICommandListType::Graphics, [Tex](FRHICommandList& Cmd)
-		{
-			Cmd.TransitionTexture(Tex, ERHIResourceState::RenderTarget, ERHIResourceState::ShaderResource);
-		});
-		SceneColorLayout = ESceneColorLayout::ShaderResource;
-	}
-}
-
-void FScene::TransitionSceneColorForRendering(FRender& R)
-{
-	MAHO_TRACE_SECTION("transition scene color back to rendering", nullptr);
-	// Undo the sampling flip so the next scene write can target COLOR_ATTACHMENT again.
-	if (SceneColor.IsValid() && SceneColorLayout == ESceneColorLayout::ShaderResource)
-	{
-		FRHITexture* Tex = SceneColor.GetRHI();
-		R.AddPass(ERHICommandListType::Graphics, [Tex](FRHICommandList& Cmd)
-		{
-			Cmd.TransitionTexture(Tex, ERHIResourceState::ShaderResource, ERHIResourceState::RenderTarget);
-		});
-		SceneColorLayout = ESceneColorLayout::RenderTarget;
-	}
 }
 
 } // namespace Scene

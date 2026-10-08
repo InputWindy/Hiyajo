@@ -8,6 +8,7 @@
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 // sol2 is a Big Header and this is a public interface: the binder is declared, not included.
 // `MAHO_LUA_BIND_REGISTER` expands to `Type::LuaBind(*static_cast<sol::state*>(...))`, so only the
@@ -24,26 +25,70 @@ class FPrimitiveRegistry;
 namespace GameWorld
 {
 
+/** The material an entity with no `FMaterialComponent` draws with (a `Content/Shaders/<名>.shader`
+ *  name). Naming it HERE, on the game side, is deliberate: "what the default material is" is a
+ *  gameplay/project decision, and the render side must not have to guess it -- it resolves the name
+ *  through the ShaderLibrary and falls back only when that name itself is unusable. */
+inline constexpr const char* kDefaultMaterialShader = "DefaultLit";
+
 /**
  * Mesh render component - "this entity is something to draw".
  *
  * Names, not pointers: the render side owns GPU buffers behind a name (`Mesh.Cube` today, an asset
- * path later), so the game side never holds a renderer handle. `Material` is reserved -- the material
- * path is not wired yet and is carried through unchanged.
+ * path later), so the game side never holds a renderer handle. The material is a SEPARATE component
+ * (`FMaterialComponent`) because "what it looks like" and "what shape it is" are edited by different
+ * people and shared independently -- an entity with no material component still draws, with the
+ * default material (see `kDefaultMaterialShader`).
  */
 struct FMeshRenderComponent
 {
 	Name::FName Mesh;
-	Name::FName Material;
 	bool bVisible = true;
+};
+
+/**
+ * One material parameter OVERRIDE: the value a designer/script sets on top of the shader's own
+ * default.
+ *
+ * `Name` is matched CASE-INSENSITIVELY (`_basecolor` == `_BaseColor`): the shader property names are
+ * a UI convention, and a gameplay API that rejects `_basecolor` only because of spelling is a
+ * papercut, not a feature. The resolved, authoritative spelling is what reaches the render side.
+ *
+ * Two value kinds, exactly the two the .shader syntax can express today: a float4 (`Color` uses all
+ * four lanes, `Float`/`Range`/`Int` use lane 0) and a texture asset name (`Texture2D`). A parameter
+ * that is not listed here is NOT "zero" -- it is "use the shader's default", which is what keeps a
+ * material component down to the one or two lines a designer actually cares about.
+ */
+struct FMaterialParam
+{
+	Name::FName Name;
+	float Value[4] = {};
+	Name::FName Texture;
+};
+
+/**
+ * Material component - "this is what the entity looks like".
+ *
+ * `Shader` is a `.shader` name (`DefaultLit`, `UnlitColor`, `Transparent`); it is the KEY into the
+ * render side's ShaderLibrary, so the game side never sees bytecode, a layout or a pipeline. Several
+ * entities naming the SAME shader with the SAME parameters share ONE material entry in the published
+ * snapshot (the system deduplicates per frame, see PublishScene) -- that is "change one material,
+ * everything using it changes".
+ */
+struct FMaterialComponent
+{
+	Name::FName Shader;                   // None => the default material (kDefaultMaterialShader)
+	std::vector<FMaterialParam> Params;   // overrides only; anything absent falls back to the shader default
 };
 
 /**
  * Camera component - "this entity is the eye".
  *
- * The math is Vulkan-convention (y-down clip space, z in [0,1]); the values here are the
- * application-level parameters a script or a designer would touch, the composed matrix is built in
- * the system (see the composition helpers in MeshRenderSystem.cpp).
+ * The values here are the application-level parameters a script or a designer would touch (fov /
+ * near / far). The system turns the entity's transform into a VIEW matrix and publishes that plus
+ * these numbers -- the PROJECTION is composed on the render side, because its aspect depends on the
+ * draw target (see `FRenderCamera`). The values are already in the units the projection math wants:
+ * radians and world units, not degrees and centimetres.
  */
 struct FCameraComponent
 {
@@ -99,8 +144,10 @@ struct FScriptComponent
  *   1. fill every `FInputComponent` from the platform's published input frame;
  *   2. call every `FScriptComponent`'s `update(dt)` -- the gameplay lives in the script;
  *   3. walk (FTransform + FMeshRenderComponent) entities, compose each TRS into an object matrix and
- *      `Publish` the whole list into the primitive mirror;
- *   4. compose the active camera entity's view-projection and `PublishCamera` it.
+ *      `Publish` the whole scene: primitives + a DEDUPLICATED material table + its parameter values
+ *      (see `PublishScene` and PrimitiveRegistry.h's `FRenderScene`);
+ *   4. compose the active camera entity's VIEW matrix and `PublishCamera` it together with its
+ *      frustum (fov/near/far) -- the projection itself is the render side's, see `FRenderCamera`.
  *
  * The render side (MeshFeature) reads both channels and knows nothing about entities, components or
  * transforms. Nothing here touches the RHI, the renderer, or a GPU buffer -- it produces numbers.
@@ -150,10 +197,18 @@ private:
 	/** 每帧从平台填 `FInputComponent`（键位 + 鼠标视角增量）；在 `ProcessInput` 里调用。 */
 	void FillInput(FGameWorld& World);
 
-	/** 把 (FTransform + FMeshRenderComponent) 的 entity 合成对象矩阵并发布。 */
-	void PublishPrimitives(FGameWorld& World);
+	/** 材质参数查找/写入（名字**大小写不敏感**）：脚本按 `_basecolor` 写、shader 里写 `_BaseColor`
+	 *  都能命中同一条覆盖。返回 nullptr = 没有该名字的覆盖（不是错误，回退 shader 默认值）。 */
+	static FMaterialParam* FindParam(FMaterialComponent& Material, std::string_view ParamName);
+	/** 同上的写入侧：命中就改，没命中就追加一条。`Name` 用调用方给的拼写（首次出现者为准）。 */
+	static FMaterialParam& EnsureParam(FMaterialComponent& Material, Name::FName ParamName);
 
-	/** 把激活的相机 entity 合成 view-projection 并发布；没有相机就发布"没有相机"。 */
+	/** 把 (FTransform + FMeshRenderComponent) 的 entity 合成对象矩阵，并把材质表 + 参数表
+	 *  去重后一起发布（三段同一次 swap，见 PrimitiveRegistry.h 的 FRenderScene）。 */
+	void PublishScene(FGameWorld& World);
+
+	/** 把激活的相机 entity 合成 **view 矩阵 + 视锥参数（fov/near/far）** 并发布；没有相机就发布
+	 *  "没有相机"。**不发布投影**：投影的宽高比属于绘制目标（渲染侧），见 FRenderCamera。 */
 	void PublishCamera(FGameWorld& World);
 
 	FEntity CubeEntity;      // demo:脚本驱动自转
@@ -173,6 +228,10 @@ private:
 
 	/** 诊断计数：发布出去多少帧（"游戏侧活着"的可观测证据）。 */
 	std::uint64_t PublishCount = 0;
+
+	/** 上一帧发布出去的材质表 / 参数表大小（去重后）：诊断行里的读数，也是"共享材质生效"的证据。 */
+	std::size_t PublishedMaterials = 0;
+	std::size_t PublishedParams = 0;
 
 	/** 相机发布了多少帧（0 = 一帧都没发过，"从来没有相机"与"相机中途消失"是两回事）。 */
 	std::uint64_t CameraPublishCount = 0;

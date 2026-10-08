@@ -28,9 +28,58 @@ class FPrimitiveRegistry;
 struct FRenderPrimitive
 {
 	Name::FName Mesh;       // asset name; the render side owns the GPU buffers behind a name
-	Name::FName Material;   // reserved: the material path (batch 2.3) is not wired yet
+	Name::FName Material;   // the material's NAME, kept for diagnostics only (see `MaterialIndex`)
+	std::uint32_t MaterialIndex = 0;   // index into the snapshot's material table (invalid index = default material)
 	std::uint32_t ActorId = 0;
 	float ObjectMatrix[16] = {};
+};
+
+/**
+ * One MATERIAL PARAMETER value, mirrored to the render side.
+ *
+ * The name is the shader's own property name (`_BaseColor`) in its authoritative spelling -- the
+ * case-insensitive lookup a gameplay API wants happens on the GAME side, so what travels here is
+ * already a resolved name. Two value kinds cover every property the .shader syntax supports today:
+ * a float4 (Color = all four lanes; Float/Range/Int use lane 0) and a texture asset name.
+ */
+struct FRenderMaterialParam
+{
+	Name::FName Name;
+	float Value[4] = {};
+	Name::FName Texture;    // texture properties only; None = "no override, use the shader's default"
+};
+
+/**
+ * One entry of the frame's MATERIAL TABLE.
+ *
+ * A material is a sparse, SHARED thing: many actors point at the same entry through
+ * `FRenderPrimitive::MaterialIndex`, and its parameters live ONCE in the snapshot's parameter table
+ * (see `FirstParam`/`ParamCount`). That sharing is the whole reason the material table exists as a
+ * separate table instead of each primitive carrying its own copy -- 1000 actors on one material copy
+ * one color, and changing it changes every one of them (see design D5).
+ */
+struct FRenderMaterial
+{
+	Name::FName Shader;              // the .shader name (ShaderLibrary's key); the render side falls back when unknown
+	Name::FName Name;                // the material's name for diagnostics/logs
+	std::uint32_t FirstParam = 0;    // this material's parameters start here...
+	std::uint32_t ParamCount = 0;    // ...and there are this many of them
+};
+
+/**
+ * The frame's whole mirrored scene: primitives + the materials they reference + the parameter values.
+ *
+ * THREE TABLES, ONE SNAPSHOT. They must be published and read as one unit: a primitive's
+ * `MaterialIndex` only means something against the material table of the SAME frame, so three
+ * separate channels (or one lock per table) would let a reader pair frame N's primitives with frame
+ * N-1's materials -- and draw with a material that is one frame stale, or, worse, out of range. One
+ * shared_ptr swap makes the triple indivisible by construction.
+ */
+struct FRenderScene
+{
+	std::vector<FRenderPrimitive> Primitives;
+	std::vector<FRenderMaterial> Materials;
+	std::vector<FRenderMaterialParam> Params;
 };
 
 /** Snapshot accessor -- same shape as `GetUIViewRegistry()` / `GetLog()`: a cross-DLL exported
@@ -38,21 +87,35 @@ struct FRenderPrimitive
 MAHO_PRIMITIVEREGISTRY_API FPrimitiveRegistry* GetPrimitiveRegistry();
 
 /**
- * The CAMERA channel beside the primitive channel: one mirrored view-projection, already composed by
- * the game side's camera entity.
+ * The CAMERA channel beside the primitive channel: the game side's camera POSE + FRUSTUM, published
+ * so the render side can compose the frame's view-projection itself.
  *
- * Same reduction as `FRenderPrimitive`: the game side owns what a camera IS (fov/near/far, the
- * transform it hangs from, how the two sides of the projection are ordered), the render side owns
- * nothing but "here is the matrix to draw the frame with". `Eye` is the composed world-space eye
- * position, carried for diagnostics / future eye-dependent passes (it is not needed to draw).
+ * Same reduction as `FRenderPrimitive` (the game side owns what a camera IS: the transform it hangs
+ * from, its fov/near/far), and the projection is deliberately NOT part of it -- the projection's
+ * ASPECT belongs to whoever owns the DRAW TARGET, and that is the render side. The reason is not
+ * taste: the OS window's shape and the target the frame is actually drawn into are different things
+ * (an editor layout can draw the scene into a canvas whose aspect has nothing to do with the window),
+ * and a projection built from the wrong one squashes the image on exactly one axis. So the mirror
+ * carries the VIEW and the frustum numbers, and the aspect is resolved where the target is
+ * (`FMeshFeature::Render`, from the scene color target's own desc).
+ *
+ * `Eye` is the composed world-space eye position, carried for diagnostics / future eye-dependent
+ * passes (it is not needed to draw).
+ *
+ * An EMPTY `FRenderCamera` (all zeros -- what the game side publishes at teardown) is NOT drawable:
+ * `FovY == 0` / `Far <= Near` cannot produce a projection, so the render side treats it as "no
+ * camera" instead of dividing by `tan(0)` and writing NaN into the frame's UBO.
  *
  * One camera per frame on purpose: multi-view rendering is a later concern and a second channel is
  * cheaper to add than a wrongly-general one is to remove.
  */
 struct FRenderCamera
 {
-	float ViewProj[16] = {};    // column-major, Vulkan clip space (y down, z in [0,1])
-	float Eye[3] = {};          // world-space eye position
+	float View[16] = {};    // column-major view matrix (world -> camera); the inverse of the eye's T*R
+	float FovY = 0.0f;      // vertical field of view in radians (the unit the projection math wants)
+	float Near = 0.0f;      // near plane, world units
+	float Far = 0.0f;       // far plane, world units
+	float Eye[3] = {};      // world-space eye position
 };
 
 /**
@@ -89,16 +152,20 @@ public:
 	FPrimitiveRegistry(const FPrimitiveRegistry&) = delete;
 	FPrimitiveRegistry& operator=(const FPrimitiveRegistry&) = delete;
 
-	/** GAME side: publish this frame's primitives (replaces the previous snapshot). */
-	void Publish(std::vector<FRenderPrimitive>&& Primitives);
+	/** GAME side: publish this frame's scene (primitives + materials + parameters, ONE swap). */
+	void Publish(FRenderScene&& Scene);
 
-	/** RENDER side: the latest complete snapshot (may be empty; never a partial one). */
-	[[nodiscard]] std::shared_ptr<const std::vector<FRenderPrimitive>> ReadLatest() const;
+	/** RENDER side: the latest complete snapshot (may be empty; never a partial one). The three
+	 *  tables inside it always belong to the same frame -- that is the point of publishing them
+	 *  together (see FRenderScene). Reading is one lock + one shared_ptr copy, NOT three. */
+	[[nodiscard]] std::shared_ptr<const FRenderScene> ReadLatest() const;
 
 	/** Diagnostics: how many snapshots have been published ("the game side is alive"). */
 	[[nodiscard]] std::uint64_t GetPublishCount() const;
 
-	/** GAME side: publish this frame's camera (REPLACES the previous one -- a camera is not a list). */
+	/** GAME side: publish this frame's camera pose + frustum (REPLACES the previous one -- a camera is
+	 *  not a list). The PROJECTION is not published: its aspect belongs to the draw target's owner
+	 *  (the render side), see FRenderCamera. */
 	void PublishCamera(FRenderCamera Camera);
 
 	/** RENDER side: the latest camera, or null when none was ever published. A null camera is
@@ -111,7 +178,7 @@ private:
 	void Shutdown(FEngineBase& Engine, FEngineContext& Frame) override;     // drop the snapshots
 
 	mutable std::mutex Mutex;
-	std::shared_ptr<const std::vector<FRenderPrimitive>> Latest;
+	std::shared_ptr<const FRenderScene> Latest;
 	std::shared_ptr<const FRenderCamera> LatestCamera;
 	std::uint64_t PublishCount = 0;
 };

@@ -50,17 +50,18 @@ void FPrimitiveRegistry::Shutdown(FEngineBase&, FEngineContext&)
 	GPrimitiveRegistry = nullptr;
 }
 
-void FPrimitiveRegistry::Publish(std::vector<FRenderPrimitive>&& Primitives)
+void FPrimitiveRegistry::Publish(FRenderScene&& Scene)
 {
-	// The snapshot is built OUTSIDE the lock: the copy of a frame's primitives is the expensive part,
-	// and a reader only ever needs the pointer swap to be atomic w.r.t. other readers/writers.
-	auto Snapshot = std::make_shared<const std::vector<FRenderPrimitive>>(std::move(Primitives));
+	// The snapshot is built OUTSIDE the lock: the copy of a frame's three tables is the expensive part,
+	// and a reader only ever needs the pointer swap to be atomic w.r.t. other readers/writers. ONE
+	// make_shared for the whole scene is what makes primitives + materials + params indivisible.
+	auto Snapshot = std::make_shared<const FRenderScene>(std::move(Scene));
 	std::lock_guard<std::mutex> Lock(Mutex);
 	Latest = std::move(Snapshot);
 	++PublishCount;
 }
 
-std::shared_ptr<const std::vector<FRenderPrimitive>> FPrimitiveRegistry::ReadLatest() const
+std::shared_ptr<const FRenderScene> FPrimitiveRegistry::ReadLatest() const
 {
 	std::lock_guard<std::mutex> Lock(Mutex);
 	return Latest;
@@ -75,6 +76,10 @@ std::uint64_t FPrimitiveRegistry::GetPublishCount() const
 void FPrimitiveRegistry::PublishCamera(FRenderCamera Camera)
 {
 	// Same construction as Publish(): build the immutable value off the lock, then swap the pointer.
+	// The payload is still "whatever the game side reduced its camera to" -- today a view matrix plus
+	// the frustum numbers (NOT a view-projection: the aspect belongs to the draw target's owner, see
+	// FRenderCamera in the header). The publish/read semantics are unchanged: replace, one pointer
+	// swap, readers keep a consistent snapshot.
 	// No publish counter here -- the camera rides along with the primitive channel, and a second
 	// counter would only invite "which one is the frame counter?" questions.
 	std::lock_guard<std::mutex> Lock(Mutex);

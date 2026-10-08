@@ -1,0 +1,11 @@
+{
+  "FileVersion": 1,
+  "Name": "ShaderLibrary",
+  "Description": "Unity 风格 .shader 文本库：解析 Properties/SubShader/Pass，把语义重写成 GLSL 布局，注入 Set0/push/Set2 引擎块，按内容哈希编译并缓存（glslang）。",
+  "Dependencies": [
+    "RHI",
+    "Name",
+    "Paths",
+    "Log"
+  ]
+}

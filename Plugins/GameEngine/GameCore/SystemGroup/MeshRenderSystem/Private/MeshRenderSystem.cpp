@@ -12,9 +12,19 @@
 #include <Script.h>
 #include <Trace.h>
 
+// 矩阵数学交给 glm（引擎核心以 PUBLIC 链了 glm::glm，见 Tools/maho_tools.py 的 Maho target）。
+// glm 与 GLSL 同为列主序，value_ptr 出来的 16 个 float 就是镜像边界要的那 16 个数。
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/type_ptr.hpp>
+
+#include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstring>
+#include <map>
 #include <string>
+#include <string_view>
 #include <tuple>
 #include <utility>
 #include <vector>
@@ -45,164 +55,126 @@ namespace
 	constexpr int kKeyW = 87;
 	constexpr int kKeyS = 83;
 
-	// -- 矩阵工具：列主序（GLSL mat4 的内存序），M[列 * 4 + 行] ---------------------------------
+	// -- 矩阵工具：列主序（GLSL mat4 的内存序，M[列 * 4 + 行]）。数学全部走 glm -----------------
 	// 这些函数刻意留在 GAME 侧：TRS 的合成顺序 / 单位 / 层级是游戏语义，渲染侧只该收到 16 个 float。
+	// glm 与 GLSL 同为列主序，value_ptr 出来的 16 个 float 可以原样 memcpy 过镜像边界。
 
-	void MakeTranslation(float X, float Y, float Z, float* M)
+	/** glm::mat4 -> 调用方要的列主序 float[16]（镜像边界的格式，不要改）。 */
+	void StoreMatrix(const glm::mat4& M, float* Out)
 	{
-		std::memset(M, 0, sizeof(float) * 16);
-		M[0] = M[5] = M[10] = M[15] = 1.0f;
-		M[12] = X;
-		M[13] = Y;
-		M[14] = Z;
-	}
-
-	void MakeScale(float X, float Y, float Z, float* M)
-	{
-		std::memset(M, 0, sizeof(float) * 16);
-		M[0] = X;
-		M[5] = Y;
-		M[10] = Z;
-		M[15] = 1.0f;
-	}
-
-	void MakeRotationX(float Angle, float* M)
-	{
-		const float C = std::cos(Angle);
-		const float S = std::sin(Angle);
-		std::memset(M, 0, sizeof(float) * 16);
-		M[0] = 1.0f;
-		M[5] = C;
-		M[6] = S;
-		M[9] = -S;
-		M[10] = C;
-		M[15] = 1.0f;
-	}
-
-	void MakeRotationY(float Angle, float* M)
-	{
-		const float C = std::cos(Angle);
-		const float S = std::sin(Angle);
-		std::memset(M, 0, sizeof(float) * 16);
-		M[0] = C;
-		M[2] = -S;
-		M[5] = 1.0f;
-		M[8] = S;
-		M[10] = C;
-		M[15] = 1.0f;
-	}
-
-	void MakeRotationZ(float Angle, float* M)
-	{
-		const float C = std::cos(Angle);
-		const float S = std::sin(Angle);
-		std::memset(M, 0, sizeof(float) * 16);
-		M[0] = C;
-		M[1] = S;
-		M[4] = -S;
-		M[5] = C;
-		M[10] = 1.0f;
-		M[15] = 1.0f;
-	}
-
-	/** Out = A * B（两个都是列主序）。 */
-	void Multiply(const float* A, const float* B, float* Out)
-	{
-		float R[16] = {};
-		for (int Col = 0; Col < 4; ++Col)
-		{
-			for (int Row = 0; Row < 4; ++Row)
-			{
-				float Sum = 0.0f;
-				for (int K = 0; K < 4; ++K)
-				{
-					Sum += A[K * 4 + Row] * B[Col * 4 + K];
-				}
-				R[Col * 4 + Row] = Sum;
-			}
-		}
-		std::memcpy(Out, R, sizeof(R));
+		std::memcpy(Out, glm::value_ptr(M), sizeof(float) * 16);
 	}
 
 	/** 欧拉角 -> 旋转矩阵：R = Rz * Ry * Rx（先绕 X，再 Y，最后 Z —— 也就是 Unity 的 ZXY 直觉）。
 	 *  单轴用例（只有 RotationY 或只有 RotationX）与旧版 MeshFeature 的 `RotY * RotX` 完全一致。 */
-	void RotationXYZ(float RX, float RY, float RZ, float* Out)
+	glm::mat4 RotationXYZ(float RX, float RY, float RZ)
 	{
-		float MX[16] = {};
-		float MY[16] = {};
-		float MZ[16] = {};
-		float Tmp[16] = {};
-		MakeRotationX(RX, MX);
-		MakeRotationY(RY, MY);
-		MakeRotationZ(RZ, MZ);
-		Multiply(MY, MX, Tmp);      // Ry * Rx
-		Multiply(MZ, Tmp, Out);     // Rz * Ry * Rx
+		return glm::rotate(glm::mat4(1.0f), RZ, glm::vec3(0.0f, 0.0f, 1.0f))     // Rz
+		     * glm::rotate(glm::mat4(1.0f), RY, glm::vec3(0.0f, 1.0f, 0.0f))     // * Ry
+		     * glm::rotate(glm::mat4(1.0f), RX, glm::vec3(1.0f, 0.0f, 0.0f));    // * Rx
+	}
+
+	void MakeTranslation(float X, float Y, float Z, float* M)
+	{
+		StoreMatrix(glm::translate(glm::mat4(1.0f), glm::vec3(X, Y, Z)), M);
+	}
+
+	void MakeScale(float X, float Y, float Z, float* M)
+	{
+		StoreMatrix(glm::scale(glm::mat4(1.0f), glm::vec3(X, Y, Z)), M);
+	}
+
+	void MakeRotationX(float Angle, float* M)
+	{
+		StoreMatrix(glm::rotate(glm::mat4(1.0f), Angle, glm::vec3(1.0f, 0.0f, 0.0f)), M);
+	}
+
+	void MakeRotationY(float Angle, float* M)
+	{
+		StoreMatrix(glm::rotate(glm::mat4(1.0f), Angle, glm::vec3(0.0f, 1.0f, 0.0f)), M);
+	}
+
+	void MakeRotationZ(float Angle, float* M)
+	{
+		StoreMatrix(glm::rotate(glm::mat4(1.0f), Angle, glm::vec3(0.0f, 0.0f, 1.0f)), M);
 	}
 
 	/** TRS -> 对象矩阵：M = T * R * S。 */
 	void ComposeTransform(const FTransform& T, float* Out)
 	{
-		float Rot[16] = {};
-		float Scale[16] = {};
-		float RotScale[16] = {};
-		float Translation[16] = {};
-		RotationXYZ(T.RotationX, T.RotationY, T.RotationZ, Rot);
-		MakeScale(T.ScaleX, T.ScaleY, T.ScaleZ, Scale);
-		Multiply(Rot, Scale, RotScale);
-		MakeTranslation(T.X, T.Y, T.Z, Translation);
-		Multiply(Translation, RotScale, Out);
+		const glm::mat4 Translation = glm::translate(glm::mat4(1.0f), glm::vec3(T.X, T.Y, T.Z));
+		const glm::mat4 Rotation    = RotationXYZ(T.RotationX, T.RotationY, T.RotationZ);
+		const glm::mat4 Scale       = glm::scale(glm::mat4(1.0f), glm::vec3(T.ScaleX, T.ScaleY, T.ScaleZ));
+		StoreMatrix(Translation * Rotation * Scale, Out);
 	}
 
-	/** Vulkan 约定的透视投影：Y 翻转、z 落在 [0,1]。
-	 *  形状照抄旧版 MeshFeature 的手工相机（那是这套引擎里第一处透视），只是现在由相机 entity
-	 *  的参数（fov/near/far）驱动，而不是 feature 里写死的常量。 */
-	void MakePerspective(float FovYRadians, float Aspect, float Near, float Far, float* M)
-	{
-		std::memset(M, 0, sizeof(float) * 16);
-		const float F = 1.0f / std::tan(FovYRadians * 0.5f);
-		M[0] = F / Aspect;
-		M[5] = -F;                        // Vulkan 裁剪空间 Y 向下，不翻转就是倒像
-		M[10] = Far / (Near - Far);
-		M[11] = -1.0f;
-		M[14] = (Far * Near) / (Near - Far);
-	}
-
-	/** 相机的 view 矩阵：刚体变换的逆（旋转部分转置，平移部分 -R^T * P）。
-	 *  相机不带缩放 —— 缩放是"物体怎么被拉长"，不该改变视锥的空间。 */
+	/** 相机的 view 矩阵：刚体变换的逆（旋转部分转置，平移部分 -R^T * P），也就是 (T * R) 的逆。
+	 *  相机不带缩放 —— 缩放是"物体怎么被拉长"，不该改变视锥的空间。
+	 *
+	 *  **投影不在这里**：fov/near/far 和 view 一起发到渲染侧，由**拥有绘制目标的一方**按目标的真实
+	 *  宽高比组投影（见 FRenderCamera 与 FMeshFeature::Render）—— 游戏侧的窗口尺寸和这一帧真正画进
+	 *  去的目标不是一回事，用错那个就会在某个轴上把画面压扁。 */
 	void MakeViewFromCamera(const FTransform& T, float* M)
 	{
-		float Rot[16] = {};
-		RotationXYZ(T.RotationX, T.RotationY, T.RotationZ, Rot);
-
-		std::memset(M, 0, sizeof(float) * 16);
-		for (int Col = 0; Col < 3; ++Col)
-		{
-			for (int Row = 0; Row < 3; ++Row)
-			{
-				M[Col * 4 + Row] = Rot[Row * 4 + Col];   // R^T
-			}
-		}
-		M[15] = 1.0f;
-		M[12] = -(M[0] * T.X + M[4] * T.Y + M[8] * T.Z);
-		M[13] = -(M[1] * T.X + M[5] * T.Y + M[9] * T.Z);
-		M[14] = -(M[2] * T.X + M[6] * T.Y + M[10] * T.Z);
+		const glm::mat4 Rigid = glm::translate(glm::mat4(1.0f), glm::vec3(T.X, T.Y, T.Z))
+		                      * RotationXYZ(T.RotationX, T.RotationY, T.RotationZ);
+		StoreMatrix(glm::inverse(Rigid), M);
 	}
 
-	/** 视口宽高比：用平台缓存的窗口尺寸（场景 RT 就是按画布尺寸建的，见 FScene::EnsureTargets）。
-	 *  拿不到窗口时退回 16:9，免得除零把整帧画没。 */
-	float GetAspectRatio()
+	/** 大小写不敏感比较：材质参数名是 UI 约定（`_BaseColor`），脚本写 `_basecolor` 必须命中同一条。 */
+	bool EqualsIgnoreCase(std::string_view A, std::string_view B)
 	{
-		Platform::FPlatform* P = Platform::GetPlatform();
-		if (P != nullptr)
+		if (A.size() != B.size())
 		{
-			const std::uint32_t W = P->GetWindowWidth();
-			const std::uint32_t H = P->GetWindowHeight();
-			if (W > 0 && H > 0)
+			return false;
+		}
+		for (std::size_t I = 0; I < A.size(); ++I)
+		{
+			const unsigned char CA = static_cast<unsigned char>(A[I]);
+			const unsigned char CB = static_cast<unsigned char>(B[I]);
+			if (std::tolower(CA) != std::tolower(CB))
 			{
-				return static_cast<float>(W) / static_cast<float>(H);
+				return false;
 			}
 		}
-		return 16.0f / 9.0f;
+		return true;
+	}
+
+	/** 一个材质的去重键：shader 名 + 参数覆盖（按参数名的规范化拼写排序，再逐条序列化数值 /
+	 *  纹理名）。两个 entity 的组件内容完全一致 → 同一个键 → 同一条材质表项（参数共享）。
+	 *
+	 *  排序让"声明顺序不同、内容相同"的两份组件也归并到一条；代价是每帧一次字符串拼装，
+	 *  与整帧的矩阵合成相比可以忽略。 */
+	std::string MakeMaterialKey(Name::FName Shader, const FMaterialComponent& Material)
+	{
+		std::vector<std::string> Entries;
+		Entries.reserve(Material.Params.size());
+		for (const FMaterialParam& P : Material.Params)
+		{
+			std::string Entry(P.Name.ToString());
+			for (char& C : Entry)
+			{
+				C = static_cast<char>(std::tolower(static_cast<unsigned char>(C)));
+			}
+			Entry += '=';
+			for (float V : P.Value)
+			{
+				Entry += std::to_string(V);
+				Entry += ',';
+			}
+			Entry += P.Texture.IsNone() ? "-" : std::string(P.Texture.ToString());
+			Entries.push_back(std::move(Entry));
+		}
+		std::sort(Entries.begin(), Entries.end());
+
+		std::string Key(Shader.ToString());
+		Key += '|';
+		for (const std::string& E : Entries)
+		{
+			Key += E;
+			Key += ';';
+		}
+		return Key;
 	}
 } // namespace
 
@@ -283,11 +255,28 @@ void FMeshRenderSystem::SeedDemoEntities(FGameWorld& World)
 	FMeshRenderComponent CubeMesh;
 	CubeMesh.Mesh = Name::FName("Mesh.Cube");
 	World.AddComponent<FMeshRenderComponent>(Cube, CubeMesh);
+	// 材质：DefaultLit + 一条**明确的** `_BaseColor` 覆盖。覆盖会盖掉 shader 文件里的默认值
+	// （DefaultLit.shader 里那行是偏冷的浅蓝），所以画面上看到的颜色同时证明"参数真的到了 GPU"
+	// 和"组件优先级高于 shader 默认值"。`_Metallic` 故意不写：不在组件里的参数回退 shader 默认值。
+	FMaterialComponent CubeMaterial;
+	CubeMaterial.Shader = Name::FName("DefaultLit");
+	{
+		FMaterialParam BaseColor;
+		BaseColor.Name = Name::FName("_BaseColor");
+		BaseColor.Value[0] = 0.20f;
+		BaseColor.Value[1] = 0.85f;
+		BaseColor.Value[2] = 0.45f;
+		BaseColor.Value[3] = 1.0f;
+		CubeMaterial.Params.push_back(BaseColor);
+	}
+	World.AddComponent<FMaterialComponent>(Cube, std::move(CubeMaterial));
 	AttachScript(World, Cube, "cube.lua");
 	CubeEntity = Cube;
 
 	// 第二个立方体：位置/缩放都不同，且挂**另一个**脚本 —— 于是"两个 actor 同屏"和
 	// "每个 entity 有自己的脚本实例"是同一条证据（脚本表是每 entity 一份，状态互不干扰）。
+	// 它用**另一个 shader**（UnlitColor）且**不写任何参数**：画面上它的颜色就是
+	// Content/Shaders/UnlitColor.shader 里那行默认值 —— "shader 文本的默认值真的被解析"的活证据。
 	FEntity Cube2 = World.CreateEntity();
 	FTransform Cube2Transform;
 	Cube2Transform.X = -1.8f;
@@ -297,6 +286,9 @@ void FMeshRenderSystem::SeedDemoEntities(FGameWorld& World)
 	FMeshRenderComponent Cube2Mesh;
 	Cube2Mesh.Mesh = Name::FName("Mesh.Cube");
 	World.AddComponent<FMeshRenderComponent>(Cube2, Cube2Mesh);
+	FMaterialComponent Cube2Material;
+	Cube2Material.Shader = Name::FName("UnlitColor");
+	World.AddComponent<FMaterialComponent>(Cube2, std::move(Cube2Material));
 	AttachScript(World, Cube2, "cube2.lua");
 	Cube2Entity = Cube2;
 
@@ -336,6 +328,30 @@ std::uint32_t FMeshRenderSystem::FindLuaId(FEntity E) const
 {
 	const auto It = EntityToLuaId.find(E.Index);
 	return It == EntityToLuaId.end() ? 0u : It->second;
+}
+
+FMaterialParam* FMeshRenderSystem::FindParam(FMaterialComponent& Material, std::string_view ParamName)
+{
+	for (FMaterialParam& P : Material.Params)
+	{
+		if (EqualsIgnoreCase(P.Name.ToString(), ParamName))
+		{
+			return &P;
+		}
+	}
+	return nullptr;
+}
+
+FMaterialParam& FMeshRenderSystem::EnsureParam(FMaterialComponent& Material, Name::FName ParamName)
+{
+	if (FMaterialParam* Existing = FindParam(Material, ParamName.ToString()))
+	{
+		return *Existing;
+	}
+	FMaterialParam Fresh;
+	Fresh.Name = ParamName;   // 首次出现者的拼写成为权威拼写（发到渲染侧的就是它）
+	Material.Params.push_back(Fresh);
+	return Material.Params.back();
 }
 
 void FMeshRenderSystem::AttachScript(FGameWorld& World, FEntity E, const char* ScriptFile)
@@ -473,7 +489,7 @@ void FMeshRenderSystem::Update(FGameWorld& World, FGameWorldContext& Frame)
 	}
 
 	// (c)(d) 合成并发布两条镜像通道
-	PublishPrimitives(World);
+	PublishScene(World);
 	PublishCamera(World);
 
 	// (e) 诊断：状态一变就打一行（脚本/文件、要画的 entity 数、发布计数、相机有没有发出去）。
@@ -565,14 +581,14 @@ void FMeshRenderSystem::ReportState(FGameWorld& World, Maho::FPrimitiveRegistry*
 	bReportedBindings = bLuaBindingsInstalled;
 
 	MAHO_LOG_CORE_INFO(
-		"MeshRenderSystem: state change -- scripts={} ({}), lua-bindings={}, mesh-entities={}, cameras={}, "
-		"mirror-registry={}, publishes={}, camera-published={}",
+		"MeshRenderSystem: state change -- scripts={} ({}), lua-bindings={}, mesh-entities={}, materials={}/params={}, "
+		"cameras={}, mirror-registry={}, publishes={}, camera-published={}",
 		Scripts, Files.empty() ? "<none>" : Files, bLuaBindingsInstalled ? "installed" : "MISSING",
-		MeshEntities, Cameras, bRegistry ? "present" : "MISSING",
+		MeshEntities, PublishedMaterials, PublishedParams, Cameras, bRegistry ? "present" : "MISSING",
 		Registry != nullptr ? Registry->GetPublishCount() : 0, bCamera ? "yes" : "no");
 }
 
-void FMeshRenderSystem::PublishPrimitives(FGameWorld& World)
+void FMeshRenderSystem::PublishScene(FGameWorld& World)
 {
 	Maho::FPrimitiveRegistry* Registry = GetPrimitiveRegistry();
 	if (Registry == nullptr)
@@ -580,7 +596,11 @@ void FMeshRenderSystem::PublishPrimitives(FGameWorld& World)
 		return;   // 镜像表还没发布（渲染层未安装）—— 没有东西可发，也不是错误
 	}
 
-	std::vector<FRenderPrimitive> Primitives;
+	// 三段一起建、一次 swap（FRenderScene）。材质表是**去重**的：`MaterialIndexByKey` 把
+	// "shader + 参数内容" 映射到材质表下标，于是多个 actor 共享一条材质、一份参数 ——
+	// 那正是"改一次材质全体生效"的语义来源（design D5）。
+	FRenderScene Scene;
+	std::map<std::string, std::uint32_t> MaterialIndexByKey;
 
 	// 遍历 (变换 + 网格) 的 entity：谁有这两样，谁就是"要画的东西"。
 	for (FEntity E : World.GetAllWithComponent<FTransform>())
@@ -605,25 +625,75 @@ void FMeshRenderSystem::PublishPrimitives(FGameWorld& World)
 			continue;
 		}
 
+		// 材质：没有组件就是"默认材质"（名字是游戏侧的决定，见 kDefaultMaterialShader）。
+		// 空组件是合法的 —— 拿到的就是 shader 文件里的默认参数值。
+		static const FMaterialComponent EmptyMaterial;
+		const FMaterialComponent* Material = World.GetComponent<FMaterialComponent>(E);
+		if (Material == nullptr)
+		{
+			Material = &EmptyMaterial;
+		}
+		const Name::FName ShaderName = Material->Shader.IsNone()
+			? Name::FName(kDefaultMaterialShader)
+			: Material->Shader;
+
 		FRenderPrimitive Primitive;
 		Primitive.Mesh = MeshRender->Mesh;
-		Primitive.Material = MeshRender->Material;
+		Primitive.Material = ShaderName;   // 诊断用（材质名目前就是 shader 名）
 		// ActorId 用与脚本同一个整数 id：一个 entity 一个稳定 id，渲染侧按它增删 actor
 		// （"这个 actor 还在不在快照里"就是它的身份）。
 		Primitive.ActorId = AssignLuaId(E);
 		ComposeTransform(*Transform, Primitive.ObjectMatrix);
-		Primitives.push_back(Primitive);
+
+		// 去重：同 shader + 同参数内容的 entity 落在同一条材质表项上。
+		const std::string Key = MakeMaterialKey(ShaderName, *Material);
+		std::uint32_t MaterialIndex = 0;
+		if (const auto It = MaterialIndexByKey.find(Key); It != MaterialIndexByKey.end())
+		{
+			MaterialIndex = It->second;
+		}
+		else
+		{
+			MaterialIndex = static_cast<std::uint32_t>(Scene.Materials.size());
+			MaterialIndexByKey.emplace(Key, MaterialIndex);
+
+			FRenderMaterial Entry;
+			Entry.Shader = ShaderName;
+			Entry.Name = ShaderName;
+			Entry.FirstParam = static_cast<std::uint32_t>(Scene.Params.size());
+			Entry.ParamCount = static_cast<std::uint32_t>(Material->Params.size());
+			Scene.Materials.push_back(Entry);
+
+			for (const FMaterialParam& P : Material->Params)
+			{
+				FRenderMaterialParam Out;
+				Out.Name = P.Name;
+				for (int Lane = 0; Lane < 4; ++Lane)
+				{
+					Out.Value[Lane] = P.Value[Lane];
+				}
+				Out.Texture = P.Texture;
+				Scene.Params.push_back(Out);
+			}
+		}
+		Primitive.MaterialIndex = MaterialIndex;
+		Scene.Primitives.push_back(Primitive);
 	}
 
-	const std::size_t Count = Primitives.size();
-	Registry->Publish(std::move(Primitives));
+	const std::size_t PrimitiveCount = Scene.Primitives.size();
+	const std::size_t MaterialCount = Scene.Materials.size();
+	const std::size_t ParamCount = Scene.Params.size();
+	PublishedMaterials = MaterialCount;
+	PublishedParams = ParamCount;
+	Registry->Publish(std::move(Scene));
 
 	++PublishCount;
 	// 证据行：首帧 + 之后每 600 帧（约 10 秒@60Hz）一次，卸载时由 PreUnInstall 报最终值。
+	// 三个数一起报：actor 数、材质数（去重后）、参数条数 —— 只报 actor 数看不出"共享材质"这件事。
 	if (PublishCount == 1 || PublishCount % 600 == 0)
 	{
-		MAHO_LOG_CORE_INFO("MeshRenderSystem: published {} primitive(s) to the mirror table (publish #{})",
-			Count, Registry->GetPublishCount());
+		MAHO_LOG_CORE_INFO("MeshRenderSystem: published {} primitive(s), {} material(s), {} parameter(s) to the mirror table (publish #{})",
+			PrimitiveCount, MaterialCount, ParamCount, Registry->GetPublishCount());
 	}
 }
 
@@ -644,12 +714,14 @@ void FMeshRenderSystem::PublishCamera(FGameWorld& World)
 			continue;
 		}
 
-		float Projection[16] = {};
-		float View[16] = {};
+		// 发出去的是 **view + 视锥参数**，不是 view-projection：投影的宽高比属于**绘制目标**，
+		// 而目标是渲染侧的东西（游戏侧的窗口尺寸和这一帧真正画进去的目标不是一回事 —— 用错那个就在
+		// 某个轴上把画面压扁）。渲染侧拿这三个数 + 目标的真实尺寸自己组 P（见 FRenderCamera）。
 		FRenderCamera Out;
-		MakePerspective(Camera->FovY, GetAspectRatio(), Camera->Near, Camera->Far, Projection);
-		MakeViewFromCamera(*Transform, View);
-		Multiply(Projection, View, Out.ViewProj);   // ViewProj = P * V
+		MakeViewFromCamera(*Transform, Out.View);
+		Out.FovY = Camera->FovY;
+		Out.Near = Camera->Near;
+		Out.Far = Camera->Far;
 		Out.Eye[0] = Transform->X;
 		Out.Eye[1] = Transform->Y;
 		Out.Eye[2] = Transform->Z;
@@ -679,11 +751,13 @@ void FMeshRenderSystem::PreUnInstall(FGameWorld&, FGameWorldContext&)
 {
 	MAHO_TRACE_STAGE(IPreUnInstall, "Mesh render system teardown", "clear the mirror channels so nothing lingers");
 
-	// 清空两条通道：卸载后不让旧快照继续被画（残影）。相机发布成"空矩阵"= 这一帧没有可看的东西，
-	// 注册表自己的 Shutdown 随后会把槽位置回 null。
+	// 清空两条通道：卸载后不让旧快照继续被画（残影）。相机发布成**全零的 FRenderCamera** = 这一帧没有
+	// 可看的东西（全零的 fov/near/far 组不出投影，渲染侧明确当"没有相机"处理，不会去算 tan(0)）；
+	// 注册表自己的 Shutdown 随后会把槽位置回 null。primitive 通道发布**空的三段**（材质 / 参数
+	// 也一起清），否则渲染侧会留着上一帧的 actor + 材质表。
 	if (Maho::FPrimitiveRegistry* Registry = GetPrimitiveRegistry())
 	{
-		Registry->Publish(std::vector<FRenderPrimitive>{});
+		Registry->Publish(FRenderScene{});
 		Registry->PublishCamera(FRenderCamera{});
 		MAHO_LOG_CORE_INFO("MeshRenderSystem: mirror cleared at uninstall ({} primitive publishes this run)",
 			Registry->GetPublishCount());
@@ -774,7 +848,83 @@ void FMeshRenderSystem::LuaBind(sol::state& Lua)
 			: std::make_tuple(0.0f, 0.0f, 0.0f, 0.0f);
 	});
 
-	MAHO_LOG_CORE_INFO("MeshRenderSystem: Lua bindings registered (maho.set_position/get_position/set_rotation/get_rotation/get_input)");
+	// -- 材质参数（gameplay 数据）--------------------------------------------------------------
+	// 脚本改的是(entity 的 FMaterialComponent)这条**覆盖**，下一帧随快照发布 —— 不重编、不重启，
+	// 画面就变（这就是"材质参数走镜像"的那条证据）。参数名大小写不敏感（`_basecolor` == `_BaseColor`）。
+	Maho.set_function("set_material_color", [](std::uint32_t Id, std::string Name, float R, float G, float B, float A)
+	{
+		if (GMeshRenderSystem == nullptr)
+		{
+			return;
+		}
+		FGameWorld* World = GetGameWorld();
+		const FEntity Entity = GMeshRenderSystem->FindEntity(Id);
+		if (World == nullptr || World->GetComponent<FTransform>(Entity) == nullptr)
+		{
+			return;   // 未登记的 id / 已销毁的 entity：脚本的错，但不动摇整帧
+		}
+		if (World->GetComponent<FMaterialComponent>(Entity) == nullptr)
+		{
+			World->AddComponent<FMaterialComponent>(Entity, FMaterialComponent{});
+		}
+		FMaterialComponent* Material = World->GetComponent<FMaterialComponent>(Entity);
+		if (Material == nullptr)
+		{
+			return;
+		}
+		FMaterialParam& Param = EnsureParam(*Material, Name::FName(Name));
+		Param.Value[0] = R;
+		Param.Value[1] = G;
+		Param.Value[2] = B;
+		Param.Value[3] = A;
+	});
+
+	Maho.set_function("set_material_texture", [](std::uint32_t Id, std::string Name, std::string TextureName)
+	{
+		if (GMeshRenderSystem == nullptr)
+		{
+			return;
+		}
+		FGameWorld* World = GetGameWorld();
+		const FEntity Entity = GMeshRenderSystem->FindEntity(Id);
+		if (World == nullptr || World->GetComponent<FTransform>(Entity) == nullptr)
+		{
+			return;
+		}
+		if (World->GetComponent<FMaterialComponent>(Entity) == nullptr)
+		{
+			World->AddComponent<FMaterialComponent>(Entity, FMaterialComponent{});
+		}
+		FMaterialComponent* Material = World->GetComponent<FMaterialComponent>(Entity);
+		if (Material == nullptr)
+		{
+			return;
+		}
+		EnsureParam(*Material, Name::FName(Name)).Texture = Name::FName(TextureName);
+	});
+
+	Maho.set_function("get_material_color", [](std::uint32_t Id, std::string Name)
+	{
+		if (GMeshRenderSystem == nullptr)
+		{
+			return std::make_tuple(0.0f, 0.0f, 0.0f, 0.0f);
+		}
+		FGameWorld* World = GetGameWorld();
+		FMaterialComponent* Material = World != nullptr
+			? World->GetComponent<FMaterialComponent>(GMeshRenderSystem->FindEntity(Id))
+			: nullptr;
+		if (Material == nullptr)
+		{
+			return std::make_tuple(0.0f, 0.0f, 0.0f, 0.0f);
+		}
+		const FMaterialParam* Param = FindParam(*Material, Name);
+		return Param != nullptr
+			? std::make_tuple(Param->Value[0], Param->Value[1], Param->Value[2], Param->Value[3])
+			: std::make_tuple(0.0f, 0.0f, 0.0f, 0.0f);
+	});
+
+	MAHO_LOG_CORE_INFO("MeshRenderSystem: Lua bindings registered (maho.set_position/get_position/set_rotation/get_rotation/get_input/"
+		"set_material_color/set_material_texture/get_material_color)");
 }
 
 } // namespace GameWorld

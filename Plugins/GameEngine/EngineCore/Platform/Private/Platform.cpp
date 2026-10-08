@@ -849,7 +849,22 @@ bool FPlatform::ReadInputFrame(std::uint64_t Index, FInputFrame& Out) const
 	const FInputFrame& Slot = InputRing[(Index - 1) % kInputRingSlots];
 	if (Slot.Index != Index)
 	{
-		return false;   // evicted, or never written -- the caller fell too far behind
+		// The producer overwrote the frame this reader still owed. Its input is SKIPPED -- never
+		// silently applied to another frame -- and that is worth a report: production is 1:1 with the
+		// frame loop (the publish happens in Tick, the pump is waited on), so a consumer that falls
+		// further than the ring means its stage did not run for that many frames, which is a scheduling
+		// bug, not a mode. Rate-limited by frame index so a persistent bug cannot flood the log.
+		const std::uint64_t Latest = InputFramePublished.load(std::memory_order_relaxed);
+		static std::uint64_t LastReportedIndex = 0;
+		if (Latest >= LastReportedIndex + 600)
+		{
+			LastReportedIndex = Latest;
+			MAHO_LOG_CORE_ERROR(
+				"FPlatform: input frame {} was EVICTED before a consumer read it (latest {}, that consumer is behind by "
+				"{}, ring is {} slot(s)) -- those frames' input is SKIPPED, not replayed",
+				Index, Latest, Latest > Index ? Latest - Index : 0, kInputRingSlots);
+		}
+		return false;
 	}
 	Out = Slot;
 	return true;

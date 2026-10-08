@@ -294,15 +294,20 @@ FUIFeature::FUIFeature()
 	// one (still COLOR_ATTACHMENT) -> vkCmdDraw layout-mismatch validation error. Pin the
 	// data-flow edge so the reader always sees the current target.
 	MyStage<IInitViews>().IsWaiting<Scene::FScene>().ForStage<IBeginRender>();
-	// The compose pass SAMPLES SceneColor (the game's imgui::image of the scene mirror): it flips the
-	// scene color to SHADER_READ_ONLY right before AddPass and back right after, each as its own
-	// command list. So every WRITER of SceneColor must have finished by then -- Scene's clear is
-	// covered by the IEndRender edge above, but the triangle feature's IRender is not: with no edge
-	// the two run concurrently, and its draw can be registered between my two flips, i.e. after the
-	// flip to SHADER_READ_ONLY and before the flip back, which is exactly a
-	// vkCmdBeginRendering-pRenderingInfo-09592 attachment-layout error. Declared by NAME: this
-	// feature has no build dependency on the triangle plugin.
-	MyStage<IRenderUI>().IsWaiting("FDrawTriangleFeature").ForStage<IRender>();
+	// The compose pass SAMPLES SceneColor (the game's imgui::image of the scene mirror): the mirror is
+	// resolved from this pass's own draw list, so the read is a REQUIRED state (Sampled) of this
+	// command buffer, recorded right before the draws. Every WRITER of SceneColor must therefore have
+	// finished recording AND submitting by then. Scene's clear is covered by the IEndRender edge above;
+	// the MESH pass is not -- FMeshFeature::IRender only waits for Scene::IEndRender, exactly like this
+	// stage, so with no edge between the two they run concurrently and the RHI's per-texture tracker is
+	// advanced by whichever thread records first. The two barriers then land in two command buffers of
+	// ONE frame batch whose submission order (registration order = node order) is the opposite of the
+	// order the layouts were derived in: the mesh pass declares a COLOR_ATTACHMENT attachment on a
+	// texture the batch has already moved to SHADER_READ_ONLY (VUID-...-09592) while this pass's draws
+	// sample a texture the batch moved back to COLOR_ATTACHMENT (VUID-vkCmdDraw-None-09600). Declared by
+	// NAME: this feature has no build dependency on the mesh plugin, and the name must be the frame that
+	// is actually MOUNTED -- a name that cannot bind is only reported and leaves the race in place.
+	MyStage<IRenderUI>().IsWaiting("FMeshFeature").ForStage<IRender>();
 	// NOTE: do NOT try to order this stage against FPlatform::ITick with an edge -- it cannot
 	// work. This frame lives in the RENDER COLLECTOR's graph while FPlatform::ITick lives in the
 	// ENGINE's (they are separate FFrameGraph instances), so a declaration here would never bind:
@@ -495,10 +500,9 @@ void FUIFeature::InitViews(FRender& R, FRenderContext& Frame)
 				R.ReleaseTexture(UIRenderTarget);
 				UIRenderTarget.Reset();
 			}
-			// Recreated target's native starts UNDEFINED; it is re-transitioned Common ->
-			// RenderTarget below, so the stale SR flag must be cleared or RenderUI's head
-			// would emit a bogus ShaderResource -> RenderTarget barrier (oldLayout mismatch).
-			bUIRenderTargetLayoutSR = false;
+			// Recreated target's native starts UNDEFINED and is brought to the attachment layout by
+			// the first RenderUI's BeginRendering (from the RHI's tracked state -- there is no
+			// per-feature layout flag to keep in sync any more).
 			FRHITextureDesc Desc;
 			Desc.Format = R.GetSwapchainFormat();
 			Desc.Dimension = ERHITextureDimension::Tex2D;
@@ -515,18 +519,10 @@ void FUIFeature::InitViews(FRender& R, FRenderContext& Frame)
 				MAHO_LOG_CORE_ERROR("FUIFeature: UI composite target creation failed");
 				return;
 			}
-			// The composite target leaves create as UNDEFINED but is used as a dynamic-
-			// rendering color attachment (BeginRendering declares COLOR_ATTACHMENT and
-			// never auto-transitions). Bring it to COLOR_ATTACHMENT_OPTIMAL once, now,
-			// so the first RenderUI's BeginRendering (and PresentTexture's "is a color
-			// attachment" barrier) find it legal.
-			{
-				FRHITexture* RT = UIRenderTarget.GetRHI();
-				R.AddPass(ERHICommandListType::Graphics, [RT](FRHICommandList& Cmd)
-				{
-					Cmd.TransitionTexture(RT, ERHIResourceState::Common, ERHIResourceState::RenderTarget);
-				});
-			}
+			// The composite target leaves create as UNDEFINED, but that needs no hand-recorded
+			// promotion pass: the first RenderUI's BeginRendering requests the color-attachment
+			// state and the RHI derives the barrier (oldLayout = the TRACKED layout, i.e.
+			// UNDEFINED here). PresentTexture likewise requests the state it needs.
 		}
 	}
 
@@ -929,17 +925,12 @@ void FUIFeature::RenderUI(FRender& R, FRenderContext& Frame)
 	FDrawList& DrawList = this->DrawList;
 	if (!DrawList.HasPrimitiveData())
 	{
-		// No draws this frame, but the editor's pass3 always samples GetPresentTarget()
-		// (the game composite) and NEVER re-flips it -- it relies on pass2 leaving
-		// UIRenderTarget in SHADER_READ_ONLY for exactly that sampled read. So even on a
-		// no-draw frame we must keep the present slot on UIRenderTarget and (editor build)
-		// flip it to SR; otherwise pass3 reads a COLOR_ATTACHMENT texture as a shader
-		// resource (descriptors hardcode SHADER_READ_ONLY) and the validator fires. The
-		// head flip below undoes this the next time a draw actually happens.
+		// No draws this frame, but the present slot must still name this composite: the editor's
+		// pass3 samples GetPresentTarget() as its viewport background. The sampled state that read
+		// needs is requested by pass3's own read set (its draw list binds the present target as a
+		// sampled texture), so nothing has to be flipped here -- and a no-draw frame therefore
+		// leaves the target's tracked state alone.
 		R.SetPresentTarget(UIRenderTarget);
-#ifdef MAHO_EDITOR_BUILD
-		TransitionUIRenderTargetForSampling(R);
-#endif
 		return;
 	}
 
@@ -948,18 +939,10 @@ void FUIFeature::RenderUI(FRender& R, FRenderContext& Frame)
 	//    pipeline implicitly, and only then runs this lambda -- so the lambda records
 	//    ONLY the draws (viewport / binds / push constant / draw calls). The feature
 	//    never queries a pipeline or calls BeginRendering/BindGraphicsPipeline itself.
-	// UIRenderTarget doubles, in an editor build, as the viewport's sampled present target.
-	// If the previous frame's pass3 sampled it (flipped to SHADER_READ_ONLY), bring it back
-	// to COLOR_ATTACHMENT here before we clear+redraw -- the RHI never auto-transitions.
-	if (bUIRenderTargetLayoutSR)
-	{
-		FRHITexture* RT = UIRenderTarget.GetRHI();
-		R.AddPass(ERHICommandListType::Graphics, [RT](FRHICommandList& Cmd)
-		{
-			Cmd.TransitionTexture(RT, ERHIResourceState::ShaderResource, ERHIResourceState::RenderTarget);
-		});
-		bUIRenderTargetLayoutSR = false;
-	}
+	// No layout hand-off here either: this pass WRITES UIRenderTarget, and BeginRendering
+	// requests the color-attachment state from the RHI's tracked layout (which may be
+	// SHADER_READ_ONLY if the previous frame's pass3 sampled it), while the SceneColor mirror
+	// this pass samples through its draw list is requested as a read in the same command buffer.
 	FRenderTarget Target;
 	FRenderTarget::FAttachment Color;
 	Color.View = UIRenderTarget;
@@ -1033,18 +1016,12 @@ void FUIFeature::RenderUI(FRender& R, FRenderContext& Frame)
 		// One AddPass == one subpass. AddPass uploads the CPU primitive data once, resolves
 		// the pass-level font set + each per-batch set by content, binds the pipeline, and
 		// records every batch's draw. Nothing below is a raw RHI operation.
-		// The UI composites the scene-color mirror (game imgui::image of SceneColor) which
-		// the scene left as COLOR_ATTACHMENT, but descriptor writes hardcode SHADER_READ_ONLY.
-		// Flip SceneColor to SR before this compose pass samples it, and back afterwards.
-		if (Scene::FScene* Scene = Scene::GetScene())
-		{
-			Scene->TransitionSceneColorForSampling(R);
-		}
+		// The UI composites the scene-color mirror (game imgui::image of SceneColor). That read is
+		// declared by this pass's own draw list (the mirror is a per-batch CombinedImageSampler), so
+		// AddPass' read set brings SceneColor to its readable layout in THIS command buffer, right
+		// before the draws -- no transition pass, and nothing to flip back afterwards: the next scene
+		// write's BeginRendering requests the color-attachment state, again from the tracked layout.
 		R.AddPass(ERHICommandListType::Graphics, PipelineDesc, Target, Params, DrawList);
-		if (Scene::FScene* Scene = Scene::GetScene())
-		{
-			Scene->TransitionSceneColorForRendering(R);
-		}
 
 		// The list's per-frame GPU refs (the merged VB/IB) are DONE the moment the draw pass above
 		// has recorded: nothing reads them again. Dropping them here instead of at the next frame's
@@ -1067,31 +1044,6 @@ void FUIFeature::RenderUI(FRender& R, FRenderContext& Frame)
 	// this, the viewport would sample a stale/empty present target.
 	MAHO_TRACE_SECTION("publish the composite as present target", nullptr);
 	R.SetPresentTarget(UIRenderTarget);
-#ifdef MAHO_EDITOR_BUILD
-	// Editor build: pass3 samples this present target as its viewport background (the
-	// present-target ImTextureID resolves to GetPresentTarget() == this composite). Flip it
-	// to SHADER_READ_ONLY so that sampled read is legal; pass3's RenderEditorUI flips it back
-	// to COLOR_ATTACHMENT afterwards, and RenderUI's head flips it back before the next write.
-	TransitionUIRenderTargetForSampling(R);
-#endif
-}
-
-void FUIFeature::TransitionUIRenderTargetForSampling(FRender& R)
-{
-	// Flip UIRenderTarget from COLOR_ATTACHMENT (where the composite just wrote it) to
-	// SHADER_READ_ONLY so a downstream sampled use (pass3's viewport imgui::image of the
-	// present target) can bind it legally. The RHI never auto-transitions and descriptor
-	// writes hardcode SHADER_READ_ONLY, so sampling a target still in COLOR_ATTACHMENT
-	// trips the validation layer. RenderUI's head flips it back before any write.
-	if (UIRenderTarget.IsValid() && !bUIRenderTargetLayoutSR)
-	{
-		FRHITexture* RT = UIRenderTarget.GetRHI();
-		R.AddPass(ERHICommandListType::Graphics, [RT](FRHICommandList& Cmd)
-		{
-			Cmd.TransitionTexture(RT, ERHIResourceState::RenderTarget, ERHIResourceState::ShaderResource);
-		});
-		bUIRenderTargetLayoutSR = true;
-	}
 }
 
 void FUIFeature::PreUnInstall(FRender& R, FRenderContext& Frame)

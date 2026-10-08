@@ -16,7 +16,7 @@ namespace
 void main()
 {
 	vec2 pos[3] = vec2[](vec2(0.0, -0.5), vec2(0.5, 0.5), vec2(-0.5, 0.5));
-	gl_Position = vec4(pos[gl_VertexIndex], 0.0, 1.0);
+	gl_Position = vec4(pos[gl_VertexIndex], 1.0, 1.0);
 }
 )";
 
@@ -129,7 +129,13 @@ void FDrawTriangleFeature::Render(FRender& R, FRenderContext& Frame)
 	PipelineDesc.ColorFormat = ColorFormat;
 	PipelineDesc.DepthFormat = ERHIFormat::D32_SFLOAT;
 	PipelineDesc.bDepthTest = true;
-	PipelineDesc.bDepthWrite = false;
+	// The triangle is a BACKDROP, so it must occupy the FAR plane and say so in the depth buffer:
+	// with z = 1.0 written, whichever of the two passes records FIRST, the depth test gives the same
+	// answer -- real geometry (z < 1) passes and the triangle (z == 1) fails LEqual once geometry has
+	// written depth. Without the write (and at z = 0, which is what this had) the result was pure
+	// painter's order, so the model disappeared whenever the triangle happened to record last.
+	PipelineDesc.bDepthWrite = true;
+	PipelineDesc.DepthCompare = ERHICompareOp::LessOrEqual;
 
 	// Consume FScene's hardcoded triangle DrawList: record its batch (Draw(3) -- no
 	// VB, the vertex shader generates the primitive). One AddPass == one subpass, so
