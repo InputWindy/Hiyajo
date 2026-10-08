@@ -2,12 +2,15 @@
 
 #include "RDG.h"
 
+#include <Core/FrameGraph.h>   // MAHO_FRAMES_IN_FLIGHT: the frame-domain slot count (kFrameSlots)
 #include <RHI/RHIServer.h>
 
+#include <array>
 #include <cstddef>
 #include <mutex>
 #include <new>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace Maho
@@ -71,18 +74,19 @@ public:
 	/**
 	 * Allocate a fresh graphics command list for a render-feature pass. The pool
 	 * tracks it: a pass is recorded in its own frame and SUBMITTED at that frame's
-	 * IPresent stage, and the list is destroyed at the next BeginFrame -- after the
-	 * host waited the swapchain fence, so nothing is still executing. Submission is
-	 * the handover point (RetireRenderLists): a list recorded BEFORE the frame loop
-	 * started (an asset-mirror upload, an init-time upload) sits in a frame's table
-	 * until that frame's IPresent submits it, and must survive until then.
+	 * IPresent stage, and the list is destroyed at the BeginFrame that retires its
+	 * frame's slot -- the frame head waited that slot's fence, so nothing is still
+	 * executing. Submission is the handover point (RetireRenderLists): a list recorded
+	 * BEFORE the frame loop started (an asset-mirror upload, an init-time upload) sits
+	 * in a frame's table until that frame's IPresent submits it, and must survive
+	 * until then.
 	 */
 	[[nodiscard]] FRHICommandList* AcquireRenderList();
 
-	/** Hand back the lists this frame just SUBMITTED: they are destroyed at the next BeginFrame.
-	 *  Called by the frame's submission point, so a list's lifetime starts when it is recorded and
-	 *  ends one frame-boundary after it reached the queue -- never while it is still queued to be
-	 *  submitted. */
+	/** Hand back the lists this frame just SUBMITTED: they are destroyed when this frame's slot comes
+	 *  round again (`kFrameSlots` boundaries later), which is the point the RHI's per-slot fence proves
+	 *  them done. Called by the frame's submission point, so a list's lifetime starts when it is
+	 *  recorded and ends at the fence that covers its submission -- never while it is still queued. */
 	void RetireRenderLists(const std::vector<FRHICommandList*>& Lists);
 
 	/**
@@ -193,6 +197,14 @@ private:
 		 *  its frame fails to resolve (Get*) instead of silently aliasing the next occupant.
 		 *  Persistent slots never advance it (their handles are valid until the pool shuts down). */
 		std::uint32_t Generation = 0;
+		/** The frame (pool `FrameCounter`) this transient was last HANDED OUT in. A transient's native
+		 *  may only be handed to another frame once the frame that used it has retired on the GPU,
+		 *  which is what `kFrameLifetimeFrames = MAHO_FRAMES_IN_FLIGHT` expresses: the RHI's frame head
+		 *  waits the fence of the frame K slots back, so "K frames old" IS "provably retired". With the
+		 *  old unconditional per-frame recycle a transient reused at frame N could still be read by
+		 *  frame N-1's queued command lists -- the same class of race as the camera ring's, and it only
+		 *  stayed invisible because this frame's material parameter bytes happen to be constant. */
+		std::uint32_t LastUsedFrame = 0;
 	};
 
 	struct FBufferEntry
@@ -204,6 +216,8 @@ private:
 		bool bActive = false;
 		/** See FTextureEntry::Generation. */
 		std::uint32_t Generation = 0;
+		/** See FTextureEntry::LastUsedFrame. */
+		std::uint32_t LastUsedFrame = 0;
 	};
 
 	// PSO cache entries: the descriptor that produced the native. Reuse = find an
@@ -273,16 +287,26 @@ private:
 	void DestroyTextureEntry(FTextureEntry& Entry);
 	void DestroyBufferEntry(FBufferEntry& Entry);
 
-	/** Same, but the natives are held until the NEXT frame boundary instead of being destroyed
-	 *  now. A frame's resources are recycled at the frame's HEAD, while its command lists are only
-	 *  submitted by that frame's TAIL -- so a native whose slot is re-used here may still be bound
-	 *  in a list that has not reached the queue yet, and Vulkan reports it as a buffer destroyed
-	 *  while bound in a command buffer being submitted. One frame of grace is far more than the tail
-	 *  needs (it runs within the same frame), and it costs one frame of memory for a slot that
-	 *  changed descriptor. */
+	/** Same, but the natives are held until the frame that could still reference them has RETIRED
+	 *  instead of being destroyed now. A frame's resources are recycled at the frame's HEAD, while its
+	 *  command lists are only submitted by that frame's TAIL -- so a native whose slot is re-used here
+	 *  may still be bound in a list that has not reached the queue yet, and Vulkan reports it as a
+	 *  buffer destroyed while bound in a command buffer being submitted
+	 *  (`VUID-vkDestroyBuffer-buffer-00922`). The hold is bucketed by FRAME SLOT: the frame head waits
+	 *  the per-slot fence of the frame `kFrameSlots` back, so that -- and only that -- frame's slot
+	 *  bucket is provably retired and is the one freed (see BeginFrame / FlushCondemned).
+	 *
+	 *  ONE frame of grace was the depth-1 reading of this (a single device fence meant the frame before
+	 *  the head was done); at depth K it hands live natives to `vkDestroy*`. */
 	void CondemnTexture(FRHITexture* Native, FRHITextureView* View);
 	void CondemnBuffer(FRHIBuffer* Native);
-	void FlushCondemned();
+
+	/** Free the condemned natives of ONE frame-slot bucket -- the slot whose fence the frame head just
+	 *  waited. Called by BeginFrame with the slot it retires; never "everything". */
+	void FlushCondemned(std::uint32_t Slot);
+
+	/** Free EVERY bucket. Only legal when the device is idle (Shutdown), where no slot is in flight. */
+	void FlushAllCondemned();
 
 	IRHI* RHI = nullptr;
 
@@ -304,13 +328,42 @@ private:
 	 *  in the opposite order. */
 	mutable std::mutex TableMutex;
 
+	/** Frame-state slots, ONE per frame the RHI lets overlap: `MAHO_FRAMES_IN_FLIGHT`, the same number
+	 *  the device's per-slot fence ring uses (`FVulkanRHI::kFrameSlots`). The frame head (RHI
+	 *  `BeginFrame`, then this pool's `BeginFrame`, in that order, once per frame) waits the fence of
+	 *  ONE slot -- the slot the frame it is opening will use, signalled by the submit of the frame
+	 *  `kFrameSlots` boundaries back -- so exactly one bucket per frame-domain table is retired per
+	 *  boundary, and it is that slot's bucket. */
+	static constexpr std::uint32_t kFrameSlots = MAHO_FRAMES_IN_FLIGHT;
+
+	/** The RHI frame SLOT of the frame in progress -- the bucket key for every frame-domain retirement.
+	 *
+	 *  `FrameCounter` counts from 1 while a frame runs (it advances at the TOP of BeginFrame, before the
+	 *  sweeps that need it), so the frame being built is `FrameCounter - 1` and its slot is that value
+	 *  mod `kFrameSlots`, which is exactly what `FVulkanRHI::BeginFrame` used to pick the slot. Read at
+	 *  the top of a frame head it is therefore also the slot whose fence was just waited: one expression
+	 *  names both "the bucket to retire now" and "the bucket this frame's natives belong to".
+	 *  (An off-by-one here is not theoretical: stamping a frame's work with the NEXT slot's bucket frees
+	 *  it at the next frame head instead of K boundaries later -- measured as 11 in-use command buffers
+	 *  freed in one sweep, `VUID-vkFreeCommandBuffers-pCommandBuffers-00047`.) */
+	[[nodiscard]] std::uint32_t CurrentFrameSlot() const
+	{
+		return (FrameCounter + kFrameSlots - 1) % kFrameSlots;
+	}
+
 	std::vector<FTextureEntry> Textures;
 	std::vector<std::uint32_t> FreeTextureSlots;
 	std::vector<FBufferEntry> Buffers;
 	std::vector<std::uint32_t> FreeBufferSlots;
 	std::vector<FRHICommandList*> PendingRenderLists;    // acquired, NOT yet submitted (destroyed at Shutdown)
-	std::vector<FRHICommandList*> RetiringRenderLists;   // submitted, destroyed at the next BeginFrame
-	std::mutex RenderListsMutex;                        // guards both lists (features record on pool workers)
+
+	/** Submitted lists, bucketed by the RHI frame SLOT they were submitted in. A frame head waits ONE
+	 *  per-slot fence, so it learns exactly ONE thing: the frame `kFrameSlots` back has retired. Only
+	 *  that frame's bucket may be destroyed; the whole-table swap this replaces destroyed the lists of
+	 *  frames that were still on the queue, and Vulkan reported it as
+	 *  `VUID-vkFreeCommandBuffers-pCommandBuffers-00047` ("is in use"). */
+	std::vector<FRHICommandList*> RetiringRenderLists[kFrameSlots];
+	std::mutex RenderListsMutex;                        // guards the list tables (features record on pool workers)
 
 	std::vector<FPipelineLayoutEntry> PipelineLayouts;  // PSO cache: layout native keyed by its desc
 	std::vector<FDescriptorSetLayoutEntry> DescriptorSetLayouts;  // PSO cache: set layouts (pipeline-layout deps)
@@ -325,18 +378,18 @@ private:
 	 *  a texture that stopped being drawn) would otherwise leave its set + pool alive forever. Both
 	 *  entry tables are swept at BeginFrame: an entry unused for more than the grace period is freed.
 	 *
-	 *  Grace is deliberately not 1: a frame's sets are referenced by the command lists IT submitted,
-	 *  and BeginFrame only sweeps after it waited the frame fence. Two frames of slack keeps the
-	 *  sweep clear of a set that a still-recorded (not yet submitted) list of the frame being built
-	 *  would have used -- the same reason the command lists themselves are retired one boundary
-	 *  later. `FrameCounter` advances in BeginFrame, so it counts the frame being built. */
-	static constexpr std::uint32_t kDescriptorSetGraceFrames = 2;
+	 *  Grace is the IN-FLIGHT DEPTH, not 1: a frame's sets are referenced by the command lists it
+	 *  submitted, and those are still on the queue while K frames overlap -- `kFrameSlots` slack is
+	 *  what keeps the sweep clear of a set a still-in-flight (or still-being-recorded) frame used.
+	 *  Anything less was the depth-1 reading of "the previous frame is done". */
+	static constexpr std::uint32_t kDescriptorSetGraceFrames = MAHO_FRAMES_IN_FLIGHT;
 	std::uint32_t FrameCounter = 0;
 
-	// Natives whose slot was re-used with a different descriptor: destroyed a frame later (see
-	// CondemnTexture / CondemnBuffer) so a submission still in flight cannot be invalidated.
-	std::vector<std::pair<FRHITexture*, FRHITextureView*>> CondemnedTextures;
-	std::vector<FRHIBuffer*> CondemnedBuffers;
+	// Natives whose slot was re-used with a different descriptor: held for `kFrameSlots` frames (see
+	// CondemnTexture / CondemnBuffer), bucketed by the frame SLOT that condemned them so a submission
+	// still in flight cannot be invalidated.
+	std::array<std::vector<std::pair<FRHITexture*, FRHITextureView*>>, kFrameSlots> CondemnedTextures;
+	std::array<std::vector<FRHIBuffer*>, kFrameSlots> CondemnedBuffers;
 
 	/** Free one entry's set + pool (the pair is pool-owned; the set is freed before its pool). */
 	void DestroyDescriptorSetEntry(FDescriptorSetEntry& Entry);

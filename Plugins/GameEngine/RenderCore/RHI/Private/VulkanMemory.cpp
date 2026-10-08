@@ -165,21 +165,43 @@ void FVulkanMemoryAllocator::DestroyBufferDeferred(VkBuffer Buffer, VmaAllocatio
 		return;
 	}
 	std::lock_guard<std::mutex> Lock(DeferredMutex);
-	DeferredBuffers.push_back({ Buffer, Allocation });
+	// Tagged with the frame slot in progress: this staging is read by that frame's recorded copy, so it
+	// may only be freed once that slot's fence has been waited (see RetireDeferredForSlot).
+	DeferredBuffers[CurrentSlot % kFrameSlots].push_back({ Buffer, Allocation });
 }
 
-void FVulkanMemoryAllocator::FlushDeferredFrees()
+void FVulkanMemoryAllocator::RetireDeferredForSlot(std::uint32_t Slot)
 {
-	// Swap out the batch being retired, so a concurrent recording thread keeps
-	// queueing into a fresh list while we free the finished one.
+	// Swap out the bucket being retired, so concurrent recorders keep queueing into a fresh list while
+	// we free the finished one; then adopt the slot for everything recorded from here on.
 	std::vector<FDeferredBuffer> Pending;
 	{
 		std::lock_guard<std::mutex> Lock(DeferredMutex);
-		Pending.swap(DeferredBuffers);
+		CurrentSlot = Slot;
+		Pending.swap(DeferredBuffers[Slot % kFrameSlots]);
 	}
 	for (const FDeferredBuffer& D : Pending)
 	{
 		DestroyBuffer(D.Buffer, D.Allocation);
+	}
+}
+
+void FVulkanMemoryAllocator::FlushDeferredFrees()
+{
+	// Every bucket, regardless of slot. The caller has made the device idle (engine shutdown), so no
+	// copy can still be reading any of them -- the frame head's per-slot retirement is not available
+	// here because there is no next frame.
+	for (std::vector<FDeferredBuffer>& Bucket : DeferredBuffers)
+	{
+		std::vector<FDeferredBuffer> Pending;
+		{
+			std::lock_guard<std::mutex> Lock(DeferredMutex);
+			Pending.swap(Bucket);
+		}
+		for (const FDeferredBuffer& D : Pending)
+		{
+			DestroyBuffer(D.Buffer, D.Allocation);
+		}
 	}
 }
 

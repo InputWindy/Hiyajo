@@ -128,6 +128,8 @@ public:
 	virtual void FillBuffer(FRHIBuffer* Buffer, std::uint64_t Offset, std::uint64_t Size, std::uint32_t Data) override;
 	virtual void TransitionBuffer(FRHIBuffer* Buffer, ERHIResourceState OldState, ERHIResourceState NewState) override;
 	virtual void TransitionTexture(FRHITexture* Texture, ERHIResourceState OldState, ERHIResourceState NewState) override;
+	virtual void RequireUsage(FRHITexture* Texture, ERHIResourceUsage Usage) override;
+	virtual void RequireUsages(const FRHITextureUsageRequest* Requests, std::uint32_t Count) override;
 
 	virtual void BeginRenderPass(
 		FRHIRenderPass* RenderPass,
@@ -218,19 +220,26 @@ private:
 	void AssertNotTransfer() const;
 
 	/**
-	 * Transition ONE subresource range (a mip range plus a layer range, with an explicit aspect
-	 * mask). The public TransitionTexture is the "every mip, every layer" case of this; the copies
-	 * record per-subresource transitions so a single-mip upload never barriers the whole image.
+	 * THE state machine's single transition point (whole image: every mip, every layer, aspect from
+	 * the texture's format).
+	 *
+	 * For each request whose TRACKED state differs from the state its usage asks for, one image
+	 * memory barrier is recorded -- oldLayout / srcStage / srcAccess read from the tracked state (so
+	 * they are what the previous command actually produced), new* from the usage, and the tracked
+	 * state is advanced to the target. A request already satisfied records NOTHING. Barriers are
+	 * MERGED: every barrier sharing one (source stage, destination stage) pair goes into a single
+	 * vkCmdPipelineBarrier call, in request order.
+	 *
+	 * A request with bRequiresContent set (an attachment with LoadOp::Load) whose tracked layout is
+	 * UNDEFINED is reported ONCE per texture: that transition legally discards the contents the
+	 * caller is about to read, so a blank frame would otherwise be attributed to the renderer.
 	 */
-	void TransitionTextureRange(
-		FRHITexture* Texture,
-		ERHIResourceState OldState,
-		ERHIResourceState NewState,
-		std::uint32_t MipLevel,
-		std::uint32_t MipCount,
-		std::uint32_t BaseArrayLayer,
-		std::uint32_t LayerCount,
-		VkImageAspectFlags AspectMask);
+	void ApplyUsage(const FRHITextureUsageRequest* Requests, std::uint32_t Count);
+
+	/** Apply a legacy ERHIResourceState as a usage request (no-op for Common / unmappable states).
+	 *  This is how the hand-written TransitionTexture / copy-state-pair call sites enter the state
+	 *  machine instead of bypassing it. */
+	void ApplyState(FRHITexture* Texture, ERHIResourceState State);
 
 	ERHICommandListType Type = ERHICommandListType::Graphics;
 	VkDevice Device = VK_NULL_HANDLE;

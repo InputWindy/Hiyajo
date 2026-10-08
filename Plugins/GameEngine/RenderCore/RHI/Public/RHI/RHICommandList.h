@@ -11,6 +11,22 @@ namespace Maho
 
 class FRHICommandList;
 
+/**
+ * One usage request (see FRHICommandList::RequireUsages): a texture plus the PURPOSE the commands
+ * recorded after it need.
+ *
+ * `bRequiresContent` is the "I am about to READ what is already there" flag (an attachment with
+ * LoadOp::Load). The state machine never needs it to be correct -- the barrier is derived either
+ * way -- but it is what lets a transition that DISCARDS content (source layout UNDEFINED, so the
+ * old contents are legally gone) be reported instead of silently displayed as an empty frame.
+ */
+struct MAHO_RHI_API FRHITextureUsageRequest
+{
+	FRHITexture* Texture = nullptr;
+	ERHIResourceUsage Usage = ERHIResourceUsage::Sampled;
+	bool bRequiresContent = false;
+};
+
 struct MAHO_RHI_API FRHIRenderingAttachmentInfo
 {
 	FRHITextureView* View = nullptr;
@@ -68,8 +84,9 @@ public:
 		std::uint64_t DstOffset,
 		std::uint64_t Size) = 0;
 	/**
-	 * Buffer -> texture copy. The copy OWNS its layout transitions: DstState::Before is the
-	 * layout the destination is in on entry, DstState::After the layout it must be left in.
+	 * Buffer -> texture copy. The copy OWNS its layout transitions, and the LAYOUTS ARE TRACKED (not
+	 * declared): the destination is brought to transfer-dst through its usage state, and left in
+	 * DstState::After's state. DstState::Before is legacy and ignored (see FRHIResourceStatePair).
 	 * Callers therefore do NOT hand-write TransitionTexture around it (see UIFeature's font
 	 * atlas upload and FRender's mirror upload).
 	 */
@@ -79,16 +96,17 @@ public:
 		FRHITexture* Dst,
 		const FRHITextureCopyRegion& Region,
 		const FRHIResourceStatePair& DstState = { ERHIResourceState::Common, ERHIResourceState::ShaderResource }) = 0;
-	/** Texture -> buffer copy (readback / screenshot). Transitions Src from SrcState::Before
-	 *  to CopySrc and back to SrcState::After around the copy. */
+	/** Texture -> buffer copy (readback / screenshot). Transitions Src through its tracked state to
+	 *  transfer-src and back to SrcState::After's state around the copy (Before is ignored). */
 	virtual void CopyTextureToBuffer(
 		FRHITexture* Src,
 		const FRHITextureCopyRegion& Region,
 		FRHIBuffer* Dst,
 		std::uint64_t DstOffset,
 		const FRHIResourceStatePair& SrcState = { ERHIResourceState::ShaderResource, ERHIResourceState::ShaderResource }) = 0;
-	/** Texture -> texture copy, both regions explicit. Each side carries its own
-	 *  state pair; the layer count of a 3D source/target is its depth slice count. */
+	/** Texture -> texture copy, both regions explicit. Each side carries its own state pair; the
+	 *  layer count of a 3D source/target is its depth slice count. As above only the After half is
+	 *  consulted -- both sides move through their tracked state. */
 	virtual void CopyTexture(
 		FRHITexture* Src,
 		const FRHITextureCopyRegion& SrcRegion,
@@ -105,6 +123,23 @@ public:
 	virtual void UpdateBuffer(FRHIBuffer* Buffer, std::uint64_t Offset, std::uint64_t Size, const void* Data) = 0;
 	virtual void TransitionBuffer(FRHIBuffer* Buffer, ERHIResourceState OldState, ERHIResourceState NewState) = 0;
 	virtual void TransitionTexture(FRHITexture* Texture, ERHIResourceState OldState, ERHIResourceState NewState) = 0;
+
+	/**
+	 * Make Texture usable as Usage for every command recorded AFTER this point.
+	 *
+	 * The caller declares a PURPOSE, never a layout. The barrier is DERIVED: its old layout, source
+	 * stage and source access come from the texture's tracked state, its new layout/stage/access from
+	 * the usage, and the tracked state advances only when the two differ -- so an unchanged state
+	 * records nothing at all. This is the entry the RDG usage deduction, BeginRendering and the copy
+	 * paths all use (see ERHIResourceUsage).
+	 */
+	virtual void RequireUsage(FRHITexture* Texture, ERHIResourceUsage Usage) = 0;
+	/**
+	 * Batch form of RequireUsage: a whole pass's usage set in ONE call, so identical
+	 * (source stage, destination stage) pairs are merged into a single vkCmdPipelineBarrier instead
+	 * of one call per texture. A request already satisfied contributes nothing.
+	 */
+	virtual void RequireUsages(const FRHITextureUsageRequest* Requests, std::uint32_t Count) = 0;
 
 	// Graphics only
 	virtual void BeginRenderPass(

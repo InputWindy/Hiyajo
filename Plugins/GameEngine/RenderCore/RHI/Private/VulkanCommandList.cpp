@@ -73,28 +73,6 @@ namespace
 	}
 }
 
-[[nodiscard]] VkImageLayout ToVkImageLayout(ERHIResourceState State)
-{
-	switch (State)
-	{
-	case ERHIResourceState::CopySrc:
-		return VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-	case ERHIResourceState::CopyDst:
-		return VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-	case ERHIResourceState::ShaderResource:
-		return VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-	case ERHIResourceState::RenderTarget:
-		return VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-	case ERHIResourceState::DepthWrite:
-		return VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-	case ERHIResourceState::Present:
-		return VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-	case ERHIResourceState::Common:
-	default:
-		return VK_IMAGE_LAYOUT_UNDEFINED;
-	}
-}
-
 [[nodiscard]] VkDescriptorType ToVkDescriptorType(ERHIDescriptorType Type)
 {
 	// ERHIDescriptorType is dense and skips Vulkan texel-buffer enums - never static_cast.
@@ -251,45 +229,138 @@ void FVulkanCommandList::CopyBuffer(FRHIBuffer* Src, std::uint64_t SrcOffset, FR
 	vkCmdCopyBuffer(Buffer, SrcVk->GetVkBuffer(), DstVk->GetVkBuffer(), 1, &Region);
 }
 
-void FVulkanCommandList::TransitionTextureRange(
-	FRHITexture* Texture,
-	ERHIResourceState OldState,
-	ERHIResourceState NewState,
-	std::uint32_t MipLevel,
-	std::uint32_t MipCount,
-	std::uint32_t BaseArrayLayer,
-	std::uint32_t LayerCount,
-	VkImageAspectFlags AspectMask)
+void FVulkanCommandList::RequireUsage(FRHITexture* Texture, ERHIResourceUsage Usage)
 {
-	auto* Tex = static_cast<FVulkanTexture*>(Texture);
-	if (Tex == nullptr || !bRecording)
+	const FRHITextureUsageRequest Request{ Texture, Usage, false };
+	ApplyUsage(&Request, 1);
+}
+
+void FVulkanCommandList::RequireUsages(const FRHITextureUsageRequest* Requests, std::uint32_t Count)
+{
+	ApplyUsage(Requests, Count);
+}
+
+void FVulkanCommandList::ApplyState(FRHITexture* Texture, ERHIResourceState State)
+{
+	ERHIResourceUsage Usage = ERHIResourceUsage::Sampled;
+	if (!ToResourceUsage(State, Usage))
+	{
+		// Common ("no layout") and the buffer states name nothing to do to an image: the texture
+		// simply stays in the state the previous command left it in -- which is now TRACKED, so the
+		// next use still transitions from the truth instead of from an assumption.
+		return;
+	}
+	const FRHITextureUsageRequest Request{ Texture, Usage, false };
+	ApplyUsage(&Request, 1);
+}
+
+void FVulkanCommandList::ApplyUsage(const FRHITextureUsageRequest* Requests, std::uint32_t Count)
+{
+	if (Requests == nullptr || Count == 0 || !bRecording)
 	{
 		return;
 	}
 
-	VkImageMemoryBarrier Barrier{};
-	Barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-	Barrier.oldLayout = ToVkImageLayout(OldState);
-	Barrier.newLayout = ToVkImageLayout(NewState);
-	Barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-	Barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-	Barrier.image = Tex->GetVkImage();
-	Barrier.subresourceRange.aspectMask = AspectMask;
-	Barrier.subresourceRange.baseMipLevel = MipLevel;
-	Barrier.subresourceRange.levelCount = MipCount;
-	Barrier.subresourceRange.baseArrayLayer = BaseArrayLayer;
-	Barrier.subresourceRange.layerCount = LayerCount;
-	Barrier.srcAccessMask = ToVkAccess(OldState);
-	Barrier.dstAccessMask = ToVkAccess(NewState);
+	// One merged barrier call per distinct (source stage, destination stage) pair -- a
+	// vkCmdPipelineBarrier carries exactly one such pair, so that IS the finest legal merge. Small
+	// N (one pass's usage set): a linear scan keeps the barrier order equal to the request order.
+	struct FBarrierGroup
+	{
+		VkPipelineStageFlags SrcStage = 0;
+		VkPipelineStageFlags DstStage = 0;
+		std::vector<VkImageMemoryBarrier> Barriers;
+	};
+	std::vector<FBarrierGroup> Groups;
 
-	vkCmdPipelineBarrier(
-		Buffer,
-		ToVkPipelineStage(OldState),
-		ToVkPipelineStage(NewState),
-		0,
-		0, nullptr,
-		0, nullptr,
-		1, &Barrier);
+	for (std::uint32_t I = 0; I < Count; ++I)
+	{
+		auto* Tex = static_cast<FVulkanTexture*>(Requests[I].Texture);
+		if (Tex == nullptr || Tex->GetVkImage() == VK_NULL_HANDLE)
+		{
+			continue;
+		}
+
+		const FVulkanImageState Current = Tex->GetTrackedState();
+		const FVulkanImageState Target = ToVulkanImageState(Requests[I].Usage);
+		if (Current.Layout == Target.Layout)
+		{
+			// Already in the state this purpose needs. THE dedupe: repeating a usage (frame after
+			// frame, or twice inside one pass) costs no barrier at all -- and no access upgrade
+			// either, because the transition that got us here already carried the destination access.
+			continue;
+		}
+
+		if (Requests[I].bRequiresContent && Current.Layout == VK_IMAGE_LAYOUT_UNDEFINED && !Tex->ReportedContentLoss)
+		{
+			Tex->ReportedContentLoss = true;
+			MAHO_LOG_CORE_ERROR(
+				"RHI resource state: '{}' ({}x{}) is about to be LOADED but its tracked state is UNDEFINED -- "
+				"the barrier that follows legally discards its contents, so the load reads undefined texels "
+				"(reported once per texture; a Clear/DontCare load is unaffected)",
+				Tex->GetDebugName().c_str(), Tex->GetDesc().Extent.Width, Tex->GetDesc().Extent.Height);
+		}
+
+		const FRHITextureDesc& Desc = Tex->GetDesc();
+
+		VkImageMemoryBarrier Barrier{};
+		Barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+		Barrier.oldLayout = Current.Layout;
+		Barrier.newLayout = Target.Layout;
+		Barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		Barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		Barrier.image = Tex->GetVkImage();
+		Barrier.subresourceRange.aspectMask = GetVulkanAspectMask(Desc.Format);
+		Barrier.subresourceRange.baseMipLevel = 0;
+		Barrier.subresourceRange.levelCount = Desc.MipLevels;
+		Barrier.subresourceRange.baseArrayLayer = 0;
+		Barrier.subresourceRange.layerCount = Desc.ArrayLayers;
+		Barrier.dstAccessMask = Target.Access;
+
+		VkPipelineStageFlags SrcStage = Current.Stage;
+		if (Current.Layout == VK_IMAGE_LAYOUT_UNDEFINED)
+		{
+			// An undefined source has no producer and no contents to make visible: srcAccessMask
+			// MUST be 0 and there is nothing to wait for.
+			SrcStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+			Barrier.srcAccessMask = 0;
+		}
+		else
+		{
+			Barrier.srcAccessMask = Current.Access;
+		}
+
+		// Advance the tracking AFTER the barrier's source half was taken from it.
+		Tex->TrackedStateRef() = Target;
+
+		FBarrierGroup* Group = nullptr;
+		for (FBarrierGroup& G : Groups)
+		{
+			if (G.SrcStage == SrcStage && G.DstStage == Target.Stage)
+			{
+				Group = &G;
+				break;
+			}
+		}
+		if (Group == nullptr)
+		{
+			Groups.push_back(FBarrierGroup{ SrcStage, Target.Stage, {} });
+			Group = &Groups.back();
+		}
+		Group->Barriers.push_back(Barrier);
+	}
+
+	for (const FBarrierGroup& G : Groups)
+	{
+		vkCmdPipelineBarrier(
+			Buffer,
+			G.SrcStage,
+			G.DstStage,
+			0,
+			0, nullptr,
+			0, nullptr,
+			static_cast<std::uint32_t>(G.Barriers.size()),
+			G.Barriers.data());
+	}
 }
 
 void FVulkanCommandList::CopyBufferToTexture(
@@ -309,19 +380,15 @@ void FVulkanCommandList::CopyBufferToTexture(
 	const FRHITextureDesc& Desc = DstVk->GetDesc();
 	const FRHIExtent3D Extent = ResolveCopyExtent(Desc, Region);
 	const std::uint32_t LayerCount = ResolveCopyLayerCount(Desc, Region);
-	// Aspect comes from the texture's usage, exactly as TransitionTexture derives it.
-	const VkImageAspectFlags Aspect = RHIEnumHas(Desc.Usage, ERHITextureUsage::DepthStencil)
-		? VK_IMAGE_ASPECT_DEPTH_BIT
-		: VK_IMAGE_ASPECT_COLOR_BIT;
+	// Aspect comes from the format, exactly as the state machine derives it for its own barriers.
+	const VkImageAspectFlags Aspect = GetVulkanAspectMask(Desc.Format);
 
-	// The copy owns its transitions: the destination enters as DstState::Before and leaves as
-	// DstState::After, with the transfer-dst layout in between. Callers no longer hand-write a
-	// TransitionTexture pair around this call.
-	if (DstState.Before != ERHIResourceState::CopyDst)
-	{
-		TransitionTextureRange(Dst, DstState.Before, ERHIResourceState::CopyDst,
-			Region.MipLevel, 1, Region.BaseArrayLayer, LayerCount, Aspect);
-	}
+	// The copy owns its transitions, and the TRACKED state owns the layouts: the destination enters
+	// through a usage request (DstState::Before is a caller belief and is no longer consulted -- it
+	// was the one place an upload could silently claim UNDEFINED while the image was sampled) and is
+	// left in DstState::After's state.
+	FRHITextureUsageRequest Entry{ Dst, ERHIResourceUsage::TransferDst, false };
+	ApplyUsage(&Entry, 1);
 
 	VkBufferImageCopy Copy{};
 	Copy.bufferOffset = SrcOffset;
@@ -343,11 +410,7 @@ void FVulkanCommandList::CopyBufferToTexture(
 		1,
 		&Copy);
 
-	if (DstState.After != ERHIResourceState::CopyDst)
-	{
-		TransitionTextureRange(Dst, ERHIResourceState::CopyDst, DstState.After,
-			Region.MipLevel, 1, Region.BaseArrayLayer, LayerCount, Aspect);
-	}
+	ApplyState(Dst, DstState.After);
 }
 
 void FVulkanCommandList::CopyTextureToBuffer(
@@ -367,16 +430,14 @@ void FVulkanCommandList::CopyTextureToBuffer(
 	const FRHITextureDesc& Desc = SrcVk->GetDesc();
 	const FRHIExtent3D Extent = ResolveCopyExtent(Desc, Region);
 	const std::uint32_t LayerCount = ResolveCopyLayerCount(Desc, Region);
-	const VkImageAspectFlags Aspect = RHIEnumHas(Desc.Usage, ERHITextureUsage::DepthStencil)
-		? VK_IMAGE_ASPECT_DEPTH_BIT
-		: VK_IMAGE_ASPECT_COLOR_BIT;
+	const VkImageAspectFlags Aspect = GetVulkanAspectMask(Desc.Format);
 
-	// Same self-transitioning contract as the upload, on the source side: Before -> CopySrc.
-	if (SrcState.Before != ERHIResourceState::CopySrc)
-	{
-		TransitionTextureRange(Src, SrcState.Before, ERHIResourceState::CopySrc,
-			Region.MipLevel, 1, Region.BaseArrayLayer, LayerCount, Aspect);
-	}
+	// Same self-transitioning contract as the upload, on the source side: into transfer-src through
+	// the state machine, then out to whatever SrcState::After asks for (Before is not consulted).
+	// The readback path is the one place the tracked state matters most: it usually runs off the
+	// frame, so "which layout is this texture in right now" cannot be derived from the frame at all.
+	FRHITextureUsageRequest Entry{ Src, ERHIResourceUsage::TransferSrc, false };
+	ApplyUsage(&Entry, 1);
 
 	VkBufferImageCopy Copy{};
 	Copy.bufferOffset = DstOffset;
@@ -397,11 +458,7 @@ void FVulkanCommandList::CopyTextureToBuffer(
 		1,
 		&Copy);
 
-	if (SrcState.After != ERHIResourceState::CopySrc)
-	{
-		TransitionTextureRange(Src, ERHIResourceState::CopySrc, SrcState.After,
-			Region.MipLevel, 1, Region.BaseArrayLayer, LayerCount, Aspect);
-	}
+	ApplyState(Src, SrcState.After);
 }
 
 void FVulkanCommandList::CopyTexture(
@@ -437,24 +494,15 @@ void FVulkanCommandList::CopyTexture(
 		return;
 	}
 
-	const VkImageAspectFlags SrcAspect = RHIEnumHas(SrcDesc.Usage, ERHITextureUsage::DepthStencil)
-		? VK_IMAGE_ASPECT_DEPTH_BIT
-		: VK_IMAGE_ASPECT_COLOR_BIT;
-	const VkImageAspectFlags DstAspect = RHIEnumHas(DstDesc.Usage, ERHITextureUsage::DepthStencil)
-		? VK_IMAGE_ASPECT_DEPTH_BIT
-		: VK_IMAGE_ASPECT_COLOR_BIT;
+	const VkImageAspectFlags SrcAspect = GetVulkanAspectMask(SrcDesc.Format);
+	const VkImageAspectFlags DstAspect = GetVulkanAspectMask(DstDesc.Format);
 
-	// Both sides carry their own state pair, each around the copy's own transfer layout.
-	if (SrcState.Before != ERHIResourceState::CopySrc)
-	{
-		TransitionTextureRange(Src, SrcState.Before, ERHIResourceState::CopySrc,
-			SrcRegion.MipLevel, 1, SrcRegion.BaseArrayLayer, SrcLayers, SrcAspect);
-	}
-	if (DstState.Before != ERHIResourceState::CopyDst)
-	{
-		TransitionTextureRange(Dst, DstState.Before, ERHIResourceState::CopyDst,
-			DstRegion.MipLevel, 1, DstRegion.BaseArrayLayer, DstLayers, DstAspect);
-	}
+	// Both sides carry their own state pair, each around the copy's own transfer layout. Only the
+	// AFTER half is consulted: both sides move through their TRACKED state.
+	FRHITextureUsageRequest Entry{ Src, ERHIResourceUsage::TransferSrc, false };
+	ApplyUsage(&Entry, 1);
+	Entry = FRHITextureUsageRequest{ Dst, ERHIResourceUsage::TransferDst, false };
+	ApplyUsage(&Entry, 1);
 
 	VkImageCopy Copy{};
 	Copy.srcSubresource.aspectMask = SrcAspect;
@@ -478,16 +526,8 @@ void FVulkanCommandList::CopyTexture(
 		1,
 		&Copy);
 
-	if (SrcState.After != ERHIResourceState::CopySrc)
-	{
-		TransitionTextureRange(Src, ERHIResourceState::CopySrc, SrcState.After,
-			SrcRegion.MipLevel, 1, SrcRegion.BaseArrayLayer, SrcLayers, SrcAspect);
-	}
-	if (DstState.After != ERHIResourceState::CopyDst)
-	{
-		TransitionTextureRange(Dst, ERHIResourceState::CopyDst, DstState.After,
-			DstRegion.MipLevel, 1, DstRegion.BaseArrayLayer, DstLayers, DstAspect);
-	}
+	ApplyState(Src, SrcState.After);
+	ApplyState(Dst, DstState.After);
 }
 
 void FVulkanCommandList::FillBuffer(FRHIBuffer* InBuffer, std::uint64_t Offset, std::uint64_t Size, std::uint32_t Data)
@@ -609,19 +649,13 @@ void FVulkanCommandList::TransitionBuffer(FRHIBuffer* InBuffer, ERHIResourceStat
 
 void FVulkanCommandList::TransitionTexture(FRHITexture* Texture, ERHIResourceState OldState, ERHIResourceState NewState)
 {
-	auto* Tex = static_cast<FVulkanTexture*>(Texture);
-	if (Tex == nullptr || !bRecording)
-	{
-		return;
-	}
-
-	// Public behavior is unchanged (EVERY mip, EVERY layer, aspect from the usage) -- it is now
-	// the whole-range case of the per-subresource helper the copy operations use.
-	const FRHITextureDesc& Desc = Tex->GetDesc();
-	const VkImageAspectFlags Aspect = RHIEnumHas(Desc.Usage, ERHITextureUsage::DepthStencil)
-		? VK_IMAGE_ASPECT_DEPTH_BIT
-		: VK_IMAGE_ASPECT_COLOR_BIT;
-	TransitionTextureRange(Texture, OldState, NewState, 0, Desc.MipLevels, 0, Desc.ArrayLayers, Aspect);
+	// The LEGACY surface (a caller that still spells out old/new states) now feeds the state
+	// machine: only the NEW state is honoured, translated into the usage it names, and applied from
+	// the TRACKED state. So this call can no longer desync the two -- OldState is what the caller
+	// believed, and the tracked state is what is true. Public behavior for a correct caller is
+	// unchanged; for an incorrect one the barrier is now right instead of silently wrong.
+	(void)OldState;
+	ApplyState(Texture, NewState);
 }
 
 void FVulkanCommandList::BeginRenderPass(
@@ -682,6 +716,46 @@ void FVulkanCommandList::BeginRendering(
 	std::uint32_t Width, std::uint32_t Height)
 {
 	AssertType(ERHICommandListType::Graphics);
+
+	// -- attachment state is guaranteed HERE, before vkCmdBeginRendering --
+	//
+	// The imageLayout declared in each VkRenderingAttachmentInfo below is a CONSEQUENCE of the
+	// barrier just recorded, never an assumption: the attachment is brought into its attachment
+	// layout through the state machine, which derives the old layout/stage/access from what this
+	// texture is actually in. This is what makes "the caller forgot to transition" (the defect
+	// behind VUID-vkCmdBeginRendering-pRenderingInfo-09592: rendering into an image the validator
+	// still tracks as SHADER_READ_ONLY -- undefined behavior, seen as a viewport that flickers)
+	// UNEXPRESSIBLE, and it is why the transition below comes from the tracked state rather than
+	// from UNDEFINED: a LoadOp::Load pass must see the previous contents, not a discarded image.
+	std::vector<FRHITextureUsageRequest> AttachmentRequests;
+	AttachmentRequests.reserve(ColorCount + 1);
+	for (std::uint32_t I = 0; I < ColorCount; ++I)
+	{
+		auto* VkView = static_cast<FVulkanTextureView*>(ColorAttachments[I].View);
+		if (VkView == nullptr || VkView->GetSourceTexture() == nullptr)
+		{
+			continue;
+		}
+		AttachmentRequests.push_back(FRHITextureUsageRequest{
+			VkView->GetSourceTexture(),
+			ERHIResourceUsage::ColorAttachment,
+			ColorAttachments[I].LoadOp == ERHILoadOp::Load });
+	}
+	if (DepthAttachment != nullptr && DepthAttachment->View != nullptr)
+	{
+		auto* VkView = static_cast<FVulkanTextureView*>(DepthAttachment->View);
+		if (VkView != nullptr && VkView->GetSourceTexture() != nullptr)
+		{
+			AttachmentRequests.push_back(FRHITextureUsageRequest{
+				VkView->GetSourceTexture(),
+				ERHIResourceUsage::DepthAttachment,
+				DepthAttachment->LoadOp == ERHILoadOp::Load });
+		}
+	}
+	// One merged call for the whole attachment set: distinct textures may share a (src, dst) stage
+	// pair and then share one vkCmdPipelineBarrier.
+	ApplyUsage(AttachmentRequests.empty() ? nullptr : AttachmentRequests.data(),
+		static_cast<std::uint32_t>(AttachmentRequests.size()));
 
 	std::vector<VkRenderingAttachmentInfo> ColorAtts(ColorCount);
 	for (std::uint32_t I = 0; I < ColorCount; ++I)

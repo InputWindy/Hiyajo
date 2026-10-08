@@ -12,6 +12,7 @@
 #endif
 
 #include <algorithm>
+#include <chrono>   // the frame-head wait accounting below
 #include <cstdio>
 #include <cstring>
 #include <map>
@@ -23,6 +24,30 @@ namespace Maho
 
 namespace
 {
+
+// ── frame-head wait accounting ────────────────────────────────────────────────────────────────
+//
+// The frame head can only be blocked by two calls (the slot's fence wait and the swapchain acquire)
+// and the frame tail by one (the present). Timing all three is what turns "how deep is the pipeline
+// really?" into "which call actually spends the time?": the fence average is the evidence that the
+// in-flight depth is the slot count the RHI rotates over, not a bound imposed by the presentation
+// engine. Server-thread only (that is the only caller), so no atomics.
+std::uint64_t GWaitFrames = 0;
+std::uint64_t GWaitFenceUs = 0;
+std::uint64_t GWaitAcquireUs = 0;
+std::uint64_t GWaitPresentUs = 0;
+std::uint64_t GWaitFenceBlocked = 0;    // waits that took longer than 500 us == "actually blocked"
+std::uint64_t GWaitAcquireBlocked = 0;
+/** The window's opening stamp, so the reading below is emitted about once per second rather than
+ *  once per N frames (the frame rate is uncapped, so a frame count is not a duration). */
+std::uint64_t GWaitWindowStartUs = 0;
+
+[[nodiscard]] std::uint64_t NowMicros()
+{
+	return static_cast<std::uint64_t>(
+		std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now().time_since_epoch())
+			.count());
+}
 
 /** The CPU-trace LANE for every scope in this file. FVulkanRHI is the DEVICE (IDynamicRHI); the
  *  RESIDENT ROLE that owns the thread is FRHI (RHI/RHIServer.h), whose GetThreadName() answers
@@ -82,6 +107,21 @@ static ConsoleVariable::TAutoConsoleVariable<int> GCVarMinSwapchainImages(
 	2,
 	"Reported minimum swapchain image count (ImGui / present contract)");
 
+/** r.RHI.FrameDepth -- how many frames the device lets overlap, printed once a second.
+ *
+ *  `ahead` = frames whose head has run minus frames the GPU has RETIRED: it is the number of frames'
+ *  worth of per-frame data a recording layer may be touching while the GPU still reads an older copy
+ *  of it, i.e. the number every frame-domain ring has to be at least as large as. `inflight` is the
+ *  same reading against SUBMISSION (what the queue holds), and the two peaks are the worst readings
+ *  seen. This exists because the declaration (`MAHO_FRAMES_IN_FLIGHT`) used to be enforced NOWHERE:
+ *  the device held one fence, so the real depth was 1 while the graph's phases, the camera ring and
+ *  the transient pool were all sized from 3. The probe keeps that number observable instead of assumed.
+ *  0 = silent. */
+static ConsoleVariable::TAutoConsoleVariable<int> GCVarRHIFrameDepth(
+	"r.RHI.FrameDepth",
+	1,
+	"0=silent, 1=print the frame-pipeline depth (opened/submitted/retired/ahead/inflight) once a second");
+
 #if MAHO_WITH_RHI_VALIDATION
 static ConsoleVariable::TAutoConsoleVariable<int> GCVarRHIValidation(
 	"r.RHI.Validation",
@@ -126,18 +166,11 @@ VKAPI_ATTR VkBool32 VKAPI_CALL GValidationCallback(
 	return VK_FALSE;
 }
 
-/** Image view aspect from an ERHIFormat: depth(+stencil) formats are NOT color. */
+/** Image view aspect from an ERHIFormat: depth(+stencil) formats are NOT color. One definition,
+ *  shared with the state machine's barriers (see GetVulkanAspectMask). */
 VkImageAspectFlags GetImageAspectForFormat(ERHIFormat Format)
 {
-	switch (Format)
-	{
-	case ERHIFormat::D24_UNORM_S8_UINT:
-		return VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
-	case ERHIFormat::D32_SFLOAT:
-		return VK_IMAGE_ASPECT_DEPTH_BIT;
-	default:
-		return VK_IMAGE_ASPECT_COLOR_BIT;
-	}
+	return GetVulkanAspectMask(Format);
 }
 
 /** Texel size of an ERHIFormat, used to size a readback staging buffer. 0 = no known layout. */
@@ -354,21 +387,24 @@ void FVulkanRHI::Shutdown()
 		bCaptureRecorded = false;
 
 		// Drain the deferred staging-buffer frees (queued by UpdateBuffer's GPU-only
-		// upload path) BEFORE the allocator is destroyed. The flush normally runs at
-		// the NEXT BeginFrame; at shutdown there is no next frame, so free them here
-		// while the device is idle (vkDeviceWaitIdle above guarantees no in-flight
-		// GPU reads). Without this vmaDestroyAllocator asserts VMA_ASSERT_LEAK on
-		// the leftover device-memory block.
+		// upload path) BEFORE the allocator is destroyed. The per-slot retirement normally runs at the
+		// frame head; at shutdown there is no next frame, so free EVERY bucket here while the device is
+		// idle (vkDeviceWaitIdle above guarantees no in-flight GPU reads). Without this
+		// vmaDestroyAllocator asserts VMA_ASSERT_LEAK on the leftover device-memory block.
 		MemoryAllocator->FlushDeferredFrees();
 		MemoryAllocator->Shutdown();
 		MemoryAllocator.reset();
 	}
 
-	if (Device != VK_NULL_HANDLE && InFlightFence != VK_NULL_HANDLE)
+	for (std::uint32_t Slot = 0; Slot < kFrameSlots; ++Slot)
 	{
-		vkDestroyFence(Device, InFlightFence, nullptr);
-		InFlightFence = VK_NULL_HANDLE;
+		if (Device != VK_NULL_HANDLE && InFlightFences[Slot] != VK_NULL_HANDLE)
+		{
+			vkDestroyFence(Device, InFlightFences[Slot], nullptr);
+			InFlightFences[Slot] = VK_NULL_HANDLE;
+		}
 	}
+	InFlightFence = VK_NULL_HANDLE;
 
 	for (VkSemaphore Sem : RenderFinishedSemaphores)
 	{
@@ -379,11 +415,15 @@ void FVulkanRHI::Shutdown()
 	}
 	RenderFinishedSemaphores.clear();
 
-	if (Device != VK_NULL_HANDLE && ImageAvailableSemaphore != VK_NULL_HANDLE)
+	for (std::uint32_t Slot = 0; Slot < kFrameSlots; ++Slot)
 	{
-		vkDestroySemaphore(Device, ImageAvailableSemaphore, nullptr);
-		ImageAvailableSemaphore = VK_NULL_HANDLE;
+		if (Device != VK_NULL_HANDLE && FrameAcquireSemaphores[Slot] != VK_NULL_HANDLE)
+		{
+			vkDestroySemaphore(Device, FrameAcquireSemaphores[Slot], nullptr);
+			FrameAcquireSemaphores[Slot] = VK_NULL_HANDLE;
+		}
 	}
+	ImageAvailableSemaphore = VK_NULL_HANDLE;
 
 	auto DestroyPool = [this](VkCommandPool& Pool)
 	{
@@ -422,12 +462,17 @@ void FVulkanRHI::Shutdown()
 
 	if (Device != VK_NULL_HANDLE && CommandPool != VK_NULL_HANDLE)
 	{
-		// Free the non-owning wrapper first (the Vk buffer dies with the pool).
-		delete FrameCommandListRHI;
+		// Free the non-owning wrappers first (the Vk buffers die with the pool).
+		for (std::uint32_t Slot = 0; Slot < kFrameSlots; ++Slot)
+		{
+			delete FrameCommandLists[Slot];
+			FrameCommandLists[Slot] = nullptr;
+			FrameCommandBuffers[Slot] = VK_NULL_HANDLE;
+		}
 		FrameCommandListRHI = nullptr;
+		CommandBuffer = VK_NULL_HANDLE;
 		vkDestroyCommandPool(Device, CommandPool, nullptr);
 		CommandPool = VK_NULL_HANDLE;
-		CommandBuffer = VK_NULL_HANDLE;
 	}
 
 	DestroySwapchainResources();
@@ -490,6 +535,28 @@ void FVulkanRHI::BeginFrame()
 		return;
 	}
 
+	// -- this frame's SLOT -------------------------------------------------------------------------
+	//
+	// ONE slot per frame, round-robin over kFrameSlots (= MAHO_FRAMES_IN_FLIGHT). Everything a frame
+	// owns -- its fence, its acquire semaphore, its frame command buffer, the swapchain image it
+	// acquired -- comes out of the slot, and the head waits THIS SLOT'S fence before touching any of
+	// it. That wait is what bounds the pipeline: frame N starts only once frame N - kFrameSlots has
+	// retired on the GPU, so the depth is the DECLARED one and a frame-domain ring of that size is
+	// provably safe (the buffer a frame writes is only reused by a frame whose head waited the
+	// writer's fence).
+	//
+	// The counters are the probe (r.RHI.FrameDepth): `ahead` is the number a frame-domain ring has to
+	// be at least as large as. Before the slots existed there was ONE fence, so the head waited the
+	// IMMEDIATELY previous submit: `ahead` = 1 while the graph's phases, the camera ring and the
+	// transient pool were all sized from MAHO_FRAMES_IN_FLIGHT = 3, and nothing anywhere enforced the
+	// declared 3. That is the mismatch this closes.
+	CurrentSlot = static_cast<std::uint32_t>(OpenedFrames % kFrameSlots);
+	++OpenedFrames;
+	CommandBuffer = FrameCommandBuffers[CurrentSlot];
+	FrameCommandListRHI = FrameCommandLists[CurrentSlot];
+	InFlightFence = InFlightFences[CurrentSlot];
+	ImageAvailableSemaphore = FrameAcquireSemaphores[CurrentSlot];
+
 	// r.VSync is read once, at swapchain creation -- the present mode is baked in there -- so a
 	// runtime change (the editor's cvar box) is inert until the swapchain is rebuilt. POLLED, not
 	// hooked, because the cvar registry has no change notification, and one integer read per frame
@@ -514,9 +581,37 @@ void FVulkanRHI::BeginFrame()
 	// 11 ms" is only actionable once it is known WHICH of the two owns the time.
 	{
 		MAHO_TRACE_SCOPE(kRHIServerLane, "wait for the previous frame's fence");
-		if (!CheckVkResult(vkWaitForFences(Device, 1, &InFlightFence, VK_TRUE, UINT64_MAX), "vkWaitForFences"))
+		const std::uint64_t WaitStartUs = NowMicros();
+		const bool bWaited = CheckVkResult(vkWaitForFences(Device, 1, &InFlightFence, VK_TRUE, UINT64_MAX), "vkWaitForFences");
+		const std::uint64_t WaitUs = NowMicros() - WaitStartUs;
+		GWaitFenceUs += WaitUs;
+		GWaitFenceBlocked += WaitUs > 500 ? 1 : 0;
+		if (!bWaited)
 		{
 			return;
+		}
+	}
+	// The wait above is THIS slot's fence, and the submit it was signalled by belongs to the frame
+	// kFrameSlots back: that frame (and everything before it) is what this head RETIRES. Nothing else
+	// is retired here -- in particular not "the frame before this one", which is what a single fence
+	// used to imply and what made the real depth 1 while the engine declared MAHO_FRAMES_IN_FLIGHT.
+	// So the retirement watermark is `opened - kFrameSlots` frames (clamped at 0 until the pipeline has
+	// depth), and `ahead` -- the number of frames' worth of per-frame data a recording layer may still
+	// be overwriting the GPU's copy of -- is the distance from it to the frame being opened.
+	{
+		const std::uint64_t Completed = OpenedFrames > kFrameSlots ? OpenedFrames - kFrameSlots : 0;
+		RetiredFrames = Completed;
+		const std::uint64_t Ahead = OpenedFrames - Completed;
+		const std::uint64_t InFlight = SubmittedFrames > Completed ? SubmittedFrames - Completed : 0;
+		PeakAhead = (std::max)(PeakAhead, Ahead);
+		PeakInFlight = (std::max)(PeakInFlight, InFlight);
+		if (GCVarRHIFrameDepth.GetValue() != 0 && (OpenedFrames % 240) == 1)
+		{
+			MAHO_LOG_CORE_INFO(
+				"FVulkanRHI frame depth: opened={} submitted={} retired={} ahead={} inflight={} "
+				"peakAhead={} peakInFlight={} slot={}/{} swapchainImages={}",
+				OpenedFrames, SubmittedFrames, RetiredFrames, Ahead, InFlight,
+				PeakAhead, PeakInFlight, CurrentSlot, kFrameSlots, SwapchainImages.size());
 		}
 	}
 
@@ -525,10 +620,10 @@ void FVulkanRHI::BeginFrame()
 		return;
 	}
 
-	// A capture recorded by the previous frame's PresentTexture is done being written: the fence above
-	// covers that submit. Hand the pixels to the sink now -- on this thread, before this frame records
-	// anything -- so the frame owner never blocks on a readback.
-	if (bCaptureRecorded && PendingCaptureSink && CaptureStagingAllocation != nullptr)
+	// A capture recorded by an earlier frame is done being written once ITS slot's fence has been
+	// waited -- which is THIS point, but only on the slot that recorded it. Waiting for "the next
+	// frame" instead (what a single fence allowed) would hand the sink pixels the GPU is still copying.
+	if (bCaptureRecorded && CaptureSlot == CurrentSlot)
 	{
 		MAHO_TRACE_SCOPE(kRHIServerLane, "flush the backbuffer capture");
 		FRHIMemoryAllocation Staging{};
@@ -544,26 +639,25 @@ void FVulkanRHI::BeginFrame()
 			MAHO_LOG_CORE_ERROR("FVulkanRHI: capture staging is not host-visible/mappable");
 		}
 		PendingCaptureSink = nullptr;
+		bCaptureRecorded = false;
 	}
-	else if (bCaptureRecorded)
-	{
-		MAHO_LOG_CORE_ERROR("FVulkanRHI: capture was recorded but cannot be delivered");
-	}
-	bCaptureRecorded = false;
 
-	// Now that the previous frame's fence is signaled, every async-upload staging
-	// buffer whose copy was recorded into that frame is done being read by the GPU.
-	// Retire them here (free the VkBuffer + its memory) before we allocate/record
-	// this frame's uploads -- keeps the deferred list length bounded to one frame.
+	// THIS slot's fence has now retired, so every async-upload staging buffer deferred by the frame
+	// that last occupied this slot (`kFrameSlots` boundaries back, the one this wait was for) is done
+	// being read by the GPU: free that bucket, and adopt this slot for the frame we are about to
+	// record. The whole list used to be freed here, which was the depth-1 reading of "the previous
+	// frame is done" -- at depth K it frees staging the GPU is still reading
+	// (`VUID-vkDestroyBuffer-buffer-00922`, "is currently in use by VkCommandBuffer").
 	if (MemoryAllocator)
 	{
-		MAHO_TRACE_SCOPE(kRHIServerLane, "retire last frame's staging buffers");
-		MemoryAllocator->FlushDeferredFrees();
+		MAHO_TRACE_SCOPE(kRHIServerLane, "retire this slot's staging buffers");
+		MemoryAllocator->RetireDeferredForSlot(CurrentSlot);
 	}
 
 	VkResult AcquireResult;
 	{
 		MAHO_TRACE_SCOPE(kRHIServerLane, "acquire the next swapchain image");
+		const std::uint64_t AcquireStartUs = NowMicros();
 		AcquireResult = vkAcquireNextImageKHR(
 			Device,
 			Swapchain,
@@ -571,6 +665,9 @@ void FVulkanRHI::BeginFrame()
 			ImageAvailableSemaphore,
 			VK_NULL_HANDLE,
 			&CurrentImageIndex);
+		const std::uint64_t AcquireUs = NowMicros() - AcquireStartUs;
+		GWaitAcquireUs += AcquireUs;
+		GWaitAcquireBlocked += AcquireUs > 500 ? 1 : 0;
 	}
 
 	if (AcquireResult == VK_ERROR_OUT_OF_DATE_KHR || bFramebufferResized)
@@ -599,6 +696,18 @@ void FVulkanRHI::BeginFrame()
 	else if (!CheckVkResult(AcquireResult, "vkAcquireNextImageKHR"))
 	{
 		return;
+	}
+	// The image this slot presents; remembered PER SLOT so a slot's present always names the image that
+	// slot acquired (a single `CurrentImageIndex` would be the newest acquire, not this frame's).
+	FrameImageIndices[CurrentSlot] = CurrentImageIndex;
+
+	// The acquired image is handed over with NO contents this device may assume (whatever the
+	// presentation engine did to it, its layout is not ours to remember), so tracking restarts at
+	// UNDEFINED. This is the per-frame half of "re-acquire == tracking restarts"; the swapchain
+	// rebuild covers the other half.
+	if (CurrentImageIndex < SwapchainImageStates.size())
+	{
+		SwapchainImageStates[CurrentImageIndex] = FVulkanImageState{};
 	}
 
 	// Begin the frame command buffer so features can record into it via the
@@ -828,6 +937,52 @@ bool FVulkanRHI::bEnsureCaptureStaging(std::uint64_t NeededBytes)
 	return true;
 }
 
+bool FVulkanRHI::TransitionTrackedImage(
+	VkImage Image,
+	FVulkanImageState& State,
+	const FVulkanImageState& Target,
+	VkImageAspectFlags AspectMask,
+	std::uint32_t MipLevels,
+	std::uint32_t Layers)
+{
+	if (Image == VK_NULL_HANDLE || State.Layout == Target.Layout)
+	{
+		// Already in the required state: nothing to record (the tracked state IS the dedupe).
+		return false;
+	}
+
+	VkImageMemoryBarrier Barrier{};
+	Barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+	Barrier.oldLayout = State.Layout;
+	Barrier.newLayout = Target.Layout;
+	Barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	Barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	Barrier.image = Image;
+	Barrier.subresourceRange.aspectMask = AspectMask;
+	Barrier.subresourceRange.baseMipLevel = 0;
+	Barrier.subresourceRange.levelCount = MipLevels;
+	Barrier.subresourceRange.baseArrayLayer = 0;
+	Barrier.subresourceRange.layerCount = Layers;
+	Barrier.dstAccessMask = Target.Access;
+
+	VkPipelineStageFlags SrcStage = State.Stage;
+	if (State.Layout == VK_IMAGE_LAYOUT_UNDEFINED)
+	{
+		// No producer, no contents to publish: srcAccessMask MUST be 0 and the source stage must
+		// not claim a dependency that does not exist.
+		SrcStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+		Barrier.srcAccessMask = 0;
+	}
+	else
+	{
+		Barrier.srcAccessMask = State.Access;
+	}
+
+	State = Target;
+	vkCmdPipelineBarrier(CommandBuffer, SrcStage, Target.Stage, 0, 0, nullptr, 0, nullptr, 1, &Barrier);
+	return true;
+}
+
 void FVulkanRHI::PresentTexture(FRHITexture* Src)
 {
 	if (!bInitialized)
@@ -846,39 +1001,26 @@ void FVulkanRHI::PresentTexture(FRHITexture* Src)
 	const VkImage SrcImage = SrcVk->GetVkImage();
 	const VkImage DstImage = SwapchainImages[CurrentImageIndex];
 	const FRHITextureDesc& SrcDesc = SrcVk->GetDesc();
+	const VkImageAspectFlags ColorAspect = VK_IMAGE_ASPECT_COLOR_BIT;
 
-	// Transition source to transfer-src and the swapchain image to transfer-dst.
-	auto TransitionImage = [this](VkImage Image, VkImageLayout Old, VkImageLayout New,
-		VkAccessFlags SrcAccess, VkAccessFlags DstAccess, VkPipelineStageFlags SrcStage,
-		VkPipelineStageFlags DstStage, std::uint32_t MipLevels, std::uint32_t Layers)
-	{
-		VkImageMemoryBarrier Barrier{};
-		Barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-		Barrier.oldLayout = Old;
-		Barrier.newLayout = New;
-		Barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-		Barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-		Barrier.image = Image;
-		Barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-		Barrier.subresourceRange.baseMipLevel = 0;
-		Barrier.subresourceRange.levelCount = MipLevels;
-		Barrier.subresourceRange.baseArrayLayer = 0;
-		Barrier.subresourceRange.layerCount = Layers;
-		Barrier.srcAccessMask = SrcAccess;
-		Barrier.dstAccessMask = DstAccess;
-		vkCmdPipelineBarrier(CommandBuffer, SrcStage, DstStage, 0, 0, nullptr, 0, nullptr, 1, &Barrier);
-	};
+	// -- the present blit's four transitions are DERIVED, not assumed --
+	//
+	// Both images carry tracked state (the source texture's lives on the texture, the swapchain
+	// image's here), so the blit enters its transfer layouts from whatever they are ACTUALLY in.
+	// The old code hardcoded the pair (COLOR_ATTACHMENT -> TRANSFER_SRC, UNDEFINED -> TRANSFER_DST):
+	// correct only until the first frame that ended somewhere else (e.g. a UI/editor compose pass
+	// left the source SHADER_READ_ONLY), which is the "sometimes the whole mesh is missing" half of
+	// the flicker this change removes.
+	FVulkanImageState& DstState = SwapchainImageStates[CurrentImageIndex];
+	FVulkanImageState& SrcState = SrcVk->TrackedStateRef();
 
-	TransitionImage(SrcImage, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-		VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-		VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT,
-		VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
-		SrcDesc.MipLevels, SrcDesc.ArrayLayers);
+	TransitionTrackedImage(
+		SrcImage, SrcState, ToVulkanImageState(ERHIResourceUsage::TransferSrc),
+		ColorAspect, SrcDesc.MipLevels, SrcDesc.ArrayLayers);
 
-	TransitionImage(DstImage, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-		0, VK_ACCESS_TRANSFER_WRITE_BIT,
-		VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
-		1, 1);
+	TransitionTrackedImage(
+		DstImage, DstState, ToVulkanImageState(ERHIResourceUsage::TransferDst),
+		ColorAspect, 1, 1);
 
 	VkImageBlit Blit{};
 	Blit.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
@@ -907,9 +1049,12 @@ void FVulkanRHI::PresentTexture(FRHITexture* Src)
 		1, &Blit, VK_FILTER_LINEAR);
 
 	// The backbuffer now holds exactly the presented image. If a capture is armed, read it back HERE:
-	// this is the one image whose layout this layer owns end to end (PERMANENTLY in TRANSFER_DST two
-	// lines above), so the copy needs no assumption about anyone else's layout bookkeeping. The
-	// pixels are handed to the sink at the next BeginFrame, after the fence that covers this submit.
+	// the swapchain image's state is the device's own bookkeeping, so stepping it transfer-dst ->
+	// transfer-src -> present-src below is a statement about what THIS recording does, not an
+	// assumption about anyone else's. The pixels are handed to the sink at the next BeginFrame,
+	// after the fence that covers this submit.
+	const FVulkanImageState TransferSrcState = ToVulkanImageState(ERHIResourceUsage::TransferSrc);
+	const FVulkanImageState PresentState = ToVulkanImageState(ERHIResourceUsage::Present);
 	bool bCaptured = false;
 	if (PendingCaptureSink && MemoryAllocator != nullptr && MemoryAllocator->IsValid())
 	{
@@ -917,11 +1062,7 @@ void FVulkanRHI::PresentTexture(FRHITexture* Src)
 			* SwapchainExtent.height * GetFormatBytesPerPixel(ToRHIFormat(SwapchainImageFormat));
 		if (Needed > 0 && bEnsureCaptureStaging(Needed))
 		{
-			TransitionImage(DstImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-				VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-				VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT,
-				VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
-				1, 1);
+			TransitionTrackedImage(DstImage, DstState, TransferSrcState, ColorAspect, 1, 1);
 
 			VkBufferImageCopy Copy{};
 			Copy.bufferOffset = 0;
@@ -936,11 +1077,7 @@ void FVulkanRHI::PresentTexture(FRHITexture* Src)
 			vkCmdCopyImageToBuffer(CommandBuffer, DstImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
 				CaptureStagingBuffer, 1, &Copy);
 
-			TransitionImage(DstImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-				VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-				VK_ACCESS_TRANSFER_READ_BIT, 0,
-				VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
-				1, 1);
+			TransitionTrackedImage(DstImage, DstState, PresentState, ColorAspect, 1, 1);
 			bCaptured = true;
 		}
 		else
@@ -952,20 +1089,20 @@ void FVulkanRHI::PresentTexture(FRHITexture* Src)
 	if (!bCaptured)
 	{
 		// Transition the swapchain image to present-src before submit.
-		TransitionImage(DstImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-			VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-			VK_ACCESS_TRANSFER_WRITE_BIT, 0,
-			VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
-			1, 1);
+		TransitionTrackedImage(DstImage, DstState, PresentState, ColorAspect, 1, 1);
 	}
 	bCaptureRecorded = bCaptured;
+	if (bCaptured)
+	{
+		// The sink must run on THIS slot's fence, so remember which slot recorded the copy.
+		CaptureSlot = CurrentSlot;
+	}
 
-	// Return the source to color-attachment so the next frame can render into it.
-	TransitionImage(SrcImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-		VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-		VK_ACCESS_TRANSFER_READ_BIT, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-		VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-		SrcDesc.MipLevels, SrcDesc.ArrayLayers);
+	// The SOURCE is deliberately LEFT in transfer-src. It used to be forced back to
+	// COLOR_ATTACHMENT_OPTIMAL -- a hardcoded "the next renderer assumes it" that was wrong the
+	// moment the frame's last writer was anything else. The next use of this texture now derives
+	// its own barrier from the tracked state (BeginRendering does it for attachments), so there is
+	// nothing to restore here.
 }
 
 void FVulkanRHI::EndFrame()
@@ -1005,6 +1142,9 @@ void FVulkanRHI::EndFrame()
 			return;
 		}
 	}
+	// The submit above is what the NEXT frame of THIS slot will wait on at its head.
+	++SubmittedFrames;
+	PeakInFlight = (std::max)(PeakInFlight, SubmittedFrames - RetiredFrames);
 
 	VkPresentInfoKHR PresentInfo{};
 	PresentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
@@ -1022,7 +1162,42 @@ void FVulkanRHI::EndFrame()
 		// the presentation engine takes the image, which is where a "vsynced" frame spends its
 		// idle time.
 		MAHO_TRACE_SCOPE(kRHIServerLane, "present and wait for vsync");
+		const std::uint64_t PresentStartUs = NowMicros();
 		PresentResult = vkQueuePresentKHR(PresentQueue, &PresentInfo);
+		GWaitPresentUs += NowMicros() - PresentStartUs;
+	}
+
+	// What the pipeline actually spends its time on, once per second. The frame rate is uncapped, so
+	// the window is a DURATION: a frame count would print several lines a second on a fast frame and
+	// none at all on a slow one. `blocked` counts the waits that took longer than 500 us -- the ones
+	// that actually held the frame head or the frame tail up.
+	++GWaitFrames;
+	{
+		const std::uint64_t NowUs = NowMicros();
+		if (GWaitWindowStartUs == 0)
+		{
+			GWaitWindowStartUs = NowUs;
+		}
+		else if (NowUs - GWaitWindowStartUs >= 1'000'000)
+		{
+			const double N = static_cast<double>(GWaitFrames);
+			MAHO_LOG_CORE_INFO(
+				"FVulkanRHI frame waits over {:.2f}s ({} frames): avgUs fence={:.1} acquire={:.1} present={:.1} | "
+				"blocked(>500us) fence={} acquire={} | inflight={} ahead={}",
+				static_cast<double>(NowUs - GWaitWindowStartUs) / 1'000'000.0, GWaitFrames,
+				static_cast<double>(GWaitFenceUs) / N,
+				static_cast<double>(GWaitAcquireUs) / N,
+				static_cast<double>(GWaitPresentUs) / N,
+				GWaitFenceBlocked, GWaitAcquireBlocked,
+				SubmittedFrames > RetiredFrames ? SubmittedFrames - RetiredFrames : 0, PeakAhead);
+			GWaitWindowStartUs = NowUs;
+			GWaitFrames = 0;
+			GWaitFenceUs = 0;
+			GWaitAcquireUs = 0;
+			GWaitPresentUs = 0;
+			GWaitFenceBlocked = 0;
+			GWaitAcquireBlocked = 0;
+		}
 	}
 
 	if (PresentResult == VK_ERROR_OUT_OF_DATE_KHR || PresentResult == VK_SUBOPTIMAL_KHR || bFramebufferResized)
@@ -1634,6 +1809,9 @@ void FVulkanRHI::DestroySwapchainResources()
 
 	SwapchainImageViews.clear();
 	SwapchainImages.clear();
+	// The tracked states belong to the images that just went away: a rebuilt swapchain starts from
+	// "contents not defined", exactly like a freshly created texture.
+	SwapchainImageStates.clear();
 
 	if (Device != VK_NULL_HANDLE && Swapchain != VK_NULL_HANDLE)
 	{
@@ -1744,7 +1922,7 @@ bool FVulkanRHI::CreateSwapchain()
 		SwapchainExtent.height = static_cast<std::uint32_t>(FramebufferHeight);
 	}
 
-	const int ExtraImages = (std::max)(0, GCVarSwapchainExtraImages.GetValue());
+	int ExtraImages = (std::max)(0, GCVarSwapchainExtraImages.GetValue());
 	std::uint32_t ImageCount = Capabilities.minImageCount + static_cast<std::uint32_t>(ExtraImages);
 	if (Capabilities.maxImageCount > 0 && ImageCount > Capabilities.maxImageCount)
 	{
@@ -1800,6 +1978,10 @@ bool FVulkanRHI::CreateSwapchain()
 	vkGetSwapchainImagesKHR(Device, Swapchain, &SwapchainImageCount, nullptr);
 	SwapchainImages.resize(SwapchainImageCount);
 	vkGetSwapchainImagesKHR(Device, Swapchain, &SwapchainImageCount, SwapchainImages.data());
+
+	// Fresh images, no assumed contents: every entry starts UNDEFINED (which is also the only legal
+	// barrier SOURCE the first use of each image can name).
+	SwapchainImageStates.assign(SwapchainImages.size(), FVulkanImageState{});
 
 	// From here on this swapchain IS the live one, so the value it was built from becomes the
 	// baseline the frame-boundary check compares against.
@@ -1953,23 +2135,35 @@ bool FVulkanRHI::CreateCommandPoolAndBuffer()
 	AllocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
 	AllocateInfo.commandPool = CommandPool;
 	AllocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-	AllocateInfo.commandBufferCount = 1;
+	AllocateInfo.commandBufferCount = kFrameSlots;
 
-	if (!CheckVkResult(vkAllocateCommandBuffers(Device, &AllocateInfo, &CommandBuffer), "vkAllocateCommandBuffers"))
+	if (!CheckVkResult(vkAllocateCommandBuffers(Device, &AllocateInfo, FrameCommandBuffers.data()),
+		"vkAllocateCommandBuffers"))
 	{
 		return false;
 	}
 
-	// Non-owning wrapper over the frame command buffer: the frame primitives record into it (the
-	// present blit), it is closed and submitted by EndFrame. Nothing outside this DLL holds it.
+	// Non-owning wrappers, ONE PER SLOT: the frame primitives record into the current slot's buffer (the
+	// present blit), it is closed and submitted by EndFrame. Nothing outside this DLL holds them. A
+	// single buffer could not work with more than one frame in flight -- re-recording (the head's
+	// vkBeginCommandBuffer resets it) would throw away a command buffer the queue is still executing,
+	// and destroying it at shutdown would free memory the GPU still reads.
+	//
+	// The `CommandBuffer` / `FrameCommandListRHI` members are ALIASES assigned by BeginFrame to the
+	// current slot's entry (see the header), so the recording path stays slot-agnostic.
 	FVulkanCommandList::FRTRuntime RT;
 	RT.BuildAccel = CmdBuildAccelerationStructuresKHR;
 	RT.CopyAccel = CmdCopyAccelerationStructureKHR;
 	RT.TraceRays = CmdTraceRaysKHR;
-	FrameCommandListRHI = new FVulkanCommandList(
-		ERHICommandListType::Graphics, Device, CommandPool, CommandBuffer, MemoryAllocator.get(), RT);
+	for (std::uint32_t Slot = 0; Slot < kFrameSlots; ++Slot)
+	{
+		FrameCommandLists[Slot] = new FVulkanCommandList(
+			ERHICommandListType::Graphics, Device, CommandPool, FrameCommandBuffers[Slot],
+			MemoryAllocator.get(), RT);
+	}
 
-	MAHO_LOG_CORE_INFO("Vulkan command pool and buffer created");
+	MAHO_LOG_CORE_INFO("Vulkan command pool and {} frame command buffer(s) created (one per frame slot)",
+		kFrameSlots);
 	return true;
 }
 
@@ -1978,9 +2172,29 @@ bool FVulkanRHI::CreateSyncObjects()
 	VkSemaphoreCreateInfo SemaphoreInfo{};
 	SemaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
 
-	if (!CheckVkResult(vkCreateSemaphore(Device, &SemaphoreInfo, nullptr, &ImageAvailableSemaphore), "vkCreateSemaphore (image available)"))
+	VkFenceCreateInfo FenceInfo{};
+	FenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+	FenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+
+	// ONE acquire semaphore AND ONE fence per frame slot. Both are required for more than one frame in
+	// flight, and neither is optional:
+	//   - the acquire semaphore is a BINARY semaphore, so its next acquire must not start before the
+	//     submit that waits on it has consumed the previous signal. Reusing one across overlapping
+	//     frames is a two-pending-signals error (and a hang when a submit consumes only one);
+	//   - the fence is waited at the frame head, and a single fence can only ever express "the newest
+	//     submit" -- waiting it retires every frame, so the depth collapses to 1 and the declared
+	//     MAHO_FRAMES_IN_FLIGHT is enforced nowhere.
+	for (std::uint32_t Slot = 0; Slot < kFrameSlots; ++Slot)
 	{
-		return false;
+		if (!CheckVkResult(vkCreateSemaphore(Device, &SemaphoreInfo, nullptr, &FrameAcquireSemaphores[Slot]),
+			"vkCreateSemaphore (image available)"))
+		{
+			return false;
+		}
+		if (!CheckVkResult(vkCreateFence(Device, &FenceInfo, nullptr, &InFlightFences[Slot]), "vkCreateFence"))
+		{
+			return false;
+		}
 	}
 
 	if (!CreateRenderFinishedSemaphores())
@@ -1988,16 +2202,13 @@ bool FVulkanRHI::CreateSyncObjects()
 		return false;
 	}
 
-	VkFenceCreateInfo FenceInfo{};
-	FenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-	FenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+	// The aliases start on slot 0 and are re-assigned by every BeginFrame.
+	CurrentSlot = 0;
+	InFlightFence = InFlightFences[0];
+	ImageAvailableSemaphore = FrameAcquireSemaphores[0];
 
-	if (!CheckVkResult(vkCreateFence(Device, &FenceInfo, nullptr, &InFlightFence), "vkCreateFence"))
-	{
-		return false;
-	}
-
-	MAHO_LOG_CORE_INFO("Vulkan sync objects created");
+	MAHO_LOG_CORE_INFO("Vulkan sync objects created ({} frame slot(s): fence + acquire semaphore each)",
+		kFrameSlots);
 	return true;
 }
 
@@ -2502,7 +2713,8 @@ FRHIBuffer* FVulkanRHI::CreateBuffer(const FRHIBufferDesc& Desc)
 		DeviceAddress = vkGetBufferDeviceAddress(Device, &AddressInfo);
 	}
 
-	return new FVulkanBuffer(Desc, Buffer, Allocation, MemoryAllocator.get(), DeviceAddress);
+	FRHIBuffer* Native = new FVulkanBuffer(Desc, Buffer, Allocation, MemoryAllocator.get(), DeviceAddress);
+	return Native;
 }
 
 void FVulkanRHI::DestroyBuffer(FRHIBuffer* Buffer)
@@ -2775,7 +2987,8 @@ FRHIGraphicsPipeline* FVulkanRHI::CreateGraphicsPipeline(const FRHIGraphicsPipel
 	Rasterizer.rasterizerDiscardEnable = VK_FALSE;
 	Rasterizer.polygonMode = VkFill;
 	Rasterizer.cullMode = VkCull;
-	Rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+	Rasterizer.frontFace = Desc.FrontFace == ERHIFrontFace::Clockwise ? VK_FRONT_FACE_CLOCKWISE
+																	 : VK_FRONT_FACE_COUNTER_CLOCKWISE;
 	Rasterizer.depthBiasEnable = VK_FALSE;
 	Rasterizer.lineWidth = 1.0f;
 
@@ -3546,7 +3759,10 @@ FRHITextureView* FVulkanRHI::CreateTextureView(const FRHITextureViewDesc& Desc)
 		return nullptr;
 	}
 
-	return new FVulkanTextureView(Device, View);
+	// The view keeps a pointer back to its texture: BeginRendering receives attachments as VIEWS
+	// but the state machine's barrier targets the IMAGE, so the conversion view -> texture has to
+	// be available on the view (see FVulkanTextureView::GetSourceTexture).
+	return new FVulkanTextureView(Device, View, Desc.Texture);
 }
 
 void FVulkanRHI::DestroyTextureView(FRHITextureView* View)

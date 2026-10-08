@@ -181,9 +181,15 @@ struct FRHITextureCopyRegion
 };
 
 /**
- * The layouts a copy finds the resource in (Before) and must leave it in (After).
- * A copy that carries its own transitions records both barriers itself, so the caller
- * no longer hand-writes a TransitionTexture pair around every upload/readback.
+ * The layout a copy finds the resource in (Before) and must leave it in (After).
+ *
+ * `Before` is LEGACY and no longer consulted: the RHI tracks each texture's current layout itself
+ * (`ERHIResourceUsage`), and a caller's belief about the old layout is exactly the assumption that
+ * used to desync the state machine. It is kept in the signature so existing call sites compile and
+ * so the intent of the call stays readable; the backend ignores it.
+ *
+ * `After` is still meaningful -- it selects the state the copy LEAVES the resource in (mapped to a
+ * usage, e.g. ShaderResource = "it will be sampled next"); Common means "wherever the copy left it".
  */
 struct FRHIResourceStatePair
 {
@@ -217,6 +223,16 @@ struct FRHITextureDesc
 	}
 };
 
+/**
+ * Texture handle (off-screen target / sampled source / depth).
+ *
+ * STATE IS TRACKED, AND IT IS NOT ON THIS INTERFACE. Every texture carries its current layout
+ * (created as "undefined / contents not defined"), owned and mutated by the backend on the RHI's
+ * single emitting thread -- the caller's whole vocabulary is `FRHICommandList::RequireUsage`, i.e. a
+ * PURPOSE, never a layout (see ERHIResourceUsage). Exposing the field here would hand callers back
+ * the "declare the old layout" surface this change exists to remove, so the shape stays: the RHI
+ * answers what a texture IS, the tracked state lives in the concrete backend type.
+ */
 class MAHO_RHI_API FRHITexture : public FRHIResource
 {
 public:
@@ -390,6 +406,9 @@ struct FRHIGraphicsPipelineDesc
 	std::uint32_t VertexStride = 0;
 	std::vector<FRHIVertexAttribute> Attributes;
 	ERHICullMode CullMode = ERHICullMode::Back;
+	/** Winding that counts as FRONT. Default CCW matches this pipeline desc's own vocabulary (raw
+	 *  model space); a caller whose projection flips Y owes itself `Clockwise` -- see ERHIFrontFace. */
+	ERHIFrontFace FrontFace = ERHIFrontFace::CounterClockwise;
 	ERHIFillMode FillMode = ERHIFillMode::Solid;
 	ERHIFormat ColorFormat = ERHIFormat::B8G8R8A8_UNORM;
 	ERHIFormat DepthFormat = ERHIFormat::Unknown;

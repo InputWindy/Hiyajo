@@ -42,6 +42,27 @@ MAHO_RENDER_API FRender* GetRender()
 static ConsoleVariable::TAutoConsoleVariable<int> GCVarTakeScreenShot("r.TakeScreenShot", 0,
 	"1 = capture the next presented frame to Saved/Screenshots/Shot_<timestamp>.png (resets to 0)");
 
+/** `r.CaptureFrames` -- `N` = capture the NEXT `N` PRESENTED frames, one PNG each, to
+ *  `Saved/Screenshots/frame_<1..N>.png`, then reset itself to 0. Not `ECVarFlags::Shipping` for the
+ *  same reason as `r.TakeScreenShot` (a Shipping build prunes it and reads 0 = off).
+ *
+ *  Why a BURST and not one shot: a per-frame defect -- a projection or a parameter buffer that is
+ *  right on even frames and wrong on odd ones -- is invisible in a periodic DIAG line (one sample per
+ *  600 frames lands wherever it lands) and obvious in two ADJACENT images. So the knob's unit is
+ *  "consecutive frames", its output is numbered by capture order, and it is bounded: the counters
+ *  below run down to 0 and the CVar is cleared the moment the burst is armed, so nothing re-arms it. */
+static ConsoleVariable::TAutoConsoleVariable<int> GCVarCaptureFrames("r.CaptureFrames", 0,
+	"N = capture the next N presented frames to Saved/Screenshots/frame_<1..N>.png, then reset to 0");
+
+namespace
+{
+	/** Live burst state for `r.CaptureFrames`: the CVar is the COMMAND (read once, then cleared);
+	 *  these two counters are the state that advances one per presented frame. Both return to 0 when
+	 *  the burst finishes, so the whole diagnostic is a bounded one-shot. */
+	int GCaptureFramesLeft = 0;
+	int GCaptureFrameIndex = 0;
+} // namespace
+
 FRender::FRender()
 {
 	// Init: I read the window from Platform (its PostInitialize) and log heavily
@@ -673,6 +694,103 @@ void FRender::AddPass(
 		*OutDefaultSets = BoundSets;
 	}
 
+	// -- usage deduction: the pass author writes NOTHING new --
+	//
+	// The WRITE set is the pass's FRenderTarget attachments (handled inside BeginRendering, which
+	// must know them anyway); the READ set is the design of its descriptor bindings -- the resource
+	// members of the FParameters struct, already translated into Pass.Layout by
+	// ShaderParameterBuild (bIsResource + Type/Set/Binding, so no reflection is needed). This is the
+	// ONE place both halves are known at once, so this is where a purpose is derived per texture and
+	// handed to the RHI. Consequence for a pass author: sampling a texture needs no transition, and
+	// there is no API to forget -- the alternative (a per-pass "which layout do I need" declaration)
+	// is exactly the assumption-driven model this replaces.
+	//
+	// Dedupe/merge rules, both required by "same resource once, fewest barriers":
+	//   - a texture bound by several bindings of the same pass is requested once;
+	//   - a texture that is ALSO an attachment of this pass is skipped from the read set: it lives in
+	//     its attachment layout for the whole pass (a legal pass cannot sample what it renders), so
+	//     requesting a readable state for it would only fight BeginRendering's own transition;
+	//   - the requests go out in ONE RequireUsages call, which the backend merges into one
+	//     vkCmdPipelineBarrier per distinct (source stage, destination stage) pair.
+	//
+	// A texture bound as a StorageImage is NOT requested: its readable/writable state is GENERAL,
+	// which no usage in ERHIResourceUsage names yet. Leaving its tracking untouched keeps the
+	// recorded barriers TRUE (no false "it is in SHADER_READ_ONLY" claim) -- a deliberate gap, not an
+	// oversight: nothing in this engine binds a texture as a storage image today.
+	std::vector<FRHITextureUsageRequest> ReadUsageRequests;
+	{
+		std::vector<FRHITexture*> AttachmentTextures;
+		AttachmentTextures.reserve(Pass.Target.Color.size() + 1);
+		for (const FRenderTarget::FAttachment& A : Pass.Target.Color)
+		{
+			if (A.View.IsValid())
+			{
+				AttachmentTextures.push_back(A.View.GetRHI());
+			}
+		}
+		if (Pass.Target.bHasDepth && Pass.Target.Depth.View.IsValid())
+		{
+			AttachmentTextures.push_back(Pass.Target.Depth.View.GetRHI());
+		}
+
+		auto AlreadyRequested = [&ReadUsageRequests](FRHITexture* Native)
+		{
+			for (const FRHITextureUsageRequest& R : ReadUsageRequests)
+			{
+				if (R.Texture == Native)
+				{
+					return true;
+				}
+			}
+			return false;
+		};
+
+		for (const FRDGDescriptorSet& SetDesc : Pass.Layout.Sets)
+		{
+			for (const auto& [Binding, B] : SetDesc.Bindings)
+			{
+				if (B.Type != ERHIDescriptorType::SampledImage
+					&& B.Type != ERHIDescriptorType::CombinedImageSampler)
+				{
+					continue;
+				}
+				const FRDGTextureRef* Tex = std::get_if<FRDGTextureRef>(&B.Resource);
+				if (Tex == nullptr || !Tex->IsValid())
+				{
+					continue;
+				}
+				FRHITexture* Native = Tex->GetRHI();
+				if (Native == nullptr
+					|| std::find(AttachmentTextures.begin(), AttachmentTextures.end(), Native) != AttachmentTextures.end()
+					|| AlreadyRequested(Native))
+				{
+					continue;
+				}
+				ReadUsageRequests.push_back(FRHITextureUsageRequest{ Native, ERHIResourceUsage::Sampled, false });
+			}
+		}
+
+		// The reads that are declared OUTSIDE the static layout -- a draw list's per-batch textures
+		// (an ImGui texture switch samples the scene-color mirror / the live present target). Same
+		// treatment as a parameter binding: requested here, so the barrier lands in THIS pass's
+		// command buffer, immediately before the draws that sample them.
+		for (const FRDGTextureRef& Sampled : Pass.SampledReads)
+		{
+			if (!Sampled.IsValid())
+			{
+				continue;
+			}
+			FRHITexture* Native = Sampled.GetRHI();
+			if (Native == nullptr
+				|| std::find(AttachmentTextures.begin(), AttachmentTextures.end(), Native) != AttachmentTextures.end()
+				|| AlreadyRequested(Native))
+			{
+				continue;
+			}
+			ReadUsageRequests.push_back(FRHITextureUsageRequest{ Native, ERHIResourceUsage::Sampled, false });
+		}
+	}
+
 	AddPass(PassType, [=](FRHICommandList& List)
 	{
 		// Write the mutable set contents (host op at record time, before the draws
@@ -684,9 +802,19 @@ void FRender::AddPass(
 			List.UpdateDescriptorSet(DynamicSets[D], DW.data(), static_cast<std::uint32_t>(DW.size()));
 		}
 
+		// The pass's READ set, in one call, BEFORE anything samples it: every texture the bindings
+		// reference reaches its readable state here (and only the ones that are not already there
+		// cost a barrier). Attachments are not in here -- BeginRendering guarantees them below.
+		if (!ReadUsageRequests.empty())
+		{
+			List.RequireUsages(ReadUsageRequests.data(), static_cast<std::uint32_t>(ReadUsageRequests.size()));
+		}
+
 		// Dynamic rendering: start the feature's render pass, bind the pipeline
 		// and its descriptor sets (implicit -- the feature never queries them),
-		// then run the draws.
+		// then run the draws. BeginRendering brings every attachment into its attachment layout from
+		// the RHI's tracked state, so the attachment half of the pass needs no transition recorded by
+		// this layer (and cannot be forgotten by the pass author either).
 		List.BeginRendering(ColorsPtr, ColorCount, PDepth, Width, Height);
 		if (Bound != nullptr)
 		{
@@ -735,8 +863,34 @@ void FRender::AddPass(
 	// lambda below can restore them after a per-batch set displaces one.
 	std::vector<FRHIDescriptorSet*> ResolvedDefaultSets;
 
-	AddPass(PassType, std::move(PipelineDesc), Pass,
-		[this, &DrawList, &Pass, TargetW, TargetH, &ResolvedDefaultSets](FRHICommandList& List)
+	// A batch's per-draw set samples a texture that is NOT in the static parameter layout (every
+	// ImGui texture switch carries its own ImTextureID). The read-set derivation must see those too,
+	// or the pass that samples a target another pass wrote would need its own hand-written
+	// transition pass -- cross-pass bookkeeping the resource state machine exists to replace, and
+	// precisely how such a read used to reach the validator in the wrong layout. Fold them into a
+	// LOCAL pass declaration so the derivation requests their sampled state in THIS pass's own
+	// command buffer, right before the draws that sample them.
+	FRenderPassDesc EffectivePass = Pass;
+	for (const FDrawBatch& B : DrawList.GetBatches())
+	{
+		for (const FRDGDescriptorSet& BS : B.Sets)
+		{
+			for (const auto& [Binding, Bnd] : BS.Bindings)
+			{
+				if (Bnd.Type != ERHIDescriptorType::SampledImage && Bnd.Type != ERHIDescriptorType::CombinedImageSampler)
+				{
+					continue;
+				}
+				if (const FRDGTextureRef* Tex = std::get_if<FRDGTextureRef>(&Bnd.Resource))
+				{
+					EffectivePass.SampledReads.push_back(*Tex);
+				}
+			}
+		}
+	}
+
+	AddPass(PassType, std::move(PipelineDesc), EffectivePass,
+		[this, &DrawList, &EffectivePass, TargetW, TargetH, &ResolvedDefaultSets](FRHICommandList& List)
 		{
 			// The pass-level merged vertex/index buffers were already created + uploaded
 			// by the producer (InitViews). AddPass only binds + draws; nothing uploads here.
@@ -760,7 +914,7 @@ void FRender::AddPass(
 			// This used to re-look the sets up by LAYOUT, which only worked while a layout had
 			// exactly one set -- the very sharing this change removes.
 			std::uint32_t DefaultFirstSet = 0;
-			for (const FRDGDescriptorSet& SetDesc : Pass.Layout.Sets)
+			for (const FRDGDescriptorSet& SetDesc : EffectivePass.Layout.Sets)
 			{
 				if (SetDesc.SetIndex < DefaultFirstSet) { DefaultFirstSet = SetDesc.SetIndex; }
 			}
@@ -1224,8 +1378,105 @@ namespace
 }
 } // namespace
 
+namespace
+{
+	/** Arm one backbuffer capture whose sink writes the bytes to `FilePath` as a PNG. The sink runs on
+	 *  the RHI server thread one frame boundary later and touches no engine state. Shared by the
+	 *  one-shot `r.TakeScreenShot` and the `r.CaptureFrames` burst -- the only difference between them
+	 *  is the file name. */
+	void ArmCaptureToPath(FRHI& Server, std::string FilePath)
+	{
+		Server.RequestBackbufferCapture(
+			[Path = std::move(FilePath)](std::uint32_t Width, std::uint32_t Height, ERHIFormat Format,
+				const void* Pixels)
+			{
+				if (Pixels == nullptr || Width == 0 || Height == 0)
+				{
+					MAHO_LOG_CORE_ERROR("FRender: capture sink got no pixels ({})", Path);
+					return;
+				}
+
+				// The captured bytes are in the SWAPCHAIN format; PNG wants RGBA.
+				const bool bBgra = Format == ERHIFormat::B8G8R8A8_UNORM || Format == ERHIFormat::B8G8R8A8_SRGB;
+				const bool bRgba = Format == ERHIFormat::R8G8B8A8_UNORM || Format == ERHIFormat::R8G8B8A8_SRGB;
+				if (!bBgra && !bRgba)
+				{
+					MAHO_LOG_CORE_ERROR("FRender: capture unsupported for RHI format {}", FormatName(Format));
+					return;
+				}
+
+				const std::size_t ByteCount = static_cast<std::size_t>(Width) * Height * 4;
+				const auto* SrcBytes = static_cast<const std::uint8_t*>(Pixels);
+				std::vector<std::uint8_t> Rgba(SrcBytes, SrcBytes + ByteCount);
+				if (bBgra)
+				{
+					for (std::size_t I = 0; I + 3 < Rgba.size(); I += 4)
+					{
+						std::swap(Rgba[I], Rgba[I + 2]);
+					}
+				}
+
+				namespace fs = std::filesystem;
+				std::error_code ErrorCode;
+				fs::create_directories("Saved/Screenshots", ErrorCode);
+
+				if (!Render::Detail::WritePngRGBA(Path.c_str(), Width, Height, Rgba.data()))
+				{
+					MAHO_LOG_CORE_ERROR("FRender: capture write failed ({})", Path);
+					return;
+				}
+
+				MAHO_LOG_CORE_INFO("FRender: capture saved {} ({}x{}, RHI format {})", Path, Width, Height,
+					FormatName(Format));
+			});
+	}
+} // namespace
+
 void FRender::CaptureScreenshotIfRequested()
 {
+	// The burst CVar is the COMMAND: reading it arms a fresh run and clears it in the same breath, so a
+	// slow capture can never re-read a stale burst count as a new command (the one-shot discipline
+	// `r.TakeScreenShot` uses below).
+	const int BurstRequested = GCVarCaptureFrames.GetValue();
+	if (BurstRequested > 0)
+	{
+		GCVarCaptureFrames.Set(0);
+		GCaptureFramesLeft = BurstRequested;
+		GCaptureFrameIndex = 0;
+		MAHO_LOG_CORE_INFO("FRender: capture burst armed for {} frame(s) -> Saved/Screenshots/frame_<n>.png "
+			"(r.CaptureFrames reset to 0)", BurstRequested);
+	}
+
+	if (RHI == nullptr)
+	{
+		if (GCaptureFramesLeft > 0 || GCVarTakeScreenShot.GetValue() != 0)
+		{
+			MAHO_LOG_CORE_ERROR("FRender: capture requested but the RHI is unavailable");
+			GCaptureFramesLeft = 0;
+			GCVarTakeScreenShot.Set(0);
+		}
+		return;
+	}
+
+	// The burst first: it owns the frame numbering, and the frames it captures are CONSECUTIVE by
+	// construction (one arm per presented frame, no gaps).
+	if (GCaptureFramesLeft > 0)
+	{
+		--GCaptureFramesLeft;
+		++GCaptureFrameIndex;
+		char IndexedName[128] = {};
+		std::snprintf(IndexedName, sizeof(IndexedName), "Saved/Screenshots/frame_%d.png", GCaptureFrameIndex);
+		// The canvas is logged ON THE CAPTURE so an image and the size it was drawn at are read from one
+		// line: the scene target `MeshFeature` takes its aspect from is built from exactly this size
+		// (Scene::EnsureTargets <- FRender::GetCanvasWidth/Height), so a canvas that flipped between two
+		// values would show up here as an alternating pair and nowhere else.
+		MAHO_LOG_CORE_INFO("FRender: capture {} of {} -> {} (canvas {}x{})", GCaptureFrameIndex,
+			GCaptureFrameIndex + GCaptureFramesLeft, IndexedName,
+			RHI->GetFramebufferWidth(), RHI->GetFramebufferHeight());
+		ArmCaptureToPath(*RHI, IndexedName);
+		return;
+	}
+
 	if (GCVarTakeScreenShot.GetValue() == 0)
 	{
 		return;
@@ -1234,68 +1485,19 @@ void FRender::CaptureScreenshotIfRequested()
 	// can never queue up behind itself.
 	GCVarTakeScreenShot.Set(0);
 
-	if (RHI == nullptr)
-	{
-		MAHO_LOG_CORE_ERROR("FRender: screenshot requested but the RHI is unavailable");
-		return;
-	}
-
-	// The sink runs on the RHI server thread one frame boundary later (after the fence that covers
-	// the copy). It only turns bytes into a file -- no engine state is touched from there.
-	RHI->RequestBackbufferCapture([](std::uint32_t Width, std::uint32_t Height, ERHIFormat Format,
-		const void* Pixels)
-	{
-		if (Pixels == nullptr || Width == 0 || Height == 0)
-		{
-			MAHO_LOG_CORE_ERROR("FRender: screenshot sink got no pixels");
-			return;
-		}
-
-		// The captured bytes are in the SWAPCHAIN format; PNG wants RGBA.
-		const bool bBgra = Format == ERHIFormat::B8G8R8A8_UNORM || Format == ERHIFormat::B8G8R8A8_SRGB;
-		const bool bRgba = Format == ERHIFormat::R8G8B8A8_UNORM || Format == ERHIFormat::R8G8B8A8_SRGB;
-		if (!bBgra && !bRgba)
-		{
-			MAHO_LOG_CORE_ERROR("FRender: screenshot unsupported for RHI format {}", FormatName(Format));
-			return;
-		}
-
-		const std::size_t ByteCount = static_cast<std::size_t>(Width) * Height * 4;
-		const auto* SrcBytes = static_cast<const std::uint8_t*>(Pixels);
-		std::vector<std::uint8_t> Rgba(SrcBytes, SrcBytes + ByteCount);
-		if (bBgra)
-		{
-			for (std::size_t I = 0; I + 3 < Rgba.size(); I += 4)
-			{
-				std::swap(Rgba[I], Rgba[I + 2]);
-			}
-		}
-
-		namespace fs = std::filesystem;
-		std::error_code ErrorCode;
-		fs::create_directories("Saved/Screenshots", ErrorCode);
-
-		const std::time_t Now = std::time(nullptr);
-		std::tm Local{};
+	const std::time_t Now = std::time(nullptr);
+	std::tm Local{};
 #if defined(_WIN32)
-		localtime_s(&Local, &Now);
+	localtime_s(&Local, &Now);
 #else
-		localtime_r(&Now, &Local);
+	localtime_r(&Now, &Local);
 #endif
-		char FileName[128] = {};
-		std::snprintf(FileName, sizeof(FileName), "Saved/Screenshots/Shot_%04d%02d%02d_%02d%02d%02d.png",
-			Local.tm_year + 1900, Local.tm_mon + 1, Local.tm_mday,
-			Local.tm_hour, Local.tm_min, Local.tm_sec);
+	char FileName[128] = {};
+	std::snprintf(FileName, sizeof(FileName), "Saved/Screenshots/Shot_%04d%02d%02d_%02d%02d%02d.png",
+		Local.tm_year + 1900, Local.tm_mon + 1, Local.tm_mday,
+		Local.tm_hour, Local.tm_min, Local.tm_sec);
 
-		if (!Render::Detail::WritePngRGBA(FileName, Width, Height, Rgba.data()))
-		{
-			MAHO_LOG_CORE_ERROR("FRender: screenshot write failed ({})", FileName);
-			return;
-		}
-
-		MAHO_LOG_CORE_INFO("FRender: screenshot saved {} ({}x{}, RHI format {})", FileName, Width, Height,
-			FormatName(Format));
-	});
+	ArmCaptureToPath(*RHI, FileName);
 }
 
 ERHITextureDimension FRender::DimensionMirror(Resource::ETextureDimension Dim)

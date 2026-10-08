@@ -476,6 +476,17 @@ public:
 		const FRHIDescriptorWrite* Writes,
 		std::uint32_t WriteCount);
 
+	/**
+	 * Pool-owned shader module from COMPILED SPIR-V, content-keyed (stage + entry point + bytecode), so
+	 * identical bytes anywhere share one native module.
+	 *
+	 * This is the entry point for a feature that holds BYTECODE rather than a `T` declared in C++: the
+	 * ShaderLibrary compiles `Content/Shaders/*.shader` and hands a feature SPIR-V, and the feature must
+	 * turn it into modules before it can describe a pipeline (`TShaderHandle<T>` only serves the
+	 * C++-declared shader types, which compile from GLSL source asynchronously).
+	 */
+	[[nodiscard]] FRHIShaderModule* GetOrCreateShaderModule(const FRHIShaderModuleDesc& Desc);
+
 	/** Pool-owned MUTABLE descriptor set: get-or-create by LAYOUT only, allocated
 	 *  ONCE per layout (no content written at allocation). This is the single
 	 *  implementation path for Static / PerFrame / PerPass pass-parameter sets --
@@ -634,8 +645,8 @@ private:
 	 *  pipeline by descriptor. Internal: the typed AddPass and TShaderHandle use
 	 *  these; a feature never queries a pipeline/layout directly. The pool owns the
 	 *  native lifetime (destroyed at Shutdown). Shader identity is matched by
-	 *  bytecode content, so a pass shares one compiled module across frames. */
-	[[nodiscard]] FRHIShaderModule* GetOrCreateShaderModule(const FRHIShaderModuleDesc& Desc);
+	 *  bytecode content, so a pass shares one compiled module across frames.
+	 *  (`GetOrCreateShaderModule` is public above: a feature holding ShaderLibrary bytecode needs it.) */
 	[[nodiscard]] FRHIPipelineLayout* GetOrCreatePipelineLayout(const FRHIPipelineLayoutDesc& Desc);
 	[[nodiscard]] FRHIGraphicsPipeline* GetOrCreateGraphicsPipeline(const FRHIGraphicsPipelineDesc& Desc);
 

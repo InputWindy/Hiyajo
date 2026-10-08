@@ -362,6 +362,17 @@ struct MAHO_RENDER_API FRenderPassDesc
 {
 	FPassParameter Layout;       // input: descriptor sets / push constants (feature-keyed to one pool layout)
 	FRenderTarget Target;        // output: attachments + extent to render into
+
+	/** Textures this pass READS through a path that is not part of the static layout above:
+	 *  today the per-batch sets of a draw list (an ImGui texture switch -- the scene-color
+	 *  mirror, the live present target). Declared so the read-set derivation requests their
+	 *  sampled state, which puts the barrier in the SAME command buffer as the sampling.
+	 *  Without it a pass sampling a target another pass wrote would need its own hand-written
+	 *  transition pass -- the cross-pass bookkeeping the resource state machine replaces, and
+	 *  exactly how such a read used to reach the validator in the wrong layout. Filled by
+	 *  AddPass from the FDrawList; a pass with no draw list (the FParameters path) names its
+	 *  reads through the parameter struct as before. */
+	std::vector<FRDGTextureRef> SampledReads;
 };
 
 } // namespace Maho

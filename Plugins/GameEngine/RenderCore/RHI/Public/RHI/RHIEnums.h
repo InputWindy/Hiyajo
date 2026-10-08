@@ -116,6 +116,27 @@ enum class ERHIMemoryUsage : std::uint8_t
 	CPUOnly,
 };
 
+/**
+ * HOW the caller intends to USE a texture for the commands it records next.
+ *
+ * This is the ONLY thing a call site declares. The RHI owns the per-texture tracked state, so the
+ * barrier that makes a use legal -- its old layout, its source stage and its source access -- is
+ * DERIVED from what the texture is currently in, never declared by the caller. Two consequences
+ * worth stating, because they are the whole point of the type:
+ *   - "I forgot to transition" is not expressible: every use goes through a request.
+ *   - "already in that state" costs nothing: a repeat request records no barrier.
+ */
+enum class ERHIResourceUsage : std::uint8_t
+{
+	ColorAttachment = 0,
+	DepthAttachment,
+	Sampled,
+	UniformRead,
+	TransferSrc,
+	TransferDst,
+	Present,
+};
+
 enum class ERHIResourceState : std::uint16_t
 {
 	Common = 0,
@@ -188,6 +209,21 @@ enum class ERHIFillMode : std::uint8_t
 {
 	Solid = 0,
 	Wireframe,
+};
+
+/**
+ * Which winding is the FRONT face. This is a real per-pipeline decision, not a constant: it must agree
+ * with the projection the VS output went through, because winding is judged in SCREEN space after the
+ * perspective divide. Our projection flips Y for Vulkan clip space, and that flip reverses the winding
+ * of every triangle on screen -- so geometry authored counter-clockwise-when-seen-from-outside (the
+ * usual convention) presents CLOCKWISE here, and `Cull Back` only means what a shader author expects
+ * when this is Clockwise. Getting it wrong is silent: no validation error, no log line, the model is
+ * simply culled away face by face.
+ */
+enum class ERHIFrontFace : std::uint8_t
+{
+	CounterClockwise = 0,
+	Clockwise,
 };
 
 enum class ERHICompareOp : std::uint8_t

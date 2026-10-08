@@ -1,5 +1,18 @@
 #include "RenderResourcePool.h"
 
+#include <Core/FrameGraph.h>   // MAHO_FRAMES_IN_FLIGHT: the frame-domain lifetime (kFrameLifetimeFrames)
+
+namespace
+{
+	/** How many frames a TRANSIENT resource's native stays off the free list after its last use.
+	 *
+	 *  This IS the in-flight depth the RHI enforces (its frame head waits the fence of the frame
+	 *  `MAHO_FRAMES_IN_FLIGHT` slots back), so "K frames old" == "the frame that used it has retired".
+	 *  The two numbers must stay the same number: a pool that recycles faster than the device retires
+	 *  hands a live native to a new frame, and one that recycles slower only wastes memory. */
+	constexpr std::uint32_t kFrameLifetimeFrames = MAHO_FRAMES_IN_FLIGHT;
+}
+
 #include <Core/Fatal.h>
 
 #include <algorithm>
@@ -325,24 +338,29 @@ void FRHIResourcePool::CondemnTexture(FRHITexture* Native, FRHITextureView* View
 	{
 		return;
 	}
-	CondemnedTextures.emplace_back(Native, View);
+	// Bucketed by the frame slot that condemned it: the bucket is freed when that slot comes round
+	// again, i.e. after the fence covering every frame that could still reference this native.
+	CondemnedTextures[CurrentFrameSlot()].emplace_back(Native, View);
 }
 
 void FRHIResourcePool::CondemnBuffer(FRHIBuffer* Native)
 {
 	if (Native != nullptr)
 	{
-		CondemnedBuffers.push_back(Native);
+		CondemnedBuffers[CurrentFrameSlot()].push_back(Native);
 	}
 }
 
-void FRHIResourcePool::FlushCondemned()
+void FRHIResourcePool::FlushCondemned(std::uint32_t Slot)
 {
-	// Called one frame after the condemn: the fence covering the frame that used these was waited
-	// in RHI::BeginFrame, which runs before this.
+	// Called by BeginFrame with the slot whose per-slot fence it just waited: the frames that
+	// condemned these natives (that slot's earlier occupancy, `kFrameSlots` boundaries back) have
+	// retired, so nothing recorded or queued can still reference them.
+	auto& Textures = CondemnedTextures[Slot];
+	auto& Buffers = CondemnedBuffers[Slot];
 	if (RHI != nullptr)
 	{
-		for (const auto& [Native, View] : CondemnedTextures)
+		for (const auto& [Native, View] : Textures)
 		{
 			if (View != nullptr)
 			{
@@ -353,13 +371,22 @@ void FRHIResourcePool::FlushCondemned()
 				RHI->DestroyTexture(Native);
 			}
 		}
-		for (FRHIBuffer* Native : CondemnedBuffers)
+		for (FRHIBuffer* Native : Buffers)
 		{
 			RHI->DestroyBuffer(Native);
 		}
 	}
-	CondemnedTextures.clear();
-	CondemnedBuffers.clear();
+	Textures.clear();
+	Buffers.clear();
+}
+
+void FRHIResourcePool::FlushAllCondemned()
+{
+	// Shutdown only: the caller has made the device idle, so every bucket is retired at once.
+	for (std::uint32_t Slot = 0; Slot < kFrameSlots; ++Slot)
+	{
+		FlushCondemned(Slot);
+	}
 }
 
 void FRHIResourcePool::DestroyTextureEntry(FTextureEntry& Entry)
@@ -400,6 +427,7 @@ FRDGTextureRef FRHIResourcePool::CreateTexture(const FRHITextureDesc& Desc, ERDG
 		FTextureEntry& E = Textures[static_cast<std::size_t>(Reuse)];
 		E.bActive = true;
 		E.RefCount = 1;
+		E.LastUsedFrame = FrameCounter;   // frame-domain lifetime: recycled only K frames later
 		// Live now, so it must leave the frame's free list -- otherwise a later slow-path allocation
 		// in this same frame could pop it (see AllocTextureSlot).
 		TakeOffFreeList(FreeTextureSlots, static_cast<std::uint32_t>(Reuse));
@@ -422,6 +450,7 @@ FRDGTextureRef FRHIResourcePool::CreateTexture(const FRHITextureDesc& Desc, ERDG
 	Entry.Desc = Desc;
 	Entry.Lifetime = Lifetime;
 	Entry.RefCount = 1;
+	Entry.LastUsedFrame = FrameCounter;   // frame-domain lifetime: recycled only K frames later
 	Entry.bActive = true;
 	Entry.Native = RHI ? RHI->CreateTexture(Desc) : nullptr;
 
@@ -448,6 +477,7 @@ FRDGBufferRef FRHIResourcePool::CreateBuffer(const FRHIBufferDesc& Desc, ERDGRes
 		FBufferEntry& E = Buffers[static_cast<std::size_t>(Reuse)];
 		E.bActive = true;
 		E.RefCount = 1;
+		E.LastUsedFrame = FrameCounter;   // frame-domain lifetime: recycled only K frames later
 		// Live now, so it must leave the frame's free list (see AllocBufferSlot). Missing this is what
 		// made the UI's merged vertex buffer alias the camera uniform buffer after a resize.
 		TakeOffFreeList(FreeBufferSlots, static_cast<std::uint32_t>(Reuse));
@@ -467,6 +497,7 @@ FRDGBufferRef FRHIResourcePool::CreateBuffer(const FRHIBufferDesc& Desc, ERDGRes
 	Entry.Desc = Desc;
 	Entry.Lifetime = Lifetime;
 	Entry.RefCount = 1;
+	Entry.LastUsedFrame = FrameCounter;   // frame-domain lifetime: recycled only K frames later
 	Entry.bActive = true;
 	Entry.Native = RHI ? RHI->CreateBuffer(Desc) : nullptr;
 	return FRDGBufferRef(this, Slot, Entry.Generation);
@@ -944,6 +975,10 @@ void FRHIResourcePool::RetireRenderLists(const std::vector<FRHICommandList*>& Li
 		return;
 	}
 	std::lock_guard<std::mutex> Lock(RenderListsMutex);
+	// The bucket IS the frame's RHI slot: the frame head waited that slot's fence before recording
+	// started, so a list is destroyed when its own slot's fence is waited again (`kFrameSlots`
+	// boundaries later) and never while the queue still holds it.
+	std::vector<FRHICommandList*>& Bucket = RetiringRenderLists[CurrentFrameSlot()];
 	for (FRHICommandList* List : Lists)
 	{
 		const auto It = std::find(PendingRenderLists.begin(), PendingRenderLists.end(), List);
@@ -951,7 +986,7 @@ void FRHIResourcePool::RetireRenderLists(const std::vector<FRHICommandList*>& Li
 		{
 			PendingRenderLists.erase(It);
 		}
-		RetiringRenderLists.push_back(List);
+		Bucket.push_back(List);
 	}
 }
 
@@ -962,18 +997,30 @@ void FRHIResourcePool::BeginFrame()
 	// FrameAllocMutex).
 	std::lock_guard<std::mutex> Lock(TableMutex);
 
-	// Destroy the previous frame's SUBMITTED command lists. They were submitted at that frame's
-	// IPresent stage, and the host BeginFrame already waited the swapchain fence, so no list is
-	// still executing. This is the fence-aligned lifetime boundary shared with transient resource
-	// recycling below.
+	// Advance FIRST: `FrameCounter` counts from 1 while a frame runs, so everything below -- the slot
+	// being retired, the age of a transient, the age of a descriptor set -- is read against the frame
+	// currently being built (see CurrentFrameSlot).
+	++FrameCounter;
+
+	// The frame head just ran (RHI::BeginFrame, immediately before this call), and what it did was
+	// wait ONE per-slot fence: the slot of the frame being built, signalled by the submit of the frame
+	// `kFrameSlots` boundaries back. That -- and only that -- frame is provably retired on the GPU, so
+	// exactly ONE bucket per frame-domain table is destroyed here: the bucket of THIS slot.
 	//
-	// Only SUBMITTED lists are destroyed here: a list recorded before the frame loop started (an
-	// asset-mirror upload at init) waits in a frame's table until that frame's IPresent submits it,
-	// and destroying it here would hand the queue a freed command buffer.
+	// Retiring "whatever was submitted since the last boundary" instead is the depth-1 reading of
+	// "the previous frame is done" and was the direct cause of
+	// `VUID-vkFreeCommandBuffers-pCommandBuffers-00047` ("is in use") -- with K frames overlapping, the
+	// frames of the last K-1 boundaries are still on the queue.
+	const std::uint32_t RetiredSlot = CurrentFrameSlot();
+
+	// Destroy the submitted command lists of the frame that just retired. Only SUBMITTED lists are
+	// destroyed here: a list recorded before the frame loop started (an asset-mirror upload at init)
+	// waits in a frame's table until that frame's IPresent submits it, and destroying it here would
+	// hand the queue a freed command buffer.
 	std::vector<FRHICommandList*> Lists;
 	{
-		std::lock_guard<std::mutex> Lock(RenderListsMutex);
-		Lists.swap(RetiringRenderLists);
+		std::lock_guard<std::mutex> RenderLock(RenderListsMutex);
+		Lists.swap(RetiringRenderLists[RetiredSlot]);
 	}
 	for (FRHICommandList* List : Lists)
 	{
@@ -983,17 +1030,16 @@ void FRHIResourcePool::BeginFrame()
 		}
 	}
 
-	// Destroy the natives condemned by the PREVIOUS frame's slot re-use. Safe here for the same
+	// Destroy the natives condemned by that same retired frame's slot re-use. Safe here for the same
 	// reason the lists above are: the fence covering everything that may have referenced them was
-	// waited before this ran (RHI::BeginFrame).
-	FlushCondemned();
+	// waited by the frame head.
+	FlushCondemned(RetiredSlot);
 
 	// Sweep the descriptor-set tables: both are content-addressed, so an entry whose CONTENT stopped
 	// being requested (a transient buffer's address, a UI buffer that got resized, a texture nobody
 	// draws any more) would otherwise hold its set AND its descriptor pool for the life of the
-	// process. Safe here for the same reason the lists above are: the fence covering everything that
-	// referenced them was waited before this ran.
-	++FrameCounter;
+	// process. The grace period is the in-flight depth, so the sweep only touches sets no in-flight
+	// frame can still reference.
 	for (std::vector<FDescriptorSetEntry>* Table : { &DescriptorSets, &MutableDescriptorSets })
 	{
 		for (auto It = Table->begin(); It != Table->end(); )
@@ -1011,22 +1057,30 @@ void FRHIResourcePool::BeginFrame()
 	}
 
 	// Recycle transient slots: mark inactive and free the slot while KEEPING native + view + memory
-	// (the host BeginFrame already waited the previous frame's fence, so no in-flight command
-	// references them) -- a same-descriptor request this frame then reuses the objects in place, with
-	// no per-frame vkCreate / vkAllocate. A later request whose descriptor differs drops the stale
-	// native via Create* ('recycled slot, different desc' branch).
+	// (a same-descriptor request this frame then reuses the objects in place, with no per-frame
+	// vkCreate / vkAllocate). A later request whose descriptor differs drops the stale native via
+	// Create* ('recycled slot, different desc' branch).
 	//
-	// UNCONDITIONALLY: the frame IS a transient's lifetime, so a slot nobody released still gets
-	// recycled. Advancing the generation is what makes that safe -- the handle from the frame that
-	// just ended stops resolving (Get* reports it) instead of aliasing whatever native takes the slot
-	// next, which the old `RefCount == 0` gate could only avoid by keeping the slot out of
-	// circulation forever (every frame minted a fresh slot + native: 4 buffers/frame, ~200 KB/frame,
-	// unbounded growth). Persistent slots are never touched here.
+	// WHEN: only once the frame that last used the slot has RETIRED on the GPU. That is
+	// `kFrameLifetimeFrames` (== MAHO_FRAMES_IN_FLIGHT) frames after its last use, and it is not a
+	// guess: the RHI's frame head waits the fence of the frame K slots back before it records anything,
+	// so an entry last used K frames ago is provably free. This used to recycle EVERY transient
+	// unconditionally at every frame boundary, on the stated grounds that "the host waited the previous
+	// frame's fence" -- which was true only while the device held a single fence (depth 1) and stopped
+	// being true the moment the depth became the declared MAHO_FRAMES_IN_FLIGHT. A transient's native
+	// could then be handed to frame N while frame N-1's command lists were still executing with it
+	// bound (the material parameter buffer is exactly such a transient; only its constant content kept
+	// the race invisible).
+	//
+	// Handles keep the per-frame story: `Generation` still advances at the recycle, so a handle from
+	// the frame that just ended stops resolving -- it just does so K boundaries later now, which is the
+	// honest lifetime of a frame-domain resource at this depth.
 	FreeTextureSlots.clear();
 	for (std::size_t I = 0; I < Textures.size(); ++I)
 	{
 		FTextureEntry& E = Textures[I];
-		if (E.Lifetime == ERDGResourceLifetime::Transient)
+		if (E.Lifetime == ERDGResourceLifetime::Transient
+			&& (FrameCounter - E.LastUsedFrame) >= kFrameLifetimeFrames)
 		{
 			++E.Generation;
 			E.RefCount = 0;
@@ -1039,7 +1093,8 @@ void FRHIResourcePool::BeginFrame()
 	for (std::size_t I = 0; I < Buffers.size(); ++I)
 	{
 		FBufferEntry& E = Buffers[I];
-		if (E.Lifetime == ERDGResourceLifetime::Transient)
+		if (E.Lifetime == ERDGResourceLifetime::Transient
+			&& (FrameCounter - E.LastUsedFrame) >= kFrameLifetimeFrames)
 		{
 			++E.Generation;
 			E.RefCount = 0;
@@ -1051,8 +1106,9 @@ void FRHIResourcePool::BeginFrame()
 	// Recycle the frame-transient parameter pool: reset every chunk's used
 	// high-water and rewind the cursor, so the whole pool is reused next frame.
 	// Never frees (an outstanding AllocParameters<T>() pointer from the frame that
-	// just ran is stale by contract -- the fence wait above guarantees no in-flight
-	// GPU reads of it, and AddPass consumed it within the allocating frame).
+	// just ran is stale by contract -- the pool's parameters are CPU-side structures a
+	// pass consumes into its own buffers within the allocating frame, so nothing on the
+	// GPU reads this memory directly).
 	{
 		std::lock_guard<std::mutex> Lock(FrameAllocMutex);
 		for (FFrameChunk& C : FrameChunks)
@@ -1070,12 +1126,13 @@ void FRHIResourcePool::Shutdown()
 	// Same lock order as BeginFrame: tables, then the render-list tables, then the frame allocator.
 	std::lock_guard<std::mutex> Lock(TableMutex);
 
-	// Natives condemned in the last frame go with everything else (no frame boundary is left to
-	// flush them on).
-	FlushCondemned();
+	// Natives condemned in the last frames go with everything else (no frame boundary is left to
+	// flush them on). The device is idle by now (the RHI teardown waits it), so every bucket is safe.
+	FlushAllCondemned();
 
 	// Both lifetimes end here: the lists waiting to be submitted (a pass recorded in a teardown stage
-	// has no frame left to submit it) and the ones submitted but not yet recycled by a BeginFrame.
+	// has no frame left to submit it) and the ones submitted but not yet retired by a BeginFrame --
+	// i.e. every slot bucket still holding them.
 	for (FRHICommandList* List : PendingRenderLists)
 	{
 		if (RHI)
@@ -1084,14 +1141,17 @@ void FRHIResourcePool::Shutdown()
 		}
 	}
 	PendingRenderLists.clear();
-	for (FRHICommandList* List : RetiringRenderLists)
+	for (std::vector<FRHICommandList*>& Bucket : RetiringRenderLists)
 	{
-		if (RHI)
+		for (FRHICommandList* List : Bucket)
 		{
-			RHI->DestroyCommandList(List);
+			if (RHI)
+			{
+				RHI->DestroyCommandList(List);
+			}
 		}
+		Bucket.clear();
 	}
-	RetiringRenderLists.clear();
 
 	// PSO cache: destroy pipelines BEFORE the shader modules they reference, and
 	// shader modules BEFORE the pipeline layouts / descriptor set layouts. Each
