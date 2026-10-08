@@ -133,11 +133,20 @@ public:
 	using FContext = FGameWorldContext;
 
 protected:
-	std::array<FContext, MAHO_FRAMES_IN_FLIGHT> Slots;
+	/** One context per ring slot, allocated ONCE at the INJECTED pipeline depth (`GetFramesInFlight()`)
+	 *  on first use -- the depth is a run-time property of the process (the host injects it before the
+	 *  first graph exists), so it cannot be an array bound. A fixed-size array behind a `unique_ptr`,
+	 *  not a growable container: a context is not movable (it holds a mutex), so growing would have to
+	 *  move slots that systems already hold references to. */
+	std::unique_ptr<FContext[]> Slots;
 
 	void* GetContext(int Slot) override
 	{
-		return &Slots[Slot];
+		if (!Slots)
+		{
+			Slots = std::make_unique<FContext[]>(static_cast<std::size_t>(GetFramesInFlight()));
+		}
+		return &Slots[static_cast<std::size_t>(Slot)];
 	}
 
 private:
@@ -250,11 +259,12 @@ private:
 	// those stages too (IOnInstalled/IPreUnInstall belong to the collector's install/uninstall
 	// batches, not to the frame).
 	//
-	// The graphs themselves belong to the collector (Execute<TStages>() below), and it keeps one
-	// generation counter PER SEQUENCE -- which is why this is three Execute<> calls rather than
-	// one: the cross-frame self edge binds generation N to N-1, so each sequence's counter must
-	// advance by one per dispatch of THAT sequence. A single shared counter would leave each
-	// sequence's previous generation at another group's offset.
+	// The graphs themselves belong to the collector (Execute<TStages>(Frame) below), and the ROUND
+	// comes from OUTSIDE -- the host reads the canonical frame number once per frame and passes the
+	// same value to all three calls. That is what keeps one tick's sequences in one slot: three
+	// per-sequence counters would each have a private notion of "the previous frame", and the
+	// cross-frame self edge (which binds a stage to ITSELF one round back) would then resolve into
+	// three different rounds.
 	using FInputStages = TTypeList<IProcessInput>;
 	using FFixedStages = TTypeList<IFixedUpdate>;
 	using FPostStages  = TTypeList<IUpdate, ILateUpdate>;

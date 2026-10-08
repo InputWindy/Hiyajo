@@ -6,9 +6,10 @@
 #include "VulkanMemory.h"
 #include "VulkanResources.h"
 
-#include <Core/FrameGraph.h>   // MAHO_FRAMES_IN_FLIGHT: the frame-state slot count (see kFrameSlots)
+#include <Core/FrameGraph.h>   // GetFramesInFlight: the process-wide depth this device is sized by
 
 #include <array>
+#include <cstdint>
 #include <memory>
 #include <vector>
 
@@ -170,14 +171,24 @@ public:
 	[[nodiscard]] std::uint32_t GetMinImageCount() const;
 
 public:
-	/** Frame-state slot count -- the number of frames this device lets overlap. It IS
-	 *  `MAHO_FRAMES_IN_FLIGHT` (the graph's phase-ring depth) and that is the whole point: before this
-	 *  existed the device held ONE fence and one acquired image, so `BeginFrame` waited for the
-	 *  IMMEDIATELY previous submit and the pipeline depth was 1 while the graph declared 3. A frame's
-	 *  per-frame resources (a camera ring, a transient pool) must be sized by the depth that is ACTUALLY
-	 *  enforced -- so the enforced depth is now the declared one, and EVERY slot's fence is waited
-	 *  before that slot is used again. */
-	static constexpr std::uint32_t kFrameSlots = MAHO_FRAMES_IN_FLIGHT;
+	/** Frame-state slot count -- the number of frames this device lets overlap, taken from
+	 *  `FRHIInitDesc::FramesInFlight` in Initialize (i.e. INJECTED by the owner, which got it from the
+	 *  host), and therefore the SAME number the graph's phase ring is wide. Before this was a run-time
+	 *  value it was the compile-time `MAHO_FRAMES_IN_FLIGHT` and the graph's depth could not leave it;
+	 *  and before the per-slot rings existed the device held ONE fence and one acquired image, so
+	 *  `BeginFrame` waited for the IMMEDIATELY previous submit and the real depth was 1 while the graph
+	 *  declared 3. A frame's per-frame resources (a camera ring, a transient pool) are sized by the
+	 *  depth that is ACTUALLY enforced, so `FrameSlots` is the number every one of them must equal --
+	 *  and every slot's fence is waited before that slot is used again.
+	 *
+	 *  Sized ONCE in Initialize (`FrameSlotCount` is 0 before that, and the vectors below are grown
+	 *  there): the rings are a property of the live device, not of any frame. */
+	[[nodiscard]] virtual std::uint32_t GetFrameSlotCount() const override
+	{
+		return FrameSlots;
+	}
+
+	std::uint32_t FrameSlots = 0;
 
 	// -- frame-state aliases for the CURRENT slot ---------------------------------------------
 	//
@@ -190,14 +201,19 @@ public:
 	VkFence InFlightFence = VK_NULL_HANDLE;
 	VkSemaphore ImageAvailableSemaphore = VK_NULL_HANDLE;
 
-	/** Per-slot frame state. One entry per kFrameSlots: the frame's command buffer (+ its recording
-	 *  wrapper), the fence its submit signals, the acquire semaphore its submit waits, and the image
-	 *  index the acquire returned. K copies is what makes "frame N+1 may overlap frame N" legal. */
-	std::array<VkCommandBuffer, kFrameSlots> FrameCommandBuffers{};
-	std::array<FRHICommandList*, kFrameSlots> FrameCommandLists{};
-	std::array<VkFence, kFrameSlots> InFlightFences{};
-	std::array<VkSemaphore, kFrameSlots> FrameAcquireSemaphores{};
-	std::array<std::uint32_t, kFrameSlots> FrameImageIndices{};
+	/** Per-slot frame state: `FrameSlots` entries (grown in Initialize), one per frame the device lets
+	 *  overlap -- the frame's command buffer (+ its recording wrapper), the fence its submit signals,
+	 *  the acquire semaphore its submit waits, and the image index the acquire returned. K copies is
+	 *  what makes "frame N+1 may overlap frame N" legal.
+	 *
+	 *  `std::vector` rather than a fixed array because the size is a RUN-TIME value (K). These element
+	 *  types are raw handles / pointers, so growing is a plain copy and the slots a stage may hold a
+	 *  reference to are never moved after Initialize -- nothing resizes them again. */
+	std::vector<VkCommandBuffer> FrameCommandBuffers;
+	std::vector<FRHICommandList*> FrameCommandLists;
+	std::vector<VkFence> InFlightFences;
+	std::vector<VkSemaphore> FrameAcquireSemaphores;
+	std::vector<std::uint32_t> FrameImageIndices;
 
 	/** The slot the frame in progress uses; advanced once per BeginFrame/EndFrame pair. */
 	std::uint32_t CurrentSlot = 0;
@@ -205,15 +221,15 @@ public:
 	// -- frame-depth probe (bounded diagnostic; see GCVarRHI_FrameDepth in the .cpp) -----------
 	//
 	// Server-thread-only counters (no atomics: every one of them is touched on the RHI server thread,
-	// which is the only emitter). Each head waits ONE slot's fence, which proves the frame `kFrameSlots`
+	// which is the only emitter). Each head waits ONE slot's fence, which proves the frame `FrameSlots`
 	// back complete -- that, and only that, is what `RetiredFrames` counts. So `Opened - Retired` is the
 	// number of frames whose per-frame data may still be in the GPU's hands, i.e. the lower bound every
-	// frame-domain ring (the camera ring, the transient pool) must meet; it settles at `kFrameSlots`
+	// frame-domain ring (the camera ring, the transient pool) must meet; it settles at `FrameSlots`
 	// once the pipeline is full. Measuring it is what keeps the declaration honest.
 	std::uint64_t OpenedFrames = 0;      // frame heads that opened a slot (== the frame being recorded + 1)
 	std::uint64_t SubmittedFrames = 0;   // frame tails that submitted it
-	std::uint64_t RetiredFrames = 0;     // frames PROVEN complete: opened - kFrameSlots, clamped at 0
-	std::uint64_t PeakAhead = 0;         // peak of Opened - Retired (== kFrameSlots in steady state)
+	std::uint64_t RetiredFrames = 0;     // frames PROVEN complete: opened - FrameSlots, clamped at 0
+	std::uint64_t PeakAhead = 0;         // peak of Opened - Retired (== FrameSlots in steady state)
 	std::uint64_t PeakInFlight = 0;      // peak of Submitted - Retired (what the queue actually holds)
 
 private:
@@ -317,7 +333,7 @@ private:
 	FBackbufferCaptureSink PendingCaptureSink;
 	bool bCaptureRecorded = false;
 	/** The slot that RECORDED the pending capture. Only that slot's fence covers the copy, so the sink
-	 *  runs at the first BeginFrame of that very slot -- kFrameSlots boundaries later, not the next
+	 *  runs at the first BeginFrame of that very slot -- FrameSlots boundaries later, not the next
 	 *  one (the next frame's fence covers a different submit). */
 	std::uint32_t CaptureSlot = 0;
 	VkBuffer CaptureStagingBuffer = VK_NULL_HANDLE;

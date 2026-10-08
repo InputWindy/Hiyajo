@@ -1,17 +1,7 @@
 #include "RenderResourcePool.h"
 
-#include <Core/FrameGraph.h>   // MAHO_FRAMES_IN_FLIGHT: the frame-domain lifetime (kFrameLifetimeFrames)
+#include <Core/FrameGraph.h>   // GetFramesInFlight: the frame-domain lifetime is the pool's FrameSlotCount
 
-namespace
-{
-	/** How many frames a TRANSIENT resource's native stays off the free list after its last use.
-	 *
-	 *  This IS the in-flight depth the RHI enforces (its frame head waits the fence of the frame
-	 *  `MAHO_FRAMES_IN_FLIGHT` slots back), so "K frames old" == "the frame that used it has retired".
-	 *  The two numbers must stay the same number: a pool that recycles faster than the device retires
-	 *  hands a live native to a new frame, and one that recycles slower only wastes memory. */
-	constexpr std::uint32_t kFrameLifetimeFrames = MAHO_FRAMES_IN_FLIGHT;
-}
 
 #include <Core/Fatal.h>
 
@@ -354,7 +344,7 @@ void FRHIResourcePool::CondemnBuffer(FRHIBuffer* Native)
 void FRHIResourcePool::FlushCondemned(std::uint32_t Slot)
 {
 	// Called by BeginFrame with the slot whose per-slot fence it just waited: the frames that
-	// condemned these natives (that slot's earlier occupancy, `kFrameSlots` boundaries back) have
+	// condemned these natives (that slot's earlier occupancy, `FrameSlotCount` boundaries back) have
 	// retired, so nothing recorded or queued can still reference them.
 	auto& Textures = CondemnedTextures[Slot];
 	auto& Buffers = CondemnedBuffers[Slot];
@@ -383,7 +373,7 @@ void FRHIResourcePool::FlushCondemned(std::uint32_t Slot)
 void FRHIResourcePool::FlushAllCondemned()
 {
 	// Shutdown only: the caller has made the device idle, so every bucket is retired at once.
-	for (std::uint32_t Slot = 0; Slot < kFrameSlots; ++Slot)
+	for (std::uint32_t Slot = 0; Slot < FrameSlotCount; ++Slot)
 	{
 		FlushCondemned(Slot);
 	}
@@ -976,7 +966,7 @@ void FRHIResourcePool::RetireRenderLists(const std::vector<FRHICommandList*>& Li
 	}
 	std::lock_guard<std::mutex> Lock(RenderListsMutex);
 	// The bucket IS the frame's RHI slot: the frame head waited that slot's fence before recording
-	// started, so a list is destroyed when its own slot's fence is waited again (`kFrameSlots`
+	// started, so a list is destroyed when its own slot's fence is waited again (`FrameSlotCount`
 	// boundaries later) and never while the queue still holds it.
 	std::vector<FRHICommandList*>& Bucket = RetiringRenderLists[CurrentFrameSlot()];
 	for (FRHICommandList* List : Lists)
@@ -1004,7 +994,7 @@ void FRHIResourcePool::BeginFrame()
 
 	// The frame head just ran (RHI::BeginFrame, immediately before this call), and what it did was
 	// wait ONE per-slot fence: the slot of the frame being built, signalled by the submit of the frame
-	// `kFrameSlots` boundaries back. That -- and only that -- frame is provably retired on the GPU, so
+	// `FrameSlotCount` boundaries back. That -- and only that -- frame is provably retired on the GPU, so
 	// exactly ONE bucket per frame-domain table is destroyed here: the bucket of THIS slot.
 	//
 	// Retiring "whatever was submitted since the last boundary" instead is the depth-1 reading of
@@ -1044,7 +1034,7 @@ void FRHIResourcePool::BeginFrame()
 	{
 		for (auto It = Table->begin(); It != Table->end(); )
 		{
-			if (FrameCounter - It->LastUsedFrame > kDescriptorSetGraceFrames)
+			if (FrameCounter - It->LastUsedFrame > DescriptorSetGraceFrames)
 			{
 				DestroyDescriptorSetEntry(*It);
 				It = Table->erase(It);
@@ -1062,12 +1052,13 @@ void FRHIResourcePool::BeginFrame()
 	// Create* ('recycled slot, different desc' branch).
 	//
 	// WHEN: only once the frame that last used the slot has RETIRED on the GPU. That is
-	// `kFrameLifetimeFrames` (== MAHO_FRAMES_IN_FLIGHT) frames after its last use, and it is not a
+	// `FrameSlotCount` frames after its last use -- the pool's bucket count, which IS the run-time K
+	// (the same number the RHI's frame head waits one slot's fence for) -- and it is not a
 	// guess: the RHI's frame head waits the fence of the frame K slots back before it records anything,
 	// so an entry last used K frames ago is provably free. This used to recycle EVERY transient
 	// unconditionally at every frame boundary, on the stated grounds that "the host waited the previous
 	// frame's fence" -- which was true only while the device held a single fence (depth 1) and stopped
-	// being true the moment the depth became the declared MAHO_FRAMES_IN_FLIGHT. A transient's native
+	// being true the moment the depth became the declared one. A transient's native
 	// could then be handed to frame N while frame N-1's command lists were still executing with it
 	// bound (the material parameter buffer is exactly such a transient; only its constant content kept
 	// the race invisible).
@@ -1080,7 +1071,7 @@ void FRHIResourcePool::BeginFrame()
 	{
 		FTextureEntry& E = Textures[I];
 		if (E.Lifetime == ERDGResourceLifetime::Transient
-			&& (FrameCounter - E.LastUsedFrame) >= kFrameLifetimeFrames)
+			&& (FrameCounter - E.LastUsedFrame) >= FrameSlotCount)
 		{
 			++E.Generation;
 			E.RefCount = 0;
@@ -1094,7 +1085,7 @@ void FRHIResourcePool::BeginFrame()
 	{
 		FBufferEntry& E = Buffers[I];
 		if (E.Lifetime == ERDGResourceLifetime::Transient
-			&& (FrameCounter - E.LastUsedFrame) >= kFrameLifetimeFrames)
+			&& (FrameCounter - E.LastUsedFrame) >= FrameSlotCount)
 		{
 			++E.Generation;
 			E.RefCount = 0;

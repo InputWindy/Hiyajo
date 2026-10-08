@@ -1,7 +1,5 @@
 #include "MeshFeature.h"
 
-#include <Core/FrameGraph.h>   // MAHO_FRAMES_IN_FLIGHT: the camera-constant ring's slot count
-
 #include <Log.h>
 #include <Scene.h>
 #include <ShaderParameterStruct.h>
@@ -168,14 +166,18 @@ void main()
 	constexpr int kMaxCanvasSwitchReports = 32;
 
 	/**
-	 * Slots in the camera-constant ring, and the number is `MAHO_FRAMES_IN_FLIGHT` on purpose.
+	 * Slots in the camera-constant ring = the pipeline depth K, taken at RUNTIME from the owning
+	 * render layer at the first `Render` (`FRender::GetFrameSlotCount`, the host's injected
+	 * `r.FramesInFlight`: the graph's phases, the device's frame slots and the pool's buckets are all
+	 * this one number). See `CameraRingSlots` in the header for why it is no longer a compile-time
+	 * constant.
 	 *
 	 * The ring's size is not a taste decision -- it is the number of frames whose host-visible writes may
-	 * be in the GPU's hands at once, and that number is the RHI's per-slot fence depth (`kFrameSlots` in
-	 * VulkanRHI.h, which IS `MAHO_FRAMES_IN_FLIGHT`): `BeginFrame` for frame N waits the fence of frame
-	 * N - MAHO_FRAMES_IN_FLIGHT before anything of frame N is recorded (see FVulkanRHI::BeginFrame), so
-	 * a slot written at frame N was last read by frame N - MAHO_FRAMES_IN_FLIGHT, which is retired by
-	 * then. Exactly MAHO_FRAMES_IN_FLIGHT slots is therefore both NECESSARY (fewer would overwrite a
+	 * be in the GPU's hands at once, and that number is the RHI's per-slot fence depth (`FrameSlots` in
+	 * VulkanRHI.h, sized from the same injected K): `BeginFrame` for frame N waits the fence of frame
+	 * N - K before anything of frame N is recorded (see FVulkanRHI::BeginFrame), so
+	 * a slot written at frame N was last read by frame N - K, which is retired by
+	 * then. Exactly K slots is therefore both NECESSARY (fewer would overwrite a
 	 * buffer an in-flight frame still reads) and SUFFICIENT (one more only wastes memory).
 	 *
 	 * HISTORY -- why this is written down. This was once 3 with a single frame fence in the RHI: the
@@ -186,11 +188,10 @@ void main()
 	 * which is what proved the ring was being overwritten rather than the shader/material being wrong.
 	 * With the RHI's per-slot fences in place the enforced depth and this ring agree again.
 	 *
-	 * NOTE the ring INDEX is the frame slot (`FramesSeen % kCameraRingSlots`, advanced once per frame
+	 * NOTE the ring INDEX is the frame slot (`FramesSeen % CameraRingSlots`, advanced once per frame
 	 * even on frames that draw nothing) -- the same index space as the RHI's frame slot, not "slides
 	 * I happened to allocate".
 	 */
-	constexpr std::size_t kCameraRingSlots = MAHO_FRAMES_IN_FLIGHT;
 
 	/** Case-insensitive compare for parameter NAMES: the game side publishes the authoritative
 	 *  spelling, but a shader file and a component are edited by different people, and `_basecolor`
@@ -409,11 +410,22 @@ void FMeshFeature::Render(FRender& R, FRenderContext&)
 
 	++FramesSeen;
 
+	// The ring's slot count is the RUN-TIME pipeline depth K, asked of the render layer ONCE (the
+	// host injects it from `r.FramesInFlight` before the first graph, so nothing here may assume a
+	// compiled value -- see CameraRingSlots in the header). Read before the FIRST slot is computed,
+	// so the ring and the RHI's frame-slot ring are the same width from frame one.
+	if (CameraRingSlots == 0)
+	{
+		CameraRingSlots = R.GetFrameSlotCount();
+		MAHO_LOG_CORE_INFO("MeshFeature: camera-constant ring sized to the pipeline depth K={} "
+			"(FRender::GetFrameSlotCount, read once at the first frame)", CameraRingSlots);
+	}
+
 	// THIS frame's ring slot, taken before every early return below: the ring must advance once per
 	// FRAME, not once per drawn frame, or a frame that draws nothing would rotate the ring by zero and
 	// the camera buffers would drift out of step with the RHI's frame slot (the two are the same index
-	// space -- see kCameraRingSlots).
-	const std::size_t FrameSlot = static_cast<std::size_t>(FramesSeen % kCameraRingSlots);
+	// space -- see CameraRingSlots).
+	const std::size_t FrameSlot = static_cast<std::size_t>(FramesSeen % CameraRingSlots);
 
 	// The mirror table: what to draw + the camera to draw it with. It is the ONLY game/render
 	// interface -- this feature knows no entity, no component and no transform.
@@ -578,7 +590,7 @@ void FMeshFeature::Render(FRender& R, FRenderContext&)
 
 	// Camera constants: ONE buffer PER FRAME-IN-FLIGHT SLOT, Persistent, written only by the frame that
 	// owns it. A frame-scoped transient (what this was) is recycled at the NEXT BeginFrame while the CPU
-	// may already be MAHO_FRAMES_IN_FLIGHT frames ahead of the GPU -- so a frame would overwrite bytes a
+	// may already be K frames ahead of the GPU -- so a frame would overwrite bytes a
 	// previous frame is still reading, and the mesh draws with the FOLLOWING frame's matrices. Static
 	// cameras hide it (identical bytes written again); a camera that moves every frame makes it a live
 	// flicker.
@@ -586,9 +598,9 @@ void FMeshFeature::Render(FRender& R, FRenderContext&)
 	UniformDesc.Size = sizeof(FViewConstants);
 	UniformDesc.Usage = ERHIBufferUsage::Uniform;
 	UniformDesc.MemoryUsage = ERHIMemoryUsage::CPUToGPU;
-	if (CameraConstantBuffers.size() != kCameraRingSlots)
+	if (CameraConstantBuffers.size() != CameraRingSlots)
 	{
-		CameraConstantBuffers.resize(kCameraRingSlots);
+		CameraConstantBuffers.resize(CameraRingSlots);
 	}
 	const std::size_t ViewSlot = FrameSlot;
 	if (!CameraConstantBuffers[ViewSlot].IsValid())

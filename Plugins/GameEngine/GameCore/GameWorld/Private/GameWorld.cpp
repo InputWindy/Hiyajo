@@ -5,6 +5,10 @@
 #include <UISystem.h>
 #include <MeshRenderSystem.h>
 
+// The canonical frame number (Platform::GetFrameIndex): the ROUND each of this collector's
+// sequences is driven with -- see FGameWorld::Tick. Built-level dependency, declared in the
+// .cplugin; only this cpp names the platform, so GameWorld.h stays free of it.
+#include <Platform.h>
 #include <Trace.h>
 #include <vector>
 
@@ -126,9 +130,15 @@ void FGameWorld::Tick(FEngineBase&, FEngineContext&)
 	DeltaSeconds = std::chrono::duration<float>(Now - LastFrame).count();
 	LastFrame = Now;
 
+	// THIS drive's round, read ONCE for all three sequences below: the world is a collector with a
+	// graph of its own, and a single round per drive is what lets its stage groups be ordered
+	// against each other ("this frame's input before this frame's update") without a private
+	// per-sequence counter. The number is the platform's canonical one -- see Execute's note.
+	const std::uint64_t Round = Platform::GetFrameIndex();
+
 	// Pre-fixed: resolve input once, synchronously -- simulation must read a
 	// settled input state, so wait immediately after dispatch.
-	Execute<FInputStages>();
+	Execute<FInputStages>(Round);
 	Wait();
 
 	// Fixed timestep: 0..N steps this frame, each strictly ordered (a step cannot
@@ -136,14 +146,14 @@ void FGameWorld::Tick(FEngineBase&, FEngineContext&)
 	Accumulator += DeltaSeconds;
 	while (Accumulator >= FixedStepSeconds)
 	{
-		Execute<FFixedStages>();
+		Execute<FFixedStages>(Round);
 		Wait();
 		Accumulator -= FixedStepSeconds;
 	}
 
 	// Post-fixed: update + late update, dispatched WITHOUT a trailing wait so they
 	// pipeline across frames; the next Tick's leading Wait (above) collects them.
-	Execute<FPostStages>();
+	Execute<FPostStages>(Round);
 }
 
 void FGameWorld::Shutdown(FEngineBase&, FEngineContext&)

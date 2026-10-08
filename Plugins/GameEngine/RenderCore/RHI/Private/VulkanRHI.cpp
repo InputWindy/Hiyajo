@@ -1,6 +1,7 @@
 ﻿#include "VulkanRHI.h"
 
 #include <Core/BuildConfig.h>
+#include <Core/Fatal.h>   // ReportError: the pipeline-depth disagreement is an error, not a log line
 #include "VulkanResources.h"
 
 #include <ConsoleVariable.h>
@@ -113,7 +114,8 @@ static ConsoleVariable::TAutoConsoleVariable<int> GCVarMinSwapchainImages(
  *  worth of per-frame data a recording layer may be touching while the GPU still reads an older copy
  *  of it, i.e. the number every frame-domain ring has to be at least as large as. `inflight` is the
  *  same reading against SUBMISSION (what the queue holds), and the two peaks are the worst readings
- *  seen. This exists because the declaration (`MAHO_FRAMES_IN_FLIGHT`) used to be enforced NOWHERE:
+ *  seen. This exists because the declaration (`MAHO_FRAMES_IN_FLIGHT`, now only the DEFAULT for a host
+ *  that injects nothing -- the depth itself is the run-time K) used to be enforced NOWHERE:
  *  the device held one fence, so the real depth was 1 while the graph's phases, the camera ring and
  *  the transient pool were all sized from 3. The probe keeps that number observable instead of assumed.
  *  0 = silent. */
@@ -271,6 +273,45 @@ bool FVulkanRHI::Initialize(const FRHIInitDesc& Desc)
 	FramebufferWidth = Desc.FramebufferWidth;
 	FramebufferHeight = Desc.FramebufferHeight;
 
+	// ── THE PIPELINE DEPTH: size every per-slot ring NOW, before any of them is created ──────────
+	//
+	// `FrameSlots` is the number of frames this device lets overlap, and it IS the graph's K: the owner
+	// (FRender) injected it through FRHIInitDesc, having taken it from the host. `<= 0` means "not
+	// injected", and the process-wide value (`GetFramesInFlight`, the same one the graph's ring is
+	// built from) is then the only sane answer.
+	//
+	// The check below is the point of the whole exercise. Before this, the device's rings were sized at
+	// COMPILE time from `MAHO_FRAMES_IN_FLIGHT` and the host had to REFUSE any other depth and clamp
+	// back to it -- a guard that hid the mismatch instead of fixing it. Now nothing clamps: a
+	// disagreement between the injected depth and the graph's is REPORTED, and the GRAPH's value wins,
+	// because that is the ring the frame numbers are actually distributed over -- a device sized by
+	// anything else would wait the wrong slot's fence and retire a bucket another layer still uses.
+	{
+		const std::int32_t GraphDepth = GetFramesInFlight();
+		if (Desc.FramesInFlight > 0 && Desc.FramesInFlight != GraphDepth)
+		{
+			const std::string Message =
+				"FVulkanRHI::Initialize: the injected pipeline depth (" + std::to_string(Desc.FramesInFlight)
+				+ ") disagrees with the frame graph's (" + std::to_string(GraphDepth)
+				+ ") -- the device is sized by the GRAPH's value; one of them was set after the other was "
+				  "already in use (K is written once, before the first graph, and sealed by it)";
+			ReportError(Message.c_str());
+			MAHO_LOG_CORE_ERROR("{}", Message);
+		}
+		FrameSlots = static_cast<std::uint32_t>(GraphDepth > 0 ? GraphDepth : 1);
+
+		// The rings are grown ONCE, here: the element types are raw handles / pointers, so this is a
+		// plain fill, and nothing resizes them again (a stage holding a reference to a slot would break
+		// if the vector ever reallocated). The command buffers are filled by
+		// CreateCommandPoolAndBuffer, the fences and semaphores by CreateSyncObjects.
+		FrameCommandBuffers.assign(FrameSlots, VK_NULL_HANDLE);
+		FrameCommandLists.assign(FrameSlots, nullptr);
+		InFlightFences.assign(FrameSlots, VK_NULL_HANDLE);
+		FrameAcquireSemaphores.assign(FrameSlots, VK_NULL_HANDLE);
+		FrameImageIndices.assign(FrameSlots, 0u);
+		CurrentSlot = 0;
+	}
+
 	if (!CreateInstance())
 	{
 		Shutdown();
@@ -396,7 +437,7 @@ void FVulkanRHI::Shutdown()
 		MemoryAllocator.reset();
 	}
 
-	for (std::uint32_t Slot = 0; Slot < kFrameSlots; ++Slot)
+	for (std::uint32_t Slot = 0; Slot < FrameSlots; ++Slot)
 	{
 		if (Device != VK_NULL_HANDLE && InFlightFences[Slot] != VK_NULL_HANDLE)
 		{
@@ -415,7 +456,7 @@ void FVulkanRHI::Shutdown()
 	}
 	RenderFinishedSemaphores.clear();
 
-	for (std::uint32_t Slot = 0; Slot < kFrameSlots; ++Slot)
+	for (std::uint32_t Slot = 0; Slot < FrameSlots; ++Slot)
 	{
 		if (Device != VK_NULL_HANDLE && FrameAcquireSemaphores[Slot] != VK_NULL_HANDLE)
 		{
@@ -463,7 +504,7 @@ void FVulkanRHI::Shutdown()
 	if (Device != VK_NULL_HANDLE && CommandPool != VK_NULL_HANDLE)
 	{
 		// Free the non-owning wrappers first (the Vk buffers die with the pool).
-		for (std::uint32_t Slot = 0; Slot < kFrameSlots; ++Slot)
+		for (std::uint32_t Slot = 0; Slot < FrameSlots; ++Slot)
 		{
 			delete FrameCommandLists[Slot];
 			FrameCommandLists[Slot] = nullptr;
@@ -537,10 +578,11 @@ void FVulkanRHI::BeginFrame()
 
 	// -- this frame's SLOT -------------------------------------------------------------------------
 	//
-	// ONE slot per frame, round-robin over kFrameSlots (= MAHO_FRAMES_IN_FLIGHT). Everything a frame
+	// ONE slot per frame, round-robin over FrameSlots (the run-time K the graph's phases are also
+	// distributed over). Everything a frame
 	// owns -- its fence, its acquire semaphore, its frame command buffer, the swapchain image it
 	// acquired -- comes out of the slot, and the head waits THIS SLOT'S fence before touching any of
-	// it. That wait is what bounds the pipeline: frame N starts only once frame N - kFrameSlots has
+	// it. That wait is what bounds the pipeline: frame N starts only once frame N - FrameSlots has
 	// retired on the GPU, so the depth is the DECLARED one and a frame-domain ring of that size is
 	// provably safe (the buffer a frame writes is only reused by a frame whose head waited the
 	// writer's fence).
@@ -550,7 +592,7 @@ void FVulkanRHI::BeginFrame()
 	// IMMEDIATELY previous submit: `ahead` = 1 while the graph's phases, the camera ring and the
 	// transient pool were all sized from MAHO_FRAMES_IN_FLIGHT = 3, and nothing anywhere enforced the
 	// declared 3. That is the mismatch this closes.
-	CurrentSlot = static_cast<std::uint32_t>(OpenedFrames % kFrameSlots);
+	CurrentSlot = static_cast<std::uint32_t>(OpenedFrames % FrameSlots);
 	++OpenedFrames;
 	CommandBuffer = FrameCommandBuffers[CurrentSlot];
 	FrameCommandListRHI = FrameCommandLists[CurrentSlot];
@@ -592,14 +634,15 @@ void FVulkanRHI::BeginFrame()
 		}
 	}
 	// The wait above is THIS slot's fence, and the submit it was signalled by belongs to the frame
-	// kFrameSlots back: that frame (and everything before it) is what this head RETIRES. Nothing else
+	// FrameSlots back: that frame (and everything before it) is what this head RETIRES. Nothing else
 	// is retired here -- in particular not "the frame before this one", which is what a single fence
-	// used to imply and what made the real depth 1 while the engine declared MAHO_FRAMES_IN_FLIGHT.
-	// So the retirement watermark is `opened - kFrameSlots` frames (clamped at 0 until the pipeline has
+	// used to imply and what made the real depth 1 while the engine declared MAHO_FRAMES_IN_FLIGHT
+	// (the value IS `GetFramesInFlight()` now, and `FrameSlots` is it).
+	// So the retirement watermark is `opened - FrameSlots` frames (clamped at 0 until the pipeline has
 	// depth), and `ahead` -- the number of frames' worth of per-frame data a recording layer may still
 	// be overwriting the GPU's copy of -- is the distance from it to the frame being opened.
 	{
-		const std::uint64_t Completed = OpenedFrames > kFrameSlots ? OpenedFrames - kFrameSlots : 0;
+		const std::uint64_t Completed = OpenedFrames > FrameSlots ? OpenedFrames - FrameSlots : 0;
 		RetiredFrames = Completed;
 		const std::uint64_t Ahead = OpenedFrames - Completed;
 		const std::uint64_t InFlight = SubmittedFrames > Completed ? SubmittedFrames - Completed : 0;
@@ -611,7 +654,7 @@ void FVulkanRHI::BeginFrame()
 				"FVulkanRHI frame depth: opened={} submitted={} retired={} ahead={} inflight={} "
 				"peakAhead={} peakInFlight={} slot={}/{} swapchainImages={}",
 				OpenedFrames, SubmittedFrames, RetiredFrames, Ahead, InFlight,
-				PeakAhead, PeakInFlight, CurrentSlot, kFrameSlots, SwapchainImages.size());
+				PeakAhead, PeakInFlight, CurrentSlot, FrameSlots, SwapchainImages.size());
 		}
 	}
 
@@ -643,7 +686,7 @@ void FVulkanRHI::BeginFrame()
 	}
 
 	// THIS slot's fence has now retired, so every async-upload staging buffer deferred by the frame
-	// that last occupied this slot (`kFrameSlots` boundaries back, the one this wait was for) is done
+	// that last occupied this slot (`FrameSlots` boundaries back, the one this wait was for) is done
 	// being read by the GPU: free that bucket, and adopt this slot for the frame we are about to
 	// record. The whole list used to be freed here, which was the depth-1 reading of "the previous
 	// frame is done" -- at depth K it frees staging the GPU is still reading
@@ -2135,7 +2178,7 @@ bool FVulkanRHI::CreateCommandPoolAndBuffer()
 	AllocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
 	AllocateInfo.commandPool = CommandPool;
 	AllocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-	AllocateInfo.commandBufferCount = kFrameSlots;
+	AllocateInfo.commandBufferCount = FrameSlots;
 
 	if (!CheckVkResult(vkAllocateCommandBuffers(Device, &AllocateInfo, FrameCommandBuffers.data()),
 		"vkAllocateCommandBuffers"))
@@ -2155,7 +2198,7 @@ bool FVulkanRHI::CreateCommandPoolAndBuffer()
 	RT.BuildAccel = CmdBuildAccelerationStructuresKHR;
 	RT.CopyAccel = CmdCopyAccelerationStructureKHR;
 	RT.TraceRays = CmdTraceRaysKHR;
-	for (std::uint32_t Slot = 0; Slot < kFrameSlots; ++Slot)
+	for (std::uint32_t Slot = 0; Slot < FrameSlots; ++Slot)
 	{
 		FrameCommandLists[Slot] = new FVulkanCommandList(
 			ERHICommandListType::Graphics, Device, CommandPool, FrameCommandBuffers[Slot],
@@ -2163,7 +2206,7 @@ bool FVulkanRHI::CreateCommandPoolAndBuffer()
 	}
 
 	MAHO_LOG_CORE_INFO("Vulkan command pool and {} frame command buffer(s) created (one per frame slot)",
-		kFrameSlots);
+		FrameSlots);
 	return true;
 }
 
@@ -2183,8 +2226,8 @@ bool FVulkanRHI::CreateSyncObjects()
 	//     frames is a two-pending-signals error (and a hang when a submit consumes only one);
 	//   - the fence is waited at the frame head, and a single fence can only ever express "the newest
 	//     submit" -- waiting it retires every frame, so the depth collapses to 1 and the declared
-	//     MAHO_FRAMES_IN_FLIGHT is enforced nowhere.
-	for (std::uint32_t Slot = 0; Slot < kFrameSlots; ++Slot)
+	//     pipeline depth (the run-time K, `FrameSlots`) is enforced nowhere.
+	for (std::uint32_t Slot = 0; Slot < FrameSlots; ++Slot)
 	{
 		if (!CheckVkResult(vkCreateSemaphore(Device, &SemaphoreInfo, nullptr, &FrameAcquireSemaphores[Slot]),
 			"vkCreateSemaphore (image available)"))
@@ -2208,7 +2251,7 @@ bool FVulkanRHI::CreateSyncObjects()
 	ImageAvailableSemaphore = FrameAcquireSemaphores[0];
 
 	MAHO_LOG_CORE_INFO("Vulkan sync objects created ({} frame slot(s): fence + acquire semaphore each)",
-		kFrameSlots);
+		FrameSlots);
 	return true;
 }
 
@@ -2244,7 +2287,9 @@ bool FVulkanRHI::CreateRenderFinishedSemaphores()
 
 bool FVulkanRHI::CreateMemoryAllocator()
 {
-	MemoryAllocator = std::make_unique<FVulkanMemoryAllocator>();
+	// The allocator buckets its deferred staging frees by frame slot, so it needs the SAME depth this
+	// device was sized by -- handed down rather than read again, so the two can never disagree.
+	MemoryAllocator = std::make_unique<FVulkanMemoryAllocator>(FrameSlots);
 	if (!MemoryAllocator->Initialize(Instance, PhysicalDevice, Device))
 	{
 		return false;

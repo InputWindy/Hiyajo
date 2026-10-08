@@ -44,7 +44,13 @@ template <typename T> class TShaderHandle;
  *  "record now, submit once at the end" model hangs off. It is per-slot on purpose: it is the
  *  COLLECTOR graph's frame state, so only stages driven by that graph (whose slot comes from its
  *  own counter) may touch it -- the engine-side host chain must never index it (see
- *  `refactor-per-frame-context` D8). */
+ *  `refactor-per-frame-context` D8).
+ *
+ *  The ROUND is deliberately NOT a member any more (it was, and that was the bug): a slot is indexed
+ *  by PHASE (`Frame % K`) and is refilled by the next submission that owns that phase, so a round
+ *  stored here is the round of whichever submission touched it LAST -- a node that runs late reads
+ *  somebody else's round. The round now travels by value from the node's own closure
+ *  (`GetRenderBatchFrame` reads it from the call ambient, see FFrameCall). */
 struct FRenderContext
 {
 	/** One pass recorded this frame, waiting for the frame's IPresent to submit it. */
@@ -94,6 +100,25 @@ namespace Detail
  *  export) -- set when the Render layer initializes. Other layers (e.g. the
  *  ImGui layer) use it to reach the RHI. */
 MAHO_RENDER_API FRender* GetRender();
+
+/** The ROUND of the render batch the CALLING stage belongs to -- "which frame am I working on".
+ *
+ *  Use this instead of `Platform::GetFrameIndex()` from inside a render stage. The canonical counter
+ *  is advanced by `FPlatform::IBeginFrame` -- the stage that ALSO freezes this round's input -- but
+ *  the counter is a moving target for anybody outside that stage: the host drives rounds ahead of
+ *  the collector's graph, so a stage that reads it LIVE can name a later round than its own batch
+ *  (the batch was submitted for the newest FROZEN round). A consumer that asks for such a round's
+ *  input (`ReadInputFrame`) is then asking for a frame that does not exist yet, i.e. it exercises
+ *  the wait (or, worse, reports a gap) on the normal path. The batch's own round is the number this
+ *  frame's nodes were submitted with, so every stage of one frame agrees on it, and it is a round
+ *  the platform has already frozen (see `FRender::Tick`).
+ *
+ *  Implemented through the dispatcher's ambient call (`GetCurrentStageFrame`), i.e. the round BAKED
+ *  INTO THIS NODE's closure -- not a value stored per phase. A per-phase copy is overwritten by the
+ *  next submission that owns the phase, so a node running late reads somebody else's round; the
+ *  closure's copy cannot be overwritten at all. Works from a helper that was never handed the
+ *  `FRenderContext&`. Returns 0 outside a stage call. */
+MAHO_RENDER_API std::uint64_t GetRenderBatchFrame();
 
 class MAHO_RENDER_API IOnInstalled
 {
@@ -251,11 +276,15 @@ public:
 	using FContext = FRenderContext;
 
 protected:
-	/** One context per ring slot. The derived class owns the storage -- the base cannot name the
-	 *  nested type while it is being instantiated. */
-	std::array<FContext, MAHO_FRAMES_IN_FLIGHT> Slots;
+	/** One context per ring slot, allocated ONCE at the INJECTED pipeline depth (`GetFramesInFlight()`)
+	 *  on first use -- the depth is a run-time property of the process (the host injects it before the
+	 *  first graph exists), so it cannot be an array bound. A fixed-size array behind a `unique_ptr`,
+	 *  not a growable container: a context is not movable (it holds a mutex), so growing would have to
+	 *  move slots that stages already hold references to. */
+	std::unique_ptr<FContext[]> Slots;
 
-	/** Type-erased access to a slot's context (see FFrameBuilder). Must never return nullptr. */
+	/** Type-erased access to a slot's context (see FFrameBuilder). Must never return nullptr -- the
+	 *  whole ring is created here, at its full depth, on the very first call. */
 	void* GetContext(int Slot) override
 	{
 		// The dispatcher publishes this pointer as the AMBIENT frame context for the duration of each
@@ -263,7 +292,11 @@ protected:
 		// frame's own AddPass -- knows which frame it belongs to. It is deliberately NOT remembered
 		// here: frames overlap now, so a member would attribute a late-running node's work to whichever
 		// frame the dispatcher last prepared.
-		return &Slots[Slot];
+		if (!Slots)
+		{
+			Slots = std::make_unique<FContext[]>(static_cast<std::size_t>(GetFramesInFlight()));
+		}
+		return &Slots[static_cast<std::size_t>(Slot)];
 	}
 
 private:
@@ -299,6 +332,18 @@ public:
 	[[nodiscard]] std::uint32_t GetCanvasWidth() const;
 	[[nodiscard]] std::uint32_t GetCanvasHeight() const;
 	[[nodiscard]] ERHIFormat GetSwapchainFormat() const;
+	/**
+	 * The pipeline depth K this process runs at: the number of frames the graph lets overlap, which is
+	 * also the RHI device's frame-slot count (its fences / acquire semaphores / frame command buffers)
+	 * and the resource pool's bucket count. A RUN-TIME value -- injected by the host from
+	 * `r.FramesInFlight` and sealed before the first graph -- so a feature that owns a K-deep ring
+	 * (e.g. MeshFeature's camera-constant buffers) asks HERE at first use instead of sizing itself from
+	 * a compile-time bound, which is exactly what let the declared and the enforced depth diverge.
+	 *
+	 * Never 0: before the device exists (headless, or a frame ahead of init) it falls back to the
+	 * process-wide graph depth, the same value the device would have been sized by.
+	 */
+	[[nodiscard]] std::uint32_t GetFrameSlotCount() const;
 	/**
 	 * Device capability query for a texture format/usage pair. Features reach the RHI only
 	 * through FRender (they must not see IRHI), so this is their one way to ask "can this
@@ -659,7 +704,9 @@ private:
 	// runs the draw passes + the present blit, and FRender::EndFrame waits it
 	// (Wait) before RHI->EndFrame so the present waits every submit.
 	// The graph itself belongs to the collector (FFrameBuilder): the stage SEQUENCE below is
-	// what FRender::Tick hands to Execute<FRenderStages>(). FRender itself does no frame work.
+	// what FRender::Tick hands to Execute<FRenderStages>(Frame) -- with the canonical frame number,
+	// read once from Platform, so the render sub-graph's round is the platform graph's round.
+	// FRender itself does no frame work.
 	// A stage no installed feature implements is not emitted at all (no empty node).
 #ifdef MAHO_EDITOR_BUILD
 	using FRenderStages = TTypeList<IEditorInput, IInitViews, IBeginRender, IRender, IEndRender, IPostProcess, IRenderUI, IEditorCompose, IPresent>;

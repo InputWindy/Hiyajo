@@ -206,6 +206,145 @@ layout(set = 0, binding = 0) uniform sampler2D FontTex;
 		OutColor = FragColor * texture(FontTex, FragUV);
 	}
 	)";
+
+	// ==========================================================================================
+	// TEMPORARY INPUT-READ PROBE -- the "input frame N was EVICTED (behind by K, ring is K)"
+	// investigation. It answers four questions with DATA instead of an argument: WHICH consumer
+	// falls behind, by HOW MUCH, whether it READS every frame its stage runs, and whether the
+	// index it asks for is its OWN round. One ledger per (consumer, stage) is fed by the read
+	// site itself; a periodic line reports the counters, and a rate-limited detail line reports
+	// every read that is within one of the ring boundary ("behind >= K-1").
+	//
+	// DELETE THIS BLOCK together with the `GProbeInput*` call sites (both stage entries + both
+	// read loops) when the investigation closes.
+	// ==========================================================================================
+	// TEMPORARY switch: 1 = probe on, 0 = probe compiled down to a no-op (the control run that
+	// tells whether a crash seen with the probe on is caused by the probe or pre-existing).
+	//
+	// LEFT AT 1 (2026-10-08): the periodic line is the standing diagnostic for this boundary (the
+	// fix's verification is exactly a re-run of it). It does NOT cause the Debug build's
+	// timing-sensitive abort in the ImGui view-translate path -- that reproduces with the probe
+	// compiled out as well. Set to 0 to remove it from a run entirely.
+#define MAHO_INPUT_PROBE 1
+
+#if MAHO_INPUT_PROBE
+
+	struct FInputReadProbe
+	{
+		const char* Name = "?";
+		std::uint64_t StageRuns = 0;      // entries of the stage that owns this consumer's read
+		std::uint64_t Reads = 0;          // ReadInputFrame() that returned true
+		std::uint64_t Misses = 0;         // ReadInputFrame() that returned false
+		std::uint64_t LastIndex = 0;      // the index the consumer ASKED for
+		std::uint64_t LastCursor = 0;     // the consumer's own cursor value at that read
+		std::uint64_t LastOwnFrame = 0;   // its own round at that read (GetRenderBatchFrame)
+		std::uint64_t LastPublished = 0;  // Platform::GetInputFrameIndex() at that read
+		std::uint32_t Slots = 0;          // the ring's K
+		int           DetailLines = 0;
+		std::uint64_t NearBehindTotal = 0;
+		std::uint64_t NextDiagAt = 600;
+		// Round-sequence evidence: "does this stage run in EVERY round, and does the round number
+		// advance by one?" A stage that skips rounds leaves its cursor exactly that many frames
+		// behind, and the catch-up read of the oldest owed frame is then already out of the ring.
+		std::uint64_t StageCursor = 0;
+		std::uint64_t StagePublished = 0;
+		std::uint64_t PrevStageFrame = 0;
+		std::uint64_t GapTotal = 0;
+		int           GapLines = 0;
+
+		void Stage(std::uint64_t OwnFrame, std::uint64_t Cursor, std::uint64_t Published)
+		{
+			++StageRuns;
+			StageCursor = Cursor;
+			StagePublished = Published;
+			if (PrevStageFrame != 0 && OwnFrame != PrevStageFrame + 1)
+			{
+				++GapTotal;
+				// Past the warm-up rounds (the first batches run before every stage is installed),
+				// so the 20-line cap is spent on the steady state and not on the startup.
+				if (StageRuns > 60 && GapLines < 20)
+				{
+					++GapLines;
+					MAHO_LOG_CORE_ERROR(
+						"INPUTPROBE-gap consumer={} stageRun={} ownFrame={} prevOwnFrame={} delta={} cursor={} published={}",
+						Name, StageRuns, OwnFrame, PrevStageFrame,
+						static_cast<long long>(OwnFrame) - static_cast<long long>(PrevStageFrame),
+						Cursor, Published);
+				}
+			}
+			PrevStageFrame = OwnFrame;
+			LastOwnFrame = OwnFrame;
+			// Reported from the STAGE too, not only from the read: a stage that runs every frame and
+			// never reads must still show its `stageRuns` -- that is what separates "the stage did not
+			// run" from "it ran and did not read".
+			Diag();
+		}
+
+		void Read(const char* Site, std::uint64_t Index, std::uint64_t Cursor,
+			std::uint64_t OwnFrame, std::uint64_t Published, std::uint32_t RingSlots, bool bOk)
+		{
+			Slots = RingSlots;
+			LastIndex = Index;
+			LastCursor = Cursor;
+			LastOwnFrame = OwnFrame;
+			LastPublished = Published;
+			if (bOk) { ++Reads; }
+			else     { ++Misses; }
+
+			// `behind == K` IS the eviction (the check is `Index + Slots <= Published`), so the
+			// detail threshold is one below it: every line here is "about to be evicted".
+			const std::uint64_t Behind = Published > Index ? Published - Index : 0;
+			if (RingSlots > 0 && Behind + 1 >= RingSlots)
+			{
+				++NearBehindTotal;
+				if (DetailLines < 20)
+				{
+					++DetailLines;
+					MAHO_LOG_CORE_ERROR(
+						"INPUTPROBE-slow consumer={} site={} index={} ownFrame={} cursor={} published={} ring={} behind={} ok={}",
+						Name, Site, Index, OwnFrame, Cursor, Published, RingSlots, Behind, bOk ? 1 : 0);
+					if (DetailLines == 20)
+					{
+						MAHO_LOG_CORE_ERROR("INPUTPROBE-slow consumer={} -- detail cap 20 reached, totals stay on the periodic line", Name);
+					}
+				}
+			}
+			Diag();
+		}
+
+		void Diag()
+		{
+			if (StageRuns < NextDiagAt) { return; }
+			NextDiagAt = StageRuns + 600;
+			MAHO_LOG_CORE_ERROR(
+				"INPUTPROBE consumer={} stageRuns={} reads={} misses={} cursor={} index={} ownFrame={} published={} ring={} behind={} slowTotal={} stageGaps={}",
+				Name, StageRuns, Reads, Misses, LastCursor, LastIndex, LastOwnFrame, LastPublished,
+				Slots, LastPublished > LastIndex ? LastPublished - LastIndex : 0, NearBehindTotal,
+				GapTotal);
+		}
+	};
+
+	// One per (consumer, stage): the editor's pass0 feed of the GAME UI context, and the editor's
+	// own context fed in its pass3 compose.
+	FInputReadProbe GProbeInputEditorInput{ "Editor(IEditorInput)" };
+	FInputReadProbe GProbeInputEditorCompose{ "Editor(IEditorCompose)" };
+
+#else   // MAHO_INPUT_PROBE == 0: the CONTROL build -- the readings still happen, nothing is recorded.
+
+	struct FInputReadProbe
+	{
+		const char* Name = "?";
+		void Stage(std::uint64_t, std::uint64_t, std::uint64_t) {}
+		void Read(const char*, std::uint64_t, std::uint64_t, std::uint64_t, std::uint64_t,
+			std::uint32_t, bool)
+		{
+		}
+	};
+
+	FInputReadProbe GProbeInputEditorInput{ "Editor(IEditorInput)" };
+	FInputReadProbe GProbeInputEditorCompose{ "Editor(IEditorCompose)" };
+
+#endif
 }
 
 namespace Maho
@@ -290,7 +429,7 @@ FExampleEditor::FExampleEditor()
 	// be clearing it. That race silently drops a frame's keys/wheel -- and it is invisible from
 	// either stage alone. Pin the intra-layer cross-frame edge; same shape as FRender's own
 	// frame-isolation edge (IBeginFrame@N+1 waits for IEndFrame@N).
-	MyStage<IEditorInput>().WaitFor<FExampleEditor>().OnLastFrameStage<IEditorCompose>();
+	MyStage<IEditorInput>().WaitFor<FExampleEditor>().OnStage<IEditorCompose>(-1);
 	// Teardown serialization, mirroring the frame edges above: FRender::Shutdown runs every
 	// feature's IPreUnInstall as one batch, and my body releases the editor target + destroys
 	// the editor's own ImGui context while the other two features release theirs. Pin my
@@ -302,6 +441,13 @@ FExampleEditor::FExampleEditor()
 void FExampleEditor::EditorInput(FRender& R, FRenderContext& Frame)
 {
 	MAHO_TRACE_STAGE(IEditorInput, "Editor input", "feed the game UI input");
+	// PROBE (see the ledger at the top of this file): the stage entry, BEFORE any early return below,
+	// so `stageRuns` answers "did the pass0 that owns this read run this frame".
+	{
+		Platform::FPlatform* const ProbeP = Platform::GetPlatform();
+		GProbeInputEditorInput.Stage(GetRenderBatchFrame(), GameInputCursor,
+			ProbeP != nullptr ? ProbeP->GetInputFrameIndex() : 0);
+	}
 	// Editor-build input takeover: taste the Win32 cursor, confine it to the viewport panel
 	// (clamp panel-local) and map it BACK to the game UI's whole-window coordinate space, then
 	// feed the game-UI context BEFORE its InitViews NewFrame()s it (ordered via the ctor
@@ -338,21 +484,26 @@ void FExampleEditor::EditorInput(FRender& R, FRenderContext& Frame)
 	// consumer owns GameInputCursor and reads every frame it has not fed yet, in order, exactly
 	// once. Nothing is drained, so the editor's own context (pass3) reading the same ring cannot
 	// starve it -- a shared drain is exactly how a key RELEASE got lost and ImGui kept the key
-	// down, auto-repeating it.
+	// down, auto-repeating it. The index asked for is the ROUND OF THIS BATCH (`GetRenderBatchFrame`,
+	// the number `FRender::Tick` submitted this frame's nodes with), NOT a fresh read of the canonical
+	// counter: that counter is advanced by `FPlatform::IBeginFrame` one stage early, so it can name a
+	// round whose input the pump has not frozen yet -- asking for it would make every read of the
+	// newest frame WAIT (or, if the producer is mid-teardown, report a gap) on the normal path.
 	MAHO_TRACE_SECTION("feed the game UI input", nullptr);
 	FUIFeature* UI = GetUI();
-	const std::uint64_t Latest = P->GetInputFrameIndex();
-	if (Latest < GameInputCursor)
-	{
-		GameInputCursor = 0;   // window recreated: the platform reset its ring
-	}
-	while (GameInputCursor < Latest)
+	const std::uint64_t FrameIndex = GetRenderBatchFrame();
+	while (GameInputCursor < FrameIndex)
 	{
 		++GameInputCursor;
 		Platform::FInputFrame Frame;
-		if (!P->ReadInputFrame(GameInputCursor, Frame))
+		// PROBE (see the ledger at the top of this file): index asked for, this consumer's own
+		// cursor and own round, the newest published index, the ring size and the lag.
+		const bool bFrameRead = P->ReadInputFrame(GameInputCursor, Frame);
+		GProbeInputEditorInput.Read("EditorInput", GameInputCursor, GameInputCursor, FrameIndex,
+			P->GetInputFrameIndex(), P->GetInputRingSlotCount(), bFrameRead);
+		if (!bFrameRead)
 		{
-			continue;   // evicted -- this consumer fell behind the ring
+			continue;   // a missing or evicted frame is SKIPPED -- never replayed onto another one
 		}
 		const Platform::MInputContext& In = Frame.Snapshot;
 
@@ -645,21 +796,25 @@ void FExampleEditor::InitEditorViews(FRender& R)
 	// are per-frame STATE and ride the frame that carries them; the edge events (keys, characters,
 	// wheel) are applied in the order those frames were pumped, so a key RELEASE cannot be skipped
 	// -- which is why this reads per frame instead of draining a shared stream (a stolen release
-	// left ImGui believing the key was still down, auto-repeating it).
+	// left ImGui believing the key was still down, auto-repeating it). The index is the ROUND OF THIS
+	// BATCH (`GetRenderBatchFrame`) -- the number this frame's nodes were submitted with, hence a
+	// round whose input is already frozen -- not the canonical counter, which `FPlatform::IBeginFrame`
+	// advances one stage EARLY and which would therefore name a round the pump has not reached.
 	MAHO_TRACE_SECTION("feed the editor context input", nullptr);
 	{
-		const std::uint64_t Latest = P->GetInputFrameIndex();
-		if (Latest < EditorInputCursor)
-		{
-			EditorInputCursor = 0;   // window recreated: the platform reset its ring
-		}
-		while (EditorInputCursor < Latest)
+		const std::uint64_t FrameIndex = GetRenderBatchFrame();
+		while (EditorInputCursor < FrameIndex)
 		{
 			++EditorInputCursor;
 			Platform::FInputFrame Frame;
-			if (!P->ReadInputFrame(EditorInputCursor, Frame))
+			// PROBE (see the ledger at the top of this file): index asked for, this consumer's own
+			// cursor and own round, the newest published index, the ring size and the lag.
+			const bool bFrameRead = P->ReadInputFrame(EditorInputCursor, Frame);
+			GProbeInputEditorCompose.Read("RenderEditorUI", EditorInputCursor, EditorInputCursor, FrameIndex,
+				P->GetInputFrameIndex(), P->GetInputRingSlotCount(), bFrameRead);
+			if (!bFrameRead)
 			{
-				continue;   // evicted -- this consumer fell behind the ring
+				continue;   // a missing or evicted frame is SKIPPED -- never replayed onto another one
 			}
 			const Platform::MInputContext& In = Frame.Snapshot;
 			IO.AddMousePosEvent(In.MouseX, In.MouseY);
@@ -1069,6 +1224,13 @@ void FExampleEditor::RenderEditorUI(FRender& R)
 void FExampleEditor::EditorCompose(FRender& R, FRenderContext& Frame)
 {
 	MAHO_TRACE_STAGE(IEditorCompose, "Editor compose", "build the editor frame and take over the present target");
+	// PROBE (see the ledger at the top of this file): the pass3 stage entry that owns the editor
+	// context's read (RenderEditorUI below).
+	{
+		Platform::FPlatform* const ProbeP = Platform::GetPlatform();
+		GProbeInputEditorCompose.Stage(GetRenderBatchFrame(), EditorInputCursor,
+			ProbeP != nullptr ? ProbeP->GetInputFrameIndex() : 0);
+	}
 	// Pass3 -- the editor's whole frame in a single graph stage (after the game-UI
 	// composite IRenderUI, before the frame's IPresent). Split into two private steps:
 	// InitViews builds the ImGui frame (feed + NewFrame + panels + Render + translate),

@@ -255,9 +255,23 @@ public:
 	FRHI();
 	virtual ~FRHI() override;
 
-	/** Bring the render server up (start the thread) + initialize the device. */
+	/** Bring the render server up (start the thread) + initialize the device.
+	 *
+	 *  `FramesInFlight` is the pipeline depth K the DEVICE must hold per-frame-slot state for (its
+	 *  fences, acquire semaphores and frame command buffers) -- the number of frames the graph lets
+	 *  overlap. INJECTED by the owner (FRender, from the host's GetFramesInFlight()), never a
+	 *  compile-time bound; `<= 0` means "not injected" and the backend takes the process-wide value.
+	 *  A non-zero value that disagrees with the graph's is REPORTED, and the graph's wins: it is the
+	 *  ring the frame numbers are actually distributed over. */
 	bool Initialize(void* NativeWindowHandle, int Width, int Height,
-		ERHIBackend Backend = ERHIBackend::Vulkan);
+		ERHIBackend Backend = ERHIBackend::Vulkan, std::int32_t FramesInFlight = 0);
+
+	/** How many frame-state SLOTS the live device holds -- the K it was initialized with. One slot
+	 *  per frame the device lets overlap; the render pool buckets its frame-domain tables by the same
+	 *  number, and the frame head waits exactly one slot's fence per boundary. 0 before Initialize.
+	 *  Exposed so the owner can CHECK that every K-deep ring in the process agrees (see
+	 *  FRender::Initialize) instead of trusting four independent constants to stay equal. */
+	[[nodiscard]] std::uint32_t GetFrameSlotCount() const;
 
 	/** Tear the device + server down (idempotent). */
 	void ShutdownRHI();

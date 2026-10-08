@@ -21,6 +21,7 @@ target_include_directories(GameWorld PUBLIC
 	"${ENGINE_DIR}/Plugins/GameEngine/EngineCore/Resource/Public"
 	"${ENGINE_DIR}/Plugins/GameEngine/EngineCore/Asset/Public"
 	"${ENGINE_DIR}/Plugins/Common/Log/Public"
+	"${ENGINE_DIR}/Plugins/GameEngine/EngineCore/Platform/Public"
 )
 target_include_directories(GameWorld PRIVATE
 	"${ENGINE_DIR}/Plugins/GameEngine/GameCore/SystemGroup/UISystem/Public"
@@ -32,7 +33,7 @@ target_compile_definitions(GameWorld PRIVATE MAHO_GAMEWORLD_MODULE_EXPORTS)
 target_link_libraries(GameWorld PUBLIC Maho)
 set_property(TARGET GameWorld PROPERTY RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>")
 set_target_properties(GameWorld PROPERTIES OUTPUT_NAME "FGameWorld" PREFIX "")
-target_link_libraries(GameWorld PUBLIC Resource Asset Log)
+target_link_libraries(GameWorld PUBLIC Resource Asset Log Platform)
 # Building GameWorld alone must also build the sub-plugins it installs at
 # runtime (UISystem MeshRenderSystem) - otherwise a sub-plugin DLL left over from a
 # previous build is silently installed. A POST_BUILD script action, NOT

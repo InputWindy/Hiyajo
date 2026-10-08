@@ -21,6 +21,17 @@ struct FRHIInitDesc
 
 	int FramebufferWidth = 0;
 	int FramebufferHeight = 0;
+
+	/** THE PIPELINE DEPTH K the device must size its per-frame-slot state by (fences, acquire
+	 *  semaphores, frame command buffers): the number of frames the frame GRAPH lets overlap, so that
+	 *  "the device enforces what the graph declares" is a fact instead of a hope.
+	 *
+	 *  INJECTED by the RHI's owner (`FRender`, from `FEngineBase::GetFramesInFlight()`), never read
+	 *  from a compile-time bound -- `MAHO_FRAMES_IN_FLIGHT` is only the default a host that injects
+	 *  nothing gets. `<= 0` means "not injected": the backend then takes the process-wide value
+	 *  (`Maho::GetFramesInFlight()`), and a non-zero value that DISAGREES with it is reported (the
+	 *  graph's ring is the authority; a device sized by anything else would retire the wrong slots). */
+	std::int32_t FramesInFlight = 0;
 };
 
 /**
@@ -44,6 +55,12 @@ public:
 	virtual void EndFrame() = 0;
 	virtual void Resize(int Width, int Height) = 0;
 	virtual void WaitIdle() = 0;
+
+	/** Frame-state slots the LIVE device holds: the pipeline depth K it was initialized with (one
+	 *  fence + acquire semaphore + frame command buffer per slot). 0 before Initialize. It is the
+	 *  device's own answer to "how many frames do you let overlap", which is what the render pool's
+	 *  bucket count has to equal. */
+	[[nodiscard]] virtual std::uint32_t GetFrameSlotCount() const = 0;
 
 	/** Blit an off-screen texture to the current swapchain backbuffer. */
 	virtual void PresentTexture(FRHITexture* Src) = 0;

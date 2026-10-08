@@ -15,6 +15,7 @@
 #include "ScreenshotWriter.h"
 
 #include <ConsoleVariable.h>
+#include <Core/Fatal.h>   // ReportError: the frame-slot invariant below is an error, not a log line
 #include <algorithm>
 #include <chrono>
 #include <ctime>
@@ -32,6 +33,23 @@ FRender* GRender = nullptr;
 MAHO_RENDER_API FRender* GetRender()
 {
 	return GRender;
+}
+
+std::uint64_t GetRenderBatchFrame()
+{
+	// The dispatcher publishes the running stage's call for the duration of the call (see
+	// FScopedFrameContext), and the ROUND in it was baked into THIS node's closure by the bridge --
+	// so this answers "which round am I" for any stage of the render batch, including a helper that
+	// was never handed the reference, and it cannot be another round's number no matter how late this
+	// node runs relative to the phase slot's reuse.
+	//
+	// Outside a stage call there is no batch, and 0 is the honest answer (a caller that feeds it to
+	// ReadInputFrame gets its "no frame 0" refusal instead of another round's input).
+	if (GetCurrentFrameContext() == nullptr)
+	{
+		return 0;
+	}
+	return GetCurrentStageFrame();
 }
 
 /** `r.TakeScreenShot` -- arm the next presented frame for a PNG capture (see
@@ -65,25 +83,43 @@ namespace
 
 FRender::FRender()
 {
-	// Init: I read the window from Platform (its PostInitialize) and log heavily
-	// (Log must be up first) -- both declared by ME, the consumer.
-	MyStage<IInit>().IsWaiting<Platform::FPlatform>().ForStage<IPostInit>();
+	// Init: I read the window from Platform (it is CREATED in FPlatform's IInit, and my swapchain is
+	// built from that handle) and log heavily (Log must be up first) -- both declared by ME, the
+	// consumer. The stage is IInit on BOTH sides on purpose: FPlatform mounts
+	// IPipeline<IInit, IBeginFrame, IEndFrame, IExit, ...> and never IPostInit, so an edge declared
+	// against IPostInit names a stage that frame does not have -- it binds to nothing, and the
+	// ordering this line exists for would silently not exist.
+	MyStage<IInit>().IsWaiting<Platform::FPlatform>().ForStage<IInit>();
 	MyStage<IInit>().IsWaiting<FLog>().ForStage<IInit>();
 	// My PostInit imports assets (FPaths::Resolve) and interns names (FNamePool)
 	// on the same stage - both must be post-init before I read them.
 	MyStage<IPostInit>().IsWaiting<Paths::FPaths>().ForStage<IPostInit>();
 	MyStage<IPostInit>().IsWaiting<Name::FNamePool>().ForStage<IPostInit>();
 
-	// The platform's ITick is what PUMPS the OS message queue (FPlatform::Tick -> PollEvents),
-	// and that pump is what refreshes the input snapshot every consumer reads. With no edge, my
-	// ITick -- and therefore every render stage inside it, including the UI features' input feed
-	// (FUIFeature::InitViews, FExampleEditor::InitEditorViews) -- runs CONCURRENTLY with that
-	// pump, so a given frame reads the snapshot from either before or after this frame's poll.
-	// The ordering then jitters frame to frame: the cursor follows, then stalls, and an ImGui
-	// window drag loses its grip because the button state was read a frame stale. Initialization
-	// already declares this dependency (IInit waits for FPlatform::IPostInit); the per-frame path
-	// needs it just as much.
-	MyStage<ITick>().IsWaiting<Platform::FPlatform>().ForStage<ITick>();
+	// The platform's IBeginFrame is what PUMPS the OS message queue (FPlatform::BeginFrame -> PollEvents),
+	// and that pump is what FREEZES + PUBLISHES this round's input snapshot (the ring slot + the
+	// `InputFramePublished` store) -- input production moved to the head of the platform's frame when
+	// ITick left its pipeline. With no edge, my ITick -- and therefore the whole render frame submitted
+	// from it, including the UI features' input feed (FUIFeature::InitViews,
+	// FExampleEditor::InitEditorViews) -- runs CONCURRENTLY with that freeze, so a given frame reads the
+	// snapshot from either before or after this frame's pump. The ordering then jitters frame to frame:
+	// the cursor follows, then stalls, and an ImGui window drag loses its grip because the button state
+	// was read a frame stale. Initialization already declares this dependency (IInit waits for
+	// FPlatform::IInit); the per-frame path needs it just as much.
+	//
+	// SAME FRAME (offset 0) and that is the point -- THE INPUT IS FROZEN AT THE FRAME HEAD, so the
+	// render submit is ordered AFTER it. My ITick is where the whole render frame is SUBMITTED (the
+	// batch below, driven with `Platform::GetInputFrameIndex()`), and the platform freezes that round
+	// in ITS IBeginFrame. With this edge, THIS round's freeze has already happened when THIS round's
+	// batch is submitted, so every render stage -- including the ones in the collector's own graph,
+	// which no edge can order against the pump -- reads a round that exists.
+	//
+	// Do NOT confuse it with the cross-frame edge further down
+	// (`MyStage<IBeginFrame>().WaitFor<...>().OnStage<IEndFrame>(-1)`): that one carries offset -1
+	// and only isolates one frame boundary from the previous one. This one must stay at 0: an offset
+	// of -1 would let my ITick submit a batch for a round whose freeze is still pending, which is
+	// exactly the "input frame N was never published / is still not frozen" failure.
+	MyStage<ITick>().IsWaiting<Platform::FPlatform>().ForStage<IBeginFrame>();
 
 	// Shutdown: my teardown drains render tasks that may log, and I hold the RHI
 	// surface created from Platform's window -- so Log and Platform must run
@@ -144,21 +180,21 @@ FRender::FRender()
 	// The edge below still pins the HOST chain's frame boundary: without it, this layer's
 	// IBeginFrame@N+1 could run while its own ITick@N is still going -- which matters for everything
 	// that interleaves with the host stages (the platform's pump, a one-shot install batch).
-	MyStage<IBeginFrame>().WaitFor<FRender>().OnLastFrameStage<IEndFrame>();
+	MyStage<IBeginFrame>().WaitFor<FRender>().OnStage<IEndFrame>(-1);
 
 	// Frame isolation against the PLATFORM, not merely against ourselves. The input snapshot is
-	// written by FPlatform::ITick (the pump) and read by the render stages that build a UI frame.
-	// Render frames PIPELINE (up to MAHO_FRAMES_IN_FLIGHT), so without this edge a render frame
-	// can be reading that snapshot while a LATER platform frame has already overwritten it.
-	// Declared here, from the side that knows the platform; the platform never learns about render.
+	// written by FPlatform::IBeginFrame (the pump + the freeze) and read by the render stages that
+	// build a UI frame. Render frames PIPELINE (up to K, the injected pipeline depth), so without
+	// this edge a render frame can be reading that snapshot while a LATER platform frame has already
+	// overwritten it. Declared here, from the side that knows the platform; the platform never learns
+	// about render.
 	//
-	// NOTE: do NOT also block FPlatform::ITick behind our IEndFrame -- a UI stage waits on
-	// FPlatform::ITick (FUIFeature::IInitViews), so a SAME-frame reverse edge closes a cycle
-	// (pump@N -> end@N -> read@N -> pump@N) and deadlocks the frame loop outright: a white
-	// screen with no diagnostics. And there is no "+1 frame" selector to offset it with either --
-	// FEdge::FrameOffset is only ever 0 or -1. Closing the remaining window is therefore NOT an
-	// edge problem: the reader has to stop sharing the mutable snapshot with the writer.
-	MyStage<IBeginFrame>().WaitFor<Platform::FPlatform>().OnLastFrameStage<IEndFrame>();
+	// NOTE: do NOT also block FPlatform::IBeginFrame behind our IEndFrame -- the per-frame edge above
+	// is `my ITick waits its IBeginFrame`, so a SAME-frame reverse edge closes a cycle
+	// (begin@N -> end@N -> read@N -> begin@N) and deadlocks the frame loop outright: a white
+	// screen with no diagnostics. And there is no "+1 frame" selector to offset it with either:
+	// FEdge::FrameOffset is only ever <= 0, i.e. it can point backwards but never forwards.
+	MyStage<IBeginFrame>().WaitFor<Platform::FPlatform>().OnStage<IEndFrame>(-1);
 }
 
 FRender::~FRender() = default;
@@ -184,30 +220,100 @@ void FRender::PreInitialize(FEngineBase&, FEngineContext&)
 void FRender::Initialize(FEngineBase& Engine, FEngineContext& Frame)
 {
 	MAHO_TRACE_STAGE(IInit, "Render init", "create the RHI, the pool, the compiler and the mirror");
-	(void)Engine;
 	GRender = this;
+
+	// ── THE PIPELINE DEPTH K: asked of the HOST, handed down to every K-deep ring below ──────────
+	//
+	// K (frames in flight) is a run-time property of the process, injected once by the host before the
+	// first graph exists. This layer owns two rings that must be exactly K wide -- the DEVICE's
+	// per-slot fence / acquire semaphore / frame command buffer, and the POOL's frame-slot buckets
+	// (retiring lists, condemned natives, and the descriptor-set grace) -- so it asks the host ONCE
+	// and passes the value down, instead of each of them reading a compile-time bound. That is what
+	// makes `r.FramesInFlight` a real configuration rather than a number the engine refuses.
+	const std::int32_t FramesInFlight = Engine.GetFramesInFlight();
+	const std::uint32_t FrameSlots = static_cast<std::uint32_t>(FramesInFlight > 0 ? FramesInFlight : 1);
 
 	// Create the render server (RHI) with the native window from the Platform.
 	Platform::FPlatform* P = Platform::GetPlatform();
 	if (P != nullptr && P->GetNativeWindow() != nullptr)
 	{
 		RHI = std::make_unique<FRHI>();
-		if (!RHI->Initialize(P->GetNativeWindow(), P->GetWindowWidth(), P->GetWindowHeight()))
+		if (!RHI->Initialize(P->GetNativeWindow(), P->GetWindowWidth(), P->GetWindowHeight(),
+			ERHIBackend::Vulkan, FramesInFlight))
 		{
 			MAHO_LOG_CORE_ERROR("FRender::Initialize: RHI initialization failed");
 			RHI.reset();
 		}
 	}
 
-	// RDG resource pool (off-screen textures/buffers, cross-frame reuse).
-	ResourcePool = std::make_unique<FRHIResourcePool>(RHI.get());
+	// RDG resource pool (off-screen textures/buffers, cross-frame reuse). Sized by the same K: its
+	// buckets are retired by the frame slot the DEVICE chose, so the two counts being equal is not a
+	// convention, it is the contract (checked below).
+	ResourcePool = std::make_unique<FRHIResourcePool>(RHI.get(), FrameSlots);
+
+	// ── THE INVARIANT: one depth, four rings ─────────────────────────────────────────────────────
+	//
+	// "K frames may be in flight" is only true if EVERY K-deep ring in the process is really K wide:
+	// the graph's phases (the authority -- the ring the frame numbers are distributed over), the
+	// device's slots (one fence / acquire semaphore / frame command buffer each), the pool's buckets,
+	// and the platform's published input ring. A ring that is smaller than K hands a live resource to
+	// another frame (the `vkQueueSubmit failed` / in-use classes of error); one that is larger only
+	// wastes memory. Both are reported HERE, at init, as one error -- instead of the previous
+	// arrangement, where a host that configured a depth other than the compiled one was refused and
+	// silently clamped back to it, which hid the mismatch rather than fixing it.
+	//
+	// A layer that is absent (headless: no window, so no RHI and no device) is not reported: 0 is then
+	// the honest answer for a ring that does not exist.
+	if (RHI)
+	{
+		const std::uint32_t RHISlots = RHI->GetFrameSlotCount();
+		if (RHISlots != FrameSlots)
+		{
+			const std::string Message =
+				"FRender::Initialize: the RHI device holds " + std::to_string(RHISlots)
+				+ " frame slot(s) but the pipeline depth is " + std::to_string(FrameSlots)
+				+ " -- the device retired a different slot than the graph admits (see FVulkanRHI: it "
+				  "sizes its per-slot rings from the injected depth)";
+			ReportError(Message.c_str());
+			MAHO_LOG_CORE_ERROR("{}", Message);
+		}
+	}
+	if (ResourcePool)
+	{
+		const std::uint32_t PoolSlots = ResourcePool->GetFrameSlotCount();
+		if (PoolSlots != FrameSlots)
+		{
+			const std::string Message =
+				"FRender::Initialize: the resource pool holds " + std::to_string(PoolSlots)
+				+ " frame bucket(s) but the pipeline depth is " + std::to_string(FrameSlots);
+			ReportError(Message.c_str());
+			MAHO_LOG_CORE_ERROR("{}", Message);
+		}
+	}
+	if (P != nullptr)
+	{
+		const std::uint32_t InputSlots = P->GetInputRingSlotCount();
+		if (InputSlots != FrameSlots)
+		{
+			const std::string Message =
+				"FRender::Initialize: the platform input ring holds " + std::to_string(InputSlots)
+				+ " slot(s) but the pipeline depth is " + std::to_string(FrameSlots)
+				+ " -- a consumer lagging by K frames would be told its frame's input was evicted";
+			ReportError(Message.c_str());
+			MAHO_LOG_CORE_ERROR("{}", Message);
+		}
+	}
+	MAHO_LOG_CORE_INFO("FRender: pipeline depth K={} (graph phases == device frame slots == pool buckets == input ring)",
+		FrameSlots);
+	(void)Frame;
 
 	// Async shader compiler (dedicated compile thread).
 	ShaderCompiler = std::make_unique<FShaderCompilerServer>();
 	ShaderCompiler->Initialize();
 
-	// The render graph lives INSIDE the collector (FFrameBuilder::Execute<FRenderStages>()):
-	// Flush at frame start, Execute at frame end (see Tick / EndFrame).
+	// The render graph lives INSIDE the collector (FFrameBuilder::Execute<FRenderStages>(Frame),
+	// driven with the canonical frame number): Flush at frame start, Execute at frame end (see
+	// Tick / EndFrame).
 
 	// (The render features are installed in PreInitialize -- they are MY declared
 	// sub-plugins; Initialize only sets up the services they will use.)
@@ -430,7 +536,7 @@ void FRender::Tick(FEngineBase&, FEngineContext&)
 	MAHO_TRACE_STAGE(ITick, "Render tick", "bound the lookahead and dispatch the render graph");
 	// SOFT lookahead bound. Waiting for the previous frame's batch to have been HANDED to the RHI
 	// server (posted), not for its submission to complete: this stage drives the OS message pump
-	// (FPlatform::ITick runs before it) and the server's FIFO has the previous frame's
+	// (FPlatform::BeginFrame runs before it) and the server's FIFO has the previous frame's
 	// vkQueuePresentKHR in front of that batch, so waiting for completion lets a slow present starve
 	// the pump -- measured as key messages queued for 0.7-7.4 SECONDS, i.e. typing that dribbles in and
 	// a single Backspace walking the cursor. Waiting for the POST still bounds the host's lookahead
@@ -461,7 +567,30 @@ void FRender::Tick(FEngineBase&, FEngineContext&)
 	// (IEditorInput / IEditorCompose) are part of it in an editor build -- and a stage no
 	// installed feature implements is simply not emitted. One call either way. The batch builder
 	// re-queries the frame set and reports what it could not bind.
-	Execute<FRenderStages>();
+	//
+	// The ROUND is the canonical frame number whose input the platform has FROZEN
+	// (`FPlatform::GetInputFrameIndex`), read HERE (once per drive, not once per stage), and the SAME
+	// number is handed to every node of this batch by the bridge -- the node's own immutable round
+	// (GetRenderBatchFrame) -- one source of "which frame am I", not one per consumer.
+	//
+	// WHY THE FROZEN INDEX AND NOT `GetFrameIndex()`: the counter is advanced by
+	// `FPlatform::IBeginFrame`, the stage that also freezes that round's input, and it is advanced
+	// once per PLATFORM frame -- while this stage runs a frame of the collector's own graph, whose
+	// round can be older (the host runs several rounds ahead -- frames pipeline). Naming this batch
+	// with the live counter would hand its stages a round whose freeze has not happened yet, and their
+	// per-frame input reads (`ReadInputFrame(Tick-1)`) would have to WAIT for a freeze that belongs to
+	// a round the host has not driven. The frozen index is the round the platform has actually
+	// produced, which is what the ordering edge in the constructor guarantees is THIS round
+	// (FPlatform::IBeginFrame@N completed before FRender::ITick@N runs -- the input is frozen at the
+	// frame head, so the submit is ordered after it), and what makes "frame N" comparable across the
+	// two graphs. `Execute`'s monotonic floor stays as the guard it is documented to be: the frozen
+	// index advances with every driven round, so no round is ever re-submitted on this path.
+	//
+	// No platform (headless: no window, hence no pump and no published ring) falls back to the
+	// canonical counter -- there is nothing to align input with, and the ring would stay empty.
+	Platform::FPlatform* const P = Platform::GetPlatform();
+	const std::uint64_t Round = P != nullptr ? P->GetInputFrameIndex() : Platform::GetFrameIndex();
+	Execute<FRenderStages>(Round);
 	// No trailing wait either: the ring is what keeps the pipeline safe (per-stage self edges +
 	// admission), and at shutdown the leftover nodes are drained by FRender::Shutdown's Wait().
 }
@@ -1063,16 +1192,16 @@ void FRender::AddPass(ERHICommandListType PassType, std::function<void(FRHIComma
 	// from a collector member) is what keeps the registration in the right frame when frames
 	// overlap: an in-flight node of frame N would otherwise be attributed to whichever frame the
 	// dispatcher had prepared last.
-	// Which frame does this pass belong to? The one whose stage call is running on THIS thread --
-	// the dispatcher publishes it for the duration of the call. Reading it per CALL (rather than
-	// from a collector member) is what keeps the registration in the right frame when frames
-	// overlap: an in-flight node of frame N would otherwise be attributed to whichever frame the
-	// dispatcher had prepared last.
-	FRenderContext* Frame = static_cast<FRenderContext*>(GetCurrentFrameContext());
-	if (Frame != nullptr)
+	//
+	// What is read here is the SLOT (the phase's pass table), not the round: the table is per phase
+	// and every node of one round appends to the same one, which is exactly right for "the frame's
+	// passes, in registration order". The round of the call -- a different question -- is available
+	// as `GetRenderBatchFrame`.
+	FRenderContext* Slot = static_cast<FRenderContext*>(GetCurrentFrameContext());
+	if (Slot != nullptr)
 	{
-		std::lock_guard<std::mutex> Lock(Frame->Mutex);
-		Frame->Passes.push_back({List, PassType});
+		std::lock_guard<std::mutex> Lock(Slot->Mutex);
+		Slot->Passes.push_back({List, PassType});
 		return;
 	}
 
@@ -1226,6 +1355,25 @@ std::uint32_t FRender::GetCanvasHeight() const
 ERHIFormat FRender::GetSwapchainFormat() const
 {
 	return RHI ? RHI->GetSwapchainFormat() : ERHIFormat::Unknown;
+}
+
+std::uint32_t FRender::GetFrameSlotCount() const
+{
+	// The DEVICE's answer is authoritative once it exists: it is the depth the per-slot fences are
+	// actually retired at, i.e. the depth a frame-domain ring has to match. Ask it first.
+	if (RHI)
+	{
+		const std::uint32_t Slots = RHI->GetFrameSlotCount();
+		if (Slots > 0)
+		{
+			return Slots;
+		}
+	}
+	// No live device (headless build, or a caller running before Initialize finished): the process-wide
+	// graph depth is the same K the device is sized by, and `SetFramesInFlight` refuses a non-positive
+	// depth, so this never reports 0.
+	const std::int32_t K = GetFramesInFlight();
+	return static_cast<std::uint32_t>(K > 0 ? K : 1);
 }
 
 bool FRender::IsTextureFormatSupported(ERHIFormat Format, ERHITextureUsage Usage) const

@@ -147,11 +147,20 @@ public:
 	using FContext = FExampleEditorContext;
 
 protected:
-	std::array<FContext, MAHO_FRAMES_IN_FLIGHT> Slots;
+	/** One context per ring slot, allocated ONCE at the INJECTED pipeline depth (`GetFramesInFlight()`)
+	 *  on first use -- the depth is a run-time property of the process (the host injects it before the
+	 *  first graph exists), so it cannot be an array bound. A fixed-size array behind a `unique_ptr`,
+	 *  not a growable container: a context is not movable (it holds a mutex), so growing would have to
+	 *  move slots that stages already hold references to. */
+	std::unique_ptr<FContext[]> Slots;
 
 	void* GetContext(int Slot) override
 	{
-		return &Slots[Slot];
+		if (!Slots)
+		{
+			Slots = std::make_unique<FContext[]>(static_cast<std::size_t>(GetFramesInFlight()));
+		}
+		return &Slots[static_cast<std::size_t>(Slot)];
 	}
 
 private:

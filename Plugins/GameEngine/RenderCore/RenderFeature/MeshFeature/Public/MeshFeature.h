@@ -247,13 +247,29 @@ private:
 	 * Camera-constant buffers, ONE PER FRAME-IN-FLIGHT SLOT (Persistent, lazily created).
 	 *
 	 * Deliberately not a frame-scoped transient: the CPU runs ahead of the GPU by up to
-	 * MAHO_FRAMES_IN_FLIGHT frames, while the pool recycles a transient at the NEXT BeginFrame -- so a
+	 * `CameraRingSlots` (= K) frames, while the pool recycles a transient at the NEXT BeginFrame -- so a
 	 * frame could write the bytes a previous frame was still reading, and the mesh would draw with the
 	 * following frame's matrices. That is invisible while the camera is static (identical bytes are
 	 * written again) and shows up as a live flicker the moment it moves every frame. A slot owned by one
 	 * frame removes the race by construction.
 	 */
 	std::vector<FRDGBufferRef> CameraConstantBuffers;
+
+	/**
+	 * SLOTS IN THE CAMERA-CONSTANT RING -- the pipeline depth K, a RUN-TIME value.
+	 *
+	 * It is NOT a compile-time constant any more: the depth is injected by the host
+	 * (`r.FramesInFlight`, sealed into the frame graph before the first graph exists) and handed down
+	 * to every K-deep ring, so this feature ASKS the owning render layer for it at the FIRST `Render`
+	 * (`FRender::GetFrameSlotCount`, which reports the device's slot count / the process-wide depth).
+	 * Sizing the ring from a compiled `MAHO_FRAMES_IN_FLIGHT` was the one place left where "the
+	 * declared depth" and "the enforced depth" could disagree the moment a host configured a
+	 * different K.
+	 *
+	 * 0 until the first frame: the ring (`CameraConstantBuffers`) is only resized once this is known,
+	 * so a zero here is "not read yet", never "a zero-slot ring".
+	 */
+	std::uint32_t CameraRingSlots = 0;
 
 	/** Frames seen without a camera -- a startup race must not be reported as "the game has no
 	 *  camera", but a real one must be reported (exactly once). */

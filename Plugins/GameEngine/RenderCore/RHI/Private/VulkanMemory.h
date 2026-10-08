@@ -2,9 +2,6 @@
 
 #include <RHI/RHIResources.h>
 
-#include <Core/FrameGraph.h>   // MAHO_FRAMES_IN_FLIGHT: the frame slots the deferred staging is bucketed by
-
-#include <array>
 #include <cstdint>
 #include <mutex>
 #include <vector>
@@ -21,7 +18,16 @@ namespace Maho
 class FVulkanMemoryAllocator final : public IDynamicRHIMemoryAllocator
 {
 public:
-	FVulkanMemoryAllocator() = default;
+	/** `InFrameSlots` is the pipeline depth K this allocator buckets deferred staging frees by --
+	 *  handed in by the device (FVulkanRHI), which is sized by the host's injected K, so all three are
+	 *  the same number WITHOUT a shared constant. The buckets are created here, once, and never
+	 *  resized: `RetireDeferredForSlot` swaps a bucket out by slot index, and a reallocation would
+	 *  move a bucket a concurrent recorder is pushing into. */
+	explicit FVulkanMemoryAllocator(std::uint32_t InFrameSlots)
+		: FrameSlotCount(InFrameSlots > 0 ? InFrameSlots : 1)
+		, DeferredBuffers(this->FrameSlotCount)
+	{
+	}
 	~FVulkanMemoryAllocator() override;
 
 	bool Initialize(VkInstance Instance, VkPhysicalDevice PhysicalDevice, VkDevice Device);
@@ -55,7 +61,7 @@ public:
 
 	/** Queue a staging buffer for destruction. It is kept alive until the frame that recorded its
 	 *  `vkCmdCopyBuffer` has RETIRED -- the RHI frame head waits the per-slot fence of the frame
-	 *  `MAHO_FRAMES_IN_FLIGHT` slots back (`RetireDeferredForSlot` below), so the staging is bucketed
+	 *  `FrameSlotCount` slots back (`RetireDeferredForSlot` below), so the staging is bucketed
 	 *  by the frame SLOT that recorded it and freed when that slot comes round again. Freeing it at
 	 *  "the next frame boundary" was true only while the device held a single fence (depth 1): at
 	 *  depth K it hands the queue a staging buffer the GPU is still reading, reported as
@@ -87,12 +93,13 @@ private:
 		VmaAllocation Allocation = nullptr;
 	};
 
-	/** Frame slots, one bucket per frame the device lets overlap (see FVulkanRHI::kFrameSlots). */
-	static constexpr std::uint32_t kFrameSlots = MAHO_FRAMES_IN_FLIGHT;
+	/** Frame slots, one bucket per frame the device lets overlap (the K its owner injected; see
+	 *  FVulkanRHI::FrameSlots). A run-time value, so the buckets are a vector and not a fixed array. */
+	std::uint32_t FrameSlotCount = 1;
 
 	VmaAllocator Allocator = nullptr;
 	std::mutex DeferredMutex;                 // guards the buckets + CurrentSlot (recording threads defer)
-	std::array<std::vector<FDeferredBuffer>, kFrameSlots> DeferredBuffers{};   // staging queued per frame slot
+	std::vector<std::vector<FDeferredBuffer>> DeferredBuffers;   // staging queued per frame slot
 	std::uint32_t CurrentSlot = 0;            // the slot new defers are tagged with (set by the frame head)
 };
 

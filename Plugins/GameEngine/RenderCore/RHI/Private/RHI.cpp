@@ -56,7 +56,8 @@ FRHI::FRHI() = default;
 
 FRHI::~FRHI() = default;
 
-bool FRHI::Initialize(void* NativeWindowHandle, int Width, int Height, ERHIBackend Backend)
+bool FRHI::Initialize(void* NativeWindowHandle, int Width, int Height, ERHIBackend Backend,
+	std::int32_t FramesInFlight)
 {
 	if (!NativeWindowHandle)
 	{
@@ -82,6 +83,10 @@ bool FRHI::Initialize(void* NativeWindowHandle, int Width, int Height, ERHIBacke
 	Desc.NativeWindowHandle = NativeWindowHandle;
 	Desc.FramebufferWidth = Width;
 	Desc.FramebufferHeight = Height;
+	// The pipeline depth travels WITH the init desc: the device sizes its per-slot fence /
+	// semaphore / command-buffer rings in Initialize, so it must be known there. Not injected (<= 0)
+	// means "the caller has no opinion" and the backend falls back to the process-wide value.
+	Desc.FramesInFlight = FramesInFlight;
 
 	if (!RHI->Initialize(Desc))
 	{
@@ -100,6 +105,13 @@ bool FRHI::Initialize(void* NativeWindowHandle, int Width, int Height, ERHIBacke
 const char* FRHI::GetThreadName() const
 {
 	return "RHIServer";
+}
+
+std::uint32_t FRHI::GetFrameSlotCount() const
+{
+	// Forwarded, not cached: the device is the thing that owns the slots, and the headless case has
+	// no device at all -- 0 is then the honest answer ("no frame-slot ring exists"), not a default.
+	return RHI ? RHI->GetFrameSlotCount() : 0u;
 }
 
 void FRHI::ShutdownRHI()

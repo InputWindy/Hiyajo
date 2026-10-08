@@ -167,7 +167,7 @@ void FVulkanMemoryAllocator::DestroyBufferDeferred(VkBuffer Buffer, VmaAllocatio
 	std::lock_guard<std::mutex> Lock(DeferredMutex);
 	// Tagged with the frame slot in progress: this staging is read by that frame's recorded copy, so it
 	// may only be freed once that slot's fence has been waited (see RetireDeferredForSlot).
-	DeferredBuffers[CurrentSlot % kFrameSlots].push_back({ Buffer, Allocation });
+	DeferredBuffers[CurrentSlot % FrameSlotCount].push_back({ Buffer, Allocation });
 }
 
 void FVulkanMemoryAllocator::RetireDeferredForSlot(std::uint32_t Slot)
@@ -178,7 +178,7 @@ void FVulkanMemoryAllocator::RetireDeferredForSlot(std::uint32_t Slot)
 	{
 		std::lock_guard<std::mutex> Lock(DeferredMutex);
 		CurrentSlot = Slot;
-		Pending.swap(DeferredBuffers[Slot % kFrameSlots]);
+		Pending.swap(DeferredBuffers[Slot % FrameSlotCount]);
 	}
 	for (const FDeferredBuffer& D : Pending)
 	{

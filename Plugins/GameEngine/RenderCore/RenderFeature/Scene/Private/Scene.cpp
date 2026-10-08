@@ -48,7 +48,7 @@ FScene::FScene()
 	// The K-deep form -- RHI holding MAHO_FRAMES_IN_FLIGHT copies of that state, so frames may
 	// genuinely overlap -- replaces this edge with a per-slot fence wait; until then this edge IS
 	// the frame isolation, and it is why the host needs no per-frame Wait() any more.
-	MyStage<IBeginRender>().WaitFor<FScene>().OnLastFrameStage<IPresent>();
+	MyStage<IBeginRender>().WaitFor<FScene>().OnStage<IPresent>(-1);
 
 	// Test producer of the draw protocol: hardcode the fullscreen triangle. No
 	// vertex buffer -- the vertex shader generates its 3 positions from
