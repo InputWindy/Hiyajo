@@ -2,6 +2,8 @@
 
 #include <Config.h>
 #include <ConsoleVariable.h>
+#include <Core/Fatal.h>
+#include <Core/FrameGraph.h>   // GetFramesInFlight: the pipeline depth the input ring is sized by
 #include <Log.h>
 #include <Trace.h>
 
@@ -81,9 +83,38 @@ MAHO_API FPlatform* GetPlatform()
 	return GPlatform;
 }
 
+namespace
+{
+	/** THE canonical frame number (see Platform.h). uint64 and not int32 for two reasons that are
+	 *  both real: at ~1500 fps an int32 wraps after about 16.5 days of uptime, and a SIGNED
+	 *  overflow is UB -- `% K` on a negative number would then land the frame in the wrong slot
+	 *  instead of merely being large.
+	 *
+	 *  It is never seeded, only incremented: the ONE writer is FPlatform::IBeginFrame (below), and
+	 *  no install, ctor or window (re)creation touches it. That is what makes it monotonic for the
+	 *  whole process, which every ring in the engine relies on. */
+	std::atomic<std::uint64_t> GFrameIndex{ 0 };
+
+	/** Debug-visible record of "this process has already installed Platform". Platform is an
+	 *  application-layer BASE plugin and is never unloaded, so a second Initialize means the host
+	 *  broke that contract -- and the failure it would otherwise cause is silent: the frame number
+	 *  must NOT be re-seeded (that would rewind every ring), so the assert is the only thing that
+	 *  can catch it. See FPlatform::Initialize. */
+	std::atomic<bool> GPlatformInstalled{ false };
+}
+
+MAHO_PLATFORM_API std::uint64_t GetFrameIndex()
+{
+	return GFrameIndex.load(std::memory_order_acquire);
+}
+
 FPlatform::~FPlatform() = default;
 
 FPlatform::FPlatform()
+	// The published input ring is sized ONCE, from the INJECTED pipeline depth: one slot per frame
+	// the graph lets overlap (see the header). The host injects K (`SetFramesInFlight`) before it
+	// installs anything, so this is the configured value and never a default.
+	: InputRing(static_cast<std::size_t>(GetFramesInFlight()))
 {
 	// The window size is read from the Config layer in Initialize - Config must
 	// be initialized first.
@@ -96,6 +127,16 @@ FPlatform::FPlatform()
 
 namespace
 {
+	/** Registered so the knob is a real CVar (settable in [ConsoleVariables] and visible in the
+	 *  registry); the depth that is ACTUALLY used is the one the HOST injects
+	 *  (`SetFramesInFlight`) before the first graph exists -- the pipeline depth is sealed
+	 *  process-wide, so a runtime change here cannot move it. */
+	static ConsoleVariable::TAutoConsoleVariable<int> GCVarFramesInFlight(
+		"r.FramesInFlight", MAHO_FRAMES_IN_FLIGHT,
+		"Pipeline depth (frames in flight); the host injects it through SetFramesInFlight before any "
+		"frame graph is built",
+		ConsoleVariable::ECVarFlags::Shipping);
+
 	static ConsoleVariable::TAutoConsoleVariable<int> GCVarWindowWidth(
 		"r.Window.Width", 1280, "Platform window width", ConsoleVariable::ECVarFlags::Shipping);
 
@@ -453,9 +494,41 @@ void FPlatform::PublishWindowState()
 	}
 }
 
-void FPlatform::Initialize(FEngineBase&, FEngineContext&)
+void FPlatform::Initialize(FEngineBase& Engine, FEngineContext&)
 {
 	MAHO_TRACE_STAGE(IInit, "Platform init", "start the platform thread and create the window");
+
+	// -- the input ring's width: the HOST's pipeline depth, READ FROM THE HOST ---------------------------------
+	//
+	// The ring was pre-sized in the constructor (the frame instance is constructed by the host's
+	// Install, which runs after the host injected K), so this is not about allocating: it is the
+	// INVARIANT. The ring must be exactly K wide, because the publisher keys each slot with the
+	// canonical frame number and the graph's admission lets at most K rounds overlap -- a ring that is
+	// narrower would silently evict a frame a consumer still legitimately owes, and a wider one only
+	// wastes memory. A mismatch is reported here, once, at init (never clamped): the value is now a
+	// real run-time configuration, so a disagreement means some layer sized itself from something else.
+	{
+		const std::size_t Slots = static_cast<std::size_t>(Engine.GetFramesInFlight());
+		if (InputRing.size() != Slots)
+		{
+			const std::string Message =
+				"FPlatform::Initialize: the published input ring holds " + std::to_string(InputRing.size())
+				+ " slot(s) but the host's pipeline depth is " + std::to_string(Slots)
+				+ " -- the ring is sized at construction, so K was changed after the frame was installed";
+			ReportError(Message.c_str());
+			MAHO_LOG_CORE_ERROR("{}", Message);
+		}
+	}
+
+	// ONE install per process. Platform is an application-layer BASE plugin and is never unloaded,
+	// so reaching here twice means the host broke that contract -- and the failure it would
+	// otherwise cause is silent rather than loud: the canonical frame number must NEVER be
+	// re-seeded (a rewind would re-enter ring slots every graph in the process has already used),
+	// and there is no code path that would do it accidentally. This assert is the only place the
+	// contract can be checked, so it is checked here, before the window is created.
+	MAHO_CHECKF(!GPlatformInstalled.exchange(true),
+		"second FPlatform install: the canonical frame number must never be re-seeded");
+
 	// The platform's OWN thread starts FIRST, because the window is created on it -- and only there.
 	// A Win32 window's message queue belongs to its creating thread (PeekMessage sees nothing else),
 	// so a window created on whichever pool worker happened to run this stage can never be pumped
@@ -483,6 +556,26 @@ void FPlatform::Initialize(FEngineBase&, FEngineContext&)
 #endif
 
 	GPlatform = this;
+}
+
+void FPlatform::PreShutdown(FEngineBase&, FEngineContext&)
+{
+	MAHO_TRACE_STAGE(IPreShutdown, "Platform pre-shutdown", "close the input ring: no further frame will be published");
+	// THE ONE place the published input is declared CLOSED, and the reason it is not `DestroyWindow`
+	// (which `CreateWindow` also calls): "closed" means "production has stopped for good", so a
+	// consumer blocked in `ReadInputFrame` must take the "that frame never ran" exit instead of
+	// waiting for a frame that cannot come. The frame loop has already exited (the host drains with
+	// Wait() before the shutdown stages), so this is the earliest true statement of it -- and it is
+	// EARLY on purpose: the render graph tears down AFTER this layer (FRender::IShutdown blocks on
+	// ours), so a UI stage still reading during teardown wakes up here instead of sitting out the
+	// whole wait budget.
+	//
+	// `InputFramePublished` keeps its value: it mirrors the canonical frame number, which is never
+	// rewound, and a rewind would turn every already-published frame into a reported gap. A read of
+	// a frame that IS published still succeeds after this point -- only a request for a frame that
+	// never ran is refused.
+	bInputClosed.store(true, std::memory_order_release);
+	InputPublishedCV.notify_all();
 }
 
 void FPlatform::Shutdown(FEngineBase&, FEngineContext&)
@@ -698,14 +791,24 @@ void FPlatform::DestroyWindow()
 		CachedWidth.store(0, std::memory_order_relaxed);
 		CachedHeight.store(0, std::memory_order_relaxed);
 		bCachedShouldClose.store(true, std::memory_order_relaxed);
-		// Drop the published ring too: a stale frame must not be readable by a new window's consumers
-		// (they align on the index, so resetting it makes them start clean).
+		// Drop the published ring too: a stale frame must not be readable by a new window's
+		// consumers. Their identity check is what does it (`ReadInputFrame`: `Slot.Index != Index`
+		// means "that slot belongs to a previous window's life"), so the ring is cleared WITHOUT
+		// rewinding `InputFramePublished` -- the published index is the CANONICAL frame number's
+		// mirror now (see Tick), and rewinding it would make every following frame look like a gap.
 		for (FInputFrame& Slot : InputRing)
 		{
 			Slot = FInputFrame{};
 		}
-		InputFrameCounter = 0;
-		InputFramePublished.store(0, std::memory_order_release);
+		// NOTE: the input is deliberately NOT declared "closed" here. `bInputClosed` means "no
+		// further frame will EVER be published", which is a property of the platform's SHUTDOWN
+		// (`PreShutdown`), not of a window teardown: `CreateWindow` calls this method too (to drop
+		// the previous backend before building the new one), so marking the input closed here set
+		// the flag at STARTUP and never cleared it. `ReadInputFrame`'s wait loop ends on
+		// `!bInputClosed`, so from the first frame on, every by-index read of a frame the pump had
+		// not frozen yet returned false immediately instead of waiting -- reported as "input frame N
+		// was never published (producer closed) -- frame GAP", with N always exactly one ahead of
+		// the freeze (~8 lines per 20s in a perfectly healthy run).
 		DroppedFiles.clear();
 	});
 }
@@ -775,16 +878,16 @@ void FPlatform::PollEvents()
 
 void FPlatform::BeginFrame(FEngineBase&, FEngineContext&)
 {
-	MAHO_TRACE_STAGE(IBeginFrame, "Platform frame begin", "no frame-head work on the platform side");
-}
-
-void FPlatform::Tick(FEngineBase& Engine, FEngineContext& Frame)
-{
-	MAHO_TRACE_STAGE(ITick, "Platform tick", "pump the window messages and publish this frame's input");
-	// The pump runs on the PLATFORM thread, marshalled (and waited on) from whatever thread this
-	// stage was dispatched to. That is the whole point: the window's messages live in the queue of
-	// the thread that created it, and PeekMessage looks nowhere else -- pumping from a random pool
-	// worker left the keys sitting in the queue for seconds and then delivered them in a burst.
+	MAHO_TRACE_STAGE(IBeginFrame, "Platform frame begin", "advance the canonical frame number");
+	// THE SINGLE WRITER of the canonical frame number. It is advanced HERE -- at the head of the
+	// frame, exactly once per driven frame -- and nowhere else: the value a reader sees during a
+	// frame is that frame's index, and it can never be rewound or re-seeded (a second install is
+	// refused by Initialize, an uninstall has no path back to zero).
+	//
+	// acq_rel on the increment: the frame's work is published to the readers that adopt the number
+	// (each stage of this frame, the sub-graphs it drives), all of which run on other threads.
+	const std::uint64_t Frame = GFrameIndex.fetch_add(1, std::memory_order_acq_rel) + 1;
+	MAHO_TRACE_STAGE(IBeginFrame, "Platform frame number", "");
 	RunOnPlatformThread([this] { PollEvents(); });
 
 	// Publish THIS frame's input as one immutable, TAGGED slot: the snapshot plus the edge events
@@ -804,22 +907,48 @@ void FPlatform::Tick(FEngineBase& Engine, FEngineContext& Frame)
 	std::uint64_t Published = 0;
 	{
 		std::lock_guard<std::mutex> L(InputMutex);
-		++InputFrameCounter;
-		InputRingWrite = static_cast<std::uint32_t>((InputFrameCounter - 1) % kInputRingSlots);
-		FInputFrame& Slot = InputRing[InputRingWrite];
-		Slot.Index = InputFrameCounter;
+		// The slot is keyed by the CANONICAL frame number -- no private per-platform tally any more --
+		// so "the round the graph is driving" and "the slot that round's input lives in" are the SAME
+		// number: that is what lets a consumer ask for frame N's input by index, and what makes a ring
+		// of exactly the pipeline depth sufficient. `IBeginFrame` has already advanced the number for
+		// this frame: it is an earlier stage of THIS same batch, ordered by the frame's structural
+		// stage chain.
+		const std::uint64_t Frame = GetFrameIndex();
+		MAHO_CHECKF(Frame != 0,
+			"FPlatform::BeginFrame: the canonical frame number is 0 -- IBeginFrame has not run for this "
+			"batch, so this frame's input cannot be tagged");
+		FInputFrame& Slot = InputRing[static_cast<std::size_t>(Frame % InputRing.size())];
+		Slot.Index = Frame;
 		Slot.Snapshot = Input;
 		Slot.Events = std::move(FrameEvents);
 		FrameEvents.clear();
 		Input.MouseWheelX = 0.0f;
 		Input.MouseWheelY = 0.0f;
-		Published = InputFrameCounter;
-		InputFramePublished.store(InputFrameCounter, std::memory_order_release);
+		Published = Frame;
+		InputFramePublished.store(Frame, std::memory_order_release);
 	}
+
+	// Wake the consumers waiting for THIS frame -- they are blocked in ReadInputFrame, on the slot
+	// the store above just completed.
+	InputPublishedCV.notify_all();
 
 	// OUTSIDE the lock: a subscriber may reach straight back in (ReadInputFrame), which is exactly
 	// why the delegate invokes its handlers outside its own lock.
 	OnInputPublished.Broadcast(Published);
+}
+
+void FPlatform::EndFrame(FEngineBase&, FEngineContext&)
+{
+	MAHO_TRACE_STAGE(IEndFrame, "Platform frame end", "the input was frozen at the frame head");
+	// Nothing to do: `BeginFrame` already pumped the OS queue and published THIS frame's input into
+	// the ring as one immutable tagged slot, so the state a reader observes for this round is frozen
+	// from the frame head on.
+	//
+	// The stage stays mounted (i.e. this node exists) because it is a NAMED ROUND MARKER: the render
+	// layer isolates its own pipelined frames against the platform with a cross-frame edge that names
+	// it (`FRender::IBeginFrame@N+1 waits FPlatform::IEndFrame@N`, declared in FRender's ctor), and an
+	// edge can only land on a node that exists. Removing the stage from the pipeline would silently
+	// turn that edge into a no-op -- the frame boundary would then be open between the two graphs.
 }
 
 void FPlatform::ReadFrameInput(MInputContext& Out) const
@@ -831,7 +960,7 @@ void FPlatform::ReadFrameInput(MInputContext& Out) const
 		Out = Input;   // nothing published yet: hand back the live copy
 		return;
 	}
-	Out = InputRing[(Latest - 1) % kInputRingSlots].Snapshot;
+	Out = InputRing[static_cast<std::size_t>(Latest % InputRing.size())].Snapshot;
 }
 
 std::uint64_t FPlatform::GetInputFrameIndex() const
@@ -839,42 +968,110 @@ std::uint64_t FPlatform::GetInputFrameIndex() const
 	return InputFramePublished.load(std::memory_order_acquire);
 }
 
+namespace
+{
+	/** How long a consumer waits for the frame it asked for before that frame is declared "never
+	 *  ran". The wait itself is the NORMAL path (see the declaration in the header); this bound only
+	 *  turns a pathological stall into a reported gap instead of a hung frame -- a frame is tens of
+	 *  milliseconds, so two seconds is not a schedule, it is a give-up point. */
+	constexpr std::chrono::seconds kInputWaitBudget{ 2 };
+}
+
 bool FPlatform::ReadInputFrame(std::uint64_t Index, FInputFrame& Out) const
 {
-	std::lock_guard<std::mutex> L(InputMutex);
 	if (Index == 0)
 	{
 		return false;
 	}
-	const FInputFrame& Slot = InputRing[(Index - 1) % kInputRingSlots];
+
+	std::unique_lock<std::mutex> L(InputMutex);
+
+	// WAIT for THIS frame rather than reading whatever is newest: the two graphs PIPELINE, so the
+	// round a consumer is driving can be newer than the freeze -- its stage is a SIBLING of
+	// IBeginFrame in that same round, never its successor. The producer stores the index and notifies
+	// under this mutex, so the wakeup cannot be missed; the loop also ends when the producer closes.
+	const auto Deadline = std::chrono::steady_clock::now() + kInputWaitBudget;
+	while (InputFramePublished.load(std::memory_order_acquire) < Index
+		&& !bInputClosed.load(std::memory_order_acquire))
+	{
+		if (InputPublishedCV.wait_until(L, Deadline) == std::cv_status::timeout)
+		{
+			break;
+		}
+	}
+
+	const std::uint64_t Published = InputFramePublished.load(std::memory_order_acquire);
+	const std::size_t   Slots = InputRing.size();
+	const bool          bClosed = bInputClosed.load(std::memory_order_acquire);
+
+	// The two failures below are reports, rate-limited by frame index so a persistent one cannot
+	// flood the log (the same shape as the old eviction report).
+	static std::uint64_t LastReportedIndex = 0;
+	const bool bMayReport = Published >= LastReportedIndex + 600;
+
+	if (Published < Index)
+	{
+		// Still ahead of the freeze. WHO is at fault is decided by the producer's state, and the two
+		// cases are NOT the same failure:
+		if (!bClosed)
+		{
+			// The producer is ALIVE and this call has already waited for it (`kInputWaitBudget`): the
+			// wait is the fallback, and it is not supposed to be reached -- the platform freezes a
+			// round's input in that round's `IBeginFrame`, and the ordering edge into the render
+			// collector (FRender::ITick waits FPlatform::IBeginFrame, same frame) is what keeps a
+			// consumer's round from being submitted before its freeze. So reaching here is a
+			// SCHEDULING BUG, and it is reported as one instead of as a "that frame did not run" gap.
+			if (bMayReport)
+			{
+				LastReportedIndex = Published;
+				MAHO_LOG_CORE_ERROR(
+					"FPlatform: input frame {} is still not frozen after waiting (newest {}, ring {} "
+					"slot(s)): the producer is ALIVE, so the wait should not have been needed -- the "
+					"consumer's round was submitted BEFORE this round's FPlatform::IBeginFrame froze it. Its "
+					"input is SKIPPED, not replayed (scheduling bug)",
+					Index, Published, Slots);
+			}
+			return false;
+		}
+		// The producer has CLOSED (shutdown): that frame truly never ran, and no ring could have
+		// served it. Nothing to replay -- the consumer skips the frame. Not a lag.
+		if (bMayReport)
+		{
+			LastReportedIndex = Published;
+			MAHO_LOG_CORE_ERROR(
+				"FPlatform: input frame {} was never published (newest {}, producer closed) -- frame GAP, "
+				"that frame did not run; its input is SKIPPED, not replayed",
+				Index, Published);
+		}
+		return false;
+	}
+
+	if (Index + Slots <= Published)
+	{
+		// BEHIND by more than the pipeline depth: the producer already overwrote this frame. That is
+		// a scheduling bug, not a mode -- production is 1:1 with the frame loop (the publish happens
+		// in IBeginFrame, whose pump is awaited), so a consumer's stage cannot legitimately miss K rounds.
+		if (bMayReport)
+		{
+			LastReportedIndex = Published;
+			MAHO_LOG_CORE_ERROR(
+				"FPlatform: input frame {} was EVICTED before a consumer read it (newest {}, that "
+				"consumer is behind by {}, ring is {} slot(s) = the pipeline depth) -- those frames' "
+				"input is SKIPPED, not replayed",
+				Index, Published, Published - Index, Slots);
+		}
+		return false;
+	}
+
+	const FInputFrame& Slot = InputRing[static_cast<std::size_t>(Index % Slots)];
 	if (Slot.Index != Index)
 	{
-		// The producer overwrote the frame this reader still owed. Its input is SKIPPED -- never
-		// silently applied to another frame -- and that is worth a report: production is 1:1 with the
-		// frame loop (the publish happens in Tick, the pump is waited on), so a consumer that falls
-		// further than the ring means its stage did not run for that many frames, which is a scheduling
-		// bug, not a mode. Rate-limited by frame index so a persistent bug cannot flood the log.
-		const std::uint64_t Latest = InputFramePublished.load(std::memory_order_relaxed);
-		static std::uint64_t LastReportedIndex = 0;
-		if (Latest >= LastReportedIndex + 600)
-		{
-			LastReportedIndex = Latest;
-			MAHO_LOG_CORE_ERROR(
-				"FPlatform: input frame {} was EVICTED before a consumer read it (latest {}, that consumer is behind by "
-				"{}, ring is {} slot(s)) -- those frames' input is SKIPPED, not replayed",
-				Index, Latest, Latest > Index ? Latest - Index : 0, kInputRingSlots);
-		}
+		// In range but not this frame's slot: the ring was reset under us (window recreated) and the
+		// slot still belongs to the previous life. Life 2's frames start at the canonical number.
 		return false;
 	}
 	Out = Slot;
 	return true;
-}
-
-void FPlatform::EndFrame(FEngineBase&, FEngineContext&)
-{
-	MAHO_TRACE_STAGE(IEndFrame, "Platform frame end", "the input snapshot was frozen at tick");
-	// Nothing to do: Tick() publishes the frame's input into the ring and drains the event
-	// stream, so the state a reader observes is already frozen at that point.
 }
 
 void FPlatform::RequestExit(FEngineBase& Engine, FEngineContext& Frame)

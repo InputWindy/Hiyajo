@@ -7,6 +7,8 @@
 
 #include <Core/FrameGraph.h>
 #include <Core/ThreadPool.h>
+#include <Engine/Frame.h>   // MAHO_FRAME_STAGE_CHAIN / MAHO_FRAME_SELF_EDGES: the frames below declare
+                            // their own structural edges (the bridge no longer invents them)
 
 #include <atomic>
 #include <chrono>
@@ -69,7 +71,12 @@ namespace
 	const std::type_index TagA{ typeid(int) };
 	const std::type_index TagB{ typeid(double) };
 
-	/** Names must be string literals: FTaskKey holds a string_view. */
+	/** Names must be string literals: FTaskKey holds a string_view.
+	 *
+	 *  The PHASE argument is the caller's raw identity value, and `Submit` overwrites it with the
+	 *  round's own slot (`PhaseOfFrame(Frame)`) -- so it no longer carries authority, it is just
+	 *  what the batch is authored with. A DEPENDENCY's phase is the caller's for real (it names
+	 *  another round), which is why the cases below spell those out. */
 	FTask Make(std::string_view Name, std::type_index Stage, std::int32_t Phase,
 	           std::vector<FDependency> Deps, std::function<void()> Body)
 	{
@@ -102,7 +109,7 @@ int RunFrameGraphSemanticsTest()
 		Batch.push_back(Make("A", TagA, 0, {}, []() {}));
 		std::string Reason;
 		Check("T1  Submit before Initialize() is refused",
-		      Graph.Submit(Batch, &Reason) == false);
+		      Graph.Submit(Batch, 0, &Reason) == false);
 	}
 
 	Graph.Initialize();
@@ -125,16 +132,16 @@ int RunFrameGraphSemanticsTest()
 		Batch.push_back(Make("C", TagA, 0, { Dep("A", TagA, 0) },
 		                     [&]() { COrder = Order.fetch_add(1); R.Arrive(); }));
 
-		Check("T2  batch accepted", Graph.Submit(Batch));
+		Check("T2  batch accepted", Graph.Submit(Batch, 0));
 		Check("T2  all three ran (both waiters released)", R.WaitFor(3000));
 		Check("T2  A ran before B", AOrder >= 0 && BOrder > AOrder);
 		Check("T2  A ran before C", AOrder >= 0 && COrder > AOrder);
 	}
 
-	// T3: an EXPLICIT cross-phase dependency. Phase 1's P waits for phase 0's P -- which is
+	// T3: an EXPLICIT cross-round dependency. Frame 1's P waits for frame 0's P -- which is
 	// the "a layer pipelines with itself across frames" property, now spelled out as an
 	// edge the bridge emits rather than as an implicit rule. P0 sets its flag only AFTER a
-	// sleep, so "phase 1 saw it" can only come from the dependency actually delaying it.
+	// sleep, so "frame 1 saw it" can only come from the dependency actually delaying it.
 	{
 		FRendezvous R;
 		R.Expect(2);
@@ -148,7 +155,7 @@ int RunFrameGraphSemanticsTest()
 			P0Done.store(true);
 			R.Arrive();
 		}));
-		Check("T3  phase 0 accepted", Graph.Submit(Frame0));
+		Check("T3  frame 0 accepted", Graph.Submit(Frame0, 0));
 
 		std::vector<FTask> Frame1;
 		Frame1.push_back(Make("P", TagA, 1, { Dep("P", TagA, 0) }, [&]()
@@ -156,9 +163,9 @@ int RunFrameGraphSemanticsTest()
 			SawPrevious.store(P0Done.load());
 			R.Arrive();
 		}));
-		Check("T3  phase 1 accepted", Graph.Submit(Frame1));
+		Check("T3  frame 1 accepted", Graph.Submit(Frame1, 1));
 		Check("T3  both ran", R.WaitFor(3000));
-		Check("T3  phase 1 waited for phase 0 to finish", SawPrevious.load());
+		Check("T3  frame 1 waited for frame 0 to finish", SawPrevious.load());
 	}
 
 	// T4: a dependency whose target does not exist makes the EDGE disappear. The batch is
@@ -172,7 +179,7 @@ int RunFrameGraphSemanticsTest()
 		Batch.push_back(Make("W", TagA, 0, { Dep("ZZZ_DoesNotExist", TagA, 0) },
 		                     [&]() { R.Arrive(); }));
 
-		Check("T4  batch with a dangling dependency accepted", Graph.Submit(Batch));
+		Check("T4  batch with a dangling dependency accepted", Graph.Submit(Batch, 0));
 		Check("T4  node ran (the edge does not exist)", R.WaitFor(3000));
 	}
 
@@ -184,8 +191,8 @@ int RunFrameGraphSemanticsTest()
 		R.Expect(1);
 		std::vector<FTask> Frame0;
 		Frame0.push_back(Make("Q", TagA, 0, {}, [&]() { R.Arrive(); }));
-		Check("T5  phase 0 accepted", Graph.Submit(Frame0));
-		Check("T5  phase 0 ran", R.WaitFor(3000));
+		Check("T5  frame 0 accepted", Graph.Submit(Frame0, 0));
+		Check("T5  frame 0 ran", R.WaitFor(3000));
 
 		FRendezvous R2;
 		R2.Expect(1);
@@ -193,8 +200,8 @@ int RunFrameGraphSemanticsTest()
 		Frame1.push_back(Make("Q", TagA, 1,
 		                      { Dep("Q", TagA, 0), Dep("Q", TagA, 0) },   // same target twice
 		                      [&]() { R2.Arrive(); }));
-		Check("T5  phase 1 accepted", Graph.Submit(Frame1));
-		Check("T5  phase 1 ran (duplicate target deduplicated)", R2.WaitFor(3000));
+		Check("T5  frame 1 accepted", Graph.Submit(Frame1, 1));
+		Check("T5  frame 1 ran (duplicate target deduplicated)", R2.WaitFor(3000));
 	}
 
 	// T6: a throwing body must still complete its node, or its waiters wait forever.
@@ -208,7 +215,7 @@ int RunFrameGraphSemanticsTest()
 		Batch.push_back(Make("AfterThrows", TagB, 0, { Dep("Throws", TagA, 0) },
 		                     [&]() { R.Arrive(); }));
 
-		Check("T6  batch accepted", Graph.Submit(Batch));
+		Check("T6  batch accepted", Graph.Submit(Batch, 0));
 		Check("T6  downstream ran despite the upstream body throwing", R.WaitFor(3000));
 	}
 
@@ -220,16 +227,28 @@ int RunFrameGraphSemanticsTest()
 		std::vector<FTask> Cycle;
 		Cycle.push_back(Make("Cy1", TagA, 0, { Dep("Cy2", TagA, 0) }, []() {}));
 		Cycle.push_back(Make("Cy2", TagA, 0, { Dep("Cy1", TagA, 0) }, []() {}));
-		Check("T7  dependency cycle rejected", Graph.Submit(Cycle, &Reason) == false);
+		Check("T7  dependency cycle rejected", Graph.Submit(Cycle, 0, &Reason) == false);
 
 		std::vector<FTask> Dup;
 		Dup.push_back(Make("Dup", TagA, 0, {}, []() {}));
 		Dup.push_back(Make("Dup", TagA, 0, {}, []() {}));
-		Check("T7  duplicate identity rejected", Graph.Submit(Dup, &Reason) == false);
+		Check("T7  duplicate identity rejected", Graph.Submit(Dup, 0, &Reason) == false);
 
+		// A batch's OWN phase is not the caller's to get wrong any more: Submit stamps the round's
+		// slot (`PhaseOfFrame(Frame)`) onto every task's key, so a nonsense value there is
+		// normalized instead of rejected. That is what makes the phase a graph-internal vocabulary
+		// and the frame the only thing a submit site has to produce.
+		std::vector<FTask> Stamped;
+		Stamped.push_back(Make("Stamped", TagA, 4242, {}, []() {}));
+		Check("T7  a batch's phase is stamped from the round, not taken from the caller",
+		      Graph.Submit(Stamped, 0));
+
+		// Which leaves exactly one way to author an out-of-range phase: through a TARGET, whose
+		// phase names ANOTHER round and is therefore left alone by that stamp.
 		std::vector<FTask> BadPhase;
-		BadPhase.push_back(Make("Bad", TagA, kPhaseCount - 1 + 7, {}, []() {}));
-		Check("T7  out-of-range phase rejected", Graph.Submit(BadPhase, &Reason) == false);
+		BadPhase.push_back(Make("Bad", TagA, 0,
+		                        { Dep("Bad", TagA, GetFramesInFlight() - 1 + 7) }, []() {}));
+		Check("T7  out-of-range phase rejected", Graph.Submit(BadPhase, 0, &Reason) == false);
 	}
 
 	// T9: ONE-SIDED reverse declaration. The producer alone says "I block B", and B knows
@@ -250,7 +269,7 @@ int RunFrameGraphSemanticsTest()
 		Batch.push_back(Make("Tgt9", TagB, 0, {},
 		                     [&]() { BlockedOrder = Order.fetch_add(1); R.Arrive(); }));
 
-		Check("T9  one-sided reverse declaration accepted", Graph.Submit(Batch));
+		Check("T9  one-sided reverse declaration accepted", Graph.Submit(Batch, 0));
 		Check("T9  both ran", R.WaitFor(3000));
 		Check("T9  blocked node ran AFTER the blocker",
 		      BlockerOrder >= 0 && BlockedOrder > BlockerOrder);
@@ -264,7 +283,7 @@ int RunFrameGraphSemanticsTest()
 		R.Expect(1);
 		std::vector<FTask> First;
 		First.push_back(Make("L", TagA, 0, {}, [&]() { R.Arrive(); }));
-		Check("T10 earlier batch accepted", Graph.Submit(First));
+		Check("T10 earlier batch accepted", Graph.Submit(First, 0));
 		Check("T10 earlier batch ran", R.WaitFor(3000));
 
 		FRendezvous R2;
@@ -272,15 +291,16 @@ int RunFrameGraphSemanticsTest()
 		std::vector<FTask> Second;
 		Second.push_back(Make("UsesL", TagB, 0, { Dep("L", TagA, 0) },
 		                      [&]() { R2.Arrive(); }));
-		Check("T10 later batch accepted", Graph.Submit(Second));
+		Check("T10 later batch accepted", Graph.Submit(Second, 0));
 		Check("T10 later batch ran without waiting (target already completed)",
 		      R2.WaitFor(3000));
 	}
 
-	// T11: Submit performs the ring-reuse admission ITSELF -- a submit whose phase is still
-	// busy blocks the CALLER until that phase drains. This deliberately exercises the edge of
-	// the "one submit per phase per occupancy" contract: a second submit for a busy phase is
-	// exactly the case that blocks.
+	// T11: Submit performs the ring-reuse admission ITSELF -- a submit whose round names a slot
+	// that is still busy BLOCKS THE CALLER until that slot drains. This deliberately exercises the
+	// edge of the "one submit per phase per occupancy" contract: submitting the SAME round a second
+	// time is exactly the case that blocks (the builder's monotonic floor exists to keep a sequence
+	// from doing that by accident).
 	{
 		FRendezvous R;
 		R.Expect(1);
@@ -291,7 +311,7 @@ int RunFrameGraphSemanticsTest()
 			std::this_thread::sleep_for(std::chrono::milliseconds(250));
 			R.Arrive();
 		}));
-		Check("T11 slow node accepted", Graph.Submit(Slow));
+		Check("T11 slow node accepted", Graph.Submit(Slow, 1));
 
 		// Give the scheduler a moment to actually DISPATCH it, so the phase is genuinely busy
 		// rather than merely queued: Submit only enqueues a command, and a check made before
@@ -305,7 +325,7 @@ int RunFrameGraphSemanticsTest()
 		Again.push_back(Make("Slow11", TagA, 1, {}, [&]() { R2.Arrive(); }));
 
 		const auto Start = std::chrono::steady_clock::now();
-		const bool bAccepted = Graph.Submit(Again);
+		const bool bAccepted = Graph.Submit(Again, 1);
 		const auto Elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
 			std::chrono::steady_clock::now() - Start).count();
 
@@ -335,7 +355,7 @@ int RunFrameGraphSemanticsTest()
 
 		FA A;
 		A.MyStage<FStageOne>().IsWaiting<FB>().ForStage<FStageTwo>();
-		A.MyStage<FStageOne>().IsWaiting<FB>().LastFrame().ForStage<FStageTwo>();
+		A.MyStage<FStageOne>().IsWaiting<FB>().ForStage<FStageTwo>(-1);
 		A.MyStage<FStageOne>().IsBlocking<FB>().OnStage<FStageTwo>();
 		// Name-addressed: for a consumer that must NOT name the producer's type (naming it would
 		// force a build dependency on an optional plugin).
@@ -346,7 +366,7 @@ int RunFrameGraphSemanticsTest()
 		Check("T12 two stages carry declarations", Deps.size() == 2);
 		Check("T12 two waits on that stage", Deps.at(typeid(FStageOne)).size() == 2);
 		Check("T12 first wait has offset 0", Deps.at(typeid(FStageOne))[0].FrameOffset == 0);
-		Check("T12 LastFrame() gives offset -1", Deps.at(typeid(FStageOne))[1].FrameOffset == -1);
+		Check("T12 the offset argument gives offset -1", Deps.at(typeid(FStageOne))[1].FrameOffset == -1);
 		Check("T12 target name is the TARGET frame", Deps.at(typeid(FStageOne))[0].TargetName == "FB");
 		Check("T12 target stage recorded", Deps.at(typeid(FStageOne))[0].TargetStage == typeid(FStageTwo));
 		Check("T12 name-addressed wait records the name it was given",
@@ -365,9 +385,9 @@ int RunFrameGraphSemanticsTest()
 		      && Blocks[1].second.TargetStage == typeid(FStageTwo));
 	}
 
-	// T15: the canonical sugar -- WaitFor/BlockOn with the FRAME in the stage selector
-	// (OnStage = this frame, OnLastFrameStage = the previous frame). The older
-	// IsWaiting/IsBlocking + LastFrame() + ForStage() spelling stays valid; this pins the new one.
+	// T15: the canonical sugar -- WaitFor/BlockOn with the RELATIVE FRAME OFFSET in the stage
+	// selector (0 = this round, -1 = the previous one, -K = one full window back). One selector,
+	// one argument: IsWaiting/IsBlocking are still the two directions (aliases of WaitFor/BlockOn).
 	{
 		struct IStageA {};
 		struct IStageB {};
@@ -384,12 +404,12 @@ int RunFrameGraphSemanticsTest()
 		};
 
 		FSugar S;
-		S.MyStage<IStageA>().WaitFor<FSugarTarget>().OnStage<IStageB>();             // this frame
-		S.MyStage<IStageA>().WaitFor<FSugarTarget>().OnLastFrameStage<IStageB>();   // last frame
-		S.MyStage<IStageA>().WaitFor("SugarTarget").OnLastFrameStage<IStageB>();    // by NAME, last frame
-		S.MyStage<IStageA>().BlockOn<FSugarTarget>().OnStage<IStageB>();            // reverse, this frame
-		S.MyStage<IStageA>().BlockOn<FSugarTarget>().OnLastFrameStage<IStageB>();   // reverse, last frame
-		S.MyStage<IStageB>().WaitFor<FSugarTarget>().OnLastFrameStage<IStageB>();   // another stage
+		S.MyStage<IStageA>().WaitFor<FSugarTarget>().OnStage<IStageB>();             // this round
+		S.MyStage<IStageA>().WaitFor<FSugarTarget>().OnStage<IStageB>(-1);          // one round back
+		S.MyStage<IStageA>().WaitFor("SugarTarget").OnStage<IStageB>(-1);           // by NAME, one back
+		S.MyStage<IStageA>().BlockOn<FSugarTarget>().OnStage<IStageB>();            // reverse, this round
+		S.MyStage<IStageA>().BlockOn<FSugarTarget>().OnStage<IStageB>(-1);          // reverse, one back
+		S.MyStage<IStageB>().WaitFor<FSugarTarget>().OnStage<IStageB>(-1);          // another stage
 
 		const auto& Deps = S.GetDependencies();
 		const auto& Blocks = S.GetDependents();
@@ -397,16 +417,16 @@ int RunFrameGraphSemanticsTest()
 		      Deps.at(typeid(IStageA))[0].FrameOffset == 0
 		      && Deps.at(typeid(IStageA))[0].TargetName == "SugarTarget"
 		      && Deps.at(typeid(IStageA))[0].TargetStage == typeid(IStageB));
-		Check("T15 WaitFor().OnLastFrameStage() records a cross-frame edge",
+		Check("T15 WaitFor().OnStage(-1) records a cross-frame edge",
 		      Deps.at(typeid(IStageA))[1].FrameOffset == -1
 		      && Deps.at(typeid(IStageA))[1].TargetStage == typeid(IStageB));
-		Check("T15 WaitFor(\"name\").OnLastFrameStage() works by name",
+		Check("T15 WaitFor(\"name\").OnStage(-1) works by name",
 		      Deps.at(typeid(IStageA))[2].FrameOffset == -1
 		      && Deps.at(typeid(IStageA))[2].TargetName == "SugarTarget");
 		Check("T15 BlockOn().OnStage() records a same-frame reverse edge",
 		      Blocks[0].first == typeid(IStageA) && Blocks[0].second.FrameOffset == 0
 		      && Blocks[0].second.TargetName == "SugarTarget");
-		Check("T15 BlockOn().OnLastFrameStage() records a cross-frame reverse edge",
+		Check("T15 BlockOn().OnStage(-1) records a cross-frame reverse edge",
 		      Blocks[1].first == typeid(IStageA) && Blocks[1].second.FrameOffset == -1);
 		Check("T15 the same selector works from another stage",
 		      Deps.at(typeid(IStageB)).size() == 1
@@ -416,32 +436,46 @@ int RunFrameGraphSemanticsTest()
 
 	// exactly what makes it inspectable here: every resolution is checked as DATA before the
 	// graph ever sees it.
-	// T16: the sugar's cross-frame edge really BLOCKS. That is the whole point of OnLastFrameStage:
-	// the only cross-frame ordering a frame extension gets for free is the IMPLICIT self edge (a
-	// stage against ITSELF), so ordering stage Q of frame N+1 after stage P of frame N has to be
+	// T16: the sugar's cross-frame edge really BLOCKS. That is the whole point of the relative
+	// frame offset: the only cross-frame ordering a frame extension gets for free is its own SELF
+	// edge (a stage against ITSELF, one frame back -- and that one is a declaration too, installed
+	// by MAHO_DECLARE_FRAME), so ordering stage Q of frame N+1 after stage P of frame N has to be
 	// explicit -- and "explicit" has to mean it waits, not just that it is recorded.
+	//
+	// Each frame below mounts EXACTLY ONE stage, and that is deliberate: the identity the
+	// declarations rest on is "the frame's list IS what it implements" (a node exists iff the frame
+	// mounts the stage), so the dispatch here must name one stage per frame. A frame that mounted
+	// both would also declare the chain P->Q INSIDE its own frame, and then Q@10 would run after
+	// P@10 -- which sets the flag the assertion reads, so the assertion would pass through the
+	// chain and no longer be about the explicit edge at all.
 	//
 	// Two consecutive frames, both built by the BRIDGE (so the sugar's resolution is exercised, not
 	// just FEdge's raw form): frame 10's P sleeps before setting a flag, and frame 11's Q declares
-	// `WaitFor<FPrev>().OnLastFrameStage<IStageP>()` -- so Q has to observe that flag.
+	// `WaitFor<FPrev>().OnStage<IStageP>(-1)` -- so Q has to observe that flag.
 	{
 		struct IStageP {};
 		struct IStageQ {};
 		using FSugarStages = TTypeList<IStageP, IStageQ>;
 
-		struct FPrev : FFrameExtension
+		struct FPrev : FFrameExtension, IPipeline<IStageP>
 		{
+			FPrev() { MAHO_FRAME_STAGE_CHAIN(FPrev); MAHO_FRAME_SELF_EDGES(FPrev); }
 			static std::string_view StaticName() { return "SugarPrev"; }
 			std::string_view GetName() const override { return StaticName(); }
 		};
-		struct FNext : FFrameExtension
+		struct FNext : FFrameExtension, IPipeline<IStageQ>
 		{
+			FNext() { MAHO_FRAME_STAGE_CHAIN(FNext); MAHO_FRAME_SELF_EDGES(FNext); }
 			static std::string_view StaticName() { return "SugarNext"; }
 			std::string_view GetName() const override { return StaticName(); }
 		};
 
 		FRendezvous R;
-		R.Expect(4);   // two frames x (P + Q)
+		// Every (frame in the set) x (stage) of BOTH rounds arrives: 2 frames x 1 stage x 2 rounds.
+		// It has to be all of them -- the assertion below is about the EXPLICIT cross-frame edge
+		// (Q@11 after P@10), and "some Q saw a finished P" is only meaningful once every node that
+		// could set it has run.
+		R.Expect(4);
 		std::atomic<bool> PrevDone{ false };
 		std::atomic<bool> SawPrev{ false };
 
@@ -451,11 +485,16 @@ int RunFrameGraphSemanticsTest()
 			std::atomic<bool>* InDone = nullptr;
 			std::atomic<bool>* InSaw = nullptr;
 
-			bool Implements(const FFrameExtension&, std::type_index Stage) const override
+			bool Implements(const FFrameExtension& Frame, std::type_index Stage) const override
 			{
-				return Stage == typeid(IStageP) || Stage == typeid(IStageQ);
+				// One stage per frame, matching each frame's OWN mounted list: the bridge's structural
+				// self-check asserts that a node carries its frame's declarations, which can only hold
+				// when "what the dispatch says the frame implements" IS "what the frame mounts".
+				return Frame.GetName() == FPrev::StaticName() ? Stage == typeid(IStageP)
+				                                              : Stage == typeid(IStageQ);
 			}
-			std::function<void()> MakeClosure(FFrameExtension& Frame, std::type_index Stage) override
+			std::function<void()> MakeClosure(FFrameExtension& Frame, std::type_index Stage,
+				std::uint64_t Round) override
 			{
 				if (Stage == typeid(IStageP))
 				{
@@ -482,13 +521,13 @@ int RunFrameGraphSemanticsTest()
 
 		FPrev Prev;
 		FNext Next;
-		// The declaring side names the PRODUCER's frame and stage -- and the previous frame.
-		Next.MyStage<IStageQ>().WaitFor<FPrev>().OnLastFrameStage<IStageP>();
+		// The declaring side names the PRODUCER's frame and stage -- and the round before it.
+		Next.MyStage<IStageQ>().WaitFor<FPrev>().OnStage<IStageP>(-1);
 
 		std::vector<FFrameExtension*> Frames{ &Prev, &Next };
 		auto Frame10 = FFrameBridge::Build(Frames, StageIndicesOf(FSugarStages{}), 10, Dispatch);
 		auto Frame11 = FFrameBridge::Build(Frames, StageIndicesOf(FSugarStages{}), 11, Dispatch);
-		Check("T16 both frames expand into their stages", Frame11.Tasks.size() == 4);
+		Check("T16 both frames expand into their stages", Frame11.Tasks.size() == 2);
 
 		// The resolution, asserted as data: frame 11's Q depends on frame 10's P -- i.e. the offset
 		// went to the PREVIOUS frame's phase, not to this one's.
@@ -510,8 +549,8 @@ int RunFrameGraphSemanticsTest()
 		}
 		Check("T16 the cross-frame edge resolved onto the PREVIOUS frame's phase", bEdgeResolved);
 
-		Check("T16 frame 10 accepted", Graph.Submit(std::move(Frame10.Tasks)));
-		Check("T16 frame 11 accepted", Graph.Submit(std::move(Frame11.Tasks)));
+		Check("T16 frame 10 accepted", Graph.Submit(std::move(Frame10.Tasks), 10));
+		Check("T16 frame 11 accepted", Graph.Submit(std::move(Frame11.Tasks), 11));
 		Check("T16 all four nodes ran", R.WaitFor(3000));
 		Check("T16 frame 11's Q really waited for frame 10's P", SawPrev.load());
 	}
@@ -529,13 +568,22 @@ int RunFrameGraphSemanticsTest()
 		using FStages = TTypeList<IStageOne, IStageTwo, IStageThree>;
 		const std::array<std::type_index, 3> Stages = StageIndicesOf(FStages{});
 
-		struct FFrameA : FFrameExtension
+		struct FFrameA : FFrameExtension, IPipeline<IStageOne, IStageTwo>
 		{
+			FFrameA()
+			{
+				// The frame's OWN structural edges (the in-frame chain and the per-stage self edge).
+				// The bridge used to emit both; now they are declarations like any other, which is
+				// what the counts below still add up to.
+				MAHO_FRAME_STAGE_CHAIN(FFrameA);
+				MAHO_FRAME_SELF_EDGES(FFrameA);
+			}
 			static std::string_view StaticName() { return "BridgeA"; }
 			std::string_view GetName() const override { return StaticName(); }
 		};
-		struct FFrameB : FFrameExtension
+		struct FFrameB : FFrameExtension, IPipeline<IStageTwo>
 		{
+			FFrameB() { MAHO_FRAME_STAGE_CHAIN(FFrameB); MAHO_FRAME_SELF_EDGES(FFrameB); }
 			static std::string_view StaticName() { return "BridgeB"; }
 			std::string_view GetName() const override { return StaticName(); }
 		};
@@ -556,7 +604,7 @@ int RunFrameGraphSemanticsTest()
 				}
 				return Stage == typeid(IStageTwo);
 			}
-			std::function<void()> MakeClosure(FFrameExtension&, std::type_index) override
+			std::function<void()> MakeClosure(FFrameExtension&, std::type_index, std::uint64_t) override
 			{
 				return []() {};
 			}
@@ -573,9 +621,9 @@ int RunFrameGraphSemanticsTest()
 			return nullptr;
 		};
 
-		// Order-independent dependency lookups: the bridge emits its STRUCTURAL edges (the stage
-		// chain, the cross-frame self edge) before the declared ones, so indexing into
-		// Dependencies would bake that internal order into the test.
+		// Order-independent dependency lookups: the batch's dependency order follows the frame's
+		// declaration order (its structural edges included), which is not this test's subject -- so
+		// index into Dependencies would bake an internal order into an assertion about resolution.
 		auto HasDep = [](const FTask* T, std::string_view Name, std::type_index Stage,
 		                 std::int32_t Phase)
 		{
@@ -606,8 +654,8 @@ int RunFrameGraphSemanticsTest()
 		{
 			FFrameA A;
 			FFrameB B;
-			A.MyStage<IStageOne>().IsWaiting<FFrameB>().ForStage<IStageTwo>();              // same frame
-			A.MyStage<IStageOne>().IsWaiting<FFrameB>().LastFrame().ForStage<IStageTwo>();  // previous
+			A.MyStage<IStageOne>().IsWaiting<FFrameB>().ForStage<IStageTwo>();              // same round
+			A.MyStage<IStageOne>().IsWaiting<FFrameB>().ForStage<IStageTwo>(-1);            // previous
 			A.MyStage<IStageOne>().IsBlocking<FFrameB>().OnStage<IStageTwo>();              // reverse
 
 			std::vector<FFrameExtension*> Both{ &A, &B };
@@ -617,20 +665,21 @@ int RunFrameGraphSemanticsTest()
 			Check("T13 unimplemented stage produces no node",
 			      FindTask(Built.Tasks, "BridgeA", typeid(IStageThree)) == nullptr
 			      && FindTask(Built.Tasks, "BridgeB", typeid(IStageThree)) == nullptr);
-			Check("T13 every node carries the frame's phase (7 % 3 == 1)",
-			      Built.Tasks[0].Key.Phase == 1 && Built.Tasks[1].Key.Phase == 1
-			      && Built.Tasks[2].Key.Phase == 1);
+			Check("T13 every node carries the round's own phase (PhaseOf(7))",
+			      Built.Tasks[0].Key.Phase == FFrameBridge::PhaseOf(7)
+			      && Built.Tasks[1].Key.Phase == FFrameBridge::PhaseOf(7)
+			      && Built.Tasks[2].Key.Phase == FFrameBridge::PhaseOf(7));
 
 			const FTask* AOne = FindTask(Built.Tasks, "BridgeA", typeid(IStageOne));
 			const FTask* ATwo = FindTask(Built.Tasks, "BridgeA", typeid(IStageTwo));
 			Check("T13 forward declarations hang on the declarer's node",
 			      AOne != nullptr && AOne->Dependencies.size() == 3);   // 2 declared + the self edge
 			Check("T13 offset 0 resolves to this frame's phase",
-			      HasDep(AOne, "BridgeB", typeid(IStageTwo), 1));
+			      HasDep(AOne, "BridgeB", typeid(IStageTwo), FFrameBridge::PhaseOf(7)));
 			Check("T13 offset -1 resolves to the previous frame's phase",
-			      HasDep(AOne, "BridgeB", typeid(IStageTwo), 0));
+			      HasDep(AOne, "BridgeB", typeid(IStageTwo), FFrameBridge::PhaseOf(6)));
 			Check("T13 the same stage of the PREVIOUS frame is implied, never declared",
-			      HasDep(AOne, "BridgeA", typeid(IStageOne), 0));
+			      HasDep(AOne, "BridgeA", typeid(IStageOne), FFrameBridge::PhaseOf(6)));
 
 			// FTask::Blocks reads "these are blocked BY me", so the entry belongs on the DECLARER
 			// and names the target -- putting it on the target would invert the edge.
@@ -639,27 +688,31 @@ int RunFrameGraphSemanticsTest()
 			Check("T13 reverse declaration names the blocked target",
 			      AOne != nullptr && AOne->Blocks[0].Target.Name == "BridgeB"
 			      && AOne->Blocks[0].Target.Stage == typeid(IStageTwo)
-			      && AOne->Blocks[0].Target.Phase == 1);
+			      && AOne->Blocks[0].Target.Phase == FFrameBridge::PhaseOf(7));
 			Check("T13 the stage chain links a frame's own stages",
 			      ATwo != nullptr && HasDepKey(ATwo, AOne->Key));
 			// The cross-frame edge is PER STAGE, not per frame: a mid-chain node still carries its
 			// own edge to the previous frame. (Serializing a whole frame against its previous one
 			// would hide a missing per-frame context in the render layer -- see FFrameBridge.)
 			Check("T13 a chained node carries its own cross-frame self edge too",
-			      HasDep(ATwo, "BridgeA", typeid(IStageTwo), 0));
+			      HasDep(ATwo, "BridgeA", typeid(IStageTwo), FFrameBridge::PhaseOf(6)));
 			Check("T13 the chained node declares no reverse edge of its own",
 			      ATwo != nullptr && ATwo->Blocks.empty());
 			Check("T13 no diagnostics for a well-formed batch", Built.Diagnostics.empty());
 		}
 
-		// ── the chain crosses a skipped stage instead of breaking there ───────────
+		// ── the chain crosses a stage the frame does not MOUNT ────────────────────
 		//
-		// The pruning rule (no node for an unimplemented stage) must not cut a frame's chain in
-		// two: the chain follows the EMITTED nodes, not the stage list. (Before pruning, an empty
-		// no-op node carried the chain; those no-ops are exactly what is being removed.)
+		// The pruning rule (no node for an unimplemented stage) must not cut a frame's chain in two.
+		// The chain is declared over the frame's OWN stage list, so a stage the frame does not mount
+		// simply has no pair to interrupt: mounting One and Three chains them DIRECTLY, and the
+		// sequence's middle stage contributes no node at all. (Before the declarations moved into
+		// the frame, this was spelled "the chain follows the EMITTED nodes"; it is the same rule
+		// seen from the side that owns the list.)
 		{
-			struct FFrameGap : FFrameExtension
+			struct FFrameGap : FFrameExtension, IPipeline<IStageOne, IStageThree>
 			{
+				FFrameGap() { MAHO_FRAME_STAGE_CHAIN(FFrameGap); MAHO_FRAME_SELF_EDGES(FFrameGap); }
 				static std::string_view StaticName() { return "BridgeGap"; }
 				std::string_view GetName() const override { return StaticName(); }
 			};
@@ -669,7 +722,7 @@ int RunFrameGraphSemanticsTest()
 				{
 					return Stage == typeid(IStageOne) || Stage == typeid(IStageThree);
 				}
-				std::function<void()> MakeClosure(FFrameExtension&, std::type_index) override
+				std::function<void()> MakeClosure(FFrameExtension&, std::type_index, std::uint64_t) override
 				{
 					return []() {};
 				}
@@ -684,21 +737,25 @@ int RunFrameGraphSemanticsTest()
 			Check("T13 a skipped stage produces no node", Built.Tasks.size() == 2);
 			Check("T13 the frame's first emitted stage has only its self edge",
 			      GapOne != nullptr && GapOne->Dependencies.size() == 1
-			      && HasDep(GapOne, "BridgeGap", typeid(IStageOne), 0));
-			Check("T13 the chain crosses the skipped stage (no empty node needed)",
+			      && HasDep(GapOne, "BridgeGap", typeid(IStageOne), FFrameBridge::PhaseOf(6)));
+			Check("T13 the chain crosses the unmounted stage (no empty node needed)",
 			      HasDepKey(GapThree, GapOne != nullptr ? GapOne->Key : FTaskKey{}));
 		}
 
 		// ── diagnostics: reported, but the edge is still emitted ──────────────────
 		//
-		// What is reported is an AUTHORING error -- a name that is not in the frame set, a stage
-		// that is not in the stage sequence, a frame that does not implement the stage it is
-		// named at. What is NOT reported is a target that is merely at another PHASE: a target
-		// one frame back was built by the previous Build call, and a target at this phase may
-		// come from an earlier batch (a one-shot node keeps its identity), so its absence from
-		// this batch is expected. Reporting it would fire on every cross-frame edge.
+		// What is reported is an AUTHORING error THIS BATCH CAN PROVE -- a name that is not in the
+		// frame set, a frame that does not implement a stage that IS in this sequence. What is NOT
+		// reported is (a) a target that is merely at another PHASE: a target one frame back was built
+		// by the previous Build call, and a target at this phase may come from an earlier batch (a
+		// one-shot node keeps its identity), so its absence from this batch is expected; and (b) a
+		// target STAGE this batch does not drive: `Implements` only answers inside THIS batch's
+		// sequence, so such a stage is skipped as another batch's declaration (it has no node here and
+		// this batch cannot know whether the batch owning that stage can bind it). Reporting (b) fired
+		// on every legal cross-batch declaration -- a frame whose stage list spans several batches
+		// declares its in-frame chain across them.
 		{
-			struct IStageFour {};   // deliberately NOT part of FStages
+			struct IStageFour {};   // deliberately NOT part of FStages, and mounted by nothing at all
 
 			FFrameA Dangler;
 			FFrameB Present;
@@ -712,9 +769,13 @@ int RunFrameGraphSemanticsTest()
 
 			const FTask* DanglerTwo = FindTask(Built.Tasks, "BridgeA", typeid(IStageTwo));
 			Check("T13 a target outside the frame set still emits the edge",
-			      DanglerTwo != nullptr && DanglerTwo->Dependencies.size() == 5);   // 3 + chain + self
+			      DanglerTwo != nullptr && DanglerTwo->Dependencies.size() == 4);   // 2 + chain + self
 			Check("T13 the emitted edge names the missing target",
-			      HasDep(DanglerTwo, "BridgeMissing", typeid(IStageTwo), 1));
+			      HasDep(DanglerTwo, "BridgeMissing", typeid(IStageTwo), FFrameBridge::PhaseOf(7)));
+			// The declaration at a stage this batch does not drive left NO trace: no diagnostic (it is
+			// the other batch's to judge) and no edge (this batch has no node to land on).
+			Check("T13 a target stage outside this sequence emits no edge",
+			      !HasDep(DanglerTwo, "BridgeB", typeid(IStageFour), FFrameBridge::PhaseOf(7)));
 
 			bool bSawFrameSet = false;
 			bool bSawStageNotInSeq = false;
@@ -728,22 +789,25 @@ int RunFrameGraphSemanticsTest()
 				if (Diag.Reason == "stage not implemented by this frame") { bSawDeclarerStage = true; }
 			}
 			Check("T13 unknown target frame reported", bSawFrameSet);
-			Check("T13 target stage outside the stage sequence reported", bSawStageNotInSeq);
+			Check("T13 a target stage outside THIS sequence is the owning batch's business, not reported",
+			      !bSawStageNotInSeq);
 			Check("T13 target frame not implementing the stage reported", bSawNotImplemented);
 			Check("T13 declaration on an unimplemented stage reported", bSawDeclarerStage);
 			Check("T13 each problem reported exactly once, and nothing else",
-			      Built.Diagnostics.size() == 4);
+			      Built.Diagnostics.size() == 3);
 		}
 
 		// ── end to end: the bridge's batch actually orders the graph ──────────────
 		{
-			struct FFrameC : FFrameExtension
+			struct FFrameC : FFrameExtension, IPipeline<IStageOne>
 			{
+				FFrameC() { MAHO_FRAME_STAGE_CHAIN(FFrameC); MAHO_FRAME_SELF_EDGES(FFrameC); }
 				static std::string_view StaticName() { return "BridgeC"; }
 				std::string_view GetName() const override { return StaticName(); }
 			};
-			struct FFrameD : FFrameExtension
+			struct FFrameD : FFrameExtension, IPipeline<IStageTwo>
 			{
+				FFrameD() { MAHO_FRAME_STAGE_CHAIN(FFrameD); MAHO_FRAME_SELF_EDGES(FFrameD); }
 				static std::string_view StaticName() { return "BridgeD"; }
 				std::string_view GetName() const override { return StaticName(); }
 			};
@@ -766,7 +830,8 @@ int RunFrameGraphSemanticsTest()
 						? Stage == typeid(IStageOne)      // C declares, and does nothing else
 						: Stage == typeid(IStageTwo);     // D is the producer
 				}
-				std::function<void()> MakeClosure(FFrameExtension& Frame, std::type_index) override
+				std::function<void()> MakeClosure(FFrameExtension& Frame, std::type_index,
+					std::uint64_t Round) override
 				{
 					if (Frame.GetName() == FFrameC::StaticName())
 					{
@@ -798,7 +863,7 @@ int RunFrameGraphSemanticsTest()
 			// only if the previous frame's node exists). At frame 7 the latter names frame 6,
 			// which no Build call has produced -- so phase absence must NOT be reported.
 			C.MyStage<IStageOne>().WaitFor<FFrameD>().OnStage<IStageTwo>();
-			C.MyStage<IStageOne>().WaitFor<FFrameD>().OnLastFrameStage<IStageTwo>();
+			C.MyStage<IStageOne>().WaitFor<FFrameD>().OnStage<IStageTwo>(-1);
 
 			std::vector<FFrameExtension*> JustD{ &D };
 			const auto OnlyD = FFrameBridge::Build(JustD, Stages, 7, SoloDispatch);
@@ -813,10 +878,10 @@ int RunFrameGraphSemanticsTest()
 			const FTask* COne = FindTask(Built.Tasks, "BridgeC", typeid(IStageOne));
 			Check("T13 both declared edges resolved, at two different phases",
 			      COne != nullptr && COne->Dependencies.size() == 3   // 2 declared + the self edge
-			      && HasDep(COne, "BridgeD", typeid(IStageTwo), 1)
-			      && HasDep(COne, "BridgeD", typeid(IStageTwo), 0));
+			      && HasDep(COne, "BridgeD", typeid(IStageTwo), FFrameBridge::PhaseOf(7))
+			      && HasDep(COne, "BridgeD", typeid(IStageTwo), FFrameBridge::PhaseOf(6)));
 
-			Check("T13 batch accepted", Graph.Submit(std::move(Built.Tasks)));
+			Check("T13 batch accepted", Graph.Submit(std::move(Built.Tasks), 7));
 			Check("T13 both nodes ran", R.WaitFor(3000));
 			Check("T13 the bridge-built same-frame edge actually delayed the waiter",
 			      SawDone.load());
@@ -842,7 +907,7 @@ int RunFrameGraphSemanticsTest()
 			R.Arrive();
 		}));
 
-		Check("T14 batch accepted", Graph.Submit(Batch));
+		Check("T14 batch accepted", Graph.Submit(Batch, 0));
 		Graph.Wait();
 		// Deliberately no rendezvous wait before the check: an idle-query Wait() would have
 		// returned at once, with Ran still false.

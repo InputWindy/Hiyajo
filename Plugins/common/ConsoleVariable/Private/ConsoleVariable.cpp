@@ -93,13 +93,6 @@ namespace
 	};
 }
 
-void FConsoleVariable::Initialize(FEngineBase& Engine, FEngineContext& Frame)
-{
-	// Static TAutoConsoleVariable globals registered at static-init already;
-	// nothing to bring up. Explicitly no clear - those globals must survive.
-	(void)Engine;
-}
-
 void FConsoleVariable::Shutdown(FEngineBase&, FEngineContext&)
 {
 	std::lock_guard<std::mutex> Lock(GMutex);

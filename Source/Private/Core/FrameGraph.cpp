@@ -5,6 +5,8 @@
 #include <algorithm>
 #include <cstdio>
 #include <cstdlib>
+#include <mutex>
+#include <set>
 #include <string>
 #include <utility>
 
@@ -13,9 +15,6 @@ namespace Maho
 
 namespace
 {
-	/** "no node" sentinel for a batch-local index. */
-	constexpr std::size_t NoNode = static_cast<std::size_t>(-1);
-
 	/**
 	 * Env-gated stage trace (MAHO_TRACE_STAGES=1). Read once, so it costs nothing when off and
 	 * can be switched on without a rebuild.
@@ -73,6 +72,36 @@ namespace
 	}
 }
 
+// ── the pipeline depth K (one process-wide value, read by every graph) ────────
+
+namespace
+{
+	/** K: the number of slots == the number of frames that may be in flight. Written once by the
+	 *  host (before any graph exists) and read by every graph; the DEFAULT is what a host that
+	 *  injects nothing gets, so `MAHO_FRAMES_IN_FLIGHT` survives as a default rather than as an
+	 *  array bound. */
+	std::atomic<std::int32_t> GFramesInFlight{ MAHO_FRAMES_IN_FLIGHT };
+
+	/** Set by the first graph's construction: from then on the ring's size is a hardware fact of
+	 *  the live node tables and events, so a change is a bug, not a setting. */
+	std::atomic<bool> FramesInFlightSealed{ false };
+}
+
+void SetFramesInFlight(std::int32_t InFramesInFlight)
+{
+	MAHO_CHECKF(InFramesInFlight > 0, "SetFramesInFlight: depth must be > 0 (got %d)",
+		InFramesInFlight);
+	MAHO_CHECKF(!FramesInFlightSealed.load(std::memory_order_acquire),
+		"SetFramesInFlight: the depth is sealed once a graph exists -- it must be set BEFORE any "
+		"FFrameGraph is constructed (one K per process, no mid-run change)");
+	GFramesInFlight.store(InFramesInFlight, std::memory_order_release);
+}
+
+std::int32_t GetFramesInFlight() noexcept
+{
+	return GFramesInFlight.load(std::memory_order_acquire);
+}
+
 bool FTaskKey::operator==(const FTaskKey& Other) const
 {
 	return Name == Other.Name && Stage == Other.Stage && Phase == Other.Phase;
@@ -100,6 +129,12 @@ FFrameGraph::FFrameGraph(FThreadPool& InPool, FThreadPool::FLane InLane)
 	: Pool(InPool)
 	, Lane(InLane)
 {
+	// Seal K: this graph's node table and event table are shaped by it, so the depth is fixed for
+	// the rest of the process from the moment the FIRST graph exists.
+	FramesInFlightSealed.store(true, std::memory_order_release);
+
+	SlotInFlight = std::vector<std::atomic<std::uint32_t>>(
+		static_cast<std::size_t>(GetFramesInFlight()));
 	for (auto& Count : SlotInFlight)
 	{
 		Count.store(0, std::memory_order_relaxed);
@@ -123,12 +158,24 @@ const char* FFrameGraph::GetThreadName() const
 // ── submission (host thread) ──────────────────────────────────────────────────
 
 
-bool FFrameGraph::Submit(std::vector<FTask> Tasks, std::string* OutReason)
+bool FFrameGraph::Submit(std::vector<FTask> Tasks, std::uint64_t Frame, std::string* OutReason)
 {
 	if (!IsRunning())
 	{
 		if (OutReason != nullptr) { *OutReason = "Submit before Initialize()"; }
 		return false;
+	}
+
+	// THE PHASE IS OURS. The caller hands a ROUND; `Frame % K` is the ring arithmetic and it is
+	// stamped here, onto every task's own key, so the batch's node identities belong to the slot
+	// this submission occupies no matter what the caller put in them. (The bridge already computes
+	// the same value for the resolution it does internally -- this is the authoritative stamp, not
+	// a second opinion.) Dependency TARGETS are left alone on purpose: they name OTHER rounds, and
+	// their phases were resolved one edge at a time by the bridge.
+	const std::int32_t Phase = PhaseOfFrame(Frame);
+	for (FTask& Task : Tasks)
+	{
+		Task.Key.Phase = Phase;
 	}
 
 	std::string Reason;
@@ -138,10 +185,13 @@ bool FFrameGraph::Submit(std::vector<FTask> Tasks, std::string* OutReason)
 		return false;
 	}
 
-	// Admission: block the CALLER until every phase this batch names has drained. This is
-	// the ring-reuse rule, and it lives here rather than in the caller so that the caller
-	// only ever needs Submit and Wait. The scheduler thread must never perform this wait --
-	// it would stop seeing the very completions the wait depends on.
+	// Admission: block the CALLER until the slot this batch occupies has drained. This is
+	// the ring-reuse rule AND the window (see the header): it is what makes "at most K frames in
+	// flight" true, and -- symmetrically -- what PROVES that every frame at or before
+	// `Frame - K` has completed (its slot could not have been free otherwise). It lives here
+	// rather than in the caller so that the caller only ever needs Submit and Wait. The scheduler
+	// thread must never perform this wait -- it would stop seeing the very completions the wait
+	// depends on.
 	//
 	// Safe only because of the contract: one submit per phase per occupancy (see Submit).
 	WaitPhasesIdle(Tasks);
@@ -263,7 +313,7 @@ FNodeId FFrameGraph::GetOrCreateNodeId(const FTaskKey& Key)
 	// Floor the event table at this node's phases. A deque, because growing never moves
 	// elements (std::atomic_bool is neither copyable nor movable).
 	const std::size_t Needed = (static_cast<std::size_t>(Id) + 1)
-		* static_cast<std::size_t>(kPhaseCount);
+		* static_cast<std::size_t>(GetFramesInFlight());
 	while (EventStates.size() < Needed)
 	{
 		EventStates.emplace_back(false);
@@ -299,7 +349,8 @@ void FFrameGraph::WireNode(FTaskNode& Node, const FTask& Decl)
 			return;   // dangling edge: disappears
 		}
 
-		const FEvent Event = Detail::EventOf(Target, Nodes[Target].Key.Phase);
+		// K is a runtime value now, so the phase space is passed in rather than read from a constant.
+		const FEvent Event = Detail::EventOf(Target, Nodes[Target].Key.Phase, GetFramesInFlight());
 
 		// Dedup by target event: a double declaration would otherwise count twice while the
 		// event is set once -- a permanent wait.
@@ -345,7 +396,7 @@ void FFrameGraph::ApplySubmit(std::vector<FTask> Tasks)
 		Node.Dependencies.clear();
 		Node.Successors.clear();
 		Node.UnmetCount = 0;
-		Node.CompletionEvent = Detail::EventOf(Id, Task.Key.Phase);
+		Node.CompletionEvent = Detail::EventOf(Id, Task.Key.Phase, GetFramesInFlight());
 		Node.Closure = Task.Closure;
 		Node.bDispatched.store(false, std::memory_order_relaxed);
 
@@ -524,13 +575,15 @@ void FFrameGraph::TryReap(FNodeId Id)
 
 void FFrameGraph::WaitPhasesIdle(const std::vector<FTask>& Tasks)
 {
-	// Only the phases a task NAMES matter: a task's own phase is what gets (re)occupied.
-	std::array<bool, kPhaseCount> Wanted{};
+	// Only the phases a task NAMES matter: a task's own phase is what gets (re)occupied. After
+	// Submit's stamp they are all the batch's own phase, but the scan stays generic -- it is the
+	// ADMISSION that must be right, not the shape of a batch.
+	std::vector<char> Wanted(static_cast<std::size_t>(GetFramesInFlight()), 0);
 	for (const FTask& Task : Tasks)
 	{
 		if (PhaseIsKnown(Task.Key.Phase))
 		{
-			Wanted[static_cast<std::size_t>(SlotIndexOf(Task.Key.Phase))] = true;
+			Wanted[static_cast<std::size_t>(SlotIndexOf(Task.Key.Phase))] = 1;
 		}
 	}
 
@@ -584,14 +637,16 @@ std::size_t FFrameGraph::GetLiveNodeCount() const
 
 // ── the bridge (builds a batch; never touches the graph) ──────────────────────
 
-std::int32_t FFrameBridge::PhaseOf(std::int32_t Frame) noexcept
+std::int32_t FFrameBridge::PhaseOf(std::uint64_t Frame) noexcept
 {
-	return ((Frame % kPhaseCount) + kPhaseCount) % kPhaseCount;
+	// One forwarder, on purpose: the graph's Submit and this resolution must agree bit for bit,
+	// so neither of them may own a private copy of `% K` (see PhaseOfFrame).
+	return PhaseOfFrame(Frame);
 }
 
 FFrameBridge::FResult FFrameBridge::Build(std::span<FFrameExtension* const> Frames,
 	std::span<const std::type_index> Stages,
-	std::int32_t Frame,
+	std::uint64_t Frame,
 	IDispatch& Dispatch)
 {
 	FResult Result;
@@ -600,12 +655,12 @@ FFrameBridge::FResult FFrameBridge::Build(std::span<FFrameExtension* const> Fram
 	// empty-node pruning policy -- a frame that does not implement a stage contributes nothing
 	// to the stage sequence, so it costs nothing to schedule.
 	//
-	// The same pass builds the STAGE CHAIN: a stage sequence means ORDERED stages, so each
-	// emitted node waits for the previously emitted node of the SAME frame. Note that "previous"
-	// is the previous EMITTED stage, not the previous stage in the list -- a skipped
-	// (unimplemented) stage must not cut the chain into two independent halves, which is exactly
-	// what an empty node would have been doing before (a no-op node whose whole job was to carry
-	// the chain).
+	// NO STRUCTURAL EDGE IS EMITTED HERE. The two that used to be invented at this point -- the
+	// in-frame stage chain and the per-stage cross-frame self edge -- are now DECLARED by the frame
+	// itself (MAHO_FRAME_STAGE_CHAIN / MAHO_FRAME_SELF_EDGES, installed by MAHO_DECLARE_FRAME in
+	// Engine/Frame.h) and arrive through pass 2 like every other edge. They are properties of a
+	// frame's OWN stage list, which only the frame has; a batch is not where ordering should appear
+	// from nowhere. The graph keeps exactly three jobs: emit, resolve, admit.
 	std::unordered_map<FTaskKey, std::size_t, FTaskKeyHash> Index;
 	for (FFrameExtension* F : Frames)
 	{
@@ -614,7 +669,6 @@ FFrameBridge::FResult FFrameBridge::Build(std::span<FFrameExtension* const> Fram
 			continue;
 		}
 
-		std::size_t Previous = NoNode;
 		for (const std::type_index Stage : Stages)
 		{
 			if (!Dispatch.Implements(*F, Stage))
@@ -624,36 +678,15 @@ FFrameBridge::FResult FFrameBridge::Build(std::span<FFrameExtension* const> Fram
 
 			FTask Task;
 			Task.Key = FTaskKey{ F->GetName(), Stage, PhaseOf(Frame) };
-			Task.Closure = Dispatch.MakeClosure(*F, Stage);
-
-			// STRUCTURAL EDGE 1 -- the stage SEQUENCE within this frame: each emitted node waits
-			// for the previously emitted node. Chained over the EMITTED nodes, so a skipped
-			// (unimplemented) stage cannot cut one frame's chain in two.
-			if (Previous != NoNode)
-			{
-				Task.Dependencies.push_back(FDependency{ Result.Tasks[Previous].Key });
-			}
-
-			// STRUCTURAL EDGE 2 -- the stage IDENTITY over time: this stage waits for ITSELF one
-			// frame earlier. The same stage of the same frame extension has the same job every
-			// frame, so two of its instances running at once are two writers of one stage's state.
-			//
-			// It is deliberately PER STAGE, not per frame: a frame extension that owns per-frame
-			// state of its own is expected to keep MAHO_FRAMES_IN_FLIGHT copies of it, which is
-			// what lets frame N+1 overlap frame N. Serializing a whole frame against its previous
-			// frame here would hide the absence of those copies inside the scheduler instead of
-			// making it the render layer's job -- and that absence IS measurable: with a single
-			// frame fence / a single acquired swapchain index, per-stage edges let S1@N+1 run
-			// while S3@N is still submitting, and Vulkan validation reports exactly that
-			// (VkFence "simultaneously used in vkQueueSubmit and vkWaitForFences").
-			//
-			// The target may not exist (frame 0, or a phase never occupied) -- the graph then
-			// makes the edge disappear, exactly as it does for a declared one (R2).
-			Task.Dependencies.push_back(FDependency{
-				FTaskKey{ F->GetName(), Stage, PhaseOf(Frame - 1) } });
+			// The ROUND is handed to the closure, not merely to the node key: the node's own frame
+			// number must reach the stage when the node RUNS, and `Frame % K` says nothing about how
+			// many rounds later that is. Somebody mounting a counter per phase instead ("stamp the
+			// round onto the slot this batch occupies") gets it wrong by construction -- measured:
+			// a stage's own round advanced +4 then -2 across two runs of itself, because the slot
+			// had been refilled by a later submission of the same phase before the node executed.
+			Task.Closure = Dispatch.MakeClosure(*F, Stage, Frame);
 
 			Index.emplace(Task.Key, Result.Tasks.size());
-			Previous = Result.Tasks.size();
 			Result.Tasks.push_back(std::move(Task));
 		}
 	}
@@ -662,7 +695,7 @@ FFrameBridge::FResult FFrameBridge::Build(std::span<FFrameExtension* const> Fram
 	// Pointers, not indices: no element is added to Result.Tasks after pass 1, so they stay valid.
 	auto Find = [&](std::string_view Name, std::type_index Stage, std::int32_t Offset) -> FTask*
 	{
-		const auto It = Index.find(FTaskKey{ Name, Stage, PhaseOf(Frame + Offset) });
+		const auto It = Index.find(FTaskKey{ Name, Stage, PhaseOfShiftedFrame(Frame, Offset) });
 		return It == Index.end() ? nullptr : &Result.Tasks[It->second];
 	};
 
@@ -681,17 +714,20 @@ FFrameBridge::FResult FFrameBridge::Build(std::span<FFrameExtension* const> Fram
 		}
 	}
 
-	/** null when the target is a plausible node, otherwise why it can never be one. */
+	/** null when the target is a plausible node, otherwise why it can never be one.
+	 *
+	 *  Only what THIS batch can prove is judged here: the frame set it was given, and the stage
+	 *  sequence it drives. A target stage that is not part of this sequence never reaches this lambda
+	 *  any more -- it is skipped as another batch's declaration (see IsOtherBatchDeclaration), because
+	 *  this batch has no node for it and cannot say whether the batch that owns that stage can bind it.
+	 *  What is left is the authoring error this batch CAN prove: the named stage IS in this sequence,
+	 *  so a node for it had to exist, and the named frame does not mount it. */
 	auto CheckTarget = [&](const FFrameExtension::FEdge& Edge) -> const char*
 	{
 		const auto It = ByName.find(Edge.TargetName);
 		if (It == ByName.end())
 		{
 			return "target frame is not in this frame set";
-		}
-		if (std::find(Stages.begin(), Stages.end(), Edge.TargetStage) == Stages.end())
-		{
-			return "target stage is not in the stage sequence";
 		}
 		if (!Dispatch.Implements(*It->second, Edge.TargetStage))
 		{
@@ -711,7 +747,38 @@ FFrameBridge::FResult FFrameBridge::Build(std::span<FFrameExtension* const> Fram
 		return std::find(Stages.begin(), Stages.end(), Stage) != Stages.end();
 	};
 
+	/** True when this declaration belongs to ANOTHER batch of the same frame -- the exact mirror of
+	 *  the `InSequence(MyStage)` skip the two passes below already do on the DECLARER's side.
+	 *
+	 *  ONE frame's stage list routinely spans several batches: the engine's own frames mount init,
+	 *  tick AND shutdown stages, and a world system mounts IProcessInput in one sequence and IUpdate
+	 *  in another. A declaration whose TARGET stage is not in THIS batch's sequence therefore has no
+	 *  node to land on here, and it is the batch whose sequence contains that stage that processes
+	 *  it. Reporting it would fire on every frame of every pipeline (`target stage is not in the
+	 *  stage sequence`), and emitting it would put a dependency on a node this batch cannot even
+	 *  emit into every batch -- which is why the STRUCTURAL declarations the frames now carry
+	 *  depend on this rule to stay exactly as expensive as the edges they replaced.
+	 *
+	 *  WHY THERE IS NO `Implements` TEST HERE: `IDispatch::Implements` is scoped to THIS BATCH'S STAGE
+	 *  SEQUENCE (`TFrameDispatch::ImplementsImpl` walks its own `FStages`), so for a target stage that
+	 *  is not in the sequence it answers false BY CONSTRUCTION. Guarding the skip with it therefore
+	 *  made the rule unreachable -- it never fired once -- and every legal cross-batch declaration was
+	 *  reported as an authoring error (measured: 9 per run, e.g. "FLog waits for FLog at IInit at
+	 *  ITick", which is the pair (IInit, ITick) of FLog's OWN list seen from the TICK batch, whose
+	 *  sequence simply does not contain IInit).
+	 *
+	 *  The honest question is the only one asked now: "is the target stage one of MINE?" A stage that
+	 *  is not is not this batch's to judge -- whether the batch that does own it can bind the edge is
+	 *  that batch's business (and the frame's own stage list is what makes "another batch owns it" true
+	 *  in the first place). What stays reported is what this batch can actually prove: a target stage
+	 *  that IS in this sequence and still produces no node -- see CheckTarget. */
+	auto IsOtherBatchDeclaration = [&](const FFrameExtension::FEdge& Edge) -> bool
+	{
+		return !InSequence(Edge.TargetStage);
+	};
+
 	// Pass 2: forward declarations -- they hang on the DECLARER's node.
+	std::size_t DeclaredEdges = 0;   // for the Debug self-check at the bottom of this function
 	for (FFrameExtension* F : Frames)
 	{
 		if (F == nullptr)
@@ -737,16 +804,47 @@ FFrameBridge::FResult FFrameBridge::Build(std::span<FFrameExtension* const> Fram
 
 			for (const FFrameExtension::FEdge& Edge : Edges)
 			{
+				// The legal offset domain is `<= 0` (see FFrameExtension::FEdge). A FORWARD offset
+				// cannot be honoured: there is no such round to wait for, and resolving it anyway
+				// would silently land on some other round's slot. Reported, and no edge emitted.
+				if (Edge.FrameOffset > 0)
+				{
+					Result.Diagnostics.push_back({ "frame offset must be <= 0 (a wait points backwards)",
+						F->GetName(), MyStage, Edge.TargetName, Edge.TargetStage, Edge.FrameOffset, false });
+					continue;
+				}
+
+				// Another batch of this frame owns the target stage: not this batch's business
+				// (see IsOtherBatchDeclaration). Silent, and no edge -- the edge belongs to the
+				// batch whose sequence holds that stage.
+				if (IsOtherBatchDeclaration(Edge))
+				{
+					continue;
+				}
+
 				if (const char* Why = CheckTarget(Edge))
 				{
 					Result.Diagnostics.push_back({ Why, F->GetName(), MyStage, Edge.TargetName,
 						Edge.TargetStage, Edge.FrameOffset, false });
 				}
 
+				// Outside the WINDOW (`Offset <= -K`): that target frame is PROVEN complete -- its
+				// slot had to drain before THIS frame could even be submitted -- so the wait is
+				// satisfied by definition and NO edge is emitted. Emitting the phase-space edge
+				// instead would point at the slot of the frame K rounds LATER (in the ring, `-K` and
+				// `0` are the same index), i.e. at the wrong round entirely. This one comparison is
+				// what makes any offset expressible without a watermark or a per-frame ledger.
+				if (!IsFrameInsideWindow(Edge.FrameOffset))
+				{
+					continue;
+				}
+
 				// Emitted either way: the target may already be in the graph, and the graph
 				// makes the edge disappear if it truly is not. See the edge policy in the header.
 				Mine->Dependencies.push_back(FDependency{
-					FTaskKey{ Edge.TargetName, Edge.TargetStage, PhaseOf(Frame + Edge.FrameOffset) } });
+					FTaskKey{ Edge.TargetName, Edge.TargetStage,
+						PhaseOfShiftedFrame(Frame, Edge.FrameOffset) } });
+				++DeclaredEdges;
 			}
 		}
 	}
@@ -775,10 +873,32 @@ FFrameBridge::FResult FFrameBridge::Build(std::span<FFrameExtension* const> Fram
 				continue;
 			}
 
+			if (Edge.FrameOffset > 0)
+			{
+				Result.Diagnostics.push_back({ "frame offset must be <= 0 (a wait points backwards)",
+					F->GetName(), MyStage, Edge.TargetName, Edge.TargetStage, Edge.FrameOffset, true });
+				continue;
+			}
+
+			// Another batch of this frame owns the target stage: a reverse edge needs a node to
+			// land on, and this batch has none -- so the declaration is dropped here and processed
+			// by the batch whose sequence contains that stage (see IsOtherBatchDeclaration).
+			if (IsOtherBatchDeclaration(Edge))
+			{
+				continue;
+			}
+
 			if (const char* Why = CheckTarget(Edge))
 			{
 				Result.Diagnostics.push_back({ Why, F->GetName(), MyStage, Edge.TargetName,
 					Edge.TargetStage, Edge.FrameOffset, true });
+			}
+
+			// Outside the window: already satisfied, and there is no node in this batch to land on
+			// anyway (see the forward pass for why the edge must not be phase-resolved instead).
+			if (!IsFrameInsideWindow(Edge.FrameOffset))
+			{
+				continue;
 			}
 
 			FTask* Target = Find(Edge.TargetName, Edge.TargetStage, Edge.FrameOffset);
@@ -793,6 +913,156 @@ FFrameBridge::FResult FFrameBridge::Build(std::span<FFrameExtension* const> Fram
 			Mine->Blocks.push_back(FDependency{ Target->Key });
 		}
 	}
+
+#if MAHO_DO_CHECK
+	// ── the STRUCTURAL SELF-CHECK: "the batch is what the old emitter would have produced" ───────
+	//
+	// The two structural edges now arrive as DECLARATIONS (MAHO_FRAME_STAGE_CHAIN /
+	// MAHO_FRAME_SELF_EDGES, installed by MAHO_DECLARE_FRAME) instead of being invented here. The
+	// claim that this is an equivalence -- not a change of schedule -- is checkable from inside the
+	// batch, so it IS checked here, in diagnostics builds:
+	//
+	//   * the node set is untouched by the move (pass 1 never changed), and
+	//   * every node still carries exactly the two edges the old emitter added (the chain edge to
+	//     the previous EMITTED node of its own frame, and the self edge one frame back), and
+	//   * the batch carries no dependency beyond (declared + those two) -- a frame whose declaration
+	//     COINCIDES with one of them is fine (the count is of pushes, and the graph deduplicates),
+	//     an undeclared extra would mean somebody is still inventing edges.
+	//
+	// A frame that forgets its structural declarations cannot exist (the macro installs them), but
+	// a DECLARATION THAT DOES NOT BIND can: this is where it becomes visible, once per batch shape.
+	//
+	// THE EXPECTATION IS COMPUTED AT OFFSET 0 -- against the batch's OWN FRAME -- and never against
+	// `PhaseOf(Frame)`. `Find`'s third argument is a FRAME OFFSET, so handing it the phase asks for the
+	// node of frame `Frame + phase`: for every phase but 0 that is not this batch's node, the lookup
+	// misses EVERY node, `ExpectedStructural` and `Missing` both stay 0 and the guard silently passes.
+	// Measured cost of that mistake: with the default K=3 exactly one frame in three was checked.
+	{
+		std::size_t ExpectedStructural = 0;
+		std::size_t Missing = 0;
+		std::size_t Actual = 0;
+		for (const FTask& Task : Result.Tasks)
+		{
+			Actual += Task.Dependencies.size();
+		}
+
+		auto HasDependency = [](const FTask& Task, const FTaskKey& Target)
+		{
+			for (const FDependency& D : Task.Dependencies)
+			{
+				if (D.Target == Target)
+				{
+					return true;
+				}
+			}
+			return false;
+		};
+
+		/** The first edge that did not reach its node, spelled as "<frame>@<stage> <- <edge>", so the
+		 *  message below NAMES the frame and the edge instead of only counting them. */
+		char        FirstMissing[256] = { 0 };
+		const auto  NoteMissing = [&FirstMissing](const FFrameExtension& F, std::type_index Stage,
+			const char* Which)
+		{
+			if (FirstMissing[0] == 0)
+			{
+				std::snprintf(FirstMissing, sizeof(FirstMissing), "%.*s@%s <- %s",
+					static_cast<int>(F.GetName().size()), F.GetName().data(), Stage.name(), Which);
+			}
+		};
+
+		// The self edge points one round back, so it is declared only while that round is still inside
+		// the window -- the SAME rule pass 2 drops the edge with (`IsFrameInsideWindow(-1)`; at K=1 the
+		// previous round is already complete and no edge is emitted). Expecting it there would invent a
+		// failure out of a correct omission.
+		const bool bExpectSelfEdge = IsFrameInsideWindow(-1);
+
+		for (FFrameExtension* F : Frames)
+		{
+			if (F == nullptr)
+			{
+				continue;
+			}
+			const FTask* PreviousEmitted = nullptr;
+			for (const std::type_index Stage : Stages)
+			{
+				FTask* Node = Find(F->GetName(), Stage, 0);
+				if (Node == nullptr)
+				{
+					continue;   // this frame does not implement this stage: no node, no edges
+				}
+				if (PreviousEmitted != nullptr)
+				{
+					++ExpectedStructural;
+					if (!HasDependency(*Node, PreviousEmitted->Key))
+					{
+						++Missing;
+						NoteMissing(*F, Stage, "the in-frame stage chain");
+					}
+				}
+				if (bExpectSelfEdge)
+				{
+					++ExpectedStructural;
+					if (!HasDependency(*Node,
+						FTaskKey{ F->GetName(), Stage, PhaseOfShiftedFrame(Frame, -1) }))
+					{
+						++Missing;
+						NoteMissing(*F, Stage, "the cross-frame self edge");
+					}
+				}
+				PreviousEmitted = Node;
+			}
+		}
+
+		MAHO_CHECKF(Missing == 0,
+			"FFrameBridge::Build: %zu structural edge(s) missing from the batch (frame %llu, %zu "
+			"node(s), first: %s) -- a frame's stage chain / self edge declaration did not reach its node",
+			Missing, static_cast<unsigned long long>(Frame), Result.Tasks.size(), FirstMissing);
+		// The batch's push count must be EXACTLY the number of declarations the two passes emitted --
+		// and the structural edges are DECLARATIONS too now (MAHO_FRAME_STAGE_CHAIN /
+		// MAHO_FRAME_SELF_EDGES expand to AddDependency calls, so they are already INSIDE
+		// `DeclaredEdges`). Adding `ExpectedStructural` on top would therefore count them twice: the
+		// structural expectation is the claim `Missing == 0` above (the edges that MUST be present),
+		// and this comparison is the other half -- nothing was pushed that no declaration asked for,
+		// and no in-window declaration failed to become a push. (Measured on the install batch: 72
+		// pushes against `declared=72`, of which `structural=59`.)
+		MAHO_CHECKF(Actual == DeclaredEdges,
+			"FFrameBridge::Build: batch carries %zu dependency(ies) but %zu declaration(s) were "
+			"emitted (%zu of them structural, frame %llu) -- a dependency was pushed by something "
+			"other than a declaration, or an in-window declaration produced no push",
+			Actual, DeclaredEdges, ExpectedStructural, static_cast<unsigned long long>(Frame));
+
+		// One line per DISTINCT batch SHAPE (node count + per-node dependency counts + declared
+		// edge count, independent of the frame number), so a run states once what it builds every
+		// frame -- the evidence that the relocation did not change the schedule.
+		{
+			std::string Digest = "nodes=" + std::to_string(Result.Tasks.size())
+				+ " structural=" + std::to_string(ExpectedStructural)
+				+ " declared=" + std::to_string(DeclaredEdges) + " deps=[";
+			std::size_t I = 0;
+			for (const FTask& Task : Result.Tasks)
+			{
+				Digest += (I++ == 0 ? "" : ",");
+				Digest += std::to_string(Task.Dependencies.size());
+			}
+			Digest += "]";
+
+			static std::mutex           DigestMutex;
+			static std::set<std::string> SeenDigests;
+			static bool                  bStopLogging = false;
+			std::lock_guard<std::mutex> Lock(DigestMutex);
+			if (SeenDigests.size() > 64)
+			{
+				bStopLogging = true;
+			}
+			if (!bStopLogging && SeenDigests.insert(Digest).second)
+			{
+				std::fprintf(stderr, "[fgbatch] %s\n", Digest.c_str());
+				std::fflush(stderr);
+			}
+		}
+	}
+#endif
 
 	return Result;
 }

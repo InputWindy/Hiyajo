@@ -108,4 +108,28 @@ template <typename TListA, typename TListB>
 using TUnionList_t = typename UnionDetail::TFold<
 	typename UnionDetail::TFold<TTypeList<>, TListA>::Type, TListB>::Type;
 
+/**
+ * The stage list a type MOUNTS: `T::TStages`, i.e. whatever its `IPipeline<TStages...>` base
+ * exposes -- or an EMPTY list for a type that mounts none.
+ *
+ * ONE definition, two consumers, and both of them need the same answer:
+ *   - the trace's `StagePredecessorOf` (which stage of a frame runs before this one), and
+ *   - the frame's own structural edge declarations (the in-frame chain and the per-stage self
+ *     edge -- see MAHO_FRAME_STAGE_CHAIN / MAHO_FRAME_SELF_EDGES in Engine/Frame.h).
+ * The list IS the frame's own declaration of what it mounts, so neither consumer is guessing: a
+ * frame that mounts nothing (a host's lifecycle stages) gets "no predecessor" / "no edges" instead
+ * of failing to compile.
+ */
+template <typename TFrame, typename = void>
+struct TFrameStageList
+{
+	using Type = TTypeList<>;
+};
+
+template <typename TFrame>
+struct TFrameStageList<TFrame, std::void_t<typename TFrame::TStages>>
+{
+	using Type = typename TFrame::TStages;
+};
+
 } // namespace Maho

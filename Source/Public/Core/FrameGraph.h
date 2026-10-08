@@ -15,11 +15,13 @@
 //     sooner. It does not need to know why: it only cares whether IT can run.
 //   - it emits NO edge of its own: an edge exists iff it was handed one. It never invents
 //     "the same stage one frame earlier", never picks a phase and never transitions one -- the
-//     phase travels IN the task (FTaskKey::Phase) and the ring arithmetic (frame % K) belongs to
-//     the caller. (The bridge does add structural edges -- see Core/FrameGraph.h's FFrameBridge:
-//     a stage sequence means ordered stages, and a stage's identity over time means its next
-//     frame waits for its previous one. Those are properties of a STAGE SEQUENCE, which the graph
-//     deliberately knows nothing about; the graph only ever materializes what it is given.)
+//     phase travels IN the task (FTaskKey::Phase), computed from the submitted ROUND (see
+//     `Submit(batch, Frame)`), and the number the task carries is a node's identity, not an
+//     ordering rule. The bridge above it resolves DECLARED edges only (see FFrameBridge): a stage
+//     sequence means ordered stages and a stage's identity over time means its next frame waits
+//     for its previous one, but both follow from a frame's OWN stage list -- so the frame declares
+//     them (MAHO_FRAME_STAGE_CHAIN / MAHO_FRAME_SELF_EDGES, Engine/Frame.h) and the graph only ever
+//     materializes what it is given.
 //   - no notion of "init" or "shutdown". Those are CALLER conventions, not graph concepts:
 //     the caller drains the graph, submits one batch, and the phase it picks for that batch
 //     is just a ring index like any other.
@@ -32,6 +34,7 @@
 // FThreadedServer). Submit and completion notifications are FIFO commands. There is no lock
 // on the graph state, and the scheduler thread must never block (I4).
 
+#include <Core/Export.h>
 #include <Core/ThreadedServer.h>
 #include <Core/ThreadPool.h>
 #include <Core/TypeList.h>
@@ -57,9 +60,44 @@ namespace Maho
 #	define MAHO_FRAMES_IN_FLIGHT 3
 #endif
 
+// ── FRAME vs PHASE: the two vocabularies, and which side owns which ───────────
+//
+//   FRAME (a "round", `std::uint64_t`) -- the CALLER's vocabulary. It is monotonic, it only
+//     ever moves forward, and it is what `Submit(batch, Frame)` takes. Where it comes from is
+//     the application's business: the canonical source is `Platform::GetFrameIndex()`, whose
+//     SINGLE writer is `FPlatform::IBeginFrame` (one fetch_add per driven frame, read once per
+//     frame by the host and once per sequence drive). Core never queries it -- the number only
+//     ever arrives as an argument.
+//
+//   PHASE (a ring index in [0, K)) -- the GRAPH's vocabulary, and it is COMPUTED HERE
+//     (`PhaseOfFrame(Frame)` == `Frame % K`), never handed in. It is what a node's identity and
+//     the admission predicate are made of, so the node table and the ring stay BOUNDED no matter
+//     how long the process runs.
+//
+// The two are orthogonal and both are needed: the phase says WHICH SLOT, the frame says WHICH
+// ROUND. Dropping either one loses a property the engine depends on (phase -> bounded container,
+// frame -> "target = Frame + Offset" is meaningful and a wait can be expressed for any depth).
+//
+// ── THE WINDOW (admission == throttling; no Retire, no watermark) ─────────────────────────────
+//
+// `Submit(batch, Frame)` occupies ONE slot -- `P = Frame % K` -- and BLOCKS the caller until that
+// slot is empty. So the number of permits is exactly K, and "K frames may be in flight" is not a
+// convention anybody has to enforce: a frame cannot even be SUBMITTED while the frame K rounds
+// earlier (which owns the same slot) still has a node running. The three consequences the rest of
+// the file relies on:
+//
+//   1. K is the whole pipeline depth, and it is enforced by the graph rather than declared.
+//   2. A frame LEAVES the window only when ALL of its nodes have completed -- the slot's in-flight
+//      count is per node, so it reaches zero only after the last one is done.
+//   3. Therefore a target frame OLDER than the oldest frame still inside the window is ALREADY
+//      COMPLETE, and an edge naming it is satisfied by definition (see the bridge's offset rule).
+//      That is why no per-frame record, no retire queue and no {Name,Stage} watermark is needed:
+//      the blocking of the NEXT occupancy of a slot IS the completion proof.
+//
 // ── phase index space ─────────────────────────────────────────────────────────
 //
-// A phase IS a ring index: [0, MAHO_FRAMES_IN_FLIGHT). That is the whole space -- there is
+// A phase IS a ring index: [0, K), where K is the PIPELINE DEPTH the APPLICATION layer
+// injected (see SetFramesInFlight / GetFramesInFlight). That is the whole space -- there is
 // no separate init or shutdown phase, because those are not graph concepts. A one-shot
 // batch (install, uninstall) is submitted by the caller AFTER draining the graph, at
 // whichever ring index it likes; since the graph is empty at that point, the index carries
@@ -70,12 +108,49 @@ namespace Maho
 // install-time node as its dependency.
 //
 // Phase ORDER carries no meaning to the scheduler. All ordering is explicit edges.
-
-constexpr std::int32_t kPhaseCount = MAHO_FRAMES_IN_FLIGHT;
+//
+// K IS A RUNTIME VALUE, and it is NOT this file's business to decide it: the depth is an
+// application configuration (r.FramesInFlight), injected by the host before the graphs are
+// created. Core holds the value (one process-wide setting, read at graph construction) and
+// otherwise only consumes it. The default below is what a host that never injects anything
+// gets; `MAHO_FRAMES_IN_FLIGHT` survives as that DEFAULT, never as an array bound.
+MAHO_API void                    SetFramesInFlight(std::int32_t InFramesInFlight);
+[[nodiscard]] MAHO_API std::int32_t GetFramesInFlight() noexcept;
 
 inline bool IsValidPhase(std::int32_t Phase) noexcept
 {
-	return Phase >= 0 && Phase < MAHO_FRAMES_IN_FLIGHT;
+	return Phase >= 0 && Phase < GetFramesInFlight();
+}
+
+/** THE ring arithmetic, in ONE place: absolute frame number -> phase index (`Frame % K`).
+ *  Everything that needs a phase goes through here (the graph's `Submit`, the bridge's
+ *  resolution), so "which slot am I" cannot drift between the two. */
+[[nodiscard]] inline std::int32_t PhaseOfFrame(std::uint64_t Frame) noexcept
+{
+	return static_cast<std::int32_t>(Frame % static_cast<std::uint64_t>(GetFramesInFlight()));
+}
+
+/** The phase of the frame `Offset` ROUNDS before `Frame` (`Offset <= 0`; a future frame is
+ *  refused by the bridge, because a wait can only point backwards).
+ *
+ *  Computed in the signed domain on purpose: a naive `PhaseOfFrame(Frame + Offset)` would wrap a
+ *  negative target into a huge unsigned value at the start of the run (Frame 0, Offset -1) and
+ *  land on some unrelated slot -- which is precisely the "phase is not a frame" mistake the
+ *  frame/phase split exists to make impossible. */
+[[nodiscard]] inline std::int32_t PhaseOfShiftedFrame(std::uint64_t Frame, std::int32_t Offset) noexcept
+{
+	const std::int32_t K = GetFramesInFlight();
+	const std::int32_t P = PhaseOfFrame(Frame);
+	return static_cast<std::int32_t>(
+		((static_cast<std::int64_t>(P) + Offset) % K + K) % K);
+}
+
+/** Is the frame `Offset` rounds before `Frame` still inside the active WINDOW (i.e. possibly
+ *  still running)? Offsets are counted backwards, so `Offset <= -K` names a frame that the
+ *  admission rule has already proven complete -- the edge is satisfied and is not emitted. */
+[[nodiscard]] inline bool IsFrameInsideWindow(std::int32_t Offset) noexcept
+{
+	return Offset > -GetFramesInFlight();
 }
 
 /** An event is an INDEX into the atomic flag table -- not an object. */
@@ -88,10 +163,11 @@ constexpr FNodeId InvalidNodeId = 0xFFFFFFFFu;
 
 namespace Detail
 {
-	/** Event index for (Id, phase). Computed, never allocated. */
-	inline FEvent EventOf(FNodeId Id, std::int32_t Phase) noexcept
+	/** Event index for (Id, phase). Computed, never allocated. The phase SPACE is a runtime
+	 *  value now, so it is passed in rather than read from a constant. */
+	inline FEvent EventOf(FNodeId Id, std::int32_t Phase, std::int32_t PhaseCount) noexcept
 	{
-		return static_cast<FEvent>(Id * static_cast<std::uint32_t>(kPhaseCount)
+		return static_cast<FEvent>(Id * static_cast<std::uint32_t>(PhaseCount)
 			+ static_cast<std::uint32_t>(Phase));
 	}
 }
@@ -158,7 +234,12 @@ public:
 	{
 		std::string_view TargetName{};
 		std::type_index  TargetStage{ typeid(void) };
-		std::int32_t     FrameOffset = 0;   // 0 = this frame, -1 = the previous one
+		/** A RELATIVE FRAME OFFSET, always <= 0: 0 = this frame, -1 = the previous one, -K = one
+		 *  full window back (i.e. the frame that last occupied this slot). Any offset <= 0 is
+		 *  legal; `> 0` is REFUSED by the bridge with a diagnostic, because a wait can only point
+		 *  backwards -- there is nothing to wait FOR in a frame that has not been submitted, and
+		 *  accepting it would silently resolve to some other round's slot. */
+		std::int32_t     FrameOffset = 0;
 		/** The declaration's own direction, which the graph already knows (it is what `FDiagnostic`
 		 *  reports and what the builder branches on) and which this struct used to discard: false =
 		 *  `WaitFor` (the target runs FIRST, I wait for it), true = `BlockOn` (I run first, the target
@@ -184,9 +265,9 @@ public:
 
 	// -- sugar ---------------------------------------------------------------------
 	//
-	//   MyStage<IInitViews>().IsWaiting<FLog>().ForStage<IInit>();              // same frame
-	//   MyStage<IInitViews>().WaitFor<FLog>().OnLastFrameStage<IInit>();        // previous frame
-	//   MyStage<IEditorInput>().IsBlocking<FUIFeature>().OnStage<IInitViews>(); // reverse
+	//   MyStage<IInitViews>().IsWaiting<FLog>().ForStage<IInit>();               // same frame
+	//   MyStage<IInitViews>().IsWaiting<FLog>().ForStage<IInit>(-1);             // previous frame
+	//   MyStage<IEditorInput>().IsBlocking<FUIFeature>().OnStage<IInitViews>();  // reverse
 	//
 	//   MyStage<IShutdown>().IsBlocking("FUIViewRegistry").OnStage<IShutdown>(); // by NAME
 	//
@@ -197,16 +278,19 @@ public:
 	// (which would force a build dependency on an optional plugin). A name that matches no
 	// frame in the frame set simply does not bind -- the bridge reports it (see FDiagnostic).
 	//
-	// The CANONICAL spelling puts the frame into the stage selector, so a cross-frame dependency
-	// reads as one sentence and needs no LastFrame() step:
+	// ONE selector, ONE argument: the frame offset is a RELATIVE FRAME OFFSET (`<= 0`, including
+	// `-K`) passed STRAIGHT TO THE SELECTOR -- there is no separate step, and no second spelling:
 	//
-	//   MyStage<IInitViews>().WaitFor<FLog>().OnStage<IInit>();            // FLog@IInit, THIS frame
-	//   MyStage<IInitViews>().WaitFor<FLog>().OnLastFrameStage<IInit>();   // FLog@IInit, LAST frame
-	//   MyStage<IEditorInput>().BlockOn<FUIFeature>().OnLastFrameStage<IInitViews>();
-	//   MyStage<IShutdown>().WaitFor("FUIViewRegistry").OnLastFrameStage<IShutdown>();
+	//   MyStage<IInitViews>().WaitFor<FLog>().OnStage<IInit>();       // FLog@IInit, THIS frame
+	//   MyStage<IInitViews>().WaitFor<FLog>().OnStage<IInit>(-1);     // FLog@IInit, ONE frame back
+	//   MyStage<IEditorInput>().BlockOn<FUIFeature>().OnStage<IInitViews>(-1);
+	//   MyStage<IShutdown>().WaitFor("FUIViewRegistry").OnStage<IShutdown>(-1);
 	//
-	// `WaitFor`/`BlockOn` are the two directions; `OnStage`/`OnLastFrameStage` are the selector
-	// they share. IsWaiting/IsBlocking + LastFrame() + ForStage() remain as aliases.
+	// `WaitFor`/`BlockOn` are the two directions; `OnStage`/`ForStage` are the selector they
+	// share, both taking the offset (an offset of 0 is the same-frame case). `IsWaiting` /
+	// `IsBlocking` remain as aliases of the direction. There used to be a SECOND spelling: a
+	// shift-the-target step followed by a selector hard-wired to -1. One argument covers -1, -2
+	// and -K alike, so that spelling was removed rather than kept as a second way to say it.
 
 	template <typename TMyStage>
 	struct TWaitScope
@@ -221,31 +305,21 @@ public:
 			std::int32_t Offset = 0;
 			explicit TTarget(FFrameExtension& InSelf) : Self(InSelf) {}
 
-			/** Shift the target back by one frame. Call BEFORE ForStage(). */
-			TTarget& LastFrame() { Offset = -1; return *this; }
-
+			/** The target's stage, `Offset` frames back (0 = this frame, -1 = the previous one,
+			 *  -K = one full window back). */
 			template <typename TTargetStage>
-			TTarget& ForStage()
+			TTarget& ForStage(std::int32_t Offset = 0)
 			{
 				Self.AddDependency(typeid(TMyStage),
 					FEdge{ TTargetFrame::StaticName(), typeid(TTargetStage), Offset });
 				return *this;
 			}
 
-			/** The target's stage in THIS frame. */
+			/** The same thing under the canonical name: the offset goes INTO the selector. */
 			template <typename TTargetStage>
-			TTarget& OnStage()
+			TTarget& OnStage(std::int32_t Offset = 0)
 			{
-				Offset = 0;
-				return ForStage<TTargetStage>();
-			}
-
-			/** The target's stage in the PREVIOUS frame -- the cross-frame dependency. */
-			template <typename TTargetStage>
-			TTarget& OnLastFrameStage()
-			{
-				Offset = -1;
-				return ForStage<TTargetStage>();
+				return ForStage<TTargetStage>(Offset);
 			}
 		};
 
@@ -257,10 +331,8 @@ public:
 			std::int32_t     Offset = 0;
 			TNamedTarget(FFrameExtension& InSelf, std::string_view InName) : Self(InSelf), TargetName(InName) {}
 
-			TNamedTarget& LastFrame() { Offset = -1; return *this; }
-
 			template <typename TTargetStage>
-			TNamedTarget& ForStage()
+			TNamedTarget& ForStage(std::int32_t Offset = 0)
 			{
 				Self.AddDependency(typeid(TMyStage),
 					FEdge{ TargetName, typeid(TTargetStage), Offset });
@@ -268,17 +340,9 @@ public:
 			}
 
 			template <typename TTargetStage>
-			TNamedTarget& OnStage()
+			TNamedTarget& OnStage(std::int32_t Offset = 0)
 			{
-				Offset = 0;
-				return ForStage<TTargetStage>();
-			}
-
-			template <typename TTargetStage>
-			TNamedTarget& OnLastFrameStage()
-			{
-				Offset = -1;
-				return ForStage<TTargetStage>();
+				return ForStage<TTargetStage>(Offset);
 			}
 		};
 
@@ -317,23 +381,13 @@ public:
 			std::int32_t Offset = 0;
 			explicit TTarget(FFrameExtension& InSelf) : Self(InSelf) {}
 
-			/** Shift the target back by one frame. Call BEFORE OnStage(). */
-			TTarget& LastFrame() { Offset = -1; return *this; }
-
+			/** `Offset` frames back (0 = this frame, -1 = the previous one, -K = one window back). */
 			template <typename TTargetStage>
-			TTarget& OnStage()
+			TTarget& OnStage(std::int32_t Offset = 0)
 			{
 				Self.AddDependent(typeid(TMyStage),
 					FEdge{ TTargetFrame::StaticName(), typeid(TTargetStage), Offset, /*bReverse=*/true });
 				return *this;
-			}
-
-			/** The target's stage in the PREVIOUS frame (a cross-frame reverse declaration). */
-			template <typename TTargetStage>
-			TTarget& OnLastFrameStage()
-			{
-				Offset = -1;
-				return OnStage<TTargetStage>();
 			}
 		};
 
@@ -345,21 +399,12 @@ public:
 			std::int32_t     Offset = 0;
 			TNamedTarget(FFrameExtension& InSelf, std::string_view InName) : Self(InSelf), TargetName(InName) {}
 
-			TNamedTarget& LastFrame() { Offset = -1; return *this; }
-
 			template <typename TTargetStage>
-			TNamedTarget& OnStage()
+			TNamedTarget& OnStage(std::int32_t Offset = 0)
 			{
 				Self.AddDependent(typeid(TMyStage),
 					FEdge{ TargetName, typeid(TTargetStage), Offset, /*bReverse=*/true });
 				return *this;
-			}
-
-			template <typename TTargetStage>
-			TNamedTarget& OnLastFrameStage()
-			{
-				Offset = -1;
-				return OnStage<TTargetStage>();
 			}
 		};
 
@@ -407,22 +452,29 @@ private:
 // and it never writes that back into the FFrameExtension: a declaration is authored once and re-applied
 // every frame, so only the frame NUMBER being submitted can make it absolute.
 //
-// THE STRUCTURAL EDGES -- what Build() emits on its own. Neither is a convenience: both are what
-// a STAGE SEQUENCE means, and the bridge is the only thing that knows a sequence exists.
+// BUILD EMITS NOTHING OF ITS OWN. There used to be two STRUCTURAL edges invented here (an in-frame
+// stage chain and a per-stage cross-frame self edge), on the argument that "a stage sequence means
+// ordered stages, and only the bridge knows a sequence exists". True, and incomplete: both follow
+// from a FRAME's OWN stage list, which only the frame has. So the frame DECLARES them
+// (MAHO_FRAME_STAGE_CHAIN / MAHO_FRAME_SELF_EDGES, installed by MAHO_DECLARE_FRAME in
+// Engine/Frame.h) and they arrive through the declaration pass like every other edge. Core keeps
+// three jobs -- emit, resolve, admit -- and no ordering rule of its own.
 //
-//   1. IN-FRAME CHAIN: each emitted node waits for the previously emitted node of the SAME frame.
-//      Chained over the EMITTED nodes, so a skipped (unimplemented) stage cannot cut one frame's
-//      chain into two independent halves.
+// The two, for the record:
+//
+//   1. IN-FRAME CHAIN: each stage waits for the previous stage of the SAME frame. Declared over the
+//      frame's own list, which is why a stage the frame does not mount cannot cut the chain in two
+//      (the machinery this replaces chained the EMITTED nodes for the same reason).
 //   2. CROSS-FRAME SELF EDGE: each node also waits for ITSELF one frame earlier. The same stage of
-//      the same frame has the same job every frame, so two of its instances at once are two
-//      writers of one stage's state. This is what makes "frame N+1 may overlap frame N" safe for
-//      the stages themselves.
+//      the same frame extension has the same job every frame, so two of its instances at once are
+//      two writers of one stage's state. This is what makes "frame N+1 may overlap frame N" safe
+//      for the stages themselves.
 //
 // WHAT EDGE 2 DOES NOT COVER, and must not be made to cover: two DIFFERENT stages of one frame
 // extension that share state across a frame boundary (S1@N+1 while S3@N is still running). A frame
-// extension that owns per-frame state is expected to hold MAHO_FRAMES_IN_FLIGHT copies of it --
-// that is what makes the overlap legal, and serializing a whole frame against its previous frame
-// here would instead hide the missing copies inside the scheduler. The absence is measurable:
+// extension that owns per-frame state is expected to hold K copies of it (one context per ring
+// slot) -- that is what makes the overlap legal, and serializing a whole frame against its previous
+// frame here would instead hide the missing copies inside the scheduler. The absence is measurable:
 // with a single frame fence / one acquired swapchain index, this is a VkFence "simultaneously used
 // in vkQueueSubmit and vkWaitForFences" from the validation layers -- the render layer's to fix.
 //
@@ -433,16 +485,34 @@ private:
 //     came from the previous Build call). The graph's registry is scheduler-thread-only state
 //     the bridge must not read -- and if the target truly does not exist, the graph makes the
 //     edge disappear on its own.
-//   * Reported only for an AUTHORING error: a target name outside the frame set, a target stage
-//     outside the stage sequence, a target frame that does not implement the stage it is named
-//     at, or a declaration hanging on a stage the declaring frame does not implement. A target
-//     that is merely at another PHASE is NOT reported -- that is what every cross-frame edge
-//     looks like. Reporting it would fire on every frame of every pipeline.
+//   * Reported only for an AUTHORING error THIS BATCH CAN PROVE: a target name outside the frame
+//     set, a target frame that does not implement a stage that IS in this batch's sequence, a
+//     declaration hanging on a stage the declaring frame does not implement, or a frame offset that
+//     points FORWARD (`> 0`). A target that is merely at another PHASE is NOT reported -- that is what
+//     every cross-frame edge looks like. Reporting it would fire on every frame of every pipeline.
+//   * NOT emitted (and NOT reported) when the target STAGE is outside THIS batch's sequence: one
+//     frame's stage list spans several sequences (init / tick / shutdown; a world system mounts
+//     IProcessInput in one and IUpdate in another), so that declaration belongs to the batch whose
+//     sequence holds the stage -- the mirror of the declarer-side rule that a declaration hanging on
+//     a stage outside this sequence is skipped. ONLY the sequence decides this, because
+//     `IDispatch::Implements` answers INSIDE a sequence: asked about a stage outside its own list it
+//     says "no" by construction, so "the target frame owns that stage, in some other batch" is not a
+//     question this batch can ask -- and a skip guarded by it never fired once (measured: 9 legal
+//     cross-batch chain declarations reported as errors on every run). The cost, stated plainly: a
+//     stage that NO frame mounts (a typo) is reported nowhere, because the batch that would own it
+//     does not exist.
+//   * NOT emitted at all when the offset reaches outside the WINDOW (`Offset <= -K`): such a
+//     target frame is PROVEN complete (its slot had to drain before THIS frame could even be
+//     submitted -- see "THE WINDOW" at the top of this header), so the edge is satisfied by
+//     definition. This is what makes `-K`/`-2K` expressible without a watermark, a retire queue
+//     or any per-frame bookkeeping: the frame is resolved to a phase and the phase to a slot,
+//     and a slot can only be occupied by one round at a time.
 //
-// LIFETIME -- a closure from IDispatch::MakeClosure may capture the FFrameExtension (by address) and the
-// context (by pointer), so both must outlive the nodes they produced -- the host owns the frame, and the
-// context IS the host. The IDispatch OBJECT itself need NOT: it is a per-batch stack local whose closures
-// are self-contained (see TFrameDispatch), which is what lets a host pipeline frames.
+// LIFETIME -- a closure from IDispatch::MakeClosure may capture the FFrameExtension (by address), the
+// context (by pointer) and the ROUND (by value), so the two addresses must outlive the nodes they
+// produced -- the host owns the frame, and the context IS the host. The IDispatch OBJECT itself need NOT:
+// it is a per-batch stack local whose closures are self-contained (see TFrameDispatch), which is what
+// lets a host pipeline frames.
 //
 // INVARIANT I3 -- FFrameExtension::GetName() feeds FTaskKey::Name, so it must return STATIC storage
 // (MAHO_DECLARE_FRAME's StaticName() is a string literal, which satisfies it).
@@ -460,9 +530,13 @@ public:
 		 *  the empty-node pruning policy lives here. */
 		[[nodiscard]] virtual bool Implements(const FFrameExtension& Frame, std::type_index Stage) const = 0;
 
-		/** The body of (frame, stage). Called once per emitted node. */
+		/** The body of (frame, stage) for round `Round`. Called once per emitted node.
+		 *
+		 *  `Round` is the batch's frame number, handed in HERE so the body can close over it BY VALUE:
+		 *  the node's round is then a property of that one closure, not of a per-phase slot that the
+		 *  next submission owning the phase will refill (see FFrameCall in Engine/Frame.h). */
 		[[nodiscard]] virtual std::function<void()> MakeClosure(FFrameExtension& Frame,
-			std::type_index Stage) = 0;
+			std::type_index Stage, std::uint64_t Round) = 0;
 	};
 
 	/** A declaration that looks wrong FROM THIS BATCH. Reporting never changes what is emitted:
@@ -485,7 +559,8 @@ public:
 	};
 
 	/**
-	 * Build one batch for frame number `Frame`.
+	 * Build one batch for frame number `Frame` (the ROUND, not a phase -- the phase is derived
+	 * here via `PhaseOf`, so a caller never handles ring indices).
 	 *
 	 * `Frames` is the frame set to expand (the caller decides the set: an install batch may pass
 	 * fewer frames than the loop does). `Stages` is the stage sequence, in order.
@@ -496,12 +571,13 @@ public:
 	 */
 	[[nodiscard]] static FResult Build(std::span<FFrameExtension* const> Frames,
 		std::span<const std::type_index> Stages,
-		std::int32_t Frame,
+		std::uint64_t Frame,
 		IDispatch& Dispatch);
 
-	/** Absolute frame number -> phase index. The ring arithmetic is the BRIDGE's, never the
-	 *  graph's (the graph only ever sees absolute identities). */
-	[[nodiscard]] static std::int32_t PhaseOf(std::int32_t Frame) noexcept;
+	/** Absolute frame number -> phase index. Thin forwarder to `PhaseOfFrame` (the one place the
+	 *  ring arithmetic lives); kept because the resolution here and the graph's `Submit` must
+	 *  answer with the SAME number for the same frame. */
+	[[nodiscard]] static std::int32_t PhaseOf(std::uint64_t Frame) noexcept;
 };
 
 /** Expand a stage TTypeList into the runtime view Build() consumes -- the one-line seam between
@@ -543,22 +619,23 @@ struct FTaskNode
  *
  * How the caller is expected to drive it:
  *
- *   install  : drain (trivially empty) -> Submit(one batch, any phase) -> drain
- *   loop     : per frame -> WaitPhaseIdle(phase) -> Submit(that frame's nodes) -> ...
- *   shutdown : drain -> Submit(one batch, any phase) -> drain
+ *   install  : drain (trivially empty) -> Submit(one batch, frame 0) -> drain
+ *   loop     : per frame -> Submit(that frame's nodes, Frame) -> ...
+ *   shutdown : drain -> Submit(one batch, frame 0) -> drain
  *
- * Only the LOOP pushes incrementally; the one-shot batches are drained-then-submitted, so
- * they never contend for a ring slot.
+ * The admission inside Submit IS the per-frame throttle (see "THE WINDOW" at the top of this
+ * header): the caller never asks whether a slot is idle before submitting -- submitting is what
+ * waits. The one-shot batches are drained-then-submitted, so they never contend for a ring slot.
  *
  * Caveats worth knowing:
  *
  * A. An instance is only RESET when it is re-submitted (a new occupancy of its phase).
  *    Blindly resetting an instance whose body is still running would race its own state, so
- *    it is the CALLER's job not to do that: call WaitPhaseIdle(phase) when entering a
- *    phase's occupancy. The graph cannot do that wait itself -- the scheduler thread must
- *    never block (it would stop seeing the very completions the wait depends on), and only
- *    the caller knows whether a submit is a NEW occupancy or another batch of the SAME one
- *    (which is why Submit itself stays purely mechanical and may be called freely).
+ *    the RESET is guarded by the admission wait: Submit blocks until the phase named by this
+ *    batch is idle, which is exactly the previous occupancy being over. The graph cannot make
+ *    that wait anywhere else -- the scheduler thread must never block (it would stop seeing
+ *    the very completions the wait depends on) -- which is why it lives in Submit, on the
+ *    CALLER's thread.
  *
  * B. Producer before consumer, or the edge does not exist. A dependency whose target
  *    instance has not been submitted yet makes the edge disappear. The graph does not report
@@ -569,6 +646,13 @@ struct FTaskNode
  * C. Because only existing edges are ever waited on, every created instance is eventually
  *    dispatched -> there is no silent hang. The one exception is a cycle, which Submit
  *    rejects structurally.
+ *
+ * D. THE CALLER'S THREAD IS BLOCKED by admission, so Submit must not be called from work that
+ *    must itself run on the pool to make progress: the slot being waited for is drained by
+ *    POOL workers, and a wait issued from one occupies it. It is safe from the host loop
+ *    (whose thread is not a pool worker) and from a collector's stage body only because the
+ *    slot it waits for is driven by a DIFFERENT graph with its own scheduler thread. The
+ *    audit of the engine's own Submit sites lives in Engine/FrameBuilder.h.
  */
 class FFrameGraph : public FThreadedServer
 {
@@ -582,11 +666,19 @@ public:
 	// ── submission ─────────────────────────────────────────────────────────
 
 	/**
-	 * Merge a batch of nodes into the live graph.
+	 * Merge a batch of nodes into the live graph, as ROUND `Frame`.
 	 *
-	 * ADMISSION: if any phase named by this batch still has instances in flight from a
-	 * previous occupancy, Submit BLOCKS THE CALLING THREAD until that phase drains. That is
-	 * the ring-reuse rule, and it is safe only because of the contract below.
+	 * THE PHASE IS COMPUTED HERE (`PhaseOfFrame(Frame)` == `Frame % K`) and stamped onto every
+	 * task's key, so the CALLER's vocabulary is the frame and the graph's is the phase: a batch
+	 * handed in with stale/foreign phases cannot land in the wrong slot, and `Frame % K` is
+	 * written in exactly one place. Node identity and the admission predicate stay keyed by
+	 * PHASE, which is what keeps the node table and the ring bounded.
+	 *
+	 * ADMISSION (== the throttling that makes "K frames in flight" a fact rather than a hope):
+	 * if the slot `Frame % K` still has instances in flight from a previous occupancy, Submit
+	 * BLOCKS THE CALLING THREAD until that slot drains. That is the ring-reuse rule AND the
+	 * window: the same blocking is what proves every frame `<= Frame - K` has completed. It is
+	 * safe only because of the contract below.
 	 *
 	 * CONTRACT -- submit once per phase per occupancy. In the loop that means one Submit per
 	 * frame; for a one-shot batch it means one Submit after draining. A second submit for the
@@ -600,7 +692,8 @@ public:
 	 * A dependency whose target instance does not exist makes that edge disappear (see B);
 	 * the batch is still accepted.
 	 */
-	[[nodiscard]] bool Submit(std::vector<FTask> Tasks, std::string* OutReason = nullptr);
+	[[nodiscard]] bool Submit(std::vector<FTask> Tasks, std::uint64_t Frame,
+		std::string* OutReason = nullptr);
 
 	/**
 	 * Block the CALLER until every node it has SUBMITTED so far has completed.
@@ -690,8 +783,10 @@ private:
 	std::unordered_map<FTaskKey, FNodeId, FTaskKeyHash> Registry;    // exact key -> id
 	std::deque<std::atomic_bool>                        EventStates; // index == FEvent
 
-	/** Per-phase in-flight counts: written by the scheduler, read by callers for waits. */
-	std::array<std::atomic<std::uint32_t>, kPhaseCount> SlotInFlight{};
+	/** Per-phase in-flight counts: written by the scheduler, read by callers for waits.
+	 *  Sized from the INJECTED depth at construction (K is a runtime value -- see
+	 *  SetFramesInFlight), which is why this is a vector and not an array. */
+	std::vector<std::atomic<std::uint32_t>> SlotInFlight;
 
 	/** Nodes the caller has submitted that have not completed yet. The caller raises it in
 	 *  Submit BEFORE the command is enqueued (which is what makes Wait() a correct fence --

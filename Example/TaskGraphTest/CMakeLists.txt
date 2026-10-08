@@ -235,6 +235,27 @@ add_custom_command(TARGET EntryPoint POST_BUILD
 	VERBATIM
 )
 
+# Copy the Lua scripts next to the binary: the script backend resolves its
+# "Scripts" directory relative to the WORKING DIRECTORY, which is
+# Binaries/$<CONFIG> under the IDE (and under the smoke/run scripts). A project
+# Scripts/ wins; otherwise the engine's Scripts/ (the built-in demo scripts).
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/Scripts")
+	set(_MAHO_SCRIPTS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/Scripts")
+elseif(EXISTS "${ENGINE_DIR}/Scripts")
+	set(_MAHO_SCRIPTS_DIR "${ENGINE_DIR}/Scripts")
+else()
+	set(_MAHO_SCRIPTS_DIR "")
+endif()
+if(_MAHO_SCRIPTS_DIR)
+	add_custom_command(TARGET EntryPoint POST_BUILD
+		COMMAND ${CMAKE_COMMAND} -E copy_directory
+			"${_MAHO_SCRIPTS_DIR}"
+			"${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>/Scripts"
+		COMMENT "Copying Scripts/ to runtime dir"
+		VERBATIM
+	)
+endif()
+
 # One Binaries/<Config> dir for the exe + Maho.dll + every plugin DLL, so at
 # runtime they all resolve each other (both Maho.dll and the plugin DLLs must
 # sit next to the EntryPoint exe). Multi-config (MSVC): per-config suffix.

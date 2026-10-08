@@ -81,6 +81,55 @@ namespace
 	}
 }
 
+std::int64_t ReadIniInt(std::string_view Path, std::string_view Section, std::string_view Key,
+	std::int64_t Default)
+{
+	// EXACTLY the parse Load does (comments, section headers, whitespace) on purpose: a value read
+	// here and the same value read through an installed layer must not be able to disagree.
+	std::ifstream Stream{ std::string(Path) };
+	if (!Stream)
+	{
+		return Default;
+	}
+
+	const std::string WantedSection(Section);
+	std::string       CurrentSection;
+	std::string       Line;
+	while (std::getline(Stream, Line))
+	{
+		const std::string Trimmed = Trim(Line);
+		if (Trimmed.empty() || Trimmed.front() == ';' || Trimmed.front() == '#')
+		{
+			continue;
+		}
+
+		if (Trimmed.front() == '[' && Trimmed.back() == ']')
+		{
+			CurrentSection = Trimmed.substr(1, Trimmed.size() - 2);
+			continue;
+		}
+
+		const std::size_t Eq = Trimmed.find('=');
+		if (Eq == std::string::npos || CurrentSection != WantedSection)
+		{
+			continue;
+		}
+		if (Trim(Trimmed.substr(0, Eq)) != Key)
+		{
+			continue;
+		}
+		try
+		{
+			return std::stoll(Trim(Trimmed.substr(Eq + 1)));
+		}
+		catch (...)
+		{
+			return Default;
+		}
+	}
+	return Default;
+}
+
 bool FConfig::Load(std::string_view Path)
 {
 	std::ifstream Stream{ std::string(Path) };

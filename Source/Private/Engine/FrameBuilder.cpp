@@ -12,19 +12,28 @@ namespace
 {
 	/** The stage call this thread is currently inside, published by MAHO_DECLARE_STAGE_DISPATCH.
 	 *  thread_local, not a collector member: frames pipeline, so two frames' stage bodies run at the
-	 *  same time and "the frame I belong to" is a property of the call. */
-	thread_local void* GCurrentFrameContext = nullptr;
+	 *  same time and "the frame I belong to" is a property of the call.
+	 *
+	 *  It carries BOTH halves of the call (see FFrameCall): the per-phase SLOT, and the ROUND the node
+	 *  was submitted with. The round travels by value from the node's own closure, so a node that runs
+	 *  after the slot was refilled by a later submission still sees its own round. */
+	thread_local FFrameCall GCurrentFrameCall{};
 }
 
 void* GetCurrentFrameContext() noexcept
 {
-	return GCurrentFrameContext;
+	return GCurrentFrameCall.Slot;
 }
 
-FScopedFrameContext::FScopedFrameContext(void* InFrameContext) noexcept
-	: Previous(GCurrentFrameContext)
+std::uint64_t GetCurrentStageFrame() noexcept
 {
-	GCurrentFrameContext = InFrameContext;
+	return GCurrentFrameCall.Frame;
+}
+
+FScopedFrameContext::FScopedFrameContext(FFrameCall InCall) noexcept
+	: Previous(GCurrentFrameCall)
+{
+	GCurrentFrameCall = InCall;
 }
 
 FScopedFrameContext::~FScopedFrameContext()
@@ -32,7 +41,7 @@ FScopedFrameContext::~FScopedFrameContext()
 	// Restore, don't clear: a stage body may run a one-shot batch (an install/uninstall flush), whose
 	// own stage calls publish and restore their contexts -- the outer frame must still be visible
 	// after they return.
-	GCurrentFrameContext = Previous;
+	GCurrentFrameCall = Previous;
 }
 
 namespace Detail

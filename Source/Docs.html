@@ -79,7 +79,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div id="app">
   <div id="side">
     <h1>Maho 引擎源码</h1>
-    <div class="search" title="左侧扫描 Source/**/*.h：24 个头文件 · 已声明 24 个 · 36 个实体 / 196 个成员 ｜ 内容在 Tools/docs_content.py 里逐条声明">
+    <div class="search" title="左侧扫描 Source/**/*.h：24 个头文件 · 已声明 24 个 · 36 个实体 / 197 个成员 ｜ 内容在 Tools/docs_content.py 里逐条声明">
       <input id="q" type="search" placeholder="搜索头文件…  （如 Frame、Core、Entry）" autocomplete="off">
     </div>
     <div id="tree"><ul>
@@ -383,12 +383,11 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td>Core/ThreadedServer.h</td><td>`FFrameGraph` 继承它：调度器就是「一个持久线程 + FIFO 串行命令队列」</td></tr>
 <tr><td>Core/ThreadPool.h</td><td>节点体跑在池上（`Dispatch` 提交、完成通知回投调度线程）</td></tr>
 <tr><td>Core/TypeList.h</td><td>`StageIndicesOf` 把编译期 stage 序列摊成运行期数组</td></tr>
-<tr><td>array</td><td>每相位一个在飞计数（`SlotInFlight`）</td></tr>
+<tr><td>array / vector</td><td>stage 索引数组；每相位一个在飞计数（`SlotInFlight` —— 深度 `K` 是运行期注入的值 ⇒ vector，不是 array）</td></tr>
 <tr><td>atomic / condition_variable / mutex</td><td>事件标志表、准入与提交栅栏的等待</td></tr>
-<tr><td>deque</td><td>节点表与事件表：元素含 `std::atomic` ⇒ 不可移动 ⇒ 不能用 `vector`</td></tr>
-<tr><td>functional</td><td>节点体（闭包）</td></tr>
+<tr><td>cstdint / deque / functional</td><td>帧号与相位；节点表与事件表（元素含 `std::atomic` ⇒ 不可移动 ⇒ 不能用 `vector`）；节点体（闭包）</td></tr>
 <tr><td>span / string / string_view</td><td>批次的输入视图；诊断与身份名</td></tr>
-<tr><td>typeindex / unordered_map / vector</td><td>阶段类型索引；身份 → 节点下标的注册表</td></tr>
+<tr><td>typeindex / unordered_map</td><td>阶段类型索引；身份 → 节点下标的注册表</td></tr>
 </tbody></table>
 </div>
 <div class="card">
@@ -397,10 +396,12 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <table>
 <thead><tr><th>签名</th><th>说明</th></tr></thead>
 <tbody>
-<tr><td>MAHO_FRAMES_IN_FLIGHT</td><td>环深度（默认 3）：同时在飞的帧槽数</td></tr>
-<tr><td>kPhaseCount</td><td>= `MAHO_FRAMES_IN_FLIGHT`：相位空间就是环 `[0, K)`，没有独立相位</td></tr>
-<tr><td><span class="kw">constexpr</span> <span class="kw">bool</span> IsValidPhase(std::int32_t)</td><td>相位是否落在环内</td></tr>
-<tr><td>Detail::EventOf(FNodeId Id, std::int32_t Phase)</td><td>算完成事件的下标：`Id * K + Phase` —— 不分配、不回收，事件只是一把钥匙</td></tr>
+<tr><td>MAHO_FRAMES_IN_FLIGHT</td><td>环深度的**默认值**（3）。真正的深度 `K` 是运行期值 —— 见下面三个函数</td></tr>
+<tr><td>SetFramesInFlight(K) / GetFramesInFlight()</td><td>**流水深度的唯一口径**：应用层在**任何 FFrameGraph 构造之前**注入一次，之后进程内只读（第一个图构造即封口，中途改是 bug 而不是设置）。`MAHO_FRAMES_IN_FLIGHT` 只是没人注入时的兜底</td></tr>
+<tr><td>PhaseOfFrame(Frame) / PhaseOfShiftedFrame(Frame, Offset)</td><td>**唯一的环运算**：绝对帧号 → 相位（`Frame % K`），以及「相对偏移 `Offset` 帧之前的那一轮的相位」（在**有符号**域里算，否则起跑期 `Frame 0, Offset -1` 会下溢到无关槽）</td></tr>
+<tr><td>IsFrameInsideWindow(Offset)</td><td>目标是否还在活跃窗口内：`Offset &lt;= -K` 的帧**必然已完成**（它的槽不排空，这一轮根本提交不进去）⇒ 边视为已满足、不必发射</td></tr>
+<tr><td><span class="kw">constexpr</span> <span class="kw">bool</span> IsValidPhase(std::int32_t)</td><td>相位是否落在环内（`[0, K)`）</td></tr>
+<tr><td>Detail::EventOf(FNodeId Id, std::int32_t Phase, std::int32_t PhaseCount)</td><td>算完成事件的下标：`Id * K + Phase` —— 不分配、不回收，事件只是一把钥匙</td></tr>
 <tr><td>FEvent / FNodeId / InvalidEvent / InvalidNodeId</td><td>事件下标 / 节点下标（各带一个无效哨兵）。事件**不是对象**：没有锁、没有等待者列表</td></tr>
 <tr><td>StageIndicesOf(TTypeList&lt;...&gt;)</td><td>编译期 stage 序列 → `std::array&lt;type_index, N&gt;`（桥的输入）</td></tr>
 </tbody></table>
@@ -415,7 +416,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
 <tr><td><span class="acc a-public">public</span></td><td>std::string_view Name</td><td>稳定身份名（**必须指向静态存储**，即字符串字面量）</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>std::type_index Stage</td><td>阶段类型</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>std::int32_t Phase</td><td>相位 = 环索引，不是绝对帧号</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>std::int32_t Phase</td><td>相位 = 环索引（`Frame % K`），不是绝对帧号 —— 由 `Submit` 从帧号盖上</td></tr>
 </tbody></table></div>
 <div class="sect">
 <h4>接口</h4>
@@ -484,7 +485,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div class="sect">
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-public">public</span></td><td>FEdge{ TargetName, TargetStage, FrameOffset }</td><td>嵌套类型：一条边 = 目标的名字 + 阶段 + **相对**帧偏移（0 = 本帧，-1 = 上一帧；由桥解析成绝对相位）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>FEdge{ TargetName, TargetStage, FrameOffset }</td><td>嵌套类型：一条边 = 目标的名字 + 阶段 + **相对帧偏移**（0 = 本帧，-1 = 上一帧，**任意 `&lt;= 0`** —— 含 `-K`「一整个窗口之前」，那已经必然完成；`&gt; 0` 被桥报错，等待只能向后）</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>Dependencies / Dependents</td><td>两张表（<span class="kw">private</span>；声明只经上面的 DSL/sugar）</td></tr>
 </tbody></table></div>
 <div class="sect">
@@ -511,8 +512,8 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div class="sect">
 <h4>接口</h4>
 <table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">static</span> FResult Build(std::span&lt;FFrameExtension* <span class="kw">const</span>&gt; Frames, std::span&lt;<span class="kw">const</span> std::type_index&gt; Stages, std::int32_t Frame, IDispatch&amp; Dispatch)</td><td>解析相对偏移 → 绝对身份；为**实现的** stage 产节点（未实现不产）；产出两类结构边；报出写错的声明</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">static</span> std::int32_t PhaseOf(std::int32_t Frame) <span class="kw">noexcept</span></td><td>绝对帧号 → 相位（环运算属于桥；图只见绝对身份）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">static</span> FResult Build(std::span&lt;FFrameExtension* <span class="kw">const</span>&gt; Frames, std::span&lt;<span class="kw">const</span> std::type_index&gt; Stages, std::uint64_t Frame, IDispatch&amp; Dispatch)</td><td>解析相对偏移 → 绝对身份（`Frame + Offset` 的相位；窗口外的目标**直接不发射边**）；为**实现的** stage 产节点（未实现不产）；产出两类结构边；报出写错的声明</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">static</span> std::int32_t PhaseOf(std::uint64_t Frame) <span class="kw">noexcept</span></td><td>绝对帧号 → 相位。只是 `PhaseOfFrame` 的转发 —— 桥的解析与 `Submit` 的盖章必须给同一个数</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>IDispatch::Implements(frame, stage)</td><td>策略：这个 frame 实现该 stage 吗</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>IDispatch::MakeClosure(frame, stage)</td><td>策略：把「调用该 frame 的该 stage」包成闭包</td></tr>
 </tbody></table></div>
@@ -528,14 +529,14 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-private">private</span></td><td>std::deque&lt;FTaskNode&gt; Nodes</td><td>节点表，下标即 FNodeId</td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>std::unordered_map&lt;FTaskKey, FNodeId, FTaskKeyHash&gt; Registry</td><td>身份 → 节点下标（精确键）</td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>std::deque&lt;std::atomic_bool&gt; EventStates</td><td>事件标志表（用下标寻址，不分配不回收）</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td>std::array&lt;std::atomic&lt;std::uint32_t&gt;, kPhaseCount&gt; SlotInFlight</td><td>每相位在飞计数：准入依据</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>std::vector&lt;std::atomic&lt;std::uint32_t&gt;&gt; SlotInFlight</td><td>每相位在飞计数：准入依据。按**构造时的 K** 定尺（K 是运行期值）</td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>std::atomic&lt;std::uint32_t&gt; AwaitingCompletion</td><td>待完成节点数：提交栅栏的计数</td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>SlotCv / SlotMutex</td><td>等待 / 唤醒（只在提交方与完成通知之间配对）</td></tr>
 </tbody></table></div>
 <div class="sect">
 <h4>接口</h4>
 <table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">bool</span> Submit(std::vector&lt;FTask&gt; Tasks, std::string* OutReason = <span class="kw">nullptr</span>)</td><td>提交一批：① 校验（批内同一身份重复 / 相位越界 / 成环）② **准入**（阻塞调用方，直到这批点名的相位排空）③ 入队。提交即合并 —— 没有重建动作</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">bool</span> Submit(std::vector&lt;FTask&gt; Tasks, std::uint64_t Frame, std::string* OutReason = <span class="kw">nullptr</span>)</td><td>提交**第 `Frame` 轮**：① 相位在这里算（`PhaseOfFrame(Frame)` 盖到每个 task 的身份上 —— 调用方的词汇是轮次，槽是图的）② 校验（批内同一身份重复 / 相位越界 / 成环）③ **准入**（阻塞调用方，直到本轮占用的那个槽排空）④ 入队。准入既是环复用规则，也是「最多 K 轮在飞」这条事实本身 —— 所以没有 Retire、没有水位线</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Wait()</td><td>**提交栅栏**：阻塞到「我提交过的都完成」。待完成计数由调用方在入队**前**自增、调度线程完成时自减 —— 所以它不会漏掉自己的工作（等相位计数则会在派发空档漏掉）</td></tr>
 </tbody></table></div>
 </div>
@@ -834,7 +835,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div class="ent e-class" id="Public__Engine__Engine_h-0">
 <h3><span class="kind">类</span> FEngineBase <span class="base">: FFrameBuilder&lt;FEngineBase&gt;</span></h3>
 <div class="sect"><div class="doc">
-<p>宿主基类。继承 `FFrameBuilder&lt;FEngineBase&gt;`（收集器 + 帧循环），把生命周期拆成两个钩子 + 一个纯调度主循环：`PreMain`（安装 + 初始化）→ `Main`（`<span class="kw">while</span> (!ShouldExit())`：`FlushPendingUpdates` + `Execute&lt;FTickStages&gt;`，末尾 `Wait`）→ `PostMain`（关闸门 → 扫尾卸载 → 排干）。入口 `EntryPoint` 只认识这个锚，不认识具体引擎类型。</p>
+<p>宿主基类。继承 `FFrameBuilder&lt;FEngineBase&gt;`（收集器 + 帧循环），把生命周期拆成两个钩子 + 一个纯调度主循环：`PreMain`（安装 + 初始化）→ `Main`（`<span class="kw">while</span> (!ShouldExit())`：每帧先取一次帧号 `NextFrameNumber()`，再 `FlushPendingUpdates` + `Execute&lt;FTickStages&gt;(Frame)`，末尾 `Wait`）→ `PostMain`（关闸门 → 扫尾卸载 → 排干）。入口 `EntryPoint` 只认识这个锚，不认识具体引擎类型。</p>
 </div></div>
 <div class="sect">
 <h4>字段</h4>
@@ -846,7 +847,8 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> ParseCommandLine(<span class="kw">int</span> Argc, <span class="kw">char</span>** Argv)</td><td>把 `-key` / `-key value` / `--key=value` 归一化后交给 CLI11 解析，结果进 KV 表</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> PreMain() = 0</td><td>纯虚：装载（`FPluginManager::Load` → `InstallChildrenOf`）并驱动一次 init 批次</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">int</span> Main()</td><td>主循环：`<span class="kw">while</span> (!ShouldExit()) { FlushPendingUpdates&lt;Init,Shutdown&gt;(); Execute&lt;Tick&gt;(); }` → `Wait()`。返回退出码</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">int</span> Main()</td><td>主循环：`<span class="kw">while</span> (!ShouldExit()) { <span class="kw">const</span> Frame = NextFrameNumber(); FlushPendingUpdates&lt;Init,Shutdown&gt;(); Execute&lt;Tick&gt;(Frame); }` → `Wait()`。返回退出码</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> std::uint64_t NextFrameNumber()</td><td>**这一轮的帧号**：`Main` 每帧只读**一次**，整帧（每条序列的 tick 批，以及宿主自己按帧发布的东西）都用同一个数 —— 读两次可能跨过帧边界，把一帧劈进两轮。默认是本循环自己的单调计数器（没有帧源的宿主，如测试工程）；有真实帧源的宿主覆写它（`FExampleEngine` 读 `Platform::GetFrameIndex()`，单写者是 `FPlatform::IBeginFrame`）。Core 不认识这个值，它只从 `Execute` / `Submit` 的参数进来</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> PostMain()</td><td>收摊：关闸门 → 丢弃未生效装载 → `UninstallAll` → 循环 flush 到静 → `Wait()` → 残留报出</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">bool</span> Has(std::string_view Key) <span class="kw">const</span></td><td>命令行里有这个键吗（带不带值都算）</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] std::string Get(std::string_view Key) <span class="kw">const</span></td><td>取键的值；不存在为空串</td></tr>
@@ -971,7 +973,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-private">private</span></td><td>std::vector&lt;std::unique_ptr&lt;FFrameExtension&gt;&gt; Features</td><td>实例所有权（析构顺序的关键一环）</td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>FThreadPool OwnedPool / FThreadPool* Pool / FThreadPool::FLane Lane</td><td>本收集器驱动节点的池，以及**属于它自己**的那条 lane。`OwnedPool` 是兜底（宿主、或没人递池的收集器有自己的 worker）；`UseSharedPool` 把 `Pool` 指向**父**收集器那个池并取一条 lane，于是嵌套收集器（宿主 → FRender → FExampleEditor）全落在最外层那个 worker 集上，同时各自保有独立栅栏。**这是 lane 存在的全部理由**：引擎需要的隔离是**每收集器**的，而它从前是用「每收集器一套线程」买的（4 × 核数条线程，去跑约 2 个并发节点）。<br>`Features` **刻意声明在 `Pool` 之后**：成员按声明逆序销毁，而收集器子实例正是在那里被销毁，它的析构要 flush 父收集器共享的池 —— 顺序写反就是收摊期的一次 use-after-free</td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>std::unique_ptr&lt;FFrameGraph&gt; Graph</td><td>那张图（声明在 Pool 之后 ⇒ 先于 Pool 析构）</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td>LoopFrames / LoopFrameNumbers / bLoopDirty / bLoopJustExpanded / LastLoopRejectReason</td><td>帧集缓存 + 每序列一个生成计数器 + 两个「只报一次」守卫</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>LoopFrames / LastSequenceRound / bLoopDirty / bLoopJustExpanded / LastLoopRejectReason</td><td>帧集缓存 + **每序列的单调地板**（`LastSequenceRound` 只是「这条序列已经驱动到哪一轮」，**不是帧源** —— 帧号由宿主给 `Execute`）+ 两个「只报一次」守卫</td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>std::atomic&lt;<span class="kw">bool</span>&gt; bClosing</td><td>关闭标志（阶段里可能从任意线程置位，故原子）</td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">bool</span> bFlushing</td><td>flush 重入守卫（RAII 管理）</td></tr>
 </tbody></table></div>
@@ -1025,7 +1027,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">void</span> Reload(std::string_view Name)</td><td>热重载：下个安全点卸旧（依赖安全）、随后装回同 DLL 新副本</td></tr>
 <tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">void</span> TryUninstall(std::string_view Query)</td><td>按**名字或 DLL 路径**匹配第一命中，命中即入卸载 pending</td></tr>
 <tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">template</span> &lt;TInitStages, TShutdownStages&gt; <span class="kw">void</span> FlushPendingUpdates()</td><td>应用挂起变更（**函数内部就是安全点**）：先处理「装载被同窗口的卸载取消」→ init 批 → 卸载批。重入被拒；插件异常被捕获上报、pending 保持原样等下次重试</td></tr>
-<tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">template</span> &lt;TLoopStages&gt; <span class="kw">void</span> Execute()</td><td>**跑一帧**：按 `TLoopStages` 重查帧集（脏时）→ 建批 → 提交。**不排空** ⇒ 帧会流水</td></tr>
+<tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">template</span> &lt;TLoopStages&gt; <span class="kw">void</span> Execute(std::uint64_t Frame)</td><td>**跑第 `Frame` 轮**：按 `TLoopStages` 重查帧集（脏时）→ 建批（帧号即相位来源）→ 提交 → 记地板。**不排空** ⇒ 帧会流水（真正节流的是 `Submit` 的准入：轮次 `Frame` 占用的槽没排空就阻塞调用方）。帧号是**宿主的**：本类不持有帧源，`Frame` 由参数进来，所以同一个渲染帧的多条序列落进同一个槽</td></tr>
 <tr><td><span class="acc a-protected">protected</span></td><td>FlushPendingUpdatesImpl / FlushUnload&lt;TShutdownStages&gt;</td><td>上两者的实现：建批（`TFrameDispatch` + `FFrameBridge::Build`）→ `Submit` → 排空 → 收割</td></tr>
 <tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">template</span> &lt;TStages&gt; <span class="kw">void</span> ExpandLoopFrames(TTypeList&lt;TStages...&gt;)</td><td>LINQ：`Select&lt;TStages...&gt;()` 重查帧集（脏标志由集合侧自己置位，宿主没有缓存要失效）</td></tr>
 <tr><td><span class="acc a-protected">protected</span></td><td>TContext&amp; GetContext()</td><td>把 `<span class="kw">this</span>` 取回 `TContext&amp;`（宿主就是上下文）</td></tr>
@@ -1342,7 +1344,9 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <table>
 <thead><tr><th>开关</th><th>说明</th></tr></thead>
 <tbody>
-<tr><td>MAHO_TRACE</td><td>任意值即**初始开启**。它只决定初值：运行期由 `r.Trace`（Log 插件的 CVar）覆盖，随时可开可关、不必重启，且是**进程级**。关闭时 `FStageTrace` / `FScopeTrace` / `FSectionTrace` 的构造只剩几次指针拷贝加一个分支（一个 relaxed 原子读）</td></tr>
+<tr><td>MAHO_TRACE</td><td>**读的是值，不是「有没有设」**：未设 / 空 / `0` / `<span class="kw">false</span>` / `off` / `no`（大小写不敏感，两端空白忽略）= 关，其余值 = 开（`MAHO_TRACE=1` 是「从第一个事件就记录」）。
+为什么必须解析值：只测「有没有设」时，启动器为「这轮别记录」而设的 `MAHO_TRACE=0` 会把记录**打开**—— 这不是观感问题：记录中的每次发条都会进内存队列（见 `Trace.cpp` 的 `ProtoQueue`，只有退出时的 `TraceFlush` 才排空），实测 **10.2 KB/帧**，~1900 fps 跑 150 s 就是 **3.9 GB**，外加一个几 GB 的 `Profile_trace.txt`。同设施另外两个开关（`MAHO_TRACE_FORMAT` / `MAHO_TRACE_MIN_US`）本就解析值，`r.Trace` 的说明也写着「等同于 `MAHO_TRACE=1`」，所以这里的契约就是**值**。
+它只决定初值：运行期由 `r.Trace`（Log 插件的 CVar，默认值同样走这个解析）覆盖，随时可开可关、不必重启，且是**进程级**。关闭时 `FStageTrace` / `FScopeTrace` / `FSectionTrace` 的构造只剩几次指针拷贝加一个分支（一个 relaxed 原子读）</td></tr>
 <tr><td>MAHO_TRACE_FORMAT</td><td>**写哪几个文件**：`0` = 只要文本，`1` = 只要原生，`2` = 两个都写（**默认**）。只读一次；非法值回落到 2 —— 默认同时走两条路，于是两条路都被练习到</td></tr>
 <tr><td>MAHO_TRACE_MIN_US=&lt;n&gt;</td><td>**stage 条的时长门槛**（默认 0 = 全留）。stage 条是为**每一个**帧的**每一个** stage 生成的，所以它们才是让 trace 变贵的东西；手写 SECTION / SCOPE 是人对「什么重要」的判断，**永不被过滤**。
 代价说清楚：行是从事件派生出来的，所以一个帧若全部分条都低于门槛，它会**连行一起消失**（随后手写埋点落在数字 lane id 下），而被丢掉的条**把它的箭头一起带走**（箭头两端都得存在）；原生输出**没有门槛** —— BEGIN/END 必须成对，条短就只是短。

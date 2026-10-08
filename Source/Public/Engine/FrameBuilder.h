@@ -542,36 +542,49 @@ protected:
 	 * TLoopStages is the frame sequence. The frame set is the frames implementing ANY of its
 	 * stages -- the LINQ query is DERIVED from that list, so the two cannot disagree.
 	 *
-	 * Each SEQUENCE has its own generation counter (see below), because a host may drive more
-	 * than one sequence from a single builder -- a world drives input, N fixed steps, and
-	 * post-update, all in one tick.
+	 * `Frame` is the ROUND being driven, and it is the HOST's to produce: this class holds NO
+	 * counter of its own. The number is what makes the ring meaningful ("frame N waits frame N-1")
+	 * and what lets several sequences be driven for one rendered frame with the SAME number --
+	 * so the phase a sequence lands in is a property of the round, not of a per-sequence tally
+	 * that could drift out of step with the others. The canonical source is
+	 * `Platform::GetFrameIndex()` (single writer: `FPlatform::IBeginFrame`), read ONCE per frame
+	 * by the host; a collector that drives its own sub-graph reads it once per drive.
 	 *
 	 * Frames are NOT drained here: they PIPELINE. What makes that safe is the batch builder's two
 	 * STRUCTURAL edges -- a frame's own stages in order, and each stage against its OWN previous
-	 * frame (see FFrameBridge). A host that wants one frame in flight calls Wait() after this.
+	 * frame (see FFrameBridge) -- plus the graph's ADMISSION, which blocks this call until the
+	 * slot this round occupies has drained, i.e. until `Frame - K` has completed. A host that
+	 * wants one frame in flight calls Wait() after this.
 	 */
 	template <typename TLoopStages>
-	void Execute()
+	void Execute(std::uint64_t Frame)
 	{
 		ExpandLoopFrames(TLoopStages{});
 
-		// One counter PER SEQUENCE, and that is load bearing rather than bookkeeping: the
-		// cross-frame self edge binds generation N to N-1, so the number handed to the graph must
-		// advance by exactly one per dispatch of THAT sequence. A single counter shared by several
-		// sequences would leave each sequence's previous generation at some other offset -- the
-		// self edge would then point at a node that does not exist (the edge disappears, and the
-		// sequence silently loses its cross-frame exclusion) or at an unrelated older generation.
-		std::int32_t& SequenceFrame = LoopFrameNumbers[std::type_index(typeid(TLoopStages))];
+		// A SAFETY FLOOR, not a frame source: a sequence may never drive a round it has already
+		// driven. `Frame` comes from the canonical counter, and that counter is advanced by
+		// `FPlatform::IBeginFrame` -- INSIDE the frame it opens, on a pool thread -- so the value a
+		// caller reads can still be the round it just submitted (the frame is queued, its head has
+		// not run yet). Submitting that round again would re-enter the SAME ring slot while the
+		// previous occupancy may be running: ApplySubmit resets the node and re-dispatches it, i.e.
+		// the stage BODY RUNS TWICE. So the round only ever moves forward, and the guard is where
+		// rounds are consumed (every sequence, including the ones a collector drives, goes through
+		// here -- a caller cannot forget it).
+		const std::uint64_t Round = Frame > LastSequenceRound[std::type_index(typeid(TLoopStages))]
+			? Frame
+			: LastSequenceRound[std::type_index(typeid(TLoopStages))] + 1;
+		LastSequenceRound[std::type_index(typeid(TLoopStages))] = Round;
 
-		// ONE read of the counter feeds BOTH the batch's frame number and the frame-context slot:
-		// the ring arithmetic goes through FFrameBridge::PhaseOf either way, so the slot the stages
-		// read cannot drift from the phase the bridge stamps into the batch.
-		const std::int32_t Frame = SequenceFrame++;
-
+		// ONE read of the round feeds the batch: the bridge stamps it onto every node's identity AND
+		// hands it to every node's closure, so a stage sees the round it was submitted with no matter
+		// how much later it runs (see FFrameCall). The dispatch also takes the context SLOT for this
+		// round's PHASE (`PhaseOfFrame`, computed by Core so it cannot drift from the phase `Submit`
+		// stamps into the batch) -- that slot is the collector's per-phase state, and deliberately NOT
+		// where the round lives.
 		TFrameDispatch<TLoopStages, TContext> Dispatch(GetContext(),
-			GetContext(FFrameBridge::PhaseOf(Frame)));
+			GetContext(PhaseOfFrame(Round)));
 		FFrameBridge::FResult Built = FFrameBridge::Build(LoopFrames,
-			TFrameDispatch<TLoopStages, TContext>::StageIndices(), Frame, Dispatch);
+			TFrameDispatch<TLoopStages, TContext>::StageIndices(), Round, Dispatch);
 
 		// Report the declarations that cannot bind ONCE per frame set, not once per frame: the
 		// same typo would otherwise be logged on every single frame.
@@ -583,7 +596,7 @@ protected:
 
 		FFrameGraph& Loop = GetGraph();
 		std::string Reason;
-		if (!Loop.Submit(std::move(Built.Tasks), &Reason) && Reason != LastLoopRejectReason)
+		if (!Loop.Submit(std::move(Built.Tasks), Round, &Reason) && Reason != LastLoopRejectReason)
 		{
 			LastLoopRejectReason = Reason;
 			ReportError((std::string("frame batch rejected (") + Reason + ")").c_str());
@@ -716,17 +729,37 @@ protected:
 			// feature installs) -- so a pool barrier here waits for the pool to drain including the
 			// very task calling it. That is a self-deadlock: guaranteed with a single pool worker
 			// (MAHO_PARALLELISM=1), intermittent with many (measured as the startup white screen).
+			//
+			// AUDIT -- "Submit from inside pool work" (the three Submit sites of this class:
+			// here, FlushUnload, and Execute). Submit BLOCKS the caller in admission, so a caller
+			// that is ITSELF a node body can occupy a worker while waiting for nodes that need a
+			// worker. Two facts make the engine's current sites safe, and both are properties to
+			// re-check before a new Submit site is added:
+			//   * the slot being waited for is drained by the SAME graph, whose scheduler runs on
+			//     its OWN thread (FFrameGraph is a FThreadedServer) -- the wait never depends on
+			//     the blocked worker to make progress;
+			//   * a ONE-SHOT batch drains (Update.Wait()) immediately before submitting, so
+			//     admission has nothing to wait for and returns without blocking at all. That is
+			//     why the two one-shot sites are safe even when reached from FRender::Tick.
+			// The LOOP site (Execute) is called by the host thread normally, but FRender::Tick and
+			// FGameWorld::Tick drive their own sub-graphs from a node body -- there admission can
+			// really block a worker. It does not deadlock (the sub-graph has its own scheduler and
+			// the pool has more than one worker), but it is a known hazard, and the fix is on the
+			// architecture side: drive those sub-graphs from the host loop rather than from a
+			// stage body. Not attempted here.
 			FFrameGraph& Update = GetGraph();
-			// A one-shot batch runs at frame number 0 (below), so its slot is PhaseOf(0) == 0 -- and
+			// A one-shot batch runs at frame number 0, i.e. slot `PhaseOfFrame(0) == 0` -- and
 			// these batches are drained before and after, so slot 0 is never shared with the loop.
-			TFrameDispatch<TInitStages, TContext> Dispatch(GetContext(), GetContext(0));
+			// (The frame number here is a VOCABULARY, not a clock: a one-shot batch is not a round
+			// of anything, it just needs an address, and the drain is what makes that address free.)
+			TFrameDispatch<TInitStages, TContext> Dispatch(GetContext(), GetContext(PhaseOfFrame(0)));
 			Update.Wait();
 			FFrameBridge::FResult Built = FFrameBridge::Build(NewLayers,
 				TFrameDispatch<TInitStages, TContext>::StageIndices(), 0, Dispatch);
 			ReportDiagnostics(Built.Diagnostics);
 
 			std::string Reason;
-			if (!Update.Submit(std::move(Built.Tasks), &Reason))
+			if (!Update.Submit(std::move(Built.Tasks), 0, &Reason))
 			{
 				// Structurally broken (the only structural failure a batch can have is a cycle).
 				// Report it, broadcast it, and RELEASE the batch. No silent retry: leaving these
@@ -1041,13 +1074,14 @@ private:
 				for (const auto& Dep : Deps)
 				{
 					// A layer's declaration against ITSELF is intra-layer ordering, never a
-					// reason to wait for another layer: `WaitFor<Self>().OnLastFrameStage<...>()`
-					// reads as "my next frame waits for my previous frame" (FRender's frame
-					// isolation). Counting it made the layer depend on itself, so the greedy
-					// below could never take it -- FRender stayed alive, its IShutdown never ran
-					// and teardown fell back to the destructor path (measured: "uninstall
-					// refused: layer 'FRender' (still depended on by: FRender)", active=7, then a
-					// VMA leak assert under ~FRHI).
+					// reason to wait for another layer: `WaitFor<Self>().OnStage<...>(-1)`
+					// reads as "my next frame waits for my previous frame" -- the RELATIVE FRAME
+					// OFFSET (any `<= 0`, `-K` = one full window back) is what a cross-frame edge
+					// is spelled with (FRender's frame isolation). Counting it made the layer
+					// depend on itself, so the greedy below could never take it -- FRender stayed
+					// alive, its IShutdown never ran and teardown fell back to the destructor path
+					// (measured: "uninstall refused: layer 'FRender' (still depended on by: FRender)",
+					// active=7, then a VMA leak assert under ~FRHI).
 					if (Dep.TargetName == StoredName(L))
 					{
 						continue;
@@ -1188,14 +1222,15 @@ private:
 		// Graph fence only, for the same reason as there: a builder Wait() flushes the pool, and this
 		// runs inside a graph node.
 		FFrameGraph& Update = GetGraph();
-		TFrameDispatch<TShutdownStages, TContext> Dispatch(GetContext(), GetContext(0));   // frame 0 below, so slot 0
+		// Frame 0 == slot 0, the one-shot address; see the init path for why that slot is free here.
+		TFrameDispatch<TShutdownStages, TContext> Dispatch(GetContext(), GetContext(PhaseOfFrame(0)));
 		Update.Wait();
 		FFrameBridge::FResult Built = FFrameBridge::Build(ToUnload,
 			TFrameDispatch<TShutdownStages, TContext>::StageIndices(), 0, Dispatch);
 		ReportDiagnostics(Built.Diagnostics);
 
 		std::string Reason;
-		if (!Update.Submit(std::move(Built.Tasks), &Reason))
+		if (!Update.Submit(std::move(Built.Tasks), 0, &Reason))
 		{
 			// NEVER erase or destroy these: their teardown stages have not run, and a frame
 			// destroyed without its teardown is where "resources still cataloged / threads
@@ -1363,9 +1398,19 @@ private:
 	 *  is destroyed BEFORE it -- the graph holds Pool by reference. */
 	std::unique_ptr<FFrameGraph> Graph;
 
-	/** The loop's cache and the two report-once guards. */
+	/** The loop's cache, the per-sequence monotonic FLOOR, and the two report-once guards.
+	 *
+	 *  NOTE what is NOT here any more: a per-sequence frame SOURCE. The round is produced by the
+	 *  application (`Execute<TLoopStages>(Frame)`) -- one read of `Platform::GetFrameIndex()` per
+	 *  frame, shared by every sequence driven for that frame. A per-sequence tally (what this used
+	 *  to hold, `LoopFrameNumbers`) made each sequence's "previous frame" a private notion: two
+	 *  sequences of one rendered frame landed in different rounds, and the number could not be
+	 *  compared with the platform graph's at all. `LastSequenceRound` keeps only the floor. */
 	std::vector<FFrameExtension*>  LoopFrames;
-	std::map<std::type_index, std::int32_t> LoopFrameNumbers;  // one generation counter per sequence
+	/** Per-sequence "round already driven", used ONLY as the monotonic floor of Execute -- it is
+	 *  not a frame source (see the guard there). A map keyed by the stage list because a host may
+	 *  drive several sequences from one builder. */
+	std::map<std::type_index, std::uint64_t> LastSequenceRound;
 	bool                           bLoopDirty = true;         // the cached frame set is stale
 	bool                           bLoopJustExpanded = false; // report diagnostics once per set
 	std::string                    LastLoopRejectReason;

@@ -165,8 +165,14 @@ int FEngineBase::Main()
 	// design.md D9).
 	while (!ShouldExit())
 	{
+		// ONE read of the frame number per frame, and the SAME value goes to every sequence this
+		// frame drives: the tick batch below, and (in a host that overrides NextFrameNumber from
+		// Platform's canonical counter) whatever else the frame publishes. Two reads could straddle
+		// a frame boundary and split one frame across two rounds of the ring.
+		const std::uint64_t Frame = NextFrameNumber();
+
 		FlushPendingUpdates<FInitStages, FShutdownStages>();
-		Execute<FTickStages>();
+		Execute<FTickStages>(Frame);
 	}
 
 	// Quiescence before teardown, and it has to cover BOTH the frames and the pool: stage methods
@@ -182,6 +188,27 @@ void FEngineBase::RequestExit()
 {
 	// The collector owns the transition (and the OnClosing broadcast that goes with it).
 	CloseForLoads();
+}
+
+std::uint64_t FEngineBase::NextFrameNumber()
+{
+	// The default frame source: this loop's own monotonic counter (see the header). A host with a
+	// real frame source -- the project entry point, reading Platform's canonical index -- overrides
+	// it and this counter is never read.
+	return LoopFrame++;
+}
+
+std::int32_t FEngineBase::GetFramesInFlight() const noexcept
+{
+	// Fully qualified on purpose: an unqualified `GetFramesInFlight()` inside this member would find
+	// the member itself and recurse. Core holds the ONE value (the host's injection point IS Core's
+	// `SetFramesInFlight`), so this is a forward, not a second copy.
+	return ::Maho::GetFramesInFlight();
+}
+
+void FEngineBase::SetFramesInFlight(std::int32_t InFramesInFlight)
+{
+	::Maho::SetFramesInFlight(InFramesInFlight);
 }
 
 bool FEngineBase::Has(std::string_view Key) const

@@ -76,13 +76,12 @@ public:
  */
 class FConsoleVariable
 	: public TSingleton<FConsoleVariable>
-	, public IPlugin<IInit, IShutdown>
+	, public IPlugin<IShutdown>
 {
 public:
 	/** Process-unique accessor - declared here, defined in ConsoleVariable.cpp (in ConsoleVariable.dll). */
 	static FConsoleVariable& Get();
 
-	void Initialize(FEngineBase& Engine, FEngineContext& Frame) override;
 	void Shutdown(FEngineBase& Engine, FEngineContext& Frame) override;
 
 	/** Find a registered variable; nullptr when absent. */

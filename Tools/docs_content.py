@@ -22,38 +22,10 @@ import docs_builder as D
 # 每次渲染都从空开始（内容全部来自本文件）。
 # D.Reset()  // 内容已清空：先声明 Header，再逐类 Class / Interface / Field
 
-# ══════════════════════════════════════════════════════════════════════════════
-# Public/Core/FrameGraph.h —— 调度器 + 声明层 + 桥
-# ══════════════════════════════════════════════════════════════════════════════
-
-# D.Header("Public/Core/FrameGraph.h", Title="FrameGraph —— 帧调度器 / 声明层 / 桥",
-#          Desc="三件强绑定的东西放在同一个头里：节点调度器 FFrameGraph、声明层 FFrameExtension、"
-#               "把声明翻译成一批任务的 FFrameBridge。")
-
-# D.Macro("MAHO_FRAMES_IN_FLIGHT", "3",
-#         "环深度：同时在飞的帧槽数。相位就是 [0, K) 的环索引。")
-
-# D.Struct("FTaskKey", Desc="节点实例的身份三元组。依赖就是指向目标实例的身份。")
-# D.Field("std::string_view Name", "稳定身份名（必须指向静态存储，即字符串字面量）")
-# D.Field("std::type_index Stage", "阶段类型")
-# D.Field("std::int32_t Phase", "相位 = 环索引，不是绝对帧号")
-# D.Interface("bool operator==(const FTaskKey& Other) const", "精确比较（注册表用精确键）")
-
-# D.Class("FFrameGraph", Base="FThreadedServer",
-#         Desc="节点调度器。全部图状态只被调度线程触碰，所以没有图锁，且该线程绝不阻塞。")
-# D.SetAccess("public")
-# D.Interface("bool Submit(std::vector<FTask> Tasks, std::string* OutReason = nullptr)",
-#             "提交一批任务：校验（批内重复身份 / 相位越界 / 成环）→ 准入（阻塞调用方，"
-#             "直到这批点名的相位排空）→ 入队。提交即合并，没有重建。")
-# D.Interface("void Wait()",
-#             "提交栅栏：阻塞到「我提交过的都完成」。计数由调用方在入队前自增、"
-#             "调度线程完成时自减 —— 所以它不会漏掉自己的工作。")
-# D.SetAccess("private")
-# D.Field("std::deque<FTaskNode> Nodes", "节点表，下标即 FNodeId（deque：元素含 atomic，不可移动）")
-# D.Field("std::unordered_map<FTaskKey, FNodeId, FTaskKeyHash> Registry", "身份 → 节点下标")
-# D.Field("std::array<std::atomic<std::uint32_t>, kPhaseCount> SlotInFlight",
-#         "每相位在飞计数：准入与 Wait 的依据")
-# D.Field("std::atomic<std::uint32_t> AwaitingCompletion", "待完成节点数（提交栅栏的计数）")
+# (Two dead drafts of the FFrameGraph page used to sit here as comments. They were removed with the
+#  frame/phase split: both still described a submit that took no frame number and a COMPILE-TIME
+#  phase count, i.e. the exact vocabulary this change retires, and the live section further down is
+#  the single source for that page.)
 
 # ══════════════════════════════════════════════════════════════════════════════
 # Source/Maho.h —— 引擎聚合头
@@ -402,19 +374,20 @@ D.Table("头文件", "功能")
 D.Row("Core/ThreadedServer.h", "`FFrameGraph` 继承它：调度器就是「一个持久线程 + FIFO 串行命令队列」")
 D.Row("Core/ThreadPool.h", "节点体跑在池上（`Dispatch` 提交、完成通知回投调度线程）")
 D.Row("Core/TypeList.h", "`StageIndicesOf` 把编译期 stage 序列摊成运行期数组")
-D.Row("array", "每相位一个在飞计数（`SlotInFlight`）")
+D.Row("array / vector", "stage 索引数组；每相位一个在飞计数（`SlotInFlight` —— 深度 `K` 是运行期注入的值 ⇒ vector，不是 array）")
 D.Row("atomic / condition_variable / mutex", "事件标志表、准入与提交栅栏的等待")
-D.Row("deque", "节点表与事件表：元素含 `std::atomic` ⇒ 不可移动 ⇒ 不能用 `vector`")
-D.Row("functional", "节点体（闭包）")
+D.Row("cstdint / deque / functional", "帧号与相位；节点表与事件表（元素含 `std::atomic` ⇒ 不可移动 ⇒ 不能用 `vector`）；节点体（闭包）")
 D.Row("span / string / string_view", "批次的输入视图；诊断与身份名")
-D.Row("typeindex / unordered_map / vector", "阶段类型索引；身份 → 节点下标的注册表")
+D.Row("typeindex / unordered_map", "阶段类型索引；身份 → 节点下标的注册表")
 
 D.Card("宏 / 常量 / 别名")
 D.Table("签名", "说明")
-D.Row("MAHO_FRAMES_IN_FLIGHT", "环深度（默认 3）：同时在飞的帧槽数")
-D.Row("kPhaseCount", "= `MAHO_FRAMES_IN_FLIGHT`：相位空间就是环 `[0, K)`，没有独立相位")
-D.Row("constexpr bool IsValidPhase(std::int32_t)", "相位是否落在环内")
-D.Row("Detail::EventOf(FNodeId Id, std::int32_t Phase)",
+D.Row("MAHO_FRAMES_IN_FLIGHT", "环深度的**默认值**（3）。真正的深度 `K` 是运行期值 —— 见下面三个函数")
+D.Row("SetFramesInFlight(K) / GetFramesInFlight()", "**流水深度的唯一口径**：应用层在**任何 FFrameGraph 构造之前**注入一次，之后进程内只读（第一个图构造即封口，中途改是 bug 而不是设置）。`MAHO_FRAMES_IN_FLIGHT` 只是没人注入时的兜底")
+D.Row("PhaseOfFrame(Frame) / PhaseOfShiftedFrame(Frame, Offset)", "**唯一的环运算**：绝对帧号 → 相位（`Frame % K`），以及「相对偏移 `Offset` 帧之前的那一轮的相位」（在**有符号**域里算，否则起跑期 `Frame 0, Offset -1` 会下溢到无关槽）")
+D.Row("IsFrameInsideWindow(Offset)", "目标是否还在活跃窗口内：`Offset <= -K` 的帧**必然已完成**（它的槽不排空，这一轮根本提交不进去）⇒ 边视为已满足、不必发射")
+D.Row("constexpr bool IsValidPhase(std::int32_t)", "相位是否落在环内（`[0, K)`）")
+D.Row("Detail::EventOf(FNodeId Id, std::int32_t Phase, std::int32_t PhaseCount)",
       "算完成事件的下标：`Id * K + Phase` —— 不分配、不回收，事件只是一把钥匙")
 D.Row("FEvent / FNodeId / InvalidEvent / InvalidNodeId",
       "事件下标 / 节点下标（各带一个无效哨兵）。事件**不是对象**：没有锁、没有等待者列表")
@@ -425,7 +398,7 @@ D.Struct("FTaskKey", Desc="一个节点实例的**身份三元组**。依赖就�
 D.SetAccess("public")
 D.Field("std::string_view Name", "稳定身份名（**必须指向静态存储**，即字符串字面量）")
 D.Field("std::type_index Stage", "阶段类型")
-D.Field("std::int32_t Phase", "相位 = 环索引，不是绝对帧号")
+D.Field("std::int32_t Phase", "相位 = 环索引（`Frame % K`），不是绝对帧号 —— 由 `Submit` 从帧号盖上")
 D.Interface("bool operator==(const FTaskKey&) const", "精确比较（注册表用精确键，故无碰撞场景）")
 
 D.Struct("FTaskKeyHash", Desc="`FTaskKey` 的哈希（`unordered_map` 注册表用）。")
@@ -461,18 +434,19 @@ D.Interface("void AddDependent(std::type_index MyStage, FEdge Edge)",
 D.Interface("const std::unordered_map<...>& GetDependencies() const", "逐 stage 的前向表（桥读）")
 D.Interface("const std::vector<...>& GetDependents() const", "反向声明表（桥读）")
 D.Field("FEdge{ TargetName, TargetStage, FrameOffset }", "嵌套类型：一条边 = 目标的名字 + 阶段 + "
-        "**相对**帧偏移（0 = 本帧，-1 = 上一帧；由桥解析成绝对相位）")
+        "**相对帧偏移**（0 = 本帧，-1 = 上一帧，**任意 `<= 0`** —— 含 `-K`「一整个窗口之前」，"
+        "那已经必然完成；`> 0` 被桥报错，等待只能向后）")
 D.Field("Dependencies / Dependents", "两张表（private；声明只经上面的 DSL/sugar）")
 
 D.Class("FFrameBridge", Desc="**桥**：把「frame 集合 + stage 序列 + 帧号」建成一批 `FTask`。"
         "它只构建、不提交（提交是调用方的事），所以桥不涉及准入 / 占用。")
 D.SetAccess("public")
 D.Interface("static FResult Build(std::span<FFrameExtension* const> Frames, "
-            "std::span<const std::type_index> Stages, std::int32_t Frame, IDispatch& Dispatch)",
-            "解析相对偏移 → 绝对身份；为**实现的** stage 产节点（未实现不产）；产出两类结构边；"
-            "报出写错的声明")
-D.Interface("static std::int32_t PhaseOf(std::int32_t Frame) noexcept",
-            "绝对帧号 → 相位（环运算属于桥；图只见绝对身份）")
+            "std::span<const std::type_index> Stages, std::uint64_t Frame, IDispatch& Dispatch)",
+            "解析相对偏移 → 绝对身份（`Frame + Offset` 的相位；窗口外的目标**直接不发射边**）；"
+            "为**实现的** stage 产节点（未实现不产）；产出两类结构边；报出写错的声明")
+D.Interface("static std::int32_t PhaseOf(std::uint64_t Frame) noexcept",
+            "绝对帧号 → 相位。只是 `PhaseOfFrame` 的转发 —— 桥的解析与 `Submit` 的盖章必须给同一个数")
 D.Interface("IDispatch::Implements(frame, stage)", "策略：这个 frame 实现该 stage 吗")
 D.Interface("IDispatch::MakeClosure(frame, stage)", "策略：把「调用该 frame 的该 stage」包成闭包")
 D.Field("FDiagnostic{ Reason, Frame, Stage, Target, TargetStage, FrameOffset, bReverse }",
@@ -483,9 +457,11 @@ D.Class("FFrameGraph", Base="FThreadedServer",
         Desc="**调度器**。全部图状态只被调度线程触碰，所以**没有图锁**；调度线程也**绝不阻塞** "
              "（准入与栅栏的等待都发生在调用方）。")
 D.SetAccess("public")
-D.Interface("bool Submit(std::vector<FTask> Tasks, std::string* OutReason = nullptr)",
-            "提交一批：① 校验（批内同一身份重复 / 相位越界 / 成环）② **准入**（阻塞调用方，"
-            "直到这批点名的相位排空）③ 入队。提交即合并 —— 没有重建动作")
+D.Interface("bool Submit(std::vector<FTask> Tasks, std::uint64_t Frame, std::string* OutReason = nullptr)",
+            "提交**第 `Frame` 轮**：① 相位在这里算（`PhaseOfFrame(Frame)` 盖到每个 task 的身份上 —— "
+            "调用方的词汇是轮次，槽是图的）② 校验（批内同一身份重复 / 相位越界 / 成环）"
+            "③ **准入**（阻塞调用方，直到本轮占用的那个槽排空）④ 入队。"
+            "准入既是环复用规则，也是「最多 K 轮在飞」这条事实本身 —— 所以没有 Retire、没有水位线")
 D.Interface("void Wait()",
             "**提交栅栏**：阻塞到「我提交过的都完成」。待完成计数由调用方在入队**前**自增、"
             "调度线程完成时自减 —— 所以它不会漏掉自己的工作（等相位计数则会在派发空档漏掉）")
@@ -493,7 +469,7 @@ D.SetAccess("private")
 D.Field("std::deque<FTaskNode> Nodes", "节点表，下标即 FNodeId")
 D.Field("std::unordered_map<FTaskKey, FNodeId, FTaskKeyHash> Registry", "身份 → 节点下标（精确键）")
 D.Field("std::deque<std::atomic_bool> EventStates", "事件标志表（用下标寻址，不分配不回收）")
-D.Field("std::array<std::atomic<std::uint32_t>, kPhaseCount> SlotInFlight", "每相位在飞计数：准入依据")
+D.Field("std::vector<std::atomic<std::uint32_t>> SlotInFlight", "每相位在飞计数：准入依据。按**构造时的 K** 定尺（K 是运行期值）")
 D.Field("std::atomic<std::uint32_t> AwaitingCompletion", "待完成节点数：提交栅栏的计数")
 D.Field("SlotCv / SlotMutex", "等待 / 唤醒（只在提交方与完成通知之间配对）")
 
@@ -978,13 +954,19 @@ D.Row("IExit", "RequestExit(FEngineBase&)", "每帧：退出闸门（调 `Reques
 D.Class("FEngineBase", Base="FFrameBuilder<FEngineBase>",
         Desc="宿主基类。继承 `FFrameBuilder<FEngineBase>`（收集器 + 帧循环），把生命周期拆成两个"
              "钩子 + 一个纯调度主循环：`PreMain`（安装 + 初始化）→ `Main`（`while (!ShouldExit())`："
-             "`FlushPendingUpdates` + `Execute<FTickStages>`，末尾 `Wait`）→ `PostMain`（关闸门 → "
+             "每帧先取一次帧号 `NextFrameNumber()`，再 `FlushPendingUpdates` + `Execute<FTickStages>(Frame)`，"
+             "末尾 `Wait`）→ `PostMain`（关闸门 → "
              "扫尾卸载 → 排干）。入口 `EntryPoint` 只认识这个锚，不认识具体引擎类型。")
 D.SetAccess("public")
 D.Interface("virtual void ParseCommandLine(int Argc, char** Argv)",
             "把 `-key` / `-key value` / `--key=value` 归一化后交给 CLI11 解析，结果进 KV 表")
 D.Interface("virtual void PreMain() = 0", "纯虚：装载（`FPluginManager::Load` → `InstallChildrenOf`）并驱动一次 init 批次")
-D.Interface("virtual int Main()", "主循环：`while (!ShouldExit()) { FlushPendingUpdates<Init,Shutdown>(); Execute<Tick>(); }` → `Wait()`。返回退出码")
+D.Interface("virtual int Main()", "主循环：`while (!ShouldExit()) { const Frame = NextFrameNumber(); FlushPendingUpdates<Init,Shutdown>(); Execute<Tick>(Frame); }` → `Wait()`。返回退出码")
+D.Interface("[[nodiscard]] virtual std::uint64_t NextFrameNumber()",
+            "**这一轮的帧号**：`Main` 每帧只读**一次**，整帧（每条序列的 tick 批，以及宿主自己按帧发布的东西）都用同一个数 —— "
+            "读两次可能跨过帧边界，把一帧劈进两轮。默认是本循环自己的单调计数器（没有帧源的宿主，如测试工程）；"
+            "有真实帧源的宿主覆写它（`FExampleEngine` 读 `Platform::GetFrameIndex()`，单写者是 `FPlatform::IBeginFrame`）。"
+            "Core 不认识这个值，它只从 `Execute` / `Submit` 的参数进来")
 D.Interface("virtual void PostMain()", "收摊：关闸门 → 丢弃未生效装载 → `UninstallAll` → 循环 flush 到静 → `Wait()` → 残留报出")
 D.Interface("[[nodiscard]] bool Has(std::string_view Key) const", "命令行里有这个键吗（带不带值都算）")
 D.Interface("[[nodiscard]] std::string Get(std::string_view Key) const", "取键的值；不存在为空串")
@@ -1127,8 +1109,9 @@ D.Field("FThreadPool OwnedPool / FThreadPool* Pool / FThreadPool::FLane Lane",
         "`Features` **刻意声明在 `Pool` 之后**：成员按声明逆序销毁，而收集器子实例正是在那里被销毁，"
         "它的析构要 flush 父收集器共享的池 —— 顺序写反就是收摊期的一次 use-after-free")
 D.Field("std::unique_ptr<FFrameGraph> Graph", "那张图（声明在 Pool 之后 ⇒ 先于 Pool 析构）")
-D.Field("LoopFrames / LoopFrameNumbers / bLoopDirty / bLoopJustExpanded / LastLoopRejectReason",
-        "帧集缓存 + 每序列一个生成计数器 + 两个「只报一次」守卫")
+D.Field("LoopFrames / LastSequenceRound / bLoopDirty / bLoopJustExpanded / LastLoopRejectReason",
+        "帧集缓存 + **每序列的单调地板**（`LastSequenceRound` 只是「这条序列已经驱动到哪一轮」，"
+        "**不是帧源** —— 帧号由宿主给 `Execute`）+ 两个「只报一次」守卫")
 D.Field("std::atomic<bool> bClosing", "关闭标志（阶段里可能从任意线程置位，故原子）")
 D.Field("bool bFlushing", "flush 重入守卫（RAII 管理）")
 
@@ -1169,8 +1152,10 @@ D.Interface("void TryUninstall(std::string_view Query)", "按**名字或 DLL 路
 D.Interface("template <TInitStages, TShutdownStages> void FlushPendingUpdates()",
             "应用挂起变更（**函数内部就是安全点**）：先处理「装载被同窗口的卸载取消」→ init 批 → 卸载批。"
             "重入被拒；插件异常被捕获上报、pending 保持原样等下次重试")
-D.Interface("template <TLoopStages> void Execute()",
-            "**跑一帧**：按 `TLoopStages` 重查帧集（脏时）→ 建批 → 提交。**不排空** ⇒ 帧会流水")
+D.Interface("template <TLoopStages> void Execute(std::uint64_t Frame)",
+            "**跑第 `Frame` 轮**：按 `TLoopStages` 重查帧集（脏时）→ 建批（帧号即相位来源）→ 提交 → 记地板。"
+            "**不排空** ⇒ 帧会流水（真正节流的是 `Submit` 的准入：轮次 `Frame` 占用的槽没排空就阻塞调用方）。"
+            "帧号是**宿主的**：本类不持有帧源，`Frame` 由参数进来，所以同一个渲染帧的多条序列落进同一个槽")
 D.Interface("FlushPendingUpdatesImpl / FlushUnload<TShutdownStages>",
             "上两者的实现：建批（`TFrameDispatch` + `FFrameBridge::Build`）→ `Submit` → 排空 → 收割")
 D.Interface("template <TStages> void ExpandLoopFrames(TTypeList<TStages...>)",

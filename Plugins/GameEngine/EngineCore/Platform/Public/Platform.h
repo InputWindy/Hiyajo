@@ -1,5 +1,7 @@
 #pragma once
 
+#include "PlatformApi.h"
+
 #include <Core/Delegate.h>
 #include <Core/Interface.h>
 #include <Core/ThreadedServer.h>
@@ -7,6 +9,7 @@
 #include <Maho.h>
 
 #include <atomic>
+#include <condition_variable>
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -34,6 +37,30 @@ class FPlatform;
 
 /** Global platform instance accessor - returns FPlatform* (cross-DLL via function, no bare variable export). */
 MAHO_API FPlatform* GetPlatform();
+
+/**
+ * THE CANONICAL FRAME NUMBER: the ROUND the engine is driving, process-wide, monotonic.
+ *
+ * It answers exactly one question -- "which round is this?" -- and that is what lets a caller
+ * hand a frame number to the scheduler (`FFrameGraph::Submit(batch, Frame)` /
+ * `FFrameBuilder::Execute<TStages>(Frame)`) instead of inventing a private counter per sequence.
+ * Every graph in the process then puts a given round in the same slot, so "the frame K rounds
+ * ago" means the same thing everywhere.
+ *
+ * WHY A FUNCTION AND NOT A VARIABLE: the counter would otherwise be instantiated once per module
+ * that links it, and each DLL would count its own frames -- silently, and only visibly as frames
+ * landing in the wrong slot. `MAHO_PLATFORM_API` on the function keeps a single definition, in
+ * this module.
+ *
+ * SINGLE WRITER: `FPlatform::IBeginFrame` -- one increment per frame driven, and nothing else in
+ * the process writes it (not the ctor, not `Initialize`). A second `FPlatform` install is
+ * therefore a contract break, not a reset; `Initialize` asserts it.
+ *
+ * Readers may call this freely: it is one atomic load, and reading it twice within one frame is
+ * allowed to give the same value (that is the point). The HOST should still read it ONCE per
+ * frame and share the value -- see `FEngineBase::NextFrameNumber`.
+ */
+MAHO_PLATFORM_API std::uint64_t GetFrameIndex();
 
 /** Native surface handle - opaque (GLFWwindow*, EGLContext, ANativeWindow*, UIView*, ...). */
 using FNativeSurface = void*;
@@ -146,7 +173,10 @@ public:
  *   Platform.CreateWindow(1280, 720, "MyGame");
  *   Engine.Install<FPlatform>();   // or Install(ApplyModuleExtension("FPlatform"))
  */
-class FPlatform : public FFrameExtension, public FThreadedServer, public IPipeline<IPreInit, IInit, IPostInit, IBeginFrame, ITick, IEndFrame, IExit, IPreShutdown, IShutdown, IPostShutdown>
+class FPlatform 
+	: public FFrameExtension
+	, public FThreadedServer
+	, public IPipeline<IInit, IBeginFrame, IEndFrame, IExit, IPreShutdown, IShutdown>
 {
 public:
 	MAHO_DECLARE_FRAME(FPlatform);
@@ -194,6 +224,16 @@ public:
 		return CachedToolkitWindow;
 	}
 
+	/** How many slots the published input ring holds -- the pipeline depth K this ring was sized by
+	 *  (the host's value; see the ring in the private section). Never a margin and never re-sized: the
+	 *  publisher keys every slot with the canonical frame number, so a K-wide ring cannot evict a frame
+	 *  that is still in flight. Exposed so the render layer can CHECK that it equals the device's frame
+	 *  slots and its own bucket count (FRender::Initialize) instead of trusting them to match. */
+	[[nodiscard]] std::uint32_t GetInputRingSlotCount() const
+	{
+		return static_cast<std::uint32_t>(InputRing.size());
+	}
+
 	/** Copy the current input snapshot (mouse pos/buttons + keyboard down-state + mods
 	 *  + cursor-in + focus) into Out. Any reader may call this every frame; it is a
 	 *  REPEATABLE pull-current snapshot (nothing is consumed). Its wheel fields are whatever the
@@ -205,17 +245,43 @@ public:
 	 *  This is the one a reader in a DIFFERENT frame graph must use. The UI stages are children
 	 *  of the render collector, so no dependency edge can ever order them against Tick() -- and
 	 *  reading ReadInput() would race the pump's live working copy. A published slot is complete
-	 *  and never mutated again, so a reader lagging by up to MAHO_FRAMES_IN_FLIGHT frames still
-	 *  gets a coherent snapshot instead of a torn one. */
+	 *  and never mutated again, so a reader lagging by up to the pipeline depth (`GetFramesInFlight`)
+	 *  of frames still gets a coherent snapshot instead of a torn one. */
 	void ReadFrameInput(MInputContext& Out) const;
 
-	/** The LATEST published input-frame index (monotonic, bumped once per published frame). A
-	 *  consumer ALIGNS on this: it reads every frame it has not read yet, in order, exactly once. */
+	/** The NEWEST published input frame -- the canonical frame whose input is already frozen. This is
+	 *  the PULL side (a reader that only wants the current state); a consumer that must apply EVERY
+	 *  frame exactly once aligns on the CANONICAL frame instead (`Platform::GetFrameIndex()`) and asks
+	 *  for that frame by index -- see ReadInputFrame. */
 	[[nodiscard]] std::uint64_t GetInputFrameIndex() const;
 
-	/** Read one TAGGED input frame -- its snapshot AND the edge events of that same pump. False when
-	 *  the index has already been evicted (the reader fell more than kInputRingSlots frames behind),
-	 *  which a consumer must treat as "I skipped input", never as "no input happened". */
+	/** Read the input PUBLISHED FOR THE CANONICAL FRAME `Index` -- "give me frame Index's input": its
+	 *  snapshot AND the edge events of that same pump.
+	 *
+	 *  The two graphs PIPELINE, so the frame a consumer is driving can be newer than anything the
+	 *  platform has frozen yet: this consumer's stage runs in the same round as `FPlatform::Tick`, as
+	 *  its sibling rather than its successor (no edge can order them -- they are in different frame
+	 *  graphs). The call therefore WAITS on the publisher (`Tick` stores the index and notifies under
+	 *  `InputMutex`) instead of handing back a stale slot. That wait is the FALLBACK: with the
+	 *  ordering edge into the render collector in place (a consumer's batch is submitted only after
+	 *  the round's own freeze), a request for a frame that IS frozen returns immediately and one for
+	 *  a frame that is not should never be made.
+	 *
+	 *  False means the frame's input is NOT available, and the three reasons are distinct failures:
+	 *
+	 *    - `Index > Published` while the producer is ALIVE: the wait above already expired, i.e. the
+	 *      consumer's round was submitted before this round's freeze. Production is 1:1 with the frame
+	 *      loop and the ordering edge makes it reachable in order, so this is reported as a
+	 *      SCHEDULING BUG -- not as a gap.
+	 *    - `Index > Published` with the producer CLOSED (`PreShutdown`): that frame never ran (shutdown
+	 *      stopped production), so there is nothing to replay. A GAP, not a lag.
+	 *    - `Index + kInputRingSlots <= Published`: this consumer is behind by MORE than the pipeline
+	 *      depth, i.e. its frame had already been evicted when it asked. Production is 1:1 with the
+	 *      frame loop (the publish is awaited inside `Tick`), so nothing legitimate gets that far
+	 *      behind: it is reported as a bug.
+	 *
+	 *  Either way the caller SKIPS that frame's input -- never applies an older frame's input to
+	 *  another frame. */
 	[[nodiscard]] bool ReadInputFrame(std::uint64_t Index, FInputFrame& Out) const;
 
 	/** Fired at the END of every pump, carrying the index of the frame just published. Subscribers
@@ -234,16 +300,12 @@ public:
 
 private:
 	// -- engine pipeline stages (scheduler-only) --
-	void PreInitialize(FEngineBase&, FEngineContext&) override {}
 	void Initialize(FEngineBase& Engine, FEngineContext& Frame) override;
-	void PostInitialize(FEngineBase&, FEngineContext&) override {}
 	void Shutdown(FEngineBase& Engine, FEngineContext& Frame) override;
 	void BeginFrame(FEngineBase& Engine, FEngineContext& Frame) override;
-	void Tick(FEngineBase& Engine, FEngineContext& Frame) override;
 	void EndFrame(FEngineBase& Engine, FEngineContext& Frame) override;
 	void RequestExit(FEngineBase& Engine, FEngineContext& Frame) override;
-	void PreShutdown(FEngineBase&, FEngineContext&) override {}
-	void PostShutdown(FEngineBase&, FEngineContext&) override {}
+	void PreShutdown(FEngineBase& Engine, FEngineContext& Frame) override;
 
 	// -- the platform's OWN thread (FThreadedServer) ---------------------------------------------
 	//
@@ -294,26 +356,26 @@ private:
 	 *  the key was still down). */
 	std::vector<MInputEvent> FrameEvents;
 
-	/** Published input ring: one slot per in-flight frame PLUS a measured margin.
+	/** Published input ring: one slot per frame the pipeline lets overlap.
 	 *
-	 *  The margin is NOT for stalls -- production is 1:1 with the frame loop (the publish happens in
-	 *  `FPlatform::Tick`, and the pump is marshalled onto the platform thread *and waited on*), so a
-	 *  stalled frame publishes nothing and no backlog can accumulate.
-	 *
-	 *  It is for the STRUCTURAL offset between the two graphs: this stage publishes in the engine graph,
-	 *  while the consumers (the UI stages) are children of the render collector and the render frames
-	 *  PIPELINE -- so a consumer's cursor sits a few frames behind the producer by construction, not by
-	 *  being late. Measured (Release, steady state): with the ring at exactly `MAHO_FRAMES_IN_FLIGHT` a
-	 *  consumer reading by index was repeatedly 3 frames behind and its input frames were EVICTED, i.e.
-	 *  the ring had to hold the offset plus headroom. Keep the offset in the ring's name, not in a magic
-	 *  number: a consumer that falls behind by more than this SKIPS frames and is TOLD (ReadInputFrame),
-	 *  because silently applying an older frame's input to the wrong frame is worse than dropping it. */
-	static constexpr std::uint32_t kInputConsumersPipelineOffset = 3;
-	static constexpr std::uint32_t kInputRingSlots = MAHO_FRAMES_IN_FLIGHT + kInputConsumersPipelineOffset;
-	FInputFrame InputRing[kInputRingSlots];
-	std::uint32_t InputRingWrite = 0;
-	std::uint64_t InputFrameCounter = 0;                      // writer-owned
-	std::atomic<std::uint64_t> InputFramePublished{ 0 };      // what readers align on
+	 *  The slot count IS the graph's depth K (`GetFramesInFlight()`, injected by the host), and that
+	 *  is now exact rather than a margin: the publisher keys every slot with the CANONICAL frame
+	 *  number (`Platform::GetFrameIndex()`, advanced one stage earlier by `IBeginFrame`), and the
+	 *  graph's admission holds at most K rounds in flight -- so the oldest round a consumer can still
+	 *  legitimately owe is at most K behind the newest, and a K-slot ring cannot evict a frame that is
+	 *  still in flight. A consumer that asks for an older one has LOST that frame's input and is TOLD
+	 *  (`ReadInputFrame`), because applying an older frame's input to another frame is worse than
+	 *  dropping it. (An earlier design added a hand-measured `+3` margin here, because a consumer
+	 *  reading "whatever was published" sat structurally behind the producer; the by-index wait in
+	 *  `ReadInputFrame` removes that offset, so the margin went with it.) */
+	std::vector<FInputFrame> InputRing;
+	std::atomic<std::uint64_t> InputFramePublished{ 0 };      // newest frame whose input is frozen
+	/** Set ONCE, at `PreShutdown` -- "production has stopped for good". Deliberately NOT set by
+	 *  `DestroyWindow` (which `CreateWindow` calls before building a window): marking it there closed
+	 *  the input at STARTUP, so every by-index read of a not-yet-frozen frame took the closed exit and
+	 *  reported a gap instead of waiting its (short) moment. */
+	std::atomic<bool> bInputClosed{ false };
+	mutable std::condition_variable InputPublishedCV;         // consumers wait here for a frame's publish
 
 	// Dropped file paths (OS drag & drop), same producer/consumer split.
 	mutable std::vector<std::string> DroppedFiles;
