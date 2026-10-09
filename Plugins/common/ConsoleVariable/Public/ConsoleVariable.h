@@ -3,6 +3,7 @@
 // ConsoleVariable - CVar registry (engine Common, TSingleton). Static
 // TAutoConsoleVariable globals self-register at static-init; Find looks them
 // up. Values stored as strings, parsed on typed access.
+#include "ConsoleVariableApi.h"
 #include <Core/Singleton.h>
 #include <Maho.h>
 
@@ -38,6 +39,25 @@ enum class ECVarFlags : std::uint32_t
 	return (static_cast<std::uint32_t>(Flags) & static_cast<std::uint32_t>(Test)) != 0;
 }
 
+/** Bitwise composition for the flag set. A SCOPED enum has no implicit conversion to its underlying
+ *  type, so without these a registration could only pass ONE flag (`ECVarFlags::ReadOnly`), and a
+ *  variable that is genuinely both (e.g. `ReadOnly | Shipping`) would have to cast by hand at every
+ *  call site -- which is where a dropped flag goes unnoticed. */
+[[nodiscard]] constexpr ECVarFlags operator|(ECVarFlags Lhs, ECVarFlags Rhs)
+{
+	return static_cast<ECVarFlags>(static_cast<std::uint32_t>(Lhs) | static_cast<std::uint32_t>(Rhs));
+}
+
+[[nodiscard]] constexpr ECVarFlags operator&(ECVarFlags Lhs, ECVarFlags Rhs)
+{
+	return static_cast<ECVarFlags>(static_cast<std::uint32_t>(Lhs) & static_cast<std::uint32_t>(Rhs));
+}
+
+constexpr ECVarFlags& operator|=(ECVarFlags& Lhs, ECVarFlags Rhs)
+{
+	return Lhs = (Lhs | Rhs);
+}
+
 /** Console variable value type. */
 enum class ECVarType : std::uint8_t
 {
@@ -48,8 +68,15 @@ enum class ECVarType : std::uint8_t
 };
 
 /**
- 	 * Console variable interface - what FindConsoleVariable returns. Values are
+ 	* Console variable interface - what FindConsoleVariable returns. Values are
  * stored as a string internally and parsed on typed access.
+ *
+ * Reads are LAZY-CONFIGURED: the first value access applies the project's
+ * `[ConsoleVariables]` entry from `Config/DefaultEngine.ini`, and falls back to
+ * the registered default when the file, the section or the key is absent. The
+ * application is memoized per variable (never re-read), so the value is stable
+ * for the rest of the process. It is NOT routed through `Set`, i.e. `ReadOnly`
+ * does not block a config-file value -- only a runtime `Set` (see below).
  */
 class IConsoleVariable
 {
@@ -65,16 +92,28 @@ public:
 	[[nodiscard]] virtual bool GetBool() const = 0;
 	[[nodiscard]] virtual std::string GetString() const = 0;
 
-	/** Set from a string (parsed); ignored when ReadOnly. */
+	/** Set from a string (parsed). A variable carrying `ECVarFlags::ReadOnly`
+	 *  REFUSES the write and reports it once (Core `ReportError` -> stderr +
+	 *  Saved/Logs/Fatal.log); it never fails silently. */
 	virtual void Set(std::string_view Value) = 0;
+
+	/** UE's `SetByString` name for the same operation - the same gate, the same
+	 *  once-only report. Kept as the alias it is (not a second virtual), so the
+	 *  two spellings can never drift apart. */
+	void SetByString(std::string_view Value) { Set(Value); }
 };
 
 /**
  * Console variable registry (UE IConsoleManager). Static TAutoConsoleVariable
  * globals register here at static-init; Find looks them up. TSingleton with the
  * fixed Initialize/Shutdown lifecycle (Shutdown clears the registry).
+ *
+ * Exported (`MAHO_CONSOLEVARIABLE_API`, see ConsoleVariableApi.h): every plugin
+ * that declares a `TAutoConsoleVariable` reaches this single instance through
+ * the DLL boundary - an inline accessor here would hand each module its OWN
+ * registry, and `Find` would then only ever see the caller's own variables.
  */
-class FConsoleVariable
+class MAHO_CONSOLEVARIABLE_API FConsoleVariable
 	: public TSingleton<FConsoleVariable>
 	, public IPlugin<IShutdown>
 {
@@ -126,6 +165,10 @@ template <> struct TCVarType<std::string> { static constexpr ECVarType Value = E
  * Core/BuildConfig.h: a release carries what the product needs, not the development knobs). An
  * unregistered variable is not gone -- `GetValue`/`Set` keep working on its own copy, so a setting
  * a release pruned reads as its default instead of breaking the build.
+ *
+ * `GetValue` reads through the registry entry, so it is the LAZY CONFIG POINT: the first read
+ * applies `Config/DefaultEngine.ini`'s `[ConsoleVariables]` value for this name (see
+ * IConsoleVariable). No Config layer has to be installed for that to happen.
  */
 template <typename T>
 class TAutoConsoleVariable

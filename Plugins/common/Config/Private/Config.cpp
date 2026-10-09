@@ -51,12 +51,23 @@ void FConfig::Initialize(FEngineBase&, FEngineContext&)
 	Load("Config/" + std::string(GetPlatformName()) + ".ini");
 
 	// Push [ConsoleVariables] values into the CVar registry: key == CVar name.
+	//
+	// A `ReadOnly` variable is SKIPPED, and that is not a hole in the contract: ReadOnly refuses
+	// RUNTIME writes, while a configured startup value is applied by the variable itself, lazily, on
+	// its first read (the same ini, the same section -- see ConsoleVariable.h), so pushing it here
+	// would only be refused and reported as an error by the very layer that already applied it.
 	for (const auto& [Key, Value] : Sections["ConsoleVariables"])
 	{
-		if (ConsoleVariable::IConsoleVariable* Var = ConsoleVariable::FConsoleVariable::Get().Find(Key))
+		ConsoleVariable::IConsoleVariable* Var = ConsoleVariable::FConsoleVariable::Get().Find(Key);
+		if (Var == nullptr)
 		{
-			Var->Set(Value);
+			continue;
 		}
+		if (ConsoleVariable::HasFlag(Var->GetFlags(), ConsoleVariable::ECVarFlags::ReadOnly))
+		{
+			continue;   // its value comes from the configuration, not from a runtime Set
+		}
+		Var->Set(Value);
 	}
 }
 

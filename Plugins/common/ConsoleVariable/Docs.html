@@ -79,13 +79,14 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div id="app">
   <div id="side">
     <h1>Maho 引擎源码</h1>
-    <div class="search" title="左侧扫描 Source/**/*.h：1 个头文件 · 已声明 1 个 · 6 个实体 / 26 个成员 ｜ 内容在 Tools/docs_content.py 里逐条声明">
+    <div class="search" title="左侧扫描 Source/**/*.h：2 个头文件 · 已声明 2 个 · 6 个实体 / 27 个成员 ｜ 内容在 Tools/docs_content.py 里逐条声明">
       <input id="q" type="search" placeholder="搜索头文件…  （如 Frame、Core、Entry）" autocomplete="off">
     </div>
     <div id="tree"><ul>
 <li class="dir"><span class="dir-label" data-dir="Public">Public</span>
 <ul>
 <li class="file"><a href="#Public__ConsoleVariable_h" data-file="Public__ConsoleVariable_h">ConsoleVariable.h</a></li>
+<li class="file"><a href="#Public__ConsoleVariableApi_h" data-file="Public__ConsoleVariableApi_h">ConsoleVariableApi.h</a></li>
 </ul>
 </li>
 </ul></div>
@@ -97,7 +98,8 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <p>运行时可调参数的注册表（对齐 UE 的 `IConsoleManager` / `TAutoConsoleVariable`）：静态的 `TAutoConsoleVariable&lt;T&gt;` 全局对象在**静态初始化期**自注册，`FConsoleVariable::Get().Find(name)` 在运行期按名字查。</p>
 <p>**为什么自注册**：参数属于**使用它们的那个模块**，不属于注册表。让参数对象在静态初始化期自己登记，就省掉了「注册表需要枚举所有模块的参数」这条反向依赖 —— 注册表因此保持通用，加一个新参数不需要改任何中心文件。</p>
 <p>**为什么值一律以字符串存放、按需解析**：控制台 / 配置文件 / 命令行给出的都是文本，存原文让同一份数据既能按 <span class="kw">int</span> 读也能按 <span class="kw">float</span> 读；也避免了「类型」在运行期被首次访问锁死。</p>
-<p>**为什么容量是 O(1) 单例**：注册表必须进程唯一（静态对象在任何线程 / 任何 DLL 里都要落到同一张表），因此 `Get()` 声明在头、定义在本模块的 cpp（实例跨 DLL 唯一）。</p>
+<p>**为什么单例进程唯一**：注册表必须进程唯一（静态对象在任何线程 / 任何 DLL 里都要落到同一张表），因此 `Get()` 声明在头、定义在本模块的 cpp（实例跨 DLL 唯一），并且整个类带 `MAHO_CONSOLEVARIABLE_API`。</p>
+<p>**取值是懒配置的**：某个变量**第一次被读**时，先应用工程目录 `Config/DefaultEngine.ini` 的 `[ConsoleVariables]` 值（键 == 变量名），文件 / 段 / 键缺一个就用注册默认值；每项只应用一次（`std::once_flag` 记忆化，文件也只解析一次），所以**不装 Config 层也读得到 ini**，而值在进程余下时间里保持稳定。</p>
 </div></div>
 <div class="card">
 <h3 class="card-title">包含的头文件</h3>
@@ -124,7 +126,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tbody>
 <tr><td>ECVarFlags::None = 0</td><td>无标志</td></tr>
 <tr><td>ECVarFlags::Cheat = 1u &lt;&lt; 0</td><td>仅作弊模式可改（上层策略读取，注册表本身不做拦截）</td></tr>
-<tr><td>ECVarFlags::ReadOnly = 1u &lt;&lt; 1</td><td>运行期不可改：`Set` 直接忽略（**唯一的强制项**）</td></tr>
+<tr><td>ECVarFlags::ReadOnly = 1u &lt;&lt; 1</td><td>运行期不可改：`Set` / `SetByString` **拒绝并上报一次**（`ReportError` → stderr + `Saved/Logs/Fatal.log`），不是静默忽略</td></tr>
 <tr><td>ECVarType::Int / Float / Bool / String</td><td>值类型标签：决定 `Register` 时如何解释默认值文本</td></tr>
 </tbody></table>
 </div>
@@ -180,7 +182,8 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> <span class="kw">float</span> GetFloat() <span class="kw">const</span> = 0</td><td>按浮点读取（解析失败取 0）</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> <span class="kw">bool</span> GetBool() <span class="kw">const</span> = 0</td><td>按布尔读取（解析失败取 <span class="kw">false</span>）</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> std::string GetString() <span class="kw">const</span> = 0</td><td>按字符串读取 —— 返回 `std::string` 而非 `string_view`：值可以随时被 `Set` 改写，视图会立刻悬空</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> Set(std::string_view Value) = 0</td><td>从字符串赋值（内部解析）；**带 `ReadOnly` 标志时静默忽略** —— 「不可改」是策略而不是错误，不制造异常路径</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> Set(std::string_view Value) = 0</td><td>从字符串赋值（内部解析）；**带 `ReadOnly` 标志时拒绝写入并上报一次** —— 拒绝是强制的（值不变），但**不静默**：`ReportError` 落到 stderr 与 `Saved/Logs/Fatal.log`，同一变量只报第一次（`std::atomic` 抢占），避免控制台反复敲同一个写把日志刷爆</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> SetByString(std::string_view Value)</td><td>UE `SetByString` 的同义写法 —— **非虚的转发**（`Set(Value)`），于是两种拼法的门禁与「只报一次」不可能分叉</td></tr>
 </tbody></table></div>
 </div>
 <div class="ent e-class" id="Public__ConsoleVariable_h-3">
@@ -239,12 +242,21 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <h4>接口</h4>
 <table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
 <tr><td><span class="acc a-public">public</span></td><td>TAutoConsoleVariable(std::string_view InName, T Default, std::string_view Description, ECVarFlags Flags = ECVarFlags::None)</td><td>构造即注册：走 `FConsoleVariable::Get().Register(...)`，`TCVarType&lt;T&gt;::Value` 提供类型标签、`ToString(Default)` 把默认值转成文本。**注意静态初始化顺序**：注册表由 `Get()` 保证存在，因此这里不依赖别的全局对象的构造顺序</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] T GetValue() <span class="kw">const</span></td><td>按 `T` 取值：`<span class="kw">if</span> <span class="kw">constexpr</span>` 在编译期选出 `GetInt/GetFloat/GetBool/GetString` 中的一个 —— 没有运行期类型分派，也没有装箱</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Set(T Value)</td><td>按 `T` 赋值：先 `ToString` 再走接口 `Set`（于是 `ReadOnly` 的忽略行为对两种改法一致）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] T GetValue() <span class="kw">const</span></td><td>按 `T` 取值：`<span class="kw">if</span> <span class="kw">constexpr</span>` 在编译期选出 `GetInt/GetFloat/GetBool/GetString` 中的一个 —— 没有运行期类型分派，也没有装箱。**这里就是懒配置点**：对该变量的第一次读会应用 ini（`Handle == <span class="kw">nullptr</span>` 时读自己的局部副本）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Set(T Value)</td><td>按 `T` 赋值：先 `ToString` 再走接口 `Set`（于是 `ReadOnly` 的拒绝 + 上报行为对两种改法一致）</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] std::string_view GetName() <span class="kw">const</span></td><td>本变量自己的名字（连表都不用查）</td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>[[nodiscard]] <span class="kw">static</span> std::string ToString(<span class="kw">const</span> T&amp; Value)</td><td>把值规范成存进注册表的文本：`std::string` 原样、`<span class="kw">bool</span>` 走 <span class="st">"true"</span>/<span class="st">"false"</span>（**不是 1/0**，让人手写的配置文件也读得懂）、其余走 `std::to_string`</td></tr>
 </tbody></table></div>
 </div>
+</div>
+<div class="pane" id="pane-Public__ConsoleVariableApi_h">
+<div class="hdr">Public/ConsoleVariableApi.h</div>
+<h2 class="file-title">ConsoleVariableApi.h —— 本模块的导出标签</h2>
+<div class="card"><div class="doc">
+<p>`MAHO_CONSOLEVARIABLE_API` —— 编译 `ConsoleVariable.dll` 时构建系统定义 `MAHO_CONSOLEVARIABLE_MODULE_EXPORTS` ⇒ 展开成 `MAHO_EXPORT`；消费方展开成 `MAHO_IMPORT`。</p>
+<p>**为什么注册表类本身要带这个标签**（而不只是 `Get()`）：每个声明了 `TAutoConsoleVariable` 的插件都要穿过 DLL 边界去访问**同一份**注册表；一个没有导出标签的类在消费方眼里没有 key function，vftable / 删除析构会在每个模块里各生成一份（见根 AGENTS.md「Export / Module-Boundary Rules」）。</p>
+</div></div>
+<div class="empty">（这个头还没有声明内容）</div>
 </div></div>
 </div>
 <script>

@@ -53,11 +53,14 @@ private:
 MAHO_CONFIG_API FConfig* GetConfig();
 
 /** Read one `[Section] Key` straight out of an ini FILE, with no layer installed -- for a value that
- *  must be known BEFORE the first frame graph exists. The pipeline depth is exactly that value: its
- *  reader (the host's `SetFramesInFlight`) runs before the init flush, while the layer that pushes
- *  `[ConsoleVariables]` into the CVar registry (`FConfig::IInit`) is a NODE of that very flush -- so
- *  the file is the only source that is early enough. Parses with the same rules as `Load`; returns
- *  `Default` when the file, the section or the key is missing (or the value is not a number). */
+ *  must be known BEFORE any layer runs (i.e. before `FConfig::IInit` has loaded the file). It parses
+ *  with exactly the same rules as `Load` and returns `Default` when the file, the section or the key
+ *  is missing (or the value is not a number).
+ *
+ *  The pipeline depth used to be the caller of this (the host injected K before the first frame graph
+ *  existed); it is now a CVar (`r.FramesInFlight`) read lazily by Core, so nothing in the engine
+ *  depends on this function any more. It is kept because "read one number before anything is
+ *  installed" stays a legitimate need for a host that has no CVar registry yet. */
 MAHO_CONFIG_API std::int64_t ReadIniInt(std::string_view Path, std::string_view Section,
 	std::string_view Key, std::int64_t Default);
 

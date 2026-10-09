@@ -10,6 +10,10 @@ namespace Maho
 /** Semantics test for FFrameGraph; defined in FrameGraphSemantics.cpp. */
 int RunFrameGraphSemanticsTest();
 
+/** TEMPORARY verification of the ConsoleVariable lazy-config / ReadOnly changes;
+ *  defined in CVarConfigVerify.cpp. Driven by MAHO_TEST_CVAR. */
+int RunConsoleVariableConfigTest();
+
 namespace
 {
 	/** Set MAHO_TEST_SCHED to run the new scheduler's semantics test instead of the
@@ -17,6 +21,15 @@ namespace
 	bool SchedulerTestMode()
 	{
 		return std::getenv("MAHO_TEST_SCHED") != nullptr;
+	}
+
+	/** TEMPORARY: set MAHO_TEST_CVAR to run the ConsoleVariable verification. The plugin DLLs are
+	 *  still loaded (their static CVars register), but NO layer is installed -- in particular not
+	 *  FConfig, so the value a read returns can only have come from ConsoleVariable's own lazy
+	 *  ini application, never from FConfig::Initialize pushing it through Set. */
+	bool CVarTestMode()
+	{
+		return std::getenv("MAHO_TEST_CVAR") != nullptr;
 	}
 }
 
@@ -29,9 +42,22 @@ void FTaskGraphTest::PreMain()
 		return;
 	}
 
-	// Baseline mode: same shape as the reference project (ExampleEngine).
 	FPluginManager::Get().Load();
+	if (CVarTestMode())
+	{
+		// DLLs only: InstallChildrenOf maps every child module (so the CVars its statics declare --
+		// e.g. FLog.dll's `r.Trace` -- are registered), but NOTHING is flushed, so no stage ever
+		// runs: FConfig::Initialize in particular, i.e. no layer pushes [ConsoleVariables] through
+		// Set. Whatever a read returns therefore came from ConsoleVariable's own lazy ini apply.
+		InstallChildrenOf(GetName());
+		return;
+	}
+
+	// Baseline mode: same shape as the reference project (ExampleEngine).
 	InstallChildrenOf(GetName());
+	// The graph belongs to the HOST (FEngineBase::Graph) and is created on first use -- here, before
+	// the install batch that needs it. SchedulerTestMode/CVarTestMode above drive no batch at all.
+	EnsureGraph();
 	FlushPendingUpdates<
 		TTypeList<IPreInit, IInit, IPostInit>,
 		TTypeList<IPreShutdown, IShutdown, IPostShutdown>>();
@@ -42,6 +68,10 @@ int FTaskGraphTest::Main()
 	if (SchedulerTestMode())
 	{
 		return RunFrameGraphSemanticsTest();
+	}
+	if (CVarTestMode())
+	{
+		return RunConsoleVariableConfigTest();
 	}
 	return FEngineBase::Main();
 }
