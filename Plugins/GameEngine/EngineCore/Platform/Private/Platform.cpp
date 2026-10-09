@@ -111,10 +111,11 @@ MAHO_PLATFORM_API std::uint64_t GetFrameIndex()
 FPlatform::~FPlatform() = default;
 
 FPlatform::FPlatform()
-	// The published input ring is sized ONCE, from the INJECTED pipeline depth: one slot per frame
-	// the graph lets overlap (see the header). The host injects K (`SetFramesInFlight`) before it
-	// installs anything, so this is the configured value and never a default.
-	: InputRing(static_cast<std::size_t>(GetFramesInFlight()))
+	// The published input ring is sized ONCE, from the INJECTED pipeline depth PLUS the cross-sequence
+	// slack: `K + kCrossSequenceWindowSlack` slots (see that constant for why a K-wide ring evicts a
+	// frame a batch TAIL still owes). The host injects K (`SetFramesInFlight`) before it installs
+	// anything, so this is the configured value and never a default.
+	: InputRing(static_cast<std::size_t>(GetFramesInFlight() + kCrossSequenceWindowSlack))
 {
 	// The window size is read from the Config layer in Initialize - Config must
 	// be initialized first.
@@ -498,22 +499,26 @@ void FPlatform::Initialize(FEngineBase& Engine, FEngineContext&)
 {
 	MAHO_TRACE_STAGE(IInit, "Platform init", "start the platform thread and create the window");
 
-	// -- the input ring's width: the HOST's pipeline depth, READ FROM THE HOST ---------------------------------
+	// -- the input ring's width: the HOST's pipeline depth plus the cross-sequence slack, READ FROM THE HOST ----
 	//
 	// The ring was pre-sized in the constructor (the frame instance is constructed by the host's
 	// Install, which runs after the host injected K), so this is not about allocating: it is the
-	// INVARIANT. The ring must be exactly K wide, because the publisher keys each slot with the
-	// canonical frame number and the graph's admission lets at most K rounds overlap -- a ring that is
-	// narrower would silently evict a frame a consumer still legitimately owes, and a wider one only
-	// wastes memory. A mismatch is reported here, once, at init (never clamped): the value is now a
-	// real run-time configuration, so a disagreement means some layer sized itself from something else.
+	// INVARIANT. The ring must be exactly `K + kCrossSequenceWindowSlack` wide, because the publisher
+	// keys each slot with the canonical frame number and admission is not coupled across sequences --
+	// a host batch's TAIL may legitimately lag a full K behind the newest published frame, so a
+	// K-slot ring would silently evict a frame a consumer still owes (the slack is what the tail's
+	// admissible lag requires; a wider ring only wastes memory). A mismatch is reported here, once, at
+	// init (never clamped): the value is now a real run-time configuration, so a disagreement means
+	// some layer sized itself from something else -- and FRender checks the two against THIS same
+	// quantity, so a drift shows up on both ends.
 	{
-		const std::size_t Slots = static_cast<std::size_t>(Engine.GetFramesInFlight());
+		const std::size_t Slots =
+			static_cast<std::size_t>(Engine.GetFramesInFlight() + kCrossSequenceWindowSlack);
 		if (InputRing.size() != Slots)
 		{
 			const std::string Message =
 				"FPlatform::Initialize: the published input ring holds " + std::to_string(InputRing.size())
-				+ " slot(s) but the host's pipeline depth is " + std::to_string(Slots)
+				+ " slot(s) but the host's pipeline depth + cross-sequence slack is " + std::to_string(Slots)
 				+ " -- the ring is sized at construction, so K was changed after the frame was installed";
 			ReportError(Message.c_str());
 			MAHO_LOG_CORE_ERROR("{}", Message);
@@ -1048,16 +1053,20 @@ bool FPlatform::ReadInputFrame(std::uint64_t Index, FInputFrame& Out) const
 
 	if (Index + Slots <= Published)
 	{
-		// BEHIND by more than the pipeline depth: the producer already overwrote this frame. That is
-		// a scheduling bug, not a mode -- production is 1:1 with the frame loop (the publish happens
-		// in IBeginFrame, whose pump is awaited), so a consumer's stage cannot legitimately miss K rounds.
+		// BEHIND by more than the RING WIDTH -- and the ring is `K + kCrossSequenceWindowSlack`, so
+		// this is precisely "lag > K": a lag of exactly K still has its slot and was served above.
+		// That is the whole point of the slack (admission is not coupled across sequences, so a host
+		// batch's TAIL may legitimately lag a full K). Nothing legitimately gets FURTHER behind though
+		// -- production is 1:1 with the frame loop (the publish happens in IBeginFrame, whose pump is
+		// awaited) and a round the consumer owes never exceeds the admissible lag -- so beyond K is a
+		// scheduling bug, not a mode.
 		if (bMayReport)
 		{
 			LastReportedIndex = Published;
 			MAHO_LOG_CORE_ERROR(
 				"FPlatform: input frame {} was EVICTED before a consumer read it (newest {}, that "
-				"consumer is behind by {}, ring is {} slot(s) = the pipeline depth) -- those frames' "
-				"input is SKIPPED, not replayed",
+				"consumer is behind by {} -- more than K, the pipeline depth; ring is {} slot(s) = "
+				"K + kCrossSequenceWindowSlack) -- those frames' input is SKIPPED, not replayed",
 				Index, Published, Published - Index, Slots);
 		}
 		return false;

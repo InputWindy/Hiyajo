@@ -162,6 +162,27 @@ public:
 	[[nodiscard]] virtual FNativeSurface GetNativeWindow() const = 0;
 };
 
+/** By how much the published input ring EXCEEDS the pipeline depth K -- i.e. the ring is `K + this`.
+ *
+ *  Why not exactly K: **admission is NOT coupled across sequences.** The host graph's batch for frame
+ *  N+K only waits for its OWN PHASE to be idle; frame N's render-collaborator nodes live in a
+ *  DIFFERENT sequence (the render collector's own sub-graph). Nothing admits, orders or throttles
+ *  one sequence against the other, so the input publish for N+K can happen while the BATCH TAIL of N
+ *  is still pending -- and a batch tail (a late stage) can then lag a FULL K, not K-1. (The batch
+ *  HEAD is the opposite case: it is at most K-1 behind.) With a ring of exactly K the eviction test
+ *  `Index + Slots <= Published` already holds AT lag == K, so one small stall anywhere in the tail
+ *  silently drops a frame's input. This is not "the two graphs are offset by one" -- it is the
+ *  admission rule plus two independent sequences, and the slack is what that leaves for the tail.
+ *
+ *  With the slack the ring is K+1 wide, a lag of exactly K reads back its frame normally (K+1 slots
+ *  still hold it), and the failure is reported only BEYOND K (`Index + Slots <= Published`, i.e.
+ *  lag >= K+1) -- the point at which no in-flight round could still be owed.
+ *
+ *  FRender's "one depth, N rings" invariant reads THIS value (see Render.cpp), so the input ring and
+ *  the device's frame slots are checked against the same quantity instead of two hand-written
+ *  copies of it. */
+constexpr std::uint32_t kCrossSequenceWindowSlack = 1;
+
 /**
  * Platform system - native surface + events (an FEngineLayer feature). The
  * engine loop drives Tick() -> PollEvents + ShouldClose -> Engine.RequestExit().
@@ -245,8 +266,9 @@ public:
 	 *  This is the one a reader in a DIFFERENT frame graph must use. The UI stages are children
 	 *  of the render collector, so no dependency edge can ever order them against Tick() -- and
 	 *  reading ReadInput() would race the pump's live working copy. A published slot is complete
-	 *  and never mutated again, so a reader lagging by up to the pipeline depth (`GetFramesInFlight`)
-	 *  of frames still gets a coherent snapshot instead of a torn one. */
+	 *  and never mutated again, so a reader lagging by up to the ring width
+	 *  (`GetFramesInFlight() + kCrossSequenceWindowSlack`) of frames still gets a coherent snapshot
+	 *  instead of a torn one. */
 	void ReadFrameInput(MInputContext& Out) const;
 
 	/** The NEWEST published input frame -- the canonical frame whose input is already frozen. This is
@@ -275,9 +297,11 @@ public:
 	 *      SCHEDULING BUG -- not as a gap.
 	 *    - `Index > Published` with the producer CLOSED (`PreShutdown`): that frame never ran (shutdown
 	 *      stopped production), so there is nothing to replay. A GAP, not a lag.
-	 *    - `Index + kInputRingSlots <= Published`: this consumer is behind by MORE than the pipeline
-	 *      depth, i.e. its frame had already been evicted when it asked. Production is 1:1 with the
-	 *      frame loop (the publish is awaited inside `Tick`), so nothing legitimate gets that far
+	 *    - `Index + ring size <= Published`: this consumer is behind by MORE than the ring width, i.e.
+	 *      its frame's slot had already been overwritten when it asked. The ring is `K +
+	 *      kCrossSequenceWindowSlack` wide (see that constant), so a lag of exactly K is still served;
+	 *      only a lag BEYOND K is a failure. Admission is not coupled across sequence, so a batch TAIL
+	 *      may legitimately lag a full K -- hence the slack -- but nothing legitimately gets further
 	 *      behind: it is reported as a bug.
 	 *
 	 *  Either way the caller SKIPS that frame's input -- never applies an older frame's input to
@@ -356,18 +380,21 @@ private:
 	 *  the key was still down). */
 	std::vector<MInputEvent> FrameEvents;
 
-	/** Published input ring: one slot per frame the pipeline lets overlap.
+	/** Published input ring: `K + kCrossSequenceWindowSlack` slots (`GetFramesInFlight()` plus the
+	 *  cross-sequence slack, injected by the host).
 	 *
-	 *  The slot count IS the graph's depth K (`GetFramesInFlight()`, injected by the host), and that
-	 *  is now exact rather than a margin: the publisher keys every slot with the CANONICAL frame
-	 *  number (`Platform::GetFrameIndex()`, advanced one stage earlier by `IBeginFrame`), and the
-	 *  graph's admission holds at most K rounds in flight -- so the oldest round a consumer can still
-	 *  legitimately owe is at most K behind the newest, and a K-slot ring cannot evict a frame that is
-	 *  still in flight. A consumer that asks for an older one has LOST that frame's input and is TOLD
-	 *  (`ReadInputFrame`), because applying an older frame's input to another frame is worse than
-	 *  dropping it. (An earlier design added a hand-measured `+3` margin here, because a consumer
-	 *  reading "whatever was published" sat structurally behind the producer; the by-index wait in
-	 *  `ReadInputFrame` removes that offset, so the margin went with it.) */
+	 *  The slot count EXCEEDS the graph's depth K by `kCrossSequenceWindowSlack`, and the reason is the
+	 *  one on that constant: admission is not coupled across sequences, so a host batch's TAIL may lag
+	 *  a full K behind the newest published frame. A ring of exactly K would evict such a frame the
+	 *  instant its lag reached K (`Index + Slots <= Published` holds AT lag K), which is the one-frame
+	 *  input loss the slack removes; the publisher keys every slot with the CANONICAL frame number
+	 *  (`Platform::GetFrameIndex()`, advanced one stage earlier by `IBeginFrame`), so a lag of K still
+	 *  finds its slot, while a lag BEYOND K is reported (`ReadInputFrame`) -- applying an older frame's
+	 *  input to another frame is worse than dropping it. (An earlier design added a hand-measured `+3`
+	 *  margin here, because a consumer reading "whatever was published" sat structurally behind the
+	 *  producer; the by-index wait in `ReadInputFrame` removed the need for a MARGIN, and this slack is
+	 *  not one -- it is the width the tail's admissible lag requires, stated once and shared with
+	 *  FRender's ring invariant.) */
 	std::vector<FInputFrame> InputRing;
 	std::atomic<std::uint64_t> InputFramePublished{ 0 };      // newest frame whose input is frozen
 	/** Set ONCE, at `PreShutdown` -- "production has stopped for good". Deliberately NOT set by

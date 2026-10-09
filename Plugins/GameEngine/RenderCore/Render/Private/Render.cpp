@@ -245,6 +245,41 @@ void FRender::Initialize(FEngineBase& Engine, FEngineContext& Frame)
 			RHI.reset();
 		}
 	}
+	else if (P == nullptr)
+	{
+		// NO PLATFORM AT ALL, AND THAT IS NEVER A SILENT STATE. Every consequence of it is a silent
+		// zero somewhere else: no device, so `GetCanvasWidth()` is 0x0 for the rest of the process
+		// (see its definition), so every layer that sizes itself from the canvas -- the scene targets,
+		// the game UI's composite target, the editor's EditorRT and its whole panel tree -- goes
+		// permanently dormant while its stages keep running and its input consumers keep reporting a
+		// healthy-looking `reads=0`. That is exactly how a dead editor frame was once read as a healthy
+		// one, so the cause is named HERE, at the one site where it is still a single fact:
+		//
+		//   `GPlatform` is assigned at the END of `FPlatform::Initialize`, so a null here means the
+		//   platform's IInit node had not COMPLETED when this stage ran -- i.e. the ordering edge this
+		//   frame declares for exactly this reason (`MyStage<IInit>().IsWaiting<Platform::FPlatform>()
+		//   .ForStage<IInit>()`, see the ctor) did not hold for the batch that drove this stage. The
+		//   symptom is a start-up RACE, not a configuration: it reproduces as the log lines
+		//   "FRender: pipeline depth K=..." and "FPlatform::Initialize - CreateWindow(...)" appearing in
+		//   the WRONG ORDER (the window must exist first).
+		const std::string Message =
+			"FRender::Initialize: Platform::GetPlatform() is null -- the platform layer has not published "
+			"its instance, so there is no window and this process runs WITHOUT a device (the render "
+			"canvas stays 0x0: the scene, the UI composite and the editor's panel tree never start). The "
+			"ordering edge FRender::IInit <- FPlatform::IInit did not hold for this batch (the platform's "
+			"instance is published at the END of FPlatform::Initialize)";
+		ReportError(Message.c_str());
+		MAHO_LOG_CORE_ERROR("{}", Message);
+	}
+	else
+	{
+		// The platform is up but has no native window: legitimate in a headless build (there the absent
+		// device IS the honest answer), a failure otherwise -- and in the failure case FPlatform has
+		// already reported `CreateWindow(...) => false`, so one line here is enough to tie the two.
+		MAHO_LOG_CORE_WARN(
+			"FRender::Initialize: the platform has no native window -- running WITHOUT a device (canvas "
+			"0x0: the scene, the UI composite and the editor's panel tree stay dormant)");
+	}
 
 	// RDG resource pool (off-screen textures/buffers, cross-frame reuse). Sized by the same K: its
 	// buckets are retired by the frame slot the DEVICE chose, so the two counts being equal is not a
@@ -255,12 +290,17 @@ void FRender::Initialize(FEngineBase& Engine, FEngineContext& Frame)
 	//
 	// "K frames may be in flight" is only true if EVERY K-deep ring in the process is really K wide:
 	// the graph's phases (the authority -- the ring the frame numbers are distributed over), the
-	// device's slots (one fence / acquire semaphore / frame command buffer each), the pool's buckets,
-	// and the platform's published input ring. A ring that is smaller than K hands a live resource to
-	// another frame (the `vkQueueSubmit failed` / in-use classes of error); one that is larger only
-	// wastes memory. Both are reported HERE, at init, as one error -- instead of the previous
-	// arrangement, where a host that configured a depth other than the compiled one was refused and
-	// silently clamped back to it, which hid the mismatch rather than fixing it.
+	// device's slots (one fence / acquire semaphore / frame command buffer each) and the pool's
+	// buckets. The platform's published input ring is the deliberate exception: it is `K +
+	// Platform::kCrossSequenceWindowSlack` wide, because admission is not coupled across sequences, so a
+	// host batch's TAIL may legitimately lag a full K behind the newest published frame and a K-wide
+	// ring would evict input a consumer still owes (see that constant). It is a CPU-only snapshot ring,
+	// not a device resource, so the slack costs memory and nothing else. A ring that is smaller than
+	// its width hands a live resource to another frame (the `vkQueueSubmit failed` / in-use classes of
+	// error); one that is larger only wastes memory. Both are reported HERE, at init, as one error --
+	// instead of the previous arrangement, where a host that configured a depth other than the
+	// compiled one was refused and silently clamped back to it, which hid the mismatch rather than
+	// fixing it.
 	//
 	// A layer that is absent (headless: no window, so no RHI and no device) is not reported: 0 is then
 	// the honest answer for a ring that does not exist.
@@ -292,19 +332,25 @@ void FRender::Initialize(FEngineBase& Engine, FEngineContext& Frame)
 	}
 	if (P != nullptr)
 	{
+		// The input ring is `K + kCrossSequenceWindowSlack`, NOT K: read the width from the SAME
+		// quantity the platform sized itself from, so a hand-written copy of "+1" cannot drift away
+		// from it (a K-wide ring would tell a consumer lagging by K that its frame's input had been
+		// evicted -- see kCrossSequenceWindowSlack for why the tail may lag a full K).
+		const std::uint32_t ExpectedInputSlots = FrameSlots + Platform::kCrossSequenceWindowSlack;
 		const std::uint32_t InputSlots = P->GetInputRingSlotCount();
-		if (InputSlots != FrameSlots)
+		if (InputSlots != ExpectedInputSlots)
 		{
 			const std::string Message =
 				"FRender::Initialize: the platform input ring holds " + std::to_string(InputSlots)
-				+ " slot(s) but the pipeline depth is " + std::to_string(FrameSlots)
-				+ " -- a consumer lagging by K frames would be told its frame's input was evicted";
+				+ " slot(s) but it must be K + kCrossSequenceWindowSlack = " + std::to_string(ExpectedInputSlots)
+				+ " (K = " + std::to_string(FrameSlots)
+				+ ") -- a consumer whose batch tail lags by K would be told its frame's input was evicted";
 			ReportError(Message.c_str());
 			MAHO_LOG_CORE_ERROR("{}", Message);
 		}
 	}
-	MAHO_LOG_CORE_INFO("FRender: pipeline depth K={} (graph phases == device frame slots == pool buckets == input ring)",
-		FrameSlots);
+	MAHO_LOG_CORE_INFO("FRender: pipeline depth K={} (graph phases == device frame slots == pool buckets; input ring = K + {})",
+		FrameSlots, Platform::kCrossSequenceWindowSlack);
 	(void)Frame;
 
 	// Async shader compiler (dedicated compile thread).

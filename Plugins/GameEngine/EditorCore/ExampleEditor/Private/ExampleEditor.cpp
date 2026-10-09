@@ -239,7 +239,7 @@ layout(set = 0, binding = 0) uniform sampler2D FontTex;
 		std::uint64_t LastCursor = 0;     // the consumer's own cursor value at that read
 		std::uint64_t LastOwnFrame = 0;   // its own round at that read (GetRenderBatchFrame)
 		std::uint64_t LastPublished = 0;  // Platform::GetInputFrameIndex() at that read
-		std::uint32_t Slots = 0;          // the ring's K
+		std::uint32_t Slots = 0;          // the ring's width (K + kCrossSequenceWindowSlack)
 		int           DetailLines = 0;
 		std::uint64_t NearBehindTotal = 0;
 		std::uint64_t NextDiagAt = 600;
@@ -291,8 +291,10 @@ layout(set = 0, binding = 0) uniform sampler2D FontTex;
 			if (bOk) { ++Reads; }
 			else     { ++Misses; }
 
-			// `behind == K` IS the eviction (the check is `Index + Slots <= Published`), so the
-			// detail threshold is one below it: every line here is "about to be evicted".
+			// `behind == K` is the ADMISSIBLE LIMIT (a host batch's TAIL may legitimately lag a full K),
+			// so the detail threshold is that line: every detail line here is "at the limit". The
+			// eviction itself is one further (`Index + Slots <= Published`, i.e. lag > K, the ring being
+			// K + kCrossSequenceWindowSlack wide).
 			const std::uint64_t Behind = Published > Index ? Published - Index : 0;
 			if (RingSlots > 0 && Behind + 1 >= RingSlots)
 			{
@@ -316,10 +318,19 @@ layout(set = 0, binding = 0) uniform sampler2D FontTex;
 		{
 			if (StageRuns < NextDiagAt) { return; }
 			NextDiagAt = StageRuns + 600;
+			// `cursor` / `published` fall back to the STAGE-side observation when this consumer has not
+			// read a frame yet. `LastCursor` / `LastPublished` / `LastIndex` / `Slots` are written by
+			// `Read()` ONLY, so printing them unconditionally made a consumer that never read print
+			// `published=0` -- read as "the platform published nothing" and once taken as proof that the
+			// publisher was dead, while the stage entry at the very same instant had stored the real
+			// index in `StagePublished`. A silent consumer must not be able to imitate a silent producer.
+			const bool bHasRead = Reads > 0;
+			const std::uint64_t Cursor = bHasRead ? LastCursor : StageCursor;
+			const std::uint64_t Published = bHasRead ? LastPublished : StagePublished;
 			MAHO_LOG_CORE_ERROR(
 				"INPUTPROBE consumer={} stageRuns={} reads={} misses={} cursor={} index={} ownFrame={} published={} ring={} behind={} slowTotal={} stageGaps={}",
-				Name, StageRuns, Reads, Misses, LastCursor, LastIndex, LastOwnFrame, LastPublished,
-				Slots, LastPublished > LastIndex ? LastPublished - LastIndex : 0, NearBehindTotal,
+				Name, StageRuns, Reads, Misses, Cursor, LastIndex, LastOwnFrame, Published,
+				Slots, Published > LastIndex ? Published - LastIndex : 0, NearBehindTotal,
 				GapTotal);
 		}
 	};
@@ -470,6 +481,26 @@ void FExampleEditor::EditorInput(FRender& R, FRenderContext& Frame)
 
 	if (m_Context == nullptr || !bVpValid)
 	{
+		// CONSUMER-SIDE readiness gate, reported for one reason: "the panel has not been drawn once yet"
+		// (a handful of warm-up frames -- the rect the viewport publishes is the PREVIOUS frame's, so the
+		// first frames legitimately have none) and "this frame loop will never feed the game UI" (no
+		// editor context, or no panel tree at all because the canvas was 0 and `InitEditorViews` never
+		// reached `UpdateEditorPanels`) look IDENTICAL from here -- and both look like a healthy
+		// `reads=0` in the input probe. Rate-limited: the warm-up stays silent, a permanent gate says so
+		// once per 600 gated frames instead of never.
+		static std::atomic<std::uint64_t> GateFrames{ 0 };
+		const std::uint64_t Gated = GateFrames.fetch_add(1, std::memory_order_relaxed) + 1;
+		if (Gated >= 600 && Gated % 600 == 0)
+		{
+			MAHO_LOG_CORE_ERROR(
+				"ExampleEditor::EditorInput: still NOT feeding the game UI ({} gate(s) so far, reads stay "
+				"0): {}",
+				Gated,
+				m_Context == nullptr
+					? "the editor has no ImGui context (OnInstalled never got a window)"
+					: "no viewport panel rect has been published yet (bVpValid false: the panel tree was "
+					  "never drawn, e.g. the canvas was 0 so UpdateEditorPanels never ran)");
+		}
 		return;
 	}
 	Platform::FPlatform* P = Platform::GetPlatform();
@@ -745,6 +776,22 @@ void FExampleEditor::InitEditorViews(FRender& R)
 		const std::uint32_t CanvasH = R.GetCanvasHeight();
 		if (CanvasW == 0 || CanvasH == 0)
 		{
+			// LOUD, and the reason this gate is reported at all: with no canvas (no device, so
+			// `FRender::GetCanvasWidth() == 0` for the life of the process) this return skips the WHOLE
+			// editor frame below it -- `UpdateEditorPanels()` never runs, so no component ever declares
+			// (or registers) its view tree, the viewport never publishes a panel rect, `bVpValid` stays
+			// false and `EditorInput` silently feeds nothing. A dead editor frame that still runs its
+			// stages 1000 times a second is indistinguishable from a healthy quiet one in every counter
+			// (reads=0, published>0), which is exactly the reading this gate produced. The upstream cause
+			// is named at its own site (FRender::Initialize: no window -> no device).
+			static std::atomic<int> NoCanvasLogged{ 0 };
+			if (NoCanvasLogged.fetch_add(1, std::memory_order_relaxed) < 3)
+			{
+				MAHO_LOG_CORE_ERROR(
+					"ExampleEditor: the render canvas is {}x{} -- the editor frame is NOT running: no "
+					"EditorRT, no panel tree, no viewport rect, so EditorInput feeds nothing (the device "
+					"was never created -- see FRender::Initialize)", CanvasW, CanvasH);
+			}
 			return;
 		}
 		if (!EditorRT.IsValid() || EditorRT.GetWidth() != CanvasW || EditorRT.GetHeight() != CanvasH)

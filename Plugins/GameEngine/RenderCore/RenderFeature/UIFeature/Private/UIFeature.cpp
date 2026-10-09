@@ -96,7 +96,7 @@ layout(set = 0, binding = 0) uniform sampler2D FontTex;
 		std::uint64_t LastCursor = 0;     // the consumer's own cursor value at that read
 		std::uint64_t LastOwnFrame = 0;   // its own round at that read (GetRenderBatchFrame)
 		std::uint64_t LastPublished = 0;  // Platform::GetInputFrameIndex() at that read
-		std::uint32_t Slots = 0;          // the ring's K
+		std::uint32_t Slots = 0;          // the ring's width (K + kCrossSequenceWindowSlack)
 		int           DetailLines = 0;
 		std::uint64_t NearBehindTotal = 0;
 		std::uint64_t NextDiagAt = 600;
@@ -149,8 +149,10 @@ layout(set = 0, binding = 0) uniform sampler2D FontTex;
 			if (bOk) { ++Reads; }
 			else     { ++Misses; }
 
-			// `behind == K` IS the eviction (the check is `Index + Slots <= Published`), so the
-			// detail threshold is one below it: every line here is "about to be evicted".
+			// `behind == K` is the ADMISSIBLE LIMIT (a host batch's TAIL may legitimately lag a full K),
+			// so the detail threshold is that line: every detail line here is "at the limit". The
+			// eviction itself is one further (`Index + Slots <= Published`, i.e. lag > K, the ring being
+			// K + kCrossSequenceWindowSlack wide).
 			const std::uint64_t Behind = Published > Index ? Published - Index : 0;
 			if (RingSlots > 0 && Behind + 1 >= RingSlots)
 			{
@@ -174,10 +176,19 @@ layout(set = 0, binding = 0) uniform sampler2D FontTex;
 		{
 			if (StageRuns < NextDiagAt) { return; }
 			NextDiagAt = StageRuns + 600;
+			// `cursor` / `published` fall back to the STAGE-side observation when this consumer has not
+			// read a frame yet. `LastCursor` / `LastPublished` / `LastIndex` / `Slots` are written by
+			// `Read()` ONLY, so printing them unconditionally made a consumer that never read print
+			// `published=0` -- read as "the platform published nothing", while the stage entry at the very
+			// same instant had the real index in `StagePublished`. A silent consumer must not be able to
+			// imitate a silent producer.
+			const bool bHasRead = Reads > 0;
+			const std::uint64_t Cursor = bHasRead ? LastCursor : StageCursor;
+			const std::uint64_t Published = bHasRead ? LastPublished : StagePublished;
 			MAHO_LOG_CORE_ERROR(
 				"INPUTPROBE consumer={} stageRuns={} reads={} misses={} cursor={} index={} ownFrame={} published={} ring={} behind={} slowTotal={} stageGaps={}",
-				Name, StageRuns, Reads, Misses, LastCursor, LastIndex, LastOwnFrame, LastPublished,
-				Slots, LastPublished > LastIndex ? LastPublished - LastIndex : 0, NearBehindTotal,
+				Name, StageRuns, Reads, Misses, Cursor, LastIndex, LastOwnFrame, Published,
+				Slots, Published > LastIndex ? Published - LastIndex : 0, NearBehindTotal,
 				GapTotal);
 		}
 	};
