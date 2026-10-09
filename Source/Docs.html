@@ -79,7 +79,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div id="app">
   <div id="side">
     <h1>Maho 引擎源码</h1>
-    <div class="search" title="左侧扫描 Source/**/*.h：24 个头文件 · 已声明 24 个 · 36 个实体 / 197 个成员 ｜ 内容在 Tools/docs_content.py 里逐条声明">
+    <div class="search" title="左侧扫描 Source/**/*.h：24 个头文件 · 已声明 24 个 · 36 个实体 / 204 个成员 ｜ 内容在 Tools/docs_content.py 里逐条声明">
       <input id="q" type="search" placeholder="搜索头文件…  （如 Frame、Core、Entry）" autocomplete="off">
     </div>
     <div id="tree"><ul>
@@ -396,8 +396,8 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <table>
 <thead><tr><th>签名</th><th>说明</th></tr></thead>
 <tbody>
-<tr><td>MAHO_FRAMES_IN_FLIGHT</td><td>环深度的**默认值**（3）。真正的深度 `K` 是运行期值 —— 见下面三个函数</td></tr>
-<tr><td>SetFramesInFlight(K) / GetFramesInFlight()</td><td>**流水深度的唯一口径**：应用层在**任何 FFrameGraph 构造之前**注入一次，之后进程内只读（第一个图构造即封口，中途改是 bug 而不是设置）。`MAHO_FRAMES_IN_FLIGHT` 只是没人注入时的兜底</td></tr>
+<tr><td>MAHO_FRAMES_IN_FLIGHT</td><td>环深度的**默认值**（3）—— 只给「进程里没有任何一层装过读取器」用（测试工程）。真正的深度 `K` 是运行期值，见下面两个函数</td></tr>
+<tr><td>SetFramesInFlightSource(fn) / GetFramesInFlight()</td><td>**流水深度的唯一口径**：口径是**配置**（CVar `r.FramesInFlight`，`Config/DefaultEngine.ini` 的 `[ConsoleVariables]`），而 Core 是纯脚手架、不许依赖 CVar 插件 ⇒ 交过来的不是数而是一个**读取器**（拥有该变量的那一层在 <span class="kw">static</span>-init 装一次）。`GetFramesInFlight()` 在**首次使用**时问一次并记住（`0` = 还没读过），此后进程内只读。**没有 setter 了**：从前是宿主 `SetFramesInFlight` 注入 + 第一个图构造封口，两个地方都在声称这个值；现在只有一个权威（CVar）和一个读取者（Core），运行期没有东西能让 K 动</td></tr>
 <tr><td>PhaseOfFrame(Frame) / PhaseOfShiftedFrame(Frame, Offset)</td><td>**唯一的环运算**：绝对帧号 → 相位（`Frame % K`），以及「相对偏移 `Offset` 帧之前的那一轮的相位」（在**有符号**域里算，否则起跑期 `Frame 0, Offset -1` 会下溢到无关槽）</td></tr>
 <tr><td>IsFrameInsideWindow(Offset)</td><td>目标是否还在活跃窗口内：`Offset &lt;= -K` 的帧**必然已完成**（它的槽不排空，这一轮根本提交不进去）⇒ 边视为已满足、不必发射</td></tr>
 <tr><td><span class="kw">constexpr</span> <span class="kw">bool</span> IsValidPhase(std::int32_t)</td><td>相位是否落在环内（`[0, K)`）</td></tr>
@@ -529,7 +529,8 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-private">private</span></td><td>std::deque&lt;FTaskNode&gt; Nodes</td><td>节点表，下标即 FNodeId</td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>std::unordered_map&lt;FTaskKey, FNodeId, FTaskKeyHash&gt; Registry</td><td>身份 → 节点下标（精确键）</td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>std::deque&lt;std::atomic_bool&gt; EventStates</td><td>事件标志表（用下标寻址，不分配不回收）</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td>std::vector&lt;std::atomic&lt;std::uint32_t&gt;&gt; SlotInFlight</td><td>每相位在飞计数：准入依据。按**构造时的 K** 定尺（K 是运行期值）</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>std::int32_t Depth</td><td>**本图的 K**：首次使用时读一次（`EnsureDepth`），此后是常量。每一张按相位定尺的表都由它定尺（`SlotInFlight`、事件表的相位步长）。`0` = 还没读过 —— 不能是构造期的值，因为图是**驱动它的那个帧的成员**，构造早于插件（因而早于那个 CVar）加载</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>std::vector&lt;std::atomic&lt;std::uint32_t&gt;&gt; SlotInFlight</td><td>每相位在飞计数：准入依据。按 `Depth` 在**首次使用时**定尺（K 是运行期值）；**空** = 还没读过 K，即没有任何相位在飞</td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>std::atomic&lt;std::uint32_t&gt; AwaitingCompletion</td><td>待完成节点数：提交栅栏的计数</td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>SlotCv / SlotMutex</td><td>等待 / 唤醒（只在提交方与完成通知之间配对）</td></tr>
 </tbody></table></div>
@@ -538,6 +539,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">bool</span> Submit(std::vector&lt;FTask&gt; Tasks, std::uint64_t Frame, std::string* OutReason = <span class="kw">nullptr</span>)</td><td>提交**第 `Frame` 轮**：① 相位在这里算（`PhaseOfFrame(Frame)` 盖到每个 task 的身份上 —— 调用方的词汇是轮次，槽是图的）② 校验（批内同一身份重复 / 相位越界 / 成环）③ **准入**（阻塞调用方，直到本轮占用的那个槽排空）④ 入队。准入既是环复用规则，也是「最多 K 轮在飞」这条事实本身 —— 所以没有 Retire、没有水位线</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Wait()</td><td>**提交栅栏**：阻塞到「我提交过的都完成」。待完成计数由调用方在入队**前**自增、调度线程完成时自减 —— 所以它不会漏掉自己的工作（等相位计数则会在派发空档漏掉）</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> EnsureDepth()</td><td>在**调用方线程**上（`Submit` 的最前面）解析 K，只有第一次做实：写 `Depth` 并按它给 `SlotInFlight` 定尺。放在 Submit 里是因为「批还没被碰过之前，环的所有相位表就已定尺」—— 调度线程此后读到的必是已发布的值，除这次交接外不需要别的同步</td></tr>
 </tbody></table></div>
 </div>
 </div>
@@ -840,6 +842,8 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div class="sect">
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-protected">protected</span></td><td>std::optional&lt;FFrameGraph&gt; Graph</td><td>图是宿主的**成员**（`FFrameGraph` 既不可拷贝也不可移动 —— 它是带常驻线程的 `FThreadedServer` ⇒ 只能原地构造一次，故用 `optional`）。成员早于基类析构 ⇒ 图比 builder 持有的池先停，「图与池都静下来了，然后才释放任何实例 / 模块」由此构造上成立；从前那个持有图的 `FFrameGraphHost` 基类已经删了</td></tr>
+<tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">bool</span> bGraphReady</td><td>`EnsureGraph` 是否已经建过并启动（两个驱动入口读它，而不是读 `Graph.has_value()` —— 让「到底用过没有」只有一个名字）</td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>std::map&lt;std::string, std::string&gt; Store</td><td>命令行解析结果的 KV 表</td></tr>
 </tbody></table></div>
 <div class="sect">
@@ -847,9 +851,9 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> ParseCommandLine(<span class="kw">int</span> Argc, <span class="kw">char</span>** Argv)</td><td>把 `-key` / `-key value` / `--key=value` 归一化后交给 CLI11 解析，结果进 KV 表</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> PreMain() = 0</td><td>纯虚：装载（`FPluginManager::Load` → `InstallChildrenOf`）并驱动一次 init 批次</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">int</span> Main()</td><td>主循环：`<span class="kw">while</span> (!ShouldExit()) { <span class="kw">const</span> Frame = NextFrameNumber(); FlushPendingUpdates&lt;Init,Shutdown&gt;(); Execute&lt;Tick&gt;(Frame); }` → `Wait()`。返回退出码</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">int</span> Main()</td><td>主循环：`EnsureGraph()`（幂等 —— 图是**宿主的成员**，首次用图之前建）→ `<span class="kw">while</span> (!ShouldExit()) { <span class="kw">const</span> Frame = NextFrameNumber(); FlushPendingUpdates&lt;Init,Shutdown&gt;(); Execute&lt;Tick&gt;(Frame); }` → 收尾的一对栅栏 `Graph-&gt;Wait()` + `DrainPool()`。返回退出码</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> std::uint64_t NextFrameNumber()</td><td>**这一轮的帧号**：`Main` 每帧只读**一次**，整帧（每条序列的 tick 批，以及宿主自己按帧发布的东西）都用同一个数 —— 读两次可能跨过帧边界，把一帧劈进两轮。默认是本循环自己的单调计数器（没有帧源的宿主，如测试工程）；有真实帧源的宿主覆写它（`FExampleEngine` 读 `Platform::GetFrameIndex()`，单写者是 `FPlatform::IBeginFrame`）。Core 不认识这个值，它只从 `Execute` / `Submit` 的参数进来</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> PostMain()</td><td>收摊：关闸门 → 丢弃未生效装载 → `UninstallAll` → 循环 flush 到静 → `Wait()` → 残留报出</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> PostMain()</td><td>收摊：`EnsureGraph()`（幂等；覆盖「装完立刻收摊、从未 tick」的宿主 —— 下面的 sweeper 要驱动一次性批，那需要图）→ 关闸门 → 丢弃未生效装载 → `UninstallAll` → 循环 flush 到静 → 残留报出 → `Graph-&gt;Wait()` —— 最后这一下是**拥有者自己的栅栏**，也是「图与池都静下来了，然后才释放任何实例 / 模块」这句不变量的全部显式动作：图的停止与释放不需要任何调用（`~FFrameGraph` 自己停调度线程，而成员早于基类析构 ⇒ 那时池还活着）</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">bool</span> Has(std::string_view Key) <span class="kw">const</span></td><td>命令行里有这个键吗（带不带值都算）</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] std::string Get(std::string_view Key) <span class="kw">const</span></td><td>取键的值；不存在为空串</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">bool</span> GetBool(std::string_view Key) <span class="kw">const</span></td><td>按布尔解释（<span class="kw">true</span>/1/yes/on）</td></tr>
@@ -857,6 +861,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">const</span> std::map&lt;std::string, std::string&gt;&amp; GetAll() <span class="kw">const</span></td><td>全部 KV 对（只读）</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> RequestExit()</td><td>请求主循环在本帧边界退出（幂等；同时让 Install/Reload 开始拒绝）</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">bool</span> ShouldExit() <span class="kw">const</span> <span class="kw">noexcept</span></td><td>是否已请求退出 —— 宿主对收集器「关闭」状态的词汇（`IsClosing()`）</td></tr>
+<tr><td><span class="acc a-protected">protected</span></td><td>FFrameGraph&amp; EnsureGraph()</td><td>**这张图的持有者就是这个宿主**（不是某个基类、也不是 builder 里的隐藏 `unique_ptr`）：首次使用时建 —— `Graph.emplace(GetPool(), GetPoolLane())` + `Initialize()` + `SetGraph`（把那个**非拥有引用**递进 builder），幂等。**懒建而不是构造期建**：`K` 是运行期值，口径是插件侧的**只读 CVar** `r.FramesInFlight`（Core 经 `GetFramesInFlight()` 问一次并记住，**没有 setter**），图在首次使用时就地解析它一次 —— 构造期建就会建在插件存在之前。`Main` / `PostMain` / `RequestExit` 三个驱动入口都先调它</td></tr>
 </tbody></table></div>
 </div>
 </div>
@@ -922,7 +927,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <p>宿主只认这一页的词汇：装 / 卸 / 重载帧集合、驱动帧循环、收摊排空。</p>
 <p>类本身**一个**（`FFrameBuilder&lt;TContext&gt;`），另有 `IFrameCollector` 接口（见下）—— 它的存在让装载方能在不知道 `TContext` 的情况下，把父收集器的任务池递给子收集器。</p>
 <p>类模板的成员天生都是模板，函数体无法 out-of-line（那需要显式实例化，而引擎模块不许 include 插件头、无法为插件上下文实例化）⇒ 只有**无状态**的辅助函数下沉进 `Private/Engine/FrameBuilder.cpp`（`Detail::ReportBridgeDiagnostics`、`IFrameCollector` 的虚析构）。</p>
-<p>**私有持有的三件**：`FFrameGraph`（图）、`FFrameBridge`（桥）、`TFrameDispatch`（分派）—— 宿主全程看不见它们。</p>
+<p>**私有持有的两件**：`FFrameBridge`（桥）、`TFrameDispatch`（分派）—— 宿主全程看不见它们。**图也不在其中**：builder 不持图（`FFrameGraphHost` 那个「持有图并把它递下去」的基类已经没了），图是**驱动那条 stage 序列的那个帧的成员**，由该帧懒建后经 `SetGraph` 递一个**引用**进来；于是「谁拥有图 / 谁栅栏它 / 谁释放它」是那个**帧**的属性，不再是某个基类的属性。</p>
 </div></div>
 <div class="card">
 <h3 class="card-title">包含的头文件</h3>
@@ -965,6 +970,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td>TMulticastEvent&lt;<span class="kw">void</span>(<span class="kw">const</span> FFrameStatusInfo&amp;)&gt; OnFrameStatus</td><td>**每个终态**都广播（12 态，无静默路径）</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>TMulticastEvent&lt;<span class="kw">void</span>()&gt; OnClosing</td><td>翻到「关闭」时广播一次（teardown 之前，帧都还活着）</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">enum</span> <span class="kw">class</span> EFrameStatus / <span class="kw">struct</span> FFrameStatusInfo / <span class="kw">struct</span> FFrameStats</td><td>嵌套类型（见上面的状态表）</td></tr>
+<tr><td><span class="acc a-protected">protected</span></td><td>FFrameGraph* InjectedGraph</td><td>**所有者注入的那一个非拥有引用**（`SetGraph` 写入）。叫 `InjectedGraph` 而不是 `Graph`：所有者自己也声明了一个叫 `Graph` 的成员（见 `FEngineBase::Graph`），基类成员同名会在每个派生作用域里被遮蔽 —— 那就是另一个对象了</td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>std::vector&lt;FFrameExtension*&gt; Pipelines</td><td>活动帧（不变量：**先移出这里再释放** ⇒ 在表里即活着）</td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>PendingAdded / PendingRemoveRequests / PendingReloads</td><td>待装载 / 待卸载 / 待重载</td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>std::map&lt;std::string, <span class="kw">int</span>&gt; ReverseDepCount</td><td>名字 → 被依赖次数（卸载拒绝的依据）</td></tr>
@@ -972,7 +978,6 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-private">private</span></td><td>std::map&lt;std::string, std::size_t&gt; NameToSlot</td><td>名字 → 槽位（O(log n) 的唯一查表）</td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>std::vector&lt;std::unique_ptr&lt;FFrameExtension&gt;&gt; Features</td><td>实例所有权（析构顺序的关键一环）</td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>FThreadPool OwnedPool / FThreadPool* Pool / FThreadPool::FLane Lane</td><td>本收集器驱动节点的池，以及**属于它自己**的那条 lane。`OwnedPool` 是兜底（宿主、或没人递池的收集器有自己的 worker）；`UseSharedPool` 把 `Pool` 指向**父**收集器那个池并取一条 lane，于是嵌套收集器（宿主 → FRender → FExampleEditor）全落在最外层那个 worker 集上，同时各自保有独立栅栏。**这是 lane 存在的全部理由**：引擎需要的隔离是**每收集器**的，而它从前是用「每收集器一套线程」买的（4 × 核数条线程，去跑约 2 个并发节点）。<br>`Features` **刻意声明在 `Pool` 之后**：成员按声明逆序销毁，而收集器子实例正是在那里被销毁，它的析构要 flush 父收集器共享的池 —— 顺序写反就是收摊期的一次 use-after-free</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td>std::unique_ptr&lt;FFrameGraph&gt; Graph</td><td>那张图（声明在 Pool 之后 ⇒ 先于 Pool 析构）</td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>LoopFrames / LastSequenceRound / bLoopDirty / bLoopJustExpanded / LastLoopRejectReason</td><td>帧集缓存 + **每序列的单调地板**（`LastSequenceRound` 只是「这条序列已经驱动到哪一轮」，**不是帧源** —— 帧号由宿主给 `Execute`）+ 两个「只报一次」守卫</td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>std::atomic&lt;<span class="kw">bool</span>&gt; bClosing</td><td>关闭标志（阶段里可能从任意线程置位，故原子）</td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">bool</span> bFlushing</td><td>flush 重入守卫（RAII 管理）</td></tr>
@@ -980,9 +985,9 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div class="sect">
 <h4>接口</h4>
 <table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> ~FFrameBuilderBase()</td><td>析构先 `Wait()`（图 + 本 lane 的池屏障），再用例析构：Graph → Features（跑插件析构）→ Pool（join worker）→ Modules（释放 DLL）。**Features 必须早于 Pool**：收集器子实例在这里被销毁，而它的析构要 flush —— 并归还自己那条 lane —— 父收集器共享的那个池，池必须还活着</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> ~FFrameBuilderBase()</td><td>析构先 `DrainPool()`（**只**排本 lane 的池屏障），再用例析构：Features（跑插件析构）→ Pool（join worker）→ Modules（释放 DLL）。**图不在这里排空** —— 图是驱动序列的那个**帧的成员**，帧的析构在 builder 基类**之前**跑（成员早于基类），而 `~FFrameGraph` 自己就会停掉调度线程（那时它自己的节点表还活着）。所有者需要显式做的只剩**栅栏**（`Graph-&gt;Wait()`）：它把「图与池都静下来了，然后才释放任何实例 / 模块」写成调用方的一个动作，而不是藏在某个析构里。**Features 必须早于 Pool**：收集器子实例在这里被销毁，而它的析构要 flush —— 并归还自己那条 lane —— 父收集器共享的那个池，池必须还活着</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FFrameStats GetStats() <span class="kw">const</span></td><td>当前规模（工具 / 面板查询用，勿每帧轮询）</td></tr>
-<tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">void</span> Wait()</td><td>收摊静默：图的栅栏 + 池屏障。**循环不每帧调**（帧要流水）</td></tr>
+<tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">void</span> DrainPool()</td><td>**本 lane 的池屏障**（一次转换栅栏的池那一半）。驱动点把它写成一对：`OwnGraph().Wait()`（图的提交栅栏，图来自所有者注入的那个引用）+ `DrainPool()`。**循环不每帧调**（帧要流水）</td></tr>
 <tr><td><span class="acc a-protected">protected</span></td><td>[[nodiscard]] std::size_t UninstallAll()</td><td>给每个活动帧发卸载请求（按名字；名字比模块活得久）</td></tr>
 <tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">void</span> ReleaseAll()</td><td>收摊最后手段：**不跑 teardown 阶段**硬释放，但仍保持「在 Pipelines 即活着」不变量</td></tr>
 <tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">void</span> DropPendingInstalls() / <span class="kw">void</span> CancelPendingReloads()</td><td>丢弃未生效的装载 / 重载</td></tr>
@@ -996,7 +1001,9 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-protected">protected</span></td><td>[[nodiscard]] <span class="kw">bool</span> HasLayerName(std::string_view) / <span class="kw">bool</span> IsOwned(<span class="kw">const</span> FFrameExtension*) <span class="kw">const</span></td><td>某名字是否活动 / 待装载（O(log n)）；该实例是否**仍归收集器所有**（唯一存活性判据 —— 卸载是「先移出 Pipelines 再释放」，所以外部拿到的指针可以查而不是盲解引用）</td></tr>
 <tr><td><span class="acc a-protected">protected</span></td><td>[[nodiscard]] std::string ModulePathOf(<span class="kw">const</span> FFrameExtension*) <span class="kw">const</span></td><td>装载它的 DLL 路径（同样不碰对方模块）</td></tr>
 <tr><td><span class="acc a-protected">protected</span></td><td>[[nodiscard]] <span class="kw">bool</span> HasPendingUpdates() <span class="kw">const</span> / <span class="kw">bool</span> IsClosing() <span class="kw">const</span> <span class="kw">noexcept</span></td><td>有没有待应用的变更 / 是否已关闸</td></tr>
-<tr><td><span class="acc a-protected">protected</span></td><td>FFrameGraph&amp; GetGraph()</td><td>唯一那张图（帧循环与一次性批次共用；靠「批次前后都排空」+「身份按 stage 区分」保证安全）</td></tr>
+<tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">void</span> SetGraph(FFrameGraph&amp; InGraph)</td><td>驱动该序列的帧**在它自己懒建出那张图的那一刻**递进来的那**一个**引用（宿主是 `EnsureGraph`，收集器帧是它自己的同名函数）。builder 只存这个非拥有引用</td></tr>
+<tr><td><span class="acc a-protected">protected</span></td><td>[[nodiscard]] FFrameGraph&amp; OwnGraph() <span class="kw">const</span></td><td>**每个驱动点用**的那张图（帧循环、两处一次性批、拓扑变更排空）。活跃的帧里它绝不为空：在帧把自己的图注入之前，没有东西能驱动序列；真变成空了，这里的 `MAHO_ENSURE` 会大声说出来</td></tr>
+<tr><td><span class="acc a-protected">protected</span></td><td>[[nodiscard]] FThreadPool&amp; GetPool() / FThreadPool::FLane GetPoolLane() <span class="kw">const</span></td><td>节点体跑在哪个池、哪条 lane —— 图就是按这一对建的</td></tr>
 </tbody></table></div>
 </div>
 <div class="ent e-class" id="Public__Engine__FrameBuilder_h-1">

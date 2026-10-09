@@ -73,6 +73,14 @@ void ReportBridgeDiagnostics(const std::vector<FFrameBridge::FDiagnostic>& Diagn
 
 } // namespace Detail
 
+// NOTHING GRAPH-SHAPED LIVES HERE ANY MORE. `FFrameGraphHost` -- the mixin base that owned a graph
+// and handed it to the builder -- is gone: the graph is a member of the frame that drives the
+// sequence (`FEngineBase`, `FRender`, `FGameWorld`, `FExampleEditor` all own theirs) and reaches the
+// builder as a REFERENCE through `SetGraph`, so "who owns the graph / who fences and releases it"
+// is a property of the frame and no longer of a base class. What is left out of line here is only
+// the interface's key function (below), for the same reason: one vtable and one deleting destructor
+// in Maho.dll rather than a COMDAT copy per module.
+
 // Out of line on purpose, exactly like FThreadedServer's virtuals: the interface is a base of
 // plugin-side objects, so keeping its first out-of-line virtual (the destructor) in the engine's
 // own module gives it a KEY FUNCTION -- one vtable and one deleting destructor in Maho.dll rather

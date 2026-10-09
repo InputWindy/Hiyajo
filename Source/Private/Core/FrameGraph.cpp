@@ -76,30 +76,46 @@ namespace
 
 namespace
 {
-	/** K: the number of slots == the number of frames that may be in flight. Written once by the
-	 *  host (before any graph exists) and read by every graph; the DEFAULT is what a host that
-	 *  injects nothing gets, so `MAHO_FRAMES_IN_FLIGHT` survives as a default rather than as an
-	 *  array bound. */
-	std::atomic<std::int32_t> GFramesInFlight{ MAHO_FRAMES_IN_FLIGHT };
+	/** The READER K comes from: installed by the layer that owns the `r.FramesInFlight` CVar (see
+	 *  FrameGraph.h), called ONCE. A function pointer rather than a value because Core must not
+	 *  depend on the CVar plugin; null in a process with no such layer (the test projects). */
+	std::atomic<std::int32_t (*)()> GFramesInFlightSource{ nullptr };
 
-	/** Set by the first graph's construction: from then on the ring's size is a hardware fact of
-	 *  the live node tables and events, so a change is a bug, not a setting. */
-	std::atomic<bool> FramesInFlightSealed{ false };
+	/** The resolved value: 0 == "not read yet". Written once (idempotent -- two threads racing here
+	 *  compute the SAME answer), read by every later caller, and never moved again: the depth sizes
+	 *  structures that cannot be re-sized while the process runs, which is why the CVar is ReadOnly.
+	 *  Memoizing here is also what lets every consumer (the graph's tables, the RHI's slots, the
+	 *  resource pool's buckets, the input ring) read ONE number instead of re-asking the config. */
+	std::atomic<std::int32_t> GFramesInFlight{ 0 };
 }
 
-void SetFramesInFlight(std::int32_t InFramesInFlight)
+void SetFramesInFlightSource(std::int32_t (*InSource)()) noexcept
 {
-	MAHO_CHECKF(InFramesInFlight > 0, "SetFramesInFlight: depth must be > 0 (got %d)",
-		InFramesInFlight);
-	MAHO_CHECKF(!FramesInFlightSealed.load(std::memory_order_acquire),
-		"SetFramesInFlight: the depth is sealed once a graph exists -- it must be set BEFORE any "
-		"FFrameGraph is constructed (one K per process, no mid-run change)");
-	GFramesInFlight.store(InFramesInFlight, std::memory_order_release);
+	GFramesInFlightSource.store(InSource, std::memory_order_release);
 }
 
 std::int32_t GetFramesInFlight() noexcept
 {
-	return GFramesInFlight.load(std::memory_order_acquire);
+	const std::int32_t Cached = GFramesInFlight.load(std::memory_order_acquire);
+	if (Cached != 0)
+	{
+		return Cached;
+	}
+
+	// First read: ask the configuration. `MAHO_FRAMES_IN_FLIGHT` is the answer for a process that
+	// never installed a reader; a non-positive answer is clamped here (a depth of 0 would make the
+	// ring arithmetic divide by zero -- the CVar's own registered default is positive).
+	// NOTE the `const` placement: it qualifies the POINTER, not the return type. `const std::int32_t
+	// (*Source)()` would be "a pointer to a function returning `const std::int32_t`" -- a different
+	// type from the one the reader was stored as, and therefore not convertible back out.
+	std::int32_t (*const Source)() = GFramesInFlightSource.load(std::memory_order_acquire);
+	std::int32_t Depth = Source != nullptr ? (*Source)() : MAHO_FRAMES_IN_FLIGHT;
+	if (Depth <= 0)
+	{
+		Depth = 1;
+	}
+	GFramesInFlight.store(Depth, std::memory_order_release);
+	return Depth;
 }
 
 bool FTaskKey::operator==(const FTaskKey& Other) const
@@ -129,12 +145,29 @@ FFrameGraph::FFrameGraph(FThreadPool& InPool, FThreadPool::FLane InLane)
 	: Pool(InPool)
 	, Lane(InLane)
 {
-	// Seal K: this graph's node table and event table are shaped by it, so the depth is fixed for
-	// the rest of the process from the moment the FIRST graph exists.
-	FramesInFlightSealed.store(true, std::memory_order_release);
+	// K is NOT read here: the graph is a MEMBER of the frame that drives it, so it is constructed
+	// before the plugins -- and therefore the CVar that owns K -- are loaded. It is resolved on
+	// first use instead (EnsureDepth), which is also the moment the ring's tables can be sized.
+}
 
-	SlotInFlight = std::vector<std::atomic<std::uint32_t>>(
-		static_cast<std::size_t>(GetFramesInFlight()));
+/** Resolve K, once. Called by Submit on the CALLER's thread, before anything is enqueued, so the
+ *  scheduler thread reads a published value and the whole ring is sized before its first node. */
+void FFrameGraph::EnsureDepth()
+{
+	if (Depth != 0)
+	{
+		return;
+	}
+
+	Depth = GetFramesInFlight();
+	MAHO_CHECKF(Depth > 0, "FFrameGraph: the pipeline depth resolved to %d -- the depth is a "
+		"process-wide configuration value (r.FramesInFlight) and may never be zero", Depth);
+
+	// The slot counters are the graph's half of "K frames in flight" (the admission wait reads
+	// them); the event table's phase stride is the other half and is sized where it grows.
+	// EXACTLY K slots: the phase index IS the slot index (`SlotIndexOf`), and both the admission
+	// scan and the event-table stride index this vector BY PHASE.
+	SlotInFlight = std::vector<std::atomic<std::uint32_t>>(static_cast<std::size_t>(Depth));
 	for (auto& Count : SlotInFlight)
 	{
 		Count.store(0, std::memory_order_relaxed);
@@ -172,6 +205,11 @@ bool FFrameGraph::Submit(std::vector<FTask> Tasks, std::uint64_t Frame, std::str
 	// the same value for the resolution it does internally -- this is the authoritative stamp, not
 	// a second opinion.) Dependency TARGETS are left alone on purpose: they name OTHER rounds, and
 	// their phases were resolved one edge at a time by the bridge.
+	//
+	// K IS READ HERE, on the caller's thread, and only the first time (see EnsureDepth): it sizes
+	// every phase-space table this graph owns, so it must be known before the batch is touched.
+	EnsureDepth();
+
 	const std::int32_t Phase = PhaseOfFrame(Frame);
 	for (FTask& Task : Tasks)
 	{
@@ -311,9 +349,10 @@ FNodeId FFrameGraph::GetOrCreateNodeId(const FTaskKey& Key)
 	Registry.emplace(Key, Id);
 
 	// Floor the event table at this node's phases. A deque, because growing never moves
-	// elements (std::atomic_bool is neither copyable nor movable).
+	// elements (std::atomic_bool is neither copyable nor movable). The stride is THIS graph's
+	// depth (read once -- see EnsureDepth).
 	const std::size_t Needed = (static_cast<std::size_t>(Id) + 1)
-		* static_cast<std::size_t>(GetFramesInFlight());
+		* static_cast<std::size_t>(Depth);
 	while (EventStates.size() < Needed)
 	{
 		EventStates.emplace_back(false);
@@ -349,8 +388,9 @@ void FFrameGraph::WireNode(FTaskNode& Node, const FTask& Decl)
 			return;   // dangling edge: disappears
 		}
 
-		// K is a runtime value now, so the phase space is passed in rather than read from a constant.
-		const FEvent Event = Detail::EventOf(Target, Nodes[Target].Key.Phase, GetFramesInFlight());
+		// The phase space is a runtime value (this graph's own depth), so it is passed in rather
+		// than read from a constant.
+		const FEvent Event = Detail::EventOf(Target, Nodes[Target].Key.Phase, Depth);
 
 		// Dedup by target event: a double declaration would otherwise count twice while the
 		// event is set once -- a permanent wait.
@@ -396,7 +436,7 @@ void FFrameGraph::ApplySubmit(std::vector<FTask> Tasks)
 		Node.Dependencies.clear();
 		Node.Successors.clear();
 		Node.UnmetCount = 0;
-		Node.CompletionEvent = Detail::EventOf(Id, Task.Key.Phase, GetFramesInFlight());
+		Node.CompletionEvent = Detail::EventOf(Id, Task.Key.Phase, Depth);
 		Node.Closure = Task.Closure;
 		Node.bDispatched.store(false, std::memory_order_relaxed);
 
@@ -578,7 +618,7 @@ void FFrameGraph::WaitPhasesIdle(const std::vector<FTask>& Tasks)
 	// Only the phases a task NAMES matter: a task's own phase is what gets (re)occupied. After
 	// Submit's stamp they are all the batch's own phase, but the scan stays generic -- it is the
 	// ADMISSION that must be right, not the shape of a batch.
-	std::vector<char> Wanted(static_cast<std::size_t>(GetFramesInFlight()), 0);
+	std::vector<char> Wanted(static_cast<std::size_t>(Depth), 0);
 	for (const FTask& Task : Tasks)
 	{
 		if (PhaseIsKnown(Task.Key.Phase))
@@ -605,7 +645,10 @@ void FFrameGraph::WaitPhasesIdle(const std::vector<FTask>& Tasks)
 
 bool FFrameGraph::IsPhaseIdle(std::int32_t Phase) const
 {
-	if (!PhaseIsKnown(Phase))
+	// `SlotInFlight` is sized at first use (see EnsureDepth), so a graph that has never been given a
+	// batch has no phase in flight by definition -- and the phase-space check alone would read past
+	// an empty vector.
+	if (SlotInFlight.empty() || !PhaseIsKnown(Phase))
 	{
 		return true;
 	}

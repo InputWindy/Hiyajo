@@ -741,6 +741,9 @@ void FExampleEditor::InstallEditorComponents()
 	// FlushPendingUpdates). A component with children of its own would
 	// install them itself, into this same collector.
 	InstallChildrenOf(GetName());
+	// The graph is OURS (a member -- see EnsureGraph): the builder holds none, so the install batch
+	// below is submitted to the graph this frame created and injected.
+	EnsureGraph();
 	FlushPendingUpdates<TTypeList<IEditorInit>, TTypeList<IEditorShutdown>>();
 }
 
@@ -1361,6 +1364,16 @@ void FExampleEditor::ShutdownEditorComponents()
 	TryUninstall(Maho::ApplyModuleExtension("FEditorViewport"));
 	TryUninstall(Maho::ApplyModuleExtension("FEditorTheme"));
 	FlushPendingUpdates<TTypeList<IEditorInit>, TTypeList<IEditorShutdown>>();
+
+	// THE OWNER'S FENCE: this is the editor's last use of its own graph (the component batches above),
+	// and it happens while the shared pool the graph was built with is still alive -- the member dies
+	// before the builder base that holds the pool. There is no release step: the member's own
+	// destructor stops the scheduler thread (safe here, everything is fenced), and the whole frame
+	// instance is freed by FRender right after this teardown, not by the destructor running late.
+	if (bGraphReady)
+	{
+		Graph->Wait();
+	}
 }
 
 } // namespace Maho

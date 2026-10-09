@@ -20,6 +20,7 @@
 #include <memory>
 #include <mutex>
 #include <new>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <variant>
@@ -276,11 +277,49 @@ public:
 	using FContext = FRenderContext;
 
 protected:
-	/** One context per ring slot, allocated ONCE at the INJECTED pipeline depth (`GetFramesInFlight()`)
-	 *  on first use -- the depth is a run-time property of the process (the host injects it before the
-	 *  first graph exists), so it cannot be an array bound. A fixed-size array behind a `unique_ptr`,
-	 *  not a growable container: a context is not movable (it holds a mutex), so growing would have to
-	 *  move slots that stages already hold references to. */
+	/** ── THE GRAPH THIS COLLECTOR DRIVES ─────────────────────────────────────────────────────────
+	 *
+	 *  The render FEATURES are installed into this collector and scheduled on a graph FRender OWNS --
+	 *  a member, not a base class and not a hidden `unique_ptr` inside the builder. The rule is stated
+	 *  once in `Engine/FrameBuilder.h`: "a frame that DRIVES a stage sequence owns the FFrameGraph that
+	 *  sequence is scheduled on", and each driver owning its own ring is what makes the admission wait
+	 *  in `Submit` correct (`FRender::Tick` runs as a node of the PARENT's graph and submits its own
+	 *  batch for the same round, so sharing one graph would make it wait on itself).
+	 *
+	 *  Created ON FIRST USE (`EnsureGraph`), never in the constructor, because K (the pipeline depth) is
+	 *  resolved by Core on the graph's first use and its authority is a plugin-side CVar. `std::optional`
+	 *  because `FFrameGraph` is neither copyable nor movable (it is a `FThreadedServer` with a resident
+	 *  scheduler thread).
+	 *
+	 *  Destruction order is what keeps the scheduler thread safe: this member dies BEFORE the builder
+	 *  base that holds the pool the graph was built with (members die before base classes), and
+	 *  `~FFrameGraph` stops the thread while its own node table is still alive. */
+	std::optional<FFrameGraph> Graph;
+
+	/** True once `EnsureGraph` created + started the graph (see FEngineBase::bGraphReady). */
+	bool bGraphReady = false;
+
+	/** Create + start this collector's graph on FIRST use, at the shared pool's lane this collector was
+	 *  handed at install, name it for the trace, and inject it into the batch builder. Idempotent; every
+	 *  driving site goes through it, which is why no site can reach the graph before it exists. */
+	FFrameGraph& EnsureGraph()
+	{
+		if (!bGraphReady)
+		{
+			bGraphReady = true;
+			Graph.emplace(GetPool(), GetPoolLane());
+			Graph->SetOwnerName(GetName().data());
+			Graph->Initialize();
+			SetGraph(*Graph);
+		}
+		return *Graph;
+	}
+
+	/** One context per ring slot, allocated ONCE at the process pipeline depth (`GetFramesInFlight()`)
+	 *  on first use -- the depth is a run-time value (the CVar `r.FramesInFlight`), so it cannot be an
+	 *  array bound. A fixed-size array behind a `unique_ptr`, not a growable container: a context is not
+	 *  movable (it holds a mutex), so growing would have to move slots that stages already hold
+	 *  references to. */
 	std::unique_ptr<FContext[]> Slots;
 
 	/** Type-erased access to a slot's context (see FFrameBuilder). Must never return nullptr -- the

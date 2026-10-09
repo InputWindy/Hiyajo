@@ -115,10 +115,15 @@ void FGameWorld::Initialize(FEngineBase&, FEngineContext&)
 void FGameWorld::Tick(FEngineBase&, FEngineContext&)
 {
 	MAHO_TRACE_STAGE(ITick, "World tick", "drive the input, fixed and post stage groups");
+	// THE graph this collector drives: ours, not the builder's (see EnsureGraph). It is a MEMBER of
+	// this frame, created on first use, and the batch builder was handed a reference to it once.
+	FFrameGraph& Own = EnsureGraph();
+
 	// Frame-start barrier: the post-fixed group is dispatched un-waited below, so it pipelines
 	// across frames into this wait -- cross-frame parallelism, same as the render graph. Must
 	// precede any frame-set change (a change under live nodes is a use of a freed node).
-	Wait();
+	Own.Wait();
+	DrainPool();
 
 	// Safe point for world-system install/uninstall (attach -> IOnInstalled, detach ->
 	// IPreUnInstall). A changed system set is the ONLY thing that changes the frame set, and it
@@ -139,7 +144,8 @@ void FGameWorld::Tick(FEngineBase&, FEngineContext&)
 	// Pre-fixed: resolve input once, synchronously -- simulation must read a
 	// settled input state, so wait immediately after dispatch.
 	Execute<FInputStages>(Round);
-	Wait();
+	Own.Wait();
+	DrainPool();
 
 	// Fixed timestep: 0..N steps this frame, each strictly ordered (a step cannot
 	// overlap the next, so each is waited out before the next runs).
@@ -147,7 +153,8 @@ void FGameWorld::Tick(FEngineBase&, FEngineContext&)
 	while (Accumulator >= FixedStepSeconds)
 	{
 		Execute<FFixedStages>(Round);
-		Wait();
+		Own.Wait();
+		DrainPool();
 		Accumulator -= FixedStepSeconds;
 	}
 
@@ -163,7 +170,9 @@ void FGameWorld::Shutdown(FEngineBase&, FEngineContext&)
 	// whose destructors live in the systems' modules, and the graph's nodes point at
 	// their instances -- freeing either of those once a system's DLL is unloaded runs
 	// code from an unmapped module (a hard AV, not a leak).
-	Wait();
+	FFrameGraph& Own = EnsureGraph();
+	Own.Wait();
+	DrainPool();
 	ComponentPools.clear();
 
 	// Now the systems: uninstall through the collector teardown pipeline so each one's
@@ -171,8 +180,18 @@ void FGameWorld::Shutdown(FEngineBase&, FEngineContext&)
 	// would skip that stage and leak cross-module subscriptions -- e.g. a system's
 	// std::function bound into another DLL's event). By NAME, because a name is what
 	// survives a module.
-	UninstallAll();
+	(void)UninstallAll();
 	FlushPendingUpdates<TTypeList<IOnInstalled>, TTypeList<IPreUnInstall>>();
+
+	// THE OWNER'S FENCE: last use of the world's graph, and it happens while the pool the graph was
+	// built with is still alive (the member dies before the builder base that holds it). ~FFrameBuilder
+	// no longer drains the graph at all -- its destructor is pool-only -- so this IS the "quiet before
+	// anything is freed" invariant. No release step: the member's own destructor stops the scheduler
+	// thread, which is safe because the nodes are all fenced here.
+	if (bGraphReady)
+	{
+		Graph->Wait();
+	}
 
 	GGameWorld = nullptr;
 }

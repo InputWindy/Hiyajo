@@ -9,7 +9,9 @@
 #include <UITypes.h>
 
 #include <cstdint>
+#include <memory>
 #include <mutex>
+#include <optional>
 #include <span>
 #include <string>
 #include <vector>
@@ -147,11 +149,45 @@ public:
 	using FContext = FExampleEditorContext;
 
 protected:
-	/** One context per ring slot, allocated ONCE at the INJECTED pipeline depth (`GetFramesInFlight()`)
-	 *  on first use -- the depth is a run-time property of the process (the host injects it before the
-	 *  first graph exists), so it cannot be an array bound. A fixed-size array behind a `unique_ptr`,
-	 *  not a growable container: a context is not movable (it holds a mutex), so growing would have to
-	 *  move slots that stages already hold references to. */
+	/** ── THE GRAPH THIS COLLECTOR DRIVES ─────────────────────────────────────────────────────────
+	 *
+	 *  The editor COMPONENTS (viewport, console, theme, ...) are installed into this collector and
+	 *  scheduled on a graph FExampleEditor OWNS (a member -- the rule lives in `Engine/FrameBuilder.h`:
+	 *  a frame that drives a stage sequence owns the graph that sequence runs on, and each driver needs
+	 *  its own ring because `Submit`'s admission wait is per slot).
+	 *
+	 *  Created ON FIRST USE (`EnsureGraph`): K is resolved by Core on the graph's first use, from the
+	 *  plugin-side CVar, so it cannot be a construction-time value. `std::optional` because
+	 *  `FFrameGraph` is not movable (it owns a resident scheduler thread). This member dies before the
+	 *  builder base holding the shared pool, which is what keeps the thread stop safe.
+	 *
+	 *  NOTE the whole editor frame is itself INSTALLED INTO FRender, so it lives and dies with that
+	 *  collector: FRender's teardown drives this frame's IPreUnInstall (which releases this graph) and
+	 *  only then frees the instance. */
+	std::optional<FFrameGraph> Graph;
+
+	/** True once `EnsureGraph` created + started the graph. */
+	bool bGraphReady = false;
+
+	/** Create + start this collector's graph on FIRST use, at the shared pool's lane this collector was
+	 *  handed at install, named for the trace, and injected into the batch builder. Idempotent. */
+	FFrameGraph& EnsureGraph()
+	{
+		if (!bGraphReady)
+		{
+			bGraphReady = true;
+			Graph.emplace(GetPool(), GetPoolLane());
+			Graph->SetOwnerName(GetName().data());
+			Graph->Initialize();
+			SetGraph(*Graph);
+		}
+		return *Graph;
+	}
+
+	/** One context per ring slot, allocated ONCE at the process pipeline depth (`GetFramesInFlight()`)
+	 *  on first use -- the depth is a run-time value (the CVar `r.FramesInFlight`), so it cannot be an
+	 *  array bound. A fixed-size array behind a `unique_ptr`, not a growable container: a context is not
+	 *  movable, so growing would have to move slots that stages already hold references to. */
 	std::unique_ptr<FContext[]> Slots;
 
 	void* GetContext(int Slot) override

@@ -10,6 +10,7 @@
 #include <atomic>
 #include <map>
 #include <memory>
+#include <optional>
 #include <queue>
 #include <set>
 #include <string>
@@ -139,6 +140,11 @@ using FTickStages = TTypeList<IBeginFrame, ITick, IEndFrame, IExit>;
 using FShutdownStages = TTypeList<IPreShutdown, IShutdown, IPostShutdown>;
 
 // Engine base class
+//
+// ONE base: FFrameBuilder<FEngineBase> is the collector + frame loop. The graph this host drives is
+// no longer a base class either -- it is a MEMBER (see Graph below), created on first use at this
+// host's own pool + default lane and injected into the builder (`SetGraph`). The host is the only
+// frame whose graph has no owner name: its frames ARE the top level.
 class MAHO_API FEngineBase : public FFrameBuilder<FEngineBase>
 {
 public:
@@ -178,26 +184,43 @@ public:
 	 *  slot; a host that has a source overrides it, and then this counter is dead. */
 	[[nodiscard]] virtual std::uint64_t NextFrameNumber();
 
-public:
-	/** ── THE PIPELINE DEPTH K: the host's vocabulary for Core's process-wide value ───────────────
+protected:
+	/** ── THE GRAPH THIS HOST DRIVES ───────────────────────────────────────────────────────────────
 	 *
-	 *  K (frames in flight == the phase-ring width == the number of copies every frame-domain ring
-	 *  must hold) is a RUN-TIME property of the process. Its single authority is Core
-	 *  (`SetFramesInFlight` / `GetFramesInFlight`, Core/FrameGraph.h): the host writes it ONCE, before
-	 *  the first graph exists, and the first `FFrameGraph` construction SEALS it. This pair exists so
-	 *  a layer that is handed an `FEngineBase&` can ask the HOST for K instead of reading a
-	 *  compile-time bound -- `MAHO_FRAMES_IN_FLIGHT` is only the default a host that injects nothing
-	 *  gets, never a size.
+	 *  The host OWNS the graph its tick sequence is scheduled on -- it is a MEMBER, not a base class
+	 *  and not a hidden `unique_ptr` inside the builder (`Engine/FrameBuilder.h` states the rule:
+	 *  "a frame that DRIVES a stage sequence owns the FFrameGraph that sequence is scheduled on").
+	 *  Owning it here is what makes the drain visible at this layer: `Main` fences it before the pool
+	 *  is torn down, and the member's own destructor stops the scheduler thread while the pool it was
+	 *  built with is still alive (members die before base classes -- `FFrameBuilder` holds the pool).
 	 *
-	 *  The render layer is the one that must be told: its device rings, the pool's frame-slot buckets
-	 *  and the frame-domain resource lifetimes are all K-deep, and they are sized from the value this
-	 *  returns. Nothing clamps: a mismatch between two layers that both claim to hold K copies is
-	 *  reported (see FRender::Initialize) instead of being silently hidden.
+	 *  IT IS CREATED ON FIRST USE (`EnsureGraph`), never in the constructor, and for one reason: K
+	 *  (the pipeline depth) is a RUN-TIME value whose authority is a plugin-side CVar
+	 *  (`r.FramesInFlight`, read through Core's `GetFramesInFlight`), and a graph resolves it once, on
+	 *  first use. A graph built at construction time would be built before the plugins exist.
 	 *
-	 *  `SetFramesInFlight` here is a forward to Core's, so the host's override point and the engine
-	 *  core share ONE value (there is no second copy to drift). */
-	[[nodiscard]] std::int32_t GetFramesInFlight() const noexcept;
-	void SetFramesInFlight(std::int32_t InFramesInFlight);
+	 *  `std::optional` because `FFrameGraph` is neither copyable nor movable (it is a
+	 *  `FThreadedServer` with a resident thread): the storage has to be constructed in place, once. */
+	std::optional<FFrameGraph> Graph;
+
+	/** True once `EnsureGraph` has created + started the graph. The two driving entry points read it
+	 *  instead of `Graph.has_value()` so the "was it ever used" question has one name. */
+	bool bGraphReady = false;
+
+	/** Create + start the graph on FIRST use, at this host's own pool + default lane, and hand it to
+	 *  the batch builder (`SetGraph`) -- which is the only party that turns declarations into
+	 *  submissions. Idempotent, and cheap enough to call from every driving entry point. */
+	FFrameGraph& EnsureGraph()
+	{
+		if (!bGraphReady)
+		{
+			bGraphReady = true;
+			Graph.emplace(GetPool(), GetPoolLane());
+			Graph->Initialize();
+			SetGraph(*Graph);
+		}
+		return *Graph;
+	}
 
 public:
 	/** True when a flag/key is present (whether or not it carries a value). */
@@ -231,11 +254,11 @@ private:
 	std::uint64_t LoopFrame = 0;
 
 protected:
-	/** One context per ring slot, allocated ONCE at the INJECTED pipeline depth (`GetFramesInFlight()`)
+	/** One context per ring slot, allocated ONCE at the process pipeline depth (`GetFramesInFlight()`)
 	 *  on first use -- never sized by a compile-time bound: the depth is a run-time property of the
-	 *  process (the host injects it before the first graph exists). A fixed-size array behind a
-	 *  `unique_ptr`, not a growable container: a context is not movable (it holds a mutex), so growing
-	 *  would have to move slots that stages already hold references to. */
+	 *  process (the CVar `r.FramesInFlight`, resolved by Core before the graph's ring is sized). A
+	 *  fixed-size array behind a `unique_ptr`, not a growable container: a context is not movable (it
+	 *  holds a mutex), so growing would have to move slots that stages already hold references to. */
 	std::unique_ptr<FContext[]> Slots;
 
 	/** The base's only way to reach a slot's context, type-erased on purpose (see FFrameBuilder).
@@ -246,7 +269,10 @@ protected:
 	{
 		if (!Slots)
 		{
-			Slots = std::make_unique<FContext[]>(static_cast<std::size_t>(GetFramesInFlight()));
+			// Qualified: the engine's Base used to carry a `GetFramesInFlight()` of its own (a forward
+			// to Core's). What remains is Core's, and naming it explicitly keeps the call unambiguous
+			// if this class ever grows a member of that name again.
+			Slots = std::make_unique<FContext[]>(static_cast<std::size_t>(::Maho::GetFramesInFlight()));
 		}
 		return &Slots[static_cast<std::size_t>(Slot)];
 	}

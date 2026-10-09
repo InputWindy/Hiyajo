@@ -96,8 +96,8 @@ namespace Maho
 //
 // ── phase index space ─────────────────────────────────────────────────────────
 //
-// A phase IS a ring index: [0, K), where K is the PIPELINE DEPTH the APPLICATION layer
-// injected (see SetFramesInFlight / GetFramesInFlight). That is the whole space -- there is
+// A phase IS a ring index: [0, K), where K is the PIPELINE DEPTH of the process (see
+// GetFramesInFlight). That is the whole space -- there is
 // no separate init or shutdown phase, because those are not graph concepts. A one-shot
 // batch (install, uninstall) is submitted by the caller AFTER draining the graph, at
 // whichever ring index it likes; since the graph is empty at that point, the index carries
@@ -109,12 +109,19 @@ namespace Maho
 //
 // Phase ORDER carries no meaning to the scheduler. All ordering is explicit edges.
 //
-// K IS A RUNTIME VALUE, and it is NOT this file's business to decide it: the depth is an
-// application configuration (r.FramesInFlight), injected by the host before the graphs are
-// created. Core holds the value (one process-wide setting, read at graph construction) and
-// otherwise only consumes it. The default below is what a host that never injects anything
-// gets; `MAHO_FRAMES_IN_FLIGHT` survives as that DEFAULT, never as an array bound.
-MAHO_API void                    SetFramesInFlight(std::int32_t InFramesInFlight);
+// K IS A RUNTIME VALUE and it comes from the CONFIGURATION -- the CVar `r.FramesInFlight`, which is
+// a `Config/DefaultEngine.ini` entry flagged ReadOnly (changing it requires a restart). Core is pure
+// scaffolding and must not depend on the CVar plugin, so the VALUE arrives as a reader: the layer
+// that owns the variable installs it here at static-init (`SetFramesInFlightSource`), i.e. before
+// anything can ask. `GetFramesInFlight` asks ONCE and remembers the answer for the rest of the
+// process; `MAHO_FRAMES_IN_FLIGHT` is what a process with no such layer (the test projects) gets.
+//
+// THERE IS NO SETTER ANY MORE. K used to be INJECTED by the host (`SetFramesInFlight`, called from
+// the project entry point, read straight out of the ini) and SEALED by the first graph's
+// construction -- two places that both claimed the value, and a seal that existed because the write
+// came from outside the layer that consumes it. Now there is one authority (the CVar) and one
+// reader (Core), and nothing can move K while the process runs.
+MAHO_API void SetFramesInFlightSource(std::int32_t (*InSource)()) noexcept;
 [[nodiscard]] MAHO_API std::int32_t GetFramesInFlight() noexcept;
 
 inline bool IsValidPhase(std::int32_t Phase) noexcept
@@ -745,6 +752,18 @@ private:
 	void    TryReap(FNodeId Id);
 	bool    Validate(const std::vector<FTask>& Tasks, std::string& OutReason) const;
 
+	/** K, read ONCE on FIRST USE and a constant for the rest of the graph's life. EVERY K-deep table
+	 *  below is sized from it (the slot counters here, the event table's phase stride), and it may not
+	 *  be read at construction: the graph is a MEMBER of the frame that drives it, so it is built
+	 *  before the plugins (and therefore the CVar) are loaded. Lazy is what makes "the configuration
+	 *  decides K" true without a construction-order rule; `Depth == 0` means "not read yet".
+	 *
+	 *  The caller's thread reads it (Submit), the scheduler thread consumes it: it is published before
+	 *  the first command is enqueued, so no synchronization beyond that hand-off is needed. */
+	void EnsureDepth();
+
+	[[nodiscard]] std::int32_t GetDepth() const noexcept { return Depth; }
+
 	/** Admission used by Submit: block the CALLER until every phase named by this batch has
 	 *  drained. This is where the ring-reuse wait lives -- Submit blocks, the scheduler
 	 *  thread never does. */
@@ -783,9 +802,14 @@ private:
 	std::unordered_map<FTaskKey, FNodeId, FTaskKeyHash> Registry;    // exact key -> id
 	std::deque<std::atomic_bool>                        EventStates; // index == FEvent
 
+	/** The pipeline depth this graph runs at -- read once, on first use (see EnsureDepth). Every
+	 *  phase-space table below is shaped by it, which is why it is the FIRST thing Submit resolves
+	 *  and the only thing the scheduler thread needs to know about K. */
+	std::int32_t Depth = 0;
+
 	/** Per-phase in-flight counts: written by the scheduler, read by callers for waits.
-	 *  Sized from the INJECTED depth at construction (K is a runtime value -- see
-	 *  SetFramesInFlight), which is why this is a vector and not an array. */
+	 *  Sized from `Depth` at first use (K is a runtime value -- see GetFramesInFlight), which is
+	 *  why this is a vector and not an array. Empty == "K not read yet", i.e. nothing is in flight. */
 	std::vector<std::atomic<std::uint32_t>> SlotInFlight;
 
 	/** Nodes the caller has submitted that have not completed yet. The caller raises it in

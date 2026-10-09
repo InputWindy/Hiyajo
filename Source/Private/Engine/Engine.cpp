@@ -106,6 +106,11 @@ void FEngineBase::ParseCommandLine(int Argc, char** Argv)
 
 void FEngineBase::PostMain()
 {
+	// The graph this teardown drains is THIS host's (a member -- see the header). Ensuring it here is
+	// idempotent and it covers the host that never ticked (a build/test that installs and immediately
+	// tears down): the shutdown sweep below drives one-shot batches, and those need a graph.
+	EnsureGraph();
+
 	// Teardown never loads: Install / Reload are refused from here on (the collector's
 	// closing flag). Main already flipped it through the exit request that ended its
 	// loop; closing again is idempotent (and OnClosing only ever broadcasts once).
@@ -120,7 +125,10 @@ void FEngineBase::PostMain()
 	// go at runtime, and a frame left behind keeps its DLL loaded, which the process teardown
 	// would then free under a live module. (The catalog is still loaded from PreMain, and the
 	// sub-plugin lookup below needs it.) By NAME, because that is what survives a module.
-	UninstallAll();
+	// The count is deliberately dropped (`(void)`): this sweep uninstalls EVERYTHING, so the number
+	// answers nothing the caller could act on -- but it is `[[nodiscard]]` on purpose, because a
+	// caller that expected a smaller sweep should notice (C4834 is that notice).
+	(void)UninstallAll();
 
 	// Apply the shutdown stages, then repeat while they request more (a parent's Shutdown
 	// uninstalls its sub-plugins). Bounded: a dependency cycle must not spin.
@@ -136,6 +144,21 @@ void FEngineBase::PostMain()
 			+ std::to_string(Stats.PendingRemoves)
 			+ ", active=" + std::to_string(Stats.Active)
 			+ ") -- a shutdown dependency edge is missing").c_str());
+	}
+
+	// THE OWNER'S DRAIN -- and it is the host's, not the builder's: ~FFrameBuilder only flushes the
+	// pool now. The invariant "the graph AND the pool are quiet before any instance or module is
+	// released" is exactly this call: every frame above was uninstalled through batches that drained
+	// on the way, so what is left is this fence.
+	//
+	// ONE call, not the old `DrainGraph(); ShutdownGraph();` pair: the graph is a MEMBER here, so
+	// stopping its scheduler thread is no longer a separate step -- `~FFrameGraph` does it (it calls
+	// FThreadedServer::Shutdown while its own node table is still alive), and that destructor runs
+	// BEFORE the pool it was built with, because members die before base classes. There is nothing
+	// left for this layer to release explicitly.
+	if (bGraphReady)
+	{
+		Graph->Wait();
 	}
 
 	// (Any diagnostic tail -- e.g. flushing the CPU trace file -- is the OWNER's business: the Log
@@ -163,6 +186,11 @@ int FEngineBase::Main()
 	// MAHO_FRAMES_IN_FLIGHT copies of it -- that is the render layer's job, and doing it in the
 	// scheduler instead would hide the missing copies (measured: the Vulkan validation errors in
 	// design.md D9).
+	// The graph this loop submits every frame to. `PreMain` (the host's override) is the usual first
+	// caller -- it drives the install flush through it -- and this call is the one that has to hold
+	// for a host that drives NO flush of its own. Idempotent either way.
+	EnsureGraph();
+
 	while (!ShouldExit())
 	{
 		// ONE read of the frame number per frame, and the SAME value goes to every sequence this
@@ -178,14 +206,26 @@ int FEngineBase::Main()
 	// Quiescence before teardown, and it has to cover BOTH the frames and the pool: stage methods
 	// submit their own async work (nested graph work, asset/RHI helpers) that no frame fence
 	// tracks, and PostMain is about to free plugin DLLs -- a module must never be unloaded under
-	// running code.
-	Wait();
+	// running code. The graph comes from the owner (this), not from the builder: the builder holds
+	// no graph (see FFrameBuilder). Two halves, spelled out: the graph's submission fence, then
+	// this host's own pool lane.
+	if (bGraphReady)
+	{
+		Graph->Wait();
+	}
+	DrainPool();
 
 	return 0;
 }
 
 void FEngineBase::RequestExit()
 {
+	// Exit is the OTHER end of the loop, and it is reached from an `IExit` stage -- i.e. from inside
+	// a node of this host's graph. Ensuring it here keeps the one invariant the teardown relies on
+	// (`Graph` exists as soon as anything graph-shaped has been asked of this host) without any path
+	// being able to skip it; on the normal path it is a no-op.
+	EnsureGraph();
+
 	// The collector owns the transition (and the OnClosing broadcast that goes with it).
 	CloseForLoads();
 }
@@ -196,19 +236,6 @@ std::uint64_t FEngineBase::NextFrameNumber()
 	// real frame source -- the project entry point, reading Platform's canonical index -- overrides
 	// it and this counter is never read.
 	return LoopFrame++;
-}
-
-std::int32_t FEngineBase::GetFramesInFlight() const noexcept
-{
-	// Fully qualified on purpose: an unqualified `GetFramesInFlight()` inside this member would find
-	// the member itself and recurse. Core holds the ONE value (the host's injection point IS Core's
-	// `SetFramesInFlight`), so this is a forward, not a second copy.
-	return ::Maho::GetFramesInFlight();
-}
-
-void FEngineBase::SetFramesInFlight(std::int32_t InFramesInFlight)
-{
-	::Maho::SetFramesInFlight(InFramesInFlight);
 }
 
 bool FEngineBase::Has(std::string_view Key) const

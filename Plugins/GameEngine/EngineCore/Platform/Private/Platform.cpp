@@ -111,10 +111,10 @@ MAHO_PLATFORM_API std::uint64_t GetFrameIndex()
 FPlatform::~FPlatform() = default;
 
 FPlatform::FPlatform()
-	// The published input ring is sized ONCE, from the INJECTED pipeline depth PLUS the cross-sequence
+	// The published input ring is sized ONCE, from the configured pipeline depth PLUS the cross-sequence
 	// slack: `K + kCrossSequenceWindowSlack` slots (see that constant for why a K-wide ring evicts a
-	// frame a batch TAIL still owes). The host injects K (`SetFramesInFlight`) before it installs
-	// anything, so this is the configured value and never a default.
+	// frame a batch TAIL still owes). K comes from `r.FramesInFlight` (read through Core's reader --
+	// the same value the graph's ring is sized by), so this is the configured value, not a default.
 	: InputRing(static_cast<std::size_t>(GetFramesInFlight() + kCrossSequenceWindowSlack))
 {
 	// The window size is read from the Config layer in Initialize - Config must
@@ -128,15 +128,43 @@ FPlatform::FPlatform()
 
 namespace
 {
-	/** Registered so the knob is a real CVar (settable in [ConsoleVariables] and visible in the
-	 *  registry); the depth that is ACTUALLY used is the one the HOST injects
-	 *  (`SetFramesInFlight`) before the first graph exists -- the pipeline depth is sealed
-	 *  process-wide, so a runtime change here cannot move it. */
+	/** THE pipeline depth K -- `r.FramesInFlight` is the AUTHORITY now, not a knob that mirrored an
+	 *  injected number: Core reads it through the reader installed below (`GetFramesInFlight`), and
+	 *  every K-deep structure in the process (the graph's phases, the RHI's per-slot fence / acquire
+	 *  semaphore / frame command buffer, the staging and render-list buckets, the camera-constant
+	 *  ring, this layer's own input ring) is sized from that ONE value.
+	 *
+	 *  `ReadOnly` because the value may not move while the process runs: every one of those
+	 *  structures is sized once and never re-sized, so a mid-run write would silently disagree with
+	 *  the graph's ring. A CVar flagged ReadOnly still takes its STARTUP value from the ini -- the
+	 *  lazy config read is not routed through `Set` (see ConsoleVariable.h) -- so
+	 *  `Config/DefaultEngine.ini` still configures it; CHANGING IT REQUIRES A RESTART, and a runtime
+	 *  write is refused (and reported once) instead of being ignored.
+	 *
+	 *  `Shipping` as well, deliberately: the depth is not a development knob. An unregistered
+	 *  variable would silently fall back to the compiled default in a Shipping build and ignore the
+	 *  ini -- a build that configured its pipeline would then run at another depth. */
 	static ConsoleVariable::TAutoConsoleVariable<int> GCVarFramesInFlight(
 		"r.FramesInFlight", MAHO_FRAMES_IN_FLIGHT,
-		"Pipeline depth (frames in flight); the host injects it through SetFramesInFlight before any "
-		"frame graph is built",
-		ConsoleVariable::ECVarFlags::Shipping);
+		"Pipeline depth (frames in flight, K); configurable in Config/DefaultEngine.ini "
+		"[ConsoleVariables]. ReadOnly: changing it requires a restart (every K-deep ring is sized "
+		"at Initialize and never re-sized)",
+		ConsoleVariable::ECVarFlags::ReadOnly | ConsoleVariable::ECVarFlags::Shipping);
+
+	/** Hand the value to Core. Core is pure scaffolding and must not depend on this plugin, so what
+	 *  crosses the boundary is a READER, not a number: Core asks once, on the first frame graph's
+	 *  first use, and remembers the answer. Static-init installs it (this translation unit's statics
+	 *  are constructed in order, so the variable above is registered first) -- i.e. long before any
+	 *  graph exists, which is why no `SetFramesInFlight` injection point is left anywhere. */
+	[[maybe_unused]] static const bool GFramesInFlightSourceInstalled = []()
+	{
+		Maho::SetFramesInFlightSource([]() -> std::int32_t
+		{
+			const int Depth = GCVarFramesInFlight.GetValue();
+			return Depth > 0 ? static_cast<std::int32_t>(Depth) : 1;
+		});
+		return true;
+	}();
 
 	static ConsoleVariable::TAutoConsoleVariable<int> GCVarWindowWidth(
 		"r.Window.Width", 1280, "Platform window width", ConsoleVariable::ECVarFlags::Shipping);
@@ -495,7 +523,7 @@ void FPlatform::PublishWindowState()
 	}
 }
 
-void FPlatform::Initialize(FEngineBase& Engine, FEngineContext&)
+void FPlatform::Initialize(FEngineBase&, FEngineContext&)
 {
 	MAHO_TRACE_STAGE(IInit, "Platform init", "start the platform thread and create the window");
 
@@ -512,8 +540,10 @@ void FPlatform::Initialize(FEngineBase& Engine, FEngineContext&)
 	// some layer sized itself from something else -- and FRender checks the two against THIS same
 	// quantity, so a drift shows up on both ends.
 	{
+		// The value is Core's (the same one this layer installed a reader for at static-init), so it is
+		// read through Core rather than asked of the host -- there is no second copy to drift.
 		const std::size_t Slots =
-			static_cast<std::size_t>(Engine.GetFramesInFlight() + kCrossSequenceWindowSlack);
+			static_cast<std::size_t>(GetFramesInFlight() + kCrossSequenceWindowSlack);
 		if (InputRing.size() != Slots)
 		{
 			const std::string Message =

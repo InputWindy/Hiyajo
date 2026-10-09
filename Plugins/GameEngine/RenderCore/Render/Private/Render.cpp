@@ -217,20 +217,21 @@ void FRender::PreInitialize(FEngineBase&, FEngineContext&)
 	InstallChildrenOf(GetName());
 }
 
-void FRender::Initialize(FEngineBase& Engine, FEngineContext& Frame)
+void FRender::Initialize(FEngineBase&, FEngineContext&)
 {
 	MAHO_TRACE_STAGE(IInit, "Render init", "create the RHI, the pool, the compiler and the mirror");
 	GRender = this;
 
-	// ── THE PIPELINE DEPTH K: asked of the HOST, handed down to every K-deep ring below ──────────
+	// ── THE PIPELINE DEPTH K: read from the ONE process-wide value every K-deep ring is sized by ──
 	//
-	// K (frames in flight) is a run-time property of the process, injected once by the host before the
-	// first graph exists. This layer owns two rings that must be exactly K wide -- the DEVICE's
-	// per-slot fence / acquire semaphore / frame command buffer, and the POOL's frame-slot buckets
-	// (retiring lists, condemned natives, and the descriptor-set grace) -- so it asks the host ONCE
-	// and passes the value down, instead of each of them reading a compile-time bound. That is what
-	// makes `r.FramesInFlight` a real configuration rather than a number the engine refuses.
-	const std::int32_t FramesInFlight = Engine.GetFramesInFlight();
+	// K (frames in flight) is a run-time property of the process whose authority is the CVar
+	// `r.FramesInFlight` (read through Core's `GetFramesInFlight`, which resolves it once and memoizes
+	// it). This layer owns two rings that must be exactly K wide -- the DEVICE's per-slot fence /
+	// acquire semaphore / frame command buffer, and the POOL's frame-slot buckets (retiring lists,
+	// condemned natives, and the descriptor-set grace) -- so it reads the value ONCE and passes it
+	// down, instead of each of them reading a compile-time bound. That is what makes `r.FramesInFlight`
+	// a real configuration rather than a number the engine refuses.
+	const std::int32_t FramesInFlight = GetFramesInFlight();
 	const std::uint32_t FrameSlots = static_cast<std::uint32_t>(FramesInFlight > 0 ? FramesInFlight : 1);
 
 	// Create the render server (RHI) with the native window from the Platform.
@@ -351,7 +352,6 @@ void FRender::Initialize(FEngineBase& Engine, FEngineContext& Frame)
 	}
 	MAHO_LOG_CORE_INFO("FRender: pipeline depth K={} (graph phases == device frame slots == pool buckets; input ring = K + {})",
 		FrameSlots, Platform::kCrossSequenceWindowSlack);
-	(void)Frame;
 
 	// Async shader compiler (dedicated compile thread).
 	ShaderCompiler = std::make_unique<FShaderCompilerServer>();
@@ -463,8 +463,12 @@ void FRender::Shutdown(FEngineBase&, FEngineContext&)
 	// RHI was created from). The RHI stays a stateless task processor -- it
 	// never refuses work, it just runs what it is given.
 	// Quiescence for the render graph AND its pool: teardown may free feature modules below,
-	// and a stage body may have submitted work the graph's own fence does not cover.
-	Wait();
+	// and a stage body may have submitted work the graph's own fence does not cover. The graph is
+	// OURS (this collector owns it -- see EnsureGraph); the builder holds none -- which is why
+	// the barrier is spelled as two calls: the graph's submission fence, then our own pool lane.
+	EnsureGraph();
+	Graph->Wait();
+	DrainPool();
 	if (ShaderCompiler)
 	{
 		ShaderCompiler->Shutdown();   // compile thread: drain pending compiles, stop + join
@@ -491,7 +495,7 @@ void FRender::Shutdown(FEngineBase&, FEngineContext&)
 		// EditorConsole unregisters its live log listener); a bare Features.clear()
 		// would destroy the instances without driving those teardown stages and
 		// leak subscriptions (e.g. the console's FLog listener) into the Log layer.
-		UninstallAll();
+		(void)UninstallAll();
 		FlushPendingUpdates<TTypeList<IOnInstalled>, TTypeList<IPreUnInstall>>();
 
 		// Destroy whatever the uninstall path could not release (it REFUSES to unload a feature
@@ -512,7 +516,8 @@ void FRender::Shutdown(FEngineBase&, FEngineContext&)
 	// were already in flight; this one also covers anything the teardown steps above submitted.)
 	if (ResourcePool)
 	{
-		Wait();
+		Graph->Wait();
+		DrainPool();
 		ResourcePool->Shutdown();
 		ResourcePool.reset();
 	}
@@ -521,6 +526,17 @@ void FRender::Shutdown(FEngineBase&, FEngineContext&)
 	{
 		RHI->ShutdownRHI();   // re-joining the server thread is a no-op; tears down the device
 		RHI.reset();
+	}
+
+	// THE OWNER'S FENCE, and it has to be here: this is the last use of the render graph. There is no
+	// separate release step any more -- the graph is a MEMBER frame (`Graph`), so it dies when
+	// FRender does, BEFORE the builder base that holds the pool it was built with (members die before
+	// base classes) and before the modules of the features it scheduled are freed. ~FFrameBuilder no
+	// longer drains the graph either (its destructor is pool-only), so this fence IS the invariant
+	// "the graph is quiet before anything of ours is freed".
+	if (bGraphReady)
+	{
+		Graph->Wait();
 	}
 
 	// (The UI's CPU-side ImGui context is owned by FUIFeature and is destroyed in
@@ -580,6 +596,9 @@ void FRender::BeginResourcePool()
 void FRender::Tick(FEngineBase&, FEngineContext&)
 {
 	MAHO_TRACE_STAGE(ITick, "Render tick", "bound the lookahead and dispatch the render graph");
+	// The graph this tick drives: OURS, created on first use (see EnsureGraph). Every driving call
+	// below -- the install flush and the frame batch -- goes through the same object.
+	EnsureGraph();
 	// SOFT lookahead bound. Waiting for the previous frame's batch to have been HANDED to the RHI
 	// server (posted), not for its submission to complete: this stage drives the OS message pump
 	// (FPlatform::BeginFrame runs before it) and the server's FIFO has the previous frame's
