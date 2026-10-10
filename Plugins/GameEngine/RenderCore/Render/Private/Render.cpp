@@ -357,7 +357,7 @@ void FRender::Initialize(FEngineBase&, FEngineContext&)
 	ShaderCompiler = std::make_unique<FShaderCompilerServer>();
 	ShaderCompiler->Initialize();
 
-	// The render graph lives INSIDE the collector (FFrameBuilder::Execute<FRenderStages>(Frame),
+	// The render graph lives INSIDE the collector (FFrameBuilder::Execute<FRenderStages>(Graph, Frame),
 	// driven with the canonical frame number): Flush at frame start, Execute at frame end (see
 	// Tick / EndFrame).
 
@@ -496,7 +496,7 @@ void FRender::Shutdown(FEngineBase&, FEngineContext&)
 		// would destroy the instances without driving those teardown stages and
 		// leak subscriptions (e.g. the console's FLog listener) into the Log layer.
 		(void)UninstallAll();
-		FlushPendingUpdates<TTypeList<IOnInstalled>, TTypeList<IPreUnInstall>>();
+		FlushPendingUpdates<TTypeList<IOnInstalled>, TTypeList<IPreUnInstall>>(EnsureGraph());
 
 		// Destroy whatever the uninstall path could not release (it REFUSES to unload a feature
 		// another one still depends on) -- their destructors free Vulkan objects (pipelines /
@@ -597,8 +597,9 @@ void FRender::Tick(FEngineBase&, FEngineContext&)
 {
 	MAHO_TRACE_STAGE(ITick, "Render tick", "bound the lookahead and dispatch the render graph");
 	// The graph this tick drives: OURS, created on first use (see EnsureGraph). Every driving call
-	// below -- the install flush and the frame batch -- goes through the same object.
-	EnsureGraph();
+	// below -- the install flush and the frame batch -- is handed this reference; the builder holds no
+	// graph of its own, so the graph a sequence runs on is stated at each call.
+	FFrameGraph& RenderGraph = EnsureGraph();
 	// SOFT lookahead bound. Waiting for the previous frame's batch to have been HANDED to the RHI
 	// server (posted), not for its submission to complete: this stage drives the OS message pump
 	// (FPlatform::BeginFrame runs before it) and the server's FIFO has the previous frame's
@@ -626,7 +627,7 @@ void FRender::Tick(FEngineBase&, FEngineContext&)
 	// flatten the ring: frame N+1's batch could never overlap frame N's nodes. Quiescence is the
 	// change's business, not every frame's -- FlushPendingUpdates drains (fully: graph + pool) when
 	// the frame set actually changes, which is the only event that needed it.
-	FlushPendingUpdates<TTypeList<IOnInstalled>, TTypeList<IPreUnInstall>>();
+	FlushPendingUpdates<TTypeList<IOnInstalled>, TTypeList<IPreUnInstall>>(RenderGraph);
 
 	// The stage SEQUENCE is FRenderStages itself (see Render.h), so the editor-only stages
 	// (IEditorInput / IEditorCompose) are part of it in an editor build -- and a stage no
@@ -655,7 +656,7 @@ void FRender::Tick(FEngineBase&, FEngineContext&)
 	// canonical counter -- there is nothing to align input with, and the ring would stay empty.
 	Platform::FPlatform* const P = Platform::GetPlatform();
 	const std::uint64_t Round = P != nullptr ? P->GetInputFrameIndex() : Platform::GetFrameIndex();
-	Execute<FRenderStages>(Round);
+	Execute<FRenderStages>(RenderGraph, Round);
 	// No trailing wait either: the ring is what keeps the pipeline safe (per-stage self edges +
 	// admission), and at shutdown the leftover nodes are drained by FRender::Shutdown's Wait().
 }
@@ -2044,3 +2045,30 @@ extern "C" MAHO_RENDER_API Maho::FFrameExtension* CreateFrame()
 {
 	return Maho::FRender::CreateFrame();
 }
+
+// ── the stage access table (change add-resource-metadata-edges, step 2) ─────────────────────────
+//
+// This frame's resource is the RHI (`IRHI`: the render server, its device and its per-slot rings), the
+// thing whose lifetime the whole render pipeline hangs off. The rows state that window and the two READ
+// relations that make the shutdown order non-obvious:
+//
+//   IInit      -- the render server is created from the PLATFORM's window and sized by K: `Create(IRHI)`
+//                 plus a read of the platform (the window must exist first -- the edge this layer
+//                 already declares by hand) and of the log.
+//   ITick      -- the frame's passes are recorded and submitted through the server: a WRITE of it.
+//   IShutdown  -- the server is torn down here, BEFORE the platform's surface goes away (`FRender`
+//                 blocks on `FPlatform::IShutdown` for exactly this reason -- the surface is created
+//                 from the platform's window): `Destroy(IRHI)`.
+//
+// Reads of `FLog` are reads of another frame's service -- the teardown-logging relation the graph has to
+// keep alive while layers tear down. Recorded, not yet derived from (step 4).
+#include <Core/StageAccess.h>
+
+namespace Maho
+{
+
+MAHO_IMPLEMENT_STAGE(FRender, IInit, Create(IRHI), Read(Platform::FPlatform), Read(FLog))
+MAHO_IMPLEMENT_STAGE(FRender, ITick,       Write(IRHI), Read(FLog))
+MAHO_IMPLEMENT_STAGE(FRender, IShutdown,   Destroy(IRHI), Read(FLog))
+
+} // namespace Maho

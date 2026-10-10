@@ -5,7 +5,11 @@
 #include <UITheme.h>
 #include <UIViewRegistry.h>
 
+#include <Log.h>
+
 #include <cstdint>
+#include <mutex>
+#include <set>
 #include <string>
 
 namespace Maho { namespace UI {
@@ -41,6 +45,37 @@ std::string WindowNameOf(const FUIView& View, const FUIViewShell& Shell)
 	Name += "###uiView";
 	Name += std::to_string(View.GetId().GetId());
 	return Name;
+}
+
+// ---------------------------------------------------------------------------------------
+// 诊断（临时，仅定位，不改行为）：谁把空名字喂给了 `ImGui::Begin`（imgui.cpp:7404
+// `IM_ASSERT(name != NULL && name[0] != '\0')`）。
+//   - `DiagEmptyBeginName`：`name` 为空（nullptr / ""）才报，**每站点限一次**；日志点名
+//     站点标签 + 视图/弹层 id + 名字来源。加锁是因为翻译可能跑在任一 pool worker 上。
+//   - `DiagBeginSiteReached`：给"没有名字参数"的 Begin 家族调用点留一条覆盖标记 —— 那些名字由
+//     ImGui 自己生成（如 `##Tooltip_%02d`），空名字不可能从那里来。
+// ---------------------------------------------------------------------------------------
+void DiagEmptyBeginName(const char* Site, const char* Name, const char* Origin, std::uint32_t Id)
+{
+	static std::mutex Mutex;
+	static std::set<std::string> Reported;
+
+	if (Name != nullptr && Name[0] != '\0') { return; }
+
+	std::lock_guard<std::mutex> Lock(Mutex);
+	if (!Reported.insert(Site).second) { return; }
+	MAHO_LOG_CORE_ERROR("UIBEGINNAME-CHECK EMPTY site={} id={} origin={} name={}", Site, Id, Origin,
+						Name != nullptr ? std::string(Name) : std::string("<nullptr>"));
+}
+
+void DiagBeginSiteReached(const char* Site)
+{
+	static std::mutex Mutex;
+	static std::set<std::string> Reported;
+
+	std::lock_guard<std::mutex> Lock(Mutex);
+	if (!Reported.insert(Site).second) { return; }
+	MAHO_LOG_CORE_INFO("UIBEGINNAME-CHECK REACHED site={}", Site);
 }
 
 void TranslateViewImpl(FUIView& View, const FUIRect& LocalRect, bool bDebugDraw)
@@ -122,6 +157,9 @@ std::uint32_t TranslateRegisteredViews(const FUIViewFrameDesc& Desc)
 				ImGui::SetNextWindowSize(ImVec2(Shell.DefaultSize.X, Shell.DefaultSize.Y), ImGuiCond_FirstUseEver);
 			}
 			const ImGuiWindowFlags Flags = ToImGuiWindowFlags(Shell.Flags);
+			// 诊断（临时）：前置的空名字点名（见上方 DiagEmptyBeginName）。
+			DiagEmptyBeginName("UIImGuiEntry.cpp:125 ImGui::Begin(shell window)", Name.c_str(),
+							   "WindowNameOf: Shell.Title|##view + ###uiView<id>", View->GetId().GetId());
 			if (ImGui::Begin(Name.c_str(), &bOpen, Flags))
 			{
 				const ImVec2 Content = ImGui::GetContentRegionAvail();
@@ -141,6 +179,9 @@ std::uint32_t TranslateRegisteredViews(const FUIViewFrameDesc& Desc)
 		ImGui::SetNextWindowSize(ImVec2(W, H));
 		ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.f, 0.f));
 		ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.f);
+		// 诊断（临时）：前置的空名字点名（见上方 DiagEmptyBeginName）。
+		DiagEmptyBeginName("UIImGuiEntry.cpp:144 ImGui::Begin(overlay root)", Name.c_str(),
+						   "WindowNameOf: ##view + ###uiView<id> (no shell)", View->GetId().GetId());
 		if (ImGui::Begin(Name.c_str(), nullptr, kOverlayRootFlags))
 		{
 			View->SetDisplaySize(W, H);

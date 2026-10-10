@@ -55,13 +55,14 @@ void FExampleEngine::PreMain()
 	FPluginManager::Get().Load();
 	InstallChildrenOf(GetName());
 	// The graph the install batch is submitted to belongs to the HOST (this engine object -- see
-	// FEngineBase::Graph): created here, on first use, and injected into the batch builder. It is the
-	// first graph of the process, which is why Core resolves K at this moment.
-	EnsureGraph();
+	// FEngineBase::Graph): created here, on first use, and handed to the driving call (the batch
+	// builder stores no graph). It is the first graph of the process, which is why Core resolves K at
+	// this moment.
+	FFrameGraph& HostGraph = EnsureGraph();
 	FlushPendingUpdates<
 		TTypeList<IPreInit, IInit, IPostInit>,
 		TTypeList<IPreShutdown, IShutdown, IPostShutdown>
-	>();
+	>(HostGraph);
 }
 
 void FExampleEngine::PostMain()

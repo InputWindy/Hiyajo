@@ -199,8 +199,8 @@ struct FStaticName
 class MAHO_LOG_API FStageTrace
 {
 public:
-	FStageTrace(const FFrameExtension* InFrame, const std::type_info& InStage, const char* InGroup,
-		const char* InTrack, const char* InLabel, const char* InTip, const std::type_info* InPrevStage);
+	FStageTrace(const FFrameExtension* InFrame, std::string_view InStage, const char* InGroup,
+		const char* InTrack, const char* InLabel, const char* InTip, std::string_view InPrevStage);
 	~FStageTrace();
 
 	FStageTrace(const FStageTrace&) = delete;
@@ -216,10 +216,12 @@ private:
 
 	/** The stage the scheduler ran BEFORE this one inside the same frame: the STRUCTURAL in-frame
 	 *  chain edge, deduced at compile time from the frame's own stage list (see StagePredecessorOf)
-	 *  because a structural edge never appears in GetDependencies(). Null for a frame's first stage. */
-	const std::type_info*                       PrevStage = nullptr;
+	 *  because a structural edge never appears in GetDependencies(). EMPTY for a frame's first stage. */
+	std::string_view                            PrevStage{};
 
-	std::type_index Stage = std::type_index(typeid(void));
+	/** The stage's STATIC NAME (`MAHO_DECLARE_STAGE`) -- the same identity the graph keys its nodes by,
+	 *  which is what makes `GetDependencies()` answerable here without RTTI. */
+	std::string_view Stage{};
 	const char*     Group = nullptr;
 	const char*     Track = nullptr;
 	const char*     Label = nullptr;
@@ -325,23 +327,24 @@ namespace Maho
 {
 
 template <typename... S>
-inline const std::type_info* StagePredecessorIn(TTypeList<S...>, const std::type_info& Stage)
+inline std::string_view StagePredecessorIn(TTypeList<S...>, std::string_view Stage)
 {
-	const std::type_info* Types[sizeof...(S) == 0 ? 1 : sizeof...(S)] = { &typeid(S)... };
+	// By NAME, not by `type_info`: a stage's identity is its `StaticName()` now (Engine/Frame.h),
+	// which is a literal in the stage's own module -- so this comparison needs no RTTI record and no
+	// cross-module `type_info` equality, and the peer typeid note that used to live here is gone with it.
+	const std::string_view Types[sizeof...(S) == 0 ? 1 : sizeof...(S)] = { S::StaticName()... };
 	for (std::size_t i = 0; i < sizeof...(S); ++i)
 	{
-		// type_info's operator== compares NAMES, not addresses: the macro and the frame's dispatch may
-		// be in different modules, where one type has one type_info per module.
-		if (*Types[i] == Stage)
+		if (Types[i] == Stage)
 		{
-			return (i > 0) ? Types[i - 1] : nullptr;
+			return (i > 0) ? Types[i - 1] : std::string_view{};
 		}
 	}
-	return nullptr;
+	return {};
 }
 
 template <typename TFrame>
-inline const std::type_info* StagePredecessorOf(const TFrame*, const std::type_info& Stage)
+inline std::string_view StagePredecessorOf(const TFrame*, std::string_view Stage)
 {
 	// The frame's own mounted-stage list: TStages comes from its IPipeline<...> base, and a type with
 	// no such list (the host's lifecycle stages) reports an empty list -- no predecessor, no arrow.
@@ -376,8 +379,8 @@ inline const std::type_info* StagePredecessorOf(const TFrame*, const std::type_i
  */
 #define MAHO_TRACE_STAGE(StageType, Label, Tip)                                     \
 	::Maho::FStageTrace MAHO_TRACE_CONCAT(_MahoStageTrace, __LINE__)(                \
-		this, typeid(StageType), TraceGroupName(), StaticName().data(), Label, Tip,  \
-		::Maho::StagePredecessorOf(this, typeid(StageType)))
+		this, StageType::StaticName(), TraceGroupName(), StaticName().data(), Label, Tip, \
+		::Maho::StagePredecessorOf(this, StageType::StaticName()))
 /**
  * Trace one hand-labelled SECTION inside a stage (or inside any helper a stage calls). It inherits
  * the ambient row, so it lands on the frame that is running and nests inside that stage's bar.

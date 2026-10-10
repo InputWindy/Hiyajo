@@ -42,7 +42,7 @@ struct FUIWidget
  */
 class MAHO_UISYSTEM_API FUISystem : public FFrameExtension, public IPipeline<IOnInstalled, IProcessInput, IUpdate, IPreUnInstall>
 {
-	MAHO_DECLARE_FRAME(FUISystem);
+	MAHO_DECLARE_FRAME_UNDER(FUISystem, FGameWorld);
 
 public:
 	void OnInstalled(FGameWorld& World, FGameWorldContext& Frame) override;

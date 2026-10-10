@@ -979,7 +979,7 @@ D.Interface("void RequestExit()", "请求主循环在本帧边界退出（幂等
 D.Interface("[[nodiscard]] bool ShouldExit() const noexcept",
             "是否已请求退出 —— 宿主对收集器「关闭」状态的词汇（`IsClosing()`）")
 D.SetAccess("protected")
-D.Interface("FFrameGraph& EnsureGraph()", "**这张图的持有者就是这个宿主**（不是某个基类、也不是 builder 里的隐藏 `unique_ptr`）：首次使用时建 —— `Graph.emplace(GetPool(), GetPoolLane())` + `Initialize()` + `SetGraph`（把那个**非拥有引用**递进 builder），幂等。**懒建而不是构造期建**：`K` 是运行期值，口径是插件侧的**只读 CVar** `r.FramesInFlight`（Core 经 `GetFramesInFlight()` 问一次并记住，**没有 setter**），图在首次使用时就地解析它一次 —— 构造期建就会建在插件存在之前。`Main` / `PostMain` / `RequestExit` 三个驱动入口都先调它")
+D.Interface("FFrameGraph& EnsureGraph()", "**这张图的持有者就是这个宿主**（不是某个基类、也不是 builder 里的隐藏 `unique_ptr`）：首次使用时建 —— `Graph.emplace(GetPool(), GetPoolLane())` + `Initialize()`，幂等。**图不经任何注入进入 builder**（`SetGraph` 已经删了）：builder 一个引用都不存，图由这个帧在**每次驱动调用**里当参数传下去。**懒建而不是构造期建**：`K` 是运行期值，口径是插件侧的**只读 CVar** `r.FramesInFlight`（Core 经 `GetFramesInFlight()` 问一次并记住，**没有 setter**），图在首次使用时就地解析它一次 —— 构造期建就会建在插件存在之前。`Main` / `PostMain` / `RequestExit` 三个驱动入口都先调它")
 D.Field("std::optional<FFrameGraph> Graph", "图是宿主的**成员**（`FFrameGraph` 既不可拷贝也不可移动 —— 它是带常驻线程的 `FThreadedServer` ⇒ 只能原地构造一次，故用 `optional`）。成员早于基类析构 ⇒ 图比 builder 持有的池先停，「图与池都静下来了，然后才释放任何实例 / 模块」由此构造上成立；从前那个持有图的 `FFrameGraphHost` 基类已经删了")
 D.Field("bool bGraphReady", "`EnsureGraph` 是否已经建过并启动（两个驱动入口读它，而不是读 `Graph.has_value()` —— 让「到底用过没有」只有一个名字）")
 D.SetAccess("private")
@@ -1047,8 +1047,9 @@ D.Header("Public/Engine/FrameBuilder.h", Title="FrameBuilder.h —— 帧集合 
               "`Private/Engine/FrameBuilder.cpp`（`Detail::ReportBridgeDiagnostics`、`IFrameCollector` "
               "的虚析构）。\n"
               "**私有持有的两件**：`FFrameBridge`（桥）、`TFrameDispatch`（分派）—— 宿主全程看不见它们。"
-              "**图也不在其中**：builder 不持图（`FFrameGraphHost` 那个「持有图并把它递下去」的基类已经没了），"
-              "图是**驱动那条 stage 序列的那个帧的成员**，由该帧懒建后经 `SetGraph` 递一个**引用**进来；"
+              "**图也不在其中**（连引用都不是）：builder 不持图（`FFrameGraphHost` 那个「持有图并把它递下去」的基类已经没了），"
+              "图是**驱动那条 stage 序列的那个帧的成员**，并且在每次驱动调用里**由该帧当 `FFrameGraph&` 参数传进来**"
+              "（从前那个一次写入的 `SetGraph` 已经删了）；"
               "于是「谁拥有图 / 谁栅栏它 / 谁释放它」是那个**帧**的属性，不再是某个基类的属性。")
 
 D.Card("包含的头文件")
@@ -1081,7 +1082,7 @@ D.Field("TMulticastEvent<void(const FFrameStatusInfo&)> OnFrameStatus", "**每�
 D.Field("TMulticastEvent<void()> OnClosing", "翻到「关闭」时广播一次（teardown 之前，帧都还活着）")
 D.Field("enum class EFrameStatus / struct FFrameStatusInfo / struct FFrameStats", "嵌套类型（见上面的状态表）")
 D.SetAccess("protected")
-D.Interface("void DrainPool()", "**本 lane 的池屏障**（一次转换栅栏的池那一半）。驱动点把它写成一对：`OwnGraph().Wait()`（图的提交栅栏，图来自所有者注入的那个引用）+ `DrainPool()`。**循环不每帧调**（帧要流水）")
+D.Interface("void DrainPool()", "**本 lane 的池屏障**（一次转换栅栏的池那一半）。驱动点把它写成一对：`Graph.Wait()`（**调用方**传进来的那张图的提交栅栏 —— 调用方就是驱动这条序列的那个帧，图是它自己的成员）+ `DrainPool()`。**循环不每帧调**（帧要流水）")
 D.Interface("[[nodiscard]] std::size_t UninstallAll()", "给每个活动帧发卸载请求（按名字；名字比模块活得久）")
 D.Interface("void ReleaseAll()", "收摊最后手段：**不跑 teardown 阶段**硬释放，但仍保持「在 Pipelines 即活着」不变量")
 D.Interface("void DropPendingInstalls() / void CancelPendingReloads()", "丢弃未生效的装载 / 重载")
@@ -1100,12 +1101,8 @@ D.Interface("[[nodiscard]] bool HasLayerName(std::string_view) / bool IsOwned(co
             "卸载是「先移出 Pipelines 再释放」，所以外部拿到的指针可以查而不是盲解引用）")
 D.Interface("[[nodiscard]] std::string ModulePathOf(const FFrameExtension*) const", "装载它的 DLL 路径（同样不碰对方模块）")
 D.Interface("[[nodiscard]] bool HasPendingUpdates() const / bool IsClosing() const noexcept", "有没有待应用的变更 / 是否已关闸")
-D.Interface("void SetGraph(FFrameGraph& InGraph)", "驱动该序列的帧**在它自己懒建出那张图的那一刻**递进来的那**一个**引用（宿主是 `EnsureGraph`，收集器帧是它自己的同名函数）。builder 只存这个非拥有引用")
-D.Interface("[[nodiscard]] FFrameGraph& OwnGraph() const",
-            "**每个驱动点用**的那张图（帧循环、两处一次性批、拓扑变更排空）。活跃的帧里它绝不为空：在帧把自己的图注入之前，没有东西能驱动序列；真变成空了，这里的 `MAHO_ENSURE` 会大声说出来")
 D.Interface("[[nodiscard]] FThreadPool& GetPool() / FThreadPool::FLane GetPoolLane() const",
             "节点体跑在哪个池、哪条 lane —— 图就是按这一对建的")
-D.Field("FFrameGraph* InjectedGraph", "**所有者注入的那一个非拥有引用**（`SetGraph` 写入）。叫 `InjectedGraph` 而不是 `Graph`：所有者自己也声明了一个叫 `Graph` 的成员（见 `FEngineBase::Graph`），基类成员同名会在每个派生作用域里被遮蔽 —— 那就是另一个对象了")
 D.SetAccess("private")
 D.Field("std::vector<FFrameExtension*> Pipelines", "活动帧（不变量：**先移出这里再释放** ⇒ 在表里即活着）")
 D.Field("PendingAdded / PendingRemoveRequests / PendingReloads", "待装载 / 待卸载 / 待重载")
@@ -1161,17 +1158,21 @@ D.Interface("void UseSharedPool(FThreadPool& InPool) override",
             "所以留着这个成员不会多起线程），并 `CreateLane()` 取一条自己的 lane")
 D.Interface("void Reload(std::string_view Name)", "热重载：下个安全点卸旧（依赖安全）、随后装回同 DLL 新副本")
 D.Interface("void TryUninstall(std::string_view Query)", "按**名字或 DLL 路径**匹配第一命中，命中即入卸载 pending")
-D.Interface("template <TInitStages, TShutdownStages> void FlushPendingUpdates()",
+D.Interface("template <TInitStages, TShutdownStages> void FlushPendingUpdates(FFrameGraph& Graph)",
             "应用挂起变更（**函数内部就是安全点**）：先处理「装载被同窗口的卸载取消」→ init 批 → 卸载批。"
-            "重入被拒；插件异常被捕获上报、pending 保持原样等下次重试")
-D.Interface("template <TLoopStages> void Execute(std::uint64_t Frame)",
+            "重入被拒；插件异常被捕获上报、pending 保持原样等下次重试。"
+            "`Graph` 是**调用方自己的**那张图 —— 一次性批和帧循环共用它，安装期的节点才在循环里仍可寻址"
+            "（节点身份 = 名字 + stage + 相位，活过一次批不影响）")
+D.Interface("template <TLoopStages> void Execute(FFrameGraph& Graph, std::uint64_t Frame)",
             "**跑第 `Frame` 轮**：按 `TLoopStages` 重查帧集（脏时）→ 建批（帧号即相位来源）→ 提交 → 记地板。"
             "**不排空** ⇒ 帧会流水（真正节流的是 `Submit` 的准入：轮次 `Frame` 占用的槽没排空就阻塞调用方）。"
-            "帧号是**宿主的**：本类不持有帧源，`Frame` 由参数进来，所以同一个渲染帧的多条序列落进同一个槽")
+            "两个参数都是**调用方给的**：`Frame` 来自宿主的帧源（本类不持有帧源，所以同一个渲染帧的多条序列落进同一个槽），"
+            "`Graph` 是驱动这条序列的那个帧自己那张图 —— 每个驱动者传自己的，父子共用一张会让准入等在自己占的那个槽上")
 D.Interface("FlushPendingUpdatesImpl / FlushUnload<TShutdownStages>",
-            "上两者的实现：建批（`TFrameDispatch` + `FFrameBridge::Build`）→ `Submit` → 排空 → 收割")
-D.Interface("template <TStages> void ExpandLoopFrames(TTypeList<TStages...>)",
-            "LINQ：`Select<TStages...>()` 重查帧集（脏标志由集合侧自己置位，宿主没有缓存要失效）")
+            "上两者的实现（都带 `FFrameGraph&` 参数）：建批（`TFrameDispatch` + `FFrameBridge::Build`）→ `Submit` → 排空 → 收割")
+D.Interface("template <TStages> void ExpandLoopFrames(FFrameGraph& Graph, TTypeList<TStages...>)",
+            "LINQ：`Select<TStages...>()` 重查帧集（脏标志由集合侧自己置位，宿主没有缓存要失效）；"
+            "重查**前**先拿调用方的图来一次 `Graph.Wait()`（帧集要换了，不能有东西在飞）")
 D.Interface("TContext& GetContext()", "把 `this` 取回 `TContext&`（宿主就是上下文）")
 D.Interface("template <TEvent, TArgs...> void BroadcastIsolated(TEvent&, const TArgs&...)",
             "隔离广播：订阅者抛异常只报错，不影响收集器状态与 teardown")

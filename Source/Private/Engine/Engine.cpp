@@ -108,8 +108,9 @@ void FEngineBase::PostMain()
 {
 	// The graph this teardown drains is THIS host's (a member -- see the header). Ensuring it here is
 	// idempotent and it covers the host that never ticked (a build/test that installs and immediately
-	// tears down): the shutdown sweep below drives one-shot batches, and those need a graph.
-	EnsureGraph();
+	// tears down): the shutdown sweep below drives one-shot batches, and those need a graph. The
+	// reference is what every driving call below is handed -- the builder stores no graph of its own.
+	FFrameGraph& HostGraph = EnsureGraph();
 
 	// Teardown never loads: Install / Reload are refused from here on (the collector's
 	// closing flag). Main already flipped it through the exit request that ended its
@@ -134,7 +135,7 @@ void FEngineBase::PostMain()
 	// uninstalls its sub-plugins). Bounded: a dependency cycle must not spin.
 	for (int Pass = 0; Pass < 8 && GetStats().PendingRemoves != 0; ++Pass)
 	{
-		FlushPendingUpdates<FInitStages, FShutdownStages>();
+		FlushPendingUpdates<FInitStages, FShutdownStages>(HostGraph);
 	}
 
 	const FFrameStats Stats = GetStats();
@@ -188,8 +189,18 @@ int FEngineBase::Main()
 	// design.md D9).
 	// The graph this loop submits every frame to. `PreMain` (the host's override) is the usual first
 	// caller -- it drives the install flush through it -- and this call is the one that has to hold
-	// for a host that drives NO flush of its own. Idempotent either way.
-	EnsureGraph();
+	// for a host that drives NO flush of its own. Idempotent either way, and the reference is handed to
+	// every driving call below: the builder holds no graph, so "which graph this loop drives" is stated
+	// here, once, instead of being stored inside the scheduler-adjacent machinery.
+	FFrameGraph& TickGraph = GetGraph();
+
+	// The stage-metadata table's one-shot dump (change add-resource-metadata-edges, step 2). HERE, and
+	// not earlier: every row is registered at static-init time inside the plugin that owns the
+	// declaration, so the table is complete only once those plugins are loaded -- and `PreMain` (the
+	// host's override) is what loads them. The names in the rows are string literals inside those
+	// modules, so the dump has to happen while they are mapped -- which is also why it is not left to
+	// process exit. Off unless `MAHO_GRAPH_META` is set (the `MAHO_GRAPH_*` diagnostic family).
+	DumpStageAccess();
 
 	while (!ShouldExit())
 	{
@@ -199,8 +210,8 @@ int FEngineBase::Main()
 		// a frame boundary and split one frame across two rounds of the ring.
 		const std::uint64_t Frame = NextFrameNumber();
 
-		FlushPendingUpdates<FInitStages, FShutdownStages>();
-		Execute<FTickStages>(Frame);
+		FlushPendingUpdates<FInitStages, FShutdownStages>(TickGraph);
+		Execute<FTickStages>(TickGraph, Frame);
 	}
 
 	// Quiescence before teardown, and it has to cover BOTH the frames and the pool: stage methods

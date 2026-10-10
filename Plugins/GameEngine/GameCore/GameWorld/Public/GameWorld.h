@@ -32,6 +32,21 @@ struct FGameWorldContext
 {
 };
 
+} // namespace GameWorld
+
+/** The world collector's per-frame context, mapped from the collector's NAME (see TCollectorContext).
+ *  Written at THIS scope because an explicit specialization is only allowed in a namespace ENCLOSING
+ *  the primary template's, while the collector itself lives in `Maho::GameWorld`; it has to precede
+ *  the stage declarations below, which spell the slot type while `FGameWorld` is still incomplete. */
+template <>
+struct TCollectorContext<GameWorld::FGameWorld>
+{
+	using Type = GameWorld::FGameWorldContext;
+};
+
+namespace GameWorld
+{
+
 /**
  * Transform component - a FULL TRS, still a plain POD.
  *
@@ -62,52 +77,22 @@ struct FTransform
 // its own stage sequences, in the Unity ECS order below.
 
 /** Rows/layers attached to the world (arrived via Install at the safe point). */
-class MAHO_GAMEWORLD_API IOnInstalled
-{
-public:
-	virtual ~IOnInstalled() = default;
-	virtual void OnInstalled(FGameWorld&, FGameWorldContext&) = 0;
-};
+MAHO_DECLARE_STAGE(MAHO_GAMEWORLD_API, IOnInstalled, OnInstalled, FGameWorld)
 
 /** Per-frame, once, before any fixed/regular update. */
-class MAHO_GAMEWORLD_API IProcessInput
-{
-public:
-	virtual ~IProcessInput() = default;
-	virtual void ProcessInput(FGameWorld&, FGameWorldContext&) = 0;
-};
+MAHO_DECLARE_STAGE(MAHO_GAMEWORLD_API, IProcessInput, ProcessInput, FGameWorld)
 
 /** Fixed-timestep update - runs 0..N times per frame with a fixed dt. */
-class MAHO_GAMEWORLD_API IFixedUpdate
-{
-public:
-	virtual ~IFixedUpdate() = default;
-	virtual void FixedUpdate(FGameWorld&, FGameWorldContext&) = 0;
-};
+MAHO_DECLARE_STAGE(MAHO_GAMEWORLD_API, IFixedUpdate, FixedUpdate, FGameWorld)
 
 /** Per-frame update (after all fixed steps this frame). */
-class MAHO_GAMEWORLD_API IUpdate
-{
-public:
-	virtual ~IUpdate() = default;
-	virtual void Update(FGameWorld&, FGameWorldContext&) = 0;
-};
+MAHO_DECLARE_STAGE(MAHO_GAMEWORLD_API, IUpdate, Update, FGameWorld)
 
 /** Per-frame, after update. */
-class MAHO_GAMEWORLD_API ILateUpdate
-{
-public:
-	virtual ~ILateUpdate() = default;
-	virtual void LateUpdate(FGameWorld&, FGameWorldContext&) = 0;
-};
+MAHO_DECLARE_STAGE(MAHO_GAMEWORLD_API, ILateUpdate, LateUpdate, FGameWorld)
 
 /** Detached from the world (removed at the next safe point). */
-class MAHO_GAMEWORLD_API IPreUnInstall
-{
-public:
-	virtual ~IPreUnInstall() = default;
-	virtual void PreUnInstall(FGameWorld&, FGameWorldContext&) = 0;
-};
+MAHO_DECLARE_STAGE(MAHO_GAMEWORLD_API, IPreUnInstall, PreUnInstall, FGameWorld)
 
 /**
  * Game world subsystem - an engine layer (mounted as IInit/ITick/IShutdown on the
@@ -151,7 +136,9 @@ protected:
 	bool bGraphReady = false;
 
 	/** Create + start this collector's graph on FIRST use, at the shared pool's lane this collector was
-	 *  handed at install, named for the trace, and injected into the batch builder. Idempotent.
+	 *  handed at install, and name it for the trace. Idempotent. The reference is handed to every
+	 *  driving call (`Execute(Graph, Frame)` / `FlushPendingUpdates(Graph)`): the builder keeps no graph
+	 *  of its own, so "which graph this collector drives" is visible at each call site.
 	 *
 	 *  QUALIFIED on purpose: this class also has a `GetPool<C>()` (its component pools, below), and a
 	 *  derived member of that name HIDES the builder's per the usual name lookup -- an unqualified call
@@ -164,7 +151,6 @@ protected:
 			Graph.emplace(FFrameBuilder<FGameWorld>::GetPool(), GetPoolLane());
 			Graph->SetOwnerName(GetName().data());
 			Graph->Initialize();
-			SetGraph(*Graph);
 		}
 		return *Graph;
 	}
@@ -175,13 +161,16 @@ protected:
 	 *  movable, so growing would have to move slots that systems already hold references to. */
 	std::unique_ptr<FContext[]> Slots;
 
-	void* GetContext(int Slot) override
+	/** This collector's per-phase state, typed (see FFrameBuilder: `TCollectorContext<FGameWorld>`
+	 *  answers the type). Must never return anything but a live slot: every system stage takes the
+	 *  context by reference, so the whole ring is created here, at its full depth, on the first call. */
+	FGameWorldContext& GetContext(int Slot) override
 	{
 		if (!Slots)
 		{
 			Slots = std::make_unique<FContext[]>(static_cast<std::size_t>(GetFramesInFlight()));
 		}
-		return &Slots[static_cast<std::size_t>(Slot)];
+		return Slots[static_cast<std::size_t>(Slot)];
 	}
 
 private:
@@ -201,7 +190,13 @@ public:
 	template <typename C>
 	C* AddComponent(FEntity E, C Value)
 	{
-		return GetOrAddPool<C>()->Add(E.Index, std::move(Value));
+		TComponentPool<C>* Pool = GetOrAddPool<C>();
+		// A null pool means this component type is not in GameWorld.cpp's pool factory. Say so and
+		// store nothing: falling back to a locally constructed pool is what the factory exists to
+		// prevent (see CreateComponentPool in ComponentPool.h).
+		MAHO_CHECKF(Pool != nullptr, "AddComponent: no component pool for this type -- add it to the "
+			"table in GameWorld.cpp::CreateComponentPool()");
+		return Pool != nullptr ? Pool->Add(E.Index, std::move(Value)) : nullptr;
 	}
 
 	template <typename C>
@@ -270,9 +265,16 @@ private:
 				return Typed;
 			}
 		}
-		auto New = std::make_unique<TComponentPool<C>>();
-		TComponentPool<C>* Raw = New.get();
-		ComponentPools.push_back(std::move(New));
+		// CONSTRUCTED BY GAMEWORLD.DLL, not here: this header is instantiated in the WORLD SYSTEMS'
+		// modules, and a pool built here would carry THEIR vtable + deleting destructor -- which
+		// Shutdown's uninstall frees before the pool dies. See CreateComponentPool's note.
+		IComponentPool* New = CreateComponentPool(typeid(C));
+		if (New == nullptr)
+		{
+			return nullptr;
+		}
+		auto* Raw = dynamic_cast<TComponentPool<C>*>(New);
+		ComponentPools.emplace_back(New);
 		return Raw;
 	}
 
@@ -294,7 +296,7 @@ private:
 	// those stages too (IOnInstalled/IPreUnInstall belong to the collector's install/uninstall
 	// batches, not to the frame).
 	//
-	// The graphs themselves belong to the collector (Execute<TStages>(Frame) below), and the ROUND
+	// The graphs themselves belong to the collector (Execute<TStages>(Graph, Frame) below), and the ROUND
 	// comes from OUTSIDE -- the host reads the canonical frame number once per frame and passes the
 	// same value to all three calls. That is what keeps one tick's sequences in one slot: three
 	// per-sequence counters would each have a private notion of "the previous frame", and the
@@ -318,15 +320,10 @@ MAHO_GAMEWORLD_API FGameWorld* GetGameWorld();
 
 } // namespace GameWorld
 
-// Stage dispatch specializations for the GameWorld context. These MUST be at the
-// Maho namespace scope (not nested GameWorld) so they full-specialize the primary
-// Invoke<TStage, TContext> template declared in Layer.h -- same pattern as Engine.h
-// (FEngineBase) and Render.h (FRender).
-MAHO_DECLARE_STAGE_DISPATCH(GameWorld::FGameWorld,   GameWorld::IOnInstalled,   GameWorld::IOnInstalled,   OnInstalled)
-MAHO_DECLARE_STAGE_DISPATCH(GameWorld::FGameWorld,   GameWorld::IProcessInput,  GameWorld::IProcessInput,  ProcessInput)
-MAHO_DECLARE_STAGE_DISPATCH(GameWorld::FGameWorld,   GameWorld::IFixedUpdate,   GameWorld::IFixedUpdate,   FixedUpdate)
-MAHO_DECLARE_STAGE_DISPATCH(GameWorld::FGameWorld,   GameWorld::IUpdate,        GameWorld::IUpdate,        Update)
-MAHO_DECLARE_STAGE_DISPATCH(GameWorld::FGameWorld,   GameWorld::ILateUpdate,    GameWorld::ILateUpdate,    LateUpdate)
-MAHO_DECLARE_STAGE_DISPATCH(GameWorld::FGameWorld,   GameWorld::IPreUnInstall,  GameWorld::IPreUnInstall,  PreUnInstall)
+// The ECS sub-stages declare NO metadata row of their own: a stage is not a frame. The world's
+// SYSTEMS implement these (one interface, many systems), so each access table belongs to the
+// implementing system, in that system's own .cpp
+// (`MAHO_IMPLEMENT_STAGE(FMeshRenderSystem, IRender, ...)`). WHO a stage is called and with what
+// context is the interface declaration's own fact (MAHO_DECLARE_STAGE above).
 
 } // namespace Maho

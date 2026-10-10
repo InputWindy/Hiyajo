@@ -7,6 +7,8 @@
 #include <cstring>
 #include <exception>
 #include <functional>
+#include <mutex>
+#include <set>
 #include <string>
 #include <utility>
 #include <variant>
@@ -42,6 +44,24 @@ constexpr const char* kPresentTargetTexName = "__EditorPresentTarget__";
 
 namespace
 {
+// ---------------------------------------------------------------------------------------
+// 诊断（临时，仅定位，不改行为）：谁把空名字喂给了 `ImGui::Begin`（imgui.cpp:7404
+// `IM_ASSERT(name != NULL && name[0] != '\0')`）。名字为空（nullptr / ""）才报，**每站点限一次**；
+// 日志点名站点标签 + 名字来源。加锁是因为编辑器帧可能跑在任一 pool worker 上。
+// ---------------------------------------------------------------------------------------
+void DiagEmptyBeginName(const char* Site, const char* Name, const char* Origin)
+{
+	static std::mutex Mutex;
+	static std::set<std::string> Reported;
+
+	if (Name != nullptr && Name[0] != '\0') { return; }
+
+	std::lock_guard<std::mutex> Lock(Mutex);
+	if (!Reported.insert(Site).second) { return; }
+	MAHO_LOG_CORE_ERROR("UIBEGINNAME-CHECK EMPTY site={} origin={} name={}", Site, Origin,
+						Name != nullptr ? std::string(Name) : std::string("<nullptr>"));
+}
+
 #if defined(_WIN32)
 	// No GLFW/OS clipboard backend: route ImGui's SetClipboardText straight into the
 	// system clipboard so Ctrl+C inside a readonly InputText copies to the OS.
@@ -742,9 +762,9 @@ void FExampleEditor::InstallEditorComponents()
 	// install them itself, into this same collector.
 	InstallChildrenOf(GetName());
 	// The graph is OURS (a member -- see EnsureGraph): the builder holds none, so the install batch
-	// below is submitted to the graph this frame created and injected.
-	EnsureGraph();
-	FlushPendingUpdates<TTypeList<IEditorInit>, TTypeList<IEditorShutdown>>();
+	// below is handed the graph this frame owns.
+	FFrameGraph& EditorGraph = EnsureGraph();
+	FlushPendingUpdates<TTypeList<IEditorInit>, TTypeList<IEditorShutdown>>(EditorGraph);
 }
 
 void FExampleEditor::InitEditorViews(FRender& R)
@@ -1126,6 +1146,9 @@ void FExampleEditor::DrawEditorPanels()
 	ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
 	ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
 	ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
+	// 诊断（临时）：前置的空名字点名（见文件开头的 DiagEmptyBeginName）。
+	DiagEmptyBeginName("ExampleEditor.cpp:1129 ImGui::Begin(\"EditorDock\")", "EditorDock",
+					   "string literal 'EditorDock'");
 	ImGui::Begin("EditorDock", nullptr, HostFlags);
 	ImGui::PopStyleVar(3);
 	EditorDockSpaceId = static_cast<std::uint32_t>(ImGui::GetID("EditorDockSpace"));
@@ -1363,7 +1386,8 @@ void FExampleEditor::ShutdownEditorComponents()
 	TryUninstall(Maho::ApplyModuleExtension("FContentBrowser"));
 	TryUninstall(Maho::ApplyModuleExtension("FEditorViewport"));
 	TryUninstall(Maho::ApplyModuleExtension("FEditorTheme"));
-	FlushPendingUpdates<TTypeList<IEditorInit>, TTypeList<IEditorShutdown>>();
+	FFrameGraph& EditorGraph = EnsureGraph();
+	FlushPendingUpdates<TTypeList<IEditorInit>, TTypeList<IEditorShutdown>>(EditorGraph);
 
 	// THE OWNER'S FENCE: this is the editor's last use of its own graph (the component batches above),
 	// and it happens while the shared pool the graph was built with is still alive -- the member dies

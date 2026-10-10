@@ -1,5 +1,10 @@
 #include <Core/Fatal.h>
 
+// For GetCurrentGraphNode(): the crash reporter names the node body that was running (see the
+// PrintAddressStack note). Same module, so this is a direct call, and it is the ONE thing that turns
+// "0xC0000005 at <module+offset>" into "which of the ~35 nodes of this frame did it".
+#include <Core/FrameGraph.h>
+
 #include <chrono>
 #include <csignal>
 #include <cstdint>
@@ -113,6 +118,17 @@ void PrintAddressStack(const char* Why)
 	void* Frames[40] = {};
 	const USHORT Count = RtlCaptureStackBackTrace(1, 40, Frames, nullptr);
 	std::fprintf(stderr, "Maho CRASH (%s): %u frames\n", Why, static_cast<unsigned>(Count));
+
+	// WHO was running. A hard fault raises nothing catchable and by the time this runs the frames are
+	// gone, so the identity has to have been PUBLISHED while the body was alive -- the graph does that
+	// around every node (Core/FrameGraph.h::GetCurrentGraphNode). Without it a crash inside a node is
+	// only a module+offset, and a 34-DLL program has ~35 node bodies per frame.
+	const char* Node = GetCurrentGraphNode();
+	if (Node != nullptr && Node[0] != 0)
+	{
+		std::fprintf(stderr, "  during node %s\n", Node);
+	}
+
 	for (USHORT i = 0; i < Count; ++i)
 	{
 		char Where[MAX_PATH + 32] = "?";

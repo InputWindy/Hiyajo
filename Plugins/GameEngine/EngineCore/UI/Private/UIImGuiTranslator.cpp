@@ -10,7 +10,10 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <cstring>
+#include <mutex>
+#include <set>
 
 namespace Maho { namespace UI {
 
@@ -22,6 +25,37 @@ const FUIColor kPlaceholderGray{ 0.5f, 0.5f, 0.5f, 0.35f };
 bool NearlyEqual(float A, float B)
 {
 	return std::fabs(A - B) < 1e-4f;
+}
+
+// ---------------------------------------------------------------------------------------
+// 诊断（临时，仅定位，不改行为）：谁把空名字喂给了 `ImGui::Begin`（imgui.cpp:7404
+// `IM_ASSERT(name != NULL && name[0] != '\0')`）。
+//   - `DiagEmptyBeginName`：`name` 为空（nullptr / ""）才报，**每站点限一次**；日志点名
+//     站点标签 + 视图/弹层 id + 名字来源。加锁是因为翻译可能跑在任一 pool worker 上。
+//   - `DiagBeginSiteReached`：给"没有名字参数"的 Begin 家族调用点留一条覆盖标记 —— 那些名字由
+//     ImGui 自己生成（如 `##Tooltip_%02d`），空名字不可能从那里来。
+// ---------------------------------------------------------------------------------------
+void DiagEmptyBeginName(const char* Site, const char* Name, const char* Origin, std::uint32_t Id)
+{
+	static std::mutex Mutex;
+	static std::set<std::string> Reported;
+
+	if (Name != nullptr && Name[0] != '\0') { return; }
+
+	std::lock_guard<std::mutex> Lock(Mutex);
+	if (!Reported.insert(Site).second) { return; }
+	MAHO_LOG_CORE_ERROR("UIBEGINNAME-CHECK EMPTY site={} id={} origin={} name={}", Site, Id, Origin,
+						Name != nullptr ? std::string(Name) : std::string("<nullptr>"));
+}
+
+void DiagBeginSiteReached(const char* Site)
+{
+	static std::mutex Mutex;
+	static std::set<std::string> Reported;
+
+	std::lock_guard<std::mutex> Lock(Mutex);
+	if (!Reported.insert(Site).second) { return; }
+	MAHO_LOG_CORE_INFO("UIBEGINNAME-CHECK REACHED site={}", Site);
 }
 } // namespace
 
@@ -255,6 +289,8 @@ FUIVector2 FImGuiTranslator::MeasureIcon(const FUIResolvedResource& Icon, float 
 
 void FImGuiTranslator::PushDisabled()
 {
+	// 诊断（临时）：本站点没有名字参数（`BeginDisabled` 不建窗口，只压 item flag）。
+	DiagBeginSiteReached("UIImGuiTranslator.cpp:258 ImGui::BeginDisabled (no window / no name)");
 	ImGui::BeginDisabled(true);
 	++DisabledDepth;
 }
@@ -613,6 +649,9 @@ bool FImGuiTranslator::BeginScrollRegion(FUIName Id, const FUIRect& Rect, const 
 {
 	ImGui::PushID(static_cast<int>(Id.GetId()));
 	ImGui::SetCursorScreenPos(ScreenMin(Rect));
+	// 诊断（临时）：前置的空名字点名 —— 字面量 `##scroll`，ImGui 实际用 `<parent>/##scroll_%08X`。
+	DiagEmptyBeginName("UIImGuiTranslator.cpp:616 ImGui::BeginChild(##scroll)", "##scroll",
+					   "literal '##scroll' (ImGui builds '<parent>/##scroll_%08X')", Id.GetId());
 	const bool bVisible = ImGui::BeginChild("##scroll", ImVec2(std::max(Rect.W, 1.f), std::max(Rect.H, 1.f)),
 											ImGuiChildFlags_None, ImGuiWindowFlags_None);
 	// 区域内原点 = 子窗口内容起点（滚动量已由 ImGui 计进内容偏移）
@@ -661,6 +700,8 @@ bool FImGuiTranslator::BeginTooltip(FUIName Id, const FUIRect& Anchor, bool bFol
 	{
 		ImGui::SetNextWindowPos(ScreenMin(Anchor));
 	}
+	// 诊断（临时）：本站点没有名字参数 —— 名字由 ImGui 生成（`##Tooltip_%02d`），空名字不可能来自这里。
+	DiagBeginSiteReached("UIImGuiTranslator.cpp:664 ImGui::BeginTooltip (name is ImGui-generated '##Tooltip_%02d')");
 	ImGui::BeginTooltip();
 	// 提示窗是独立窗口：原点切到它的内容区，出栈时恢复（与弹层同一约定）。
 	OriginStack.push_back(Origin);
@@ -749,6 +790,9 @@ bool FImGuiTranslator::BeginPopup(FUIName Id, bool bOpen, bool bWasShown, const 
 	// 不压这几下，弹层就是个既没底也没边框的玻璃框。声明侧没意见（`Fill.A == 0`）时由
 	// `PushWindowStyle` 原样推回当前值。
 	PushWindowStyle(S);
+	// 诊断（临时）：前置的空名字点名 —— `Name` 来自本函数开头的 "##uiPopup" + id。
+	DiagEmptyBeginName("UIImGuiTranslator.cpp:752 ImGui::BeginPopupModal/BeginPopup", Name.c_str(),
+					   "local: '##uiPopup' + std::to_string(Id)", Id.GetId());
 	const bool bShown = bModal ? ImGui::BeginPopupModal(Name.c_str(), nullptr, PopupFlags)
 							   : ImGui::BeginPopup(Name.c_str(), PopupFlags);
 	if (!bShown)
@@ -802,6 +846,8 @@ bool FImGuiTranslator::BeginDragSource(FUIName Id, std::string_view PayloadType,
 									   std::string_view PreviewText)
 {
 	(void)Id;
+	// 诊断（临时）：本站点没有名字参数（拖放预览窗的名字由 ImGui 生成 `##Tooltip_DragDrop_%02d`）。
+	DiagBeginSiteReached("UIImGuiTranslator.cpp:805 ImGui::BeginDragDropSource (no name)");
 	if (!ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID)) { return false; }
 	const std::string Type(PayloadType);
 	ImGui::SetDragDropPayload(Type.c_str(), Payload.data(), Payload.size());
@@ -817,6 +863,8 @@ void FImGuiTranslator::EndDragSource()
 bool FImGuiTranslator::IsDropTarget(FUIName Id, std::string_view PayloadType, std::string* OutPayload)
 {
 	(void)Id;
+	// 诊断（临时）：本站点没有名字参数（拖放目标不建窗口）。
+	DiagBeginSiteReached("UIImGuiTranslator.cpp:820 ImGui::BeginDragDropTarget (no name)");
 	if (!ImGui::BeginDragDropTarget()) { return false; }
 	bool bAccepted = false;
 	const std::string Type(PayloadType);

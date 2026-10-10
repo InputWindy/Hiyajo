@@ -10,6 +10,8 @@
 // .cplugin; only this cpp names the platform, so GameWorld.h stays free of it.
 #include <Platform.h>
 #include <Trace.h>
+#include <typeinfo>
+#include <unordered_map>
 #include <vector>
 
 namespace Maho
@@ -40,11 +42,26 @@ FGameWorld::FGameWorld()
 	// generic scaffolding and must not build-depend on the optional UI plugin; the graph
 	// skips an edge whose target is not installed.
 	MyStage<IShutdown>().IsBlocking("FUIViewRegistry").OnStage<IShutdown>();
+
+	// Reverse edge, same reason, different environment service: the SCRIPT BACKEND must be shut down
+	// AFTER me. A pool element is an `FScriptComponent` holding a `shared_ptr<FScriptInstance>`, and
+	// that instance's destructor runs `~sol::table`, which pushes the table's registry slot back to
+	// reference it (`lua_rawgeti`). `FScriptSystem::IShutdown` calls `Language->Shutdown()`, i.e.
+	// `lua_close` on exactly that state -- so the two steps are WRITERS on one structure and must be
+	// ordered, or the pool teardown calls into a closed VM (observed: AV inside `lua_rawgeti` reached
+	// from `ComponentPools.clear()`, with the world's own IShutdown node as the one being dispatched).
+	// BOTH shut down in the same batch on the SAME graph, so without this edge their order is whatever
+	// the worker pool picks. Addressed by NAME for the same reason as above: FGameWorld is generic
+	// scaffolding and does not build-depend on the optional Script plugin; the graph skips the edge
+	// when no script layer is installed (and a process with no Lua pools has nothing to order).
+	MyStage<IShutdown>().IsBlocking("FScriptSystem").OnStage<IShutdown>();
 }
 
 FGameWorld::~FGameWorld()
 {
-	// WorldGraph is reset in Shutdown; ComponentPools cleared there too.
+	// Nothing to release: `Graph` is a member and stops its own scheduler thread in ~FFrameGraph,
+	// the pools are cleared in Shutdown (while the systems' modules are still mapped), and the
+	// global world pointer is cleared there too.
 }
 
 // -- engine stage overrides (host drives these). Initialize/Tick/Shutdown carry
@@ -115,8 +132,9 @@ void FGameWorld::Initialize(FEngineBase&, FEngineContext&)
 void FGameWorld::Tick(FEngineBase&, FEngineContext&)
 {
 	MAHO_TRACE_STAGE(ITick, "World tick", "drive the input, fixed and post stage groups");
-	// THE graph this collector drives: ours, not the builder's (see EnsureGraph). It is a MEMBER of
-	// this frame, created on first use, and the batch builder was handed a reference to it once.
+	// THE graph this collector drives is a MEMBER of this frame (see EnsureGraph), created on first
+	// use and handed to every driving call below as a parameter -- the builder stores no graph, so
+	// "which graph this collector drives" is visible at each call site.
 	FFrameGraph& Own = EnsureGraph();
 
 	// Frame-start barrier: the post-fixed group is dispatched un-waited below, so it pipelines
@@ -128,7 +146,7 @@ void FGameWorld::Tick(FEngineBase&, FEngineContext&)
 	// Safe point for world-system install/uninstall (attach -> IOnInstalled, detach ->
 	// IPreUnInstall). A changed system set is the ONLY thing that changes the frame set, and it
 	// happens right here, with nothing in flight; the collector notices and re-queries.
-	FlushPendingUpdates<TTypeList<IOnInstalled>, TTypeList<IPreUnInstall>>();
+	FlushPendingUpdates<TTypeList<IOnInstalled>, TTypeList<IPreUnInstall>>(Own);
 
 	// Delta time.
 	const auto Now = std::chrono::steady_clock::now();
@@ -143,7 +161,7 @@ void FGameWorld::Tick(FEngineBase&, FEngineContext&)
 
 	// Pre-fixed: resolve input once, synchronously -- simulation must read a
 	// settled input state, so wait immediately after dispatch.
-	Execute<FInputStages>(Round);
+	Execute<FInputStages>(Own, Round);
 	Own.Wait();
 	DrainPool();
 
@@ -152,7 +170,7 @@ void FGameWorld::Tick(FEngineBase&, FEngineContext&)
 	Accumulator += DeltaSeconds;
 	while (Accumulator >= FixedStepSeconds)
 	{
-		Execute<FFixedStages>(Round);
+		Execute<FFixedStages>(Own, Round);
 		Own.Wait();
 		DrainPool();
 		Accumulator -= FixedStepSeconds;
@@ -160,40 +178,108 @@ void FGameWorld::Tick(FEngineBase&, FEngineContext&)
 
 	// Post-fixed: update + late update, dispatched WITHOUT a trailing wait so they
 	// pipeline across frames; the next Tick's leading Wait (above) collects them.
-	Execute<FPostStages>(Round);
+	Execute<FPostStages>(Own, Round);
 }
 
 void FGameWorld::Shutdown(FEngineBase&, FEngineContext&)
 {
-	MAHO_TRACE_STAGE(IShutdown, "World shutdown", "drain the graph, free the pools, uninstall all");
-	// MY OWN state first, the world systems AFTER. The component pools hold objects
-	// whose destructors live in the systems' modules, and the graph's nodes point at
-	// their instances -- freeing either of those once a system's DLL is unloaded runs
-	// code from an unmapped module (a hard AV, not a leak).
+	MAHO_TRACE_STAGE(IShutdown, "World shutdown", "drain the graph, free the pools, then uninstall all");
+	// ORDER IS THE WHOLE METHOD. Each step is fenced before the next one touches memory a plugin owns:
+	//   (A) drain MY in-flight work, (B) free the module-defined component pools, (C) uninstall the
+	//   systems, (D) clear the global world pointer.
+	//
+	// THE POOLS COME OUT BEFORE THE UNINSTALL, and that is not a preference. Each pool IS a
+	// `TComponentPool<C>` -- an all-inline header template with no key function -- so its vtable and
+	// deleting destructor used to be the COMDAT copy emitted in whichever module CONSTRUCTED it (the
+	// systems' DLLs). Destroying it through `unique_ptr<IComponentPool>` then calls a deleting
+	// destructor IN THAT MODULE, and `UninstallAll` is precisely what `FreeLibrary`s it: freeing the
+	// pools afterwards is a call into an unmapped image (observed: an AV inside
+	// `default_delete<IComponentPool>::operator()`, reached from this method).
+	//
+	// The pools are therefore freed here, while the graph is fenced AND every module that could own
+	// their vtable, RTTI or element deleters is still mapped. `CreateComponentPool` (ComponentPool.h)
+	// additionally moves the pool's own vtable into THIS module, so the delete no longer depends on
+	// which system happened to create the pool; the element destructors (`FScriptComponent::Script`,
+	// `FUIWidget::View`) still live in the systems' modules, which is why the order below is required
+	// either way.
 	FFrameGraph& Own = EnsureGraph();
+
+	// (A) MY OWN in-flight work first: the post-fixed group is dispatched UN-WAITED by Tick, so the
+	// last tick's nodes may still be running when Shutdown arrives. They read the pools and the world
+	// pointer, so they must be quiet before either is touched below.
 	Own.Wait();
 	DrainPool();
+
+	// (B) The component pools: every pool and every component it holds is a module-defined object, so
+	// they die HERE -- with the graph fenced (no node can be running a body that reaches them) and with
+	// the systems' modules still loaded (see the order note above).
 	ComponentPools.clear();
 
-	// Now the systems: uninstall through the collector teardown pipeline so each one's
+	// (C) The systems: uninstall through the collector teardown pipeline so each one's
 	// IPreUnInstall runs BEFORE its instance is destroyed (a bare member destruction
 	// would skip that stage and leak cross-module subscriptions -- e.g. a system's
 	// std::function bound into another DLL's event). By NAME, because a name is what
-	// survives a module.
+	// survives a module. The flush drives that teardown as a one-shot batch on THIS graph.
 	(void)UninstallAll();
-	FlushPendingUpdates<TTypeList<IOnInstalled>, TTypeList<IPreUnInstall>>();
+	FlushPendingUpdates<TTypeList<IOnInstalled>, TTypeList<IPreUnInstall>>(Own);
 
-	// THE OWNER'S FENCE: last use of the world's graph, and it happens while the pool the graph was
-	// built with is still alive (the member dies before the builder base that holds it). ~FFrameBuilder
-	// no longer drains the graph at all -- its destructor is pool-only -- so this IS the "quiet before
-	// anything is freed" invariant. No release step: the member's own destructor stops the scheduler
-	// thread, which is safe because the nodes are all fenced here.
-	if (bGraphReady)
+	// THE OWNER'S FENCE: drain the uninstall batch (and anything its bodies submitted to this lane)
+	// while the pool the graph was built with is still alive -- the graph member dies before the
+	// builder base that holds the pool. ~FFrameBuilder no longer drains the graph at all (its
+	// destructor is pool-only), so this IS the "the graph is quiet before anything is freed"
+	// invariant, and it is the LAST use of the world's graph: nothing submits after it. No release
+	// step is needed either: the member's own destructor stops the scheduler thread, which is safe
+	// precisely because the nodes are all fenced here.
+	Own.Wait();
+	DrainPool();
+
+	// (D) LAST, and deliberately after the fence: `GGameWorld` is read by every node that runs world
+	// code (systems resolve entities through it -- e.g. the Lua bindings), so it may only be cleared
+	// once no node can run any more. Clearing it earlier would make a still-running body observe a
+	// null world (or miss its own guard) rather than a live one.
+	GGameWorld = nullptr;
+}
+
+// ── the component-pool factory (the module boundary of the pools) ─────────────
+//
+// THE TABLE BELOW IS THE BOUNDARY. Every component type the world or a world system can put in a
+// pool is named here, and each `new TComponentPool<T>` is instantiated in THIS translation unit --
+// so each pool's vtable, RTTI and deleting destructor belong to GameWorld.dll, the module that owns
+// (and therefore outlives) the pool. `CreateComponentPool`'s note in ComponentPool.h explains why a
+// pool constructed in a system's module is a use-after-free waiting for `UninstallAll`'s FreeLibrary.
+//
+// ADDING A COMPONENT TYPE means adding it here. Forgetting does NOT corrupt silently: the call site
+// gets nullptr and `FGameWorld::AddComponent` reports it (MAHO_CHECKF). The types are readable here
+// because this cpp already includes the systems' headers privately (they are this plugin's
+// PrivateIncludes); GameWorld.h stays free of them.
+namespace
+{
+	template <typename T>
+	IComponentPool* NewComponentPool()
 	{
-		Graph->Wait();
+		return new TComponentPool<T>();
 	}
 
-	GGameWorld = nullptr;
+	const std::unordered_map<std::type_index, IComponentPool* (*)()>& ComponentPoolFactory()
+	{
+		static const std::unordered_map<std::type_index, IComponentPool* (*)()> Factory{
+			{ typeid(FTransform),           &NewComponentPool<FTransform> },
+			{ typeid(FMeshRenderComponent), &NewComponentPool<FMeshRenderComponent> },
+			{ typeid(FMaterialComponent),   &NewComponentPool<FMaterialComponent> },
+			{ typeid(FCameraComponent),     &NewComponentPool<FCameraComponent> },
+			{ typeid(FInputComponent),      &NewComponentPool<FInputComponent> },
+			{ typeid(FScriptComponent),     &NewComponentPool<FScriptComponent> },
+			{ typeid(FUIWidget),            &NewComponentPool<FUIWidget> },
+		};
+		return Factory;
+	}
+} // namespace
+
+IComponentPool* CreateComponentPool(const std::type_info& Type)
+{
+	const auto& Factory = ComponentPoolFactory();
+	const auto It = Factory.find(std::type_index(Type));
+	return It != Factory.end() ? It->second() : nullptr;
 }
 
 FEntity FGameWorld::CreateEntity()
@@ -228,3 +314,34 @@ extern "C" MAHO_GAMEWORLD_API Maho::FFrameExtension* CreateFrame()
 {
 	return Maho::GameWorld::FGameWorld::CreateFrame();
 }
+
+// ── the stage access table (change add-resource-metadata-edges, step 2) ─────────────────────────
+//
+// The world's resource is its COMPONENT POOLS (`GameWorld::FComponentPools`, the nested tag type: the
+// pools are members of the world, not a class of their own -- design D3). The rows say the lifetime
+// window and who touches the pools while they exist:
+//
+//   IInit      -- the pools/registry come alive (the world pointer is published, the systems install):
+//                 `Create`.
+//   ITick      -- the frame's stage groups run and every system reads/writes components THROUGH the
+//                 world: a `Write` of the pools (the world is the only writer of its own storage).
+//   IShutdown  -- the pools are cleared BEFORE the systems' modules are unloaded (the COMDAT-vtable
+//                 reason documented in the body), and the graph is fenced first: `Destroy`.
+//
+// `Read(FLog)`/`Read(IRHI)` are reads of OTHER layers' services, and they are the reason this table is
+// worth having: `FLog` lives in the `FLog` frame and `IRHI` in `FRender`'s, so a teardown that touches
+// them has an ordering question no hand-written edge recorded. Nothing derives an edge from these rows
+// yet (that is step 4).
+#include <Core/StageAccess.h>
+
+namespace Maho
+{
+
+MAHO_IMPLEMENT_STAGE(GameWorld::FGameWorld, IInit,
+	Create(GameWorld::FComponentPools), Read(FLog))
+MAHO_IMPLEMENT_STAGE(GameWorld::FGameWorld, ITick,
+	Write(GameWorld::FComponentPools), Read(FLog))
+MAHO_IMPLEMENT_STAGE(GameWorld::FGameWorld, IShutdown,
+	Destroy(GameWorld::FComponentPools), Read(FLog), Read(IRHI))
+
+} // namespace Maho

@@ -183,4 +183,17 @@ private:
 	std::uint64_t PublishCount = 0;
 };
 
+/** The ORDERING semantics of this resource (design D4): a SNAPSHOT hand-off channel.
+ *
+ *  The two sides are deliberately scheduled apart -- the game side publishes, the render side reads one
+ *  frame later, and neither waits for the other -- and what crosses is an IMMUTABLE snapshot
+ *  (`shared_ptr<const FRenderScene>`), so a Write-to-Read edge between them is not needed for
+ *  correctness (nothing can tear) and would be actively harmful (it would serialise the K-deep pipeline
+ *  into lock-step). `Snapshot` says exactly that: the same lifetime rules as any resource, minus the
+ *  write-then-read edge.
+ *
+ *  A PLACEHOLDER this round: step 2 records the trait and dumps it, step 4 is what derives edges from
+ *  it -- and the value has to be reviewable in the dump BEFORE it decides anything. */
+MAHO_DECLARE_RESOURCE_ORDERING(FPrimitiveRegistry, Snapshot)
+
 } // namespace Maho

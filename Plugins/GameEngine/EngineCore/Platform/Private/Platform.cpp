@@ -1161,3 +1161,34 @@ extern "C" MAHO_API Maho::FFrameExtension* CreateFrame()
 {
 	return Maho::Platform::FPlatform::CreateFrame();
 }
+
+// ── the stage access table (change add-resource-metadata-edges, step 2) ─────────────────────────
+//
+// `Platform::FPlatform` is this layer's resource in the graph's vocabulary: the window (its message
+// queue) AND the published input ring -- the one thing every frame of the process eventually reads
+// through this layer's door. The rows therefore state the window's lifetime and who publishes into it:
+//
+//   IInit        -- the platform thread starts, the window is created, the input ring is validated:
+//                   the resource starts existing here (and the edge `FRender::IInit -> FPlatform::IInit`
+//                   exists precisely because the RHI is built from this window).
+//   IBeginFrame  -- the pump runs and THIS frame's input is published: a WRITE of the channel.
+//   IEndFrame    -- the frame's window state is read (nothing published): a read.
+//   IExit        -- the cached "should close" state is read to answer the request.
+//   IPreShutdown -- the channel is closed for good (`bInputClosed`), so a consumer wakes instead of
+//                   waiting for a frame that cannot come: still a write of the same channel, not a
+//                   destroy -- the window is still alive.
+//   IShutdown    -- the window is destroyed and the platform thread joined: the resource stops
+//                   existing here.
+#include <Core/StageAccess.h>
+
+namespace Maho
+{
+
+MAHO_IMPLEMENT_STAGE(Platform::FPlatform, IInit,  Create(Platform::FPlatform), Read(FLog))
+MAHO_IMPLEMENT_STAGE(Platform::FPlatform, IBeginFrame,  Write(Platform::FPlatform))
+MAHO_IMPLEMENT_STAGE(Platform::FPlatform, IEndFrame,    Read(Platform::FPlatform))
+MAHO_IMPLEMENT_STAGE(Platform::FPlatform, IExit, Read(Platform::FPlatform))
+MAHO_IMPLEMENT_STAGE(Platform::FPlatform, IPreShutdown, Write(Platform::FPlatform))
+MAHO_IMPLEMENT_STAGE(Platform::FPlatform, IShutdown,    Destroy(Platform::FPlatform), Read(FLog))
+
+} // namespace Maho

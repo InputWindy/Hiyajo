@@ -7,6 +7,8 @@
 #include <cstring>
 #include <exception>
 #include <functional>
+#include <mutex>
+#include <set>
 #include <string>
 #include <utility>
 #include <vector>
@@ -33,6 +35,24 @@
 
 namespace
 {
+	// -----------------------------------------------------------------------------------
+	// 诊断（临时，仅定位，不改行为）：谁把空名字喂给了 `ImGui::Begin`（imgui.cpp:7404
+	// `IM_ASSERT(name != NULL && name[0] != '\0')`）。名字为空（nullptr / ""）才报，每站点限一次。
+	// 加锁是因为 UI 合成帧可能跑在任一 pool worker 上。
+	// -----------------------------------------------------------------------------------
+	void DiagEmptyBeginName(const char* Site, const char* Name, const char* Origin)
+	{
+		static std::mutex Mutex;
+		static std::set<std::string> Reported;
+
+		if (Name != nullptr && Name[0] != '\0') { return; }
+
+		std::lock_guard<std::mutex> Lock(Mutex);
+		if (!Reported.insert(Site).second) { return; }
+		MAHO_LOG_CORE_ERROR("UIBEGINNAME-CHECK EMPTY site={} origin={} name={}", Site, Origin,
+							Name != nullptr ? std::string(Name) : std::string("<nullptr>"));
+	}
+
 	// ImGui vertex shader: aPos (loc0) / aUV (loc1) / aColor (loc2) + a vertex-stage
 	// push constant (mat4) for the ortho projection. gl_Position = Proj * aPos.
 	constexpr const char* kImGuiVertShader = R"(
@@ -856,6 +876,9 @@ void FUIFeature::InitViews(FRender& R, FRenderContext& Frame)
 			// draws on top of it.
 			ImGui::SetNextWindowPos(ImVec2(0.0f, 0.0f), ImGuiCond_Always);
 			ImGui::SetNextWindowSize(IO.DisplaySize, ImGuiCond_Always);
+			// 诊断（临时）：前置的空名字点名（见文件开头的 DiagEmptyBeginName）。
+			DiagEmptyBeginName("UIFeature.cpp:859 ImGui::Begin(\"##SceneBackground\")", "##SceneBackground",
+							   "string literal '##SceneBackground'");
 			if (ImGui::Begin("##SceneBackground", nullptr,
 				ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize
 				| ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar

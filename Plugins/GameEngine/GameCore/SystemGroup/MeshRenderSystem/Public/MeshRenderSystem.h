@@ -156,7 +156,7 @@ class MAHO_MESHRENDERSYSTEM_API FMeshRenderSystem
 	: public FFrameExtension
 	, public IPipeline<IOnInstalled, IProcessInput, IUpdate, IPreUnInstall>
 {
-	MAHO_DECLARE_FRAME(FMeshRenderSystem);
+	MAHO_DECLARE_FRAME_UNDER(FMeshRenderSystem, FGameWorld);
 
 public:
 	void OnInstalled(FGameWorld& World, FGameWorldContext& Frame) override;

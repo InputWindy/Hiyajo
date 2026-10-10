@@ -39,7 +39,7 @@ namespace Maho
  */
 class FContentBrowser : public FFrameExtension, public IPipeline<IEditorPanel, IEditorShutdown>
 {
-	MAHO_DECLARE_FRAME_UNDER(FContentBrowser, FRender);
+	MAHO_DECLARE_FRAME_UNDER(FContentBrowser, FExampleEditor);
 
 public:
 	/** 声明期（宿主 `NewFrame` 之前）：只重建本视图的树，不碰后端。 */

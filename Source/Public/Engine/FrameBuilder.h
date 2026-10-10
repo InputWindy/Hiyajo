@@ -40,10 +40,10 @@ namespace Detail
  *
  * A frame that DRIVES a stage sequence OWNS the FFrameGraph that sequence is scheduled on: the host
  * (`FEngineBase`, whose sequence is the engine's tick), and every collector frame that drives its own
- * sub-graph (`FRender`, `FGameWorld`, `FExampleEditor`). The BUILDER owns nothing: it is the layer
- * that turns declarations into a batch (`FFrameBridge::Build`) and submits it to the graph its frame
- * handed it through `SetGraph` -- one non-owning reference, which is exactly the "collector 只存注入
- * 的 FFrameGraph&" rule. Ownership is therefore visible in the frame's own type (a member), and so is
+ * sub-graph (`FRender`, `FGameWorld`, `FExampleEditor`). The BUILDER owns nothing AND STORES NOTHING:
+ * it is the layer that turns declarations into a batch (`FFrameBridge::Build`) and submits it to a
+ * graph that arrives as a PARAMETER at every driving call (`EnsureGraph()` of the frame that drives
+ * the sequence). Ownership is therefore visible in the frame's own type (a member), and so is
  * the drain: the OWNER fences and releases it before anything it submitted is released, because the
  * nodes hold closures that run in the frames' modules.
  *
@@ -492,14 +492,15 @@ protected:
 	 *  Shutdown stages). Broadcasts OnFramesChanged when anything changed so the
 	 *  host knows to re-expand its cached frame set.
 	 *
-	 *  The graph both one-shot batches go through is the one the OWNER injected (`SetGraph`), i.e. the
-	 *  same graph the frame loop drives, so an install-time node stays addressable from the loop. */
+	 *  The graph both one-shot batches go through is the CALLER's (`Graph`, i.e. the one the frame
+	 *  that drives this sequence owns), so an install-time node stays addressable from the frame loop
+	 *  of that same graph. */
 	// TInitStages / TShutdownStages are TTypeList<> stage lists: the first drives
 	// the install-init graph, the second the unload-shutdown graph. A layer's
 	// install and teardown stages are DIFFERENT interfaces, so passing one pack to
 	// both would re-run init methods during unload.
 	template <typename TInitStages, typename TShutdownStages>
-	void FlushPendingUpdates()
+	void FlushPendingUpdates(FFrameGraph& Graph)
 	{
 		if (!HasPendingUpdates())
 		{
@@ -530,7 +531,7 @@ protected:
 		// pending sets as they are, so the next flush simply retries them.
 		try
 		{
-			FlushPendingUpdatesImpl<TInitStages, TShutdownStages>();
+			FlushPendingUpdatesImpl<TInitStages, TShutdownStages>(Graph);
 		}
 		catch (const std::exception& E)
 		{
@@ -574,14 +575,16 @@ protected:
 	 * slot this round occupies has drained, i.e. until `Frame - K` has completed. A host that
 	 * wants one frame in flight calls Wait() after this.
 	 *
-	 * The graph this frame's batch is submitted to is the one the OWNER injected (`SetGraph`): the
-	 * builder stores a reference and nothing else -- which graph a frame drives is a property of the
-	 * frame, decided once at its first use.
+	 * The graph this frame's batch is submitted to -- `Graph` -- is passed BY THE CALLER, and it is the
+	 * graph the driving frame owns: the builder stores no reference of any kind, so "which graph a
+	 * frame drives" is visible in the call and not in the type. Each driver passes its OWN graph
+	 * (sharing one between a parent frame and a collector would make the admission wait on the very
+	 * slot the calling node occupies -- see the note above `FEngineBase::Graph`).
 	 */
 	template <typename TLoopStages>
-	void Execute(std::uint64_t Frame)
+	void Execute(FFrameGraph& Graph, std::uint64_t Frame)
 	{
-		ExpandLoopFrames(TLoopStages{});
+		ExpandLoopFrames(Graph, TLoopStages{});
 
 		// A SAFETY FLOOR, not a frame source: a sequence may never drive a round it has already
 		// driven. `Frame` comes from the canonical counter, and that counter is advanced by
@@ -617,7 +620,7 @@ protected:
 		}
 
 		std::string Reason;
-		if (!OwnGraph().Submit(std::move(Built.Tasks), Round, &Reason) && Reason != LastLoopRejectReason)
+		if (!Graph.Submit(std::move(Built.Tasks), Round, &Reason) && Reason != LastLoopRejectReason)
 		{
 			LastLoopRejectReason = Reason;
 			ReportError((std::string("frame batch rejected (") + Reason + ")").c_str());
@@ -677,11 +680,11 @@ protected:
 	}
 
 	/** The flush body (see the wrapper above for the guard + fatal-error handling). The one-shot
-	 *  batches and the frame loop share ONE graph on purpose -- the one the owner injected -- so an
-	 *  install-time node stays addressable from the loop because identity survives the batch that
-	 *  created it. */
+	 *  batches and the frame loop share ONE graph on purpose -- the CALLER's, which is the graph its
+	 *  frame loop drives -- so an install-time node stays addressable from the loop because identity
+	 *  survives the batch that created it. */
 	template <typename TInitStages, typename TShutdownStages>
-	void FlushPendingUpdatesImpl()
+	void FlushPendingUpdatesImpl(FFrameGraph& Graph)
 	{
 		bool bChanged = false;
 		if (!PendingAdded.empty())
@@ -753,13 +756,13 @@ protected:
 			// (The frame number here is a VOCABULARY, not a clock: a one-shot batch is not a round
 			// of anything, it just needs an address, and the drain is what makes that address free.)
 			TFrameDispatch<TInitStages, TContext> Dispatch(GetContext(), GetContext(PhaseOfFrame(0)));
-			OwnGraph().Wait();
+			Graph.Wait();
 			FFrameBridge::FResult Built = FFrameBridge::Build(NewLayers,
 				TFrameDispatch<TInitStages, TContext>::StageIndices(), 0, Dispatch);
 			ReportDiagnostics(Built.Diagnostics);
 
 			std::string Reason;
-			if (!OwnGraph().Submit(std::move(Built.Tasks), 0, &Reason))
+			if (!Graph.Submit(std::move(Built.Tasks), 0, &Reason))
 			{
 				// Structurally broken (the only structural failure a batch can have is a cycle).
 				// Report it, broadcast it, and RELEASE the batch. No silent retry: leaving these
@@ -780,9 +783,9 @@ protected:
 			}
 			else
 			{
-				// The install batch is done: fence the graph (its owner is whoever passed it in), then
-				// this collector's own lane (a stage body's async work), exactly as the sites below do.
-				OwnGraph().Wait();
+				// The install batch is done: fence the graph (the CALLER owns it), then this
+				// collector's own lane (a stage body's async work), exactly as the sites below do.
+				Graph.Wait();
 				DrainPool();
 				for (FFrameExtension* P : NewLayers)
 				{
@@ -791,7 +794,7 @@ protected:
 			}
 		}
 
-		if (FlushUnload<TShutdownStages>())
+		if (FlushUnload<TShutdownStages>(Graph))
 		{
 			bChanged = true;
 		}
@@ -890,33 +893,17 @@ protected:
 	[[nodiscard]] FThreadPool&       GetPool() noexcept { return *Pool; }
 	[[nodiscard]] FThreadPool::FLane GetPoolLane() const noexcept { return Lane; }
 
-	/** Hand the builder the ONE graph it drives -- called ONCE by the frame that owns it, when that
-	 *  graph is created (the host's `EnsureGraph`, or a collector frame's own). The builder keeps a
-	 *  non-owning reference and nothing else: who owns the graph, and who fences and releases it, is a
-	 *  property of the FRAME, not of the machinery that turns declarations into batches. */
-	void SetGraph(FFrameGraph& InGraph) noexcept { InjectedGraph = &InGraph; }
-
-	/** The graph every driving site uses (the frame loop, the two one-shot batches, the
-	 *  topology-change drain). Never null in a live frame: nothing can drive a sequence before the
-	 *  frame injected its graph, and the ENSURE says so loudly if that ever stops being true. */
-	[[nodiscard]] FFrameGraph& OwnGraph() const
-	{
-		MAHO_ENSURE_BREAK(InjectedGraph != nullptr,
-			"FFrameBuilder: no graph was injected -- the frame that drives this sequence must call "
-			"SetGraph with the graph IT owns before the first Execute / FlushPendingUpdates");
-		return *InjectedGraph;
-	}
-
 	/** Quiescence of this collector's OWN lane -- the POOL half of a transition barrier: the async work
 	 *  a stage body may have submitted that no node fence tracks (nested graph work, asset / RHI
 	 *  helpers).
 	 *
 	 *  It is NOT a substitute for the graph's fence, so a driving site spells the barrier as the PAIR
-	 *  `OwnGraph().Wait()` -- the graph's own submission fence -- followed by this. Both halves matter
-	 *  and they are NOT the same set: Submit's fence covers the nodes, while this covers what no node
-	 *  fence tracks. A transition that frees instances or modules (a collector's Shutdown, a flush
-	 *  applying an uninstall) must pay BOTH, and the graph's OWNER must have fenced it before anything
-	 *  it submitted is released (a module must never be unloaded under running code).
+	 *  `Graph.Wait()` -- the graph the caller passed in, i.e. that submission fence -- followed by
+	 *  this. Both halves matter and they are NOT the same set: Submit's fence covers the nodes, while
+	 *  this covers what no node fence tracks. A transition that frees instances or modules (a
+	 *  collector's Shutdown, a flush applying an uninstall) must pay BOTH, and the graph's OWNER must
+	 *  have fenced it before anything it submitted is released (a module must never be unloaded under
+	 *  running code).
 	 *
 	 *  The frame loop does NOT pay this per frame: frames PIPELINE (see Execute), and a pool barrier
 	 *  every frame would serialize them. Note the one-shot paths (FlushPendingUpdates) are already safe
@@ -924,16 +911,13 @@ protected:
 	 *  lets them share the loop's graph. */
 	void DrainPool() { Pool->Flush(Lane); }
 
-	/** NOTHING IS OWNED HERE. The graph's storage belongs to the frame that drives the sequence (a
-	 *  member of the host, or of the collector frame) and reaches this class through `SetGraph`; the
-	 *  builder only ever holds the reference above. It used to own a `std::unique_ptr<FFrameGraph>`
-	 *  created on first use by `GetGraph()`, which made one class both the collector of a frame set and
-	 *  the owner of a scheduler and hid "who owns the graph / who drains it" inside a member.
-	 *
-	 *  `InjectedGraph`, not `Graph`: the OWNER declares its own member called `Graph` (see
-	 *  `FEngineBase::Graph`), and a base member of that name would be shadowed by it inside every
-	 *  derived scope -- a silently different object. */
-	FFrameGraph* InjectedGraph = nullptr;
+	/** NOTHING GRAPH-SHAPED IS STORED HERE -- not even a reference, and that is the point. The graph's
+	 *  storage belongs to the frame that drives the sequence (a member of the host, or of the collector
+	 *  frame) and arrives at every driving call as the `FFrameGraph&` PARAMETER. Two earlier shapes grew
+	 *  back into a member and were removed for the same reason: a `std::unique_ptr<FFrameGraph>` created
+	 *  on first use by `GetGraph()` made one class both the collector of a frame set and the owner of a
+	 *  scheduler, and a `FFrameGraph* InjectedGraph` set once by `SetGraph` hid which graph a frame
+	 *  drives behind a pointer only one call site could confirm. */
 
 private:
 	/** Any queued topology change? (install / uninstall / reload) */
@@ -954,7 +938,7 @@ private:
 	 *  once per site: see MAHO_ENSURE_BREAK (report + break under a debugger, Shipping compiles it out).
 	 *  The fix -- one frame set per sequence -- is separate work. */
 	template <typename... TStages>
-	void ExpandLoopFrames(TTypeList<TStages...>)
+	void ExpandLoopFrames(FFrameGraph& Graph, TTypeList<TStages...>)
 	{
 		if (!bLoopDirty)
 		{
@@ -989,7 +973,7 @@ private:
 		}
 		bLoopDirty = false;
 		bLoopJustExpanded = true;
-		OwnGraph().Wait();   // the frame set is about to change: nothing may be in flight
+		Graph.Wait();   // the frame set is about to change: nothing may be in flight
 		LoopFrames = Select<TStages...>();
 	}
 
@@ -1048,25 +1032,31 @@ private:
 		}
 	}
 
+	/** The collector's PER-PHASE state ("the slot"), derived from the collector itself -- `TContext` is
+	 *  the collector (this base is its CRTP base), and the mapping lives in Core's `TCollectorContext`
+	 *  so the answer is readable HERE, where the collector is still incomplete (see Frame.h). It is the
+	 *  same fact the stage signatures spell, which is why the slot channel needs no erasure and no
+	 *  cast anywhere between this base and the stage body. */
+	using FSlotType = typename TCollectorContext<TContext>::Type;
+
 	TContext& GetContext() { return *static_cast<TContext*>(this); }
 
-	/** The frame context of a ring SLOT, TYPE-ERASED. Implemented by the scheduler, which owns the
-	 *  storage and is the only party that knows the nested type:
+	/** The frame context of a ring SLOT. Implemented by the scheduler, which owns the storage:
 	 *
-	 *      void* GetContext(int Slot) override { return &Slots[Slot]; }
+	 *      FContext& GetContext(int Slot) override { return Slots[Slot]; }
 	 *
-	 *  The base never names that type: it carries the pointer through TFrameDispatch as a `void*`,
-	 *  and the per-stage dispatch specialization -- expanded in the scheduler's own header, where the
-	 *  type is complete -- turns it back into a reference. That is the whole reason FFrameBuilder
-	 *  needs no extra template parameter and no change to its entry signatures.
+	 *  NO LONGER TYPE-ERASED: the slot type follows from `TContext` (the collector) through
+	 *  `TCollectorContext`, so this base can name it even though the collector is incomplete where the
+	 *  base is defined. Before the trait existed the base COULD not name it, and the channel was a
+	 *  `void*` that `TFrameDispatch` cast back -- a cast the compiler could not check, now gone.
 	 *
-	 *  Every slot must be a LIVE object: all stages take a reference, so returning nullptr would be
-	 *  undefined behaviour downstream.
+	 *  Every slot must be a LIVE object: all stages take a reference, so there is nothing to return for
+	 *  "no slot", which the return type now states.
 	 *
 	 *  The SLOT is the base's to choose, not the caller's: it is the ring index of the batch being
 	 *  built (`FFrameBridge::PhaseOf`), so the phase is computed in exactly one place and cannot
 	 *  drift from the phase the bridge puts in the batch. */
-	[[nodiscard]] virtual void* GetContext(int Slot) = 0;
+	[[nodiscard]] virtual FSlotType& GetContext(int Slot) = 0;
 
 	/** Rebuild the reverse dependency count: layer name -> depended-on count. */
 	void RebuildReverseDeps()
@@ -1126,9 +1116,10 @@ private:
 	/** Min-heap greedy unload, then drive the Shutdown stages before delete.
 	 *  Returns true when any layer was actually unloaded. TShutdownStages is a
 	 *  TTypeList<> of teardown stage interfaces -- NOT the init stages.
-	 *  The graph is the one FlushPendingUpdatesImpl used: same graph, same one-shot discipline. */
+	 *  The graph is the caller's -- the same one FlushPendingUpdatesImpl was handed: same graph, same
+	 *  one-shot discipline. */
 	template <typename TShutdownStages>
-	bool FlushUnload()
+	bool FlushUnload(FFrameGraph& Graph)
 	{
 		if (PendingRemoveRequests.empty())
 		{
@@ -1240,13 +1231,13 @@ private:
 		// runs inside a graph node.
 		// Frame 0 == slot 0, the one-shot address; see the init path for why that slot is free here.
 		TFrameDispatch<TShutdownStages, TContext> Dispatch(GetContext(), GetContext(PhaseOfFrame(0)));
-		OwnGraph().Wait();
+		Graph.Wait();
 		FFrameBridge::FResult Built = FFrameBridge::Build(ToUnload,
 			TFrameDispatch<TShutdownStages, TContext>::StageIndices(), 0, Dispatch);
 		ReportDiagnostics(Built.Diagnostics);
 
 		std::string Reason;
-		if (!OwnGraph().Submit(std::move(Built.Tasks), 0, &Reason))
+		if (!Graph.Submit(std::move(Built.Tasks), 0, &Reason))
 		{
 			// NEVER erase or destroy these: their teardown stages have not run, and a frame
 			// destroyed without its teardown is where "resources still cataloged / threads
@@ -1261,7 +1252,7 @@ private:
 			return false;   // the active set did not change
 		}
 
-		OwnGraph().Wait();
+		Graph.Wait();
 
 		std::set<std::string> UnloadedNames;   // collected BEFORE DeleteUnloaded clears the stored names
 		for (FFrameExtension* L : ToUnload)
@@ -1369,9 +1360,10 @@ protected:
 
 	// ── the collection, and the machinery that drives it ──────────────────────
 	//
-	// All PRIVATE: a host drives frames with Execute(), waits with Wait(), sweeps with
-	// UninstallAll() and reads GetStats(). FFrameGraph / FFrameBridge / TFrameDispatch never
-	// appear in the host's vocabulary, and neither does the frame set the loop caches.
+	// All PRIVATE: a host drives frames with Execute(), sweeps with UninstallAll() and reads
+	// GetStats(). FFrameGraph / FFrameBridge / TFrameDispatch never appear in the host's vocabulary of
+	// the FRAME SET, and neither does the frame set the loop caches. (A graph does appear in the
+	// signature of a driving call -- as the `FFrameGraph&` the caller owns.)
 private:
 
 	/** Active layers. INVARIANT: a layer is erased from here BEFORE its instance and module
@@ -1410,12 +1402,12 @@ private:
 	 *  that pool is still alive; the reverse order would be a use-after-free during teardown. */
 	std::vector<std::unique_ptr<FFrameExtension>> Features;
 
-	/** NO OWNED GRAPH HERE -- deliberately, and it is the point of the current shape. The graph is a
-	 *  COLLABORATOR: the frame that drives the sequence owns it (a member of `FEngineBase`, or of the
-	 *  collector frame itself) and injects it once through `SetGraph`; this class keeps the non-owning
-	 *  reference above and nothing else. What it must NOT grow back into is a `std::unique_ptr` created
-	 *  on first use: that made one class both the collector of a frame set and the owner of a scheduler,
-	 *  and hid "who owns the graph / who drains it" inside a member.
+	/** NO GRAPH MEMBER HERE -- not even a reference, and it is the point of the current shape. The
+	 *  graph is a COLLABORATOR: the frame that drives the sequence owns it (a member of `FEngineBase`,
+	 *  or of the collector frame itself) and passes it into each driving call as an `FFrameGraph&`
+	 *  parameter. What it must NOT grow back into is a `std::unique_ptr` created on first use: that
+	 *  made one class both the collector of a frame set and the owner of a scheduler, and hid "who owns
+	 *  the graph / who drains it" inside a member.
 	 *
 	 *  The property that ONE graph can serve the frame loop AND the one-shot batches is unchanged -- a
 	 *  node's identity is (frame name, stage, phase), so an install-time node stays addressable from

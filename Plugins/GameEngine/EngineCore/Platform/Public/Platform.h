@@ -43,7 +43,7 @@ MAHO_API FPlatform* GetPlatform();
  *
  * It answers exactly one question -- "which round is this?" -- and that is what lets a caller
  * hand a frame number to the scheduler (`FFrameGraph::Submit(batch, Frame)` /
- * `FFrameBuilder::Execute<TStages>(Frame)`) instead of inventing a private counter per sequence.
+ * `FFrameBuilder::Execute<TStages>(Graph, Frame)`) instead of inventing a private counter per sequence.
  * Every graph in the process then puts a given round in the same slot, so "the frame K rounds
  * ago" means the same thing everywhere.
  *

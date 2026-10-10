@@ -178,3 +178,28 @@ extern "C" MAHO_LOG_API Maho::FFrameExtension* CreateFrame()
 {
 	return Maho::FLog::CreateFrame();
 }
+
+// ── the stage access table (change add-resource-metadata-edges, step 2) ─────────────────────────
+//
+// One declaration per (frame, stage): which method implements the stage, and WHICH RESOURCE that method
+// holds while it runs. Hand-written this round (a scanner that reads the body's MAHO_* markers comes
+// later), so the rules are the design's: `Create` marks where the resource starts existing, `Destroy`
+// where it stops, and every access in between is the truth about the call.
+//
+//   IInit      -- this layer brings the logger up and publishes it (`GetLog()`): the log RESOURCE
+//                starts existing here.
+//   ITick      -- the layer reads itself: it polls the trace CVar and re-applies it to the sink.
+//   IShutdown  -- the layer flushes + drops its logger and clears the published pointer: the resource
+//                stops existing here. It runs BEFORE `spdlog::shutdown()`, and the edge that keeps
+//                logging alive during teardown is exactly what this row (once step 4 derives edges
+//                from it) will state.
+#include <Core/StageAccess.h>
+
+namespace Maho
+{
+
+MAHO_IMPLEMENT_STAGE(FLog, IInit, Create(FLog))
+MAHO_IMPLEMENT_STAGE(FLog, ITick,       Read(FLog))
+MAHO_IMPLEMENT_STAGE(FLog, IShutdown,   Destroy(FLog))
+
+} // namespace Maho

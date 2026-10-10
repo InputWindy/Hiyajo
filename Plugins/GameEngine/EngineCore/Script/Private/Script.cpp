@@ -403,3 +403,23 @@ extern "C" MAHO_SCRIPT_API Maho::FFrameExtension* CreateFrame()
 {
 	return Maho::Script::FScriptSystem::CreateFrame();
 }
+
+// ── the stage access table (change add-resource-metadata-edges, step 2) ─────────────────────────
+//
+// `Script::FScriptSystem` is this layer's resource: the script system itself, i.e. the language
+// backends (the Lua state among them) whose lifetime the system owns. Two rows, and they are the pair
+// the change's motivation names -- the world's teardown reads the script system while the systems that
+// drive it are still installed, so "who may still be running when this Destroy happens" is a real
+// ordering question that used to have no answer anywhere:
+//
+//   IInit     -- the backends are created and started, the system published: `Create`.
+//   IShutdown -- every backend is stopped and dropped, the published pointer cleared: `Destroy`.
+#include <Core/StageAccess.h>
+
+namespace Maho
+{
+
+MAHO_IMPLEMENT_STAGE(Script::FScriptSystem, IInit, Create(Script::FScriptSystem), Read(FLog))
+MAHO_IMPLEMENT_STAGE(Script::FScriptSystem, IShutdown,   Destroy(Script::FScriptSystem), Read(FLog))
+
+} // namespace Maho

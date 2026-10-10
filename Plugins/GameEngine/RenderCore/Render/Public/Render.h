@@ -67,6 +67,16 @@ struct FRenderContext
 	std::vector<FPendingPass> Passes;
 };
 
+/** The render collector's per-frame context, mapped from the collector's NAME: the stage declarations
+ *  below must spell the slot type while `FRender` is still incomplete (the class inherits them). The
+ *  specialization needs only the forward declaration at the top of this file -- which is the whole
+ *  reason the mapping is a trait and not `FRender::FContext`. */
+template <>
+struct TCollectorContext<FRender>
+{
+	using Type = FRenderContext;
+};
+
 namespace Detail
 {
 	/** Resolve a shader type's optional static entry point (default "main"). */
@@ -121,54 +131,13 @@ MAHO_RENDER_API FRender* GetRender();
  *  `FRenderContext&`. Returns 0 outside a stage call. */
 MAHO_RENDER_API std::uint64_t GetRenderBatchFrame();
 
-class MAHO_RENDER_API IOnInstalled
-{
-public:
-	virtual ~IOnInstalled() = default;
-	virtual void OnInstalled(FRender&, FRenderContext&) = 0;
-};
-
-class MAHO_RENDER_API IInitViews
-{
-public:
-	virtual ~IInitViews() = default;
-	virtual void InitViews(FRender&, FRenderContext&) = 0;
-};
-
-class MAHO_RENDER_API IBeginRender
-{
-public:
-	virtual ~IBeginRender() = default;
-	virtual void BeginRender(FRender&, FRenderContext&) = 0;
-};
-
-class MAHO_RENDER_API IRender
-{
-public:
-	virtual ~IRender() = default;
-	virtual void Render(FRender&, FRenderContext&) = 0;
-};
-
-class MAHO_RENDER_API IEndRender
-{
-public:
-	virtual ~IEndRender() = default;
-	virtual void EndRender(FRender&, FRenderContext&) = 0;
-};
-
-class MAHO_RENDER_API IPostProcess
-{
-public:
-	virtual ~IPostProcess() = default;
-	virtual void PostProcess(FRender&, FRenderContext&) = 0;
-};
-
-class MAHO_RENDER_API IRenderUI
-{
-public:
-	virtual ~IRenderUI() = default;
-	virtual void RenderUI(FRender&, FRenderContext&) = 0;
-};
+MAHO_DECLARE_STAGE(MAHO_RENDER_API, IOnInstalled, OnInstalled, FRender)
+MAHO_DECLARE_STAGE(MAHO_RENDER_API, IInitViews, InitViews, FRender)
+MAHO_DECLARE_STAGE(MAHO_RENDER_API, IBeginRender, BeginRender, FRender)
+MAHO_DECLARE_STAGE(MAHO_RENDER_API, IRender, Render, FRender)
+MAHO_DECLARE_STAGE(MAHO_RENDER_API, IEndRender, EndRender, FRender)
+MAHO_DECLARE_STAGE(MAHO_RENDER_API, IPostProcess, PostProcess, FRender)
+MAHO_DECLARE_STAGE(MAHO_RENDER_API, IRenderUI, RenderUI, FRender)
 
 #ifdef MAHO_EDITOR_BUILD
 /**
@@ -181,12 +150,7 @@ public:
  * MAHO_EDITOR_BUILD: with no editor feature installed the stage has no
  * implementer and is silently skipped (no regression).
  */
-class MAHO_RENDER_API IEditorInput
-{
-public:
-	virtual ~IEditorInput() = default;
-	virtual void EditorInput(FRender&, FRenderContext&) = 0;
-};
+MAHO_DECLARE_STAGE(MAHO_RENDER_API, IEditorInput, EditorInput, FRender)
 
 /**
  * Pass3: editor final-compose surface. Runs AFTER the game UI (IRenderUI)
@@ -198,12 +162,7 @@ public:
  * editor feature installed the stage has no implementer and is silently skipped,
  * so the game-UI target stays the present target (no regression).
  */
-class MAHO_RENDER_API IEditorCompose
-{
-public:
-	virtual ~IEditorCompose() = default;
-	virtual void EditorCompose(FRender&, FRenderContext&) = 0;
-};
+MAHO_DECLARE_STAGE(MAHO_RENDER_API, IEditorCompose, EditorCompose, FRender)
 #endif // MAHO_EDITOR_BUILD
 
 /**
@@ -229,22 +188,12 @@ public:
  * much on paper and everything in practice: its pass is registered after this stage has already
  * taken the table, so it is submitted a whole ring later against resources its frame has released.
  */
-class MAHO_RENDER_API IPresent
-{
-public:
-	virtual ~IPresent() = default;
-	virtual void Present(FRender&, FRenderContext&) = 0;
-};
+MAHO_DECLARE_STAGE(MAHO_RENDER_API, IPresent, Present, FRender)
+MAHO_DECLARE_STAGE(MAHO_RENDER_API, IPreUnInstall, PreUnInstall, FRender)
 
-class MAHO_RENDER_API IPreUnInstall
-{
-public:
-	virtual ~IPreUnInstall() = default;
-	virtual void PreUnInstall(FRender&, FRenderContext&) = 0;
-};
-
-// The per-stage dispatch specializations live AT THE BOTTOM of this header, after `class FRender`:
-// their body names `FRender::FContext`, which is only declared inside the class.
+// The render stages declare NO metadata row of their own (see the note at the bottom of this header):
+// a row belongs to the implementing feature, so nothing here has to wait for `class FRender` to be
+// complete.
 
 /**
  * Render subsystem - a layer in the host engine (mounted as IInit/ITick/...),
@@ -300,8 +249,9 @@ protected:
 	bool bGraphReady = false;
 
 	/** Create + start this collector's graph on FIRST use, at the shared pool's lane this collector was
-	 *  handed at install, name it for the trace, and inject it into the batch builder. Idempotent; every
-	 *  driving site goes through it, which is why no site can reach the graph before it exists. */
+	 *  handed at install, and name it for the trace. Idempotent; every driving site goes through it and
+	 *  hands the reference to the driving call (`Execute(Graph, Frame)`), which is why the builder keeps
+	 *  no graph of its own and no site can reach a graph before it exists. */
 	FFrameGraph& EnsureGraph()
 	{
 		if (!bGraphReady)
@@ -310,7 +260,6 @@ protected:
 			Graph.emplace(GetPool(), GetPoolLane());
 			Graph->SetOwnerName(GetName().data());
 			Graph->Initialize();
-			SetGraph(*Graph);
 		}
 		return *Graph;
 	}
@@ -322,12 +271,14 @@ protected:
 	 *  references to. */
 	std::unique_ptr<FContext[]> Slots;
 
-	/** Type-erased access to a slot's context (see FFrameBuilder). Must never return nullptr -- the
-	 *  whole ring is created here, at its full depth, on the very first call. */
-	void* GetContext(int Slot) override
+	/** This collector's per-phase state, typed (see FFrameBuilder: `TCollectorContext<FRender>` answers
+	 *  the type, so the base needs no erasure). Must never return anything but a live slot -- the whole
+	 *  ring is created here, at its full depth, on the very first call. */
+	FRenderContext& GetContext(int Slot) override
 	{
-		// The dispatcher publishes this pointer as the AMBIENT frame context for the duration of each
-		// stage call (GetCurrentFrameContext), which is how a helper reached from a stage body -- the
+		// The dispatcher publishes this reference as the AMBIENT frame context for the duration of each
+		// stage call (GetCurrentFrameContext, which stays type-erased on purpose: it is the published
+		// channel, read by whoever owns the slot), which is how a helper reached from a stage body -- the
 		// frame's own AddPass -- knows which frame it belongs to. It is deliberately NOT remembered
 		// here: frames overlap now, so a member would attribute a late-running node's work to whichever
 		// frame the dispatcher last prepared.
@@ -335,7 +286,7 @@ protected:
 		{
 			Slots = std::make_unique<FContext[]>(static_cast<std::size_t>(GetFramesInFlight()));
 		}
-		return &Slots[static_cast<std::size_t>(Slot)];
+		return Slots[static_cast<std::size_t>(Slot)];
 	}
 
 private:
@@ -743,8 +694,8 @@ private:
 	// runs the draw passes + the present blit, and FRender::EndFrame waits it
 	// (Wait) before RHI->EndFrame so the present waits every submit.
 	// The graph itself belongs to the collector (FFrameBuilder): the stage SEQUENCE below is
-	// what FRender::Tick hands to Execute<FRenderStages>(Frame) -- with the canonical frame number,
-	// read once from Platform, so the render sub-graph's round is the platform graph's round.
+	// what FRender::Tick hands to Execute<FRenderStages>(Graph, Frame) -- with the canonical frame
+	// number, read once from Platform, so the render sub-graph's round is the platform graph's round.
 	// FRender itself does no frame work.
 	// A stage no installed feature implements is not emitted at all (no empty node).
 #ifdef MAHO_EDITOR_BUILD
@@ -968,20 +919,10 @@ private:
 	FRender* Owner = nullptr;
 };
 
-// Stage dispatch for the render subsystem. AFTER the class on purpose: each expansion names
-// `FRender::FContext`, and a full specialization's body is compiled where it is written.
-MAHO_DECLARE_STAGE_DISPATCH(FRender, IOnInstalled, IOnInstalled, OnInstalled)
-MAHO_DECLARE_STAGE_DISPATCH(FRender, IInitViews, IInitViews, InitViews)
-MAHO_DECLARE_STAGE_DISPATCH(FRender, IBeginRender, IBeginRender, BeginRender)
-MAHO_DECLARE_STAGE_DISPATCH(FRender, IRender,      IRender,      Render)
-MAHO_DECLARE_STAGE_DISPATCH(FRender, IEndRender,   IEndRender,   EndRender)
-MAHO_DECLARE_STAGE_DISPATCH(FRender, IPostProcess, IPostProcess, PostProcess)
-MAHO_DECLARE_STAGE_DISPATCH(FRender, IRenderUI,    IRenderUI,    RenderUI)
-#ifdef MAHO_EDITOR_BUILD
-MAHO_DECLARE_STAGE_DISPATCH(FRender, IEditorInput, IEditorInput, EditorInput)
-MAHO_DECLARE_STAGE_DISPATCH(FRender, IEditorCompose, IEditorCompose, EditorCompose)
-#endif // MAHO_EDITOR_BUILD
-MAHO_DECLARE_STAGE_DISPATCH(FRender, IPresent, IPresent, Present)
-MAHO_DECLARE_STAGE_DISPATCH(FRender, IPreUnInstall, IPreUnInstall, PreUnInstall)
+// The render stages declare NO metadata row of their own. A stage is not a frame and every render
+// FEATURE implements these (one interface, many implementers), so the row that says WHO touches WHAT
+// belongs to the implementing feature, in that feature's own .cpp
+// (`MAHO_IMPLEMENT_STAGE(FScene, IRender, ...)`). The protocol itself -- name, method, context -- is
+// carried by the stage interface declaration above.
 
 } // namespace Maho

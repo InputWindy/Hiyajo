@@ -56,11 +56,12 @@ void FTaskGraphTest::PreMain()
 	// Baseline mode: same shape as the reference project (ExampleEngine).
 	InstallChildrenOf(GetName());
 	// The graph belongs to the HOST (FEngineBase::Graph) and is created on first use -- here, before
-	// the install batch that needs it. SchedulerTestMode/CVarTestMode above drive no batch at all.
-	EnsureGraph();
+	// the install batch that needs it, which is handed the reference (the builder stores no graph).
+	// SchedulerTestMode/CVarTestMode above drive no batch at all.
+	FFrameGraph& HostGraph = EnsureGraph();
 	FlushPendingUpdates<
 		TTypeList<IPreInit, IInit, IPostInit>,
-		TTypeList<IPreShutdown, IShutdown, IPostShutdown>>();
+		TTypeList<IPreShutdown, IShutdown, IPostShutdown>>(HostGraph);
 }
 
 int FTaskGraphTest::Main()

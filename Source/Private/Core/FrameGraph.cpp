@@ -3,8 +3,10 @@
 #include <Core/Fatal.h>
 
 #include <algorithm>
+#include <chrono>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <mutex>
 #include <set>
 #include <string>
@@ -40,8 +42,9 @@ namespace
 
 	void TraceStage(const char* What, const FTaskKey& Key)
 	{
-		std::fprintf(stderr, "[fg] %s %.*s::%s@%d\n", What,
-			static_cast<int>(Key.Name.size()), Key.Name.data(), Key.Stage.name(), Key.Phase);
+		std::fprintf(stderr, "[fg] %s %.*s::%.*s@%d\n", What,
+			static_cast<int>(Key.Name.size()), Key.Name.data(),
+			static_cast<int>(Key.Stage.size()), Key.Stage.data(), Key.Phase);
 		std::fflush(stderr);
 	}
 
@@ -70,6 +73,39 @@ namespace
 	{
 		return IsValidPhase(Phase);
 	}
+
+	/** The node body this thread is inside, published for the crash reporter (see
+	 *  GetCurrentGraphNode). A raw buffer on purpose: the READER runs on the way down, with the
+	 *  process already faulting, so the value must not need an allocation, a lock or a live module. */
+	thread_local char GCurrentGraphNode[192] = { 0 };
+
+	/** RAII publish/restore: a node body may itself run a node of ANOTHER graph (a nested batch, the
+	 *  one-shot flush), and the innermost one is what the crash is about -- so the previous identity is
+	 *  saved and put back, exactly like FScopedFrameContext does for the stage call. */
+	struct FScopedGraphNode
+	{
+		char Previous[192] = { 0 };
+
+		explicit FScopedGraphNode(const char* Identity) noexcept
+		{
+			std::memcpy(Previous, GCurrentGraphNode, sizeof(Previous));
+			std::snprintf(GCurrentGraphNode, sizeof(GCurrentGraphNode), "%s",
+				Identity != nullptr ? Identity : "");
+		}
+		~FScopedGraphNode() { std::memcpy(GCurrentGraphNode, Previous, sizeof(Previous)); }
+	};
+
+	/** Env-gated per-SHAPE node dump (MAHO_GRAPH_NODES=1). The `[fgbatch]` digest states the SHAPE of
+	 *  every distinct batch (node count + dependency counts); this states WHO is in it -- the frame
+	 *  name, the stage and the phase of every node -- printed once per new shape, next to the digest
+	 *  it belongs to. Off by default because a consumer comparing batch digests byte for byte (the
+	 *  zero-behaviour-change harness) must not get extra lines, and gated by an ENV var rather than a
+	 *  build flag so one binary can do both. */
+	bool NodeDumpEnabled()
+	{
+		static const bool bOn = (std::getenv("MAHO_GRAPH_NODES") != nullptr);
+		return bOn;
+	}
 }
 
 // ── the pipeline depth K (one process-wide value, read by every graph) ────────
@@ -92,6 +128,12 @@ namespace
 void SetFramesInFlightSource(std::int32_t (*InSource)()) noexcept
 {
 	GFramesInFlightSource.store(InSource, std::memory_order_release);
+}
+
+const char* GetCurrentGraphNode() noexcept
+{
+	// Published by FFrameGraph::Dispatch around every node body, restored when it returns (RAII).
+	return GCurrentGraphNode;
 }
 
 std::int32_t GetFramesInFlight() noexcept
@@ -126,17 +168,17 @@ bool FTaskKey::operator==(const FTaskKey& Other) const
 std::size_t FTaskKeyHash::operator()(const FTaskKey& Key) const noexcept
 {
 	std::size_t H = std::hash<std::string_view>{}(Key.Name);
-	H ^= std::hash<std::type_index>{}(Key.Stage) + 0x9e3779b9u + (H << 6) + (H >> 2);
+	H ^= std::hash<std::string_view>{}(Key.Stage) + 0x9e3779b9u + (H << 6) + (H >> 2);
 	H ^= std::hash<std::int32_t>{}(Key.Phase) + 0x9e3779b9u + (H << 6) + (H >> 2);
 	return H;
 }
 
-void FFrameExtension::AddDependency(std::type_index MyStage, FEdge Edge)
+void FFrameExtension::AddDependency(std::string_view MyStage, FEdge Edge)
 {
 	Dependencies[MyStage].push_back(Edge);
 }
 
-void FFrameExtension::AddDependent(std::type_index MyStage, FEdge Edge)
+void FFrameExtension::AddDependent(std::string_view MyStage, FEdge Edge)
 {
 	Dependents.emplace_back(MyStage, Edge);
 }
@@ -433,6 +475,10 @@ void FFrameGraph::ApplySubmit(std::vector<FTask> Tasks)
 
 		FTaskNode& Node = Nodes[Id];
 		Node.Key = Task.Key;
+		// Copy the name while the module that owns the literal is PROVABLY still mapped (this runs on
+		// the scheduler thread at submit time): the diagnostic that reports a node's identity must
+		// survive the case it exists for -- a body running after its module was unloaded.
+		Node.NameSnapshot.assign(Task.Key.Name);
 		Node.Dependencies.clear();
 		Node.Successors.clear();
 		Node.UnmetCount = 0;
@@ -519,8 +565,21 @@ void FFrameGraph::Dispatch(FNodeId Id)
 	// The pool receives the node body as a plain closure: it runs work, it does not know what the
 	// work IS. Any instrumentation is hand-written at the call site that knows it -- a stage body
 	// opens its own bar (MAHO_TRACE_STAGE), not the graph and not the pool.
-	Pool.Submit(Lane, [this, Id]()
+	//
+	// The body also carries its own IDENTITY, as a value: published to the thread for the crash
+	// reporter (a hard fault raises nothing catchable and has no stack to walk afterwards -- see
+	// GetCurrentGraphNode). It is built HERE, on the scheduler thread, where the node table and the
+	// module that owns the name are both provably intact, so nothing about the publish depends on a
+	// racy read of scheduler state from a worker.
+	std::string Identity = NodeIdentity(Node);
+	if (OwnerName != nullptr && OwnerName[0] != 0)
 	{
+		Identity = std::string(OwnerName) + ": " + Identity;
+	}
+	Pool.Submit(Lane, [this, Id, Identity = std::move(Identity)]()
+	{
+		const FScopedGraphNode ScopedNode(Identity.c_str());
+
 		// A hard crash (0xC0000005) has no stack and no exception to catch, so the last stage
 		// ENTERED is the only thing that names the culprit -- that is what this trace exists for,
 		// and why it brackets the body rather than merely logging the dispatch.
@@ -538,11 +597,11 @@ void FFrameGraph::Dispatch(FNodeId Id)
 		}
 		catch (const std::exception& E)
 		{
-			ReportError((std::string("node threw: ") + E.what()).c_str());
+			ReportNodeFailure(Id, E.what());
 		}
 		catch (...)
 		{
-			ReportError("node threw unknown exception");
+			ReportNodeFailure(Id, "unknown exception");
 		}
 
 		if (bTrace)
@@ -611,6 +670,150 @@ void FFrameGraph::TryReap(FNodeId Id)
 	Node.bDispatched.store(false, std::memory_order_relaxed);
 }
 
+// ── failure / stall diagnostics ───────────────────────────────────────────────
+//
+// A teardown bug has two shapes, and BOTH leave the same evidence: nothing. A node body that throws
+// (or, worse, a `dynamic_cast` against an already-freed instance) used to report a bare `node threw:
+// <what>` with no way to tell WHICH of the ~35 nodes of a batch it was; and a fence that never
+// returns reported nothing at all, because a hang is not an event. Both reports are produced here:
+// the identity is printed beside the message, and whoever is blocked (Wait / admission) says which
+// nodes are outstanding and what each of them is waiting for.
+
+std::string FFrameGraph::NodeIdentity(const FTaskNode& Node)
+{
+	// The name comes from the node's own snapshot, NEVER through `Key.Name`: the failure being
+	// diagnosed is a node whose module is already unmapped (see FTaskNode::NameSnapshot). The stage
+	// name is safe -- stage interfaces are engine types, owned by Maho.dll, which outlives every
+	// plugin -- and the phase is the ring slot the node's identity is keyed by.
+	const std::string_view Name = Node.NameSnapshot.empty()
+		? std::string_view("<unknown>")
+		: std::string_view(Node.NameSnapshot);
+
+	return std::string(Name) + "::" + std::string(Node.Key.Stage) + "@" + std::to_string(Node.Key.Phase);
+}
+
+std::string FFrameGraph::DescribeNode(const FTaskNode& Node) const
+{
+	return NodeIdentity(Node)
+		+ (Node.bDispatched.load(std::memory_order_relaxed) ? " [running]" : " [queued]")
+		+ (Node.UnmetCount == 0 ? "" : " unmet=" + std::to_string(Node.UnmetCount));
+}
+
+void FFrameGraph::DumpOutstanding(const char* Why)
+{
+	// SCHEDULER THREAD ONLY: `Nodes`, `Registry` and `EventStates` are this thread's state (the
+	// callers that want a dump marshal it here through FThreadedServer::Submit -- see Wait).
+	//
+	// "Outstanding" = the node's occupancy has not settled: either its body is running, or its
+	// completion flag is still clear, which is exactly the set a Wait() is blocked on. A node that
+	// was reaped (no body running, flag set) is not in flight and is not listed.
+	std::string Report = std::string("[fgnode] ") + (Why == nullptr ? "" : Why) + " -- outstanding="
+		+ std::to_string(AwaitingCompletion.load(std::memory_order_acquire))
+		+ " live=" + std::to_string(GetLiveNodeCount()) + " of " + std::to_string(Nodes.size())
+		+ " node(s) in this graph";
+
+	std::size_t Listed = 0;
+	// The event table's stride is this graph's depth. Never zero in practice (a dump can only follow
+	// a batch, and Submit resolves K before anything is enqueued), but the division is not given the
+	// chance to be the second bug in a diagnostic.
+	const std::size_t Stride = Depth > 0 ? static_cast<std::size_t>(Depth) : 1;
+	for (std::size_t I = 0; I < Nodes.size(); ++I)
+	{
+		FTaskNode& Node = Nodes[I];
+		if (!Node.bDispatched.load(std::memory_order_relaxed)
+			&& EventStates[Node.CompletionEvent].load(std::memory_order_acquire))
+		{
+			continue;   // settled (or never occupied): not what anybody is waiting for
+		}
+
+		Report += "\n[fgnode]   " + DescribeNode(Node) + " waits for:";
+		bool bAnyUnmet = false;
+		for (const FEvent Event : Node.Dependencies)
+		{
+			if (EventStates[Event].load(std::memory_order_acquire))
+			{
+				continue;   // satisfied
+			}
+			// The event ENCODES (node, phase) -- `Detail::EventOf` is `Id * depth + phase`, so the
+			// stride arithmetic here is its inverse and names the exact node that is being waited for.
+			const std::size_t TargetId = Event / Stride;
+			Report += " " + (TargetId < Nodes.size()
+				? DescribeNode(Nodes[TargetId])
+				: std::string("<no node for event ") + std::to_string(Event) + ">");
+			bAnyUnmet = true;
+		}
+		if (!bAnyUnmet)
+		{
+			Report += Node.UnmetCount == 0 ? " nothing (ready, its body has not run yet)" : " (?)";
+		}
+		Listed += 1;
+		if (Listed >= 64)
+		{
+			Report += "\n[fgnode]   ... (truncated)";
+			break;
+		}
+	}
+	if (Listed == 0)
+	{
+		Report += "\n[fgnode]   (no node is outstanding -- the fence is not waiting on a node)";
+	}
+
+	ReportError(Report.c_str());
+}
+
+void FFrameGraph::RequestOutstandingDump(const char* Why)
+{
+	// From a BLOCKED caller: the scheduler thread owns the node table, so the dump is handed to it.
+	// Nothing is waited for here -- the caller is already stuck, and a synchronous round trip would
+	// need the very thread whose progress is in question.
+	if (!IsRunning())
+	{
+		ReportError((std::string("[fgnode] ") + (Why == nullptr ? "" : Why)
+			+ " -- the scheduler thread is gone, so the outstanding set cannot be read").c_str());
+		return;
+	}
+	FThreadedServer::Submit([this, Reason = std::string(Why == nullptr ? "" : Why)]()
+	{
+		DumpOutstanding(Reason.c_str());
+	});
+}
+
+void FFrameGraph::ReportNodeFailure(FNodeId Id, const char* What)
+{
+	// Called on the POOL WORKER that caught the exception. Nothing of the node table may be read
+	// from here (`Nodes` is a deque the scheduler grows, and the very node this reports may be
+	// reaped by the time we looked), so the report is MARSHALED to the scheduler thread. It is
+	// queued BEFORE the completion notification below (the server is FIFO), so the dump it prints
+	// describes the moment the body threw rather than the moment it finished -- which matters when
+	// the throw is followed by a cascade of other nodes completing.
+	if (!IsRunning())
+	{
+		// No scheduler to ask: report what the worker knows and say why it is all there is.
+		ReportError((std::string("node threw: ") + What
+			+ " (the graph no longer runs: identity unavailable)").c_str());
+		return;
+	}
+
+	FThreadedServer::Submit([this, Id, Message = std::string(What)]()
+	{
+		ReportNodeFailureOnScheduler(Id, Message);
+	});
+}
+
+void FFrameGraph::ReportNodeFailureOnScheduler(FNodeId Id, std::string What)
+{
+	const std::string Node = Id < Nodes.size() ? DescribeNode(Nodes[Id]) : std::string("<gone>");
+	ReportError((std::string("node threw: ") + What + " -- node " + Node
+		+ (OwnerName == nullptr || OwnerName[0] == 0
+			? std::string()
+			: std::string(" (graph of '") + OwnerName + "')")).c_str());
+
+	// Beside the culprit, the rest of the moment: a body that threw after its module was freed has
+	// siblings that are about to do the same, and the set that is in flight is what says whether
+	// the teardown fenced its unload batch before releasing anything.
+	DumpOutstanding("in flight when the node above threw");
+}
+
 // ── the ring (host thread) ────────────────────────────────────────────────────
 
 void FFrameGraph::WaitPhasesIdle(const std::vector<FTask>& Tasks)
@@ -629,6 +832,11 @@ void FFrameGraph::WaitPhasesIdle(const std::vector<FTask>& Tasks)
 
 	// The waits are sequential under one lock; each wait releases it. Waiters are woken by
 	// every completion (SlotCv.notify_all in OnNodeCompleted).
+	//
+	// The wait observes itself, exactly like Wait() does: a slot that never drains blocks the CALLER
+	// inside admission, which is the other half of "the process will not exit" (a node body stuck
+	// here, or a teardown submitting into a slot something else never releases). Nothing about the
+	// wait changes -- it prints what is outstanding, then keeps waiting.
 	std::unique_lock<std::mutex> Lock(SlotMutex);
 	for (std::size_t I = 0; I < Wanted.size(); ++I)
 	{
@@ -636,10 +844,20 @@ void FFrameGraph::WaitPhasesIdle(const std::vector<FTask>& Tasks)
 		{
 			continue;
 		}
-		SlotCv.wait(Lock, [this, I]()
+		while (SlotInFlight[I].load(std::memory_order_acquire) != 0)
 		{
-			return SlotInFlight[I].load(std::memory_order_acquire) == 0;
-		});
+			if (!SlotCv.wait_for(Lock, std::chrono::seconds(StallDumpSeconds), [this, I]()
+				{
+					return SlotInFlight[I].load(std::memory_order_acquire) == 0;
+				}))
+			{
+				Lock.unlock();
+				RequestOutstandingDump((std::string("admission waiting for ring slot ")
+					+ std::to_string(I) + " to drain for " + std::to_string(StallDumpSeconds)
+					+ "s").c_str());
+				Lock.lock();
+			}
+		}
 	}
 }
 
@@ -661,11 +879,30 @@ void FFrameGraph::Wait()
 	// count is raised by the CALLER in Submit (before the command is even enqueued), so there
 	// is no window in which this could see "nothing outstanding" while a batch of ours is
 	// still queued -- which is exactly what waiting on the phase in-flight counts would do.
+	//
+	// THE WAIT OBSERVES ITSELF, and that is deliberate: a teardown blocks HERE, so a node that never
+	// completes turns into "the process will not exit" -- the shape that leaves no evidence at all
+	// (measured symptom: after interacting with the window, WM_CLOSE hangs instead of exiting, and
+	// the last log line is whatever ran before the fence). Nothing about the wait changes: every
+	// StallDumpSeconds spent unsatisfied prints which nodes are outstanding and what each of them is
+	// waiting for (through the scheduler thread, which owns that state), then keeps waiting. The
+	// dump is what turns "it hung somewhere in teardown" into a node identity.
 	std::unique_lock<std::mutex> Lock(SlotMutex);
-	SlotCv.wait(Lock, [this]()
+	while (AwaitingCompletion.load(std::memory_order_acquire) != 0)
 	{
-		return AwaitingCompletion.load(std::memory_order_acquire) == 0;
-	});
+		if (!SlotCv.wait_for(Lock, std::chrono::seconds(StallDumpSeconds), [this]()
+			{
+				return AwaitingCompletion.load(std::memory_order_acquire) == 0;
+			}))
+		{
+			const std::uint32_t Outstanding = AwaitingCompletion.load(std::memory_order_acquire);
+			Lock.unlock();
+			RequestOutstandingDump((std::string("submission fence not satisfied for ")
+				+ std::to_string(StallDumpSeconds) + "s (awaited="
+				+ std::to_string(Outstanding) + ")").c_str());
+			Lock.lock();
+		}
+	}
 }
 
 std::size_t FFrameGraph::GetLiveNodeCount() const
@@ -688,7 +925,7 @@ std::int32_t FFrameBridge::PhaseOf(std::uint64_t Frame) noexcept
 }
 
 FFrameBridge::FResult FFrameBridge::Build(std::span<FFrameExtension* const> Frames,
-	std::span<const std::type_index> Stages,
+	std::span<const std::string_view> Stages,
 	std::uint64_t Frame,
 	IDispatch& Dispatch)
 {
@@ -712,7 +949,7 @@ FFrameBridge::FResult FFrameBridge::Build(std::span<FFrameExtension* const> Fram
 			continue;
 		}
 
-		for (const std::type_index Stage : Stages)
+		for (const std::string_view Stage : Stages)
 		{
 			if (!Dispatch.Implements(*F, Stage))
 			{
@@ -736,7 +973,7 @@ FFrameBridge::FResult FFrameBridge::Build(std::span<FFrameExtension* const> Fram
 
 	// (name, stage, relative offset) -> the node it names, or nullptr when this batch has none.
 	// Pointers, not indices: no element is added to Result.Tasks after pass 1, so they stay valid.
-	auto Find = [&](std::string_view Name, std::type_index Stage, std::int32_t Offset) -> FTask*
+	auto Find = [&](std::string_view Name, std::string_view Stage, std::int32_t Offset) -> FTask*
 	{
 		const auto It = Index.find(FTaskKey{ Name, Stage, PhaseOfShiftedFrame(Frame, Offset) });
 		return It == Index.end() ? nullptr : &Result.Tasks[It->second];
@@ -785,7 +1022,7 @@ FFrameBridge::FResult FFrameBridge::Build(std::span<FFrameExtension* const> Fram
 	// is not a problem: the batch whose sequence contains that stage is the one that processes
 	// it, and reports it if the frame does not implement it. Staying silent here is what keeps
 	// one frame's declarations from being reported once per batch.
-	auto InSequence = [&](std::type_index Stage)
+	auto InSequence = [&](std::string_view Stage)
 	{
 		return std::find(Stages.begin(), Stages.end(), Stage) != Stages.end();
 	};
@@ -841,7 +1078,7 @@ FFrameBridge::FResult FFrameBridge::Build(std::span<FFrameExtension* const> Fram
 				// In this sequence, yet the frame got no node for it => it does not implement
 				// that stage. Reported, never silently dropped.
 				Result.Diagnostics.push_back({ "stage not implemented by this frame",
-					F->GetName(), MyStage, {}, typeid(void), 0, false });
+					F->GetName(), MyStage, {}, {}, 0, false });
 				continue;
 			}
 
@@ -912,7 +1149,7 @@ FFrameBridge::FResult FFrameBridge::Build(std::span<FFrameExtension* const> Fram
 			if (Mine == nullptr)
 			{
 				Result.Diagnostics.push_back({ "stage not implemented by this frame",
-					F->GetName(), MyStage, {}, typeid(void), 0, true });
+					F->GetName(), MyStage, {}, {}, 0, true });
 				continue;
 			}
 
@@ -1004,13 +1241,14 @@ FFrameBridge::FResult FFrameBridge::Build(std::span<FFrameExtension* const> Fram
 		/** The first edge that did not reach its node, spelled as "<frame>@<stage> <- <edge>", so the
 		 *  message below NAMES the frame and the edge instead of only counting them. */
 		char        FirstMissing[256] = { 0 };
-		const auto  NoteMissing = [&FirstMissing](const FFrameExtension& F, std::type_index Stage,
+		const auto  NoteMissing = [&FirstMissing](const FFrameExtension& F, std::string_view Stage,
 			const char* Which)
 		{
 			if (FirstMissing[0] == 0)
 			{
-				std::snprintf(FirstMissing, sizeof(FirstMissing), "%.*s@%s <- %s",
-					static_cast<int>(F.GetName().size()), F.GetName().data(), Stage.name(), Which);
+				std::snprintf(FirstMissing, sizeof(FirstMissing), "%.*s@%.*s <- %s",
+					static_cast<int>(F.GetName().size()), F.GetName().data(),
+					static_cast<int>(Stage.size()), Stage.data(), Which);
 			}
 		};
 
@@ -1027,7 +1265,7 @@ FFrameBridge::FResult FFrameBridge::Build(std::span<FFrameExtension* const> Fram
 				continue;
 			}
 			const FTask* PreviousEmitted = nullptr;
-			for (const std::type_index Stage : Stages)
+			for (const std::string_view Stage : Stages)
 			{
 				FTask* Node = Find(F->GetName(), Stage, 0);
 				if (Node == nullptr)
@@ -1102,6 +1340,21 @@ FFrameBridge::FResult FFrameBridge::Build(std::span<FFrameExtension* const> Fram
 			{
 				std::fprintf(stderr, "[fgbatch] %s\n", Digest.c_str());
 				std::fflush(stderr);
+
+				// WHO is in that shape (env-gated, see NodeDumpEnabled). One line per node of the
+				// batch, in batch order, with the identity the scheduler will use and the dependency
+				// count it will wire -- the batch's side of "which node never completed".
+				if (NodeDumpEnabled())
+				{
+					for (const FTask& Task : Result.Tasks)
+					{
+						std::fprintf(stderr, "[fgnodes] %.*s::%.*s@%d deps=%zu\n",
+							static_cast<int>(Task.Key.Name.size()), Task.Key.Name.data(),
+							static_cast<int>(Task.Key.Stage.size()), Task.Key.Stage.data(),
+							Task.Key.Phase, Task.Dependencies.size());
+					}
+					std::fflush(stderr);
+				}
 			}
 		}
 	}

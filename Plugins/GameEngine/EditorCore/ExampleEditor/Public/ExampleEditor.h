@@ -39,6 +39,15 @@ struct FExampleEditorContext
 {
 };
 
+/** The editor host's per-frame context, mapped from the collector's NAME (see TCollectorContext): the
+ *  stage declarations below spell the slot type while `FExampleEditor` is still incomplete, and a
+ *  specialization needs nothing but the forward declaration above. */
+template <>
+struct TCollectorContext<FExampleEditor>
+{
+	using Type = FExampleEditorContext;
+};
+
 /**
  * Lightweight shared editor state, owned by the host and read/written by the
  * component plugins through FExampleEditor::GetEditorContext(). The host keeps
@@ -61,12 +70,7 @@ struct FEditorContext
  * FExampleEditor&, so a component reads shared UI state and reaches FRender
  * through it -- it never owns ImGui/RHI resources.
  */
-class MAHO_EXAMPLEEDITOR_API IEditorInit
-{
-public:
-	virtual ~IEditorInit() = default;
-	virtual void Init(FExampleEditor&, FExampleEditorContext&) = 0;
-};
+MAHO_DECLARE_STAGE(MAHO_EXAMPLEEDITOR_API, IEditorInit, Init, FExampleEditor)
 
 /**
  * Panel stage. A panel owns a persistent UI tree (`UI::FUIView`) and rebuilds it in
@@ -74,20 +78,9 @@ public:
  * host then translates every registered view inside the frame -- a panel never calls
  * ImGui. This is the only panel door: the legacy direct-draw door is gone.
  */
-class MAHO_EXAMPLEEDITOR_API IEditorPanel
-{
-public:
-	virtual ~IEditorPanel() = default;
-	/** 声明期（宿主 `NewFrame` 之前）：只改自己的 UI 树，不碰后端。 */
-	virtual void Update(FExampleEditor&, FExampleEditorContext&) = 0;
-};
+MAHO_DECLARE_STAGE(MAHO_EXAMPLEEDITOR_API, IEditorPanel, Update, FExampleEditor)
 
-class MAHO_EXAMPLEEDITOR_API IEditorShutdown
-{
-public:
-	virtual ~IEditorShutdown() = default;
-	virtual void Shutdown(FExampleEditor&, FExampleEditorContext&) = 0;
-};
+MAHO_DECLARE_STAGE(MAHO_EXAMPLEEDITOR_API, IEditorShutdown, Shutdown, FExampleEditor)
 
 // Stage dispatch specializations so the host's FFrameBuilder install/uninstall
 // graph can drive component Init/Shutdown (Invoke<IEditorInit, FExampleEditor>).
@@ -170,7 +163,9 @@ protected:
 	bool bGraphReady = false;
 
 	/** Create + start this collector's graph on FIRST use, at the shared pool's lane this collector was
-	 *  handed at install, named for the trace, and injected into the batch builder. Idempotent. */
+	 *  handed at install, and name it for the trace. Idempotent. The reference is handed to every
+	 *  driving call (`FlushPendingUpdates(Graph)` for the component batches): the builder keeps no graph
+	 *  of its own. */
 	FFrameGraph& EnsureGraph()
 	{
 		if (!bGraphReady)
@@ -179,7 +174,6 @@ protected:
 			Graph.emplace(GetPool(), GetPoolLane());
 			Graph->SetOwnerName(GetName().data());
 			Graph->Initialize();
-			SetGraph(*Graph);
 		}
 		return *Graph;
 	}
@@ -190,13 +184,15 @@ protected:
 	 *  movable, so growing would have to move slots that stages already hold references to. */
 	std::unique_ptr<FContext[]> Slots;
 
-	void* GetContext(int Slot) override
+	/** This collector's per-phase state, typed (see FFrameBuilder: `TCollectorContext<FExampleEditor>`
+	 *  answers the type, which is what the editor's own stage interfaces above spell). */
+	FExampleEditorContext& GetContext(int Slot) override
 	{
 		if (!Slots)
 		{
 			Slots = std::make_unique<FContext[]>(static_cast<std::size_t>(GetFramesInFlight()));
 		}
-		return &Slots[static_cast<std::size_t>(Slot)];
+		return Slots[static_cast<std::size_t>(Slot)];
 	}
 
 private:
@@ -335,9 +331,9 @@ private:
 	bool bVpValid = false;
 };
 
-// Stage dispatch for the editor's own stages. Placed AFTER the class on purpose: each expansion names
-// `FExampleEditor::FContext`, and a full specialization's body is compiled where it is written.
-MAHO_DECLARE_STAGE_DISPATCH(FExampleEditor, IEditorInit, IEditorInit, Init)
-MAHO_DECLARE_STAGE_DISPATCH(FExampleEditor, IEditorShutdown, IEditorShutdown, Shutdown)
+// The editor's own stages declare NO metadata row: a stage is not a frame. The editor's COMPONENTS
+// implement these (one interface, many panels), so an access table belongs to the implementing
+// component, in its own .cpp. `IEditorPanel` is called directly by the host
+// (`Select<IEditorPanel>() -> Update`) rather than through a stage sequence.
 
 } // namespace Maho

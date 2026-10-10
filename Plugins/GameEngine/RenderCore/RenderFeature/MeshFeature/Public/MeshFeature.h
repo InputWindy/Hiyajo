@@ -91,7 +91,7 @@ struct FMeshShader
  */
 class MAHO_MESHFEATURE_API FMeshFeature : public FFrameExtension, public IPipeline<IInitViews, IRender, IPreUnInstall>
 {
-	MAHO_DECLARE_FRAME(FMeshFeature);
+	MAHO_DECLARE_FRAME_UNDER(FMeshFeature, FRender);
 
 public:
 	FMeshFeature();

@@ -121,6 +121,11 @@ public:
 	/** Process-unique accessor - declared here, defined in ConsoleVariable.cpp (in ConsoleVariable.dll). */
 	static FConsoleVariable& Get();
 
+	/** The collector that drives this plugin: it is an `IPlugin<IShutdown>` installed into the
+	 *  engine host, so its stage is handed the host + the host's own context. */
+	using TCollectorType = ::Maho::FEngineBase;
+
+
 	void Shutdown(FEngineBase& Engine, FEngineContext& Frame) override;
 
 	/** Find a registered variable; nullptr when absent. */

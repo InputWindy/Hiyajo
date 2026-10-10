@@ -37,9 +37,8 @@ public:                                                      \
 	}
 
 /**
- * Stage dispatch specializations - the primary template + specialization sugar
- * are declared in Frame.h. Here each engine stage interface gets a full
- * specialization for the FEngineBase context.
+ * Stage declarations - the declaring macro and the dispatch policy are declared in Frame.h. Here each
+ * engine stage interface gets its declaration (identity + typed entry) for the ENGINE's batches.
  */
 
 namespace Maho
@@ -56,84 +55,39 @@ struct FEngineContext
 {
 };
 
-class MAHO_API IPreInit
+/** The engine host's per-frame context, mapped from the collector's NAME: the stage declarations below
+ *  must spell the slot type while `FEngineBase` is still incomplete (they are written before it, and it
+ *  inherits them). Declared here, next to the context itself, so the type and its mapping are one fact
+ *  in one place -- a specialization needs only the forward declaration above. */
+template <>
+struct TCollectorContext<FEngineBase>
 {
-public:
-	virtual ~IPreInit() = default;
-	virtual void PreInitialize(FEngineBase&, FEngineContext&) = 0;
+	using Type = FEngineContext;
 };
 
-class MAHO_API IInit
-{
-public:
-	virtual ~IInit() = default;
-	virtual void Initialize(FEngineBase&, FEngineContext&) = 0;
-};
+// The engine's 10 stage interfaces. ONE LINE EACH: the macro IS the class (its identity, its typed
+// entry, and the export tag the consumer has to import). Nothing else is declared for a stage -- its
+// protocol is the declaration, so it registers no metadata row of its own.
 
-class MAHO_API IPostInit
-{
-public:
-	virtual ~IPostInit() = default;
-	virtual void PostInitialize(FEngineBase&, FEngineContext&) = 0;
-};
-
-class MAHO_API IPreShutdown
-{
-public:
-	virtual ~IPreShutdown() = default;
-	virtual void PreShutdown(FEngineBase&, FEngineContext&) = 0;
-};
-
-class MAHO_API IShutdown
-{
-public:
-	virtual ~IShutdown() = default;
-	virtual void Shutdown(FEngineBase&, FEngineContext&) = 0;
-};
-
-class MAHO_API IPostShutdown
-{
-public:
-	virtual ~IPostShutdown() = default;
-	virtual void PostShutdown(FEngineBase&, FEngineContext&) = 0;
-};
+MAHO_DECLARE_STAGE(MAHO_API, IPreInit, PreInitialize, FEngineBase)
+MAHO_DECLARE_STAGE(MAHO_API, IInit, Initialize, FEngineBase)
+MAHO_DECLARE_STAGE(MAHO_API, IPostInit, PostInitialize, FEngineBase)
+MAHO_DECLARE_STAGE(MAHO_API, IPreShutdown, PreShutdown, FEngineBase)
+MAHO_DECLARE_STAGE(MAHO_API, IShutdown, Shutdown, FEngineBase)
+MAHO_DECLARE_STAGE(MAHO_API, IPostShutdown, PostShutdown, FEngineBase)
 
 /** Begin-frame capability. */
-class MAHO_API IBeginFrame
-{
-public:
-	virtual ~IBeginFrame() = default;
-	virtual void BeginFrame(FEngineBase&, FEngineContext&) = 0;
-};
-
+MAHO_DECLARE_STAGE(MAHO_API, IBeginFrame, BeginFrame, FEngineBase)
 /** Tick capability. */
-class MAHO_API ITick
-{
-public:
-	virtual ~ITick() = default;
-	virtual void Tick(FEngineBase&, FEngineContext&) = 0;
-};
-
+MAHO_DECLARE_STAGE(MAHO_API, ITick, Tick, FEngineBase)
 /** End-frame capability. */
-class MAHO_API IEndFrame
-{
-public:
-	virtual ~IEndFrame() = default;
-	virtual void EndFrame(FEngineBase&, FEngineContext&) = 0;
-};
-
+MAHO_DECLARE_STAGE(MAHO_API, IEndFrame, EndFrame, FEngineBase)
 /** Exit capability -- request a running loop (IMain) to stop. */
-class MAHO_API IExit
-{
-public:
-	virtual ~IExit() = default;
-	virtual void RequestExit(FEngineBase&, FEngineContext&) = 0;
-};
+MAHO_DECLARE_STAGE(MAHO_API, IExit, RequestExit, FEngineBase)
 
-// The per-stage dispatch specializations live AT THE BOTTOM of this header, after `class FEngineBase`:
-// their body names `FEngineBase::FContext`, which is only declared inside the class. (Declaring them
-// here would fail: the class is still incomplete, and unlike a template body a full specialization's
-// body is compiled right where it is written.)
+// The engine's stages declare NO metadata row of their own (see the note at the bottom of this
+// header): a row belongs to the implementing frame, so nothing here has to wait for `class
+// FEngineBase` to be complete.
 
 using FInitStages = TTypeList<IPreInit, IInit, IPostInit>;
 using FTickStages = TTypeList<IBeginFrame, ITick, IEndFrame, IExit>;
@@ -143,8 +97,8 @@ using FShutdownStages = TTypeList<IPreShutdown, IShutdown, IPostShutdown>;
 //
 // ONE base: FFrameBuilder<FEngineBase> is the collector + frame loop. The graph this host drives is
 // no longer a base class either -- it is a MEMBER (see Graph below), created on first use at this
-// host's own pool + default lane and injected into the builder (`SetGraph`). The host is the only
-// frame whose graph has no owner name: its frames ARE the top level.
+// host's own pool + default lane and passed INTO every driving call by the call site. The host is the
+// only frame whose graph has no owner name: its frames ARE the top level.
 class MAHO_API FEngineBase : public FFrameBuilder<FEngineBase>
 {
 public:
@@ -207,9 +161,8 @@ protected:
 	 *  instead of `Graph.has_value()` so the "was it ever used" question has one name. */
 	bool bGraphReady = false;
 
-	/** Create + start the graph on FIRST use, at this host's own pool + default lane, and hand it to
-	 *  the batch builder (`SetGraph`) -- which is the only party that turns declarations into
-	 *  submissions. Idempotent, and cheap enough to call from every driving entry point. */
+	/** Create + start the graph on FIRST use, at this host's own pool + default lane. Idempotent, and
+	 *  cheap enough to call from every driving entry point. */
 	FFrameGraph& EnsureGraph()
 	{
 		if (!bGraphReady)
@@ -217,12 +170,18 @@ protected:
 			bGraphReady = true;
 			Graph.emplace(GetPool(), GetPoolLane());
 			Graph->Initialize();
-			SetGraph(*Graph);
 		}
 		return *Graph;
 	}
 
 public:
+	/** THE HOST's graph, for anyone holding nothing but an `FEngineBase&`. Same object `EnsureGraph`
+	 *  returns: calling it IS the "create it on first use" step, so a caller never has to ask whether
+	 *  the graph exists yet. It is the graph THIS host drives -- a collector frame that drives its own
+	 *  sub-graph passes the graph IT owns instead (see the note on `Graph`: two drivers sharing one
+	 *  graph would make `Submit`'s per-slot admission wait on the very node that is submitting). */
+	FFrameGraph& GetGraph() { return EnsureGraph(); }
+
 	/** True when a flag/key is present (whether or not it carries a value). */
 	[[nodiscard]] bool Has(std::string_view Key) const;
 
@@ -261,11 +220,12 @@ protected:
 	 *  holds a mutex), so growing would have to move slots that stages already hold references to. */
 	std::unique_ptr<FContext[]> Slots;
 
-	/** The base's only way to reach a slot's context, type-erased on purpose (see FFrameBuilder).
-	 *  Must never return nullptr: every stage takes the context by reference -- so the whole ring is
-	 *  created here, at its full depth, on the very first call. The phases the dispatcher asks for are
+	/** The base's only way to reach a slot's context. Typed: the slot type is this collector's own
+	 *  (`TCollectorContext<FEngineBase>`, see Engine/Frame.h), so no erasure and no cast. Must never
+	 *  return anything but a live slot: every stage takes the context by reference -- so the whole ring
+	 *  is created here, at its full depth, on the very first call. The phases the dispatcher asks for are
 	 *  `PhaseOfFrame(round)` in [0, K), i.e. exactly the array's size. */
-	void* GetContext(int Slot) override
+	FContext& GetContext(int Slot) override
 	{
 		if (!Slots)
 		{
@@ -274,23 +234,13 @@ protected:
 			// if this class ever grows a member of that name again.
 			Slots = std::make_unique<FContext[]>(static_cast<std::size_t>(::Maho::GetFramesInFlight()));
 		}
-		return &Slots[static_cast<std::size_t>(Slot)];
+		return Slots[static_cast<std::size_t>(Slot)];
 	}
 };
 
-// Stage dispatch for the engine's own stages. Placed AFTER the class on purpose: each macro expansion
-// names `FEngineBase::FContext`, and a full specialization's body is compiled where it is written --
-// so the class must be complete first (a template body could defer that; this cannot).
-
-MAHO_DECLARE_STAGE_DISPATCH(FEngineBase, IPreInit,     IPreInit,     PreInitialize)
-MAHO_DECLARE_STAGE_DISPATCH(FEngineBase, IInit,        IInit,        Initialize)
-MAHO_DECLARE_STAGE_DISPATCH(FEngineBase, IPostInit,    IPostInit,    PostInitialize)
-MAHO_DECLARE_STAGE_DISPATCH(FEngineBase, IPreShutdown, IPreShutdown, PreShutdown)
-MAHO_DECLARE_STAGE_DISPATCH(FEngineBase, IShutdown,    IShutdown,    Shutdown)
-MAHO_DECLARE_STAGE_DISPATCH(FEngineBase, IPostShutdown,IPostShutdown,PostShutdown)
-MAHO_DECLARE_STAGE_DISPATCH(FEngineBase, IBeginFrame,  IBeginFrame,  BeginFrame)
-MAHO_DECLARE_STAGE_DISPATCH(FEngineBase, ITick,        ITick,        Tick)
-MAHO_DECLARE_STAGE_DISPATCH(FEngineBase, IEndFrame,    IEndFrame,    EndFrame)
-MAHO_DECLARE_STAGE_DISPATCH(FEngineBase, IExit,        IExit,        RequestExit)
+// The engine's stages declare NO metadata row. A row belongs to the frame that IMPLEMENTS the stage
+// (`MAHO_IMPLEMENT_STAGE(FPlatform, IInit, ...)` in that frame's own .cpp, which is where WHO touches
+// what is known); the stage side of the protocol is the interface declaration above, and a
+// `MAHO_IMPLEMENT_STAGE(IInit, IInit)` "row" would only restate it with no frame to attribute it to.
 
 } // namespace Maho

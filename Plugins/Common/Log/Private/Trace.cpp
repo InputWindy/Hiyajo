@@ -74,14 +74,14 @@ const char* kGlobalLane = "Global";
 /** A slice of a string, for names we only ever print. */
 using FNameSlice = FStaticName;
 
-/** The usable part of a stage name, as a SLICE of the input -- `type_info::name()` spells a stage
- *  as "class Maho::IRender", and neither the namespace nor the keyword belongs on a timeline lane
- *  label, but copying it out to strip them would put work on the emit path. That cost is not
- *  hypothetical: the emitter runs tens of thousands of times a second while tracing is on, and
- *  anything it does shows up in the very numbers it reports. */
-FNameSlice ShortStageName(const char* Raw)
+/** The usable part of a stage name, as a SLICE of the input -- a stage is named by its
+ *  `StaticName()` now (`MAHO_DECLARE_STAGE`), i.e. the bare interface name, and the historical form
+ *  (`type_info::name()`, "class Maho::IRender") still washes out through the same strip: neither the
+ *  namespace nor the keyword belongs on a timeline lane label, but copying it out to strip them would
+ *  put work on the emit path. That cost is not hypothetical: the emitter runs tens of thousands of
+ *  times a second while tracing is on, and anything it does shows up in the very numbers it reports. */
+FNameSlice ShortStageName(std::string_view View)
 {
-	std::string_view View(Raw);
 	const std::size_t Pos = View.rfind("::");
 	View.remove_prefix(Pos == std::string_view::npos ? 0 : Pos + 2);
 	for (const std::string_view Keyword : { "class ", "struct ", "enum " })
@@ -93,6 +93,11 @@ FNameSlice ShortStageName(const char* Raw)
 		}
 	}
 	return FNameSlice{ View.data(), View.size() };
+}
+
+FNameSlice ShortStageName(const char* Raw)
+{
+	return ShortStageName(std::string_view(Raw));
 }
 
 /** The usable part of a MANUAL scope's name. `__FUNCTION__` on MSVC spells the FULLY qualified name
@@ -553,7 +558,7 @@ struct FQueuedRecord
 /** One declared edge, copied out of the frame's declaration table while the frame is still alive. */
 FWaitKey ProtoWaitKey(const FFrameExtension::FEdge& Edge)
 {
-	const FStaticName Target = ShortStageName(Edge.TargetStage.name());
+	const FStaticName Target = ShortStageName(Edge.TargetStage);
 	return FWaitKey{ std::string(Edge.TargetName), std::string(Target.Data, Target.Size),
 		Edge.FrameOffset };
 }
@@ -1016,9 +1021,9 @@ void TraceFlush()
 	}
 }
 
-FStageTrace::FStageTrace(const FFrameExtension* InFrame, const std::type_info& InStage,
+FStageTrace::FStageTrace(const FFrameExtension* InFrame, std::string_view InStage,
 	const char* InGroup, const char* InTrack, const char* InLabel, const char* InTip,
-	const std::type_info* InPrevStage)
+	std::string_view InPrevStage)
 	: Frame(InFrame), Stage(InStage), Group(InGroup), Track(InTrack), Label(InLabel), Tip(InTip),
 	  PrevStage(InPrevStage)
 {
@@ -1045,7 +1050,7 @@ FStageTrace::FStageTrace(const FFrameExtension* InFrame, const std::type_info& I
 	// in any helper the stage calls) inherits it, which is what puts them on the frame's track.
 	GCurrentGroup = Group;
 	GCurrentTrack = Track;
-	GCurrentStage = ShortStageName(Stage.name());
+	GCurrentStage = ShortStageName(Stage);
 
 	// The edges this stage WAITS for, queued as raw KEYS: the id cannot be minted here, because whether
 	// the other end exists -- and which of its frame instances it is -- is only knowable once every bar
@@ -1053,7 +1058,7 @@ FStageTrace::FStageTrace(const FFrameExtension* InFrame, const std::type_info& I
 	// instance". Only the FORWARD declarations live in this table -- the reverse ones (`BlockOn`, where
 	// I am the producer instead) are in the frame's separate dependents table, and are queued at the
 	// END: the arrow leaves MY end, so that is the record the id belongs on.
-	const FStaticName StageShort = ShortStageName(Stage.name());
+	const FStaticName StageShort = ShortStageName(Stage);
 	std::vector<FWaitKey> WaitsFor;
 	if (Edges != nullptr)
 	{
@@ -1082,7 +1087,7 @@ FStageTrace::~FStageTrace()
 
 	const std::uint64_t Now = TraceNowMicros();
 	const std::uint64_t Dur = (Now > Start) ? (Now - Start) : 0;
-	const FNameSlice    StageShort = ShortStageName(Stage.name());
+	const FNameSlice    StageShort = ShortStageName(Stage);
 	const FNameSlice    LabelSlice{ Label, std::strlen(Label) };
 	// The edges I BLOCK (`BlockOn`): the arrow leaves THIS bar, so the id is opened here. The target
 	// stays ignorant of the edge by design -- it only ever receives the terminating id -- which is also
@@ -1133,7 +1138,7 @@ FStageTrace::~FStageTrace()
 				Flow.Literal(" from=");
 				Flow.Append(Edge.TargetName.data(), Edge.TargetName.size());
 				Flow.Literal(" fromStage=");
-				Flow.Slice(ShortStageName(Edge.TargetStage.name()));
+				Flow.Slice(ShortStageName(Edge.TargetStage));
 				Flow.Literal(" off=");
 				Flow.SignedDecimal(static_cast<std::int64_t>(Edge.FrameOffset));
 				Flow.Newline();
@@ -1141,7 +1146,7 @@ FStageTrace::~FStageTrace()
 			}
 		}
 
-		if (PrevStage != nullptr)
+		if (!PrevStage.empty())
 		{
 			// The IN-FRAME CHAIN edge: the stage the scheduler ran just before this one, in the
 			// order the frame's own stage list declares. It is structural (FFrameBridge::Build emits
@@ -1159,7 +1164,7 @@ FStageTrace::~FStageTrace()
 			Flow.Literal(" from=");
 			Flow.CString((Track != nullptr && Track[0] != '\0') ? Track : kGlobalLane);
 			Flow.Literal(" fromStage=");
-			Flow.Slice(ShortStageName(PrevStage->name()));
+			Flow.Slice(ShortStageName(PrevStage));
 			Flow.Literal(" off=");
 			Flow.SignedDecimal(0);
 			Flow.Newline();
