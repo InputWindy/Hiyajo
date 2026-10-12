@@ -202,6 +202,12 @@ int FEngineBase::Main()
 	// process exit. Off unless `MAHO_GRAPH_META` is set (the `MAHO_GRAPH_*` diagnostic family).
 	DumpStageAccess();
 
+	// The metadata store's one-shot dump (change add-resource-metadata-edges, task 2'6): every type it
+	// holds -- the installed frames, the stage protocols, the declared resources -- on the same terms and
+	// at the same point, after `PreMain` loaded the plugins, while their literal values are mapped. Off
+	// unless `MAHO_METADATA` is set.
+	GetMetaData().DumpOnce();
+
 	while (!ShouldExit())
 	{
 		// ONE read of the frame number per frame, and the SAME value goes to every sequence this

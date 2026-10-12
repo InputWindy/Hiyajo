@@ -1,6 +1,5 @@
 #pragma once
 
-#include <Core/BuildConfig.h>
 #include <Core/Export.h>
 
 #include <cstdio>
@@ -26,7 +25,7 @@ MAHO_API void InstallFatalHandlers();
 
 // -- UE-style check/ensure macros -------------------------------------------------------
 //
-// WHICH OF THEM EXIST IS THE BUILD CONFIGURATION'S BUSINESS (`MAHO_DO_*`, see Core/BuildConfig.h):
+// WHICH OF THEM EXIST IS THE BUILD CONFIGURATION'S BUSINESS (`MAHO_DO_*`, see Tools/maho_tools.py):
 // Debug/Release keep the checks, Shipping compiles them out entirely -- the expression is not even
 // evaluated, so it must not carry side effects (use MAHO_VERIFY for anything that must run).
 

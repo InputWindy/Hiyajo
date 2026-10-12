@@ -332,7 +332,7 @@ extern "C" MAHO_GAMEWORLD_API Maho::FFrameExtension* CreateFrame()
 // worth having: `FLog` lives in the `FLog` frame and `IRHI` in `FRender`'s, so a teardown that touches
 // them has an ordering question no hand-written edge recorded. Nothing derives an edge from these rows
 // yet (that is step 4).
-#include <Core/StageAccess.h>
+#include <Engine/StageAccess.h>
 
 namespace Maho
 {

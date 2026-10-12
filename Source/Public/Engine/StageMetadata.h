@@ -18,7 +18,7 @@
 //
 // ── A RESOURCE IS A TYPE, AND ITS NAME COMES FROM A TRAIT ───────────────────────────────────────
 //
-// `FLog`, `IRHI`, `GameWorld::FComponentPools` -- the resource IS the type (Core/ResourceName.h), so a
+// `FLog`, `IRHI`, `GameWorld::FComponentPools` -- the resource IS the type (Engine/ResourceName.h), so a
 // row stores its STATIC NAME and never a pointer: the table describes a SCHEDULE, not a memory graph,
 // and it must stay readable after the object it names is long gone.
 //
@@ -32,11 +32,11 @@
 //                                                     rather than a rule somebody has to remember.
 //
 // The vocabulary a declaration site uses is at the bottom: the SHORT names (`Create(R)`, `Read(R)`,
-// `Write(R)`, `Destroy(R)`) live in Core/StageAccess.h -- deliberately a SEPARATE header, because they
+// `Write(R)`, `Destroy(R)`) live in Engine/StageAccess.h -- deliberately a SEPARATE header, because they
 // are common words (see the note there), while the `MAHO_`-prefixed spellings are always available.
 
 #include <Core/Export.h>
-#include <Core/ResourceName.h>
+#include <Engine/ResourceName.h>
 
 #include <cstddef>
 #include <cstdint>
@@ -87,14 +87,33 @@ struct TResourceOrdering
 	static constexpr EResourceOrdering Value = EResourceOrdering::LifetimeOnly;
 };
 
+namespace Detail
+{
+	/** The TYPE a declared ordering is filed under (see Core/MetaData.h). */
+	inline constexpr std::string_view KResourceOrderingType = "ResourceOrdering";
+
+	/** The registrar `MAHO_DECLARE_RESOURCE_ORDERING` expands, so the declared ordering reaches the
+	 *  generic store instead of staying a compile-time fact only the edges could later read.
+	 *
+	 *  The ordering travels as its DECLARED SPELLING (`#Ordering`), not as the enum: the store is
+	 *  byte-oriented, and the name is both what a dump wants to show and what the owner's decoder maps
+	 *  back to `EResourceOrdering` (the trait above keeps the typed form for compile-time use). */
+	struct MAHO_API FResourceOrderingRegistrar
+	{
+		FResourceOrderingRegistrar(std::string_view Resource, std::string_view Ordering) noexcept;
+	};
+}
+
 /** `MAHO_DECLARE_RESOURCE_ORDERING(X, Snapshot)` -- state a resource's ordering semantics where the
  *  rest of its identity is declared (the plugin that owns the type). Written INSIDE `namespace Maho`.
  *  It reads as one declaration (the expansion ends in `;`). */
-#define MAHO_DECLARE_RESOURCE_ORDERING(X, Ordering)                       \
-	template <>                                                           \
-	struct TResourceOrdering<X>                                           \
-	{                                                                     \
-		static constexpr EResourceOrdering Value = EResourceOrdering::Ordering; \
+#define MAHO_DECLARE_RESOURCE_ORDERING(X, Ordering)                              \
+	template <>                                                                 \
+	struct TResourceOrdering<X>                                                 \
+	{                                                                           \
+		static constexpr EResourceOrdering Value = EResourceOrdering::Ordering;  \
+		static inline const ::Maho::Detail::FResourceOrderingRegistrar Registration{ \
+			::Maho::TResourceName<X>::value, #Ordering };                        \
 	};
 
 // ── capability: which modes a resource ALLOWS ───────────────────────────────────────────────────
@@ -192,6 +211,31 @@ template <typename TResource, EResourceAccess TAccess>
 	}
 }
 
+/** The capability bits of `FResourceAccess::Capabilities` -- read where a row NAME the resource, so
+ *  they are the truth of that declaring site (see `ResourceCapabilityMaskV`). */
+enum class EResourceCapability : std::uint8_t
+{
+	Create  = 1u << 0,
+	Destroy = 1u << 1,
+	Read    = 1u << 2,
+	Write   = 1u << 3,
+};
+
+namespace Detail
+{
+	/** The resource's declared capabilities as a bitmask, read at a site that names it -- `0` for a
+	 *  type that declares none (which the check above reads as "every mode allowed") and `0` for an
+	 *  INCOMPLETE type, which cannot be asked at all. That second case is why the mask travels in the
+	 *  ROW instead of being looked up later: at run time no type is available, and the only parties
+	 *  that ever see a complete resource are the declaration sites themselves. */
+	template <typename TResource>
+	inline constexpr std::uint8_t ResourceCapabilityMaskV =
+		static_cast<std::uint8_t>((DeclaresCapabilityV<TResource, ICreate>  ? 1u << 0 : 0u)
+			| (DeclaresCapabilityV<TResource, IDestroy> ? 1u << 1 : 0u)
+			| (DeclaresCapabilityV<TResource, IRead>    ? 1u << 2 : 0u)
+			| (DeclaresCapabilityV<TResource, IWrite>   ? 1u << 3 : 0u));
+}
+
 /** One declared access, as the table stores it: the resource's static name + the mode + the resource's
  *  ordering semantics (kept here so a dump is one pass over the table, with no second lookup and no
  *  RTTI to ask a type anything at run time). */
@@ -200,6 +244,9 @@ struct FResourceAccess
 	std::string_view  Resource{};
 	EResourceAccess   Access   = EResourceAccess::Read;
 	EResourceOrdering Ordering = EResourceOrdering::LifetimeOnly;
+	/** The resource's capability bits, as THIS declaring site could see them (see
+	 *  `Detail::ResourceCapabilityMaskV`). `0` == "declares none" == every mode allowed. */
+	std::uint8_t      Capabilities = 0;
 };
 
 /** What a declaration-tail access macro expands to: the value, plus the two COMPILE-TIME checks the
@@ -210,12 +257,13 @@ template <typename TResource, EResourceAccess TAccess>
 [[nodiscard]] constexpr FResourceAccess MakeResourceAccess() noexcept
 {
 	static_assert(!TResourceName<TResource>::value.empty(),
-		"this type has no resource name: register it with MAHO_DECLARE_RESOURCE(...) in Core/ResourceName.h "
+		"this type has no resource name: register it with MAHO_DECLARE_RESOURCE(...) in Engine/ResourceName.h "
 		"before it appears in a stage's access table");
 	static_assert(ResourceSupportsAccess<TResource, TAccess>(),
 		"this resource does not declare this access mode: it opted into a capability set "
 		"(ICreate/IDestroy/IRead/IWrite) that does not contain this one");
-	return FResourceAccess{ TResourceName<TResource>::value, TAccess, TResourceOrdering<TResource>::Value };
+	return FResourceAccess{ TResourceName<TResource>::value, TAccess, TResourceOrdering<TResource>::Value,
+		Detail::ResourceCapabilityMaskV<TResource> };
 }
 
 /** One row of the table (the copy `FindStageAccess` hands out). */
@@ -277,7 +325,7 @@ MAHO_API const char* ToString(EResourceOrdering Ordering) noexcept;
 // Each expands to the `FResourceAccess` VALUE for that resource and mode, checking at compile time
 // that the resource is registered and that it allows the mode. The short spellings (`Destroy(...)`,
 // `Read(...)`) are the ones the change's declaration sites read best with; they live in
-// Core/StageAccess.h because they are common words that collide with ordinary methods
+// Engine/StageAccess.h because they are common words that collide with ordinary methods
 // (`FEntityRegistry::Create()`, the input probes' `Read(...)`), so a translation unit has to ask for
 // them on purpose. These prefixed forms are always safe and always correct.
 

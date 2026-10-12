@@ -5,6 +5,10 @@
 // filtered TTypeList. Select / With / Not are type-set operations evaluated at
 // compile time; runtime driving of the surviving types is the caller's concern.
 //
+// CORE, not Engine: nothing here knows what a frame or a stage is -- the predicate is "derives from
+// ANY of these types", whatever they happen to be (it filters a Core/TypeList.h table). The engine is
+// one user of it; the test projects are another.
+//
 //   using FTable = TTypeList<FLog, FNet, FAudio>;
 //   using FTickable = TQuery<FTable>::Select<ITick>::With<IShared>::Not<ITest>::FResult;
 //
@@ -202,7 +206,7 @@ private:
 	 *  from the source BEFORE releasing it, so "gone from the source" == freed. Debug-only:
 	 *  in the other configurations this is just a null check (the audit costs a scan per
 	 *  element). The switch is the build configuration's, not the toolchain's: see
-	 *  Core/BuildConfig.h (MAHO_DO_CONTAINER_CHECKS). */
+	 *  Tools/maho_tools.py (MAHO_DO_CONTAINER_CHECKS). */
 	[[nodiscard]] bool CheckStillLive(TBase* Ptr) const
 	{
 #if MAHO_DO_CONTAINER_CHECKS

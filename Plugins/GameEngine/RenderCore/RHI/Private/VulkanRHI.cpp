@@ -1,6 +1,5 @@
 ﻿#include "VulkanRHI.h"
 
-#include <Core/BuildConfig.h>
 #include <Core/Fatal.h>   // ReportError: the pipeline-depth disagreement is an error, not a log line
 #include "VulkanResources.h"
 
@@ -1316,7 +1315,7 @@ bool FVulkanRHI::CreateInstance()
 
 	// The validation layer is a DIAGNOSTIC FACILITY, so it is the build configuration that decides
 	// whether the code exists at all (Debug on, Release off by default, Shipping not compiled --
-	// see Core/BuildConfig.h and MAHO_WITH_RHI_VALIDATION).
+	// see Tools/maho_tools.py and MAHO_WITH_RHI_VALIDATION).
 #if MAHO_WITH_RHI_VALIDATION
 	const bool bValidation = GCVarRHIValidation.GetValue() != 0;
 	if (bValidation)

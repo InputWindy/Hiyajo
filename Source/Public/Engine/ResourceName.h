@@ -4,7 +4,7 @@
 //
 // ── WHY A TRAIT, AND NOT A BASE CLASS OR A MEMBER ────────────────────────────────────────────────
 //
-// A resource is not a new kind of object. It is "the thing itself": an ALREADY EXISTING type that a
+// A resource is not a new type of object. It is "the thing itself": an ALREADY EXISTING type that a
 // stage body touches (`FLog`, `IRHI`, `FPlatform`, ...). Such a type is authored elsewhere (often in
 // another plugin) and must NOT grow a base class or a member just to carry a name, so the name is
 // attached from the OUTSIDE, as an explicit specialization of one trait:
@@ -30,6 +30,8 @@
 // Registering against a forward-declared type is legal (the specialization does not use the type),
 // and it is the same pattern the plugin headers already use for their own peers.
 
+#include <Core/Export.h>
+
 #include <string_view>
 
 namespace Maho
@@ -46,8 +48,34 @@ struct TResourceName
 
 } // namespace Maho
 
+namespace Maho
+{
+
+namespace Detail
+{
+	/** The TYPE this header's declarations are filed under in the generic store (Core/MetaData.h).
+	 *  A plain literal, because the store has no schema: the type IS this string, spelled here once and
+	 *  read by every consumer that wants the resource names. */
+	inline constexpr std::string_view KResourceType = "Resource";
+
+	/** The registrar `MAHO_DECLARE_RESOURCE` expands: it files the resource's NAME, so a resource shows
+	 *  up as soon as it is declared -- before any stage access row names it, and even if nothing ever
+	 *  does (a declared resource nothing uses is visible rather than silently absent).
+	 *
+	 *  The CAPABILITIES are not filed here: a name is declared next to a forward declaration (that is
+	 *  the point of this header), and an incomplete type cannot be asked what it supports -- those bits
+	 *  travel in the access rows, where the declaring site does have the type (see StageMetadata.h). */
+	struct MAHO_API FResourceRegistrar
+	{
+		explicit FResourceRegistrar(std::string_view Resource) noexcept;
+	};
+}
+
+} // namespace Maho
+
 /**
- * Name a resource: `MAHO_DECLARE_RESOURCE(X)` => `TResourceName<X>::value == "X"`.
+ * Name a resource: `MAHO_DECLARE_RESOURCE(X)` => `TResourceName<X>::value == "X"`, and one row for it
+ * in the metadata table.
  *
  * Written INSIDE `namespace Maho` at file scope (a specialization must live in the namespace of its
  * template). `X` may be qualified (`Name::FNamePool`) -- the name it yields is then qualified too,
@@ -60,6 +88,7 @@ struct TResourceName
 	struct TResourceName<X>                                       \
 	{                                                             \
 		static constexpr std::string_view value = #X;             \
+		static inline const ::Maho::Detail::FResourceRegistrar Registration{ value }; \
 	};
 
 // ── the identified resources ─────────────────────────────────────────────────────────────────────

@@ -200,60 +200,6 @@ D.Field("std::unique_ptr<void, FModuleDeleter> Module",
         "模块句柄的唯一持有者：析构即 `FreeLibrary` / `dlclose`。空 = 未装载。")
 
 # ══════════════════════════════════════════════════════════════════════════════
-# Source/Public/Core/BuildConfig.h —— 构建配置矩阵
-# ══════════════════════════════════════════════════════════════════════════════
-
-D.Header("Public/Core/BuildConfig.h", Title="BuildConfig.h —— 构建配置矩阵（配置 × 目标）",
-         Desc="把「在什么构建下隔离什么」变成**两条正交轴 + 一张 6 格矩阵 + 一套派生规则**。"
-              "轴的唯一来源是 `.cproject`，全部宏由 `Tools/maho_tools.py` 的 `_build_config_block` "
-              "在生成期派生注入（按配置的 `$<CONFIG:...>` 生成式 ⇒ **一份生成工程覆盖三档**），"
-              "本头是**唯一读取点**：机读的宏 + `#error` 守卫 + 外部构建的回退。"
-              "规范在 `openspec/changes/add-build-configuration/`。")
-
-D.Card("两条正交轴（`.cproject` 声明）")
-D.Table("轴", "取值", "它决定")
-D.Row("BuildType", "`Runtime | Editor`", "**目标**：Runtime 在生成期丢掉 `Type=Editor` 插件（DLL/头都不编）"
-      "⇒ 同时给出 `MAHO_EDITOR_BUILD`")
-D.Row("Configuration", "`Debug | Release | Shipping`", "**诊断**：哪些检查/设施存在 ⇒ `MAHO_BUILD_*`，"
-      "并派生下面两类宏")
-
-D.Card("6 格矩阵（逐格隔离什么）")
-D.Table("格", "隔离什么")
-D.Row("Debug × Editor", "今天的日常态：断言/追踪/日志/校验层全开 + 编辑器（面板/主题/视口/控制台/浏览器）全在")
-D.Row("Debug × Runtime", "运行时调试态：诊断全开，但没有编辑器插件（可视化面板不存在）")
-D.Row("Release × Runtime", "性能态（内测/试玩）：`CHECK`/`ENSURE` 留、慢速检查与容器审计关、追踪/日志留、校验层默认关")
-D.Row("Release × Editor", "**编辑器发行版**（给美术/QA）：优化的库 + 诊断保留 + 编辑器插件在。"
-      "**「发行版要带日志/诊断」的形态一律发 Release**（本变更不做逐能力覆盖通道，见 design OQ8）")
-D.Row("Shipping × Runtime", "**对外发行（零成本）**：`CHECK`/`ENSURE`/追踪/日志/统计/校验层/运行时着色器编译"
-      "一律不编；CVar 只留标了 `ECVarFlags::Shipping` 的项（画质档位这类要现场切的**可读写**）")
-D.Row("Shipping × Editor", "**非法**：生成期报错，`BuildConfig.h` 另有一道 `#error`（编辑器发行版请用 "
-      "`Release × Editor`；Editor 工程的配置列表里也不含 Shipping）")
-
-D.Card("宏的三种归属（都只在这一个头里被读取）")
-D.Table("类", "宏", "谁定 / 可否覆盖")
-D.Row("轴", "`MAHO_BUILD_DEBUG｜RELEASE｜SHIPPING`、`MAHO_EDITOR_BUILD`", "`.cproject` 两个字段；"
-      "**谁都不许覆盖**（它们就是轴本身）")
-D.Row("行为", "`MAHO_DO_CHECK` / `_ENSURE` / `_SLOW_CHECK` / `_CONTAINER_CHECKS`",
-      "由 `Configuration` 派生；插件不得手写")
-D.Row("能力", "`MAHO_WITH_TRACE` / `_LOGGING` / `_CRASH_REPORT` / `_RHI_VALIDATION` / `_GLSLANG` / `_STATS`",
-      "有派生默认值，**项目可覆盖**（覆盖走 `.cproject`/`.cplugin`，不写在 `.cmake` 里）")
-D.Row("被拒绝的写法", "插件 `.cmake` 里出现上面任何一族的编译定义",
-      "生成期报错并指出文件:行号（第二处定义是矩阵腐烂的入口）；`MAHO_BUILD_DIR` 这类 CMake "
-      "**变量**不受影响")
-
-D.Card("守卫与回退")
-D.Table("东西", "说明")
-D.Row("`#error` × 3", "未知档（`MAHO_BUILD_UNSUPPORTED`）、非法格（`Shipping × Editor`）—— 立刻暴露，"
-      "而不是静默走默认")
-D.Row("外部构建的回退", "不经生成器的译单元（工具、外部测试工程）拿到的是**诊断打开**的一侧："
-      "行为像 Debug，而不是悄悄丢掉正在被验证的那些检查")
-D.Row("`FBuildInfo::Config` / `Target`", "把当前格编译成字符串常量，崩溃头或报告行直接用它 —— "
-      "它由宏拼出来，所以**不可能**与代码实际做的事不一致")
-D.Row("相关", "`Core/Fatal.h`（`MAHO_DO_*` 编掉断言）、`Log/Trace.h`（`MAHO_WITH_TRACE` 编掉追踪机制）、"
-      "`Log/Log.h`（`MAHO_WITH_LOGGING` 编掉日志体）、`RHI/VulkanRHI.cpp`（`MAHO_WITH_RHI_VALIDATION`）、"
-      "`ConsoleVariable`（`ECVarFlags::Shipping` 决定发行版保留哪些可调项）")
-
-# ══════════════════════════════════════════════════════════════════════════════
 # Source/Public/Core/Delegate.h —— 多播事件积木
 # ══════════════════════════════════════════════════════════════════════════════
 
@@ -355,6 +301,25 @@ D.Row("MAHO_IF_NOT_NULL(PtrExpr, Name)",
       "（不报告）。用于「还没起来是正常的」的可选服务，如 `GetLog()`。写法同 `if`："
       "`MAHO_IF_NOT_NULL(::Maho::GetLog(), L) { L->Info(\"…\"); }`（原先误放在 Export.h，"
       "它是控制流而非模块边界，故与软兄弟 `MAHO_ENSURE_NOT_NULL` 并列于此）")
+
+D.Card("构建矩阵（无头文件：宏全由 codegen 注入）")
+D.Table("东西", "说明")
+D.Row("两条轴（值形态）", "`MAHO_BUILD_TYPE=Debug|Release|Shipping`、`MAHO_BUILD_TARGET=Runtime|Editor` —— "
+      "由 `Tools/maho_tools.py` 的 `_build_config_block` 按 `$<CONFIG:...>` 生成式注入"
+      "（**一份生成工程覆盖三档**）。标识符而非字符串：要字符串的地方 stringize 一下即可，"
+      "不需要一个 C++ 头去镜像 CMake 已经知道的事实")
+D.Row("分支用伴生宏", "`MAHO_BUILD_DEBUG｜RELEASE｜SHIPPING`、`MAHO_EDITOR_BUILD`（`defined()` 形态）、"
+      "行为 `MAHO_DO_CHECK` / `_ENSURE` / `_SLOW_CHECK` / `_CONTAINER_CHECKS`、能力 `MAHO_WITH_TRACE` / "
+      "`_LOGGING` / `_CRASH_REPORT` / `_RHI_VALIDATION` / `_GLSLANG` / `_STATS` —— 同样全部由生成器派生，"
+      "**没有兜底 `#ifndef`**：不走生成工程的译单元就是没配置过")
+D.Row("守卫（在同一目录的 .cpp）", "`Source/Private/Core/Fatal.cpp` 是**唯一**放 `#error` 的地方："
+      "缺 `MAHO_BUILD_TYPE` / `MAHO_BUILD_TARGET`（生成器没配置过的目标）与 `Shipping × Editor` 都在那里失败。"
+      "为什么不放头里：`#if MAHO_DO_CHECK` 遇到**未定义**宏读作 0 ⇒ 检查/日志/追踪**静默消失**，"
+      "所以需要一个必然被编译的译单元把它变成构建错误")
+D.Row("非法格", "Shipping × Editor：生成期就不放进配置列表（`CMAKE_CONFIGURATION_TYPES`），C++ 侧再兜一道 `#error`")
+D.Row("相关", "`Log/Trace.h`（`MAHO_WITH_TRACE` 编掉追踪机制）、`Log/Log.h`（`MAHO_WITH_LOGGING` 编掉日志体）、"
+      "`RHI/VulkanRHI.cpp`（`MAHO_WITH_RHI_VALIDATION`）、`ConsoleVariable`（`ECVarFlags::Shipping` 决定发行版"
+      "保留哪些可调项）")
 
 # ══════════════════════════════════════════════════════════════════════════════
 # Source/Public/Core/FrameGraph.h —— 帧调度器 + 声明层 + 桥
@@ -926,7 +891,7 @@ D.Card("包含的头文件")
 D.Table("头文件", "功能")
 D.Row("Core/Assembly.h", "`ApplyModuleExtension`：`MAHO_DECLARE_ENGINE` 的 `GetModulePath()` 用")
 D.Row("Core/Interface.h", "`IPipeline`：frame 挂载 stage 序列")
-D.Row("Engine/Query.h", "`FQuery` 的 `Select<...>()`：按 stage 接口筛帧集")
+D.Row("Core/Query.h", "`FQuery` 的 `Select<...>()`：按 stage 接口筛帧集")
 D.Row("Engine/Frame.h", "`FFrameExtension` / `Invoke` / `TFrameDispatch`")
 D.Row("Engine/FrameBuilder.h", "`FFrameBuilder` —— 引擎宿主的基类")
 D.Row("algorithm / atomic / map / memory / queue / set / string / vector", "宿主自身的状态与命令行存储")
@@ -1060,7 +1025,7 @@ D.Row("Core/Delegate.h", "三个广播事件（`OnFramesChanged` / `OnFrameStatu
 D.Row("Core/ThreadPool.h", "`FThreadPool`：任务池；收集器**按 lane** 共享它（见 `OwnedPool` / `Pool` / `Lane`）")
 D.Row("Core/Fatal.h / Core/TypeList.h", "上报路径；`StageIndicesOf`")
 D.Row("Engine/Frame.h", "`TFrameDispatch`（驱动层用）")
-D.Row("Engine/Query.h", "`FQuery`：`GetQueryData()` 的数据源是 `Pipelines`")
+D.Row("Core/Query.h", "`FQuery`：`GetQueryData()` 的数据源是 `Pipelines`")
 D.Row("algorithm / map / memory / set / string / string_view / typeindex / vector", "集合状态与并行槽位向量")
 
 D.Card("12 个终态（EFrameStatus）")
@@ -1178,10 +1143,10 @@ D.Interface("template <TEvent, TArgs...> void BroadcastIsolated(TEvent&, const T
             "隔离广播：订阅者抛异常只报错，不影响收集器状态与 teardown")
 
 # ══════════════════════════════════════════════════════════════════════════════
-# Source/Public/Engine/Query.h —— 编译期 / 运行期筛选
+# Source/Public/Core/Query.h —— 编译期 / 运行期筛选
 # ══════════════════════════════════════════════════════════════════════════════
 
-D.Header("Public/Engine/Query.h", Title="Query.h —— 编译期类型筛选 + 运行期实例筛选",
+D.Header("Public/Core/Query.h", Title="Query.h —— 编译期类型筛选 + 运行期实例筛选",
          Desc="两套筛选，都是纯查询、不改任何东西：\n"
               "**`TQuery<TList>`** —— 纯类型运算（不引用实例）：`Select`(OR) / `With`(AND) / "
               "`Not`(NOR) → `FResult`。用来在编译期把一串 stage 接口折成帧集类型。\n"

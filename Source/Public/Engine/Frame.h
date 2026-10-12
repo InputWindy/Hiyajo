@@ -76,10 +76,11 @@
 // The batch a frame set builds is therefore identical, node for node and dependency for dependency.
 
 #include <Core/Assembly.h>
+#include <Core/MetaData.h>
 #include <Core/FrameGraph.h>
 #include <Core/Interface.h>
-#include <Core/ResourceName.h>
-#include <Core/StageMetadata.h>
+#include <Engine/ResourceName.h>
+#include <Engine/StageMetadata.h>
 #include <Core/TypeList.h>
 
 #include <cstdint>
@@ -179,6 +180,91 @@
  * member is public because the dispatcher -- which is not a friend of the interface -- has to reach
  * them.
  */
+/**
+ * THE ENGINE'S OWN METADATA -- the frame/stage axes, as the ENGINE files them.
+ *
+ * Core's store knows nothing about frames or stages (Core/MetaData.h): a TYPE is a string, a KEY is a
+ * string and a VALUE is bytes the owner produced. The literals below ARE the engine's schema then --
+ * spelled here, once -- and the DECODERS sit next to them, because the side that encodes a record is
+ * the side that knows what it means. Two rules fall out of that and both are load-bearing:
+ *
+ *   * `Frame`/`FrameInstalled` are TWO types, not one record mutated twice: registration is
+ *     idempotent by CONTENT, so "declared" and "actually installed" are two facts filed separately,
+ *     and the install-time check is the comparison of the two.
+ *   * a stage's key is the PAIR `Collector::Stage`. A stage name is unique only within one
+ *     collector's sequence -- `IOnInstalled` is declared by BOTH `FRender` and `FGameWorld` -- so a
+ *     name-keyed row would describe one protocol and silently swallow the other.
+ */
+namespace Maho
+{
+namespace Detail
+{
+	/** The TYPE names of the engine's own metadata. */
+	inline constexpr std::string_view KFrameType = "Frame";
+	inline constexpr std::string_view KStageType = "Stage";
+	inline constexpr std::string_view KFrameInstalledType = "FrameInstalled";
+
+	/** ENCODE the frame axis: "this collector drives this frame". The value is the collector's BARE
+	 *  name -- the whole record, because a name is all the install-time check compares. */
+	inline void DeclareFrameMeta(std::string_view Frame, std::string_view Collector)
+	{
+		GetMetaData().Register(KFrameType, Frame, BareTypeName(Collector));
+	}
+
+	/** DECODE it: the collector a frame declared, or empty when nothing declared it. The returned view
+	 *  points into the STORE (which never moves and is never destroyed), never into a caller's literal. */
+	[[nodiscard]] inline std::string_view FindDeclaredCollector(std::string_view Frame)
+	{
+		const FMetaDataEntry* Entry = GetMetaData().Find(KFrameType, Frame);
+		return Entry != nullptr ? std::string_view(Entry->Value) : std::string_view{};
+	}
+
+	/** ENCODE the second half of the tree axis: "this collector ACTUALLY installed this frame". */
+	inline void DeclareFrameInstalledMeta(std::string_view Frame, std::string_view Collector)
+	{
+		GetMetaData().Register(KFrameInstalledType, Frame, BareTypeName(Collector));
+	}
+
+	/** DECODE it: the collector that installed a frame, or empty. */
+	[[nodiscard]] inline std::string_view FindInstalledCollector(std::string_view Frame)
+	{
+		const FMetaDataEntry* Entry = GetMetaData().Find(KFrameInstalledType, Frame);
+		return Entry != nullptr ? std::string_view(Entry->Value) : std::string_view{};
+	}
+
+	/** ENCODE a stage's protocol: the key is the pair `Collector::Stage` (see the note above), the
+	 *  value is the method's name. */
+	inline void DeclareStageMeta(std::string_view Stage, std::string_view Method, std::string_view Context)
+	{
+		std::string Key(BareTypeName(Context));
+		Key.append("::");
+		Key.append(Stage);
+		GetMetaData().Register(KStageType, Key, Method);
+	}
+
+	/** The registrars the two declaration macros expand. Defined OUT OF LINE, in
+	 *  `Source/Private/Engine/FrameBuilder.cpp`: the macros are expanded in plugin modules, so the
+	 *  constructor has to be an imported symbol rather than an inline body each of them instantiates. */
+	struct MAHO_API FFrameRegistrar
+	{
+		FFrameRegistrar(std::string_view Frame, std::string_view Collector) noexcept;
+	};
+
+	struct MAHO_API FStageProtocolRegistrar
+	{
+		FStageProtocolRegistrar(std::string_view Stage, std::string_view Method,
+			std::string_view Context) noexcept;
+	};
+
+} // namespace Detail
+} // namespace Maho
+
+/** Token pasting in two steps, so a `__COUNTER__` is EXPANDED before it is pasted (the one-step form
+ *  would paste the literal text `__COUNTER__`). It sits here because BOTH declaration macros below
+ *  need a unique object name per expansion -- one registrar per declaration, at namespace scope. */
+#define MAHO_DETAIL_JOIN_IMPL(A, B) A##B
+#define MAHO_DETAIL_JOIN(A, B) MAHO_DETAIL_JOIN_IMPL(A, B)
+
 #define MAHO_DECLARE_STAGE(ExportTag, Stage, Method, Context)                            \
 	class ExportTag Stage                                                                 \
 	{                                                                                     \
@@ -190,7 +276,11 @@
 		virtual void Method(Context&, TSlotType&) = 0;                                      \
 		static void InvokeStage(Stage& Self, Context& C, TSlotType& S) { Self.Method(C, S); } \
 		virtual ~Stage() = default;                                                        \
-	};
+	};                                                                                    \
+	/** The stage's PROTOCOL row in the metadata table (axis ②): how it is called, and by whose sequence. */ \
+	[[maybe_unused]] const ::Maho::Detail::FStageProtocolRegistrar                            \
+		MAHO_DETAIL_JOIN(RegisterStageProtocol_, __COUNTER__){ Stage::StaticName(),            \
+			Stage::MethodName(), #Context };
 
 /**
  * The NAME-ONLY form of a stage declaration: a COMPLETE class carrying `StaticName()` and nothing
@@ -461,6 +551,23 @@ public:                                                      \
 	{                                                        \
 		return StaticName();                                  \
 	}                                                        \
+	/** The COLLECTOR this frame DECLARES drives it, as a name: the install-time check (task 2'4)      \
+	 *  compares it with the collector that actually installs the frame. A frame installed anywhere    \
+	 *  else would be driven by a sequence whose stage list and context are not the ones it declared.  \
+	 *  A name, not a type: the installing side only ever holds an `FFrameExtension*`. */               \
+	std::string_view GetCollectorName() const noexcept override                                       \
+	{                                                                                                 \
+		return "FEngineBase";                                                                          \
+	}                                                                                                 \
+	/** The tree's DECLARED edge, registered the first time this frame is created:                        \
+	 *  `CreateFrame` is the one call every install path shares, so a registered frame is a created one.  \
+	 *  A function-local static rather than a namespace-scope object, because this macro is expanded      \
+	 *  INSIDE a class body. */                                                                           \
+	static const ::Maho::Detail::FFrameRegistrar& FrameDeclaration()                                     \
+	{                                                                                                     \
+		static const ::Maho::Detail::FFrameRegistrar Instance{ StaticName(), "FEngineBase" };              \
+		return Instance;                                                                                   \
+	}                                                                                                     \
 	/** THE COLLECTOR THAT DRIVES THIS FRAME (D2'): a host sub-frame is driven by the engine host, so \
 	 *  every stage it mounts is handed an `FEngineBase&` + its context (see TFrameCollector). A frame \
 	 *  that is driven by another frame instead declares `MAHO_DECLARE_FRAME_UNDER`. */               \
@@ -489,6 +596,7 @@ public:                                                      \
 	}                                                        \
 	static Maho::FFrameExtension* CreateFrame()                       \
 	{                                                        \
+		(void)FrameDeclaration();                              \
 		return new FrameType();                                \
 	}                                                        \
 	static std::string GetModulePath()                       \
@@ -539,6 +647,20 @@ public:                                                      \
 	{                                                        \
 		return StaticName();                                  \
 	}                                                        \
+	/** The COLLECTOR this frame declares, by NAME (see the note in MAHO_DECLARE_FRAME). It is the    \
+	 *  macro argument STRINGIFIED on purpose: this header routinely cannot include the collector's    \
+	 *  header, and a name is all the installing side needs -- the comparison strips any namespace      \
+	 *  qualification (`Core/MetaData.h: BareTypeName`). */                                         \
+	std::string_view GetCollectorName() const noexcept override                                        \
+	{                                                                                                  \
+		return #CollectorType;                                                                          \
+	}                                                                                                  \
+	/** The tree's declared edge, registered when the frame is first created (see MAHO_DECLARE_FRAME). */ \
+	static const ::Maho::Detail::FFrameRegistrar& FrameDeclaration()                                    \
+	{                                                                                                    \
+		static const ::Maho::Detail::FFrameRegistrar Instance{ StaticName(), #CollectorType };            \
+		return Instance;                                                                                  \
+	}                                                                                                    \
 	/** THE COLLECTOR THAT DRIVES THIS FRAME (D2'): the frame it is INSTALLED INTO -- `FRender` for a \
 	 *  render feature, `FGameWorld` for an ECS system, `FExampleEditor` for an editor panel. Every \
 	 *  stage this frame mounts is handed that collector's `&` + its context (see TFrameCollector); \
@@ -562,6 +684,7 @@ public:                                                      \
 	}                                                        \
 	static Maho::FFrameExtension* CreateFrame()                       \
 	{                                                        \
+		(void)FrameDeclaration();                              \
 		return new FrameType();                                \
 	}                                                        \
 	static std::string GetModulePath()                       \
@@ -630,10 +753,7 @@ MAHO_API void* GetCurrentFrameContext() noexcept;
  */
 MAHO_API std::uint64_t GetCurrentStageFrame() noexcept;
 
-/** Token pasting in two steps, so the `__COUNTER__` inside MAHO_IMPLEMENT_STAGE is EXPANDED before it
- *  is pasted (the one-step form would paste the literal text `__COUNTER__`). */
-#define MAHO_DETAIL_JOIN_IMPL(A, B) A##B
-#define MAHO_DETAIL_JOIN(A, B) MAHO_DETAIL_JOIN_IMPL(A, B)
+// (MAHO_DETAIL_JOIN lives above MAHO_DECLARE_STAGE: that macro needs a unique name per expansion too.)
 
 /**
  * ONE declaration per `(frame, stage)`: WHAT THAT STAGE TOUCHES, plus the compile-time check that keeps
@@ -653,7 +773,7 @@ MAHO_API std::uint64_t GetCurrentStageFrame() noexcept;
  *      say 挂载 == 实现.
  *   2. THE TABLE ROW -- a namespace-scope registrant that records
  *      `(frame name, stage name, method name, [ {resource, mode, ordering} ] )` in Core's graph-level
- *      table (Core/StageMetadata.h). Registration happens at static-init time and is idempotent,
+ *      table (Engine/StageMetadata.h). Registration happens at static-init time and is idempotent,
  *      because a declaration in a header is expanded once per translation unit. The METHOD NAME comes
  *      from the interface (`Stage::MethodName()`), not from a macro argument: the stage declares its
  *      own entry name, and the frame's override necessarily has that name.

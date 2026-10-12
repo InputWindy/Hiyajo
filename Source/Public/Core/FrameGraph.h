@@ -259,6 +259,24 @@ public:
 	/** Stable identity: the Name of every node this frame contributes. */
 	[[nodiscard]] virtual std::string_view GetName() const = 0;
 
+	/** The COLLECTOR this frame declares drives it, as a NAME, or empty when it declares none.
+	 *
+	 *  It exists for the INSTALL-TIME consistency check (`FFrameBuilder::Install`, task 2'4): a frame
+	 *  is driven by exactly ONE collector -- the frame that installed it -- and that collector hands
+	 *  every stage its own context. Installing a frame into another collector would silently drive it
+	 *  through a sequence it does not belong to (a node is emitted only for stages the collector's
+	 *  list and the frame's list agree on), so the installing side compares this name with its OWN.
+	 *
+	 *  Core carries the name only: the answer comes from the frame's macro (`MAHO_DECLARE_FRAME` /
+	 *  `MAHO_DECLARE_FRAME_UNDER`), which stringifies the collector type it was given -- a name, never
+	 *  a type, because the installing side holds an `FFrameExtension*` and nothing else. Empty is the
+	 *  default for a hand-written frame, and the check reports that as "undecided" rather than
+	 *  accepting it silently. */
+	[[nodiscard]] virtual std::string_view GetCollectorName() const noexcept
+	{
+		return {};
+	}
+
 	/** Does this frame implement this stage, NAMED? The engine's frame macro answers it from the
 	 *  frame's OWN `IPipeline<TStages...>` list (`MAHO_DECLARE_FRAME`, Engine/Frame.h), which IS the
 	 *  frame's declaration of what it mounts -- so no `dynamic_cast` is involved and RTTI is not

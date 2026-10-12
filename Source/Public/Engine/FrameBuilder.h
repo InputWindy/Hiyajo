@@ -3,10 +3,11 @@
 #include <Core/Assembly.h>
 #include <Core/Delegate.h>
 #include <Core/Fatal.h>
+#include <Core/MetaData.h>
 #include <Core/FrameGraph.h>
 #include <Engine/Frame.h>
 #include <Engine/PluginManager.h>
-#include <Engine/Query.h>
+#include <Core/Query.h>
 
 #include <algorithm>
 #include <atomic>
@@ -291,6 +292,43 @@ protected:
 			EmitStatus(EFrameStatus::InstallRefused, Name, Path, Detail);
 			return false;
 		}
+
+		// ── install-time consistency (task 2'4): a frame is driven by exactly ONE collector, and the
+		// frame declares which. Every stage is handed ITS collector's context, and a node is emitted only
+		// for a stage the collector's sequence and the frame's own list agree on -- so a frame installed
+		// into the wrong collector is driven through a sequence it does not belong to, silently producing
+		// FEWER nodes. That is a model error, and it is invisible without this check.
+		//
+		// DECLARED vs ACTUAL: the frame answers with the collector its own macro named
+		// (`GetCollectorName`, Engine/Frame.h), this builder answers with the CRTP type's name, and the
+		// comparison strips namespace qualification so the two spellings of one type cannot disagree.
+		const std::string_view Declared = BareTypeName(Layer->GetCollectorName());
+		const std::string_view Mine = CollectorName();
+		if (Declared.empty() || Declared != Mine)
+		{
+			const std::string Detail = Declared.empty()
+				? std::string("the frame declares no collector (no MAHO_DECLARE_FRAME/MAHO_DECLARE_FRAME_UNDER)")
+				: ("declared collector '" + std::string(Declared) + "', installed by '"
+					+ std::string(Mine) + "'");
+			ReportError((std::string("Install refused: ") + Detail + ": '" + Name + "'").c_str());
+			EmitStatus(EFrameStatus::InstallRefused, Name, Path, Detail);
+			return false;
+		}
+
+		// ... and the process-wide half the per-frame comparison cannot see: one frame NAME belongs to
+		// ONE dispatch parent. Two installers of one name would be two instances claiming the same nodes
+		// -- the same error shape the duplicate-name refusal above catches INSIDE one collector, seen
+		// across collectors. Both facts are filed in Core's generic store (type `FrameInstalled`), so the
+		// check reads what an earlier install recorded rather than keeping a table of its own.
+		const std::string_view InstalledBefore = Detail::FindInstalledCollector(Name);
+		if (!InstalledBefore.empty() && InstalledBefore != Mine)
+		{
+			const std::string Detail = "already installed by '" + std::string(InstalledBefore) + "'";
+			ReportError((std::string("Install refused: ") + Detail + ": '" + Name + "'").c_str());
+			EmitStatus(EFrameStatus::InstallRefused, Name, Path, Detail);
+			return false;
+		}
+		Detail::DeclareFrameInstalledMeta(Name, Mine);
 
 		// No fail-fast dependency refusal here: features may legitimately reference
 		// each other cross-stage in ANY install order (e.g. Scene.Present depends on
@@ -1030,6 +1068,19 @@ private:
 		{
 			ReportError("layer event handler threw an unknown exception");
 		}
+	}
+
+	/** The COLLECTOR this builder belongs to, by NAME: the CRTP type IS the collector (this base is
+	 *  instantiated as `FFrameBuilder<FRender>`), so its static name is the very name a child declares
+	 *  with `MAHO_DECLARE_FRAME`/`_UNDER`. That is what makes the install-time check (task 2'4) a
+	 *  comparison of two spellings of one identity rather than a convention.
+	 *
+	 *  A STATIC function, not a virtual: the answer is a property of the TYPE, and `TContext` is
+	 *  complete wherever a member of this class is instantiated (its body is only instantiated at its
+	 *  first use, which is always inside the collector's own .cpp). */
+	[[nodiscard]] static constexpr std::string_view CollectorName() noexcept
+	{
+		return TContext::StaticName();
 	}
 
 	/** The collector's PER-PHASE state ("the slot"), derived from the collector itself -- `TContext` is

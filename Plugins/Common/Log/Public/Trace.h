@@ -1,6 +1,5 @@
 #pragma once
 
-#include <Core/BuildConfig.h>
 #include <Core/TypeList.h>
 
 // Trace -- CPU scope tracing for the profiling UI. It lives in the LOG plugin: the log plugin owns

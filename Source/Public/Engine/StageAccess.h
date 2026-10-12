@@ -27,7 +27,7 @@
 // The prefixed forms (`MAHO_ACCESS_CREATE(R)`, ...) are always available and mean exactly the same
 // thing -- use them in a HEADER, where a leaked short name would poison every includer.
 
-#include <Core/StageMetadata.h>
+#include <Engine/StageMetadata.h>
 
 /** `Create(X)` -- the resource X's lifetime starts at this stage. Expands to an `FResourceAccess`. */
 #define Create(R)  MAHO_ACCESS_CREATE(R)

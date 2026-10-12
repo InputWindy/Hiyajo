@@ -193,7 +193,7 @@ extern "C" MAHO_LOG_API Maho::FFrameExtension* CreateFrame()
 //                stops existing here. It runs BEFORE `spdlog::shutdown()`, and the edge that keeps
 //                logging alive during teardown is exactly what this row (once step 4 derives edges
 //                from it) will state.
-#include <Core/StageAccess.h>
+#include <Engine/StageAccess.h>
 
 namespace Maho
 {

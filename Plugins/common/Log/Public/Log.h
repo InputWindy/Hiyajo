@@ -1,6 +1,5 @@
 #pragma once
 
-#include <Core/BuildConfig.h>
 
 // fmt stays unconditional: the passthrough templates below name fmt::format_string in their
 // SIGNATURES, and call sites (e.g. `MAHO_IF_NOT_NULL(GetLog(), L) { L->Warn("..."); }`) must keep
@@ -179,7 +178,7 @@ private:
 //   MAHO_LOG_CORE_INFO("init {}", name);
 //   MAHO_LOG_CORE_ERROR("boom: code={}", code);
 //
-// IN SHIPPING (MAHO_WITH_LOGGING == 0, see Core/BuildConfig.h) THEY EXPAND TO NOTHING: logging is a
+// IN SHIPPING (MAHO_WITH_LOGGING == 0, see Tools/maho_tools.py) THEY EXPAND TO NOTHING: logging is a
 // diagnostic the release build does not carry, so the arguments are not even evaluated (do not put
 // required side effects in a log call). ReportFatal/ReportError still work -- a crash must stay
 // explicable.

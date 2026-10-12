@@ -2,7 +2,7 @@
 
 #include <Core/Assembly.h>
 #include <Core/Interface.h>
-#include <Engine/Query.h>
+#include <Core/Query.h>
 #include <Engine/Frame.h>
 #include <Engine/FrameBuilder.h>
 
@@ -102,6 +102,20 @@ using FShutdownStages = TTypeList<IPreShutdown, IShutdown, IPostShutdown>;
 class MAHO_API FEngineBase : public FFrameBuilder<FEngineBase>
 {
 public:
+	/** The COLLECTOR's own name. Every other collector gets one from `MAHO_DECLARE_FRAME`
+	 *  (`FRender`, `FGameWorld`, `FExampleEditor`); the host BASE has no such declaration -- it is the
+	 *  collector every plain `MAHO_DECLARE_FRAME` sub-frame names, and its own identity is the one the
+	 *  install-time check compares against (see `FFrameBuilder::CollectorName`, task 2'4).
+	 *
+	 *  DISTINCT from the HOST's name on purpose: `MAHO_DECLARE_ENGINE` gives the concrete host
+	 *  (`FExampleEngine`) its own `StaticName()`, which is the INSTALL TREE's root key, while this is
+	 *  the name of the collector ROLE the host plays -- a host sub-frame declares `FEngineBase`, not the
+	 *  engine it happens to be running under. */
+	static constexpr std::string_view StaticName() noexcept
+	{
+		return "FEngineBase";
+	}
+
 	/** Per-frame state for the ENGINE's own stages -- one instance per ring slot.
 	 *
 	 *  EMPTY FOR NOW on purpose: this step only establishes the slot plumbing (a stage receives the

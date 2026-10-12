@@ -1,5 +1,29 @@
 #include <Core/Fatal.h>
 
+// ── THE BUILD MATRIX'S GUARDS ───────────────────────────────────────────────────────────────────
+//
+// The build shape -- which configuration, which target, and everything derived from that pair
+// (`MAHO_DO_*`, `MAHO_WITH_*`) -- is INJECTED BY THE GENERATOR (`Tools/maho_tools.py`, one
+// `add_compile_definitions` block, per configuration), so there is no C++ header holding it and no
+// fallback to fall back on: a target the generator did not configure simply has no axes at all.
+//
+// The guards therefore have to be somewhere that is ALWAYS compiled, and one translation unit is
+// enough -- failing this file fails the build. What they exist for is the failure mode a missing
+// macro does NOT produce on its own: `#if MAHO_DO_CHECK` on an undefined macro reads as 0, i.e. every
+// check, every log and every trace silently disappears from a build nobody meant to strip. That is
+// worth an `#error` at the first opportunity.
+#ifndef MAHO_BUILD_TYPE
+#	error "MAHO_BUILD_TYPE is undefined: this target was not configured by the generator (Tools/maho_tools.py), which is the only definition site of the build-shape macros. Build through the generated project."
+#endif
+#ifndef MAHO_BUILD_TARGET
+#	error "MAHO_BUILD_TARGET is undefined: this target was not configured by the generator (Tools/maho_tools.py). Build through the generated project."
+#endif
+// Shipping x Editor contradicts itself: an editor needs the very facilities Shipping removes. Ship an
+// editor with Release x Editor instead.
+#if defined(MAHO_EDITOR_BUILD) && defined(MAHO_BUILD_SHIPPING)
+#	error "Shipping x Editor is not a valid combination -- ship an editor with Release x Editor."
+#endif
+
 // For GetCurrentGraphNode(): the crash reporter names the node body that was running (see the
 // PrintAddressStack note). Same module, so this is a direct call, and it is the ONE thing that turns
 // "0xC0000005 at <module+offset>" into "which of the ~35 nodes of this frame did it".

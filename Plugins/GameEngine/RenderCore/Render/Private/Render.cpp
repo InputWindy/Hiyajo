@@ -2062,7 +2062,7 @@ extern "C" MAHO_RENDER_API Maho::FFrameExtension* CreateFrame()
 //
 // Reads of `FLog` are reads of another frame's service -- the teardown-logging relation the graph has to
 // keep alive while layers tear down. Recorded, not yet derived from (step 4).
-#include <Core/StageAccess.h>
+#include <Engine/StageAccess.h>
 
 namespace Maho
 {

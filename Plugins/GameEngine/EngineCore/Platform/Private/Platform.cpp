@@ -1179,7 +1179,7 @@ extern "C" MAHO_API Maho::FFrameExtension* CreateFrame()
 //                   destroy -- the window is still alive.
 //   IShutdown    -- the window is destroyed and the platform thread joined: the resource stops
 //                   existing here.
-#include <Core/StageAccess.h>
+#include <Engine/StageAccess.h>
 
 namespace Maho
 {

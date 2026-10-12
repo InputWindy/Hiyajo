@@ -1,4 +1,6 @@
-#include <Core/StageMetadata.h>
+#include <Engine/StageMetadata.h>
+
+#include <Core/MetaData.h>
 
 // StageMetadata.cpp -- the graph-level access table's storage, its lookup and its dump.
 //
@@ -198,7 +200,7 @@ void DumpStageAccess()
 		std::fprintf(stderr, "[fgmeta] rows=%zu\n", Rows.size());
 		for (const FStageAccessRow* Row : Rows)
 		{
-			std::fprintf(stderr, "[fgmeta] row %.*s::%.*s method=%.*s kind=%s accesses=",
+			std::fprintf(stderr, "[fgmeta] row %.*s::%.*s method=%.*s type=%s accesses=",
 				static_cast<int>(Row->Frame.size()), Row->Frame.data(),
 				static_cast<int>(Row->Stage.size()), Row->Stage.data(),
 				static_cast<int>(Row->Method.size()), Row->Method.data(),
@@ -221,5 +223,39 @@ void DumpStageAccess()
 		std::fflush(stderr);
 	});
 }
+
+// ── the RESOURCE vocabulary's registrars (Engine/ResourceName.h, this header) ───────────────────
+//
+// They live HERE, on the engine side, because a resource and its ordering are concepts the SCHEDULE
+// has (a stage touches a resource; the ordering says what a mode pair implies for edge derivation) --
+// not concepts Core has. Core owns the store and nothing about what is put in it: see the note at the
+// bottom of its .cpp.
+//
+// Out of line for the usual reason: the declaration macros are expanded in plugin modules, so these
+// constructors have to be imported symbols rather than inline bodies each of those modules instantiates.
+
+namespace Detail
+{
+
+FResourceRegistrar::FResourceRegistrar(std::string_view Resource) noexcept
+{
+	if (!Resource.empty())
+	{
+		// The VALUE is empty on purpose: a declaration says "this name exists", and the name IS the
+		// key. Whether anything touches it, and in which modes, is read off the access rows.
+		GetMetaData().Register(KResourceType, Resource, {});
+	}
+}
+
+FResourceOrderingRegistrar::FResourceOrderingRegistrar(std::string_view Resource,
+	std::string_view Ordering) noexcept
+{
+	if (!Resource.empty())
+	{
+		GetMetaData().Register(KResourceOrderingType, Resource, Ordering);
+	}
+}
+
+} // namespace Detail
 
 } // namespace Maho

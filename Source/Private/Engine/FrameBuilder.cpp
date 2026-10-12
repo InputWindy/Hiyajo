@@ -89,4 +89,33 @@ void ReportBridgeDiagnostics(const std::vector<FFrameBridge::FDiagnostic>& Diagn
 // compare against a single shared RTTI record across the DLL boundary.
 IFrameCollector::~IFrameCollector() = default;
 
+// ── the engine's metadata registrars (Engine/Frame.h) ───────────────────────────────────────────
+//
+// Out of line for the same reason as everything else in this file: a declaration macro is expanded in
+// plugin modules, so these constructors have to be imported symbols rather than inline bodies each of
+// those modules instantiates. Their bodies are the whole ENCODING of the two axes the engine owns;
+// what a record MEANS lives in Engine/Frame.h, next to the decoders.
+
+namespace Detail
+{
+
+FFrameRegistrar::FFrameRegistrar(std::string_view Frame, std::string_view Collector) noexcept
+{
+	if (!Frame.empty())
+	{
+		DeclareFrameMeta(Frame, Collector);
+	}
+}
+
+FStageProtocolRegistrar::FStageProtocolRegistrar(std::string_view Stage, std::string_view Method,
+	std::string_view Context) noexcept
+{
+	if (!Stage.empty())
+	{
+		DeclareStageMeta(Stage, Method, Context);
+	}
+}
+
+} // namespace Detail
+
 } // namespace Maho

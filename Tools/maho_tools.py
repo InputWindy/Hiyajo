@@ -1133,17 +1133,30 @@ def _config_def(name: str, debug: str, release: str, shipping: str) -> str:
 def _build_config_block(build_type: str, configuration: str) -> str:
 	"""The compile-definition block for one declared cell (the axes), as CMake source."""
 	defs = [
-		# -- axis: exactly one configuration, plus the guard for "not one of ours"
+		# -- the two axes AS VALUES, so code can report the cell it was built as without a C++ header
+		#    holding them (`MAHO_BUILD_TYPE=Release`, `MAHO_BUILD_TARGET=Editor` -- identifiers, so the
+		#    string form is a stringize away and no quoting has to survive CMake).
+		(
+			"$<$<CONFIG:Debug>:MAHO_BUILD_TYPE=Debug>"
+			"$<$<CONFIG:Release>:MAHO_BUILD_TYPE=Release>"
+			"$<$<CONFIG:Shipping>:MAHO_BUILD_TYPE=Shipping>"
+		),
+		# -- and the `defined()`-style companions the preprocessor branches on, one per configuration.
+		#    A configuration the generator does NOT know leaves MAHO_BUILD_TYPE undefined, which is
+		#    exactly the state Core's guard (Private/Core/Fatal.cpp) turns into an #error -- there is no
+		#    fallback to fall back on any more, by design.
 		(
 			"$<$<CONFIG:Debug>:MAHO_BUILD_DEBUG=1>"
 			"$<$<CONFIG:Release>:MAHO_BUILD_RELEASE=1>"
 			"$<$<CONFIG:Shipping>:MAHO_BUILD_SHIPPING=1>"
-			f"$<$<NOT:$<OR:{_CONF_GENEX}>>:MAHO_BUILD_UNSUPPORTED=1>"
 		),
 	]
 	if build_type == "Editor":
 		# The target axis is per PROJECT (a project is generated for one target), so it is plain.
+		defs.append("MAHO_BUILD_TARGET=Editor")
 		defs.append("MAHO_EDITOR_BUILD")
+	else:
+		defs.append("MAHO_BUILD_TARGET=Runtime")
 	# -- behavior: which checks exist (Debug keeps all, Release drops the expensive ones,
 	#    Shipping drops the checks themselves)
 	defs.append(_config_def("MAHO_DO_CHECK", "1", "1", "0"))
@@ -1158,14 +1171,16 @@ def _build_config_block(build_type: str, configuration: str) -> str:
 	defs.append(_config_def("MAHO_WITH_GLSLANG", "1", "1", "0"))
 	defs.append(_config_def("MAHO_WITH_STATS", "1", "1", "0"))
 	# The configurations the solution offers. Shipping is NOT offered for an Editor project: the
-	# combination is self-contradictory, so it should not even be selectable (Core/BuildConfig.h
-	# still rejects it, for a hand-edited toolchain).
+	# combination is self-contradictory, so it should not even be selectable (Core's guard in
+	# Private/Core/Fatal.cpp still rejects it, for a hand-edited toolchain).
 	configs = "Debug;Release" if build_type == "Editor" else "Debug;Release;Shipping"
 	body = "\n".join(f"\t{d}" for d in defs)
 	return (
 		f"# -- build configuration matrix (derived; spec: openspec/changes/add-build-configuration)\n"
 		f"# BuildType={build_type}, Configuration={configuration}. Values are per configuration, so this\n"
-		f"# one generated project builds all of them; Core/BuildConfig.h owns the fallbacks + guards.\n"
+		f"# one generated project builds all of them; the axes are injected HERE and nowhere else (the\n"
+		f"# guards that turn a cell the generator does not know into a build error live in Core's\n"
+		f"# Private/Core/Fatal.cpp -- there is no C++ header for any of this).\n"
 		f'set(CMAKE_CONFIGURATION_TYPES "{configs}" CACHE STRING "Maho configurations" FORCE)\n'
 		f"# Shipping is Release's optimization with the diagnostics removed by the macros below -- the\n"
 		f"# difference is not a compiler flag, so the flags are simply Release's.\n"

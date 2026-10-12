@@ -414,7 +414,7 @@ extern "C" MAHO_SCRIPT_API Maho::FFrameExtension* CreateFrame()
 //
 //   IInit     -- the backends are created and started, the system published: `Create`.
 //   IShutdown -- every backend is stopped and dropped, the published pointer cleared: `Destroy`.
-#include <Core/StageAccess.h>
+#include <Engine/StageAccess.h>
 
 namespace Maho
 {

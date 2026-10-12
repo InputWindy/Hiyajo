@@ -3,7 +3,9 @@ cmake_minimum_required(VERSION 3.20)
 project(ExampleEngine LANGUAGES CXX)
 # -- build configuration matrix (derived; spec: openspec/changes/add-build-configuration)
 # BuildType=Editor, Configuration=Debug. Values are per configuration, so this
-# one generated project builds all of them; Core/BuildConfig.h owns the fallbacks + guards.
+# one generated project builds all of them; the axes are injected HERE and nowhere else (the
+# guards that turn a cell the generator does not know into a build error live in Core's
+# Private/Core/Fatal.cpp -- there is no C++ header for any of this).
 set(CMAKE_CONFIGURATION_TYPES "Debug;Release" CACHE STRING "Maho configurations" FORCE)
 # Shipping is Release's optimization with the diagnostics removed by the macros below -- the
 # difference is not a compiler flag, so the flags are simply Release's.
@@ -11,7 +13,9 @@ set(CMAKE_CXX_FLAGS_SHIPPING "${CMAKE_CXX_FLAGS_RELEASE}")
 set(CMAKE_EXE_LINKER_FLAGS_SHIPPING "${CMAKE_EXE_LINKER_FLAGS_RELEASE}")
 set(CMAKE_SHARED_LINKER_FLAGS_SHIPPING "${CMAKE_SHARED_LINKER_FLAGS_RELEASE}")
 add_compile_definitions(
-	$<$<CONFIG:Debug>:MAHO_BUILD_DEBUG=1>$<$<CONFIG:Release>:MAHO_BUILD_RELEASE=1>$<$<CONFIG:Shipping>:MAHO_BUILD_SHIPPING=1>$<$<NOT:$<OR:$<CONFIG:Debug>,$<CONFIG:Release>,$<CONFIG:Shipping>>>:MAHO_BUILD_UNSUPPORTED=1>
+	$<$<CONFIG:Debug>:MAHO_BUILD_TYPE=Debug>$<$<CONFIG:Release>:MAHO_BUILD_TYPE=Release>$<$<CONFIG:Shipping>:MAHO_BUILD_TYPE=Shipping>
+	$<$<CONFIG:Debug>:MAHO_BUILD_DEBUG=1>$<$<CONFIG:Release>:MAHO_BUILD_RELEASE=1>$<$<CONFIG:Shipping>:MAHO_BUILD_SHIPPING=1>
+	MAHO_BUILD_TARGET=Editor
 	MAHO_EDITOR_BUILD
 	$<$<CONFIG:Debug>:MAHO_DO_CHECK=1>$<$<CONFIG:Release>:MAHO_DO_CHECK=1>$<$<CONFIG:Shipping>:MAHO_DO_CHECK=0>$<$<NOT:$<OR:$<CONFIG:Debug>,$<CONFIG:Release>,$<CONFIG:Shipping>>>:MAHO_DO_CHECK=1>
 	$<$<CONFIG:Debug>:MAHO_DO_ENSURE=1>$<$<CONFIG:Release>:MAHO_DO_ENSURE=1>$<$<CONFIG:Shipping>:MAHO_DO_ENSURE=0>$<$<NOT:$<OR:$<CONFIG:Debug>,$<CONFIG:Release>,$<CONFIG:Shipping>>>:MAHO_DO_ENSURE=1>

@@ -167,7 +167,7 @@ template <> struct TCVarType<std::string> { static constexpr ECVarType Value = E
  *   static TAutoConsoleVariable<int> CVarQuality("r.Quality", 2, "quality tier", ECVarFlags::Shipping);
  *
  * A SHIPPING build registers only the variables flagged `ECVarFlags::Shipping` (see
- * Core/BuildConfig.h: a release carries what the product needs, not the development knobs). An
+ * Tools/maho_tools.py: a release carries what the product needs, not the development knobs). An
  * unregistered variable is not gone -- `GetValue`/`Set` keep working on its own copy, so a setting
  * a release pruned reads as its default instead of breaking the build.
  *
