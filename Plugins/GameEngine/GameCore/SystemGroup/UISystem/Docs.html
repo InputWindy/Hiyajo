@@ -41,10 +41,10 @@ h2.file-title{font-size:20px;margin:0 0 18px;color:#fff}
      padding:16px 18px;margin-bottom:16px}
 .ent h3{font-size:15px;margin:0 0 10px;color:#fff}
 .ent .base{font-size:12px;color:var(--sub);font-weight:400}
-.ent .kind{font-size:10.5px;color:#0f1420;background:var(--accent);border-radius:3px;
+.ent .type{font-size:10.5px;color:#0f1420;background:var(--accent);border-radius:3px;
            padding:1px 6px;margin-right:8px;vertical-align:middle}
-.e-struct .kind{background:#7de8d8} .e-enum .kind{background:var(--warn)}
-.e-macro .kind{background:#c58fff} .e-alias .kind{background:#9fb0c8}
+.e-struct .type{background:#7de8d8} .e-enum .type{background:var(--warn)}
+.e-macro .type{background:#c58fff} .e-alias .type{background:#9fb0c8}
 .card{background:#182238;border:1px solid var(--line);border-radius:8px;padding:14px 16px;
       margin:0 0 16px}
 .card-title{font-size:14px;margin:0 0 8px;color:#fff}
@@ -142,7 +142,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table>
 </div>
 <div class="ent e-struct" id="Public__UISystem_h-0">
-<h3><span class="kind">结构体</span> FUIWidget</h3>
+<h3><span class="type">结构体</span> FUIWidget</h3>
 <div class="sect"><div class="doc">
 <p>ECS 侧的 UI 控件：**一棵持久声明式 UI 树的持有者**。它是组件，所以必须可按值搬移（组件池扩容时整池元素被 move）—— 这就是这里用 `shared_ptr` 而不是 `unique_ptr` 的原因：拷贝语义让「池增长」这条最热的路径保持平凡有效。</p>
 </div></div>
@@ -153,7 +153,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table></div>
 </div>
 <div class="ent e-class" id="Public__UISystem_h-1">
-<h3><span class="kind">类</span> FUISystem <span class="base">: FFrameExtension + IPipeline&lt;IOnInstalled, IProcessInput, IUpdate, IPreUnInstall&gt;</span></h3>
+<h3><span class="type">类</span> FUISystem <span class="base">: FFrameExtension + IPipeline&lt;IOnInstalled, IProcessInput, IUpdate, IPreUnInstall&gt;</span></h3>
 <div class="sect"><div class="doc">
 <p>世界系统本身：两个基类（`FFrameExtension` 声明层 + `IPipeline&lt;...&gt;` 有序子 stage 列表）。它只挂世界真正会派发的那四个子 stage —— stage 列表就是它的能力声明，多挂一个（比如 `IFixedUpdate`）会让世界的固定步进序列给它派发节点，而它并没有固定步进的语义。</p>
 <p>**四个 stage 里的实际内容**：`OnInstalled` 发布全局访问器；`Update` 是唯一有逻辑的（建立/复用视图 → 回传事件 → 独占写重新声明树）；`ProcessInput` 是声明出来但空的能力（UI 输入由翻译层直接投递给树，游戏侧没有可轮询的东西）；`PreUnInstall` 注销视图。</p>
@@ -194,7 +194,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table>
 </div>
 <div class="ent e-macro" id="Public__UISystemApi_h-0">
-<h3><span class="kind">宏</span> MAHO_UISYSTEM_API <span class="base">: MAHO_EXPORT / MAHO_IMPORT（按 MAHO_UISYSTEM_MODULE_EXPORTS 切换）</span></h3>
+<h3><span class="type">宏</span> MAHO_UISYSTEM_API <span class="base">: MAHO_EXPORT / MAHO_IMPORT（按 MAHO_UISYSTEM_MODULE_EXPORTS 切换）</span></h3>
 <div class="sect"><div class="doc">
 <p>挂在 `FUISystem`、`GetUISystem()` 与 cpp 里的 `CreateFrame()` 上。</p>
 </div></div>

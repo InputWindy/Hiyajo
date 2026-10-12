@@ -41,10 +41,10 @@ h2.file-title{font-size:20px;margin:0 0 18px;color:#fff}
      padding:16px 18px;margin-bottom:16px}
 .ent h3{font-size:15px;margin:0 0 10px;color:#fff}
 .ent .base{font-size:12px;color:var(--sub);font-weight:400}
-.ent .kind{font-size:10.5px;color:#0f1420;background:var(--accent);border-radius:3px;
+.ent .type{font-size:10.5px;color:#0f1420;background:var(--accent);border-radius:3px;
            padding:1px 6px;margin-right:8px;vertical-align:middle}
-.e-struct .kind{background:#7de8d8} .e-enum .kind{background:var(--warn)}
-.e-macro .kind{background:#c58fff} .e-alias .kind{background:#9fb0c8}
+.e-struct .type{background:#7de8d8} .e-enum .type{background:var(--warn)}
+.e-macro .type{background:#c58fff} .e-alias .type{background:#9fb0c8}
 .card{background:#182238;border:1px solid var(--line);border-radius:8px;padding:14px 16px;
       margin:0 0 16px}
 .card-title{font-size:14px;margin:0 0 8px;color:#fff}
@@ -79,7 +79,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div id="app">
   <div id="side">
     <h1>Maho 引擎源码</h1>
-    <div class="search" title="左侧扫描 Source/**/*.h：2 个头文件 · 已声明 2 个 · 4 个实体 / 19 个成员 ｜ 内容在 Tools/docs_content.py 里逐条声明">
+    <div class="search" title="左侧扫描 Source/**/*.h：3 个头文件 · 已声明 2 个 · 4 个实体 / 19 个成员 ｜ 内容在 Tools/docs_content.py 里逐条声明">
       <input id="q" type="search" placeholder="搜索头文件…  （如 Frame、Core、Entry）" autocomplete="off">
     </div>
     <div id="tree"><ul>
@@ -87,6 +87,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <ul>
 <li class="file"><a href="#Public__Log_h" data-file="Public__Log_h">Log.h</a></li>
 <li class="file"><a href="#Public__LogApi_h" data-file="Public__LogApi_h">LogApi.h</a></li>
+<li class="file"><a href="#Public__Trace_h" data-file="Public__Trace_h">Trace.h</a></li>
 </ul>
 </li>
 </ul></div>
@@ -151,13 +152,13 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table>
 </div>
 <div class="ent e-enum" id="Public__Log_h-0">
-<h3><span class="kind">枚举</span> ELogLevel</h3>
+<h3><span class="type">枚举</span> ELogLevel</h3>
 <div class="sect"><div class="doc">
 <p>日志级别枚举 —— 它的存在是为了**把 spdlog 的级别类型挡在边界外**：引擎内部只认这 6 档，映射发生在 `Log.cpp` 里；换日志库不影响任何调用点。</p>
 </div></div>
 </div>
 <div class="ent e-struct" id="Public__Log_h-1">
-<h3><span class="kind">结构体</span> FLogMessage</h3>
+<h3><span class="type">结构体</span> FLogMessage</h3>
 <div class="sect"><div class="doc">
 <p>**一条被捕获的日志**。订阅者按 `<span class="kw">const</span>&amp;` 收到它。</p>
 <p>**为什么是值快照**：`std::string` 是拷贝过的，所以订阅者可以把它存下来（例如投递到别的线程 / 塞进环形缓冲）而不用担心源缓冲区失效 —— 这与 `string_view` 风格的「只在回调期间有效」形成明确对比。</p>
@@ -171,7 +172,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table></div>
 </div>
 <div class="ent e-class" id="Public__Log_h-2">
-<h3><span class="kind">类</span> FLog <span class="base">: FFrameExtension, IPipeline&lt;IInit, IShutdown&gt;</span></h3>
+<h3><span class="type">类</span> FLog <span class="base">: FFrameExtension, IPipeline&lt;IInit, IShutdown&gt;</span></h3>
 <div class="sect"><div class="doc">
 <p>日志层本体 —— **帧而不是单例**，因为它要持有 spdlog 日志器这份需要被显式建立 / 冲刷 / 释放的资源：`IInit` 建起来，`IShutdown` 冲刷并放掉。</p>
 <p>**为什么只挂两个 stage**：日志不参与更早 / 更晚的时序决策，它只要求「在别人开始记日志之前就绪，在别人还在记日志时别走」——后半句由别的层声明 `BlockOn` 反向边表达（依赖方向由消费者声明）。</p>
@@ -219,12 +220,17 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table>
 </div>
 <div class="ent e-macro" id="Public__LogApi_h-0">
-<h3><span class="kind">宏</span> MAHO_LOG_API <span class="base">: MAHO_EXPORT / MAHO_IMPORT（随构建开关切换）</span></h3>
+<h3><span class="type">宏</span> MAHO_LOG_API <span class="base">: MAHO_EXPORT / MAHO_IMPORT（随构建开关切换）</span></h3>
 <div class="sect"><div class="doc">
 <p>编译 `Log.dll` 时构建系统定义 `MAHO_LOG_MODULE_EXPORTS` ⇒ `MAHO_EXPORT`；消费方是 `MAHO_IMPORT`。</p>
 <p>**为什么必须有**：`FLog* GetLog()` 跨 DLL 返回值类型，`FLog` 的虚表与删除析构符必须只在本模块生成；`dllimport` 把「消费方自己生成一份」变成编译错误，而不是留到关服时在 `<span class="kw">delete</span>` 里静默崩。</p>
 </div></div>
 </div>
+</div>
+<div class="pane" id="pane-Public__Trace_h">
+<div class="hdr">Public/Trace.h</div>
+<h2 class="file-title">Trace.h</h2>
+<div class="empty">（尚未声明内容 —— 在 Tools/docs_content.py 里加一条 Header(&quot;Public/Trace.h&quot;)，再逐类声明 Class / Interface / Field）</div>
 </div></div>
 </div>
 <script>

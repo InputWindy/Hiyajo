@@ -41,10 +41,10 @@ h2.file-title{font-size:20px;margin:0 0 18px;color:#fff}
      padding:16px 18px;margin-bottom:16px}
 .ent h3{font-size:15px;margin:0 0 10px;color:#fff}
 .ent .base{font-size:12px;color:var(--sub);font-weight:400}
-.ent .kind{font-size:10.5px;color:#0f1420;background:var(--accent);border-radius:3px;
+.ent .type{font-size:10.5px;color:#0f1420;background:var(--accent);border-radius:3px;
            padding:1px 6px;margin-right:8px;vertical-align:middle}
-.e-struct .kind{background:#7de8d8} .e-enum .kind{background:var(--warn)}
-.e-macro .kind{background:#c58fff} .e-alias .kind{background:#9fb0c8}
+.e-struct .type{background:#7de8d8} .e-enum .type{background:var(--warn)}
+.e-macro .type{background:#c58fff} .e-alias .type{background:#9fb0c8}
 .card{background:#182238;border:1px solid var(--line);border-radius:8px;padding:14px 16px;
       margin:0 0 16px}
 .card-title{font-size:14px;margin:0 0 8px;color:#fff}
@@ -138,7 +138,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table>
 </div>
 <div class="ent e-class" id="Public__EditorTheme_h-0">
-<h3><span class="kind">类</span> FEditorTheme <span class="base">: FFrameExtension + IPipeline&lt;IEditorInit, IEditorPanel, IEditorShutdown&gt;</span></h3>
+<h3><span class="type">类</span> FEditorTheme <span class="base">: FFrameExtension + IPipeline&lt;IEditorInit, IEditorPanel, IEditorShutdown&gt;</span></h3>
 <div class="sect"><div class="doc">
 <p>主题调参面板本体。**`IEditorInit` 在这里承载真实工作**（装默认值 + 恢复持久主题），不是装饰：它跑在安装安全点上，早于第一帧；`IEditorPanel` 每帧重建树；`IEditorShutdown` 注销视图。它不持有任何后端 / RHI 资源，只持两块 <span class="kw">float</span> 缓冲与几个小缓冲。</p>
 </div></div>
@@ -181,7 +181,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table>
 </div>
 <div class="ent e-macro" id="Public__EditorThemeApi_h-0">
-<h3><span class="kind">宏</span> MAHO_EDITORTHEME_API <span class="base">: MAHO_EXPORT / MAHO_IMPORT（按 MAHO_EDITORTHEME_MODULE_EXPORTS 切换）</span></h3>
+<h3><span class="type">宏</span> MAHO_EDITORTHEME_API <span class="base">: MAHO_EXPORT / MAHO_IMPORT（按 MAHO_EDITORTHEME_MODULE_EXPORTS 切换）</span></h3>
 <div class="sect"><div class="doc">
 <p>面板类当前不带它。**面板真正跨 DLL 调用的是 `ExampleEditorTheme.h` 的那批函数** —— 它们由编辑器宿主的模块导出（见那一页），本头不重复声明任何东西。</p>
 </div></div>

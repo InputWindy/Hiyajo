@@ -41,10 +41,10 @@ h2.file-title{font-size:20px;margin:0 0 18px;color:#fff}
      padding:16px 18px;margin-bottom:16px}
 .ent h3{font-size:15px;margin:0 0 10px;color:#fff}
 .ent .base{font-size:12px;color:var(--sub);font-weight:400}
-.ent .kind{font-size:10.5px;color:#0f1420;background:var(--accent);border-radius:3px;
+.ent .type{font-size:10.5px;color:#0f1420;background:var(--accent);border-radius:3px;
            padding:1px 6px;margin-right:8px;vertical-align:middle}
-.e-struct .kind{background:#7de8d8} .e-enum .kind{background:var(--warn)}
-.e-macro .kind{background:#c58fff} .e-alias .kind{background:#9fb0c8}
+.e-struct .type{background:#7de8d8} .e-enum .type{background:var(--warn)}
+.e-macro .type{background:#c58fff} .e-alias .type{background:#9fb0c8}
 .card{background:#182238;border:1px solid var(--line);border-radius:8px;padding:14px 16px;
       margin:0 0 16px}
 .card-title{font-size:14px;margin:0 0 8px;color:#fff}
@@ -168,7 +168,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table>
 </div>
 <div class="ent e-struct" id="Public__Core__Assembly_h-0">
-<h3><span class="kind">结构体</span> FModuleDeleter</h3>
+<h3><span class="type">结构体</span> FModuleDeleter</h3>
 <div class="sect"><div class="doc">
 <p>自定义删除器：模块句柄用 `FreeLibrary` / `dlclose` 释放，**不是** `<span class="kw">delete</span>`。`FAssembly` 用它以 RAII 持有句柄，宿主只需持有 `FAssembly` 值。</p>
 </div></div>
@@ -179,7 +179,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table></div>
 </div>
 <div class="ent e-class" id="Public__Core__Assembly_h-1">
-<h3><span class="kind">类</span> FAssembly</h3>
+<h3><span class="type">类</span> FAssembly</h3>
 <div class="sect"><div class="doc">
 <p>一个已装载的代码单元：OS 模块句柄 + 符号查找。纯装载原语 —— 不认插件 / 清单 / 工厂，怎么解释这个模块完全由消费者决定。句柄唯一持有（move-only）：只要还有从它构造出来的实例活着，就必须让它也活着，否则先卸载再用就是 use-after-free。</p>
 </div></div>
@@ -231,13 +231,13 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table>
 </div>
 <div class="ent e-alias" id="Public__Core__Delegate_h-0">
-<h3><span class="kind">别名</span> FSubscriptionID <span class="base">: uint64_t</span></h3>
+<h3><span class="type">别名</span> FSubscriptionID <span class="base">: uint64_t</span></h3>
 <div class="sect"><div class="doc">
 <p>不透明的订阅号：`Bind` 返回、`Unbind` 消费。**永不重用**，所以陈旧号的 Unbind 只会是无操作。</p>
 </div></div>
 </div>
 <div class="ent e-class" id="Public__Core__Delegate_h-1">
-<h3><span class="kind">类</span> TMulticastEvent&lt;Signature&gt;</h3>
+<h3><span class="type">类</span> TMulticastEvent&lt;Signature&gt;</h3>
 <div class="sect"><div class="doc">
 <p>线程安全的多播事件（bind + broadcast）。任意线程可绑定 / 解绑 / 广播；Broadcast 锁内复制处理器集合、锁外调用，因此处理器可以安全再入本事件。</p>
 </div></div>
@@ -375,7 +375,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table>
 </div>
 <div class="ent e-struct" id="Public__Core__FrameGraph_h-0">
-<h3><span class="kind">结构体</span> FTaskKey</h3>
+<h3><span class="type">结构体</span> FTaskKey</h3>
 <div class="sect"><div class="doc">
 <p>一个节点实例的**身份三元组**。依赖就是指向目标实例的身份 —— 没有 delta、没有弱依赖标志。</p>
 </div></div>
@@ -393,7 +393,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table></div>
 </div>
 <div class="ent e-struct" id="Public__Core__FrameGraph_h-1">
-<h3><span class="kind">结构体</span> FTaskKeyHash</h3>
+<h3><span class="type">结构体</span> FTaskKeyHash</h3>
 <div class="sect"><div class="doc">
 <p>`FTaskKey` 的哈希（`unordered_map` 注册表用）。</p>
 </div></div>
@@ -404,7 +404,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table></div>
 </div>
 <div class="ent e-struct" id="Public__Core__FrameGraph_h-2">
-<h3><span class="kind">结构体</span> FDependency</h3>
+<h3><span class="type">结构体</span> FDependency</h3>
 <div class="sect"><div class="doc">
 <p>一条依赖 / 阻塞：就是目标实例的身份。</p>
 </div></div>
@@ -415,7 +415,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table></div>
 </div>
 <div class="ent e-struct" id="Public__Core__FrameGraph_h-3">
-<h3><span class="kind">结构体</span> FTask</h3>
+<h3><span class="type">结构体</span> FTask</h3>
 <div class="sect"><div class="doc">
 <p>一条**声明**（每帧提交、可校验）：身份 + 依赖 + 执行体。</p>
 </div></div>
@@ -429,7 +429,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table></div>
 </div>
 <div class="ent e-struct" id="Public__Core__FrameGraph_h-4">
-<h3><span class="kind">结构体</span> FTaskNode</h3>
+<h3><span class="type">结构体</span> FTaskNode</h3>
 <div class="sect"><div class="doc">
 <p>运行时节点：调度线程私有状态。</p>
 </div></div>
@@ -446,7 +446,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table></div>
 </div>
 <div class="ent e-class" id="Public__Core__FrameGraph_h-5">
-<h3><span class="kind">类</span> FFrameExtension</h3>
+<h3><span class="type">类</span> FFrameExtension</h3>
 <div class="sect"><div class="doc">
 <p>**声明层**：只闭合自己 —— 一个稳定名字 + 它声明的边。它不知道 stage 序列（那是引擎侧的事），也不管理依赖生命周期。</p>
 </div></div>
@@ -467,7 +467,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table></div>
 </div>
 <div class="ent e-class" id="Public__Core__FrameGraph_h-6">
-<h3><span class="kind">类</span> FFrameBridge</h3>
+<h3><span class="type">类</span> FFrameBridge</h3>
 <div class="sect"><div class="doc">
 <p>**桥**：把「frame 集合 + stage 序列 + 帧号」建成一批 `FTask`。它只构建、不提交（提交是调用方的事），所以桥不涉及准入 / 占用。</p>
 </div></div>
@@ -487,7 +487,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table></div>
 </div>
 <div class="ent e-class" id="Public__Core__FrameGraph_h-7">
-<h3><span class="kind">类</span> FFrameGraph <span class="base">: FThreadedServer</span></h3>
+<h3><span class="type">类</span> FFrameGraph <span class="base">: FThreadedServer</span></h3>
 <div class="sect"><div class="doc">
 <p>**调度器**。全部图状态只被调度线程触碰，所以**没有图锁**；调度线程也**绝不阻塞** （准入与栅栏的等待都发生在调用方）。</p>
 </div></div>
@@ -529,7 +529,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table>
 </div>
 <div class="ent e-class" id="Public__Core__Interface_h-0">
-<h3><span class="kind">类</span> IPlugin&lt;TCapabilities...&gt;</h3>
+<h3><span class="type">类</span> IPlugin&lt;TCapabilities...&gt;</h3>
 <div class="sect"><div class="doc">
 <p>**能力组合器**：一组能力的无序集合，没有顺序语义 —— 只用于能力查询（`dynamic_cast`）与按能力分派。</p>
 </div></div>
@@ -540,7 +540,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table></div>
 </div>
 <div class="ent e-class" id="Public__Core__Interface_h-1">
-<h3><span class="kind">类</span> IPipeline&lt;TStageTypes...&gt;</h3>
+<h3><span class="type">类</span> IPipeline&lt;TStageTypes...&gt;</h3>
 <div class="sect"><div class="doc">
 <p>**阶段管线组合器**：参数顺序就是该管线的节点顺序（例如 `IPipeline&lt;IInit, IMain, IShutdown&gt;` = Init → Main → Shutdown）。它只承载阶段列表，`Invoke` 协议由具体管线类实现。</p>
 </div></div>
@@ -580,7 +580,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table>
 </div>
 <div class="ent e-struct" id="Public__Core__Query_h-0">
-<h3><span class="kind">结构体</span> TQuery&lt;TList&gt;</h3>
+<h3><span class="type">结构体</span> TQuery&lt;TList&gt;</h3>
 <div class="sect"><div class="doc">
 <p>**编译期**筛选：只操作类型列表，零运行期开销。</p>
 </div></div>
@@ -596,7 +596,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table></div>
 </div>
 <div class="ent e-class" id="Public__Core__Query_h-1">
-<h3><span class="kind">类</span> FQuery&lt;TBase&gt;</h3>
+<h3><span class="type">类</span> FQuery&lt;TBase&gt;</h3>
 <div class="sect"><div class="doc">
 <p>**运行期**筛选的基类：派生类给出数据源（`GetQueryData()`），本类提供按接口谓词筛选与 Debug 活性审计。</p>
 </div></div>
@@ -614,7 +614,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table></div>
 </div>
 <div class="ent e-class" id="Public__Core__Query_h-2">
-<h3><span class="kind">类</span> FQueryResult&lt;TBase&gt;</h3>
+<h3><span class="type">类</span> FQueryResult&lt;TBase&gt;</h3>
 <div class="sect"><div class="doc">
 <p>筛选结果：**隐式转换为 `std::vector&lt;TBase*&gt;`**（赋给 vector 即可用），但它本身**不能直接 `range-<span class="kw">for</span>`**（`begin/end` 找不到）—— 这一点是实测：在 `Engine.cpp` 上直接范围 <span class="kw">for</span> 会被编译器顶回来。结果内部向量私有，外部注入不了裸指针。</p>
 </div></div>
@@ -633,7 +633,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <p>`is_base_of_v&lt;TSingleton&lt;T&gt;, T&gt;` 仍能识别一个类是不是单例（查询遍历不变）。需要生命周期时用 `IPlugin&lt;IInit, IShutdown&gt;` 组合，而不是无条件继承。</p>
 </div></div>
 <div class="ent e-class" id="Public__Core__Singleton_h-0">
-<h3><span class="kind">类</span> TSingleton&lt;T&gt;</h3>
+<h3><span class="type">类</span> TSingleton&lt;T&gt;</h3>
 <div class="sect"><div class="doc">
 <p>CRTP 基类：把「我是单例」这件事做成一个类型标志。构造 / 析构 / 拷贝都是 <span class="kw">protected</span> 或删除的 —— 只有派生类能造实例。</p>
 </div></div>
@@ -667,7 +667,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table>
 </div>
 <div class="ent e-class" id="Public__Core__ThreadedServer_h-0">
-<h3><span class="kind">类</span> FThreadedServer</h3>
+<h3><span class="type">类</span> FThreadedServer</h3>
 <div class="sect"><div class="doc">
 <p>常驻专用 worker 的基类。不可拷贝、不可赋值。</p>
 </div></div>
@@ -720,7 +720,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table>
 </div>
 <div class="ent e-class" id="Public__Core__ThreadPool_h-0">
-<h3><span class="kind">类</span> FThreadPool</h3>
+<h3><span class="type">类</span> FThreadPool</h3>
 <div class="sect"><div class="doc">
 <p>任务执行原语：一组 worker 线程 + 若干 **lane**。lane 是一条独立的队列 + 完成计数，共用同一批 worker。`NumThreads = 0` 时取 `std::thread::hardware_concurrency()`（为 0 则退化为 1）。不可拷贝、不可赋值。</p>
 <p>**为什么有 lane：**引擎需要**每个收集器一条栅栏** —— 收集器的 `Wait()` 只能排空**它自己**提交的工作，不能等别的收集器（这正是「节点体可以阻塞在另一个图的静默点」成立的前提）。给每个收集器一个池能做到，但会把**线程数**乘以收集器份数（4 × 核数 = 24 核机器上 96 条线程，去跑约 2 个并发节点）。lane 把被混在一起的两件事拆开：worker 集共享，队列与计数按 lane 独立。</p>
@@ -780,7 +780,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table>
 </div>
 <div class="ent e-struct" id="Public__Core__TypeList_h-0">
-<h3><span class="kind">结构体</span> TTypeList&lt;TTypes...&gt;</h3>
+<h3><span class="type">结构体</span> TTypeList&lt;TTypes...&gt;</h3>
 <div class="sect"><div class="doc">
 <p>编译期有序类型列表（「类型数组」）。顺序即语义。</p>
 </div></div>
@@ -791,31 +791,31 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table></div>
 </div>
 <div class="ent e-alias" id="Public__Core__TypeList_h-1">
-<h3><span class="kind">别名</span> TCons&lt;T, TList&gt; <span class="base">: TTypeList&lt;T, Ts...&gt;</span></h3>
+<h3><span class="type">别名</span> TCons&lt;T, TList&gt; <span class="base">: TTypeList&lt;T, Ts...&gt;</span></h3>
 <div class="sect"><div class="doc">
 <p>把头插到最前</p>
 </div></div>
 </div>
 <div class="ent e-alias" id="Public__Core__TypeList_h-2">
-<h3><span class="kind">别名</span> TAppend&lt;TList, TValue&gt; / TAppend_t <span class="base">: TTypeList&lt;Ts..., TValue&gt;</span></h3>
+<h3><span class="type">别名</span> TAppend&lt;TList, TValue&gt; / TAppend_t <span class="base">: TTypeList&lt;Ts..., TValue&gt;</span></h3>
 <div class="sect"><div class="doc">
 <p>把尾追加到最末</p>
 </div></div>
 </div>
 <div class="ent e-alias" id="Public__Core__TypeList_h-3">
-<h3><span class="kind">别名</span> TContains&lt;TList, T&gt; / TContains_v <span class="base">: <span class="kw">bool</span></span></h3>
+<h3><span class="type">别名</span> TContains&lt;TList, T&gt; / TContains_v <span class="base">: <span class="kw">bool</span></span></h3>
 <div class="sect"><div class="doc">
 <p>成员判断（编译期布尔）</p>
 </div></div>
 </div>
 <div class="ent e-alias" id="Public__Core__TypeList_h-4">
-<h3><span class="kind">别名</span> TCatch&lt;TLists...&gt; <span class="base">: 拼接结果</span></h3>
+<h3><span class="type">别名</span> TCatch&lt;TLists...&gt; <span class="base">: 拼接结果</span></h3>
 <div class="sect"><div class="doc">
 <p>把多个 `TTypeList` 按序拼成一个</p>
 </div></div>
 </div>
 <div class="ent e-alias" id="Public__Core__TypeList_h-5">
-<h3><span class="kind">别名</span> TUnionList_t&lt;TListA, TListB&gt; <span class="base">: 保序去重的并集</span></h3>
+<h3><span class="type">别名</span> TUnionList_t&lt;TListA, TListB&gt; <span class="base">: 保序去重的并集</span></h3>
 <div class="sect"><div class="doc">
 <p>折叠式并集：逐个追加、已在集合内则跳过</p>
 </div></div>
@@ -872,7 +872,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table>
 </div>
 <div class="ent e-class" id="Public__Engine__Engine_h-0">
-<h3><span class="kind">类</span> FEngineBase <span class="base">: FFrameBuilder&lt;FEngineBase&gt;</span></h3>
+<h3><span class="type">类</span> FEngineBase <span class="base">: FFrameBuilder&lt;FEngineBase&gt;</span></h3>
 <div class="sect"><div class="doc">
 <p>宿主基类。继承 `FFrameBuilder&lt;FEngineBase&gt;`（收集器 + 帧循环），把生命周期拆成两个钩子 + 一个纯调度主循环：`PreMain`（安装 + 初始化）→ `Main`（`<span class="kw">while</span> (!ShouldExit())`：每帧先取一次帧号 `NextFrameNumber()`，再 `FlushPendingUpdates` + `Execute&lt;FTickStages&gt;(Frame)`，末尾 `Wait`）→ `PostMain`（关闸门 → 扫尾卸载 → 排干）。入口 `EntryPoint` 只认识这个锚，不认识具体引擎类型。</p>
 </div></div>
@@ -936,7 +936,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table>
 </div>
 <div class="ent e-class" id="Public__Engine__Frame_h-0">
-<h3><span class="kind">类</span> TFrameDispatch&lt;TStages, TContext&gt; <span class="base">: FFrameBridge::IDispatch</span></h3>
+<h3><span class="type">类</span> TFrameDispatch&lt;TStages, TContext&gt; <span class="base">: FFrameBridge::IDispatch</span></h3>
 <div class="sect"><div class="doc">
 <p>桥的策略实现：**代码库里唯一知道 stage 列表的东西**。桥把它当不透明接口用 —— `Implements` 答「这个 frame 实现该 stage 吗」，`MakeClosure` 给出该 stage 的闭包。</p>
 <p>派发对象必须**活得比它产出的批次久**（闭包捕获了它和 frame 的引用）；宿主本来的栈寿命规则已经保证这一点（批次在当前栈帧退出前排空）。</p>
@@ -996,7 +996,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table>
 </div>
 <div class="ent e-class" id="Public__Engine__FrameBuilder_h-0">
-<h3><span class="kind">类</span> FFrameBuilderBase <span class="base">: FQuery&lt;FFrameExtension&gt;</span></h3>
+<h3><span class="type">类</span> FFrameBuilderBase <span class="base">: FQuery&lt;FFrameExtension&gt;</span></h3>
 <div class="sect"><div class="doc">
 <p>**集合本身**：与 `TContext` 无关，实现在 `Private/Engine/FrameBuilder.cpp`（类带 `MAHO_API` —— 宿主是它的子类）。拥有全部状态，并实现「与调度上下文无关」的那部分逻辑。</p>
 </div></div>
@@ -1041,7 +1041,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table></div>
 </div>
 <div class="ent e-class" id="Public__Engine__FrameBuilder_h-1">
-<h3><span class="kind">类</span> IFrameCollector</h3>
+<h3><span class="type">类</span> IFrameCollector</h3>
 <div class="sect"><div class="doc">
 <p>**本身也是收集器**的帧（它通过自己的 `FFrameBuilder` 驱动一组子帧）—— 即使共用父收集器的池，它也需要**自己的 lane**。</p>
 <p>为什么是接口而不是基类：装载是泛型的。父收集器经 DLL 工厂建出子实例，全程只把它当 `FFrameExtension` 看；而收集器子实例必须在它第一次 `Execute` **之前**拿到共享池。向本接口的一次**旁转**（side cast，两者都是那个具体收集器的基类）就是这次交接，而且它是**唯一**需要知道「哪些帧是收集器」的地方。</p>
@@ -1055,7 +1055,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table></div>
 </div>
 <div class="ent e-class" id="Public__Engine__FrameBuilder_h-2">
-<h3><span class="kind">类</span> FFrameBuilder&lt;TContext&gt; <span class="base">: FFrameBuilderBase, IFrameCollector</span></h3>
+<h3><span class="type">类</span> FFrameBuilder&lt;TContext&gt; <span class="base">: FFrameBuilderBase, IFrameCollector</span></h3>
 <div class="sect"><div class="doc">
 <p>**驱动层**：只保留真正需要 `TContext` 或 stage 列表的东西 —— 三个 stage 分派入口、LINQ 帧集展开、以及安装/重载/卸载入口。</p>
 </div></div>
@@ -1380,7 +1380,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table>
 </div>
 <div class="ent e-struct" id="Plugins__Common__Log__Public__Trace_h-0">
-<h3><span class="kind">结构体</span> FStaticName</h3>
+<h3><span class="type">结构体</span> FStaticName</h3>
 <div class="sect"><div class="doc">
 <p>**静态字符串的一片** —— 事件里每个名字都是它（字面量、stage 的 `type_info::name()`、`__FUNCTION__`）。裁命名空间与缩短都是**切片**，从不拷贝：这条路一秒钟要跑几万次</p>
 </div></div>
@@ -1392,7 +1392,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table></div>
 </div>
 <div class="ent e-class" id="Plugins__Common__Log__Public__Trace_h-1">
-<h3><span class="kind">类</span> FStageTrace</h3>
+<h3><span class="type">类</span> FStageTrace</h3>
 <div class="sect"><div class="doc">
 <p>`MAHO_TRACE_STAGE` 的 RAII scope —— **唯一知道 stage 身份**的那一种：它属于哪个 stage 接口、哪个帧。它**建立行**：stage body 里发出的一切（嵌套的 section、stage 调用的任何 helper）都归到这一行。关闭时写一根条，再按帧声明的边写箭头。定义在 `.cpp` 里（行/深度状态是 `.cpp` 拥有的 `thread_local`）；关闭追踪时构造只是拷几个指针，`Start` 保持 0、析构什么都不做</p>
 </div></div>
@@ -1412,7 +1412,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table></div>
 </div>
 <div class="ent e-class" id="Plugins__Common__Log__Public__Trace_h-2">
-<h3><span class="kind">类</span> FScopeTrace</h3>
+<h3><span class="type">类</span> FScopeTrace</h3>
 <div class="sect"><div class="doc">
 <p>`MAHO_TRACE_SCOPE` 的 RAII scope —— **自带一条 lane**。给没有帧驱动的代码用：常驻 worker 的任务体，或还没有行的自由函数。`Group` 同时是 lane 与 owner（`FThreadedServer` 角色传 `GetThreadName()`），所以常驻线程在时间线上是「一个概念、一行」。它活着期间**建立**这一行（嵌套的 scope 也落在它上面），退出时还原</p>
 </div></div>
@@ -1429,7 +1429,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table></div>
 </div>
 <div class="ent e-class" id="Plugins__Common__Log__Public__Trace_h-3">
-<h3><span class="kind">类</span> FSectionTrace</h3>
+<h3><span class="type">类</span> FSectionTrace</h3>
 <div class="sect"><div class="doc">
 <p>`MAHO_TRACE_SECTION` 的 RAII scope —— stage **里面**手写的一段。它**什么都不建立**：捕获包住它的 stage（或 scope）留下的那一行，于是落在同一个行上、嵌套在它的条里。`Func` 跟着进 `func=`：条是手写标签命名的，悬停仍然要说清这段埋点住在哪</p>
 </div></div>

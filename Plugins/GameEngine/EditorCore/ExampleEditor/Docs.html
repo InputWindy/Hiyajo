@@ -41,10 +41,10 @@ h2.file-title{font-size:20px;margin:0 0 18px;color:#fff}
      padding:16px 18px;margin-bottom:16px}
 .ent h3{font-size:15px;margin:0 0 10px;color:#fff}
 .ent .base{font-size:12px;color:var(--sub);font-weight:400}
-.ent .kind{font-size:10.5px;color:#0f1420;background:var(--accent);border-radius:3px;
+.ent .type{font-size:10.5px;color:#0f1420;background:var(--accent);border-radius:3px;
            padding:1px 6px;margin-right:8px;vertical-align:middle}
-.e-struct .kind{background:#7de8d8} .e-enum .kind{background:var(--warn)}
-.e-macro .kind{background:#c58fff} .e-alias .kind{background:#9fb0c8}
+.e-struct .type{background:#7de8d8} .e-enum .type{background:var(--warn)}
+.e-macro .type{background:#c58fff} .e-alias .type{background:#9fb0c8}
 .card{background:#182238;border:1px solid var(--line);border-radius:8px;padding:14px 16px;
       margin:0 0 16px}
 .card-title{font-size:14px;margin:0 0 8px;color:#fff}
@@ -180,7 +180,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table>
 </div>
 <div class="ent e-struct" id="Public__ExampleEditor_h-0">
-<h3><span class="kind">结构体</span> FEditorContext</h3>
+<h3><span class="type">结构体</span> FEditorContext</h3>
 <div class="sect"><div class="doc">
 <p>轻量的共享编辑器状态：宿主拥有，组件插件经 `FExampleEditor::GetEditorContext()` 读写。**为什么是共享结构体而不是依赖边**：宿主把面板绘制顺序固定死（Viewport → Outliner → Inspector → Controls），于是「先发布（选中实体）后消费」由**代码顺序**保证 —— 不需要任务图，也不需要组件之间声明依赖边（组件图里根本绑不上这种边）。</p>
 </div></div>
@@ -192,7 +192,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table></div>
 </div>
 <div class="ent e-class" id="Public__ExampleEditor_h-1">
-<h3><span class="kind">类</span> IEditorInit</h3>
+<h3><span class="type">类</span> IEditorInit</h3>
 <div class="sect"><div class="doc">
 <p>编辑器组件的**初始化** stage：组件的 install 图上跑一次，用于建自己的持久资源（例如一棵视图树、一个订阅）。独立的 stage 而不是塞进 `IEditorPanel::Update` —— 一次性工作不该每帧被检查一次。</p>
 </div></div>
@@ -204,7 +204,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table></div>
 </div>
 <div class="ent e-class" id="Public__ExampleEditor_h-2">
-<h3><span class="kind">类</span> IEditorPanel</h3>
+<h3><span class="type">类</span> IEditorPanel</h3>
 <div class="sect"><div class="doc">
 <p>**面板** stage：一个面板拥有一棵持久 UI 树（`UI::FUIView`），在 `Update` 里重建它。宿主在 `ImGui::NewFrame()` **之前**调用（声明期），随后在帧内翻译所有已注册视图 —— **面板从不调用 ImGui**。</p>
 <p>这就是面板的唯一入口：老式的「直接绘制」入口已经不存在了。</p>
@@ -217,7 +217,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table></div>
 </div>
 <div class="ent e-class" id="Public__ExampleEditor_h-3">
-<h3><span class="kind">类</span> IEditorShutdown</h3>
+<h3><span class="type">类</span> IEditorShutdown</h3>
 <div class="sect"><div class="doc">
 <p>编辑器组件的**卸载** stage：由宿主的卸载图驱动，**在实例被销毁之前**跑。存在的理由与 `IPreUnInstall` 同：裸的成员析构会跳过这一步，留下跨模块的订阅 / 注册表里的裸指针。</p>
 </div></div>
@@ -229,7 +229,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table></div>
 </div>
 <div class="ent e-struct" id="Public__ExampleEditor_h-4">
-<h3><span class="kind">结构体</span> FEditorShader</h3>
+<h3><span class="type">结构体</span> FEditorShader</h3>
 <div class="sect"><div class="doc">
 <p>编辑器的绘制着色器类型（对照 `FUIShader`）。GLSL 源码是 .cpp 的私有实现，**只经这四个访问器**暴露给 `FRender::TryGetShader&lt;FEditorShader&gt;()` —— 这正是 `FRender::TryGetShader` 对任何特性着色器要求的契约。**无状态**：没有逐帧数据，正交投影的推送数据来自 `FDrawList`。用静态函数而不是虚接口，因为着色器类型是**编译期**参数（`TryGetShader&lt;T&gt;`），运行期多态没有意义。</p>
 </div></div>
@@ -243,7 +243,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table></div>
 </div>
 <div class="ent e-class" id="Public__ExampleEditor_h-5">
-<h3><span class="kind">类</span> FExampleEditor <span class="base">: FFrameExtension + IPipeline&lt;IOnInstalled, IEditorInput, IEditorCompose, IPreUnInstall&gt; + FFrameBuilder&lt;FExampleEditor&gt;</span></h3>
+<h3><span class="type">类</span> FExampleEditor <span class="base">: FFrameExtension + IPipeline&lt;IOnInstalled, IEditorInput, IEditorCompose, IPreUnInstall&gt; + FFrameBuilder&lt;FExampleEditor&gt;</span></h3>
 <div class="sect"><div class="doc">
 <p>编辑器宿主：两个基类（声明层 + 挂 FRender stage 的有序列表）加**第三个** —— `FFrameBuilder&lt;FExampleEditor&gt;`，使它同时是编辑器组件（EditorViewport / EditorConsole / ContentBrowser / EditorTheme）**各自的收集器**。</p>
 <p>`Type=Editor` 的插件：Runtime 构建在 codegen 阶段就把它（连同它的组件）丢掉，所以编辑器的 DLL / 头 / ImGui 编译只发生在编辑器构建里（`MAHO_EDITOR_BUILD`）。</p>
@@ -315,7 +315,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table>
 </div>
 <div class="ent e-macro" id="Public__ExampleEditorApi_h-0">
-<h3><span class="kind">宏</span> MAHO_EXAMPLEEDITOR_API <span class="base">: MAHO_EXPORT / MAHO_IMPORT（按 MAHO_EXAMPLEEDITOR_MODULE_EXPORTS 切换）</span></h3>
+<h3><span class="type">宏</span> MAHO_EXAMPLEEDITOR_API <span class="base">: MAHO_EXPORT / MAHO_IMPORT（按 MAHO_EXAMPLEEDITOR_MODULE_EXPORTS 切换）</span></h3>
 <div class="sect"><div class="doc">
 <p>挂在 `FExampleEditor`、3 个编辑器 stage 接口与 `ExampleEditorTheme.h` 的每个自由函数上。这是组件插件能跨 DLL 继承并调用它们的前提。</p>
 </div></div>

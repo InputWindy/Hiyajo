@@ -41,10 +41,10 @@ h2.file-title{font-size:20px;margin:0 0 18px;color:#fff}
      padding:16px 18px;margin-bottom:16px}
 .ent h3{font-size:15px;margin:0 0 10px;color:#fff}
 .ent .base{font-size:12px;color:var(--sub);font-weight:400}
-.ent .kind{font-size:10.5px;color:#0f1420;background:var(--accent);border-radius:3px;
+.ent .type{font-size:10.5px;color:#0f1420;background:var(--accent);border-radius:3px;
            padding:1px 6px;margin-right:8px;vertical-align:middle}
-.e-struct .kind{background:#7de8d8} .e-enum .kind{background:var(--warn)}
-.e-macro .kind{background:#c58fff} .e-alias .kind{background:#9fb0c8}
+.e-struct .type{background:#7de8d8} .e-enum .type{background:var(--warn)}
+.e-macro .type{background:#c58fff} .e-alias .type{background:#9fb0c8}
 .card{background:#182238;border:1px solid var(--line);border-radius:8px;padding:14px 16px;
       margin:0 0 16px}
 .card-title{font-size:14px;margin:0 0 8px;color:#fff}
@@ -138,7 +138,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table>
 </div>
 <div class="ent e-alias" id="Public__Unicode_h-0">
-<h3><span class="kind">别名</span> FNativeString <span class="base">: Windows: std::wstring ｜ 其它平台: std::string</span></h3>
+<h3><span class="type">别名</span> FNativeString <span class="base">: Windows: std::wstring ｜ 其它平台: std::string</span></h3>
 <div class="sect"><div class="doc">
 <p>平台原生字符串类型（用 `#<span class="kw">if</span> defined(_WIN32)` 切换）。</p>
 <p>**为什么要这个别名而不是到处写 `std::wstring`**：调用点从此与平台无关，「这里需要原生串」这件事由类型名表达；将来若某平台需要别的表示，只改这一处。</p>
@@ -146,7 +146,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </div></div>
 </div>
 <div class="ent e-alias" id="Public__Unicode_h-1">
-<h3><span class="kind">别名</span> FNativeStringView <span class="base">: Windows: std::wstring_view ｜ 其它平台: std::string_view</span></h3>
+<h3><span class="type">别名</span> FNativeStringView <span class="base">: Windows: std::wstring_view ｜ 其它平台: std::string_view</span></h3>
 <div class="sect"><div class="doc">
 <p>`FNativeString` 对应的只读视图 —— 传给 WinAPI / 文件系统 API 时不复制、不分配。**入参收视图**是这套转换函数的统一风格：转换本来就是「读源、产新」，没有理由要求调用方把源所有权交出来</p>
 </div></div>

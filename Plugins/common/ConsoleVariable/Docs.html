@@ -41,10 +41,10 @@ h2.file-title{font-size:20px;margin:0 0 18px;color:#fff}
      padding:16px 18px;margin-bottom:16px}
 .ent h3{font-size:15px;margin:0 0 10px;color:#fff}
 .ent .base{font-size:12px;color:var(--sub);font-weight:400}
-.ent .kind{font-size:10.5px;color:#0f1420;background:var(--accent);border-radius:3px;
+.ent .type{font-size:10.5px;color:#0f1420;background:var(--accent);border-radius:3px;
            padding:1px 6px;margin-right:8px;vertical-align:middle}
-.e-struct .kind{background:#7de8d8} .e-enum .kind{background:var(--warn)}
-.e-macro .kind{background:#c58fff} .e-alias .kind{background:#9fb0c8}
+.e-struct .type{background:#7de8d8} .e-enum .type{background:var(--warn)}
+.e-macro .type{background:#c58fff} .e-alias .type{background:#9fb0c8}
 .card{background:#182238;border:1px solid var(--line);border-radius:8px;padding:14px 16px;
       margin:0 0 16px}
 .card-title{font-size:14px;margin:0 0 8px;color:#fff}
@@ -154,19 +154,19 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table>
 </div>
 <div class="ent e-enum" id="Public__ConsoleVariable_h-0">
-<h3><span class="kind">枚举</span> ECVarFlags <span class="base">: std::uint32_t</span></h3>
+<h3><span class="type">枚举</span> ECVarFlags <span class="base">: std::uint32_t</span></h3>
 <div class="sect"><div class="doc">
 <p>变量标志位（UE `ECVF_*` 风格）。**为什么用位标志而不是多个 <span class="kw">bool</span>**：标志集合会随需求增长，位掩码让「加一个标志」不改变任何已有签名。注意 `ReadOnly` 是本插件**唯一真正强制**的标志，`Cheat` 只作信息供上层判断。</p>
 </div></div>
 </div>
 <div class="ent e-enum" id="Public__ConsoleVariable_h-1">
-<h3><span class="kind">枚举</span> ECVarType <span class="base">: std::uint8_t</span></h3>
+<h3><span class="type">枚举</span> ECVarType <span class="base">: std::uint8_t</span></h3>
 <div class="sect"><div class="doc">
 <p>变量的值类型标签。**为什么需要它**：容器里存的是文本，得有东西记下「这个键按什么类型解释」；枚举而不是字符串，是为了让非法类型无法表达。</p>
 </div></div>
 </div>
 <div class="ent e-class" id="Public__ConsoleVariable_h-2">
-<h3><span class="kind">类</span> IConsoleVariable</h3>
+<h3><span class="type">类</span> IConsoleVariable</h3>
 <div class="sect"><div class="doc">
 <p>查表返回的接口 —— 调用方只依赖它，不依赖具体实现。</p>
 <p>**为什么既给 `GetString` 又给 `GetInt/GetFloat/GetBool`**：每个调用点只关心一种形状，让它在接口处就转换完，调用方不必自己写解析；同时也把「解析失败怎么办」这件事收进实现里（当前是取默认值 0 / <span class="kw">false</span> / 空串）。</p>
@@ -187,7 +187,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table></div>
 </div>
 <div class="ent e-class" id="Public__ConsoleVariable_h-3">
-<h3><span class="kind">类</span> FConsoleVariable <span class="base">: TSingleton&lt;FConsoleVariable&gt;, IPlugin&lt;IInit, IShutdown&gt;</span></h3>
+<h3><span class="type">类</span> FConsoleVariable <span class="base">: TSingleton&lt;FConsoleVariable&gt;, IPlugin&lt;IInit, IShutdown&gt;</span></h3>
 <div class="sect"><div class="doc">
 <p>注册表本体。`TSingleton` 提供 `Get()` 的声明约定、`IPlugin&lt;IInit, IShutdown&gt;` 声明它需要的生命周期 stage（**注册表在 `Initialize` 之后可用，`Shutdown` 清空**）。</p>
 <p>**为什么名字到接口的映射用 `map` 而不是哈希表**：变量数量在几十个量级，有序容器带来的「遍历顺序稳定」对编辑器枚举更值钱。</p>
@@ -212,7 +212,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table></div>
 </div>
 <div class="ent e-struct" id="Public__ConsoleVariable_h-4">
-<h3><span class="kind">结构体</span> TCVarType&lt;T&gt;</h3>
+<h3><span class="type">结构体</span> TCVarType&lt;T&gt;</h3>
 <div class="sect"><div class="doc">
 <p>C++ 类型 → `ECVarType` 的映射表：主模板**只声明**，四个特化各给出一个 `Value`。</p>
 <p>**为什么故意不给主模板下定义**：用未支持的类型实例化 `TAutoConsoleVariable&lt;T&gt;` 时应当**编译失败**（不完整类型的报错就在出错那一行），而不是在运行期给出一个错误的值类型标签，让问题推迟到读值时才暴露。</p>
@@ -224,7 +224,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table></div>
 </div>
 <div class="ent e-class" id="Public__ConsoleVariable_h-5">
-<h3><span class="kind">类</span> TAutoConsoleVariable&lt;T&gt;</h3>
+<h3><span class="type">类</span> TAutoConsoleVariable&lt;T&gt;</h3>
 <div class="sect"><div class="doc">
 <p>静态控制台变量 —— 与 UE 的 `TAutoConsoleVariable` 同名同用法：在**静态初始化期**构造即完成注册，之后直接 `GetValue()` / `Set()`：</p>
 <p>`<span class="kw">static</span> TAutoConsoleVariable&lt;<span class="kw">int</span>&gt; CVarMaxFPS(<span class="st">"r.MaxFPS"</span>, 60, <span class="st">"Max FPS"</span>);`</p>

@@ -778,14 +778,14 @@ namespace
  *  debugger when one is attached, so the mistake is loud in a run that has a debugger and still
  *  leaves evidence in one that does not. Resolution then returns nothing rather than the next
  *  occupant's native: the old silent aliasing is exactly what this generation exists to kill. */
-void ReportExpiredTransientHandle(const char* Kind, std::uint32_t Slot, std::uint32_t HandleGen,
+void ReportExpiredTransientHandle(const char* Type, std::uint32_t Slot, std::uint32_t HandleGen,
 	std::uint32_t LiveGen)
 {
 	MAHO_ENSURE_BREAK(false,
 		"RDG %s handle outlived its frame: slot %u carries handle generation %u while the live "
 		"occupant is generation %u -- a Transient handle is valid only for the frame that minted "
 		"it (see RDG.h / RenderResourcePool.h)",
-		Kind, Slot, HandleGen, LiveGen);
+		Type, Slot, HandleGen, LiveGen);
 }
 
 } // namespace

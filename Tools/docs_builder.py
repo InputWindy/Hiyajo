@@ -10,10 +10,10 @@ docs_builder.py —— 文档构建器（声明式原子接口）
 
     Header("Public/Core/FrameGraph.h")   一个头文件 —— 左树里的叶子（路径决定树的嵌套）
     Class("FFrameGraph", Base="...")     一个类      （当前类随之切换）
-    Struct / Enum / Macro / Alias        同类，不同 kind
+    Struct / Enum / Macro / Alias        同类，不同 type
     Interface("bool Submit(...);")       当前类的一个接口（成员函数）
     Field("TaskKey Key")                 当前类的一个字段（数据成员）
-    Nested("FEdge", Kind="struct")       当前类里的嵌套类型
+    Nested("FEdge", Type="struct")       当前类里的嵌套类型
     SetAccess("private")                 之后 Interface/Field/Nested 的访问级别（默认 public）
 
     Build()                              渲染到 Source/Docs.html，返回统计
@@ -36,7 +36,7 @@ from typing import Any
 
 @dataclass
 class FMember:
-	Kind: str = "field"            # field | function | class | struct | enum
+	Type: str = "field"            # field | function | class | struct | enum
 	Signature: str = ""
 	Desc: list[str] = field(default_factory=list)
 	Access: str = "public"
@@ -44,10 +44,10 @@ class FMember:
 
 @dataclass
 class FEntity:
-	Kind: str = "class"            # class | struct | enum | macro | alias
+	Type: str = "class"            # class | struct | enum | macro | alias
 	Name: str = ""
 	Desc: list[str] = field(default_factory=list)
-	Base: str = ""                 # 可选的继承/目标/宏体，按 kind 解释
+	Base: str = ""                 # 可选的继承/目标/宏体，按 type 解释
 	Members: list[FMember] = field(default_factory=list)
 
 
@@ -110,11 +110,11 @@ def Header(Rel: str, Title: str = "", Desc: Any = "") -> FHeader:
 	return Node
 
 
-def _entity(Kind: str, Name: str, Base: str = "", Desc: Any = "") -> FEntity:
+def _entity(Type: str, Name: str, Base: str = "", Desc: Any = "") -> FEntity:
 	global _CURRENT_ENTITY, _CURRENT_ACCESS
 	if _CURRENT_HEADER is None:
 		raise RuntimeError("先调用 Header(...) 才能加类/结构/枚举")
-	Node = FEntity(Kind=Kind, Name=Name, Desc=_lines(Desc), Base=Base)
+	Node = FEntity(Type=Type, Name=Name, Desc=_lines(Desc), Base=Base)
 	_CURRENT_HEADER.Entities.append(Node)
 	_CURRENT_ENTITY = Node
 	_CURRENT_ACCESS = "public"
@@ -196,10 +196,10 @@ def SetAccess(Level: str) -> None:
 	_CURRENT_ACCESS = Level
 
 
-def _member(Kind: str, Signature: str, Desc: Any) -> FMember:
+def _member(Type: str, Signature: str, Desc: Any) -> FMember:
 	if _CURRENT_ENTITY is None:
 		raise RuntimeError("先调用 Class/Struct/Enum(...) 才能加成员")
-	Node = FMember(Kind=Kind, Signature=" ".join(Signature.split()), Desc=_lines(Desc),
+	Node = FMember(Type=Type, Signature=" ".join(Signature.split()), Desc=_lines(Desc),
 	               Access=_CURRENT_ACCESS)
 	_CURRENT_ENTITY.Members.append(Node)
 	return Node
@@ -215,9 +215,9 @@ def Field(Signature: str, Desc: Any = "") -> FMember:
 	return _member("field", Signature, Desc)
 
 
-def Nested(Name: str, Kind: str = "struct", Desc: Any = "") -> FMember:
+def Nested(Name: str, Type: str = "struct", Desc: Any = "") -> FMember:
 	"""当前类里的嵌套类型（渲染在「嵌套」分区）。"""
-	return _member(Kind, Name, Desc)
+	return _member(Type, Name, Desc)
 
 
 # ── 渲染 ────────────────────────────────────────────────────────────────────────
@@ -233,7 +233,7 @@ KEYWORD_RE = re.compile(r"\b(" + "|".join(KEYWORDS) + r")\b")
 COMMENT_RE = re.compile(r"(//[^\n]*|/\*.*?\*/)", re.DOTALL)
 STRING_RE = re.compile(r"(\"(?:[^\"\\]|\\.)*\"|'(?:[^'\\]|\\.)*')")
 
-KIND_LABELS = {"class": "类", "struct": "结构体", "enum": "枚举", "macro": "宏",
+TYPE_LABELS = {"class": "类", "struct": "结构体", "enum": "枚举", "macro": "宏",
                "alias": "别名", "function": "接口", "field": "字段"}
 
 
@@ -272,18 +272,18 @@ def RenderMember(Member: FMember) -> str:
 
 
 def RenderEntity(Entity: FEntity, Anchor: str) -> str:
-	Label = KIND_LABELS.get(Entity.Kind, Entity.Kind)
-	Out = [f'<div class="ent e-{Entity.Kind}" id="{Anchor}">',
-	       f'<h3><span class="kind">{Label}</span> {html.escape(Entity.Name)}'
+	Label = TYPE_LABELS.get(Entity.Type, Entity.Type)
+	Out = [f'<div class="ent e-{Entity.Type}" id="{Anchor}">',
+	       f'<h3><span class="type">{Label}</span> {html.escape(Entity.Name)}'
 	       + (f' <span class="base">: {Highlight(Entity.Base)}</span>' if Entity.Base else "")
 	       + "</h3>"]
 	if Entity.Desc:
 		Out.append('<div class="sect">' + RenderDesc(Entity.Desc) + "</div>")
 	Groups = {"fields": [], "interface": [], "nested": []}
 	for Member in Entity.Members:
-		if Member.Kind == "function":
+		if Member.Type == "function":
 			Groups["interface"].append(Member)
-		elif Member.Kind == "field":
+		elif Member.Type == "field":
 			Groups["fields"].append(Member)
 		else:
 			Groups["nested"].append(Member)
@@ -390,10 +390,10 @@ h2.file-title{font-size:20px;margin:0 0 18px;color:#fff}
      padding:16px 18px;margin-bottom:16px}
 .ent h3{font-size:15px;margin:0 0 10px;color:#fff}
 .ent .base{font-size:12px;color:var(--sub);font-weight:400}
-.ent .kind{font-size:10.5px;color:#0f1420;background:var(--accent);border-radius:3px;
+.ent .type{font-size:10.5px;color:#0f1420;background:var(--accent);border-radius:3px;
            padding:1px 6px;margin-right:8px;vertical-align:middle}
-.e-struct .kind{background:#7de8d8} .e-enum .kind{background:var(--warn)}
-.e-macro .kind{background:#c58fff} .e-alias .kind{background:#9fb0c8}
+.e-struct .type{background:#7de8d8} .e-enum .type{background:var(--warn)}
+.e-macro .type{background:#c58fff} .e-alias .type{background:#9fb0c8}
 .card{background:#182238;border:1px solid var(--line);border-radius:8px;padding:14px 16px;
       margin:0 0 16px}
 .card-title{font-size:14px;margin:0 0 8px;color:#fff}

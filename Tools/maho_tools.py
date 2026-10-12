@@ -670,8 +670,8 @@ def _all_plugin_infos(
 			"group": group,
 			"header": header,
 			"mod_file": mod_file,
-			# Kind → class-name suffix (F{Name}Tool / F{Name}Layer / F{Name}Engine).
-			"kind": group.split("/")[0].lower() if group else "tool",
+			# Type → class-name suffix (F{Name}Tool / F{Name}Layer / F{Name}Engine).
+			"type": group.split("/")[0].lower() if group else "tool",
 			"aux_files": aux,
 			# On-disk location (plugin dir + cmake basename) — lets codegen write
 			# the plugin's own self-contained .cmake build block.
@@ -2454,8 +2454,8 @@ def list_engine_plugins(engine_root: Path | None = None) -> list[dict[str, Any]]
 				"EnabledByDefault": True,
 				"Extension": extension,
 				"Group": list(cplugin_path.parent.relative_to(root).parts[:-1]),
-				# Kind: the top-level category dir — Tool / Layer / Engine.
-				"Kind": (
+				# Type: the top-level category dir — Tool / Layer / Engine.
+				"Type": (
 					cplugin_path.parent.relative_to(root).parts[0].lower()
 					if cplugin_path.parent.relative_to(root).parts
 					else "tool"

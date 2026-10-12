@@ -41,10 +41,10 @@ h2.file-title{font-size:20px;margin:0 0 18px;color:#fff}
      padding:16px 18px;margin-bottom:16px}
 .ent h3{font-size:15px;margin:0 0 10px;color:#fff}
 .ent .base{font-size:12px;color:var(--sub);font-weight:400}
-.ent .kind{font-size:10.5px;color:#0f1420;background:var(--accent);border-radius:3px;
+.ent .type{font-size:10.5px;color:#0f1420;background:var(--accent);border-radius:3px;
            padding:1px 6px;margin-right:8px;vertical-align:middle}
-.e-struct .kind{background:#7de8d8} .e-enum .kind{background:var(--warn)}
-.e-macro .kind{background:#c58fff} .e-alias .kind{background:#9fb0c8}
+.e-struct .type{background:#7de8d8} .e-enum .type{background:var(--warn)}
+.e-macro .type{background:#c58fff} .e-alias .type{background:#9fb0c8}
 .card{background:#182238;border:1px solid var(--line);border-radius:8px;padding:14px 16px;
       margin:0 0 16px}
 .card-title{font-size:14px;margin:0 0 8px;color:#fff}
@@ -120,7 +120,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table>
 </div>
 <div class="ent e-struct" id="Private__FShaderParser_h-0">
-<h3><span class="kind">结构体</span> FParseOutput</h3>
+<h3><span class="type">结构体</span> FParseOutput</h3>
 <div class="sect"><div class="doc">
 <p>解析产物：与那份 CPU 布局**同源**的两段 GLSL，以及 Pass 的状态。</p>
 </div></div>
@@ -171,7 +171,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table>
 </div>
 <div class="ent e-enum" id="Public__ShaderLibrary_h-0">
-<h3><span class="kind">枚举</span> EMaterialPropertyType</h3>
+<h3><span class="type">枚举</span> EMaterialPropertyType</h3>
 <div class="sect"><div class="doc">
 <p>`Properties` 里支持的 6 种属性类型（design D1）。前四种进 `set2 binding0` 的常量块，后两种各占一个采样器 binding（design D3）。**为什么只有这 6 种**：多一种就多一条没测过的 std140 打包路径 —— 范围（`Range`）刻意**不改布局**，它只是 UI 提示。</p>
 </div></div>
@@ -187,7 +187,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table></div>
 </div>
 <div class="ent e-struct" id="Public__ShaderLibrary_h-1">
-<h3><span class="kind">结构体</span> FMaterialProperty</h3>
+<h3><span class="type">结构体</span> FMaterialProperty</h3>
 <div class="sect"><div class="doc">
 <p>`Properties` 的一条声明 + 它在 std140 布局里的位置。**offset/size 是解析器算出来的、并被 SPIR-V 反查过**：渲染侧照它填参数，不再自己算一遍。</p>
 </div></div>
@@ -204,7 +204,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table></div>
 </div>
 <div class="ent e-struct" id="Public__ShaderLibrary_h-2">
-<h3><span class="kind">结构体</span> FMaterialLayout</h3>
+<h3><span class="type">结构体</span> FMaterialLayout</h3>
 <div class="sect"><div class="doc">
 <p>`set2 binding0` 那个常量块的 CPU 侧布局 —— **它与注入 GLSL 里的块声明由同一份声明序生成，所以不可能错位**（design D1）。</p>
 </div></div>
@@ -222,7 +222,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table></div>
 </div>
 <div class="ent e-enum" id="Public__ShaderLibrary_h-3">
-<h3><span class="kind">枚举</span> ECullMode</h3>
+<h3><span class="type">枚举</span> ECullMode</h3>
 <div class="sect"><div class="doc">
 <p>映射到 `FRHIGraphicsPipelineDesc` 的剔除模式。</p>
 </div></div>
@@ -235,7 +235,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table></div>
 </div>
 <div class="ent e-enum" id="Public__ShaderLibrary_h-4">
-<h3><span class="kind">枚举</span> EBlendMode</h3>
+<h3><span class="type">枚举</span> EBlendMode</h3>
 <div class="sect"><div class="doc">
 <p>只有这两种混合：其余组合在本切片里是「没实现」，遇到就**报错**，不静默当不透明（design D7）。**为什么刻意只做两种**：混合因子的任意组合需要一整套映射与去重键，而本切片要证明的是「状态真的进 pipeline」这件事本身。</p>
 </div></div>
@@ -247,7 +247,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table></div>
 </div>
 <div class="ent e-struct" id="Public__ShaderLibrary_h-5">
-<h3><span class="kind">结构体</span> FPassState</h3>
+<h3><span class="type">结构体</span> FPassState</h3>
 <div class="sect"><div class="doc">
 <p>Pass 的 render state —— design D7 的四个键，全部映射到 `FRHIGraphicsPipelineDesc`。**它是 PSO 缓存键的一半**：`(shader, pass state)` 相同就复用同一个 pipeline。</p>
 </div></div>
@@ -261,7 +261,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table></div>
 </div>
 <div class="ent e-struct" id="Public__ShaderLibrary_h-6">
-<h3><span class="kind">结构体</span> FShaderDesc</h3>
+<h3><span class="type">结构体</span> FShaderDesc</h3>
 <div class="sect"><div class="doc">
 <p>一个 `.shader` 的编译产物 —— 渲染侧（`MeshFeature`）需要的全部。**它是一个值**的是 `FShaderLibrary` 里那份的 `<span class="kw">const</span>` 指针，生命周期由本帧的 `Initialize`/`Shutdown` 决定（不是引用计数，也不是拷贝）。</p>
 </div></div>
@@ -282,7 +282,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table></div>
 </div>
 <div class="ent e-struct" id="Public__ShaderLibrary_h-7">
-<h3><span class="kind">结构体</span> FShaderDiagnostics</h3>
+<h3><span class="type">结构体</span> FShaderDiagnostics</h3>
 <div class="sect"><div class="doc">
 <p>自检读数：扫描了几个文件、成功了几个、失败了几个、各自的内容哈希。**为什么要有它**：`ShaderLibrary` 的产物是「屏幕上的颜色」，一个坏 shader 的表现可能只是某个物体画不出来 —— 把读数显式发布出来（编辑器可查），「三个 shader 一个都没加载」才不会看起来像正常。</p>
 </div></div>
@@ -297,7 +297,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table></div>
 </div>
 <div class="ent e-struct" id="Public__ShaderLibrary_h-8">
-<h3><span class="kind">结构体</span> FShaderDiagnostics::FEntry</h3>
+<h3><span class="type">结构体</span> FShaderDiagnostics::FEntry</h3>
 <div class="sect"><div class="doc">
 <p>明细里的一条。</p>
 </div></div>
@@ -311,7 +311,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table></div>
 </div>
 <div class="ent e-class" id="Public__ShaderLibrary_h-9">
-<h3><span class="kind">类</span> FShaderLibrary <span class="base">: FFrameExtension, IPipeline&lt;IInit, IShutdown&gt;</span></h3>
+<h3><span class="type">类</span> FShaderLibrary <span class="base">: FFrameExtension, IPipeline&lt;IInit, IShutdown&gt;</span></h3>
 <div class="sect"><div class="doc">
 <p>`.shader` 文本库本体 —— **一个引擎侧帧**（只挂 `IInit`/`IShutdown`）。</p>
 <p>**安装位置很重要**：它挂的是引擎阶段，所以必须装进驱动这些阶段的收集者，即宿主的子节点（`ExampleEngine.cproject` 的 `Plugins` 数组），而不是 `Render.cplugin` 的 `Plugins` —— 后者是 `FRender` 的渲染阶段收集者，装进去会拿不到节点、`Initialize` 永不执行（`PrimitiveRegistry` 踩过这个坑）。`Render.cplugin` 只需要它的 `PrivateIncludes`，好让渲染侧能 include 这个头。</p>
@@ -367,7 +367,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table>
 </div>
 <div class="ent e-macro" id="Public__ShaderLibraryApi_h-0">
-<h3><span class="kind">宏</span> MAHO_SHADERLIBRARY_API <span class="base">: MAHO_EXPORT / MAHO_IMPORT（随构建开关切换）</span></h3>
+<h3><span class="type">宏</span> MAHO_SHADERLIBRARY_API <span class="base">: MAHO_EXPORT / MAHO_IMPORT（随构建开关切换）</span></h3>
 <div class="sect"><div class="doc">
 <p>编译本插件时构建系统定义 `MAHO_SHADERLIBRARY_MODULE_EXPORTS` ⇒ `MAHO_EXPORT`；消费方为 `MAHO_IMPORT`。</p>
 <p>**为什么必须有**：`FShaderLibrary` 与 `FShaderDesc` 都要跨 DLL 边界 —— 渲染侧拿到的是指针、且实例由本模块构造并销毁，虚表与删除析构符只能在本模块生成。少了这个标签，消费方会各自生成一份 vftable，卸载后 `<span class="kw">delete</span>` 静默崩（0xC0000005）而不是编译错。</p>

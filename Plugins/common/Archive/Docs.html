@@ -41,10 +41,10 @@ h2.file-title{font-size:20px;margin:0 0 18px;color:#fff}
      padding:16px 18px;margin-bottom:16px}
 .ent h3{font-size:15px;margin:0 0 10px;color:#fff}
 .ent .base{font-size:12px;color:var(--sub);font-weight:400}
-.ent .kind{font-size:10.5px;color:#0f1420;background:var(--accent);border-radius:3px;
+.ent .type{font-size:10.5px;color:#0f1420;background:var(--accent);border-radius:3px;
            padding:1px 6px;margin-right:8px;vertical-align:middle}
-.e-struct .kind{background:#7de8d8} .e-enum .kind{background:var(--warn)}
-.e-macro .kind{background:#c58fff} .e-alias .kind{background:#9fb0c8}
+.e-struct .type{background:#7de8d8} .e-enum .type{background:var(--warn)}
+.e-macro .type{background:#c58fff} .e-alias .type{background:#9fb0c8}
 .card{background:#182238;border:1px solid var(--line);border-radius:8px;padding:14px 16px;
       margin:0 0 16px}
 .card-title{font-size:14px;margin:0 0 8px;color:#fff}
@@ -124,13 +124,13 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table>
 </div>
 <div class="ent e-enum" id="Public__Archive_h-0">
-<h3><span class="kind">枚举</span> EArchiveMode <span class="base">: std::uint8_t</span></h3>
+<h3><span class="type">枚举</span> EArchiveMode <span class="base">: std::uint8_t</span></h3>
 <div class="sect"><div class="doc">
 <p>把「方向」编码进**同一个** `<span class="kw">operator</span>&lt;&lt;` 里 —— 读写共用一套调用点，业务类型的 `Serialize(FArchive&amp;)` 只需要写一遍。基点显式写成 `std::uint8_t` 是为了让它只占一个字节（序列化结构体里常见）。</p>
 </div></div>
 </div>
 <div class="ent e-class" id="Public__Archive_h-1">
-<h3><span class="kind">类</span> FArchive</h3>
+<h3><span class="type">类</span> FArchive</h3>
 <div class="sect"><div class="doc">
 <p>抽象二进制流 —— 原始字节与有类型数据之间的桥。</p>
 <p>设计要点：**原始字节是唯一的虚接口**（`Serialize`），所有类型化读写都建在它上面 ⇒ 新增一个后端（文件 / 网络 / 内存）只需实现三个虚函数。</p>
@@ -163,7 +163,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table></div>
 </div>
 <div class="ent e-class" id="Public__Archive_h-2">
-<h3><span class="kind">类</span> ISerialize</h3>
+<h3><span class="type">类</span> ISerialize</h3>
 <div class="sect"><div class="doc">
 <p>自序列化接口 —— 让**类型自己**知道怎么把自己摊成字节。</p>
 <p>**为什么要它**：`FArchive` 只认识 POD 与字符串，组合类型（材质、存档结构体）的字段布局只有它自己知道；把它写成成员函数，读写两端共用同一份布局描述，不会出现「写端改了字段、读端忘了同步」的静默错位。</p>
@@ -177,7 +177,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table></div>
 </div>
 <div class="ent e-class" id="Public__Archive_h-3">
-<h3><span class="kind">类</span> FMemoryReader <span class="base">: FArchive</span></h3>
+<h3><span class="type">类</span> FMemoryReader <span class="base">: FArchive</span></h3>
 <div class="sect"><div class="doc">
 <p>外部字节缓冲上的读取器 —— **不拷贝**，只是视图 + 一个游标。</p>
 <p>`FMemoryReader(Bytes)` 之后 `Reader &lt;&lt; X` 就是「从缓冲区取一个 X」。</p>
@@ -199,7 +199,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table></div>
 </div>
 <div class="ent e-class" id="Public__Archive_h-4">
-<h3><span class="kind">类</span> FMemoryWriter <span class="base">: FArchive</span></h3>
+<h3><span class="type">类</span> FMemoryWriter <span class="base">: FArchive</span></h3>
 <div class="sect"><div class="doc">
 <p>写进自有缓冲的写入器 —— 与读取器对称，但**拥有**数据。</p>
 <p>`Writer &lt;&lt; A &lt;&lt; B;` 之后用 `GetBytes()`（看一眼）或 `TakeBytes()`（搬走）取结果。</p>

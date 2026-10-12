@@ -17,8 +17,8 @@ from maho_tools import (  # noqa: E402
 	is_valid_project_name,
 )
 
-_ENGINE_KIND = "引擎插件 (Engine/Plugins)"
-_PROJECT_KIND = "项目插件 (项目根/Plugins)"
+_ENGINE_TYPE = "引擎插件 (Engine/Plugins)"
+_PROJECT_TYPE = "项目插件 (项目根/Plugins)"
 
 
 class CreatePluginApp(tk.Tk):
@@ -29,14 +29,14 @@ class CreatePluginApp(tk.Tk):
 		self.minsize(520, 460)
 		self.resizable(True, True)
 
-		self.var_kind = tk.StringVar(value=_PROJECT_KIND)
+		self.var_type = tk.StringVar(value=_PROJECT_TYPE)
 		self.var_name = tk.StringVar(value="MyPlugin")
 		self.var_plugins_dir = tk.StringVar(value=str(default_plugins_dir or Path.cwd() / "Plugins"))
 		self.var_project_root = tk.StringVar(value=str(Path.cwd()))
 
 		self._build()
 		self.protocol("WM_DELETE_WINDOW", self.destroy)
-		self.var_kind.trace_add("write", lambda *_: self._sync_target())
+		self.var_type.trace_add("write", lambda *_: self._sync_target())
 		self._sync_target()
 
 	def _build(self) -> None:
@@ -50,11 +50,11 @@ class CreatePluginApp(tk.Tk):
 
 		# 插件归属：引擎插件 → 引擎根/Plugins；项目插件 → 项目根/Plugins
 		ttk.Label(frm, text="Plugin Location").grid(row=1, column=0, sticky="w", **pad)
-		self.cmb_kind = ttk.Combobox(
-			frm, textvariable=self.var_kind, state="readonly",
-			values=[_ENGINE_KIND, _PROJECT_KIND],
+		self.cmb_type = ttk.Combobox(
+			frm, textvariable=self.var_type, state="readonly",
+			values=[_ENGINE_TYPE, _PROJECT_TYPE],
 		)
-		self.cmb_kind.grid(row=1, column=1, columnspan=2, sticky="ew", **pad)
+		self.cmb_type.grid(row=1, column=1, columnspan=2, sticky="ew", **pad)
 
 		ttk.Label(frm, text="Plugin Name").grid(row=2, column=0, sticky="w", **pad)
 		ttk.Entry(frm, textvariable=self.var_name).grid(row=2, column=1, columnspan=2, sticky="ew", **pad)
@@ -80,7 +80,7 @@ class CreatePluginApp(tk.Tk):
 
 	def _sync_target(self) -> None:
 		"""引擎插件 → 固定到 引擎根/Plugins；项目插件 → 项目根/Plugins（可 Browse）。"""
-		if self.var_kind.get() == _ENGINE_KIND:
+		if self.var_type.get() == _ENGINE_TYPE:
 			self.var_plugins_dir.set(str((ENGINE_ROOT / "Plugins").resolve()))
 			self.ent_plugins.config(state="readonly")
 			self.btn_browse.config(state="disabled")
@@ -91,9 +91,9 @@ class CreatePluginApp(tk.Tk):
 			self.btn_browse.config(state="normal")
 
 	def _browse(self) -> None:
-		if self.var_kind.get() == _ENGINE_KIND:
+		if self.var_type.get() == _ENGINE_TYPE:
 			return
-		# project kind: pick the project ROOT (containing the .cproject)
+		# project type: pick the project ROOT (containing the .cproject)
 		initial = self.var_project_root.get() or str(Path.cwd())
 		path = filedialog.askdirectory(initialdir=initial, title="Select Project Root (contains .cproject)")
 		if path:

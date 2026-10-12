@@ -41,10 +41,10 @@ h2.file-title{font-size:20px;margin:0 0 18px;color:#fff}
      padding:16px 18px;margin-bottom:16px}
 .ent h3{font-size:15px;margin:0 0 10px;color:#fff}
 .ent .base{font-size:12px;color:var(--sub);font-weight:400}
-.ent .kind{font-size:10.5px;color:#0f1420;background:var(--accent);border-radius:3px;
+.ent .type{font-size:10.5px;color:#0f1420;background:var(--accent);border-radius:3px;
            padding:1px 6px;margin-right:8px;vertical-align:middle}
-.e-struct .kind{background:#7de8d8} .e-enum .kind{background:var(--warn)}
-.e-macro .kind{background:#c58fff} .e-alias .kind{background:#9fb0c8}
+.e-struct .type{background:#7de8d8} .e-enum .type{background:var(--warn)}
+.e-macro .type{background:#c58fff} .e-alias .type{background:#9fb0c8}
 .card{background:#182238;border:1px solid var(--line);border-radius:8px;padding:14px 16px;
       margin:0 0 16px}
 .card-title{font-size:14px;margin:0 0 8px;color:#fff}
@@ -124,7 +124,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table>
 </div>
 <div class="ent e-class" id="Public__Paths_h-0">
-<h3><span class="kind">类</span> FPaths <span class="base">: FFrameExtension, IPipeline&lt;IInit, IPostInit, IShutdown&gt;</span></h3>
+<h3><span class="type">类</span> FPaths <span class="base">: FFrameExtension, IPipeline&lt;IPreInit, IInit, IPostInit, IPreShutdown, IShutdown, IPostShutdown&gt;</span></h3>
 <div class="sect"><div class="doc">
 <p>路径解析器本体 —— **一个帧**（挂 6 个 stage）：根别名由宿主的启动流程在它 `Initialize` 之后登记，而所有 `Resolve` 都发生在根就绪之后、`Shutdown` 之前。</p>
 <p>**为什么不做成纯静态函数**：解析结果取决于「谁把哪些根登记进来了」这份运行期状态，它不是编译期常量；做成帧就能让它参与依赖排序（例如资源层要求「路径已就绪」）。</p>
@@ -138,9 +138,12 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <h4>接口</h4>
 <table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
 <tr><td><span class="acc a-private">private</span></td><td>MAHO_DECLARE_FRAME(FPaths)</td><td>声明帧身份（稳定字面量名字 + `CreateFrame` 工厂）—— 使别处能按名字声明「我在路径就绪之后才解析」（typed 形式不可用时用名字寻址）</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> PreInitialize(FEngineBase&amp;) <span class="kw">override</span></td><td>空：本帧不需要更早的时钟点</td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> Initialize(FEngineBase&amp;) <span class="kw">override</span></td><td>发布全局访问点（`GetPaths()` 从这里开始非空）</td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> PostInitialize(FEngineBase&amp;) <span class="kw">override</span></td><td>空</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> PreShutdown(FEngineBase&amp;) <span class="kw">override</span></td><td>空</td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> Shutdown(FEngineBase&amp;) <span class="kw">override</span></td><td>撤销全局访问点 —— 此时已没有使用者（依赖图保证），因此可以直接清掉解析表</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> PostShutdown(FEngineBase&amp;) <span class="kw">override</span></td><td>空</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> SetRoot(std::string_view Alias, std::filesystem::path Path)</td><td>登记一个根别名（如 `<span class="st">"Engine"</span>` → 引擎目录）。`Path` 按值收 —— 它要被存进表里，按值传让调用方可以 `std::move` 进来</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] std::filesystem::path Resolve(std::string_view VirtualPath) <span class="kw">const</span></td><td>把 `Alias/Sub/Path` 或 `Alias:Sub/Path` 解析成物理路径。**未知别名**的语义由实现决定（当前是按字面路径回退），因此需要区分「别名拼错」与「文件不存在」时应先用 `HasRoot` 探一下</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">bool</span> HasRoot(std::string_view Alias) <span class="kw">const</span></td><td>别名是否已登记 —— 用来在**进入解析之前**区分「根没配」与「路径不对」，这两种失败的处理完全不同（一个要报配置错误，一个是正常的文件缺失）</td></tr>
@@ -163,7 +166,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table>
 </div>
 <div class="ent e-macro" id="Public__PathsApi_h-0">
-<h3><span class="kind">宏</span> MAHO_PATHS_API <span class="base">: MAHO_EXPORT / MAHO_IMPORT（随构建开关切换）</span></h3>
+<h3><span class="type">宏</span> MAHO_PATHS_API <span class="base">: MAHO_EXPORT / MAHO_IMPORT（随构建开关切换）</span></h3>
 <div class="sect"><div class="doc">
 <p>编译 `Paths.dll` 时构建系统定义 `MAHO_PATHS_MODULE_EXPORTS` ⇒ `MAHO_EXPORT`；消费方为 `MAHO_IMPORT`。</p>
 <p>**为什么必须有**：`FPaths* GetPaths()` 跨 DLL 返回类型，`FPaths` 的虚表与删除析构符只能在本模块生成；`dllimport` 把「消费方各生成一份」变成编译错误，避免卸载后 `<span class="kw">delete</span>` 静默崩。</p>

@@ -41,10 +41,10 @@ h2.file-title{font-size:20px;margin:0 0 18px;color:#fff}
      padding:16px 18px;margin-bottom:16px}
 .ent h3{font-size:15px;margin:0 0 10px;color:#fff}
 .ent .base{font-size:12px;color:var(--sub);font-weight:400}
-.ent .kind{font-size:10.5px;color:#0f1420;background:var(--accent);border-radius:3px;
+.ent .type{font-size:10.5px;color:#0f1420;background:var(--accent);border-radius:3px;
            padding:1px 6px;margin-right:8px;vertical-align:middle}
-.e-struct .kind{background:#7de8d8} .e-enum .kind{background:var(--warn)}
-.e-macro .kind{background:#c58fff} .e-alias .kind{background:#9fb0c8}
+.e-struct .type{background:#7de8d8} .e-enum .type{background:var(--warn)}
+.e-macro .type{background:#c58fff} .e-alias .type{background:#9fb0c8}
 .card{background:#182238;border:1px solid var(--line);border-radius:8px;padding:14px 16px;
       margin:0 0 16px}
 .card-title{font-size:14px;margin:0 0 8px;color:#fff}
@@ -125,7 +125,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table>
 </div>
 <div class="ent e-struct" id="Public__DrawTriangleFeature_h-0">
-<h3><span class="kind">结构体</span> FTriangleShader</h3>
+<h3><span class="type">结构体</span> FTriangleShader</h3>
 <div class="sect"><div class="doc">
 <p>被 `FRender::TryGetShader&lt;T&gt;` 消费的着色器类型：**纯静态**源码访问器。编译 / 字节码缓存 / 内容哈希都活在共享的 `TShaderHandle` 状态里，所以特性**既不拥有字节码也不拥有原生模块**。静态体定义在 .cpp（GLSL 串保持特性私有）。</p>
 </div></div>
@@ -139,7 +139,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table></div>
 </div>
 <div class="ent e-class" id="Public__DrawTriangleFeature_h-1">
-<h3><span class="kind">类</span> FDrawTriangleFeature <span class="base">: FFrameExtension, IPipeline&lt;IRender&gt;</span></h3>
+<h3><span class="type">类</span> FDrawTriangleFeature <span class="base">: FFrameExtension, IPipeline&lt;IRender&gt;</span></h3>
 <div class="sect"><div class="doc">
 <p>全屏三角形特性。`IPipeline&lt;IRender&gt;` 说明它只被 `IRender` 这一个 stage 驱动 —— stage 列表就是它挂载的能力集，没挂的 stage 在批次里**完全不产生节点**。</p>
 </div></div>

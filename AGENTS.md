@@ -19,6 +19,13 @@ All AI agents must read this file before entering this engine.
 - **`.cplugin` `Dependencies`**: build-level (compile target + include), does not fill the `IPipeline` stage list. Runtime dependencies are declared by the frame itself via `WaitFor`/`BlockOn` (each has a typed template form, a name-addressed form, and a relative frame offset -- including `-K` -- in the selector for a cross-frame edge).
 - **Lifecycle owned by host**: teardown is `FEngineBase::PostMain` (uninstall sweep) + the OWNER's explicit fence pair `Graph->Wait()` (the submission fence) + `DrainPool()` (this lane's pool barrier) + `~FFrameBuilder`, which drains only the POOL. There is no `FFrameGraphHost` base and no `DrainGraph()` / `ShutdownGraph()` pair any more: the graph is a MEMBER of the frame that drives the sequence (see above), so `~FFrameGraph` stops its scheduler thread while its own node table is still alive and BEFORE the pool it was built with (members die before base classes) -- releasing it needs no explicit call. "The graph AND the pool are quiet before any instance or module is freed" is that pair of calls on the owner's side. Feature destructors do not silently teardown; init/shutdown are explicitly driven through the `IInit`/`IShutdown` stages.
 
+## Naming & Vocabulary (strict)
+
+- **`Type`, never `Kind`, for the semantics of "type".** Anything that names *which type / which category an identity belongs to* -- a field, a parameter, an enum value, a KV key, a macro argument, a dump label, a doc label -- says **`Type`**. `Kind` is banned in that role: it reads as "sort of", while the whole point of the metadata table below is that an identity is a name, not a resemblance.
+  - Precedent a reviewer can point at: `FMetaData`'s axis was `Kind` / `Kinds()` / `kind=` / `KFrameKind` and is now `Type` / `Types()` / `type=` / `KFrameType` (commit `d02bf890`).
+  - Scope: identifiers, diagnostics, dumps, docs. Non-naming English uses of the word ("no reference of any kind") are not what this bans.
+  - Corollary for the store: a new axis is a new **type** name, never a new `Kind`.
+
 ## Dependency / Link / Include Rules (strict)
 
 **Link direction (`.cplugin` Dependencies / CMake `target_link_libraries`) - layered one-way, arrow = linked target**:

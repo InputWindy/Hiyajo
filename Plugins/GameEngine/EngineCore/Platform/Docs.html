@@ -41,10 +41,10 @@ h2.file-title{font-size:20px;margin:0 0 18px;color:#fff}
      padding:16px 18px;margin-bottom:16px}
 .ent h3{font-size:15px;margin:0 0 10px;color:#fff}
 .ent .base{font-size:12px;color:var(--sub);font-weight:400}
-.ent .kind{font-size:10.5px;color:#0f1420;background:var(--accent);border-radius:3px;
+.ent .type{font-size:10.5px;color:#0f1420;background:var(--accent);border-radius:3px;
            padding:1px 6px;margin-right:8px;vertical-align:middle}
-.e-struct .kind{background:#7de8d8} .e-enum .kind{background:var(--warn)}
-.e-macro .kind{background:#c58fff} .e-alias .kind{background:#9fb0c8}
+.e-struct .type{background:#7de8d8} .e-enum .type{background:var(--warn)}
+.e-macro .type{background:#c58fff} .e-alias .type{background:#9fb0c8}
 .card{background:#182238;border:1px solid var(--line);border-radius:8px;padding:14px 16px;
       margin:0 0 16px}
 .card-title{font-size:14px;margin:0 0 8px;color:#fff}
@@ -136,7 +136,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table>
 </div>
 <div class="ent e-enum" id="Public__Platform_h-0">
-<h3><span class="kind">枚举</span> MInputEventType <span class="base">: std::uint8_t</span></h3>
+<h3><span class="type">枚举</span> MInputEventType <span class="base">: std::uint8_t</span></h3>
 <div class="sect"><div class="doc">
 <p>GLFW 在 `glfwPollEvents` 期间能投递的**全部**输入事件类型。没有精选子集 —— 平台能产生的每一条输入都被转发，由消费者（输入经纪 / ImGui 驱动）自己决定用哪部分。命名带 `M` 前缀（`MInputEventType` / `MInputEvent` / `MInputContext`）是刻意的：它们是**中立记录**，不属于任何具体平台后端。</p>
 </div></div>
@@ -154,7 +154,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table></div>
 </div>
 <div class="ent e-struct" id="Public__Platform_h-1">
-<h3><span class="kind">结构体</span> MInputEvent</h3>
+<h3><span class="type">结构体</span> MInputEvent</h3>
 <div class="sect"><div class="doc">
 <p>单条原始输入事件，与对应 GLFW 回调的负载**逐字段对齐**。做成无 <span class="kw">union</span> 的扁平记录：<span class="kw">union</span> 让「哪个字段有效」依赖外部约定且容易读错，而这里多出的几个 <span class="kw">int</span> / <span class="kw">float</span> 相对一次事件泵的开销可以忽略 —— 换取的是读代码时不需要查表。与该 Type 无关的字段保持默认值。</p>
 </div></div>
@@ -173,7 +173,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table></div>
 </div>
 <div class="ent e-struct" id="Public__Platform_h-2">
-<h3><span class="kind">结构体</span> MInputContext</h3>
+<h3><span class="type">结构体</span> MInputContext</h3>
 <div class="sect"><div class="doc">
 <p>平台与 UI 功能之间的**中立输入快照**。写者是 Platform（它的 GLFW 回调在窗口循环线程里跑），读者是 UI 功能（渲染线程），所以它按「可重复读的状态快照」设计：任何读者拿到同一份值，什么都不消费 —— 这使多个消费者可以各自独立地读，而不需要谁先谁后的约定。</p>
 <p>例外是滚轮：它没有可持久保存的「位置」，因此按累积 + 读取交换处理，语义上也只允许单消费者（编辑器滚 Console；游戏 UI 不滚）。边沿 / 字符 / 焦点同样不属于快照 —— 它们是瞬时的，走 `DrainInputEvents`。</p>
@@ -192,7 +192,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table></div>
 </div>
 <div class="ent e-class" id="Public__Platform_h-3">
-<h3><span class="kind">类</span> IPlatform</h3>
+<h3><span class="type">类</span> IPlatform</h3>
 <div class="sect"><div class="doc">
 <p>平台层向后端暴露的**最小**接口：只有原生表面。把它保持这么小是刻意的 —— 每多一个虚函数，就把更多平台概念固化进上层；而 RHI 真正需要的只有「表面句柄」这一件事，其余（尺寸、事件、关闭请求）都由具体实现类直接提供，不经这层抽象。</p>
 </div></div>
@@ -204,7 +204,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table></div>
 </div>
 <div class="ent e-class" id="Public__Platform_h-4">
-<h3><span class="kind">类</span> FPlatform <span class="base">: FFrameExtension + IPipeline&lt;IInit, IBeginFrame, IEndFrame, IExit, IPreShutdown, IShutdown&gt;</span></h3>
+<h3><span class="type">类</span> FPlatform <span class="base">: FFrameExtension + IPipeline&lt;IInit, IBeginFrame, IEndFrame, IExit, IPreShutdown, IShutdown&gt;</span></h3>
 <div class="sect"><div class="doc">
 <p>平台系统（一个引擎帧）：原生表面 + 事件。**它挂在帧首 / 帧尾 / 退出 / 拆解这几个阶段上**，因为引擎循环正是通过它推进的：`BeginFrame` 是**输入的唯一生产者** —— 递增规范化帧号、泵 OS 消息队列（`PollEvents`）、把这一帧的输入冻结成环里一个带帧号的不可变槽并唤醒读者；`EndFrame` 只留一个节点的位置（跨帧隔离边挂在它上面，见下）；`RequestExit` 把`ShouldClose` 变成引擎退出。</p>
 <p>**`ITick` 已经不在它的序列里**：输入生产搬到了帧首，于是「帧号递增」与「输入就绪」在同一处发生 —— 消费方只要排在 `IBeginFrame` 之后，读到的就是这一帧已经冻结的输入。</p>
