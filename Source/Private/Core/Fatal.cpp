@@ -1,32 +1,15 @@
 #include <Core/Fatal.h>
 
-// ── THE BUILD MATRIX'S GUARDS ───────────────────────────────────────────────────────────────────
-//
-// The build shape -- which configuration, which target, and everything derived from that pair
-// (`MAHO_DO_*`, `MAHO_WITH_*`) -- is INJECTED BY THE GENERATOR (`Tools/maho_tools.py`, one
-// `add_compile_definitions` block, per configuration), so there is no C++ header holding it and no
-// fallback to fall back on: a target the generator did not configure simply has no axes at all.
-//
-// The guards therefore have to be somewhere that is ALWAYS compiled, and one translation unit is
-// enough -- failing this file fails the build. What they exist for is the failure mode a missing
-// macro does NOT produce on its own: `#if MAHO_DO_CHECK` on an undefined macro reads as 0, i.e. every
-// check, every log and every trace silently disappears from a build nobody meant to strip. That is
-// worth an `#error` at the first opportunity.
 #ifndef MAHO_BUILD_TYPE
 #	error "MAHO_BUILD_TYPE is undefined: this target was not configured by the generator (Tools/maho_tools.py), which is the only definition site of the build-shape macros. Build through the generated project."
 #endif
 #ifndef MAHO_BUILD_TARGET
 #	error "MAHO_BUILD_TARGET is undefined: this target was not configured by the generator (Tools/maho_tools.py). Build through the generated project."
 #endif
-// Shipping x Editor contradicts itself: an editor needs the very facilities Shipping removes. Ship an
-// editor with Release x Editor instead.
 #if defined(MAHO_EDITOR_BUILD) && defined(MAHO_BUILD_SHIPPING)
 #	error "Shipping x Editor is not a valid combination -- ship an editor with Release x Editor."
 #endif
 
-// For GetCurrentGraphNode(): the crash reporter names the node body that was running (see the
-// PrintAddressStack note). Same module, so this is a direct call, and it is the ONE thing that turns
-// "0xC0000005 at <module+offset>" into "which of the ~35 nodes of this frame did it".
 #include <Core/FrameGraph.h>
 
 #include <chrono>
@@ -126,27 +109,18 @@ void AppendFatalLogFile(const char* Message)
 	ReportFatal(Message);
 }
 
-} // namespace
+}
 
 #if defined(_WIN32)
 namespace
 {
 
-/** Raw return addresses, newest first, printed as a list. Without a PDB the numbers are the point:
- *  a crash that says WHERE (a module offset) is already most of the way to a cause -- symbolise with
- *  `dumpbin /disasm` + the nearest public symbol, which is how the trace's flush crash was found.
- *  Each frame is ALSO resolved to `module+offset`: a raw address is useless across runs (ASLR moves
- *  every module), while the offset survives and points straight at the symbol. */
 void PrintAddressStack(const char* Why)
 {
 	void* Frames[40] = {};
 	const USHORT Count = RtlCaptureStackBackTrace(1, 40, Frames, nullptr);
 	std::fprintf(stderr, "Maho CRASH (%s): %u frames\n", Why, static_cast<unsigned>(Count));
 
-	// WHO was running. A hard fault raises nothing catchable and by the time this runs the frames are
-	// gone, so the identity has to have been PUBLISHED while the body was alive -- the graph does that
-	// around every node (Core/FrameGraph.h::GetCurrentGraphNode). Without it a crash inside a node is
-	// only a module+offset, and a 34-DLL program has ~35 node bodies per frame.
 	const char* Node = GetCurrentGraphNode();
 	if (Node != nullptr && Node[0] != 0)
 	{
@@ -176,13 +150,8 @@ void PrintAddressStack(const char* Why)
 	std::abort();
 }
 
-/** The CRT's invalid-parameter path. It normally goes straight to __fastfail, which no SEH filter and
- *  no terminate handler ever sees -- so a bad argument (a null where a string was wanted, a length
- *  overrun) killed release builds with nothing but "0xc0000409 in ucrtbase". This handler runs FIRST
- *  and is handed the offending call's function / file / line / expression, so the message names the
- *  call site instead of the CRT internals. */
 void OnInvalidParameter(const wchar_t* Expression, const wchar_t* Function, const wchar_t* File,
-	unsigned int Line, std::uintptr_t /*Reserved*/)
+	unsigned int Line, std::uintptr_t )
 {
 	std::fprintf(stderr, "Maho CRASH (invalid parameter): %ls\n  at %ls:%u\n  expr: %ls\n",
 		Function != nullptr ? Function : L"(unknown)",
@@ -192,9 +161,6 @@ void OnInvalidParameter(const wchar_t* Expression, const wchar_t* Function, cons
 	PrintAddressStack("invalid parameter");
 }
 
-/** abort() -- reached by ReportFatal, by the CRT's own bail-outs and by std::terminate paths that do
- *  not go through the handler above. Raising SIGABRT is abort's first step, so a handler here can
- *  still speak before the process dies. */
 void OnAbort(int)
 {
 	std::fprintf(stderr, "Maho CRASH (SIGABRT)\n");
@@ -202,8 +168,6 @@ void OnAbort(int)
 	PrintAddressStack("SIGABRT");
 }
 
-/** A plain access violation: the filter runs before the process is torn down. (Not reached by
- *  __fastfail -- see OnInvalidParameter for the CRT's fast paths.) */
 LONG WINAPI OnUnhandledException(EXCEPTION_POINTERS* Info)
 {
 	std::fprintf(stderr, "Maho CRASH (exception %08lx) at %p\n",
@@ -214,7 +178,7 @@ LONG WINAPI OnUnhandledException(EXCEPTION_POINTERS* Info)
 	return EXCEPTION_EXECUTE_HANDLER;
 }
 
-} // namespace
+}
 #endif
 
 void InstallFatalHandlers()
@@ -226,9 +190,6 @@ void InstallFatalHandlers()
 	}
 	std::set_terminate(TerminateHandler);
 #if defined(_WIN32)
-	// The rest of the "explain the crash" surface: terminate covers C++ exceptions, and these cover
-	// the three ways the process dies WITHOUT going through it (a bad CRT parameter, abort, and a
-	// fault) -- each printing its own stack, because a hard crash has no stack to walk later.
 	_set_invalid_parameter_handler(OnInvalidParameter);
 	std::signal(SIGABRT, OnAbort);
 	SetUnhandledExceptionFilter(OnUnhandledException);
@@ -239,9 +200,6 @@ void InstallFatalHandlers()
 [[noreturn]] void ReportFatal(const char* Message)
 {
 #if defined(_WIN32)
-	// The console defaults to the OEM codepage (e.g. CP936 on Chinese Windows);
-	// switch it to UTF-8 so the UTF-8 fatal text renders correctly. No-op when
-	// no console is attached (GUI subsystem).
 	SetConsoleOutputCP(CP_UTF8);
 #endif
 
@@ -266,8 +224,6 @@ void InstallFatalHandlers()
 
 void ReportError(const char* Message)
 {
-	// Serialize concurrent reports -- a plugin exception can be reported from any
-	// pool worker, and the console/log append must not interleave.
 	std::lock_guard<std::mutex> Lock(GFatalMutex);
 	const char* Text = Message ? Message : "(null)";
 	std::fprintf(stderr, "Maho ERROR: %s\n", Text);
@@ -278,13 +234,9 @@ void ReportError(const char* Message)
 
 void ReportEnsureBreak(const char* Message)
 {
-	// The durable half first: a silent skip has to leave a record even in a RELEASE run (that is the
-	// whole point -- nobody reads it live, they read it after the frame with no bars appeared).
 	ReportError(Message);
 
 #if defined(_WIN32) && defined(_MSC_VER)
-	// The debugger half: only if somebody is actually watching. Without this guard a warning macro
-	// would itself become a new crash source in every unattended run.
 	if (IsDebuggerPresent())
 	{
 		__debugbreak();
@@ -292,4 +244,4 @@ void ReportEnsureBreak(const char* Message)
 #endif
 }
 
-} // namespace Maho
+}

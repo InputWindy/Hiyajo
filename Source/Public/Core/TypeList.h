@@ -6,18 +6,12 @@
 namespace Maho
 {
 
-/**
- * Compile-time ordered list of types (a "type array").
- * Order matters: TTypeList<A, B> is a different type from TTypeList<B, A>.
- * Traversal order (serial / parallel) is the CALLER's choice, not encoded here.
- */
 template <typename... TTypes>
 struct TTypeList
 {
 	static constexpr std::size_t Count = sizeof...(TTypes);
 };
 
-/** Prepend T to the front of a TTypeList. */
 template <typename T, typename TList>
 struct TCons;
 
@@ -27,7 +21,6 @@ struct TCons<T, TTypeList<Ts...>>
 	using Type = TTypeList<T, Ts...>;
 };
 
-/** Append T to the end of a TTypeList. */
 template <typename TList, typename TValue>
 struct TAppend;
 
@@ -40,7 +33,6 @@ struct TAppend<TTypeList<Ts...>, TValue>
 template <typename TList, typename TValue>
 using TAppend_t = typename TAppend<TList, TValue>::Type;
 
-/** Membership: is T an element of TList? */
 template <typename TList, typename T>
 struct TContains : std::false_type
 {
@@ -59,11 +51,6 @@ struct TContains<TTypeList<THead, TRest...>, T> : TContains<TTypeList<TRest...>,
 template <typename TList, typename T>
 inline constexpr bool TContains_v = TContains<TList, T>::value;
 
-/**
- * Concatenate multiple TTypeLists into one, in order.
- *
- *   using FTags = TCatch<TTypeList<A>, TTypeList<B, C>>::Type;   // TTypeList<A, B, C>
- */
 template <typename... TLists>
 struct TCatch;
 
@@ -79,10 +66,6 @@ struct TCatch<TTypeList<T1...>, TTypeList<T2...>, TRest...>
 	using Type = typename TCatch<TTypeList<T1..., T2...>, TRest...>::Type;
 };
 
-/**
- * Union of two TTypeLists (order-preserving, deduplicated). Fold appends each
- * element to an accumulator unless already present.
- */
 namespace UnionDetail
 {
 	template <typename TAcc, typename TList>
@@ -103,23 +86,10 @@ namespace UnionDetail
 	};
 }
 
-/** Union of two TTypeLists (order-preserving, deduplicated). */
 template <typename TListA, typename TListB>
 using TUnionList_t = typename UnionDetail::TFold<
 	typename UnionDetail::TFold<TTypeList<>, TListA>::Type, TListB>::Type;
 
-/**
- * The stage list a type MOUNTS: `T::TStages`, i.e. whatever its `IPipeline<TStages...>` base
- * exposes -- or an EMPTY list for a type that mounts none.
- *
- * ONE definition, two consumers, and both of them need the same answer:
- *   - the trace's `StagePredecessorOf` (which stage of a frame runs before this one), and
- *   - the frame's own structural edge declarations (the in-frame chain and the per-stage self
- *     edge -- see MAHO_FRAME_STAGE_CHAIN / MAHO_FRAME_SELF_EDGES in Engine/Frame.h).
- * The list IS the frame's own declaration of what it mounts, so neither consumer is guessing: a
- * frame that mounts nothing (a host's lifecycle stages) gets "no predecessor" / "no edges" instead
- * of failing to compile.
- */
 template <typename TFrame, typename = void>
 struct TFrameStageList
 {
@@ -132,4 +102,4 @@ struct TFrameStageList<TFrame, std::void_t<typename TFrame::TStages>>
 	using Type = typename TFrame::TStages;
 };
 
-} // namespace Maho
+}

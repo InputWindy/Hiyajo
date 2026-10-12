@@ -2,39 +2,95 @@
 
 #include <Core/Fatal.h>
 
+#include <array>
+#include <condition_variable>
 #include <cstdlib>
+#include <deque>
+#include <mutex>
 #include <stdexcept>
+#include <thread>
 #include <utility>
+#include <vector>
 
 namespace Maho
 {
 
 namespace
 {
-	/** The pool whose task THIS thread is currently executing, or null outside any pool task.
-	 *
-	 *  It is what licenses Flush to help drain (only a worker of the pool may run its lanes'
-	 *  tasks) and it is deliberately a property of the RUNNING TASK, not of the thread: a thread
-	 *  that is not running this pool's work -- the game thread, a shutdown path -- must stay out
-	 *  of the queue, because running node bodies there is exactly what the pool exists to avoid.
-	 *
-	 *  Saved and restored around every task, because a drained task can belong to another lane or
-	 *  (in a nested case) another pool. */
 	thread_local const FThreadPool* GRunningPool = nullptr;
 }
 
-FThreadPool::FThreadPool(std::uint32_t InNumThreads)
-	: NumThreads(InNumThreads == 0 ? std::thread::hardware_concurrency() : InNumThreads)
+struct FThreadPool::FImpl
 {
-	if (NumThreads == 0)
+	struct FQueuedTask
 	{
-		NumThreads = 1;
+		std::function<void()> Task;
+	};
+
+	struct FLaneState
+	{
+		std::deque<FQueuedTask> Queue;
+		std::uint32_t           Pending = 0;
+		bool                    bInUse  = false;
+	};
+
+	void EnsureThreads(const FThreadPool* Owner, std::uint32_t Required);
+
+	void WorkerLoop(const FThreadPool* Owner);
+
+	bool TakeAnyTaskLocked(FQueuedTask& OutTask, FLane& OutLane);
+
+	[[nodiscard]] bool AnyLaneHasWorkLocked() const;
+
+	void NotifyWorkAvailableLocked();
+
+	void NotifyProgressLocked();
+
+	std::vector<std::thread> Workers;
+
+	mutable std::mutex      Mutex;
+	std::condition_variable CondVar;
+
+	std::uint32_t NumThreads = 0;
+	bool          bStopping  = false;
+
+	std::array<FLaneState, MaxLanes> Lanes{};
+
+	FLane NextLaneToServe = DefaultLane;
+
+	std::uint32_t FlushWaiters = 0;
+};
+
+namespace
+{
+	void RunTaskSafely(const FThreadPool* Owner, const std::function<void()>& Task)
+	{
+		const FThreadPool* const Previous = GRunningPool;
+		GRunningPool = Owner;
+		try
+		{
+			Task();
+		}
+		catch (const std::exception& E)
+		{
+			ReportError(E.what());
+		}
+		catch (...)
+		{
+			ReportError("Unknown exception in thread-pool worker");
+		}
+		GRunningPool = Previous;
 	}
-	// Zero workers at construction -- lazily started on first Submit.
-	// Diagnostic override (default-constructed pools only, so an explicitly sized
-	// pool such as RHI's serial recording pool keeps its width): MAHO_PARALLELISM=1
-	// reproduces the serial execution the graph was historically run under, which
-	// makes a parallel failure directly comparable against a known-good baseline.
+}
+
+FThreadPool::FThreadPool(std::uint32_t InNumThreads)
+	: Impl(std::make_unique<FImpl>())
+{
+	Impl->NumThreads = InNumThreads == 0 ? std::thread::hardware_concurrency() : InNumThreads;
+	if (Impl->NumThreads == 0)
+	{
+		Impl->NumThreads = 1;
+	}
 	if (InNumThreads == 0)
 	{
 		if (const char* Override = std::getenv("MAHO_PARALLELISM"))
@@ -42,22 +98,22 @@ FThreadPool::FThreadPool(std::uint32_t InNumThreads)
 			const long Requested = std::strtol(Override, nullptr, 10);
 			if (Requested > 0)
 			{
-				NumThreads = static_cast<std::uint32_t>(Requested);
+				Impl->NumThreads = static_cast<std::uint32_t>(Requested);
 			}
 		}
 	}
-	Workers.reserve(NumThreads);
-	Lanes[DefaultLane].bInUse = true;   // lane 0 belongs to the pool itself
+	Impl->Workers.reserve(Impl->NumThreads);
+	Impl->Lanes[DefaultLane].bInUse = true;
 }
 
 FThreadPool::~FThreadPool()
 {
 	{
-		std::lock_guard Lock(Mutex);
-		bStopping = true;
+		std::lock_guard Lock(Impl->Mutex);
+		Impl->bStopping = true;
 	}
-	CondVar.notify_all();
-	for (std::thread& Worker : Workers)
+	Impl->CondVar.notify_all();
+	for (std::thread& Worker : Impl->Workers)
 	{
 		if (Worker.joinable())
 		{
@@ -66,35 +122,17 @@ FThreadPool::~FThreadPool()
 	}
 }
 
-void FThreadPool::EnsureThreads(std::uint32_t Required)
-{
-	// Never exceed the hardware_concurrency-derived cap (more threads than
-	// cores only adds contention).
-	if (Required > NumThreads)
-	{
-		Required = NumThreads;
-	}
-	std::lock_guard Lock(Mutex);
-	while (Workers.size() < Required)
-	{
-		Workers.emplace_back(&FThreadPool::WorkerLoop, this);
-	}
-}
-
-// ── lanes ────────────────────────────────────────────────────────────────────
-
 FThreadPool::FLane FThreadPool::CreateLane()
 {
-	std::lock_guard Lock(Mutex);
+	std::lock_guard Lock(Impl->Mutex);
 
-	// Lane 0 is the pool's own; hand out from 1 upward.
 	for (FLane Lane = 1; Lane < MaxLanes; ++Lane)
 	{
-		if (!Lanes[Lane].bInUse)
+		if (!Impl->Lanes[Lane].bInUse)
 		{
-			Lanes[Lane].Queue.clear();
-			Lanes[Lane].Pending = 0;
-			Lanes[Lane].bInUse = true;
+			Impl->Lanes[Lane].Queue.clear();
+			Impl->Lanes[Lane].Pending = 0;
+			Impl->Lanes[Lane].bInUse = true;
 			return Lane;
 		}
 	}
@@ -110,32 +148,34 @@ void FThreadPool::DestroyLane(FLane Lane)
 		return;
 	}
 
-	std::lock_guard Lock(Mutex);
-	if (!Lanes[Lane].bInUse)
+	std::lock_guard Lock(Impl->Mutex);
+	if (!Impl->Lanes[Lane].bInUse)
 	{
 		return;
 	}
-	if (Lanes[Lane].Pending != 0 || !Lanes[Lane].Queue.empty())
+	if (Impl->Lanes[Lane].Pending != 0 || !Impl->Lanes[Lane].Queue.empty())
 	{
-		// Refused, not forced: releasing a lane whose work is still counted here would move that
-		// work's completion onto a lane somebody else now owns.
 		ReportError("FThreadPool::DestroyLane: lane still has work, it will not be reclaimed");
 		return;
 	}
-	Lanes[Lane].bInUse = false;
+	Impl->Lanes[Lane].bInUse = false;
 }
 
 std::uint32_t FThreadPool::GetLanePending(FLane Lane) const
 {
-	std::lock_guard Lock(Mutex);
-	if (Lane >= MaxLanes || !Lanes[Lane].bInUse)
+	std::lock_guard Lock(Impl->Mutex);
+	if (Lane >= MaxLanes || !Impl->Lanes[Lane].bInUse)
 	{
 		return 0;
 	}
-	return Lanes[Lane].Pending;
+	return Impl->Lanes[Lane].Pending;
 }
 
-// ── submission ───────────────────────────────────────────────────────────────
+std::uint32_t FThreadPool::GetNumThreads() const
+{
+	return Impl->NumThreads;
+}
+
 
 void FThreadPool::Submit(std::function<void()> Task)
 {
@@ -144,22 +184,19 @@ void FThreadPool::Submit(std::function<void()> Task)
 
 void FThreadPool::Submit(FLane Lane, std::function<void()> Task)
 {
-	EnsureThreads(NumThreads);
+	Impl->EnsureThreads(this, Impl->NumThreads);
 
-	std::lock_guard Lock(Mutex);
-	if (Lane >= MaxLanes || !Lanes[Lane].bInUse)
+	std::lock_guard Lock(Impl->Mutex);
+	if (Lane >= MaxLanes || !Impl->Lanes[Lane].bInUse)
 	{
-		// An unknown lane is a caller bug, but dropping its work would turn it into a hang
-		// somewhere else entirely -- report and keep it, on the lane that always exists.
 		ReportError("FThreadPool::Submit: unknown lane, falling back to the default lane");
 		Lane = DefaultLane;
 	}
-	Lanes[Lane].Queue.push_back(FQueuedTask{ std::move(Task) });
-	Lanes[Lane].Pending += 1;
-	NotifyWorkAvailableLocked();
+	Impl->Lanes[Lane].Queue.push_back(FImpl::FQueuedTask{ std::move(Task) });
+	Impl->Lanes[Lane].Pending += 1;
+	Impl->NotifyWorkAvailableLocked();
 }
 
-// ── barriers ─────────────────────────────────────────────────────────────────
 
 void FThreadPool::Flush()
 {
@@ -173,124 +210,54 @@ void FThreadPool::Flush(FLane Lane)
 		return;
 	}
 
-	std::unique_lock Lock(Mutex);
-	if (!Lanes[Lane].bInUse)
+	std::unique_lock Lock(Impl->Mutex);
+	if (!Impl->Lanes[Lane].bInUse)
 	{
 		return;
 	}
 
-	// A worker may call this -- a collector's stage body is dispatched by its PARENT's graph, so
-	// it runs on the parent's lane while flushing its own, and that lane's count cannot include
-	// it. But when the caller IS a worker of this pool, it can and must help drain the lane it is
-	// waiting on: a pool whose workers are all blocked here has a queue nobody can run, and then
-	// the count below is unreachable no matter what it is.
 	const bool bMayHelpDrain = (GRunningPool == this);
 
-	FlushWaiters += 1;
+	Impl->FlushWaiters += 1;
 	for (;;)
 	{
-		if (Lanes[Lane].Pending == 0)
+		if (Impl->Lanes[Lane].Pending == 0)
 		{
 			break;
 		}
 
-		if (bMayHelpDrain && !Lanes[Lane].Queue.empty())
+		if (bMayHelpDrain && !Impl->Lanes[Lane].Queue.empty())
 		{
-			// Drain exactly ONE lane -- the one being waited on. That is what keeps this exact:
-			// it advances this condition and touches nothing else's. The task is run exactly like
-			// any other one, so a drained task is indistinguishable from a worker-run one -- which
-			// is why nothing here (or in the worker) needs to know how a task is instrumented.
-			FQueuedTask Queued = std::move(Lanes[Lane].Queue.front());
-			Lanes[Lane].Queue.pop_front();
+			FImpl::FQueuedTask Queued = std::move(Impl->Lanes[Lane].Queue.front());
+			Impl->Lanes[Lane].Queue.pop_front();
 			Lock.unlock();
-			RunTaskSafely(Queued.Task);
+			RunTaskSafely(this, Queued.Task);
 			Lock.lock();
-			Lanes[Lane].Pending -= 1;
-			NotifyProgressLocked();
+			Impl->Lanes[Lane].Pending -= 1;
+			Impl->NotifyProgressLocked();
 			continue;
 		}
 
-		// Re-waiting (not a predicate wait) so that a task arriving while we sleep gets one more
-		// look at the drain branch above -- otherwise a full house of blocked workers could sleep
-		// through work it is able to run itself.
-		CondVar.wait(Lock);
+		Impl->CondVar.wait(Lock);
 	}
-	FlushWaiters -= 1;
+	Impl->FlushWaiters -= 1;
 }
 
-// ── workers ──────────────────────────────────────────────────────────────────
 
-bool FThreadPool::AnyLaneHasWorkLocked() const
+void FThreadPool::FImpl::EnsureThreads(const FThreadPool* Owner, std::uint32_t Required)
 {
-	for (const FLaneState& Lane : Lanes)
+	if (Required > NumThreads)
 	{
-		if (!Lane.Queue.empty())
-		{
-			return true;
-		}
+		Required = NumThreads;
 	}
-	return false;
-}
-
-bool FThreadPool::TakeAnyTaskLocked(FQueuedTask& OutTask, FLane& OutLane)
-{
-	// Round-robin from the cursor so a busy lane cannot starve a quiet one (lane 0 carries the
-	// host graph and would otherwise always win).
-	for (std::uint32_t Step = 0; Step < MaxLanes; ++Step)
+	std::lock_guard Lock(Mutex);
+	while (Workers.size() < Required)
 	{
-		NextLaneToServe = static_cast<FLane>((NextLaneToServe + 1) % MaxLanes);
-		if (!Lanes[NextLaneToServe].Queue.empty())
-		{
-			OutLane = NextLaneToServe;
-			OutTask = std::move(Lanes[NextLaneToServe].Queue.front());
-			Lanes[NextLaneToServe].Queue.pop_front();
-			return true;
-		}
-	}
-	return false;
-}
-
-void FThreadPool::NotifyWorkAvailableLocked()
-{
-	if (FlushWaiters > 0)
-	{
-		// A blocked Flush waiter may need to help drain; it cannot be picked by notify_one.
-		CondVar.notify_all();
-		return;
-	}
-	CondVar.notify_one();
-}
-
-void FThreadPool::NotifyProgressLocked()
-{
-	if (FlushWaiters > 0)
-	{
-		CondVar.notify_all();
+		Workers.emplace_back(&FImpl::WorkerLoop, this, Owner);
 	}
 }
 
-void FThreadPool::RunTaskSafely(const std::function<void()>& Task)
-{
-	const FThreadPool* const Previous = GRunningPool;
-	GRunningPool = this;
-	try
-	{
-		Task();
-	}
-	catch (const std::exception& E)
-	{
-		// A throwing task must not kill the host -- a buggy plugin stage should
-		// be isolated. Report (non-fatal) and keep the worker serving.
-		ReportError(E.what());
-	}
-	catch (...)
-	{
-		ReportError("Unknown exception in thread-pool worker");
-	}
-	GRunningPool = Previous;
-}
-
-void FThreadPool::WorkerLoop()
+void FThreadPool::FImpl::WorkerLoop(const FThreadPool* Owner)
 {
 	while (true)
 	{
@@ -309,7 +276,7 @@ void FThreadPool::WorkerLoop()
 			}
 		}
 
-		RunTaskSafely(Queued.Task);
+		RunTaskSafely(Owner, Queued.Task);
 
 		{
 			std::lock_guard Lock(Mutex);
@@ -319,4 +286,50 @@ void FThreadPool::WorkerLoop()
 	}
 }
 
-} // namespace Maho
+bool FThreadPool::FImpl::AnyLaneHasWorkLocked() const
+{
+	for (const FLaneState& Lane : Lanes)
+	{
+		if (!Lane.Queue.empty())
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+bool FThreadPool::FImpl::TakeAnyTaskLocked(FQueuedTask& OutTask, FLane& OutLane)
+{
+	for (std::uint32_t Step = 0; Step < MaxLanes; ++Step)
+	{
+		NextLaneToServe = static_cast<FLane>((NextLaneToServe + 1) % MaxLanes);
+		if (!Lanes[NextLaneToServe].Queue.empty())
+		{
+			OutLane = NextLaneToServe;
+			OutTask = std::move(Lanes[NextLaneToServe].Queue.front());
+			Lanes[NextLaneToServe].Queue.pop_front();
+			return true;
+		}
+	}
+	return false;
+}
+
+void FThreadPool::FImpl::NotifyWorkAvailableLocked()
+{
+	if (FlushWaiters > 0)
+	{
+		CondVar.notify_all();
+		return;
+	}
+	CondVar.notify_one();
+}
+
+void FThreadPool::FImpl::NotifyProgressLocked()
+{
+	if (FlushWaiters > 0)
+	{
+		CondVar.notify_all();
+	}
+}
+
+}

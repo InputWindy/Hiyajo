@@ -17,18 +17,14 @@
 
 #include <filesystem>
 #include <fstream>
+#include <map>
+#include <memory>
 #include <optional>
 #include <sstream>
 #include <string>
 #include <utility>
 #include <vector>
 
-// ── the manifest's runtime location is the GENERATOR's fact ─────────────────────────────────────
-//
-// `Tools/maho_tools.py` writes the manifest AND stages it next to the binary (POST_BUILD), so the
-// generator also knows the path -- and it is the only party that may: a path literal here would be
-// Core hardcoding a build layout it does not own. No fallback value on purpose: a translation unit
-// without these macros is not built through the generated project.
 #ifndef MAHO_PLUGIN_MANIFEST
 #	error "MAHO_PLUGIN_MANIFEST is undefined: the plugin manifest's name is filled in by the generator (Tools/maho_tools.py), together with the step that stages the file next to the binary."
 #endif
@@ -54,63 +50,33 @@ std::string ApplyModuleExtension(std::string_view BaseName)
 #endif
 }
 
-void FModuleDeleter::operator()(void* Handle) const noexcept
-{
-	if (Handle == nullptr)
-	{
-		return;
-	}
-#if defined(_WIN32)
-	FreeLibrary(static_cast<HMODULE>(Handle));
-#else
-	dlclose(Handle);
-#endif
-}
-
-FAssembly::FAssembly(std::string_view Path)
-{
-	Load(Path);
-}
-
-bool FAssembly::Load(std::string_view Path)
-{
-	Unload();
-	const std::string Native = std::string(Path);
-#if defined(_WIN32)
-	Module.reset(static_cast<void*>(LoadLibraryA(Native.c_str())));
-#else
-	Module.reset(dlopen(Native.c_str(), RTLD_NOW));
-#endif
-	return IsLoaded();
-}
-
-void FAssembly::Unload()
-{
-	Module.reset();
-}
-
-void* FAssembly::GetProcAddress(const char* Name) const
-{
-	if (Module == nullptr)
-	{
-		return nullptr;
-	}
-#if defined(_WIN32)
-	return reinterpret_cast<void*>(::GetProcAddress(static_cast<HMODULE>(Module.get()), Name));
-#else
-	return dlsym(Module.get(), Name);
-#endif
-}
-
-// ── the plugin manifest (FAssembly's static half -- see the header) ─────────────────────────────
-
 namespace
 {
-	/** The first candidate that actually holds the manifest. Every candidate is built from the
-	 *  GENERATOR's macros (see the guard above), so this function spells no path of its own -- only
-	 *  the set of places worth probing, which IS a runtime decision: the staged copy beside the binary
-	 *  first, then the development (un-staged) location, then the working directory, for a host that
-	 *  runs the binary from somewhere else. */
+	struct FModuleDeleter
+	{
+		void operator()(void* Handle) const noexcept
+		{
+			if (Handle == nullptr)
+			{
+				return;
+			}
+#if defined(_WIN32)
+			FreeLibrary(static_cast<HMODULE>(Handle));
+#else
+			dlclose(Handle);
+#endif
+		}
+	};
+
+	struct FManifestState
+	{
+		bool bLoaded = false;
+		std::string EngineRoot;
+		std::map<std::string, std::vector<std::string>> Children;
+	};
+
+	FManifestState GManifest;
+
 	std::optional<std::filesystem::path> FindManifestFile()
 	{
 		const std::filesystem::path ExeDir = FAssembly::ExecutableDir();
@@ -137,14 +103,64 @@ namespace
 		}
 		return std::nullopt;
 	}
+}
 
-} // namespace
+struct FAssembly::FImpl
+{
+	std::unique_ptr<void, FModuleDeleter> Module;
+};
 
-// The manifest's state: process-wide, so it is DEFINED here, in the module that exports FAssembly --
-// every plugin DLL then reaches the SAME three fields through the import.
-bool FAssembly::bManifestLoaded = false;
-std::string FAssembly::ManifestEngineRoot;
-std::map<std::string, std::vector<std::string>> FAssembly::ManifestChildren;
+FAssembly::FAssembly()
+	: Impl(std::make_unique<FImpl>())
+{
+}
+
+FAssembly::FAssembly(std::string_view Path)
+	: Impl(std::make_unique<FImpl>())
+{
+	Load(Path);
+}
+
+FAssembly::FAssembly(FAssembly&&) noexcept = default;
+
+FAssembly& FAssembly::operator=(FAssembly&&) noexcept = default;
+
+FAssembly::~FAssembly() = default;
+
+bool FAssembly::Load(std::string_view Path)
+{
+	Unload();
+	const std::string Native = std::string(Path);
+#if defined(_WIN32)
+	Impl->Module.reset(static_cast<void*>(LoadLibraryA(Native.c_str())));
+#else
+	Impl->Module.reset(dlopen(Native.c_str(), RTLD_NOW));
+#endif
+	return IsLoaded();
+}
+
+void FAssembly::Unload()
+{
+	Impl->Module.reset();
+}
+
+bool FAssembly::IsLoaded() const
+{
+	return Impl->Module != nullptr;
+}
+
+void* FAssembly::GetProcAddress(const char* Name) const
+{
+	if (Impl->Module == nullptr)
+	{
+		return nullptr;
+	}
+#if defined(_WIN32)
+	return reinterpret_cast<void*>(::GetProcAddress(static_cast<HMODULE>(Impl->Module.get()), Name));
+#else
+	return dlsym(Impl->Module.get(), Name);
+#endif
+}
 
 std::filesystem::path FAssembly::ExecutableDir()
 {
@@ -175,12 +191,12 @@ std::filesystem::path FAssembly::ExecutableDir()
 
 bool FAssembly::IsManifestLoaded()
 {
-	return bManifestLoaded;
+	return GManifest.bLoaded;
 }
 
 const std::string& FAssembly::GetEngineRoot()
 {
-	return ManifestEngineRoot;
+	return GManifest.EngineRoot;
 }
 
 bool FAssembly::LoadManifest()
@@ -188,14 +204,14 @@ bool FAssembly::LoadManifest()
 	const std::optional<std::filesystem::path> Manifest = FindManifestFile();
 	if (!Manifest)
 	{
-		bManifestLoaded = false;
+		GManifest.bLoaded = false;
 		return false;
 	}
 
 	std::ifstream In(*Manifest);
 	if (!In)
 	{
-		bManifestLoaded = false;
+		GManifest.bLoaded = false;
 		return false;
 	}
 	std::ostringstream Buf;
@@ -203,21 +219,19 @@ bool FAssembly::LoadManifest()
 	const std::string Text = Buf.str();
 	if (Text.empty())
 	{
-		bManifestLoaded = false;
+		GManifest.bLoaded = false;
 		return false;
 	}
 
 	try
 	{
 		const nlohmann::json J = nlohmann::json::parse(Text);
-		ManifestChildren.clear();
-		ManifestEngineRoot.clear();
-		// Failing at any point clears the engine root too -- a stale root from a previous successful
-		// load must not survive a failed re-load.
-		bManifestLoaded = false;
+		GManifest.Children.clear();
+		GManifest.EngineRoot.clear();
+		GManifest.bLoaded = false;
 		if (J.contains("EngineRoot") && J["EngineRoot"].is_string())
 		{
-			ManifestEngineRoot = J["EngineRoot"].get<std::string>();
+			GManifest.EngineRoot = J["EngineRoot"].get<std::string>();
 		}
 		if (J.contains("Children") && J["Children"].is_object())
 		{
@@ -237,16 +251,16 @@ bool FAssembly::LoadManifest()
 				}
 				if (!Kids.empty())
 				{
-					ManifestChildren[It.key()] = std::move(Kids);
+					GManifest.Children[It.key()] = std::move(Kids);
 				}
 			}
 		}
-		bManifestLoaded = true;
+		GManifest.bLoaded = true;
 		return true;
 	}
 	catch (const std::exception&)
 	{
-		bManifestLoaded = false;
+		GManifest.bLoaded = false;
 		return false;
 	}
 }
@@ -254,8 +268,8 @@ bool FAssembly::LoadManifest()
 const std::vector<std::string>& FAssembly::GetChildren(std::string_view LayerName)
 {
 	static const std::vector<std::string> Empty;
-	const auto It = ManifestChildren.find(std::string(LayerName));
-	return It != ManifestChildren.end() ? It->second : Empty;
+	const auto It = GManifest.Children.find(std::string(LayerName));
+	return It != GManifest.Children.end() ? It->second : Empty;
 }
 
-} // namespace Maho
+}

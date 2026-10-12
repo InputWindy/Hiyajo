@@ -1,146 +1,19 @@
 #pragma once
 
-// TQuery -- a type-UNRELATED compile-time LINQ over a type table. It never
-// references instances / schedulers: input is a TTypeList, output is a
-// filtered TTypeList. Select / With / Not are type-set operations evaluated at
-// compile time; runtime driving of the surviving types is the caller's concern.
-//
-// CORE, not Engine: nothing here knows what a frame or a stage is -- the predicate is "derives from
-// ANY of these types", whatever they happen to be (it filters a Core/TypeList.h table). The engine is
-// one user of it; the test projects are another.
-//
-//   using FTable = TTypeList<FLog, FNet, FAudio>;
-//   using FTickable = TQuery<FTable>::Select<ITick>::With<IShared>::Not<ITest>::FResult;
-//
-//   Select<T...>   keep types deriving ANY of T (OR)    -- starts from FList
-//   With<T...>     keep types deriving ALL of T (AND)   -- refines FList
-//   Not<T...>      drop types deriving ANY of T (NOR)   -- subtracts from FList
-//
-// The chain mutates FList: every call returns a NEW TQuery whose FList is the
-// survivor set so far. FResult is just that running table.
-//
-// FQuery -- the RUNTIME counterpart: filters an instance vector by the same
-// interface predicates (dynamic_cast on the erased base). Used when the layer
-// set is dynamic (unknown at compile time).
-//
-//   std::vector<FFrameExtension*> Layers = ...;
-//   auto Tickable = FQuery<FFrameExtension>(Layers).Select<ITick>().Data;
 #include <Core/Fatal.h>
-#include <Core/TypeList.h>
 
 #include <cstddef>
-#include <functional>
-#include <type_traits>
-#include <utility>
 #include <vector>
 
 namespace Maho
 {
 
-// -- type-set operations (pure type algebra, no engine dependency) -----------------------
-
-namespace QueryDetail
-{
-	/** Keep elements of TList deriving ANY of TBase... (OR). */
-	template <typename TList, typename... TBase>
-	struct TKeep;
-	template <typename... TBase>
-	struct TKeep<TTypeList<>, TBase...> { using Type = TTypeList<>; };
-	template <typename THead, typename... TRest, typename... TBase>
-	struct TKeep<TTypeList<THead, TRest...>, TBase...>
-	{
-		static constexpr bool bAny = (std::is_base_of_v<TBase, THead> || ...);
-		using FTail = typename TKeep<TTypeList<TRest...>, TBase...>::Type;
-		using Type = std::conditional_t<bAny,
-			typename TCons<THead, FTail>::Type, FTail>;
-	};
-
-	/** Keep elements of TList deriving ALL of TBase... (AND). */
-	template <typename TList, typename... TBase>
-	struct TKeepAll;
-	template <typename... TBase>
-	struct TKeepAll<TTypeList<>, TBase...> { using Type = TTypeList<>; };
-	template <typename THead, typename... TRest, typename... TBase>
-	struct TKeepAll<TTypeList<THead, TRest...>, TBase...>
-	{
-		static constexpr bool bAll = (std::is_base_of_v<TBase, THead> && ...);
-		using FTail = typename TKeepAll<TTypeList<TRest...>, TBase...>::Type;
-		using Type = std::conditional_t<bAll,
-			typename TCons<THead, FTail>::Type, FTail>;
-	};
-
-	/** Drop elements of TList deriving ANY of TBase... (NOR / subtraction). */
-	template <typename TList, typename... TBase>
-	struct TDrop;
-	template <typename... TBase>
-	struct TDrop<TTypeList<>, TBase...> { using Type = TTypeList<>; };
-	template <typename THead, typename... TRest, typename... TBase>
-	struct TDrop<TTypeList<THead, TRest...>, TBase...>
-	{
-		static constexpr bool bAny = (std::is_base_of_v<TBase, THead> || ...);
-		using FTail = typename TDrop<TTypeList<TRest...>, TBase...>::Type;
-		using Type = std::conditional_t<bAny, FTail,
-			typename TCons<THead, FTail>::Type>;
-	};
-}
-
-/**
- * Type-agnostic compile-time query over a type table.
- *
- * Select / With / Not are chainable and pure: they never touch runtime state.
- * Each returns a new TQuery whose FList is the survivor set so far; FResult is
- * that running table. Driving the surviving elements is left to the caller.
- *
- *   TQuery<FTable> Q;
- *   using FOut = decltype(Q.Select<IA>().With<IB>().Not<IC>())::FResult;
- */
-template <typename FList>
-class TQuery
-{
-public:
-	/** The survivor set so far -- a TTypeList. */
-	using FResult = FList;
-
-	/** Keep types deriving ANY of TInterfaces... (OR) -- starts from FList. */
-	template <typename... TInterfaces>
-	[[nodiscard]] constexpr auto Select() const
-	{
-		return TQuery<typename QueryDetail::TKeep<FList, TInterfaces...>::Type>{};
-	}
-
-	/** Keep types deriving ALL of TInterfaces... (AND) -- refines FList. */
-	template <typename... TInterfaces>
-	[[nodiscard]] constexpr auto With() const
-	{
-		return TQuery<typename QueryDetail::TKeepAll<FList, TInterfaces...>::Type>{};
-	}
-
-	/** Drop types deriving ANY of TInterfaces... (NOR) -- subtracts from FList. */
-	template <typename... TInterfaces>
-	[[nodiscard]] constexpr auto Not() const
-	{
-		return TQuery<typename QueryDetail::TDrop<FList, TInterfaces...>::Type>{};
-	}
-};
-
-/**
- * Runtime instance query result -- owns a filtered vector and is usable as a
- * vector via implicit conversion. Select/With/Not continue the chain on the
- * current result set (recursive querying).
- *
- * The vector is private: letting a caller push raw pointers in would bypass every
- * predicate. It is also debug-audited against the collection it came from -- a pointer
- * that is no longer in the source is a layer that was unloaded, and dereferencing it
- * (a dynamic_cast reads the vptr!) is a crash, so the audit drops it and reports.
- */
 template <typename TBase>
 class FQueryResult
 {
 public:
 	FQueryResult() = default;
 
-	/** Built by FQuery::AsResult / Filter: remembers where the pointers came from, which
-	 *  is what the debug liveness audit checks them against. */
 	explicit FQueryResult(std::vector<TBase*>& InSource)
 		: Source(&InSource)
 	{
@@ -153,31 +26,24 @@ public:
 	[[nodiscard]] bool IsEmpty() const noexcept { return Data.empty(); }
 	[[nodiscard]] const std::vector<TBase*>& GetData() const noexcept { return Data; }
 
-	/** Keep instances whose dynamic type derives ANY of TFilter... (OR). */
 	template <typename... TFilter>
 	FQueryResult<TBase> Select() const
 	{
 		return Filter([](TBase* P) { return ((dynamic_cast<TFilter*>(P) != nullptr) || ...); });
 	}
 
-	/** Keep instances whose dynamic type derives ALL of TFilter... (AND). */
 	template <typename... TFilter>
 	FQueryResult<TBase> With() const
 	{
 		return Filter([](TBase* P) { return ((dynamic_cast<TFilter*>(P) != nullptr) && ...); });
 	}
 
-	/** Drop instances whose dynamic type derives ANY of TFilter... (NOR). */
 	template <typename... TFilter>
 	FQueryResult<TBase> Not() const
 	{
 		return Filter([](TBase* P) { return !((dynamic_cast<TFilter*>(P) != nullptr) || ...); });
 	}
 
-	/** Cast the current result set to a concrete interface type (dynamic_cast),
-	 *  returning only the non-null survivors as std::vector<T*>. Lets a caller
-	 *  drive the survivors directly (e.g. call interface methods) without
-	 *  arranging a TaskGraph. */
 	template <typename T>
 	[[nodiscard]] std::vector<T*> Cast() const
 	{
@@ -198,15 +64,9 @@ public:
 	}
 
 private:
-	/** FQuery is the only other writer of Data (it seeds a result from the source). */
 	template <typename T>
 	friend class FQuery;
 
-	/** Is this pointer still in the collection the result came from? Unload erases a layer
-	 *  from the source BEFORE releasing it, so "gone from the source" == freed. Debug-only:
-	 *  in the other configurations this is just a null check (the audit costs a scan per
-	 *  element). The switch is the build configuration's, not the toolchain's: see
-	 *  Tools/maho_tools.py (MAHO_DO_CONTAINER_CHECKS). */
 	[[nodiscard]] bool CheckStillLive(TBase* Ptr) const
 	{
 #if MAHO_DO_CONTAINER_CHECKS
@@ -255,55 +115,36 @@ private:
 	}
 
 	std::vector<TBase*>  Data;
-	std::vector<TBase*>* Source = nullptr;   // the collection the pointers came from
+	std::vector<TBase*>* Source = nullptr;
 };
 
-/**
- * Runtime instance query -- an abstract query source over a vector of
- * erased-base pointers. The data source is supplied by the subclass via
- * GetQueryData() (e.g. FEngineBase returns its Pipelines vector). Select/With/
- * Not filter by interface predicates (dynamic_cast) and return value-type
- * FQueryResult instances.
- *
- *   // FEngineBase inherits FQuery<FFrameExtension>; inside the engine:
- *   auto Tickable = Select<ITick>();   // FQueryResult<FFrameExtension>
- *   TickGraph.Init(Tickable);                        // implicit conversion to vector
- */
 template <typename TBase>
 class FQuery
 {
 public:
 	virtual ~FQuery() = default;
 
-	/** Data source: the subclass returns its instance collection. The NON-const form is
-	 *  the collector's own write path (install/unload) and is not exported: a caller that
-	 *  could hand-write into the collection would bypass every install check. */
 	virtual std::vector<TBase*>& GetQueryData() = 0;
 	virtual const std::vector<TBase*>& GetQueryData() const = 0;
 
-	/** Keep instances whose dynamic type derives ANY of TFilter... (OR). */
 	template <typename... TFilter>
 	FQueryResult<TBase> Select() const
 	{
 		return AsResult().template Select<TFilter...>();
 	}
 
-	/** Keep instances whose dynamic type derives ALL of TFilter... (AND). */
 	template <typename... TFilter>
 	FQueryResult<TBase> With() const
 	{
 		return AsResult().template With<TFilter...>();
 	}
 
-        /** Drop instances whose dynamic type derives ANY of TFilter... (NOR). */
         template <typename... TFilter>
         FQueryResult<TBase> Not() const
         {
             return AsResult().template Not<TFilter...>();
         }
 
-        /** Cast the query source to a concrete interface type (dynamic_cast) and
-         *  return only the non-null survivors as std::vector<T*>. */
         template <typename T>
         [[nodiscard]] std::vector<T*> Cast() const
         {
@@ -311,18 +152,15 @@ public:
         }
 
 private:
-	/** FQuery seeds a result from its source (the only other writer of Data). */
 	template <typename T>
 	friend class FQuery;
 
 	FQueryResult<TBase> AsResult() const
 	{
-		// Bind the result to the LIVE source so its debug audit can tell "still there" from
-		// "unloaded while I held this result" -- a freed pointer is never dereferenced.
 		FQueryResult<TBase> Result(const_cast<std::vector<TBase*>&>(GetQueryData()));
-		Result.Data = GetQueryData();   // copy the source pointers (friend access)
+		Result.Data = GetQueryData();
 		return Result;
 	}
 };
 
-} // namespace Maho
+}

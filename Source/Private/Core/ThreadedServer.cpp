@@ -2,18 +2,17 @@
 
 #include <Core/Fatal.h>
 
+#include <atomic>
+#include <condition_variable>
+#include <deque>
+#include <mutex>
 #include <stdexcept>
+#include <thread>
 #include <utility>
 
 namespace Maho
 {
 
-// The virtuals are defined HERE rather than inline: this class is a base of
-// plugin-side objects (a render/IO role) and of the scheduler, so keeping its
-// first out-of-line virtual in the engine's own module gives it a KEY FUNCTION --
-// one vtable and one deleting destructor, in Maho.dll, instead of a COMDAT copy
-// per module. The inline versions were exactly the hazard Core/Export.h warns
-// about (whichever TU instantiated it stamped its own module's vptr).
 bool FThreadedServer::OnInitialize()
 {
 	return true;
@@ -28,6 +27,29 @@ const char* FThreadedServer::GetThreadName() const
 	return "ThreadedServer";
 }
 
+struct FThreadedServer::FImpl
+{
+	struct FQueuedTask
+	{
+		std::function<void()> Task;
+	};
+
+	void RunLoop();
+
+	std::thread Worker;
+	std::thread::id WorkerId;
+	std::deque<FQueuedTask> Queue;
+	mutable std::mutex Mutex;
+	std::condition_variable CondVar;
+	std::atomic<bool> bRunning{false};
+	bool bStopping = false;
+};
+
+FThreadedServer::FThreadedServer()
+	: Impl(std::make_unique<FImpl>())
+{
+}
+
 FThreadedServer::~FThreadedServer()
 {
 	Shutdown();
@@ -35,7 +57,7 @@ FThreadedServer::~FThreadedServer()
 
 bool FThreadedServer::Initialize()
 {
-	if (bRunning.load(std::memory_order_acquire))
+	if (Impl->bRunning.load(std::memory_order_acquire))
 	{
 		return true;
 	}
@@ -43,46 +65,47 @@ bool FThreadedServer::Initialize()
 	{
 		return false;
 	}
-	bStopping = false;
-	bRunning.store(true, std::memory_order_release);
-	Worker = std::thread(&FThreadedServer::RunLoop, this);
+	Impl->bStopping = false;
+	Impl->bRunning.store(true, std::memory_order_release);
+	Impl->Worker = std::thread(&FImpl::RunLoop, Impl.get());
 	return true;
 }
 
 void FThreadedServer::Shutdown()
 {
-	if (!bRunning.load(std::memory_order_acquire))
+	if (!Impl->bRunning.load(std::memory_order_acquire))
 	{
 		return;
 	}
 	{
-		std::lock_guard Lock(Mutex);
-		bStopping = true;
+		std::lock_guard Lock(Impl->Mutex);
+		Impl->bStopping = true;
 	}
-	CondVar.notify_all();
-	if (Worker.joinable())
+	Impl->CondVar.notify_all();
+	if (Impl->Worker.joinable())
 	{
-		Worker.join();
+		Impl->Worker.join();
 	}
-	bRunning.store(false, std::memory_order_release);
+	Impl->bRunning.store(false, std::memory_order_release);
 	OnShutdown();
+}
+
+bool FThreadedServer::IsRunning() const
+{
+	return Impl->bRunning.load(std::memory_order_acquire);
 }
 
 void FThreadedServer::Submit(std::function<void()> Task)
 {
 	{
-		std::lock_guard Lock(Mutex);
-		Queue.push_back(FQueuedTask{ std::move(Task) });
+		std::lock_guard Lock(Impl->Mutex);
+		Impl->Queue.push_back(FImpl::FQueuedTask{ std::move(Task) });
 	}
-	CondVar.notify_one();
+	Impl->CondVar.notify_one();
 }
 
 void FThreadedServer::Flush()
 {
-	// A barrier means "wait until the work I queued has run" -- and with no worker there is nothing
-	// that will ever run it, so waiting would hang forever. (Found the hard way: a caller that
-	// drained a server AFTER Shutdown -- the thread is joined, the queue is dead -- blocked for good.)
-	// The server never refuses work, but it also must not pretend a barrier can be honoured here.
 	if (!IsRunning())
 	{
 		return;
@@ -101,10 +124,8 @@ void FThreadedServer::Flush()
 	BarrierCv.wait(Lock, [&] { return bDone; });
 }
 
-void FThreadedServer::RunLoop()
+void FThreadedServer::FImpl::RunLoop()
 {
-	// Publish this thread's identity for IsServerThread(): a marshal helper on the server thread
-	// must recognize itself and run inline instead of posting a task and waiting on it forever.
 	{
 		std::lock_guard Lock(Mutex);
 		WorkerId = std::this_thread::get_id();
@@ -116,8 +137,6 @@ void FThreadedServer::RunLoop()
 		{
 			std::unique_lock Lock(Mutex);
 
-			// No bar for the WAIT itself -- the server runs closures and knows nothing about any
-			// profiling layer (a role that wants its work visible instruments the body it submits).
 			CondVar.wait(Lock, [this] { return bStopping || !Queue.empty(); });
 
 			if (bStopping && Queue.empty())
@@ -134,8 +153,6 @@ void FThreadedServer::RunLoop()
 		}
 		catch (const std::exception& E)
 		{
-			// A throwing task must not kill the host -- report (non-fatal) and
-			// keep serving.
 			ReportError(E.what());
 		}
 		catch (...)
@@ -144,8 +161,6 @@ void FThreadedServer::RunLoop()
 		}
 	}
 
-	// Retract this thread's identity: the id may be recycled by the OS for a later thread, and a
-	// stale match would make a marshal helper believe it is already on the server.
 	{
 		std::lock_guard Lock(Mutex);
 		WorkerId = std::thread::id{};
@@ -154,8 +169,8 @@ void FThreadedServer::RunLoop()
 
 bool FThreadedServer::IsServerThread() const
 {
-	std::lock_guard Lock(Mutex);
-	return WorkerId != std::thread::id{} && WorkerId == std::this_thread::get_id();
+	std::lock_guard Lock(Impl->Mutex);
+	return Impl->WorkerId != std::thread::id{} && Impl->WorkerId == std::this_thread::get_id();
 }
 
-} // namespace Maho
+}
