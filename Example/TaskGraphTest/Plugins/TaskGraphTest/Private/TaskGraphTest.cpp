@@ -1,6 +1,6 @@
 #include "TaskGraphTest.h"
 
-#include <Engine/PluginManager.h>
+#include <Core/Assembly.h>
 
 #include <cstdlib>
 
@@ -42,7 +42,7 @@ void FTaskGraphTest::PreMain()
 		return;
 	}
 
-	FPluginManager::Get().Load();
+	FAssembly::LoadManifest();
 	if (CVarTestMode())
 	{
 		// DLLs only: InstallChildrenOf maps every child module (so the CVars its statics declare --

@@ -10,7 +10,7 @@
 #include <Script.h>
 #include <GameWorld.h>
 
-#include <Engine/PluginManager.h>
+#include <Core/Assembly.h>
 
 #if defined(_DEBUG) && defined(_MSC_VER)
 #include <crtdbg.h>
@@ -52,7 +52,7 @@ void FExampleEngine::PreMain()
 	// layer makes for its own children (InstallChildrenOf(GetName())), one argument
 	// apart. Each installed layer then installs ITS children into its own collector,
 	// so nothing is installed twice and nobody needs a special "top level" list.
-	FPluginManager::Get().Load();
+	FAssembly::LoadManifest();
 	InstallChildrenOf(GetName());
 	// The graph the install batch is submitted to belongs to the HOST (this engine object -- see
 	// FEngineBase::Graph): created here, on first use, and handed to the driving call (the batch

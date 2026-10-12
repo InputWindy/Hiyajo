@@ -229,13 +229,22 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/Config")
 	)
 endif()
 
-# Stage the runtime plugin manifest next to the binary so FPluginManager can
-# discover it (the install tree + engine root) at startup.
+# Stage the runtime plugin manifest next to the binary so FAssembly::LoadManifest() can
+# discover it (the install tree + engine root) at startup. The two macros are emitted
+# HERE, derived from the same name: the manifest's filename and its un-staged
+# (development) location are build-layout facts, so Core/Assembly.cpp spells neither of
+# them -- it only decides the ORDER in which the candidates are probed.
+set(MAHO_PLUGIN_MANIFEST_NAME "PluginManager.json")
+set(MAHO_PLUGIN_MANIFEST_FALLBACK_PATH "../Intermediate/${MAHO_PLUGIN_MANIFEST_NAME}")
+add_compile_definitions(
+	MAHO_PLUGIN_MANIFEST="${MAHO_PLUGIN_MANIFEST_NAME}"
+	MAHO_PLUGIN_MANIFEST_FALLBACK="${MAHO_PLUGIN_MANIFEST_FALLBACK_PATH}"
+)
 add_custom_command(TARGET EntryPoint POST_BUILD
 	COMMAND ${CMAKE_COMMAND} -E copy_if_different
-		"${CMAKE_CURRENT_SOURCE_DIR}/Intermediate/PluginManager.json"
-		"${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>/PluginManager.json"
-	COMMENT "Staging PluginManager.json to runtime dir"
+		"${CMAKE_CURRENT_SOURCE_DIR}/Intermediate/${MAHO_PLUGIN_MANIFEST_NAME}"
+		"${CMAKE_BINARY_DIR}/Binaries/$<CONFIG>/${MAHO_PLUGIN_MANIFEST_NAME}"
+	COMMENT "Staging the plugin manifest to runtime dir"
 	VERBATIM
 )
 

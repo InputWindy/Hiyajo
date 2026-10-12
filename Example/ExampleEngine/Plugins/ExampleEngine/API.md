@@ -4,7 +4,7 @@
 
 ## FExampleEngine <class : FEngineBase>
 
-应用根。`PreMain` 从安装树装载根的直系子层并驱动 Init 阶段（`FPluginManager::Get().Load()` → `InstallChildrenOf(GetName())` → `FlushPendingUpdatePipelines<Init, Shutdown>()`）；`PostMain` 是出口钩子（关闸门 → 卸全部活层 → 排干）。
+应用根。`PreMain` 从安装树装载根的直系子层并驱动 Init 阶段（`FAssembly::LoadManifest()` → `InstallChildrenOf(GetName())` → `FlushPendingUpdatePipelines<Init, Shutdown>()`）；`PostMain` 是出口钩子（关闸门 → 卸全部活层 → 排干）。
 
 #### 接口
 

@@ -266,7 +266,7 @@ void FExampleEngine::PreMain()
     // Install TREE (PluginManager.json <- the .cproject's TopLevel list): the host
     // installs the ROOT node's direct children, each of which installs its own
     // children into its own collector.
-    FPluginManager::Get().Load();
+    FAssembly::LoadManifest();
     InstallChildrenOf(GetName());
     FlushPendingUpdatePipelines<TTypeList<IPreInit, IInit, IPostInit>,
                                 TTypeList<IPreShutdown, IShutdown, IPostShutdown>>();

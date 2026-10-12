@@ -112,6 +112,9 @@ std::uint32_t TranslateRegisteredViews(const FUIViewFrameDesc& Desc)
 	if (ImGui::GetCurrentContext() == nullptr) { return 0; }
 
 	std::uint32_t Translated = 0;
+	// 遍历屏障：**先取它，再取快照**（顺序反了等于没写 —— 两步之间发生的注销仍会让指针失效）。
+	// `UnregisterView` 会等本趟归零，所以快照里的每个指针在这一趟内都一定还活着。
+	FScopedUITranslationPass Pass(*Registry);
 	for (FUIView* View : Registry->SnapshotViews())
 	{
 		if (View == nullptr) { continue; }

@@ -18,6 +18,10 @@ namespace
 /** 注册表自身的发布指针。**只有它必须留在文件作用域** —— 它是「发布自身」，成员化做不到
  *  （也没有意义）。它的生命期由 Initialize / Shutdown 管，不是 CRT 的 atexit。 */
 FUIViewRegistry* GUIRegistry = nullptr;
+
+/** 本线程的遍历深度。遍历中注销一个视图是合法用法（视图可以在翻译到自己时决定退场），此时
+ *  不能自锁等待自己 —— 见 WaitForPassesToDrain。 */
+thread_local int GPassDepth = 0;
 }
 
 MAHO_UI_API FUIViewRegistry* GetUIViewRegistry()
@@ -42,8 +46,46 @@ void FUIViewRegistry::RegisterView(FUIView& View)
 
 void FUIViewRegistry::UnregisterView(FUIView& View)
 {
-	std::scoped_lock Lock(Mutex);
-	Views.erase(std::remove(Views.begin(), Views.end(), &View), Views.end());
+	{
+		std::scoped_lock Lock(Mutex);
+		Views.erase(std::remove(Views.begin(), Views.end(), &View), Views.end());
+	}
+
+	// 表已经摘掉它（后续快照不会再交出去），但**在飞的遍历可能还拿着它** —— 等它们归零，调用方
+	// 才可以析构。这一步就是"注销返回即可安全析构"的全部实现。
+	WaitForPassesToDrain();
+}
+
+void FUIViewRegistry::BeginTranslationPass()
+{
+	++GPassDepth;
+	std::scoped_lock Lock(PassMutex);
+	++PassesInFlight;
+}
+
+void FUIViewRegistry::EndTranslationPass()
+{
+	{
+		std::scoped_lock Lock(PassMutex);
+		if (--PassesInFlight <= 0)
+		{
+			PassesInFlight = 0;
+			PassCv.notify_all();
+		}
+	}
+	--GPassDepth;
+}
+
+void FUIViewRegistry::WaitForPassesToDrain()
+{
+	// 遍历中的线程不等待（自锁）：它自己的遍历仍在飞，但它已不在表里，本趟不会再访问它。
+	if (GPassDepth > 0)
+	{
+		return;
+	}
+
+	std::unique_lock<std::mutex> Lock(PassMutex);
+	PassCv.wait(Lock, [this]() { return PassesInFlight == 0; });
 }
 
 std::vector<FUIView*> FUIViewRegistry::SnapshotViews() const
@@ -162,6 +204,11 @@ void FUIViewRegistry::Initialize(FEngineBase& Engine, FEngineContext& Frame)
 void FUIViewRegistry::Shutdown(FEngineBase& Engine, FEngineContext& Frame)
 {
 	MAHO_TRACE_STAGE(IShutdown, "UI registry shutdown", "report and clear the capability slots");
+
+	// 0) 先等遍历归零，再动表：本层收场时翻译线程可能正拿着快照里的指针（它的视图所有者还没被
+	//    卸完）。这一步把"表要没了"与"没人还在用它"排成顺序 —— 与 UnregisterView 同一把屏障。
+	WaitForPassesToDrain();
+
 	// 1) 能力槽：先对账，再清空。
 	//    注册者若已经卸载（它死在别的 collector 的子树里 —— 比如 FExampleEditor 在 FRender 下），
 	//    槽里剩下的就是**已卸载模块的闭包**；留到实例析构，就会在 DLL detach 之后调用它

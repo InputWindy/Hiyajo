@@ -1182,6 +1182,9 @@ void FExampleEditor::UpdateEditorPanels()
 	const UI::FUIName EditorScope = EditorRenderScope();
 	if (UI::FUIViewRegistry* Registry = UI::GetUIViewRegistry())
 	{
+		// 遍历屏障：先取它、再取快照（见 FUIViewRegistry 的类注释）—— 否则遍历途中某个面板被
+		// 注销并析构，这里的裸指针就是 use-after-free。
+		UI::FScopedUITranslationPass Pass(*Registry);
 		for (UI::FUIView* View : Registry->SnapshotViews())
 		{
 			if (View->GetRenderScope() != EditorScope)

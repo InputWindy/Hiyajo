@@ -144,10 +144,12 @@ D.Row("int main(int Argc, char** Argv)", "`return Maho::Main(Argc, Argv)` ——
 # Source/Public/Core/Assembly.h —— 动态库装载原语
 # ══════════════════════════════════════════════════════════════════════════════
 
-D.Header("Public/Core/Assembly.h", Title="Assembly.h —— 动态库装载原语",
+D.Header("Public/Core/Assembly.h", Title="Assembly.h —— 动态库装载原语 + 插件清单",
          Desc="只回答两个问题：**怎么把一个动态库装进来**，以及**怎么按符号名取函数**。"
-              "它不知道模块里是什么 —— 不认插件、清单、工厂；怎么解释一个已装载的模块完全由"
-              "消费者决定（插件管理器 / 极薄的启动器 / 工程自己的加载器）。"
+              "它不知道模块里是什么 —— 不认插件、工厂；怎么解释一个已装载的模块完全由"
+              "消费者决定（安装树 / 极薄的启动器 / 工程自己的加载器）。"
+              "同一个类还有**静态的一半**：读插件清单转成 `节点 → 直接子节点` 的查找表，回答"
+              "\"这个节点该装谁\"。两者放在一起是因为它们回答的是同一个问题——模块从哪来。"
               "实现与平台分支都在 `Private/Core/Assembly.cpp`，所以这个头是**平台无关**的"
               "（不引入 `Windows.h` / `dlfcn.h`）。\n"
               "**所有权契约**：`FAssembly` 是模块句柄的唯一持有者（move-only）。只要还有从它"
@@ -195,9 +197,29 @@ D.Interface("void* GetProcAddress(const char* Name) const",
 D.Interface("template <typename TFunction> TFunction GetProcAs(const char* Name) const",
             "把原始符号转成**函数指针**类型再返回 —— 调用方写 "
             "`GetProcAs<CreateFn>(\"CreateEngine\")` 即可，无需自己 `reinterpret_cast`。")
+D.SetAccess("public")
+D.Interface("static bool LoadManifest()",
+            "装载（或重载）**插件清单**（安装树）：先看可执行文件目录（POST_BUILD 摆好的那份）、再看它旁边"
+            "未摆盘的开发位置、最后看当前工作目录。缺失 / 不可解析返回 `false` —— 由调用方走回退策略。"
+            "**路径里没有一个字面量**：`MAHO_PLUGIN_MANIFEST` 与 `MAHO_PLUGIN_MANIFEST_FALLBACK` 由 "
+            "`Tools/maho_tools.py` 连同\"摆盘那一步\"一起注入（构建布局是生成器的事实，不是 Core 的）")
+D.Interface("static bool IsManifestLoaded()", "是否已经拿到可用的树")
+D.Interface("static const std::vector<std::string>& GetChildren(std::string_view LayerName)",
+            "某节点的**直接**子层类型，按清单顺序 —— 宿主与每个收集器共用的**唯一**查询，各自传自己的"
+            "名字。没有子节点返回空（那是正常情况，不是错误）。清单是一棵「层类型」树：工程是根节点，"
+            "每个节点的 children 就是它装进**自己的收集器**的那些模块")
+D.Interface("static const std::string& GetEngineRoot()",
+            "codegen 记下的引擎源码根（绝对路径，生成器用的 posix 形式）。缺失为空 ⇒ 调用方自行探测。"
+            "**在 C++ 里它永远不是编译期常量**：清单是运行期数据")
+D.Interface("static std::filesystem::path ExecutableDir()",
+            "可执行文件所在目录（各平台的规范查询），失败为空。所有运行期路径探测（清单查找、虚拟根）"
+            "都共用它")
 D.SetAccess("private")
 D.Field("std::unique_ptr<void, FModuleDeleter> Module",
         "模块句柄的唯一持有者：析构即 `FreeLibrary` / `dlclose`。空 = 未装载。")
+D.Field("static bool bManifestLoaded", "清单是否已成功装载过")
+D.Field("static std::string ManifestEngineRoot", "引擎源码根（来自清单）")
+D.Field("static std::map<std::string, std::vector<std::string>> ManifestChildren", "节点 → 它的直接子节点")
 
 # ══════════════════════════════════════════════════════════════════════════════
 # Source/Public/Core/Delegate.h —— 多播事件积木
@@ -927,7 +949,7 @@ D.Class("FEngineBase", Base="FFrameBuilder<FEngineBase>",
 D.SetAccess("public")
 D.Interface("virtual void ParseCommandLine(int Argc, char** Argv)",
             "把 `-key` / `-key value` / `--key=value` 归一化后交给 CLI11 解析，结果进 KV 表")
-D.Interface("virtual void PreMain() = 0", "纯虚：装载（`FPluginManager::Load` → `InstallChildrenOf`）并驱动一次 init 批次")
+D.Interface("virtual void PreMain() = 0", "纯虚：装载（`FAssembly::LoadManifest` → `InstallChildrenOf`）并驱动一次 init 批次")
 D.Interface("virtual int Main()", "主循环：`EnsureGraph()`（幂等 —— 图是**宿主的成员**，首次用图之前建）→ `while (!ShouldExit()) { const Frame = NextFrameNumber(); FlushPendingUpdates<Init,Shutdown>(); Execute<Tick>(Frame); }` → 收尾的一对栅栏 `Graph->Wait()` + `DrainPool()`。返回退出码")
 D.Interface("[[nodiscard]] virtual std::uint64_t NextFrameNumber()",
             "**这一轮的帧号**：`Main` 每帧只读**一次**，整帧（每条序列的 tick 批，以及宿主自己按帧发布的东西）都用同一个数 —— "
@@ -1177,49 +1199,6 @@ D.Class("FQueryResult<TBase>", Desc="筛选结果：**隐式转换为 `std::vect
         "但它本身**不能直接 `range-for`**（`begin/end` 找不到）—— 这一点是实测：在 `Engine.cpp` 上"
         "直接范围 for 会被编译器顶回来。结果内部向量私有，外部注入不了裸指针。")
 D.Interface("std::vector<TBase*> Data", "结果容器（public：只读使用；外部无法注入）")
-
-# ══════════════════════════════════════════════════════════════════════════════
-# Source/Public/Engine/PluginManager.h —— 运行期插件安装树
-# ══════════════════════════════════════════════════════════════════════════════
-
-D.Header("Public/Engine/PluginManager.h", Title="PluginManager.h —— 运行期插件安装树",
-         Desc="运行期的插件**安装树**，来自 `PluginManager.json`（codegen 的 EntryPoint POST_BUILD "
-              "把它放到二进制旁边）。清单是一棵「层类型」树：**工程是根节点**，每个节点的 children "
-              "就是它装进**自己的收集器**的那些插件。\n"
-              "一次查询对所有人都够用，而且每个节点本来就认识自己的名字 ⇒ 宿主与收集器跑**同一句**"
-              "调用：`InstallChildrenOf(GetName())`。反方向不携带任何名字：目录只存树和引擎根，"
-              "不存「谁是谁」。\n"
-              "**进程唯一**：访问器在这里声明、在引擎 DLL（`Maho`）里定义 ⇒ 任何链接 Maho 的插件 DLL "
-              "共享同一个实例。")
-
-D.Card("包含的头文件")
-D.Table("头文件", "功能")
-D.Row("Core/Export.h", "`MAHO_API` —— 类跨 DLL（进程唯一实例在 Maho 里）")
-D.Row("filesystem", "`std::filesystem::path`：`ExecutableDir()` 的返回类型")
-D.Row("map", "节点 → 直接子节点（清单顺序）")
-D.Row("string / string_view", "名字与路径；查询入参用 view，不拷贝")
-
-D.Class("FPluginManager", Desc="插件安装树的持有者（进程唯一）。构造 / 析构 / 拷贝都是私有的 —— "
-        "只能经 `Get()` 拿到那一个实例。")
-D.SetAccess("public")
-D.Interface("static FPluginManager& Get()", "进程唯一实例（首次访问时惰性装载）")
-D.Interface("bool Load()",
-            "装载（或重载）`PluginManager.json`：先找当前工作目录、再找可执行文件目录。缺失 / "
-            "不可解析返回 `false` —— 由调用方走回退策略")
-D.Interface("[[nodiscard]] bool IsLoaded() const", "是否已经拿到可用的目录")
-D.Interface("[[nodiscard]] const std::vector<std::string>& GetChildren(std::string_view LayerName) const",
-            "某节点的**直接**子层类型，按清单顺序 —— 宿主与每个收集器共用的**唯一**查询，各自传自己的"
-            "名字。没有子节点返回空（那是正常情况，不是错误）")
-D.Interface("[[nodiscard]] const std::string& GetEngineRoot() const",
-            "codegen 记下的引擎源码根（绝对路径，生成器用的 posix 形式）。缺失为空 ⇒ 调用方自行探测。"
-            "**在 C++ 里它永远不是编译期常量**：清单是运行期数据")
-D.Interface("[[nodiscard]] static std::filesystem::path ExecutableDir()",
-            "可执行文件所在目录（各平台的规范查询），失败为空。所有运行期路径探测（目录查找、虚拟根）"
-            "都共用它")
-D.SetAccess("private")
-D.Field("bool bLoaded = false", "是否已成功装载过")
-D.Field("std::string EngineRoot", "引擎源码根（来自清单）")
-D.Field("std::map<std::string, std::vector<std::string>> Children", "节点 → 它的直接子节点")
 
 # ══════════════════════════════════════════════════════════════════════════════
 # 下面继续按你的口述追加：再 Header(...) 换一个头，Class/Interface/Field 往下挂。

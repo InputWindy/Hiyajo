@@ -65,7 +65,7 @@ void FExampleEngine::PreMain()
     // list) replaces hand-written DLL names: the host installs the ROOT node's direct
     // children, and each of those installs its own children into its own collector
     // (Render its features, ExampleEditor its panels, GameWorld its system).
-    FPluginManager::Get().Load();
+    FAssembly::LoadManifest();
     InstallChildrenOf(GetName());
     FlushPendingUpdatePipelines<TTypeList<IPreInit, IInit, IPostInit>,
                                 TTypeList<IPreShutdown, IShutdown, IPostShutdown>>();

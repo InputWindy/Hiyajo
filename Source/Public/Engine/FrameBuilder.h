@@ -6,7 +6,7 @@
 #include <Core/MetaData.h>
 #include <Core/FrameGraph.h>
 #include <Engine/Frame.h>
-#include <Engine/PluginManager.h>
+#include <Core/Assembly.h>
 #include <Core/Query.h>
 
 #include <algorithm>
@@ -504,7 +504,7 @@ protected:
 	FInstallSummary InstallChildrenOf(std::string_view ParentLayer)
 	{
 		FInstallSummary Summary;
-		for (const std::string& Child : FPluginManager::Get().GetChildren(ParentLayer))
+		for (const std::string& Child : FAssembly::GetChildren(ParentLayer))
 		{
 			Summary.Requested += 1;
 			if (Install(ApplyModuleExtension(Child)))

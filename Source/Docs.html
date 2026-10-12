@@ -79,7 +79,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div id="app">
   <div id="side">
     <h1>Maho 引擎源码</h1>
-    <div class="search" title="左侧扫描 Source/**/*.h：27 个头文件 · 已声明 23 个 · 36 个实体 / 201 个成员 ｜ 内容在 Tools/docs_content.py 里逐条声明">
+    <div class="search" title="左侧扫描 Source/**/*.h：26 个头文件 · 已声明 22 个 · 35 个实体 / 200 个成员 ｜ 内容在 Tools/docs_content.py 里逐条声明">
       <input id="q" type="search" placeholder="搜索头文件…  （如 Frame、Core、Entry）" autocomplete="off">
     </div>
     <div id="tree"><ul>
@@ -123,7 +123,6 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <li class="file"><a href="#Public__Engine__Engine_h" data-file="Public__Engine__Engine_h">Engine.h</a></li>
 <li class="file"><a href="#Public__Engine__Frame_h" data-file="Public__Engine__Frame_h">Frame.h</a></li>
 <li class="file"><a href="#Public__Engine__FrameBuilder_h" data-file="Public__Engine__FrameBuilder_h">FrameBuilder.h</a></li>
-<li class="file"><a href="#Public__Engine__PluginManager_h" data-file="Public__Engine__PluginManager_h">PluginManager.h</a></li>
 <li class="file"><a href="#Public__Engine__ResourceName_h" data-file="Public__Engine__ResourceName_h">ResourceName.h</a></li>
 <li class="file"><a href="#Public__Engine__StageAccess_h" data-file="Public__Engine__StageAccess_h">StageAccess.h</a></li>
 <li class="file"><a href="#Public__Engine__StageMetadata_h" data-file="Public__Engine__StageMetadata_h">StageMetadata.h</a></li>
@@ -142,9 +141,9 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
   </div>
   <div id="main"><div class="pane" id="pane-Public__Core__Assembly_h">
 <div class="hdr">Public/Core/Assembly.h</div>
-<h2 class="file-title">Assembly.h —— 动态库装载原语</h2>
+<h2 class="file-title">Assembly.h —— 动态库装载原语 + 插件清单</h2>
 <div class="card"><div class="doc">
-<p>只回答两个问题：**怎么把一个动态库装进来**，以及**怎么按符号名取函数**。它不知道模块里是什么 —— 不认插件、清单、工厂；怎么解释一个已装载的模块完全由消费者决定（插件管理器 / 极薄的启动器 / 工程自己的加载器）。实现与平台分支都在 `Private/Core/Assembly.cpp`，所以这个头是**平台无关**的（不引入 `Windows.h` / `dlfcn.h`）。</p>
+<p>只回答两个问题：**怎么把一个动态库装进来**，以及**怎么按符号名取函数**。它不知道模块里是什么 —— 不认插件、工厂；怎么解释一个已装载的模块完全由消费者决定（安装树 / 极薄的启动器 / 工程自己的加载器）。同一个类还有**静态的一半**：读插件清单转成 `节点 → 直接子节点` 的查找表，回答<span class="st">"这个节点该装谁"</span>。两者放在一起是因为它们回答的是同一个问题——模块从哪来。实现与平台分支都在 `Private/Core/Assembly.cpp`，所以这个头是**平台无关**的（不引入 `Windows.h` / `dlfcn.h`）。</p>
 <p>**所有权契约**：`FAssembly` 是模块句柄的唯一持有者（move-only）。只要还有从它构造出来的实例活着，宿主就必须让这个 `FAssembly` 也活着 —— vtable 与析构函数都在那个模块里，先卸载再用就是 use-after-free。</p>
 </div></div>
 <div class="card">
@@ -188,6 +187,9 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
 <tr><td><span class="acc a-private">private</span></td><td>std::unique_ptr&lt;<span class="kw">void</span>, FModuleDeleter&gt; Module</td><td>模块句柄的唯一持有者：析构即 `FreeLibrary` / `dlclose`。空 = 未装载。</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">static</span> <span class="kw">bool</span> bManifestLoaded</td><td>清单是否已成功装载过</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">static</span> std::string ManifestEngineRoot</td><td>引擎源码根（来自清单）</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">static</span> std::map&lt;std::string, std::vector&lt;std::string&gt;&gt; ManifestChildren</td><td>节点 → 它的直接子节点</td></tr>
 </tbody></table></div>
 <div class="sect">
 <h4>接口</h4>
@@ -199,6 +201,11 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">bool</span> IsLoaded() <span class="kw">const</span></td><td>是否持有有效的模块句柄。</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span>* GetProcAddress(<span class="kw">const</span> <span class="kw">char</span>* Name) <span class="kw">const</span></td><td>原始符号查找（`GetProcAddress` / `dlsym`）；未装载或符号不存在则返回 <span class="kw">nullptr</span>。</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">template</span> &lt;<span class="kw">typename</span> TFunction&gt; TFunction GetProcAs(<span class="kw">const</span> <span class="kw">char</span>* Name) <span class="kw">const</span></td><td>把原始符号转成**函数指针**类型再返回 —— 调用方写 `GetProcAs&lt;CreateFn&gt;(<span class="st">"CreateEngine"</span>)` 即可，无需自己 `reinterpret_cast`。</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">static</span> <span class="kw">bool</span> LoadManifest()</td><td>装载（或重载）**插件清单**（安装树）：先看可执行文件目录（POST_BUILD 摆好的那份）、再看它旁边未摆盘的开发位置、最后看当前工作目录。缺失 / 不可解析返回 `<span class="kw">false</span>` —— 由调用方走回退策略。**路径里没有一个字面量**：`MAHO_PLUGIN_MANIFEST` 与 `MAHO_PLUGIN_MANIFEST_FALLBACK` 由 `Tools/maho_tools.py` 连同<span class="st">"摆盘那一步"</span>一起注入（构建布局是生成器的事实，不是 Core 的）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">static</span> <span class="kw">bool</span> IsManifestLoaded()</td><td>是否已经拿到可用的树</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">static</span> <span class="kw">const</span> std::vector&lt;std::string&gt;&amp; GetChildren(std::string_view LayerName)</td><td>某节点的**直接**子层类型，按清单顺序 —— 宿主与每个收集器共用的**唯一**查询，各自传自己的名字。没有子节点返回空（那是正常情况，不是错误）。清单是一棵「层类型」树：工程是根节点，每个节点的 children 就是它装进**自己的收集器**的那些模块</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">static</span> <span class="kw">const</span> std::string&amp; GetEngineRoot()</td><td>codegen 记下的引擎源码根（绝对路径，生成器用的 posix 形式）。缺失为空 ⇒ 调用方自行探测。**在 C++ 里它永远不是编译期常量**：清单是运行期数据</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">static</span> std::filesystem::path ExecutableDir()</td><td>可执行文件所在目录（各平台的规范查询），失败为空。所有运行期路径探测（清单查找、虚拟根）都共用它</td></tr>
 </tbody></table></div>
 </div>
 </div>
@@ -880,7 +887,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <h4>接口</h4>
 <table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> ParseCommandLine(<span class="kw">int</span> Argc, <span class="kw">char</span>** Argv)</td><td>把 `-key` / `-key value` / `--key=value` 归一化后交给 CLI11 解析，结果进 KV 表</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> PreMain() = 0</td><td>纯虚：装载（`FPluginManager::Load` → `InstallChildrenOf`）并驱动一次 init 批次</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> PreMain() = 0</td><td>纯虚：装载（`FAssembly::LoadManifest` → `InstallChildrenOf`）并驱动一次 init 批次</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">int</span> Main()</td><td>主循环：`EnsureGraph()`（幂等 —— 图是**宿主的成员**，首次用图之前建）→ `<span class="kw">while</span> (!ShouldExit()) { <span class="kw">const</span> Frame = NextFrameNumber(); FlushPendingUpdates&lt;Init,Shutdown&gt;(); Execute&lt;Tick&gt;(Frame); }` → 收尾的一对栅栏 `Graph-&gt;Wait()` + `DrainPool()`。返回退出码</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> std::uint64_t NextFrameNumber()</td><td>**这一轮的帧号**：`Main` 每帧只读**一次**，整帧（每条序列的 tick 批，以及宿主自己按帧发布的东西）都用同一个数 —— 读两次可能跨过帧边界，把一帧劈进两轮。默认是本循环自己的单调计数器（没有帧源的宿主，如测试工程）；有真实帧源的宿主覆写它（`FExampleEngine` 读 `Platform::GetFrameIndex()`，单写者是 `FPlatform::IBeginFrame`）。Core 不认识这个值，它只从 `Execute` / `Submit` 的参数进来</td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> PostMain()</td><td>收摊：`EnsureGraph()`（幂等；覆盖「装完立刻收摊、从未 tick」的宿主 —— 下面的 sweeper 要驱动一次性批，那需要图）→ 关闸门 → 丢弃未生效装载 → `UninstallAll` → 循环 flush 到静 → 残留报出 → `Graph-&gt;Wait()` —— 最后这一下是**拥有者自己的栅栏**，也是「图与池都静下来了，然后才释放任何实例 / 模块」这句不变量的全部显式动作：图的停止与释放不需要任何调用（`~FFrameGraph` 自己停调度线程，而成员早于基类析构 ⇒ 那时池还活着）</td></tr>
@@ -1066,50 +1073,6 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">template</span> &lt;TStages&gt; <span class="kw">void</span> ExpandLoopFrames(FFrameGraph&amp; Graph, TTypeList&lt;TStages...&gt;)</td><td>LINQ：`Select&lt;TStages...&gt;()` 重查帧集（脏标志由集合侧自己置位，宿主没有缓存要失效）；重查**前**先拿调用方的图来一次 `Graph.Wait()`（帧集要换了，不能有东西在飞）</td></tr>
 <tr><td><span class="acc a-protected">protected</span></td><td>TContext&amp; GetContext()</td><td>把 `<span class="kw">this</span>` 取回 `TContext&amp;`（宿主就是上下文）</td></tr>
 <tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">template</span> &lt;TEvent, TArgs...&gt; <span class="kw">void</span> BroadcastIsolated(TEvent&amp;, <span class="kw">const</span> TArgs&amp;...)</td><td>隔离广播：订阅者抛异常只报错，不影响收集器状态与 teardown</td></tr>
-</tbody></table></div>
-</div>
-</div>
-<div class="pane" id="pane-Public__Engine__PluginManager_h">
-<div class="hdr">Public/Engine/PluginManager.h</div>
-<h2 class="file-title">PluginManager.h —— 运行期插件安装树</h2>
-<div class="card"><div class="doc">
-<p>运行期的插件**安装树**，来自 `PluginManager.json`（codegen 的 EntryPoint POST_BUILD 把它放到二进制旁边）。清单是一棵「层类型」树：**工程是根节点**，每个节点的 children 就是它装进**自己的收集器**的那些插件。</p>
-<p>一次查询对所有人都够用，而且每个节点本来就认识自己的名字 ⇒ 宿主与收集器跑**同一句**调用：`InstallChildrenOf(GetName())`。反方向不携带任何名字：目录只存树和引擎根，不存「谁是谁」。</p>
-<p>**进程唯一**：访问器在这里声明、在引擎 DLL（`Maho`）里定义 ⇒ 任何链接 Maho 的插件 DLL 共享同一个实例。</p>
-</div></div>
-<div class="card">
-<h3 class="card-title">包含的头文件</h3>
-
-<table>
-<thead><tr><th>头文件</th><th>功能</th></tr></thead>
-<tbody>
-<tr><td>Core/Export.h</td><td>`MAHO_API` —— 类跨 DLL（进程唯一实例在 Maho 里）</td></tr>
-<tr><td>filesystem</td><td>`std::filesystem::path`：`ExecutableDir()` 的返回类型</td></tr>
-<tr><td>map</td><td>节点 → 直接子节点（清单顺序）</td></tr>
-<tr><td>string / string_view</td><td>名字与路径；查询入参用 view，不拷贝</td></tr>
-</tbody></table>
-</div>
-<div class="ent e-class" id="Public__Engine__PluginManager_h-0">
-<h3><span class="kind">类</span> FPluginManager</h3>
-<div class="sect"><div class="doc">
-<p>插件安装树的持有者（进程唯一）。构造 / 析构 / 拷贝都是私有的 —— 只能经 `Get()` 拿到那一个实例。</p>
-</div></div>
-<div class="sect">
-<h4>字段</h4>
-<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-private">private</span></td><td><span class="kw">bool</span> bLoaded = <span class="kw">false</span></td><td>是否已成功装载过</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td>std::string EngineRoot</td><td>引擎源码根（来自清单）</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td>std::map&lt;std::string, std::vector&lt;std::string&gt;&gt; Children</td><td>节点 → 它的直接子节点</td></tr>
-</tbody></table></div>
-<div class="sect">
-<h4>接口</h4>
-<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">static</span> FPluginManager&amp; Get()</td><td>进程唯一实例（首次访问时惰性装载）</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">bool</span> Load()</td><td>装载（或重载）`PluginManager.json`：先找当前工作目录、再找可执行文件目录。缺失 / 不可解析返回 `<span class="kw">false</span>` —— 由调用方走回退策略</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">bool</span> IsLoaded() <span class="kw">const</span></td><td>是否已经拿到可用的目录</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">const</span> std::vector&lt;std::string&gt;&amp; GetChildren(std::string_view LayerName) <span class="kw">const</span></td><td>某节点的**直接**子层类型，按清单顺序 —— 宿主与每个收集器共用的**唯一**查询，各自传自己的名字。没有子节点返回空（那是正常情况，不是错误）</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">const</span> std::string&amp; GetEngineRoot() <span class="kw">const</span></td><td>codegen 记下的引擎源码根（绝对路径，生成器用的 posix 形式）。缺失为空 ⇒ 调用方自行探测。**在 C++ 里它永远不是编译期常量**：清单是运行期数据</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">static</span> std::filesystem::path ExecutableDir()</td><td>可执行文件所在目录（各平台的规范查询），失败为空。所有运行期路径探测（目录查找、虚拟根）都共用它</td></tr>
 </tbody></table></div>
 </div>
 </div>

@@ -13,7 +13,7 @@
 ```cpp
 void FExampleEngine::PreMain()
 {
-    FPluginManager::Get().Load();          // 安装树（根节点 = 本插件的层名 FExampleEngine）
+    FAssembly::LoadManifest();          // 安装树（根节点 = 本插件的层名 FExampleEngine）
     InstallChildrenOf(GetName());          // 装根的直系子层：FConfig / FException / FLog / FNamePool /
                                            // FUIViewRegistry / FPaths / FPlatform / FResourceSystem /
                                            // FScriptSystem / FTextManager / FTimer / FRender / FGameWorld
