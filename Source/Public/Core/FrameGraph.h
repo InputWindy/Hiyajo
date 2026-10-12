@@ -96,6 +96,8 @@ public:
 
 	[[nodiscard]] virtual void* GetStageInstance(std::string_view Stage) noexcept;
 
+	[[nodiscard]] virtual void* QuerySubobject(const void* TargetTag) noexcept;
+
 	struct FEdge
 	{
 		std::string_view TargetName{};

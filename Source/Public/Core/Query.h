@@ -1,12 +1,78 @@
 #pragma once
 
 #include <Core/Fatal.h>
+#include <Core/TypeList.h>
 
 #include <cstddef>
+#include <string_view>
+#include <type_traits>
 #include <vector>
 
 namespace Maho
 {
+
+template <typename T, typename = void>
+struct TQueryTag
+{
+	[[nodiscard]] static const void* Get() noexcept
+	{
+		return nullptr;
+	}
+};
+
+template <typename TFrom, typename TTo>
+struct TQueryCast
+{
+	[[nodiscard]] static TTo* Get(TFrom* P) noexcept
+	{
+		(void)P;
+		return nullptr;
+	}
+};
+
+template <typename TSelf, typename... TTargets>
+[[nodiscard]] inline void* QueryDispatch(TSelf* Self, const void* TargetTag) noexcept
+{
+	void* Found = nullptr;
+	((TQueryTag<TTargets>::Get() == TargetTag && TargetTag != nullptr
+		? (Found = static_cast<void*>(TQueryCast<TSelf, TTargets>::Get(Self)), true)
+		: false) || ...);
+	return Found;
+}
+
+template <typename TSelf, typename... TTargets>
+[[nodiscard]] inline void* QueryDispatchStatic(TSelf* Self, const void* TargetTag) noexcept
+{
+	void* Found = nullptr;
+	((TQueryTag<TTargets>::Get() == TargetTag && TargetTag != nullptr
+		? (Found = static_cast<void*>(static_cast<TTargets*>(Self)), true)
+		: false) || ...);
+	return Found;
+}
+
+template <typename TSelf, typename... TTargets>
+[[nodiscard]] inline void* QueryDispatchList(TSelf* Self, const void* TargetTag,
+	TTypeList<TTargets...>) noexcept
+{
+	return QueryDispatchStatic<TSelf, TTargets...>(Self, TargetTag);
+}
+
+template <typename TBase, typename TTo>
+[[nodiscard]] inline TTo* QueryCast(TBase* P) noexcept
+{
+	const void* Tag = TQueryTag<TTo>::Get();
+	if (P == nullptr || Tag == nullptr)
+	{
+		return nullptr;
+	}
+	return static_cast<TTo*>(P->QuerySubobject(Tag));
+}
+
+#define MAHO_QUERY_CASTER(Self, ...)                                                    \
+	[[nodiscard]] void* QuerySubobject(const void* TargetTag) noexcept override          \
+	{                                                                                    \
+		return ::Maho::QueryDispatch<Self, __VA_ARGS__>(this, TargetTag);                 \
+	}
 
 template <typename TBase>
 class FQueryResult
@@ -29,19 +95,19 @@ public:
 	template <typename... TFilter>
 	FQueryResult<TBase> Select() const
 	{
-		return Filter([](TBase* P) { return ((dynamic_cast<TFilter*>(P) != nullptr) || ...); });
+		return Filter([](TBase* P) { return ((QueryCast<TBase, TFilter>(P) != nullptr) || ...); });
 	}
 
 	template <typename... TFilter>
 	FQueryResult<TBase> With() const
 	{
-		return Filter([](TBase* P) { return ((dynamic_cast<TFilter*>(P) != nullptr) && ...); });
+		return Filter([](TBase* P) { return ((QueryCast<TBase, TFilter>(P) != nullptr) && ...); });
 	}
 
 	template <typename... TFilter>
 	FQueryResult<TBase> Not() const
 	{
-		return Filter([](TBase* P) { return !((dynamic_cast<TFilter*>(P) != nullptr) || ...); });
+		return Filter([](TBase* P) { return !((QueryCast<TBase, TFilter>(P) != nullptr) || ...); });
 	}
 
 	template <typename T>
@@ -55,9 +121,9 @@ public:
 			{
 				continue;
 			}
-			if (auto* Tp = dynamic_cast<T*>(P))
+			if (T* Typed = QueryCast<TBase, T>(P))
 			{
-				Out.push_back(Tp);
+				Out.push_back(Typed);
 			}
 		}
 		return Out;
@@ -83,8 +149,8 @@ private:
 					return true;
 				}
 			}
-			ReportError("query result holds a pointer that is no longer in its source "
-				"(the layer was unloaded); the entry was dropped");
+			ReportError("query result holds a pointer that is no longer in its source (the layer was "
+				"unloaded); the entry was dropped");
 			return false;
 		}
 		return true;
@@ -139,22 +205,19 @@ public:
 		return AsResult().template With<TFilter...>();
 	}
 
-        template <typename... TFilter>
-        FQueryResult<TBase> Not() const
-        {
-            return AsResult().template Not<TFilter...>();
-        }
+	template <typename... TFilter>
+	FQueryResult<TBase> Not() const
+	{
+		return AsResult().template Not<TFilter...>();
+	}
 
-        template <typename T>
-        [[nodiscard]] std::vector<T*> Cast() const
-        {
-            return AsResult().template Cast<T>();
-        }
+	template <typename T>
+	[[nodiscard]] std::vector<T*> Cast() const
+	{
+		return AsResult().template Cast<T>();
+	}
 
 private:
-	template <typename T>
-	friend class FQuery;
-
 	FQueryResult<TBase> AsResult() const
 	{
 		FQueryResult<TBase> Result(const_cast<std::vector<TBase*>&>(GetQueryData()));

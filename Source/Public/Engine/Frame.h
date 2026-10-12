@@ -79,6 +79,7 @@
 #include <Core/MetaData.h>
 #include <Core/FrameGraph.h>
 #include <Core/Interface.h>
+#include <Core/Query.h>
 #include <Engine/ResourceName.h>
 #include <Engine/StageMetadata.h>
 #include <Core/TypeList.h>
@@ -256,7 +257,32 @@ namespace Detail
 			std::string_view Context) noexcept;
 	};
 
+	[[nodiscard]] inline const void* StageProtocolRow(std::string_view CollectorName,
+		std::string_view StageName) noexcept
+	{
+		std::string Key(CollectorName);
+		Key.append("::");
+		Key.append(StageName);
+		return GetMetaData().Find(KStageType, Key);
+	}
+
 } // namespace Detail
+} // namespace Maho
+
+namespace Maho
+{
+
+template <typename T>
+struct TQueryTag<T, std::void_t<typename T::TContextType>>
+{
+	[[nodiscard]] static const void* Get() noexcept
+	{
+		static const void* const Cached = Detail::StageProtocolRow(
+			T::TContextType::StaticName(), T::StaticName());
+		return Cached;
+	}
+};
+
 } // namespace Maho
 
 /** Token pasting in two steps, so a `__COUNTER__` is EXPANDED before it is pasted (the one-step form
@@ -590,6 +616,11 @@ public:                                                      \
 		return ::Maho::Detail::SelectStageInstance(this, Stage,                            \
 			::Maho::TFrameStageList<FrameType>::Type{});                                   \
 	}                                                                                     \
+	[[nodiscard]] void* QuerySubobject(const void* TargetTag) noexcept override             \
+	{                                                                                     \
+		return ::Maho::QueryDispatchList<FrameType>(this, TargetTag,                        \
+			::Maho::TFrameStageList<FrameType>::Type{});                                     \
+	}                                                                                     \
 	static const char* TraceGroupName()                      \
 	{                                                        \
 		return "Engine";                                      \
@@ -678,6 +709,11 @@ public:                                                      \
 		return ::Maho::Detail::SelectStageInstance(this, Stage,                      \
 			::Maho::TFrameStageList<FrameType>::Type{});                             \
 	}                                                                              \
+	[[nodiscard]] void* QuerySubobject(const void* TargetTag) noexcept override             \
+	{                                                                                     \
+		return ::Maho::QueryDispatchList<FrameType>(this, TargetTag,                        \
+			::Maho::TFrameStageList<FrameType>::Type{});                                     \
+	}                                                                                     \
 	static const char* TraceGroupName()                      \
 	{                                                        \
 		return #CollectorType;                                \

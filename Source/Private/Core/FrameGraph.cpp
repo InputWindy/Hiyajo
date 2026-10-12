@@ -190,6 +190,12 @@ void* FFrameExtension::GetStageInstance(std::string_view Stage) noexcept
 	return nullptr;
 }
 
+void* FFrameExtension::QuerySubobject(const void* TargetTag) noexcept
+{
+	(void)TargetTag;
+	return nullptr;
+}
+
 void FFrameExtension::AddDependency(std::string_view MyStage, FEdge Edge)
 {
 	Impl->Dependencies[MyStage].push_back(Edge);
