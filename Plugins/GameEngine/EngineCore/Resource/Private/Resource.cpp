@@ -17,6 +17,11 @@ namespace Maho::Resource
 
 FResourceSystem* GResourceSystem = nullptr;
 
+std::string_view FResource::GetTypeName() const noexcept
+{
+	return TTypeName<FResource>::value;
+}
+
 /** This role's trace lane: the row the IO thread's own work lands on. The same string
  *  GetThreadName() answers, kept as a literal because the task bodies below are lambdas and should
  *  not have to keep the system alive just to be named (the RHI's device names its lane the same way). */

@@ -1839,7 +1839,9 @@ void FRender::OnAssetMirrorImported(const Name::FName& AssetName, Resource::FOnT
 	if (Resource::FResourceSystem* RS = Resource::GetResourceSystem())
 	{
 		Resource::FResource* R = RS->FindMutable(AssetName.ToString());
-		if (Resource::FTexture* Tex = dynamic_cast<Resource::FTexture*>(R))
+		if (Resource::FTexture* Tex = (R != nullptr && R->GetTypeName() == TTypeName<Resource::FTexture>::value)
+			? static_cast<Resource::FTexture*>(R)
+			: nullptr)
 		{
 			bSuccess = UploadTextureMirror(AssetName, *Tex);
 			MAHO_LOG_CORE_INFO("FRender: mirror imported asset={} ({}x{}, {}) => {}",
@@ -1890,7 +1892,10 @@ void FRender::OnAssetMirrorCreated(const Name::FName& AssetName, const Resource:
 	// Only textures are creatable resources today (FTexture2D desc). Build a
 	// Persistent GPU mirror from the descriptor fields; empty Pixels = no staged
 	// upload, the mirror is a runtime placeholder render features sample.
-	const Resource::FTexture* Tex = dynamic_cast<const Resource::FTexture*>(&Resource);
+	const Resource::FTexture* Tex =
+		(Resource.GetTypeName() == TTypeName<Resource::FTexture>::value)
+		? static_cast<const Resource::FTexture*>(&Resource)
+		: nullptr;
 	if (Tex == nullptr)
 	{
 		MAHO_LOG_CORE_WARN("FRender: mirror create asset={} (non-texture, skipped)", AssetName.ToString());
@@ -1974,7 +1979,9 @@ bool FRender::ReadbackMirror(const Name::FName& AssetName, Resource::FResource& 
 	// GPU -> CPU fill-back before an export: resolve the Persistent mirror, copy its pixels into
 	// a host-visible buffer through the RHI's BLOCKING readback (submit + fence wait -- the export
 	// path, never per-frame), then hand the bytes to the resource's CPU payload.
-	auto* Texture = dynamic_cast<Resource::FTexture*>(&OutResource);
+	auto* Texture = (OutResource.GetTypeName() == TTypeName<Resource::FTexture>::value)
+		? static_cast<Resource::FTexture*>(&OutResource)
+		: nullptr;
 	if (Texture == nullptr)
 	{
 		MAHO_LOG_CORE_ERROR("FRender: readback asset={} (resource is not a texture)", AssetName.ToString());

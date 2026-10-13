@@ -176,6 +176,11 @@ protected:
 private:
 	MAHO_DECLARE_FRAME(FGameWorld);
 
+	[[nodiscard]] void* GetCollectorInterface() noexcept override
+	{
+		return static_cast<IFrameCollector*>(this);
+	}
+
 public:
 	FGameWorld();
 	~FGameWorld() override;
@@ -191,12 +196,7 @@ public:
 	C* AddComponent(FEntity E, C Value)
 	{
 		TComponentPool<C>* Pool = GetOrAddPool<C>();
-		// A null pool means this component type is not in GameWorld.cpp's pool factory. Say so and
-		// store nothing: falling back to a locally constructed pool is what the factory exists to
-		// prevent (see CreateComponentPool in ComponentPool.h).
-		MAHO_CHECKF(Pool != nullptr, "AddComponent: no component pool for this type -- add it to the "
-			"table in GameWorld.cpp::CreateComponentPool()");
-		return Pool != nullptr ? Pool->Add(E.Index, std::move(Value)) : nullptr;
+		return Pool->Add(E.Index, std::move(Value));
 	}
 
 	template <typename C>
@@ -258,34 +258,34 @@ private:
 	template <typename C>
 	TComponentPool<C>* GetOrAddPool()
 	{
-		for (const auto& Pool : ComponentPools)
+		if (TComponentPool<C>* Existing = GetPool<C>())
 		{
-			if (auto* Typed = dynamic_cast<TComponentPool<C>*>(Pool.get()))
-			{
-				return Typed;
-			}
+			return Existing;
 		}
 		// CONSTRUCTED BY GAMEWORLD.DLL, not here: this header is instantiated in the WORLD SYSTEMS'
 		// modules, and a pool built here would carry THEIR vtable + deleting destructor -- which
-		// Shutdown's uninstall frees before the pool dies. See CreateComponentPool's note.
-		IComponentPool* New = CreateComponentPool(typeid(C));
-		if (New == nullptr)
-		{
-			return nullptr;
-		}
-		auto* Raw = dynamic_cast<TComponentPool<C>*>(New);
+		// Shutdown's uninstall frees before the pool dies. See CreateComponentPoolTyped's note.
+		TComponentPool<C>* New = CreateComponentPoolTyped<C>();
 		ComponentPools.emplace_back(New);
-		return Raw;
+		ComponentPoolTypes.emplace_back(TTypeName<C>::value);
+		ComponentPoolSelves.emplace_back(static_cast<void*>(New));
+		return New;
 	}
 
 	template <typename C>
 	TComponentPool<C>* GetPool()
 	{
-		for (const auto& Pool : ComponentPools)
+		// The key is the component type's DECLARED NAME -- a compile-time string, the same in every
+		// module -- and the answer is the typed address stored beside the erased pointer, so this
+		// works in whichever module it is instantiated with no cast and no RTTI.
+		static_assert(!TTypeName<C>::value.empty(),
+			"this component type needs MAHO_DECLARE_TYPE: its declared name is how its pool is found");
+		const std::string_view TypeName = TTypeName<C>::value;
+		for (std::size_t Index = 0; Index < ComponentPoolTypes.size(); ++Index)
 		{
-			if (auto* Typed = dynamic_cast<TComponentPool<C>*>(Pool.get()))
+			if (ComponentPoolTypes[Index] == TypeName)
 			{
-				return Typed;
+				return static_cast<TComponentPool<C>*>(ComponentPoolSelves[Index]);
 			}
 		}
 		return nullptr;
@@ -309,6 +309,13 @@ private:
 	FEntityRegistry Registry;
 	std::vector<std::unique_ptr<IComponentPool>> ComponentPools;   // one TComponentPool<T> per component type
 
+	/** The pool's identity and its TYPED address, kept beside the erased pointer: a component type's
+	 *  declared name (`MAHO_DECLARE_TYPE` -> `TTypeName<T>::value`) is the key, and the typed address
+	 *  is what a lookup hands back -- resolved ONCE, here, instead of being down-cast per search. Both
+	 *  are filled by `GetOrAddPool<C>`, where the concrete type is still known. */
+	std::vector<std::string_view> ComponentPoolTypes;
+	std::vector<void*>            ComponentPoolSelves;
+
 	std::chrono::steady_clock::time_point LastFrame = std::chrono::steady_clock::now();
 	float DeltaSeconds = 0.f;
 	float FixedStepSeconds = 1.f / 60.f;
@@ -327,3 +334,12 @@ MAHO_GAMEWORLD_API FGameWorld* GetGameWorld();
 // context is the interface declaration's own fact (MAHO_DECLARE_STAGE above).
 
 } // namespace Maho
+
+namespace Maho
+{
+// In a HEADER on purpose: a component type's token is computed wherever a pool is SEARCHED, so
+// every module that searches must see this identity (a .cpp-only declaration would give the other
+// modules an empty token and their lookups would silently never match).
+MAHO_DECLARE_TYPE(GameWorld::FTransform)
+} // namespace Maho
+

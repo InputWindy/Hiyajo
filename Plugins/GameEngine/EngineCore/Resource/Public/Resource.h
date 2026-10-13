@@ -127,6 +127,9 @@ public:
 	 *  false after ReleaseBulk(). */
 	[[nodiscard]] virtual bool HasBulk() const { return true; }
 
+	/** This resource's TYPE, as a declared identity (`MAHO_DECLARE_TYPE`): a resource answers "what am I" itself, so a consumer checks it instead of a `dynamic_cast`. Overridden by every concrete resource type. */
+	[[nodiscard]] virtual std::string_view GetTypeName() const noexcept;
+
 private:
 	std::string Path;
 };
@@ -352,6 +355,8 @@ TResource* FResourceSystem::CreateResource(std::string_view AssetPath, typename 
 template <typename TResource>
 bool FResourceSystem::Export(typename TResourceExporter<TResource>::FConfig Config, std::string_view AssetPath)
 {
+	static_assert(!TTypeName<TResource>::value.empty(),
+		"this resource type needs MAHO_DECLARE_TYPE: its declared name is how it is identified here");
 	// Copy the asset path + config first (the lambda captures by move; argument
 	// evaluation order isn't guaranteed, so reading them after the move sees empty).
 	const std::string Path(AssetPath);
@@ -360,7 +365,11 @@ bool FResourceSystem::Export(typename TResourceExporter<TResource>::FConfig Conf
 	{
 		return false;
 	}
-	const TResource* Typed = dynamic_cast<const TResource*>(Resource);
+	// The identity check names the type the caller asked for, and the resource itself declared it --
+	// so the cast below is a cast to a type the object has just confirmed it is.
+	const TResource* Typed = Resource->GetTypeName() == TTypeName<TResource>::value
+		? static_cast<const TResource*>(Resource)
+		: nullptr;
 	if (Typed == nullptr)
 	{
 		return false;
@@ -389,4 +398,9 @@ bool FResourceSystem::Export(typename TResourceExporter<TResource>::FConfig Conf
 }
 
 } // namespace Resource
+} // namespace Maho
+
+namespace Maho
+{
+MAHO_DECLARE_TYPE(Resource::FResource)
 } // namespace Maho

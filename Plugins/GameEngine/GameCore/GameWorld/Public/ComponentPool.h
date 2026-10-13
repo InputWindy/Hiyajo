@@ -19,7 +19,7 @@ namespace GameWorld
  * Index stays addressable by every other pool, matching FEntityRegistry.
  *
  * EXPORTED because the pool object crosses the module boundary that frees it: a world
- * system's module constructs the pool (through `CreateComponentPool` below, so the
+ * system's module constructs the pool (through `CreateComponentPoolTyped` below, so the
  * construction itself stays in GameWorld.dll) and GAMEWORLD.DLL destroys it. The tag is
  * what keeps the deleting destructor a single symbol of this module instead of a COMDAT
  * copy emitted wherever the base is first seen - see the AGENTS export rules.
@@ -99,8 +99,8 @@ private:
 };
 
 /**
- * Create the component pool for `Type` - **inside GameWorld.dll**, which is the point of this
- * function existing at all.
+ * Create the component pool for `C` - **inside GameWorld.dll**, which is the point of this function
+ * existing at all.
  *
  * `TComponentPool<T>` is an all-inline header TEMPLATE, so it has no key function: its vtable and
  * its deleting destructor are emitted as a COMDAT **in whichever module constructs the object**.
@@ -111,22 +111,23 @@ private:
  * that module is mapped. It generally IS not: `FGameWorld::Shutdown` uninstalls its systems, and
  * the uninstall is what `FreeLibrary`s their modules.
  *
- * So the construction is routed through here, and GameWorld.cpp owns the (small, explicit) table of
- * component types it can build. That makes the pool's vtable, RTTI and deleting destructor live in
- * the module that also OWNS the pool - the same fix the export rules prescribe for any type whose
- * instances outlive (or are freed later than) the module that made them, applied to a template where
- * a `MAHO_*_API` tag alone cannot do it.
+ * So the construction is routed through here (the definition, and therefore the instantiation,
+ * lives in GameWorld.cpp), which makes the pool's vtable and deleting destructor live in the module
+ * that also OWNS the pool - the same fix the export rules prescribe for any type whose instances
+ * outlive the module that made them, applied to a template where a `MAHO_*_API` tag alone cannot do
+ * it.
  *
- * Returns nullptr for a type that is not in that table. A caller must treat that as a programming
- * error, not as "no pool yet": silently falling back to a locally constructed pool is exactly the
- * cross-module vtable this function exists to prevent.
+ * TYPED, and the type list is the .cpp's EXPLICIT INSTANTIATIONS: no `type_info`, no cast, and a
+ * component type that is used but not listed is a LINK ERROR instead of a pool that silently comes
+ * back empty.
  *
  * ORDERING IS STILL REQUIRED: `FGameWorld::Shutdown` frees the pools BEFORE it uninstalls the
  * systems, because a pool's elements (e.g. `FScriptComponent`, `FUIWidget`) hold `shared_ptr`s whose
  * deleters were baked into the system modules -- `TComponentPool<T>`'s own destructor is in
  * GameWorld.dll now, but `~T` is not.
  */
-MAHO_GAMEWORLD_API IComponentPool* CreateComponentPool(const std::type_info& Type);
+template <typename C>
+MAHO_GAMEWORLD_API TComponentPool<C>* CreateComponentPoolTyped();
 
 } // namespace GameWorld
 } // namespace Maho

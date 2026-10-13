@@ -18,6 +18,7 @@
 #include <set>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -34,6 +35,19 @@ namespace Detail
 	 * engine module must not include plugin headers. Stateless ones move here instead.
 	 */
 	void ReportBridgeDiagnostics(const std::vector<FFrameBridge::FDiagnostic>& Diagnostics);
+
+	/**
+	 * A token that identifies a compile-time type list INSIDE this module: the address of a
+	 * function-local static in an inline function template. It never crosses a DLL boundary
+	 * (the map it keys is a member of one builder object), which is exactly why a module-local
+	 * address is enough -- and why no RTTI is involved.
+	 */
+	template <typename TTag>
+	[[nodiscard]] inline const void* SeqToken() noexcept
+	{
+		static const char Token = 0;
+		return &Token;
+	}
 }
 
 /**
@@ -339,14 +353,15 @@ protected:
 
 		// A child that is ITSELF a collector is handed OUR pool and takes its own lane in it, so
 		// the whole tree runs on one worker set while each collector keeps an isolated barrier.
-		// Install is generic and only knows the child as an FFrameExtension, so this side cast is
-		// the one place that asks "are you a collector too?". Both ends are this same class:
-		// whichever collector installs a collector hands down whatever pool it was given, so the
-		// outermost builder's workers are the ones used all the way down.
+		// The child is only known here as an FFrameExtension, so this is the one place that asks
+		// "are you a collector too?" -- and the OBJECT answers (`GetCollectorInterface`, a plain
+		// base conversion on its side), because only it knows its own hierarchy. Both ends are this
+		// same class: whichever collector installs a collector hands down whatever pool it was
+		// given, so the outermost builder's workers are the ones used all the way down.
 		//
 		// BEFORE the pushes, i.e. only once the child is definitely accepted: a refused install
 		// must leave the caller with nothing to clean up.
-		if (auto* Child = dynamic_cast<IFrameCollector*>(Layer.get()))
+		if (auto* Child = static_cast<IFrameCollector*>(Layer->GetCollectorInterface()))
 		{
 			Child->UseSharedPool(*Pool);
 		}
@@ -633,10 +648,10 @@ protected:
 		// the stage BODY RUNS TWICE. So the round only ever moves forward, and the guard is where
 		// rounds are consumed (every sequence, including the ones a collector drives, goes through
 		// here -- a caller cannot forget it).
-		const std::uint64_t Round = Frame > LastSequenceRound[std::type_index(typeid(TLoopStages))]
+		const std::uint64_t Round = Frame > LastSequenceRound[Detail::SeqToken<TLoopStages>()]
 			? Frame
-			: LastSequenceRound[std::type_index(typeid(TLoopStages))] + 1;
-		LastSequenceRound[std::type_index(typeid(TLoopStages))] = Round;
+			: LastSequenceRound[Detail::SeqToken<TLoopStages>()] + 1;
+		LastSequenceRound[Detail::SeqToken<TLoopStages>()] = Round;
 
 		// ONE read of the round feeds the batch: the bridge stamps it onto every node's identity AND
 		// hands it to every node's closure, so a stage sees the round it was submitted with no matter
@@ -1475,8 +1490,9 @@ private:
 	std::vector<FFrameExtension*>  LoopFrames;
 	/** Per-sequence "round already driven", used ONLY as the monotonic floor of Execute -- it is
 	 *  not a frame source (see the guard there). A map keyed by the stage list because a host may
-	 *  drive several sequences from one builder. */
-	std::map<std::type_index, std::uint64_t> LastSequenceRound;
+	 *  drive several sequences from one builder -- keyed by a module-local token (`Detail::SeqToken`),
+	 *  since the identity never has to survive a DLL boundary. */
+	std::unordered_map<const void*, std::uint64_t> LastSequenceRound;
 	bool                           bLoopDirty = true;         // the cached frame set is stale
 	bool                           bLoopJustExpanded = false; // report diagnostics once per set
 	std::string                    LastLoopRejectReason;

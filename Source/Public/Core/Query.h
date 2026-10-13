@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Core/Fatal.h>
+#include <Core/MetaData.h>
 #include <Core/TypeList.h>
 
 #include <cstddef>
@@ -17,6 +18,20 @@ struct TQueryTag
 	[[nodiscard]] static const void* Get() noexcept
 	{
 		return nullptr;
+	}
+};
+
+/** A DECLARED type (`MAHO_DECLARE_TYPE`): its identity is the ADDRESS of the row its declaration
+ *  filed in the store -- one value, resolved identically in every module, and no name comparison at
+ *  the point of use (the lookup happens once per type per module, then it is a pointer compare). */
+template <typename T>
+struct TQueryTag<T, std::enable_if_t<!TTypeName<T>::value.empty()>>
+{
+	[[nodiscard]] static const void* Get() noexcept
+	{
+		static const void* const Cached =
+			::Maho::GetMetaData().Find(KDeclaredType, TTypeName<T>::value);
+		return Cached;
 	}
 };
 

@@ -197,7 +197,7 @@ void FGameWorld::Shutdown(FEngineBase&, FEngineContext&)
 	// `default_delete<IComponentPool>::operator()`, reached from this method).
 	//
 	// The pools are therefore freed here, while the graph is fenced AND every module that could own
-	// their vtable, RTTI or element deleters is still mapped. `CreateComponentPool` (ComponentPool.h)
+	// their vtable, RTTI or element deleters is still mapped. `CreateComponentPoolTyped` (ComponentPool.h)
 	// additionally moves the pool's own vtable into THIS module, so the delete no longer depends on
 	// which system happened to create the pool; the element destructors (`FScriptComponent::Script`,
 	// `FUIWidget::View`) still live in the systems' modules, which is why the order below is required
@@ -214,6 +214,8 @@ void FGameWorld::Shutdown(FEngineBase&, FEngineContext&)
 	// they die HERE -- with the graph fenced (no node can be running a body that reaches them) and with
 	// the systems' modules still loaded (see the order note above).
 	ComponentPools.clear();
+	ComponentPoolTypes.clear();
+	ComponentPoolSelves.clear();
 
 	// (C) The systems: uninstall through the collector teardown pipeline so each one's
 	// IPreUnInstall runs BEFORE its instance is destroyed (a bare member destruction
@@ -242,45 +244,57 @@ void FGameWorld::Shutdown(FEngineBase&, FEngineContext&)
 
 // ── the component-pool factory (the module boundary of the pools) ─────────────
 //
-// THE TABLE BELOW IS THE BOUNDARY. Every component type the world or a world system can put in a
-// pool is named here, and each `new TComponentPool<T>` is instantiated in THIS translation unit --
-// so each pool's vtable, RTTI and deleting destructor belong to GameWorld.dll, the module that owns
-// (and therefore outlives) the pool. `CreateComponentPool`'s note in ComponentPool.h explains why a
-// pool constructed in a system's module is a use-after-free waiting for `UninstallAll`'s FreeLibrary.
+// ONE LIST, TWO HALVES, and they belong together: each component type the world or a world system can
+// put in a pool (a) gets an IDENTITY here (`MAHO_DECLARE_TYPE`, whose row address is the token
+// `TQueryTag<T>` resolves to in every module -- that is how a pool is found again without a cast) and
+// (b) gets its pool template instantiated in THIS translation unit, so each pool's vtable and
+// deleting destructor belong to GameWorld.dll, the module that owns (and therefore outlives) the
+// pool. CreateComponentPoolTyped's note in ComponentPool.h explains why a pool constructed in a
+// system's module is a use-after-free waiting for `UninstallAll`'s FreeLibrary.
 //
-// ADDING A COMPONENT TYPE means adding it here. Forgetting does NOT corrupt silently: the call site
-// gets nullptr and `FGameWorld::AddComponent` reports it (MAHO_CHECKF). The types are readable here
-// because this cpp already includes the systems' headers privately (they are this plugin's
-// PrivateIncludes); GameWorld.h stays free of them.
-namespace
-{
-	template <typename T>
-	IComponentPool* NewComponentPool()
-	{
-		return new TComponentPool<T>();
-	}
+// ADDING A COMPONENT TYPE means adding it to BOTH halves. Forgetting the instantiation does not
+// compile-link; forgetting the identity (which lives in the TYPE's own public header, so that every
+// module that searches can see it) makes this static_assert fail.
+} // namespace GameWorld
+} // namespace Maho
 
-	const std::unordered_map<std::type_index, IComponentPool* (*)()>& ComponentPoolFactory()
-	{
-		static const std::unordered_map<std::type_index, IComponentPool* (*)()> Factory{
-			{ typeid(FTransform),           &NewComponentPool<FTransform> },
-			{ typeid(FMeshRenderComponent), &NewComponentPool<FMeshRenderComponent> },
-			{ typeid(FMaterialComponent),   &NewComponentPool<FMaterialComponent> },
-			{ typeid(FCameraComponent),     &NewComponentPool<FCameraComponent> },
-			{ typeid(FInputComponent),      &NewComponentPool<FInputComponent> },
-			{ typeid(FScriptComponent),     &NewComponentPool<FScriptComponent> },
-			{ typeid(FUIWidget),            &NewComponentPool<FUIWidget> },
-		};
-		return Factory;
-	}
-} // namespace
-
-IComponentPool* CreateComponentPool(const std::type_info& Type)
+namespace Maho
 {
-	const auto& Factory = ComponentPoolFactory();
-	const auto It = Factory.find(std::type_index(Type));
-	return It != Factory.end() ? It->second() : nullptr;
+namespace GameWorld
+{
+
+template <typename C>
+TComponentPool<C>* CreateComponentPoolTyped()
+{
+	return new TComponentPool<C>();
 }
+
+// The factory IS this list of explicit instantiations: each line instantiates the pool template HERE,
+// in GameWorld.dll, so the object's vtable and deleting destructor live in the module that also owns
+// (and frees) it -- see CreateComponentPoolTyped's note in ComponentPool.h.
+//
+// ADDING A COMPONENT TYPE means adding it here. Forgetting cannot corrupt silently: the pool is
+// constructed by a TEMPLATE whose instantiations are this list, so a component type that is used but
+// not listed does not LINK. The types are readable here because this cpp already includes the
+// systems' headers privately (they are this plugin's PrivateIncludes); GameWorld.h stays free of them.
+template TComponentPool<FTransform>*           CreateComponentPoolTyped<FTransform>();
+template TComponentPool<FMeshRenderComponent>* CreateComponentPoolTyped<FMeshRenderComponent>();
+template TComponentPool<FMaterialComponent>*   CreateComponentPoolTyped<FMaterialComponent>();
+template TComponentPool<FCameraComponent>*     CreateComponentPoolTyped<FCameraComponent>();
+template TComponentPool<FInputComponent>*      CreateComponentPoolTyped<FInputComponent>();
+template TComponentPool<FScriptComponent>*     CreateComponentPoolTyped<FScriptComponent>();
+template TComponentPool<FUIWidget>*            CreateComponentPoolTyped<FUIWidget>();
+
+// The identity half of that list, checked at COMPILE time: a component type whose identity was not
+// declared would resolve to a null token, and its pool would then never be found again -- silently.
+static_assert(!TTypeName<FTransform>::value.empty()
+	&& !TTypeName<FMeshRenderComponent>::value.empty()
+	&& !TTypeName<FMaterialComponent>::value.empty()
+	&& !TTypeName<FCameraComponent>::value.empty()
+	&& !TTypeName<FInputComponent>::value.empty()
+	&& !TTypeName<FScriptComponent>::value.empty()
+	&& !TTypeName<FUIWidget>::value.empty(),
+	"every component type built here needs MAHO_DECLARE_TYPE (its pool is found by that token)");
 
 FEntity FGameWorld::CreateEntity()
 {

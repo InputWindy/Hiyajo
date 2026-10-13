@@ -98,6 +98,8 @@ public:
 
 	[[nodiscard]] virtual void* QuerySubobject(const void* TargetTag) noexcept;
 
+	[[nodiscard]] virtual void* GetCollectorInterface() noexcept;
+
 	struct FEdge
 	{
 		std::string_view TargetName{};

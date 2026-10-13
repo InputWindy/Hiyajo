@@ -261,3 +261,13 @@ private:
 
 } // namespace GameWorld
 } // namespace Maho
+
+namespace Maho
+{
+MAHO_DECLARE_TYPE(GameWorld::FMeshRenderComponent)
+MAHO_DECLARE_TYPE(GameWorld::FMaterialComponent)
+MAHO_DECLARE_TYPE(GameWorld::FCameraComponent)
+MAHO_DECLARE_TYPE(GameWorld::FInputComponent)
+MAHO_DECLARE_TYPE(GameWorld::FScriptComponent)
+} // namespace Maho
+

@@ -170,6 +170,11 @@ void SerializeVector(Archive::FArchive& Ar, std::vector<T>& V)
 
 } // namespace
 
+std::string_view FTexture::GetTypeName() const noexcept
+{
+	return TTypeName<FTexture>::value;
+}
+
 void FTexture::Serialize(Archive::FArchive& Ar)
 {
 	if (!Ar.IsReading())

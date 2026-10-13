@@ -198,6 +198,11 @@ protected:
 private:
 	MAHO_DECLARE_FRAME_UNDER(FExampleEditor, FRender);
 
+	[[nodiscard]] void* GetCollectorInterface() noexcept override
+	{
+		return static_cast<IFrameCollector*>(this);
+	}
+
 	FExampleEditor();
 
 public:

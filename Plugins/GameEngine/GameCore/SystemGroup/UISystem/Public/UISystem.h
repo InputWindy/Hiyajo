@@ -84,3 +84,9 @@ MAHO_UISYSTEM_API FUISystem* GetUISystem();
 
 } // namespace GameWorld
 } // namespace Maho
+
+namespace Maho
+{
+MAHO_DECLARE_TYPE(GameWorld::FUIWidget)
+} // namespace Maho
+

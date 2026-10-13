@@ -292,6 +292,11 @@ protected:
 private:
 	MAHO_DECLARE_FRAME(FRender);
 
+	[[nodiscard]] void* GetCollectorInterface() noexcept override
+	{
+		return static_cast<IFrameCollector*>(this);
+	}
+
 	FRender();
 	~FRender() override;
 

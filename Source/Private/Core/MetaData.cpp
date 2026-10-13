@@ -176,5 +176,17 @@ void FMetaData::DumpOnce() const
 	});
 }
 
+namespace Detail
+{
+
+FTypeRegistrar::FTypeRegistrar(std::string_view TypeName) noexcept
+{
+	if (!TypeName.empty())
+	{
+		GetMetaData().Register(KDeclaredType, TypeName, {});
+	}
+}
+
+} // namespace Detail
 
 }

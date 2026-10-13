@@ -199,6 +199,9 @@ public:
 
 	[[nodiscard]] bool HasBulk() const override { return !Pixels.empty(); }
 
+	/** This resource's TYPE, as a declared identity (`MAHO_DECLARE_TYPE`): a resource answers "what am I" itself, so a consumer checks it instead of a `dynamic_cast`. Overridden by every concrete resource type. */
+	[[nodiscard]] std::string_view GetTypeName() const noexcept override;
+
 protected:
 	// 像素 payload 构造：各维度子类以自身参数转发，字段布局只在
 	// FTexture::Serialize 声明一次（构造+持久化共用）。
@@ -799,4 +802,9 @@ struct TResourceExporter<FPrefab>
 };
 
 } // namespace Resource
+} // namespace Maho
+
+namespace Maho
+{
+MAHO_DECLARE_TYPE(Resource::FTexture)
 } // namespace Maho
