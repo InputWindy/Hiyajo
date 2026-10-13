@@ -12,7 +12,7 @@
 namespace Maho { namespace UI {
 
 FUIButton::FUIButton(FUIName InId)
-	: FUIBuilder(InId)
+	: FUIBuilder(ViewType, InId)
 {
 }
 
@@ -103,12 +103,13 @@ EUIInputFlags FUIButton::GetInputFlags() const
 
 void FUIButton::SyncConfig(const FUIBuilder& Declared)
 {
-	const FUIButton* Other = dynamic_cast<const FUIButton*>(&Declared);
-	if (Other == nullptr) { return; }
-	Label = Other->Label;
-	Icon = Other->Icon;
-	bIconOnly = Other->bIconOnly;
-	bRepeat = Other->bRepeat;
+	// 身份由节点自己声明（构造时必填）→ 比一下 + `static_cast` 即可，无需 RTTI
+	if (Declared.GetType() != EUIViewType::Button) { return; }
+	const FUIButton& Other = static_cast<const FUIButton&>(Declared);
+	Label = Other.Label;
+	Icon = Other.Icon;
+	bIconOnly = Other.bIconOnly;
+	bRepeat = Other.bRepeat;
 }
 
 }} // namespace Maho::UI

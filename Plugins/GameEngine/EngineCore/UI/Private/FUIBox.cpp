@@ -10,7 +10,7 @@
 namespace Maho { namespace UI {
 
 FUIBox::FUIBox(FUIName InId)
-	: FUIBuilder(InId)
+	: FUIBuilder(ViewType, InId)
 {
 }
 

@@ -21,7 +21,7 @@ FUIRect BoxRectOf(const FUIRect& Content, float BoxSize)
 } // namespace
 
 FUICheckbox::FUICheckbox(FUIName InId)
-	: FUIBuilder(InId)
+	: FUIBuilder(ViewType, InId)
 {
 }
 
@@ -120,11 +120,12 @@ EUIInputFlags FUICheckbox::GetInputFlags() const
 
 void FUICheckbox::SyncConfig(const FUIBuilder& Declared)
 {
-	const FUICheckbox* Other = dynamic_cast<const FUICheckbox*>(&Declared);
-	if (Other == nullptr) { return; }
-	Label = Other->Label;
-	Icon = Other->Icon;
-	bChecked = Other->bChecked;
+	// 身份由节点自己声明（构造时必填）→ 比一下 + `static_cast` 即可，无需 RTTI
+	if (Declared.GetType() != EUIViewType::Checkbox) { return; }
+	const FUICheckbox& Other = static_cast<const FUICheckbox&>(Declared);
+	Label = Other.Label;
+	Icon = Other.Icon;
+	bChecked = Other.bChecked;
 }
 
 }} // namespace Maho::UI

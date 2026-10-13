@@ -18,7 +18,7 @@ constexpr float kMinColorWidth = 120.f;
 } // namespace
 
 FUIColorEdit::FUIColorEdit(FUIName InId)
-	: FUIBuilder(InId)
+	: FUIBuilder(ViewType, InId)
 {
 }
 
@@ -125,14 +125,15 @@ EUIInputFlags FUIColorEdit::GetInputFlags() const
 
 void FUIColorEdit::SyncConfig(const FUIBuilder& Declared)
 {
-	const FUIColorEdit* Other = dynamic_cast<const FUIColorEdit*>(&Declared);
-	if (Other == nullptr) { return; }
-	Label = Other->Label;
-	LabelWidth = Other->LabelWidth;
+	// 身份由节点自己声明（构造时必填）→ 比一下 + `static_cast` 即可，无需 RTTI
+	if (Declared.GetType() != EUIViewType::ColorEdit) { return; }
+	const FUIColorEdit& Other = static_cast<const FUIColorEdit&>(Declared);
+	Label = Other.Label;
+	LabelWidth = Other.LabelWidth;
 	// 值：只在声明侧显式给过时采纳，否则保留后端写入的运行期值（编辑不被陈旧声明压回）
-	if (Other->bValueDirty)
+	if (Other.bValueDirty)
 	{
-		for (int i = 0; i < 4; ++i) { RGBA[i] = Other->RGBA[i]; }
+		for (int i = 0; i < 4; ++i) { RGBA[i] = Other.RGBA[i]; }
 	}
 }
 

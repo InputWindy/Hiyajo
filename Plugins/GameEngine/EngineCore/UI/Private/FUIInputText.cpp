@@ -12,7 +12,7 @@
 namespace Maho { namespace UI {
 
 FUIInputText::FUIInputText(FUIName InId)
-	: FUIBuilder(InId)
+	: FUIBuilder(ViewType, InId)
 {
 }
 
@@ -96,12 +96,13 @@ EUIInputFlags FUIInputText::GetInputFlags() const
 
 void FUIInputText::SyncConfig(const FUIBuilder& Declared)
 {
-	const FUIInputText* Other = dynamic_cast<const FUIInputText*>(&Declared);
-	if (Other == nullptr) { return; }
-	Value = Other->bValueDirty ? Other->Value : Value;   // 只认显式声明；否则保留后端写入的输入值
-	Hint = Other->Hint;
-	MaxLength = Other->MaxLength;
-	bMultiline = Other->bMultiline;
+	// 身份由节点自己声明（构造时必填）→ 比一下 + `static_cast` 即可，无需 RTTI
+	if (Declared.GetType() != EUIViewType::InputText) { return; }
+	const FUIInputText& Other = static_cast<const FUIInputText&>(Declared);
+	Value = Other.bValueDirty ? Other.Value : Value;   // 只认显式声明；否则保留后端写入的输入值
+	Hint = Other.Hint;
+	MaxLength = Other.MaxLength;
+	bMultiline = Other.bMultiline;
 }
 
 }} // namespace Maho::UI

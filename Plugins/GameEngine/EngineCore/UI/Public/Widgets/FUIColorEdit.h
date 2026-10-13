@@ -14,6 +14,8 @@ namespace Maho { namespace UI {
 class MAHO_UI_API FUIColorEdit final : public FUIBuilder
 {
 public:
+	/** 本组件声明的类型身份（构造函数把它交给 `FUIBuilder`；`AddItem<T>` 的复用判定也读它）。 */
+	static constexpr EUIViewType ViewType = EUIViewType::ColorEdit;
 	explicit FUIColorEdit(FUIName InId);
 	~FUIColorEdit() override;
 

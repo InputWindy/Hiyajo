@@ -19,7 +19,7 @@ constexpr float kCloseBoxPad  = 4.f;
 } // namespace
 
 FUIPanel::FUIPanel(FUIName InId)
-	: FUIBuilder(InId)
+	: FUIBuilder(ViewType, InId)
 {
 	if (!GetId().IsNone())
 	{
@@ -189,19 +189,20 @@ EUIInputFlags FUIPanel::GetInputFlags() const
 
 void FUIPanel::SyncConfig(const FUIBuilder& Declared)
 {
-	const FUIPanel* Other = dynamic_cast<const FUIPanel*>(&Declared);
-	if (Other == nullptr) { return; }
-	Title = Other->Title;
-	Chrome = Other->Chrome;
-	bClosable = Other->bClosable;
-	bScrollable = Other->bScrollable;
-	bContextMenu = Other->bContextMenu;
-	bHasAnchor = Other->bHasAnchor;
-	AnchorX = Other->AnchorX;
-	AnchorY = Other->AnchorY;
-	AnchorW = Other->AnchorW;
-	AnchorH = Other->AnchorH;
-	HeaderHeight = Other->HeaderHeight;
+	// 身份由节点自己声明（构造时必填）→ 比一下 + `static_cast` 即可，无需 RTTI
+	if (Declared.GetType() != EUIViewType::Panel) { return; }
+	const FUIPanel& Other = static_cast<const FUIPanel&>(Declared);
+	Title = Other.Title;
+	Chrome = Other.Chrome;
+	bClosable = Other.bClosable;
+	bScrollable = Other.bScrollable;
+	bContextMenu = Other.bContextMenu;
+	bHasAnchor = Other.bHasAnchor;
+	AnchorX = Other.AnchorX;
+	AnchorY = Other.AnchorY;
+	AnchorW = Other.AnchorW;
+	AnchorH = Other.AnchorH;
+	HeaderHeight = Other.HeaderHeight;
 }
 
 }} // namespace Maho::UI

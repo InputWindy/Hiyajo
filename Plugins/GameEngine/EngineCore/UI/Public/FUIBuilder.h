@@ -43,7 +43,13 @@ struct FUIWidgetState
 class MAHO_UI_API FUIBuilder
 {
 public:
-	explicit FUIBuilder(FUIName InId);
+	/** 构造：**类型身份是必填首参** —— 每个具体组件在自己的头里声明类型身份常量
+	 *  `static constexpr EUIViewType ViewType = EUIViewType::X;`，并在自己的构造函数里把它交出来
+	 *  （`: FUIBuilder(ViewType, InId)`）。两处都不许省：基类不提供 `ViewType` 默认值，
+	 *  漏声明就是编译错误，而不是一个静默的 `None`。
+	 *  于是"我是什么类型"由对象自己声明：消费者 `GetType() == EUIViewType::X` 判身份后
+	 *  `static_cast` 就是可靠的（无需 RTTI 的 `dynamic_cast`）。 */
+	explicit FUIBuilder(EUIViewType InType, FUIName InId);
 	virtual ~FUIBuilder();
 
 	FUIBuilder(const FUIBuilder&)            = delete;
@@ -56,6 +62,9 @@ public:
 
 	// -- 身份与树 -----------------------------------------------------------
 	[[nodiscard]] FUIName          GetId() const { return Id; }
+	/** 本节点的类型身份：由具体组件的构造函数声明（必填参数，见上），故这里是**对象自己给出的**
+	 *  答案 —— 判身份 + `static_cast` 因此可靠，消费者不必用 RTTI 的 `dynamic_cast` 去问。 */
+	[[nodiscard]] EUIViewType      GetType() const noexcept;
 	[[nodiscard]] std::string_view GetTypeName() const { return TypeName(); }
 	[[nodiscard]] FUIBuilder*      GetParent() const { return Parent; }
 	[[nodiscard]] const std::vector<std::unique_ptr<FUIBuilder>>& GetChildren() const
@@ -72,9 +81,13 @@ public:
 			"AddItem<T>: T must derive from Maho::UI::FUIBuilder");
 		static_assert(std::is_constructible_v<T, FUIName, TArgs...>,
 			"AddItem<T>: T must be constructible from (FUIName, TArgs...)");
+		static_assert(T::ViewType != EUIViewType::None,
+			"AddItem<T>: T must declare its own EUIViewType (static constexpr ViewType) "
+			"and claim it in its constructor");
 		if (FUIBuilder* Existing = FindChild(InId))
 		{
-			if (auto* Typed = dynamic_cast<T*>(Existing)) { return *Typed; }
+			// 同 Id + 同类型 = 复用：类型是节点自己声明的身份，比一下即可，不做 RTTI 反查
+			if (Existing->GetType() == T::ViewType) { return static_cast<T&>(*Existing); }
 			RemoveItem(InId);
 		}
 		auto Child = std::make_unique<T>(InId, std::forward<TArgs>(Args)...);
@@ -255,6 +268,8 @@ private:
 
 	FUIEvents& EnsureEvents();        // 懒分配
 
+	/** 类型身份：只在构造时由具体组件声明（必填参数），此后只读（`GetType()`）。 */
+	EUIViewType   Type;
 	FUIName       Id;
 	FUIBuilder*   Parent   = nullptr;
 	std::uint32_t Serial   = 0;

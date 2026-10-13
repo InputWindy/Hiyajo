@@ -173,9 +173,12 @@ void FContentBrowser::Update(FExampleEditor& Editor, FExampleEditorContext& Fram
 	// -- 值回读 --------------------------------------------------------------
 	// 翻译期后端原地改写节点的值（用户输入的真值在节点上），故先收回缓冲再按缓冲声明；
 	// 用户编辑因此跨帧存活。
-	if (const auto* SearchNode = dynamic_cast<const UI::FUIInputText*>(PanelView->Find(UI::FUIName(kIdSearch))))
+	// 节点自己声明类型身份（构造时必填）→ 比身份 + `static_cast`，不做 RTTI 的 dynamic_cast
+	if (const UI::FUIBuilder* Found = PanelView->Find(UI::FUIName(kIdSearch));
+		Found != nullptr && Found->GetType() == UI::EUIViewType::InputText)
 	{
-		std::strncpy(SearchBuffer, SearchNode->GetValue().c_str(), sizeof(SearchBuffer) - 1);
+		const UI::FUIInputText& SearchNode = static_cast<const UI::FUIInputText&>(*Found);
+		std::strncpy(SearchBuffer, SearchNode.GetValue().c_str(), sizeof(SearchBuffer) - 1);
 		SearchBuffer[sizeof(SearchBuffer) - 1] = '\0';
 	}
 

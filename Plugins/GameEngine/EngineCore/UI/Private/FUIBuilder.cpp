@@ -14,12 +14,18 @@
 
 namespace Maho { namespace UI {
 
-FUIBuilder::FUIBuilder(FUIName InId)
-	: Id(InId)
+FUIBuilder::FUIBuilder(EUIViewType InType, FUIName InId)
+	: Type(InType)
+	, Id(InId)
 {
 }
 
 FUIBuilder::~FUIBuilder() = default;
+
+EUIViewType FUIBuilder::GetType() const noexcept
+{
+	return Type;
+}
 
 // -- 树 ---------------------------------------------------------------------
 
@@ -74,7 +80,9 @@ FUIBuilder& FUIBuilder::operator[](FUIBlock InBlock)
 		const auto It = std::find_if(Children.begin(), Children.end(),
 			[ChildId](const std::unique_ptr<FUIBuilder>& C) { return C->Id == ChildId; });
 
-		if (It != Children.end() && typeid(**It) == typeid(*Declared))
+		// 同 Id + 同类型才复用：类型是节点自己声明的身份（构造时必填），比一下即可，
+		// 不必让 RTTI 去问 `typeid`。
+		if (It != Children.end() && (*It)->GetType() == Declared->GetType())
 		{
 			FUIBuilder& Existing = **It;
 			const FUIWidgetState OldState = Existing.State;   // 运行期状态保留

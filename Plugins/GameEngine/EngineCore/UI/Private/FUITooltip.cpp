@@ -17,7 +17,7 @@ constexpr float kTipMeasureWidth = 480.f;
 } // namespace
 
 FUITooltip::FUITooltip(FUIName InId)
-	: FUIBuilder(InId)
+	: FUIBuilder(ViewType, InId)
 {
 }
 
@@ -110,12 +110,13 @@ void FUITooltip::PaintContent(IUITranslator& T, const FUIResolvedStyle& S)
 
 void FUITooltip::SyncConfig(const FUIBuilder& Declared)
 {
-	const FUITooltip* Other = dynamic_cast<const FUITooltip*>(&Declared);
-	if (Other == nullptr) { return; }
-	Text = Other->Text;
-	Delay = Other->Delay;
-	bFollowMouse = Other->bFollowMouse;
-	bHasText = Other->bHasText;
+	// 身份由节点自己声明（构造时必填）→ 比一下 + `static_cast` 即可，无需 RTTI
+	if (Declared.GetType() != EUIViewType::Tooltip) { return; }
+	const FUITooltip& Other = static_cast<const FUITooltip&>(Declared);
+	Text = Other.Text;
+	Delay = Other.Delay;
+	bFollowMouse = Other.bFollowMouse;
+	bHasText = Other.bHasText;
 }
 
 }} // namespace Maho::UI

@@ -309,20 +309,25 @@ void FEditorConsole::Update(FExampleEditor& Editor, FExampleEditorContext& Frame
 	// 声明 —— 用户编辑因此跨帧存活。建议行刚点选的那一帧除外：缓冲才是真值
 	// （CvarAuthoritative），回读会把陈旧的节点文本压回去。
 	FilterEditing = false;
-	if (const auto* FilterNode = dynamic_cast<const UI::FUIInputText*>(PanelView->Find(UI::FUIName(kIdFilter))))
+	// 节点自己声明类型身份（构造时必填）→ 比身份 + `static_cast`，不做 RTTI 的 dynamic_cast
+	if (const UI::FUIBuilder* Found = PanelView->Find(UI::FUIName(kIdFilter));
+		Found != nullptr && Found->GetType() == UI::EUIViewType::InputText)
 	{
-		std::strncpy(FilterBuffer, FilterNode->GetValue().c_str(), sizeof(FilterBuffer) - 1);
+		const UI::FUIInputText& FilterNode = static_cast<const UI::FUIInputText&>(*Found);
+		std::strncpy(FilterBuffer, FilterNode.GetValue().c_str(), sizeof(FilterBuffer) - 1);
 		FilterBuffer[sizeof(FilterBuffer) - 1] = '\0';
-		FilterEditing = FilterNode->GetState().bPressed;   // 同上：过滤框的活跃位
+		FilterEditing = FilterNode.GetState().bPressed;   // 同上：过滤框的活跃位
 	}
 
 	CvarEditing = false;
-	if (const auto* CvarNode = dynamic_cast<const UI::FUIInputText*>(PanelView->Find(UI::FUIName(kIdCvar))))
+	if (const UI::FUIBuilder* Found = PanelView->Find(UI::FUIName(kIdCvar));
+		Found != nullptr && Found->GetType() == UI::EUIViewType::InputText)
 	{
-		CvarEditing = CvarNode->GetState().bPressed;   // 旧 IsItemActive()：后端写回的活跃位
+		const UI::FUIInputText& CvarNode = static_cast<const UI::FUIInputText&>(*Found);
+		CvarEditing = CvarNode.GetState().bPressed;   // 旧 IsItemActive()：后端写回的活跃位
 		if (!CvarAuthoritative)
 		{
-			std::strncpy(CvarBuffer, CvarNode->GetValue().c_str(), sizeof(CvarBuffer) - 1);
+			std::strncpy(CvarBuffer, CvarNode.GetValue().c_str(), sizeof(CvarBuffer) - 1);
 			CvarBuffer[sizeof(CvarBuffer) - 1] = '\0';
 		}
 	}

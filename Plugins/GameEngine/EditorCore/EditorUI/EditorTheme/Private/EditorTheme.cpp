@@ -155,12 +155,14 @@ void FEditorTheme::Update(FExampleEditor& Editor, FExampleEditorContext& Frame)
 	{
 		for (int i = 0; i < CCount; ++i)
 		{
-			const auto* Node = dynamic_cast<const UI::FUIColorEdit*>(PanelView->Find(MakeId("EditorTheme.Color.", i)));
-			if (Node == nullptr)
+			// 节点自己声明类型身份（构造时必填）→ 比身份 + `static_cast`，不做 RTTI 的 dynamic_cast
+			const UI::FUIBuilder* Found = PanelView->Find(MakeId("EditorTheme.Color.", i));
+			if (Found == nullptr || Found->GetType() != UI::EUIViewType::ColorEdit)
 			{
 				continue;
 			}
-			const UI::FUIColor Live = Node->GetValue();
+			const UI::FUIColorEdit& Node = static_cast<const UI::FUIColorEdit&>(*Found);
+			const UI::FUIColor Live = Node.GetValue();
 			const float Live4[4] = { Live.R, Live.G, Live.B, Live.A };
 			float* Slot = &Colors[static_cast<std::size_t>(i) * 4];
 			for (int k = 0; k < 4; ++k)
@@ -175,12 +177,17 @@ void FEditorTheme::Update(FExampleEditor& Editor, FExampleEditorContext& Frame)
 		for (int i = 0; i < SCount; ++i)
 		{
 			const int Arity = GetEditorThemeStyleArity(i);
-			const auto* Node = dynamic_cast<const UI::FUIDragFloat*>(PanelView->Find(MakeId("EditorTheme.Style.", i)));
-			if (Node == nullptr || Node->GetComponents() != Arity)
+			const UI::FUIBuilder* Found = PanelView->Find(MakeId("EditorTheme.Style.", i));
+			if (Found == nullptr || Found->GetType() != UI::EUIViewType::DragFloat)
 			{
 				continue;
 			}
-			const float* Live = Node->GetValues();
+			const UI::FUIDragFloat& Node = static_cast<const UI::FUIDragFloat&>(*Found);
+			if (Node.GetComponents() != Arity)
+			{
+				continue;
+			}
+			const float* Live = Node.GetValues();
 			float* Slot = &Styles[static_cast<std::size_t>(i) * 2];
 			for (int k = 0; k < Arity; ++k)
 			{
@@ -194,15 +201,18 @@ void FEditorTheme::Update(FExampleEditor& Editor, FExampleEditorContext& Frame)
 	}
 	bBuffersAuthoritative = false;
 
-	// 勾选态由控件自己翻转（复制语义），必须回读。
-	if (const auto* Live = dynamic_cast<const UI::FUICheckbox*>(PanelView->Find(UI::FUIName(kIdLiveApply))))
+	// 勾选态由控件自己翻转（复制语义），必须回读。身份由节点自己声明 → 比身份 + `static_cast`。
+	if (const UI::FUIBuilder* Found = PanelView->Find(UI::FUIName(kIdLiveApply));
+		Found != nullptr && Found->GetType() == UI::EUIViewType::Checkbox)
 	{
-		LiveApply = Live->IsChecked();
+		LiveApply = static_cast<const UI::FUICheckbox&>(*Found).IsChecked();
 	}
 	// 路径框的值同样是用户输入：回读进缓冲（Save/Load 用它）。
-	if (const auto* PathNode = dynamic_cast<const UI::FUIInputText*>(PanelView->Find(UI::FUIName(kIdPath))))
+	if (const UI::FUIBuilder* Found = PanelView->Find(UI::FUIName(kIdPath));
+		Found != nullptr && Found->GetType() == UI::EUIViewType::InputText)
 	{
-		std::strncpy(PathBuffer, PathNode->GetValue().c_str(), sizeof(PathBuffer) - 1);
+		const UI::FUIInputText& PathNode = static_cast<const UI::FUIInputText&>(*Found);
+		std::strncpy(PathBuffer, PathNode.GetValue().c_str(), sizeof(PathBuffer) - 1);
 		PathBuffer[sizeof(PathBuffer) - 1] = '\0';
 	}
 

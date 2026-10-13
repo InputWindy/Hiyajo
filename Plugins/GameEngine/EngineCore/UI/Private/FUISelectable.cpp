@@ -12,7 +12,7 @@
 namespace Maho { namespace UI {
 
 FUISelectable::FUISelectable(FUIName InId)
-	: FUIBuilder(InId)
+	: FUIBuilder(ViewType, InId)
 {
 }
 
@@ -103,12 +103,13 @@ EUIInputFlags FUISelectable::GetInputFlags() const
 
 void FUISelectable::SyncConfig(const FUIBuilder& Declared)
 {
-	const FUISelectable* Other = dynamic_cast<const FUISelectable*>(&Declared);
-	if (Other == nullptr) { return; }
-	Label = Other->Label;
-	Icon = Other->Icon;
-	SetSelected(Other->IsSelected());
-	bSpanAll = Other->bSpanAll;
+	// 身份由节点自己声明（构造时必填）→ 比一下 + `static_cast` 即可，无需 RTTI
+	if (Declared.GetType() != EUIViewType::Selectable) { return; }
+	const FUISelectable& Other = static_cast<const FUISelectable&>(Declared);
+	Label = Other.Label;
+	Icon = Other.Icon;
+	SetSelected(Other.IsSelected());
+	bSpanAll = Other.bSpanAll;
 }
 
 }} // namespace Maho::UI

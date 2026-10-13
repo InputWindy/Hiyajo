@@ -12,7 +12,7 @@
 namespace Maho { namespace UI {
 
 FUIImage::FUIImage(FUIName InId)
-	: FUIBuilder(InId)
+	: FUIBuilder(ViewType, InId)
 {
 }
 
@@ -88,14 +88,15 @@ void FUIImage::PaintContent(IUITranslator& T, const FUIResolvedStyle& S)
 
 void FUIImage::SyncConfig(const FUIBuilder& Declared)
 {
-	const FUIImage* Other = dynamic_cast<const FUIImage*>(&Declared);
-	if (Other == nullptr) { return; }
-	Texture = Other->Texture;
-	Tint = Other->Tint;
-	TintColor = Other->TintColor;
-	UV0 = Other->UV0;
-	UV1 = Other->UV1;
-	ScaleMode = Other->ScaleMode;
+	// 身份由节点自己声明（构造时必填）→ 比一下 + `static_cast` 即可，无需 RTTI
+	if (Declared.GetType() != EUIViewType::Image) { return; }
+	const FUIImage& Other = static_cast<const FUIImage&>(Declared);
+	Texture = Other.Texture;
+	Tint = Other.Tint;
+	TintColor = Other.TintColor;
+	UV0 = Other.UV0;
+	UV1 = Other.UV1;
+	ScaleMode = Other.ScaleMode;
 }
 
 }} // namespace Maho::UI

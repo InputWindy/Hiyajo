@@ -10,7 +10,7 @@
 namespace Maho { namespace UI {
 
 FUIText::FUIText(FUIName InId)
-	: FUIBuilder(InId)
+	: FUIBuilder(ViewType, InId)
 {
 }
 
@@ -53,11 +53,12 @@ void FUIText::PaintContent(IUITranslator& T, const FUIResolvedStyle& S)
 
 void FUIText::SyncConfig(const FUIBuilder& Declared)
 {
-	const FUIText* Other = dynamic_cast<const FUIText*>(&Declared);
-	if (Other == nullptr) { return; }
-	Text = Other->Text;
-	Align = Other->Align;
-	bWrap = Other->bWrap;
+	// 身份由节点自己声明（构造时必填）→ 比一下 + `static_cast` 即可，无需 RTTI
+	if (Declared.GetType() != EUIViewType::Text) { return; }
+	const FUIText& Other = static_cast<const FUIText&>(Declared);
+	Text = Other.Text;
+	Align = Other.Align;
+	bWrap = Other.bWrap;
 }
 
 }} // namespace Maho::UI

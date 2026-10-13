@@ -13,7 +13,7 @@
 namespace Maho { namespace UI {
 
 FUITreeNode::FUITreeNode(FUIName InId)
-	: FUIBuilder(InId)
+	: FUIBuilder(ViewType, InId)
 {
 }
 
@@ -120,12 +120,13 @@ void FUITreeNode::ArrangeChildren(IUITranslator& T)
 
 void FUITreeNode::SyncConfig(const FUIBuilder& Declared)
 {
-	const FUITreeNode* Other = dynamic_cast<const FUITreeNode*>(&Declared);
-	if (Other == nullptr) { return; }
-	Label = Other->Label;
-	Icon = Other->Icon;
-	bOpen = Other->bOpen;
-	Indent = Other->Indent;
+	// 身份由节点自己声明（构造时必填）→ 比一下 + `static_cast` 即可，无需 RTTI
+	if (Declared.GetType() != EUIViewType::TreeNode) { return; }
+	const FUITreeNode& Other = static_cast<const FUITreeNode&>(Declared);
+	Label = Other.Label;
+	Icon = Other.Icon;
+	bOpen = Other.bOpen;
+	Indent = Other.Indent;
 }
 
 }} // namespace Maho::UI

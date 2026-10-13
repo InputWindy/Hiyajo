@@ -12,7 +12,7 @@
 namespace Maho { namespace UI {
 
 FUISeparator::FUISeparator(FUIName InId)
-	: FUIBuilder(InId)
+	: FUIBuilder(ViewType, InId)
 {
 }
 
@@ -65,11 +65,12 @@ void FUISeparator::PaintSelf(IUITranslator& T, const FUIResolvedStyle& S)
 
 void FUISeparator::SyncConfig(const FUIBuilder& Declared)
 {
-	const FUISeparator* Other = dynamic_cast<const FUISeparator*>(&Declared);
-	if (Other == nullptr) { return; }
-	Color = Other->Color;
-	Thickness = Other->Thickness;
-	bVertical = Other->bVertical;
+	// 身份由节点自己声明（构造时必填）→ 比一下 + `static_cast` 即可，无需 RTTI
+	if (Declared.GetType() != EUIViewType::Separator) { return; }
+	const FUISeparator& Other = static_cast<const FUISeparator&>(Declared);
+	Color = Other.Color;
+	Thickness = Other.Thickness;
+	bVertical = Other.bVertical;
 }
 
 }} // namespace Maho::UI

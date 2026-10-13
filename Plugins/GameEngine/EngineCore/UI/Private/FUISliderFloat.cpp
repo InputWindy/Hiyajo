@@ -18,7 +18,7 @@ constexpr float kMinSliderWidth = 80.f;
 } // namespace
 
 FUISliderFloat::FUISliderFloat(FUIName InId)
-	: FUIBuilder(InId)
+	: FUIBuilder(ViewType, InId)
 {
 }
 
@@ -115,15 +115,16 @@ EUIInputFlags FUISliderFloat::GetInputFlags() const
 
 void FUISliderFloat::SyncConfig(const FUIBuilder& Declared)
 {
-	const FUISliderFloat* Other = dynamic_cast<const FUISliderFloat*>(&Declared);
-	if (Other == nullptr) { return; }
-	Label = Other->Label;
-	Format = Other->Format;
-	LabelWidth = Other->LabelWidth;
-	Min = Other->Min;
-	Max = Other->Max;
+	// 身份由节点自己声明（构造时必填）→ 比一下 + `static_cast` 即可，无需 RTTI
+	if (Declared.GetType() != EUIViewType::SliderFloat) { return; }
+	const FUISliderFloat& Other = static_cast<const FUISliderFloat&>(Declared);
+	Label = Other.Label;
+	Format = Other.Format;
+	LabelWidth = Other.LabelWidth;
+	Min = Other.Min;
+	Max = Other.Max;
 	// 值：只在声明侧显式给过时采纳，否则保留后端写入的运行期值（拖动不被陈旧声明压回）
-	if (Other->bValueDirty) { Value = Other->Value; }
+	if (Other.bValueDirty) { Value = Other.Value; }
 }
 
 }} // namespace Maho::UI

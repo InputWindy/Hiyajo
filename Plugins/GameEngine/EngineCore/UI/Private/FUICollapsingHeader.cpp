@@ -13,7 +13,7 @@
 namespace Maho { namespace UI {
 
 FUICollapsingHeader::FUICollapsingHeader(FUIName InId)
-	: FUIBuilder(InId)
+	: FUIBuilder(ViewType, InId)
 {
 }
 
@@ -117,12 +117,13 @@ void FUICollapsingHeader::ArrangeChildren(IUITranslator& T)
 
 void FUICollapsingHeader::SyncConfig(const FUIBuilder& Declared)
 {
-	const FUICollapsingHeader* Other = dynamic_cast<const FUICollapsingHeader*>(&Declared);
-	if (Other == nullptr) { return; }
-	Label = Other->Label;
-	Icon = Other->Icon;
-	bOpen = Other->bOpen;
-	bCollapsible = Other->bCollapsible;
+	// 身份由节点自己声明（构造时必填）→ 比一下 + `static_cast` 即可，无需 RTTI
+	if (Declared.GetType() != EUIViewType::CollapsingHeader) { return; }
+	const FUICollapsingHeader& Other = static_cast<const FUICollapsingHeader&>(Declared);
+	Label = Other.Label;
+	Icon = Other.Icon;
+	bOpen = Other.bOpen;
+	bCollapsible = Other.bCollapsible;
 }
 
 }} // namespace Maho::UI

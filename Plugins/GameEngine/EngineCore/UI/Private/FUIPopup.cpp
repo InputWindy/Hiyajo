@@ -17,7 +17,7 @@ constexpr float kPopupMeasureWidth = 320.f;
 } // namespace
 
 FUIPopup::FUIPopup(FUIName InId)
-	: FUIBuilder(InId)
+	: FUIBuilder(ViewType, InId)
 {
 }
 
@@ -110,15 +110,16 @@ void FUIPopup::PaintContent(IUITranslator& T, const FUIResolvedStyle& S)
 
 void FUIPopup::SyncConfig(const FUIBuilder& Declared)
 {
-	const FUIPopup* Other = dynamic_cast<const FUIPopup*>(&Declared);
-	if (Other == nullptr) { return; }
-	Anchor = Other->Anchor;
-	bModal = Other->bModal;
-	bHasAnchor = Other->bHasAnchor;
-	bFollowAnchor = Other->bFollowAnchor;
-	MeasureWidth = Other->MeasureWidth;
+	// 身份由节点自己声明（构造时必填）→ 比一下 + `static_cast` 即可，无需 RTTI
+	if (Declared.GetType() != EUIViewType::Popup) { return; }
+	const FUIPopup& Other = static_cast<const FUIPopup&>(Declared);
+	Anchor = Other.Anchor;
+	bModal = Other.bModal;
+	bHasAnchor = Other.bHasAnchor;
+	bFollowAnchor = Other.bFollowAnchor;
+	MeasureWidth = Other.MeasureWidth;
 	// 开合由声明侧（业务状态）决定：节点自己因用户关闭而置 false 后，业务不置回就一直关着
-	bOpen = Other->bOpen;
+	bOpen = Other.bOpen;
 }
 
 }} // namespace Maho::UI

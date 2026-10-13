@@ -37,6 +37,36 @@ struct FMargin
 	FMargin(float L, float T, float R, float B) : Left(L), Top(T), Right(R), Bottom(B) {}
 };
 
+/** 组件**类型**（"这是哪一个组件"的那条轴）。
+ *
+ *  身份由组件自己声明：每个具体组件的构造函数把它交给 `FUIBuilder`（构造函数的**必填**首参，
+ *  漏写 = 编译错误），于是"我是什么类型"是对象自己给出的，而不是靠 RTTI 反推。
+ *  消费者因此可以 `GetType() == EUIViewType::X` 判身份 + `static_cast` 取类型 —— 对象自己
+ *  声明过身份，这个转换就是可靠的，不必再用 `dynamic_cast`。
+ *  新增组件类型 = 在此加一个值，并让该组件的构造函数传它。 */
+enum class EUIViewType : std::uint8_t
+{
+	Button,
+	Text,
+	Image,
+	Separator,
+	InputText,
+	Checkbox,
+	SliderFloat,
+	DragFloat,
+	ColorEdit,
+	Selectable,
+	CollapsingHeader,
+	TreeNode,
+	Panel,
+	Popup,
+	Tooltip,
+	Box,
+	Grid,
+	Canvas,
+	None            // 无身份：`FUIBuilder` 抽象基类自身（不直接实例化）
+};
+
 /** 五态：常态 / 悬停 / 按下 / 选中 / 禁用。数组下标即 EUIState。 */
 enum class EUIState : std::uint8_t
 {

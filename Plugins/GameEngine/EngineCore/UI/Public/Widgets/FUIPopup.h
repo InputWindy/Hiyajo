@@ -9,6 +9,8 @@ namespace Maho { namespace UI {
 class MAHO_UI_API FUIPopup final : public FUIBuilder
 {
 public:
+	/** 本组件声明的类型身份（构造函数把它交给 `FUIBuilder`；`AddItem<T>` 的复用判定也读它）。 */
+	static constexpr EUIViewType ViewType = EUIViewType::Popup;
 	explicit FUIPopup(FUIName InId);
 	~FUIPopup() override;
 

@@ -18,7 +18,7 @@ constexpr float kMinDragWidth = 96.f;
 } // namespace
 
 FUIDragFloat::FUIDragFloat(FUIName InId)
-	: FUIBuilder(InId)
+	: FUIBuilder(ViewType, InId)
 {
 }
 
@@ -136,17 +136,18 @@ EUIInputFlags FUIDragFloat::GetInputFlags() const
 
 void FUIDragFloat::SyncConfig(const FUIBuilder& Declared)
 {
-	const FUIDragFloat* Other = dynamic_cast<const FUIDragFloat*>(&Declared);
-	if (Other == nullptr) { return; }
-	Label = Other->Label;
-	Format = Other->Format;
-	LabelWidth = Other->LabelWidth;
-	Speed = Other->Speed;
-	Components = Other->Components;
+	// 身份由节点自己声明（构造时必填）→ 比一下 + `static_cast` 即可，无需 RTTI
+	if (Declared.GetType() != EUIViewType::DragFloat) { return; }
+	const FUIDragFloat& Other = static_cast<const FUIDragFloat&>(Declared);
+	Label = Other.Label;
+	Format = Other.Format;
+	LabelWidth = Other.LabelWidth;
+	Speed = Other.Speed;
+	Components = Other.Components;
 	// 值：只在声明侧显式给过时采纳，否则保留后端写入的运行期值（拖动不被陈旧声明压回）
-	if (Other->bValueDirty)
+	if (Other.bValueDirty)
 	{
-		for (int i = 0; i < Components; ++i) { Values[i] = Other->Values[i]; }
+		for (int i = 0; i < Components; ++i) { Values[i] = Other.Values[i]; }
 	}
 }
 

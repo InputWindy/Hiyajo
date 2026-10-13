@@ -13,7 +13,7 @@
 namespace Maho { namespace UI {
 
 FUIGrid::FUIGrid(FUIName InId)
-	: FUIBuilder(InId)
+	: FUIBuilder(ViewType, InId)
 {
 }
 

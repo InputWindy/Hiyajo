@@ -3,7 +3,7 @@
 namespace Maho { namespace UI {
 
 FUICanvas::FUICanvas(FUIName InId)
-	: FUIBuilder(InId)
+	: FUIBuilder(ViewType, InId)
 {
 }
 
