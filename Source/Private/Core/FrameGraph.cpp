@@ -22,6 +22,18 @@
 namespace Maho
 {
 
+const char* GetDependencyTypeName(EDependencyType Type) noexcept
+{
+	switch (Type)
+	{
+	case EDependencyType::Wait:       return "Wait";
+	case EDependencyType::Block:      return "Block";
+	case EDependencyType::StageChain: return "StageChain";
+	case EDependencyType::SelfEdge:   return "SelfEdge";
+	}
+	return "Unknown";
+}
+
 namespace
 {
 #if MAHO_WITH_TRACE
@@ -82,6 +94,39 @@ namespace
 	{
 		static const bool bOn = (std::getenv("MAHO_GRAPH_NODES") != nullptr);
 		return bOn;
+	}
+
+	/** Per-EDGE dump, on its own switch: the node lines above are about the batch's SHAPE, these are
+	 *  about where every edge came from (a new diagnostic must not silently join an older capture --
+	 *  the whole-log compare against a pre-existing baseline is what the split protects). */
+	bool EdgesDumpEnabled()
+	{
+		static const bool bOn = (std::getenv("MAHO_GRAPH_EDGES") != nullptr);
+		return bOn;
+	}
+
+	/** The REASON an edge exists, in words. Derived from its type until a derived edge (§4) has its own
+	 *  to say -- the type is the durable fact, the sentence is presentation. */
+	const char* DependencyReason(EDependencyType Type) noexcept
+	{
+		switch (Type)
+		{
+		case EDependencyType::Wait:       return "declared WaitFor";
+		case EDependencyType::Block:      return "declared BlockOn";
+		case EDependencyType::StageChain: return "the in-frame stage chain";
+		case EDependencyType::SelfEdge:   return "the cross-frame self edge";
+		}
+		return "unknown";
+	}
+
+	/** Claim reports are per (batch shape, claimed, missed) and printed ONCE -- a submission happens
+	 *  every frame, and a line per frame buries the one that differs. */
+	bool FirstClaimOf(std::string Key)
+	{
+		static std::mutex           Mutex;
+		static std::set<std::string> Seen;
+		std::lock_guard<std::mutex> Lock(Mutex);
+		return Seen.insert(std::move(Key)).second;
 	}
 
 	using FEvent = std::uint32_t;
@@ -247,6 +292,13 @@ struct FFrameGraph::FImpl
 	void ReportNodeFailureOnScheduler(FNodeId Id, std::string What);
 
 	static constexpr std::int32_t StallDumpSeconds = 3;
+
+	/** Edge CLAIM counters of the last ApplySubmit: an edge whose target key resolves in the live
+	 *  table is claimed, and one that does not is a declaration the graph could not honour (the
+	 *  cross-batch case -- the declaring batch names a node another batch owns). Reported through
+	 *  MAHO_GRAPH_EDGES so a declaration cannot go missing silently. */
+	std::uint64_t ClaimedEdges = 0;
+	std::uint64_t MissedEdges  = 0;
 
 	void EnsureDepth();
 
@@ -494,6 +546,7 @@ void FFrameGraph::FImpl::WireNode(FTaskNode& Node, const FTask& Decl)
 		const FNodeId Target = ResolveTarget(Dep.Target);
 		if (Target == InvalidNodeId)
 		{
+			++MissedEdges;
 			return;
 		}
 
@@ -505,6 +558,7 @@ void FFrameGraph::FImpl::WireNode(FTaskNode& Node, const FTask& Decl)
 			return;
 		}
 
+		++ClaimedEdges;
 		Node.Dependencies.push_back(Event);
 
 		if (!EventStates[Event].load(std::memory_order_acquire))
@@ -555,6 +609,7 @@ void FFrameGraph::FImpl::ApplySubmit(std::vector<FTask> Tasks)
 			const FNodeId Target = ResolveTarget(Blocked.Target);
 			if (Target == InvalidNodeId)
 			{
+				++MissedEdges;
 				continue;
 			}
 
@@ -562,6 +617,9 @@ void FFrameGraph::FImpl::ApplySubmit(std::vector<FTask> Tasks)
 
 			if (Other.bDispatched.load(std::memory_order_acquire))
 			{
+				// The node the declaration wanted to hold back has already been dispatched: the
+				// declaration arrived after the fact, so it could not be honoured.
+				++MissedEdges;
 				continue;
 			}
 
@@ -572,6 +630,7 @@ void FFrameGraph::FImpl::ApplySubmit(std::vector<FTask> Tasks)
 			}
 
 			Other.Dependencies.push_back(Me.CompletionEvent);
+			++ClaimedEdges;
 			if (!EventStates[Me.CompletionEvent].load(std::memory_order_acquire))
 			{
 				Me.Successors.push_back(Target);
@@ -588,6 +647,29 @@ void FFrameGraph::FImpl::ApplySubmit(std::vector<FTask> Tasks)
 			Dispatch(Id);
 		}
 	}
+
+	// The batch's edges, as the GRAPH could honour them. `missed` is the interesting one: a
+	// declaration whose target key is not (yet) in the live table, or one that arrived after its
+	// target had already run. Deduped per (batch, claimed, missed) so a steady state does not bury
+	// the startup rounds where the cross-frame self edges legitimately have no earlier node yet.
+	if (EdgesDumpEnabled())
+	{
+		char Key[128];
+		std::snprintf(Key, sizeof(Key), "%zu|%llu|%llu", Tasks.size(),
+			static_cast<unsigned long long>(ClaimedEdges),
+			static_cast<unsigned long long>(MissedEdges));
+		if (FirstClaimOf(Key))
+		{
+			std::fprintf(stderr, "[fgclaim] graph=%s batch=%zu claimed=%llu missed=%llu\n",
+				(OwnerName == nullptr || OwnerName[0] == 0) ? "?" : OwnerName,
+				Tasks.size(),
+				static_cast<unsigned long long>(ClaimedEdges),
+				static_cast<unsigned long long>(MissedEdges));
+			std::fflush(stderr);
+		}
+	}
+	ClaimedEdges = 0;
+	MissedEdges  = 0;
 }
 
 void FFrameGraph::FImpl::Dispatch(FNodeId Id)
@@ -991,7 +1073,8 @@ FFrameBridge::FResult FFrameBridge::Build(std::span<FFrameExtension* const> Fram
 
 				Mine->Dependencies.push_back(FDependency{
 					FTaskKey{ Edge.TargetName, Edge.TargetStage,
-						PhaseOfShiftedFrame(Frame, Edge.FrameOffset) } });
+						PhaseOfShiftedFrame(Frame, Edge.FrameOffset) },
+					Edge.Type });
 				++DeclaredEdges;
 			}
 		}
@@ -1047,7 +1130,7 @@ FFrameBridge::FResult FFrameBridge::Build(std::span<FFrameExtension* const> Fram
 				continue;
 			}
 
-			Mine->Blocks.push_back(FDependency{ Target->Key });
+			Mine->Blocks.push_back(FDependency{ Target->Key, EDependencyType::Block });
 		}
 	}
 
@@ -1135,14 +1218,39 @@ FFrameBridge::FResult FFrameBridge::Build(std::span<FFrameExtension* const> Fram
 			Actual, DeclaredEdges, ExpectedStructural, static_cast<unsigned long long>(Frame));
 
 		{
+			// A batch's node ORDER is an install-order detail (a collector's tree walk), so every dump
+			// below is emitted in a canonical order: sorted by (name, stage, phase). Without it, two runs
+			// of the same build produce different positional vectors for the same graph, and a shape
+			// fingerprint that moves with the hash order cannot be compared across runs.
+			std::vector<std::size_t> Order(Result.Tasks.size());
+			for (std::size_t I = 0; I < Order.size(); ++I)
+			{
+				Order[I] = I;
+			}
+			std::sort(Order.begin(), Order.end(), [&](std::size_t L, std::size_t R)
+			{
+				const FTaskKey& A = Result.Tasks[L].Key;
+				const FTaskKey& B = Result.Tasks[R].Key;
+				if (A.Name != B.Name) { return A.Name < B.Name; }
+				if (A.Stage != B.Stage) { return A.Stage < B.Stage; }
+				return A.Phase < B.Phase;
+			});
+
 			std::string Digest = "nodes=" + std::to_string(Result.Tasks.size())
 				+ " structural=" + std::to_string(ExpectedStructural)
 				+ " declared=" + std::to_string(DeclaredEdges) + " deps=[";
 			std::size_t I = 0;
-			for (const FTask& Task : Result.Tasks)
+			for (std::size_t Index : Order)
 			{
 				Digest += (I++ == 0 ? "" : ",");
-				Digest += std::to_string(Task.Dependencies.size());
+				Digest += std::to_string(Result.Tasks[Index].Dependencies.size());
+			}
+			Digest += "] blocks=[";
+			I = 0;
+			for (std::size_t Index : Order)
+			{
+				Digest += (I++ == 0 ? "" : ",");
+				Digest += std::to_string(Result.Tasks[Index].Blocks.size());
 			}
 			Digest += "]";
 
@@ -1161,12 +1269,47 @@ FFrameBridge::FResult FFrameBridge::Build(std::span<FFrameExtension* const> Fram
 
 				if (NodeDumpEnabled())
 				{
-					for (const FTask& Task : Result.Tasks)
+					for (std::size_t Index : Order)
 					{
-						std::fprintf(stderr, "[fgnodes] %.*s::%.*s@%d deps=%zu\n",
+						const FTask& Task = Result.Tasks[Index];
+						std::fprintf(stderr, "[fgnodes] %.*s::%.*s@%d deps=%zu blocks=%zu\n",
 							static_cast<int>(Task.Key.Name.size()), Task.Key.Name.data(),
 							static_cast<int>(Task.Key.Stage.size()), Task.Key.Stage.data(),
-							Task.Key.Phase, Task.Dependencies.size());
+							Task.Key.Phase, Task.Dependencies.size(), Task.Blocks.size());
+					}
+					std::fflush(stderr);
+				}
+
+				// Both DIRECTIONS of every edge, each named with where it came from: "waits" is the
+				// edge this node carries, "blocks" the one the declarer pushed onto it. A declared
+				// edge appears under the DECLARER, which is what makes an audit by hand possible.
+				if (EdgesDumpEnabled())
+				{
+					for (std::size_t Index : Order)
+					{
+						const FTask& Task = Result.Tasks[Index];
+						for (const FDependency& Dep : Task.Dependencies)
+						{
+							std::fprintf(stderr, "[fgedges] %.*s::%.*s@%d waits %.*s::%.*s@%d type=%s reason=%s\n",
+								static_cast<int>(Task.Key.Name.size()), Task.Key.Name.data(),
+								static_cast<int>(Task.Key.Stage.size()), Task.Key.Stage.data(),
+								Task.Key.Phase,
+								static_cast<int>(Dep.Target.Name.size()), Dep.Target.Name.data(),
+								static_cast<int>(Dep.Target.Stage.size()), Dep.Target.Stage.data(),
+								Dep.Target.Phase,
+								GetDependencyTypeName(Dep.Type), DependencyReason(Dep.Type));
+						}
+						for (const FDependency& Block : Task.Blocks)
+						{
+							std::fprintf(stderr, "[fgedges] %.*s::%.*s@%d blocks %.*s::%.*s@%d type=%s reason=%s\n",
+								static_cast<int>(Task.Key.Name.size()), Task.Key.Name.data(),
+								static_cast<int>(Task.Key.Stage.size()), Task.Key.Stage.data(),
+								Task.Key.Phase,
+								static_cast<int>(Block.Target.Name.size()), Block.Target.Name.data(),
+								static_cast<int>(Block.Target.Stage.size()), Block.Target.Stage.data(),
+								Block.Target.Phase,
+								GetDependencyTypeName(Block.Type), DependencyReason(Block.Type));
+						}
 					}
 					std::fflush(stderr);
 				}

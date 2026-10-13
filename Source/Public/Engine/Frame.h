@@ -499,7 +499,9 @@ struct FStageRegistrar
 template <typename TFrame, typename TPrev, typename TCur, typename... TRest>
 void DeclareStageChain(FFrameExtension& Self, TTypeList<TPrev, TCur, TRest...>)
 {
-	Self.template MyStage<TCur>().template WaitFor<TFrame>().template OnStage<TPrev>();
+	Self.template MyStage<TCur>()
+		.template WaitFor<TFrame>()
+		.template OnStage<TPrev, EDependencyType::StageChain>();
 	if constexpr (sizeof...(TRest) > 0)
 	{
 		DeclareStageChain<TFrame>(Self, TTypeList<TCur, TRest...>{});
@@ -525,7 +527,9 @@ void DeclareStageChain(FFrameExtension&, TTypeList<TOnly>)
 template <typename TFrame, typename... TStages>
 void DeclareSelfEdges(FFrameExtension& Self, TTypeList<TStages...>)
 {
-	(Self.template MyStage<TStages>().template WaitFor<TFrame>().template OnStage<TStages>(-1), ...);
+	(Self.template MyStage<TStages>()
+			.template WaitFor<TFrame>()
+			.template OnStage<TStages, EDependencyType::SelfEdge>(-1), ...);
 }
 
 } // namespace Detail

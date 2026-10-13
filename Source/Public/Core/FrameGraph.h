@@ -68,9 +68,24 @@ struct FTaskKeyHash
 	std::size_t operator()(const FTaskKey& Key) const noexcept;
 };
 
+/** A dependency's TYPE - how the edge came to exist, not what it points at. The two DECLARED forms (a
+ *  frame's own `WaitFor` / `BlockOn`) plus the two STRUCTURAL forms a frame declares about itself
+ *  (`MAHO_FRAME_STAGE_CHAIN` / `MAHO_FRAME_SELF_EDGES`) are the whole set today; a derived edge (§4)
+ *  adds to it. The dump prints it, and the structural check counts the last two. */
+enum class EDependencyType : std::uint8_t
+{
+	Wait,         // WaitFor: the declaring stage waits for the target
+	Block,        // BlockOn: the target must run after the declaring stage
+	StageChain,   // the in-frame stage chain
+	SelfEdge,     // the per-stage cross-frame self edge
+};
+
+[[nodiscard]] MAHO_API const char* GetDependencyTypeName(EDependencyType Type) noexcept;
+
 struct FDependency
 {
-	FTaskKey Target{};
+	FTaskKey        Target{};
+	EDependencyType Type = EDependencyType::Wait;
 };
 
 struct FTask
@@ -106,6 +121,10 @@ public:
 		std::string_view TargetStage{};
 		std::int32_t     FrameOffset = 0;
 		bool             bReverse    = false;
+
+		/** Which declaration produced this edge (see EDependencyType). The scope sugar below fills it
+		 *  in; the two structural helpers in Engine/Frame.h pass StageChain / SelfEdge. */
+		EDependencyType  Type        = EDependencyType::Wait;
 	};
 
 
@@ -133,18 +152,18 @@ public:
 			std::int32_t Offset = 0;
 			explicit TTarget(FFrameExtension& InSelf) : Self(InSelf) {}
 
-			template <typename TTargetStage>
+			template <typename TTargetStage, EDependencyType TEdgeType = EDependencyType::Wait>
 			TTarget& ForStage(std::int32_t Offset = 0)
 			{
 				Self.AddDependency(TMyStage::StaticName(),
-					FEdge{ TTargetFrame::StaticName(), TTargetStage::StaticName(), Offset });
+					FEdge{ TTargetFrame::StaticName(), TTargetStage::StaticName(), Offset, false, TEdgeType });
 				return *this;
 			}
 
-			template <typename TTargetStage>
+			template <typename TTargetStage, EDependencyType TEdgeType = EDependencyType::Wait>
 			TTarget& OnStage(std::int32_t Offset = 0)
 			{
-				return ForStage<TTargetStage>(Offset);
+				return ForStage<TTargetStage, TEdgeType>(Offset);
 			}
 		};
 
@@ -155,18 +174,18 @@ public:
 			std::int32_t     Offset = 0;
 			TNamedTarget(FFrameExtension& InSelf, std::string_view InName) : Self(InSelf), TargetName(InName) {}
 
-			template <typename TTargetStage>
+			template <typename TTargetStage, EDependencyType TEdgeType = EDependencyType::Wait>
 			TNamedTarget& ForStage(std::int32_t Offset = 0)
 			{
 				Self.AddDependency(TMyStage::StaticName(),
-					FEdge{ TargetName, TTargetStage::StaticName(), Offset });
+					FEdge{ TargetName, TTargetStage::StaticName(), Offset, false, TEdgeType });
 				return *this;
 			}
 
-			template <typename TTargetStage>
+			template <typename TTargetStage, EDependencyType TEdgeType = EDependencyType::Wait>
 			TNamedTarget& OnStage(std::int32_t Offset = 0)
 			{
-				return ForStage<TTargetStage>(Offset);
+				return ForStage<TTargetStage, TEdgeType>(Offset);
 			}
 		};
 
@@ -204,7 +223,8 @@ public:
 			TTarget& OnStage(std::int32_t Offset = 0)
 			{
 				Self.AddDependent(TMyStage::StaticName(),
-					FEdge{ TTargetFrame::StaticName(), TTargetStage::StaticName(), Offset, true });
+					FEdge{ TTargetFrame::StaticName(), TTargetStage::StaticName(), Offset, true,
+						EDependencyType::Block });
 				return *this;
 			}
 		};
@@ -220,7 +240,7 @@ public:
 			TNamedTarget& OnStage(std::int32_t Offset = 0)
 			{
 				Self.AddDependent(TMyStage::StaticName(),
-					FEdge{ TargetName, TTargetStage::StaticName(), Offset, true });
+					FEdge{ TargetName, TTargetStage::StaticName(), Offset, true, EDependencyType::Block });
 				return *this;
 			}
 		};
