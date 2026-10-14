@@ -3,10 +3,10 @@
 """
 docs_builder.py —— 文档渲染层（声明式原子接口）
 
-**本模块不解析 C++**：它只提供原子函数 + 把模型渲染成单文件自包含的 `Source/Docs.html`。
-是谁往这个模型里填内容有两条路：
-  * `Tools/docs_scan.py`（**现在**）—— 扫描头文件、从 `///` 注释提取实体与成员（注释是唯一来源）；
-  * `Tools/docs_content.py`（**已退役**）—— 过去由人一条一条手写声明。
+**本模块不解析 C++**：它只提供原子函数 + 把模型渲染成单文件自包含的 HTML。
+往这个模型里填内容的**唯一**来源是 `Tools/docs_scan.py`（扫描头文件、从 `///` 注释提取实体与成员，
+`@file` / `@brief` / `@param` / `@return` / `@tparam`）。旧的手写内容脚本（`docs_content.py` 与各插件
+的 `Docs.py`）**已删除**。
 
 原子接口（都在当前上下文里追加）：
 
@@ -74,6 +74,7 @@ class FHeader:
 
 
 _HEADERS: list[FHeader] = []
+_ROOT_CARDS: list[FCard] = []          # 根级卡片：不属于某个头（例如插件的 .cplugin 事实）
 _CURRENT_HEADER: FHeader | None = None
 _CURRENT_ENTITY: FEntity | None = None
 _CURRENT_CARD: FCard | None = None
@@ -82,8 +83,9 @@ _CURRENT_ACCESS = "public"
 
 def Reset() -> None:
 	"""清空已声明的全部内容（重新构建一份文档时用）。"""
-	global _HEADERS, _CURRENT_HEADER, _CURRENT_ENTITY, _CURRENT_CARD, _CURRENT_ACCESS
+	global _HEADERS, _CURRENT_HEADER, _CURRENT_ENTITY, _CURRENT_CARD, _CURRENT_ACCESS, _ROOT_CARDS
 	_HEADERS = []
+	_ROOT_CARDS = []
 	_CURRENT_HEADER = None
 	_CURRENT_ENTITY = None
 	_CURRENT_CARD = None
@@ -164,6 +166,17 @@ def Card(Title: str, Desc: Any = "") -> FCard:
 		raise RuntimeError("先调用 Header(...) 才能加卡片")
 	Node = FCard(Title=Title, Desc=_lines(Desc))
 	_CURRENT_HEADER.Cards.append(Node)
+	_CURRENT_CARD = Node
+	return Node
+
+
+def RootCard(Title: str, Desc: Any = "") -> FCard:
+	"""根级卡片：**不属于任何一个头**，渲染在所有头之上（例如 `.cplugin` 的插件事实）。
+
+	它天然是"派生数据"的位置 —— 事实来自 `.cplugin`/目录本身，不需要谁的散文。"""
+	global _CURRENT_CARD
+	Node = FCard(Title=Title, Desc=_lines(Desc))
+	_ROOT_CARDS.append(Node)
 	_CURRENT_CARD = Node
 	return Node
 
@@ -325,7 +338,7 @@ def ScanTree(Root: str | Path = "Source") -> list[str]:
 	"""左树的数据源：扫描目录，列出 Root 下全部 `.h`（相对路径，排序）。
 
 	扫描只用于**导航** —— 它让"哪些头存在"永远和磁盘一致，不用手工维护一份文件清单。
-	右侧内容不来自扫描：只有 docs_content.py 里声明过的头才有内容，其余显示"尚未声明"。
+	右侧内容来自 `docs_scan.py` 从注释提取的模型：头里没有 `///` 注释的，只显示结构。
 	"""
 	RootPath = Path(Root)
 	Out: list[str] = []
@@ -498,7 +511,7 @@ PAGE = """<!DOCTYPE html>
     </div>
     <div id="tree">{tree}</div>
   </div>
-  <div id="main">{panes}</div>
+  <div id="main">{root}{panes}</div>
 </div>
 <script>{js}</script>
 </body>
@@ -531,8 +544,8 @@ def Build(Out: str | Path = "Source/Docs.html",
 		Declared_ = Declared.get(Rel)
 		if Declared_ is None:
 			Panes.append(f'<h2 class="file-title">{html.escape(Path(Rel).name)}</h2>')
-			Hint = html.escape('（尚未声明内容 —— 在 Tools/docs_content.py 里加一条 Header("'
-			                   + Rel + '")，再逐类声明 Class / Interface / Field）')
+			Hint = html.escape('（尚未声明内容 —— 在这个头文件里加 `/// @file` 块与 `///` 注释，'
+			                   '再跑 Tools\\maho_python.bat Tools\\docs_scan.py）')
 			Panes.append('<div class="empty">' + Hint + "</div>")
 		else:
 			Panes.append(f'<h2 class="file-title">{html.escape(Declared_.Title)}</h2>')
@@ -548,9 +561,11 @@ def Build(Out: str | Path = "Source/Docs.html",
 				Panes.append(RenderEntity(Entity, f"{Anchor}-{Index}"))
 		Panes.append("</div>")
 
-	Meta = (f"左侧扫描 Source/**/*.h：{len(Paths)} 个头文件 · 已声明 {len(Declared)} 个 · "
-	        f"{Entities} 个实体 / {Members} 个成员 ｜ 内容在 Tools/docs_content.py 里逐条声明")
+	Meta = (f"左侧扫描 {Root}/**/*.h：{len(Paths)} 个头文件 · 已声明 {len(Declared)} 个 · "
+	        f"{Entities} 个实体 / {Members} 个成员 ｜ 内容来自头文件里的 `///` 注释"
+	        f"（`Tools/docs_scan.py`）")
 	Text = PAGE.format(css=CSS, js=JS, meta=Meta, tree=RenderTree(Paths),
+	                   root="\n".join(RenderCard(CardNode) for CardNode in _ROOT_CARDS),
 	                   panes="\n".join(Panes))
 	OutPath = Path(Out)
 	OutPath.parent.mkdir(parents=True, exist_ok=True)

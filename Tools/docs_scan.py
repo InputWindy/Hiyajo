@@ -52,7 +52,7 @@ NOISE_MACROS = (
 )
 
 DOC_PREFIX = "///"
-TAG_RE = re.compile(r"@(brief|param|return|returns|tparam|note|warning|see)\s*(.*)", re.I)
+TAG_RE = re.compile(r"@(brief|file|param|return|returns|tparam|note|warning|see)\s*(.*)", re.I)
 
 
 # ── 解析 → 快照 ─────────────────────────────────────────────────────────────────
@@ -183,11 +183,11 @@ def ParseDoc(Lines: list[str]) -> tuple[str, list[tuple[str, str]]]:
 def DescOf(Brief: str, Tags: list[tuple[str, str]]) -> list[str]:
 	"""说明行的渲染顺序：brief 在前，`@param`/`@tparam`/`@return` 依源码顺序在后。"""
 	Out: list[str] = []
-	Head = " ".join([Brief] + [Text for Tag, Text in Tags if Tag == "brief" and Text]).strip()
+	Head = " ".join([Brief] + [Text for Tag, Text in Tags if Tag in ("brief", "file") and Text]).strip()
 	if Head:
 		Out.append(Head)
 	for Tag, Text in Tags:
-		if not Text or Tag == "brief":
+		if not Text or Tag in ("brief", "file"):
 			continue
 		if Tag in ("param", "tparam"):
 			Name, _, Rest = Text.partition(" ")
@@ -205,16 +205,55 @@ def DescOf(Brief: str, Tags: list[tuple[str, str]]) -> list[str]:
 	return Out
 
 
+def FileDoc(Rows: list[str]) -> list[str]:
+	"""文件说明 = 头里**带 `@file` 标记**的那个 `///` 块（通常放最上面）。
+
+	口径是显式的：普通 `//` 注释是代码注释，**不进文档**；`///` 块只有带 `@file` 才代表"这是这个头
+	文件的说明"，其余 `///` 块一律属于紧贴其下的那个声明。写法：
+
+	    /// @file
+	    /// @brief 一句话说明；续行照写。
+	"""
+	Index = 0
+	while Index < len(Rows):
+		if not Rows[Index].strip().startswith(DOC_PREFIX):
+			Index += 1
+			continue
+		Block: list[str] = []
+		while Index < len(Rows) and Rows[Index].strip().startswith(DOC_PREFIX):
+			Block.append(Rows[Index].strip())
+			Index += 1
+		if any(re.match(r"///\s*@file\b", Line, re.I) for Line in Block):
+			return [Line for Line in Block if not re.match(r"///\s*@file\b", Line, re.I)]
+	return []
+
+
 # ── 声明的形状（都在快照上判类型，不做字段查询）─────────────────────────────────
 
 NAME_TYPES = ("identifier", "type_identifier", "field_identifier", "qualified_identifier")
 BODY_TYPES = ("field_declaration_list", "declaration_list", "compound_statement")
+DECLARATION_TYPES = ("class_specifier", "struct_specifier", "union_specifier", "enum_specifier",
+                     "namespace_definition", "function_definition", "declaration", "field_declaration",
+                     "alias_declaration", "type_definition", "template_declaration",
+                     "preproc_def", "preproc_function_def")
 DECL_TYPES = ("declarator", "function_declarator", "init_declarator", "reference_declarator",
               "pointer_declarator", "attributed_declarator")
 TEMPLATE_TYPES = ("template_declaration",)
 VALUE_TYPES = ("preproc_arg", "type_descriptor", "primitive_type", "sized_type_specifier",
                "type_identifier", "qualified_identifier", "template_type", "number_literal",
                "string_literal", "true", "false")
+
+
+MACRO_CALL_RE = re.compile(r"^[A-Z][A-Z0-9_]*\s*\(")
+
+
+def IsMacroCallSignature(Signature: str) -> bool:
+	"""`MAHO_DECLARE_FRAME(FLog);` 这类**纯宏调用行**：它是声明性的（"这个类在此声明自己"），
+	但不是一个可以有 `@brief` 的成员 —— 不参与缺注释统计，仍列进文档。
+
+	判据用**签名形态**（全大写标识符紧跟左括号），而不是语法节点：解析器会把它读成"声明了一个叫
+	`MAHO_DECLARE_FRAME` 的函数"，节点层面和真函数声明无法区分；宏的拼写却能一眼认出。"""
+	return bool(MACRO_CALL_RE.match(Signature.strip()))
 
 
 def SignatureOf(Node: FSnap, Source: bytes) -> str:
@@ -272,11 +311,29 @@ class FScanner:
 		if ErrorRow >= 0 and not self.Options.quiet:
 			print(f"[docs_scan] {Rel}:{ErrorRow + 1} 解析有 ERROR —— 按已解析到的部分生成")
 
-		Brief, Tags = ParseDoc(DocLines(Root, Rows))
+		FileLines = FileDoc(Rows)
+		Brief, Tags = ParseDoc(FileLines)
 		D.Header(Rel, Desc=DescOf(Brief, Tags))
+		if not FileLines and not self.Options.quiet:
+			self.Report(Rel, Root, "缺 @file：这个头没有文件级说明（`/// @file` 块）")
+		self.DeclareIncludes(Rows)
 		self.Stats["headers"] += 1
 		self.bFunctionsOpen = False          # 「自由函数」一个头只开一次（不是一个函数一个）
 		self.Walk(Root, Source, Rows, Rel)
+
+	def DeclareIncludes(self, Rows: list[str]) -> None:
+		"""「包含的头文件」卡片：**由源码派生**，不再手写。
+
+		它回答的是"这个头依赖谁"，答案就在文件里；手写那张表的散文部分（"这个头提供什么"）属于
+		`@file` 块，不重复一遍。"""
+		Includes = [M.group(1) for Line in Rows
+		            if (M := re.match(r"\s*#include\s*([<\"][^>\"]+[>\"])", Line))]
+		if not Includes:
+			return
+		D.Card("包含的头文件")
+		D.Table("头文件")
+		for Include in Includes:
+			D.Row(f"`{Include}`")
 
 	def Walk(self, Node: FSnap, Source: bytes, Rows: list[str], Rel: str, Template: str = "") -> None:
 		for Kid in Node.Kids:
@@ -332,12 +389,20 @@ class FScanner:
 			D.Alias(SignatureOf(Node, Source), "", Desc=Desc)
 			self.Stats["entities"] += 1
 		elif Node.Type in ("declaration", "function_definition", "field_declaration"):
+			Signature = Template + SignatureOf(Node, Source) + ";"
+			if IsMacroCallSignature(Signature):
+				if not self.bFunctionsOpen:
+					D.Functions("")
+					self.bFunctionsOpen = True
+				D.Field(Signature, Desc=Desc)
+				self.Stats["members"] += 1
+				return
 			if not any(C.Type in DECL_TYPES for C in Node.Kids):
 				return
 			if not self.bFunctionsOpen:
 				D.Functions("")            # 名字留空：标签已经是「自由函数」，不必再重复一遍
 				self.bFunctionsOpen = True
-			D.Interface(Template + SignatureOf(Node, Source) + ";", Desc=Desc)
+			D.Interface(Signature, Desc=Desc)
 			self.Stats["members"] += 1
 			if not Documented and not self.Options.quiet:
 				self.Report(Rel, Node, "自由函数缺 @brief")
@@ -405,6 +470,10 @@ class FScanner:
 			return
 
 		Signature = Template + SignatureOf(Node, Source) + ";"
+		if IsMacroCallSignature(Signature):      # 纯宏调用行：列出，但不要求 @brief（见该函数）
+			D.Field(Signature, Desc=Desc)
+			self.Stats["members"] += 1
+			return
 		if any(C.Type in ("function_declarator", "function_definition") for C in Node.Kids) \
 			or Node.Type == "function_definition":
 			D.Interface(Signature, Desc=Desc)
@@ -434,6 +503,12 @@ ENTITY_CALL = {"class": D.Class, "struct": D.Struct, "enum": D.Enum, "macro": D.
 def Feed(Header: dict) -> None:
 	"""把子进程交回的模型重放进 docs_builder（纯数据 → 渲染，主进程不碰解析器）。"""
 	D.Header(Header["Rel"], Desc=Header.get("Desc", []))
+	for Card in Header.get("Cards", []):
+		D.Card(Card.get("Title", ""), Card.get("Desc", []))
+		if Card.get("Columns"):
+			D.Table(*Card["Columns"])
+			for Row in Card.get("Rows", []):
+				D.Row(*Row)
 	for Entity in Header.get("Entities", []):
 		Call = ENTITY_CALL.get(Entity["Type"])
 		if Call is None:
@@ -450,6 +525,28 @@ def Feed(Header: dict) -> None:
 				D.Field(Member["Signature"], Member.get("Desc", []))
 			else:
 				D.Nested(Member["Signature"], Member["Type"], Member.get("Desc", []))
+
+
+def DeclarePluginCard(Root: Path) -> None:
+	"""插件页的根卡片：`.cplugin` 的事实（名字 / 说明 / 依赖），**从文件派生**，不手写。
+
+	泛化地遍历 JSON 的键值（跳过 FileVersion），所以 `.cplugin` 将来加字段这里不用改。"""
+	Files = list(Root.glob("*.cplugin"))
+	if len(Files) != 1:
+		return
+	import json
+	try:
+		Data = json.loads(Files[0].read_text(encoding="utf-8"))
+	except (OSError, ValueError) as Error:
+		print(f"[docs_scan] {Files[0].name} 读不了：{Error}")
+		return
+	D.RootCard(f"{Files[0].name} —— 插件声明")
+	D.Table("字段", "值")
+	for Key, Value in Data.items():
+		if Key == "FileVersion":
+			continue
+		Text = ", ".join(str(V) for V in Value) if isinstance(Value, list) else str(Value)
+		D.Row(Key, Text if Text else "（空）")
 
 
 def RunIsolated(Root: Path, Options) -> int:
@@ -502,6 +599,7 @@ def RunIsolated(Root: Path, Options) -> int:
 		return 1 if (Problems or Failures) else 0
 
 	Out = Path(Options.out) if Options.out else Root / "Docs.html"
+	DeclarePluginCard(Root)
 	Headers, Declared, Members = D.Build(Out=Out, Root=Root)
 	print(f"[docs_scan] {Out}  {Headers} 个头 · {Declared} 个含内容 · {Members} 个成员"
 	      f"（缺 @brief {Stats['missing']} 个）")

@@ -331,5 +331,5 @@ The entry plugin's `Public/` only holds interfaces (grouped in folders by functi
 
 ## Docs
 
-- [Source/Docs.html](Source/Docs.html) - 引擎源码文档（`Tools/docs_content.py` 生成；插件页由 `Tools/plugin_docs.py` + `<plugin>/Docs.py` 生成）：左侧 Source 树（叶子 = `.h`）+ 右侧逐类字段 / 接口签名 / 功能描述
+- [Source/Docs.html](Source/Docs.html) - 引擎源码文档（`Tools/docs_scan.py` 从**头文件里的 `///` 注释**生成；插件页同源，`Tools/plugin_docs.py`）：左侧 Source 树（叶子 = `.h`）+ 右侧逐类字段 / 接口签名 / 功能描述。注释是唯一来源 —— 文件级说明用 `/// @file`，成员用 `/// @brief` / `@param` / `@return` / `@tparam`；`--check` 可当 lint 门
 - [Example/ExampleEngine/README.md](Example/ExampleEngine/README.md) - sample project walkthrough

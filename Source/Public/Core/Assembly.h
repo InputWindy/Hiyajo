@@ -1,6 +1,6 @@
-#pragma once
-
+/// @file
 /// @brief Loading a module (DLL) and resolving symbols from it, plus the process-wide plugin manifest.
+#pragma once
 #include <Core/Export.h>
 #include <filesystem>
 #include <memory>

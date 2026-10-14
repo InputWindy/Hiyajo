@@ -79,7 +79,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div id="app">
   <div id="side">
     <h1>Maho 引擎源码</h1>
-    <div class="search" title="左侧扫描 Source/**/*.h：3 个头文件 · 已声明 3 个 · 12 个实体 / 72 个成员 ｜ 内容在 Tools/docs_content.py 里逐条声明">
+    <div class="search" title="左侧扫描 Plugins\GameEngine\RenderCore\ShaderLibrary/**/*.h：3 个头文件 · 已声明 3 个 · 13 个实体 / 64 个成员 ｜ 内容来自头文件里的 `///` 注释（`Tools/docs_scan.py`）">
       <input id="q" type="search" placeholder="搜索头文件…  （如 Frame、Core、Entry）" autocomplete="off">
     </div>
     <div id="tree"><ul>
@@ -96,282 +96,213 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </li>
 </ul></div>
   </div>
-  <div id="main"><div class="pane" id="pane-Private__FShaderParser_h">
-<div class="hdr">Private/FShaderParser.h</div>
-<h2 class="file-title">FShaderParser.h —— .shader 文本的解析与注入（私有）</h2>
-<div class="card"><div class="doc">
-<p>`ShaderLibrary` 的内部实现头（`Private/`，不对外）。它**不是**通用 HLSL 前端：</p>
-<p>  * 只认 `#pragma vertex/fragment` 指定的两个入口所引用的那两个 <span class="kw">struct</span>；</p>
-<p>  * 只把 <span class="kw">struct</span> 成员按语义表重写成 `layout(location = N) in|out` 的全局量；</p>
-<p>  * 函数体里只做「实例名.成员名」的定点替换（成员名表来自解析出的 <span class="kw">struct</span> 声明）—— **函数体其余部分照 GLSL 写，包括类型名**（<span class="kw">struct</span> 成员写 `float3`/`float4`，函数体里写 `vec3`/`vec4`）。</p>
-<p>任何不认识的东西（未知语义、未知状态键、缺 pragma、未知类型）都**报错并给出文件:行**。不猜的理由很实际：猜错的典型症状是「颜色对、位置全错」，查它比读一条报错贵得多。</p>
-</div></div>
-<div class="card">
-<h3 class="card-title">内容</h3>
+  <div id="main"><div class="card">
+<h3 class="card-title">ShaderLibrary.cplugin —— 插件声明</h3>
 
 <table>
-<thead><tr><th>签名</th><th>说明</th></tr></thead>
+<thead><tr><th>字段</th><th>值</th></tr></thead>
 <tbody>
-<tr><td><span class="kw">constexpr</span> std::uint32_t kInjectedBlockVersion = 1</td><td>引擎注入块的版本号：注入内容一改就 +1，缓存键跟着变。**为什么是显式常量而不是自动算**：缓存键必须能表达「引擎那边变了」，而注入文本的哈希要跨越「解析器」与「缓存」两个模块；一个显式版本号把这件事变成一次必须动手的修改，比一个没人会想起来更新的一致性检查可靠</td></tr>
-<tr><td><span class="kw">bool</span> Parse(<span class="kw">const</span> std::string&amp; Source, std::string_view FilePath, FParseOutput&amp; Out, std::string&amp; OutError)</td><td>解析 + 重写 + 注入。失败返回 <span class="kw">false</span>，`OutError` = `&lt;文件&gt;:&lt;行&gt;: &lt;原因&gt;`</td></tr>
-<tr><td>std::uint64_t HashShaderSource(std::string_view Source)</td><td>源码字节的哈希（FNV-1a 64）—— 缓存键的一半；改一个字符就换键</td></tr>
-<tr><td><span class="kw">bool</span> VerifyMaterialLayout(<span class="kw">const</span> std::vector&lt;std::uint32_t&gt;&amp; SpirvWords, <span class="kw">const</span> FMaterialLayout&amp; Layout, std::string&amp; OutError, <span class="kw">bool</span>&amp; bOutChecked)</td><td>用编译出来的 SPIR-V 反查材质常量块的真实 std140 偏移，与 CPU 布局逐条比对（design D1 的断言）。**这是「手工打包」唯一的独立证据**：不是再算一遍同一个公式，而是读 glslang 真写下的 `OpName(<span class="st">"MahoMaterial"</span>)` → `OpTypeStruct` → `OpMemberDecorate(Offset)`。
-块在该阶段的 SPIR-V 里找不到（shader 没用到它）时返回 <span class="kw">true</span> 且 `bOutChecked = <span class="kw">false</span>` —— 没用到的块没有错位风险，但调用方要能区分「校验过了」与「没得校验」（日志里就是 `layout verified in SPIR-V` / `layout not used (nothing to verify)` 这两句）</td></tr>
+<tr><td>Name</td><td>ShaderLibrary</td></tr>
+<tr><td>Description</td><td>Unity 风格 .shader 文本库：解析 Properties/SubShader/Pass，把语义重写成 GLSL 布局，注入 Set0/push/Set2 引擎块，按内容哈希编译并缓存（glslang）。</td></tr>
+<tr><td>Dependencies</td><td>RHI, Name, Paths, Log</td></tr>
+</tbody></table>
+</div><div class="pane" id="pane-Private__FShaderParser_h">
+<div class="hdr">Private/FShaderParser.h</div>
+<h2 class="file-title">FShaderParser.h</h2>
+<div class="card">
+<h3 class="card-title">包含的头文件</h3>
+
+<table>
+<thead><tr><th>头文件</th></tr></thead>
+<tbody>
+<tr><td>`<span class="st">"ShaderLibrary.h"</span>`</td></tr>
+<tr><td>`&lt;cstdint&gt;`</td></tr>
+<tr><td>`&lt;string&gt;`</td></tr>
+<tr><td>`&lt;string_view&gt;`</td></tr>
+<tr><td>`&lt;vector&gt;`</td></tr>
 </tbody></table>
 </div>
-<div class="ent e-struct" id="Private__FShaderParser_h-0">
+<div class="ent e-functions" id="Private__FShaderParser_h-0">
+<h3><span class="type">自由函数</span> </h3>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">inline</span> <span class="kw">constexpr</span> std::uint32_t kInjectedBlockVersion = 1;</td><td></td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-struct" id="Private__FShaderParser_h-1">
 <h3><span class="type">结构体</span> FParseOutput</h3>
-<div class="sect"><div class="doc">
-<p>解析产物：与那份 CPU 布局**同源**的两段 GLSL，以及 Pass 的状态。</p>
-</div></div>
 <div class="sect">
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-public">public</span></td><td>std::string VertexGlsl;</td><td>已注入引擎块、已重写语义的完整 GLSL（`#version` 已带）</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>std::string FragmentGlsl;</td><td>片元阶段的完整 GLSL</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>std::string VertexEntry;</td><td>`#pragma vertex` 指定的入口名（会原样成为 SPIR-V 的入口名）</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>std::string FragmentEntry;</td><td>`#pragma fragment` 指定的入口名</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>FMaterialLayout Material;</td><td>由 `Properties` 声明序生成的 CPU 侧布局</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>FPassState Pass;</td><td>四个 render state 键映射后的结果</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>std::string VertexGlsl;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>std::string FragmentGlsl;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>std::string VertexEntry;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>std::string FragmentEntry;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>FMaterialLayout Material;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>FPassState Pass;</td><td></td></tr>
+</tbody></table></div>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">bool</span> Parse(<span class="kw">const</span> std::string&amp; Source, std::string_view FilePath, FParseOutput&amp; Out, std::string&amp; OutError);</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] std::uint64_t HashShaderSource(std::string_view Source);</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">bool</span> VerifyMaterialLayout(<span class="kw">const</span> std::vector&lt;std::uint32_t&gt;&amp; SpirvWords, <span class="kw">const</span> FMaterialLayout&amp; Layout, std::string&amp; OutError, <span class="kw">bool</span>&amp; bOutChecked);</td><td></td></tr>
 </tbody></table></div>
 </div>
 </div>
 <div class="pane" id="pane-Public__ShaderLibrary_h">
 <div class="hdr">Public/ShaderLibrary.h</div>
-<h2 class="file-title">ShaderLibrary.h —— Unity 风格 .shader 文本库</h2>
-<div class="card"><div class="doc">
-<p>这一层只回答一个问题：**给我一个 shader 名，我还原出渲染侧需要的一切**。答案是一个 `FShaderDesc`（两个阶段的 SPIR-V、材质布局、render state），名 = 文件名（`Content/Shaders/&lt;名&gt;.shader`）。</p>
-<p>**为什么布局与 GLSL 由同一个解析器一起产出**（design D1）：材质常量块如果「CPU 侧算一遍、GLSL 里再写一遍」，就有一份可以悄悄错位的重复数据 —— 症状是「颜色对、位置全错」这种要查一整天的 bug。所以两者由**同一份 `Properties` 声明序**生成，再用**编译出来的 SPIR-V 反查偏移**做断言（不是重算同一个公式）。</p>
-<p>**为什么是插件而不是引擎核的一部分**：引擎核（Core/Engine）零应用假设，`.shader` 语法、glslang、set0/set2 绑定约定都是**渲染侧的应用假设** —— 它们必须能被卸载、能被替换。</p>
-<p>**改 shader 需要重启**：本切片不做热重载（design D2 的显式选择）—— `Initialize` 阶段一次性扫描 + 编译 + 缓存，之后只读。</p>
-</div></div>
+<h2 class="file-title">ShaderLibrary.h</h2>
 <div class="card">
 <h3 class="card-title">包含的头文件</h3>
 
 <table>
-<thead><tr><th>头文件</th><th>功能</th></tr></thead>
+<thead><tr><th>头文件</th></tr></thead>
 <tbody>
-<tr><td>ShaderLibraryApi.h</td><td>`MAHO_SHADERLIBRARY_API` —— 本模块的导出标签</td></tr>
-<tr><td>&lt;Maho.h&gt;</td><td>引擎聚合头（`FFrameExtension` / `IPipeline` 等）</td></tr>
-<tr><td>&lt;Engine/Frame.h&gt;</td><td>`MAHO_DECLARE_FRAME` / stage 接口 —— 帧的声明词汇</td></tr>
-<tr><td>&lt;Name.h&gt;</td><td>`Name::FName` —— shader 名是**驻留字符串**，`Get()` 的键与每帧比较都不做字符串哈希</td></tr>
-<tr><td>&lt;RHI/RHIEnums.h&gt;</td><td>`ERHIShaderStage` —— 编译时区分顶点 / 片元</td></tr>
-<tr><td>&lt;cstdint&gt; / &lt;string&gt; / &lt;string_view&gt; / &lt;vector&gt;</td><td>产物与诊断的容器</td></tr>
-<tr><td>&lt;filesystem&gt;</td><td>扫描 `Content/Shaders` 目录（路径表示交给标准库）</td></tr>
-<tr><td>&lt;unordered_map&gt;</td><td>两张表：`名字 → FShaderDesc`（查询）与 `内容哈希 → FShaderDesc`（去重复用）</td></tr>
-</tbody></table>
-</div>
-<div class="card">
-<h3 class="card-title">自由函数</h3>
-
-<table>
-<thead><tr><th>签名</th><th>说明</th></tr></thead>
-<tbody>
-<tr><td>MAHO_SHADERLIBRARY_API FShaderLibrary* GetShaderLibrary()</td><td>全局访问点：`Initialize` 里发布、`Shutdown` 里清除；**上线之前是 `<span class="kw">nullptr</span>`**（别在它之前取）。用导出**函数**而不是导出变量 —— 与 `GetPaths()` / `GetPrimitiveRegistry()` 同形，跨 DLL 才拿到同一个表</td></tr>
+<tr><td>`<span class="st">"ShaderLibraryApi.h"</span>`</td></tr>
+<tr><td>`&lt;Engine/Frame.h&gt;`</td></tr>
+<tr><td>`&lt;Maho.h&gt;`</td></tr>
+<tr><td>`&lt;Name.h&gt;`</td></tr>
+<tr><td>`&lt;cstdint&gt;`</td></tr>
+<tr><td>`&lt;filesystem&gt;`</td></tr>
+<tr><td>`&lt;string&gt;`</td></tr>
+<tr><td>`&lt;string_view&gt;`</td></tr>
+<tr><td>`&lt;unordered_map&gt;`</td></tr>
+<tr><td>`&lt;vector&gt;`</td></tr>
 </tbody></table>
 </div>
 <div class="ent e-enum" id="Public__ShaderLibrary_h-0">
 <h3><span class="type">枚举</span> EMaterialPropertyType</h3>
-<div class="sect"><div class="doc">
-<p>`Properties` 里支持的 6 种属性类型（design D1）。前四种进 `set2 binding0` 的常量块，后两种各占一个采样器 binding（design D3）。**为什么只有这 6 种**：多一种就多一条没测过的 std140 打包路径 —— 范围（`Range`）刻意**不改布局**，它只是 UI 提示。</p>
-</div></div>
-<div class="sect">
-<h4>字段</h4>
-<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-public">public</span></td><td>Float</td><td>`_A(<span class="st">"A"</span>, Float) = 0.5` → `<span class="kw">float</span>`（对齐 4）</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>Range</td><td>`_A(<span class="st">"A"</span>, Range(0.0, 1.0)) = 0.5` → `<span class="kw">float</span>`（范围只是 UI 提示，不改布局）</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>Int</td><td>`_A(<span class="st">"A"</span>, Int) = 3` → `<span class="kw">int</span>`（对齐 4；默认值按位模式放 `Default[0]`）</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>Color</td><td>`_A(<span class="st">"A"</span>, Color) = (1,1,1,1)` → `vec4`（对齐 16）</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>Texture2D</td><td>`_A(<span class="st">"A"</span>, 2D) = <span class="st">"white"</span> {}` → `set2` 上的一个 `sampler2D`（**不在常量块里**）</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>TextureCube</td><td>`_A(<span class="st">"A"</span>, Cube) = <span class="st">"white"</span> {}` → `samplerCube`（同上）</td></tr>
-</tbody></table></div>
 </div>
 <div class="ent e-struct" id="Public__ShaderLibrary_h-1">
 <h3><span class="type">结构体</span> FMaterialProperty</h3>
-<div class="sect"><div class="doc">
-<p>`Properties` 的一条声明 + 它在 std140 布局里的位置。**offset/size 是解析器算出来的、并被 SPIR-V 反查过**：渲染侧照它填参数，不再自己算一遍。</p>
-</div></div>
 <div class="sect">
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-public">public</span></td><td>std::string Name;</td><td>`_BaseColor` —— 解析器强制 `_` 开头（Unity 约定；也让用户属性不会撞上注入的 `_Frame` / `_Push` / `_Material`）</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>EMaterialPropertyType Type = EMaterialPropertyType::Float;</td><td>声明类型（决定 GLSL 类型、对齐与是否占采样器）</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>std::uint32_t Offset = 0;</td><td>常量块内的**字节偏移**；纹理属性恒 0（它不在块里）</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>std::uint32_t Size = 0;</td><td>常量块内的**占用字节**；纹理属性恒 0</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>std::uint32_t SamplerBinding = 0;</td><td>`set2` 的 binding（1..N，按声明序）；非纹理属性恒 0</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">float</span> Default[4] = {};</td><td>标量 / 向量默认值（`Int` 按 <span class="kw">int</span> 的位模式放 `Default[0]`）—— 材质没覆盖某个参数时渲染侧就用它，避免「画面出现未初始化数据」</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>std::string DefaultTexture;</td><td>纹理属性的默认纹理名（`<span class="st">"white"</span> {}` 里的那个名字）；贴图缺失时是白纹理的落点</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>std::string Name;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>EMaterialPropertyType Type = EMaterialPropertyType::Float;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>std::uint32_t Offset = 0;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>std::uint32_t Size = 0;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>std::uint32_t SamplerBinding = 0;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">float</span> Default[4] =;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>std::string DefaultTexture;</td><td></td></tr>
 </tbody></table></div>
 </div>
 <div class="ent e-struct" id="Public__ShaderLibrary_h-2">
 <h3><span class="type">结构体</span> FMaterialLayout</h3>
-<div class="sect"><div class="doc">
-<p>`set2 binding0` 那个常量块的 CPU 侧布局 —— **它与注入 GLSL 里的块声明由同一份声明序生成，所以不可能错位**（design D1）。</p>
-</div></div>
 <div class="sect">
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-public">public</span></td><td>std::vector&lt;FMaterialProperty&gt; Properties;</td><td>**声明序**。GLSL 块的成员按同一份序生成 —— 序一致是「不错位」的全部理由，所以这里是 `vector` 而不是按名字查的 map</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>std::uint32_t UniformSize = 0;</td><td>常量块总大小（std140：最后成员的末尾再对齐到 16）。渲染侧按它开缓冲</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>std::uint32_t SamplerCount = 0;</td><td>`binding1..N` 的采样器数量（按声明序分配）</td></tr>
-</tbody></table></div>
-<div class="sect">
-<h4>接口</h4>
-<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">const</span> FMaterialProperty* Find(std::string_view PropName) <span class="kw">const</span></td><td>按名字找一条属性；找不到返回 `<span class="kw">nullptr</span>`。名字比较**大小写敏感**（属性名是 shader 文本里的标识符），游戏侧材质参数的名字比较才是大小写不敏感的（见 `FMaterialComponent`）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>std::vector&lt;FMaterialProperty&gt; Properties;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>std::uint32_t UniformSize = 0;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>std::uint32_t SamplerCount = 0;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">const</span> FMaterialProperty* Find(std::string_view PropName) <span class="kw">const</span>;</td><td></td></tr>
 </tbody></table></div>
 </div>
 <div class="ent e-enum" id="Public__ShaderLibrary_h-3">
 <h3><span class="type">枚举</span> ECullMode</h3>
-<div class="sect"><div class="doc">
-<p>映射到 `FRHIGraphicsPipelineDesc` 的剔除模式。</p>
-</div></div>
-<div class="sect">
-<h4>字段</h4>
-<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-public">public</span></td><td>Back</td><td>`Cull Back`（默认，也是绝大多数实体的正确选择）</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>Front</td><td>`Cull Front`（画内部 / 阴影面这类用法）</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>Off</td><td>`Cull Off`（双面）</td></tr>
-</tbody></table></div>
 </div>
 <div class="ent e-enum" id="Public__ShaderLibrary_h-4">
 <h3><span class="type">枚举</span> EBlendMode</h3>
-<div class="sect"><div class="doc">
-<p>只有这两种混合：其余组合在本切片里是「没实现」，遇到就**报错**，不静默当不透明（design D7）。**为什么刻意只做两种**：混合因子的任意组合需要一整套映射与去重键，而本切片要证明的是「状态真的进 pipeline」这件事本身。</p>
-</div></div>
-<div class="sect">
-<h4>字段</h4>
-<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-public">public</span></td><td>Opaque</td><td>`Blend Off`</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>AlphaBlend</td><td>`Blend SrcAlpha OneMinusSrcAlpha`</td></tr>
-</tbody></table></div>
 </div>
 <div class="ent e-struct" id="Public__ShaderLibrary_h-5">
 <h3><span class="type">结构体</span> FPassState</h3>
-<div class="sect"><div class="doc">
-<p>Pass 的 render state —— design D7 的四个键，全部映射到 `FRHIGraphicsPipelineDesc`。**它是 PSO 缓存键的一半**：`(shader, pass state)` 相同就复用同一个 pipeline。</p>
-</div></div>
 <div class="sect">
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-public">public</span></td><td>ECullMode Cull = ECullMode::Back;</td><td>`Cull` 键</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">bool</span> bZWrite = <span class="kw">true</span>;</td><td>`ZWrite On/Off`</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">bool</span> bZTest = <span class="kw">true</span>;</td><td>`ZTest LEqual` = <span class="kw">true</span>、`ZTest Off` = <span class="kw">false</span> —— **本切片的 ZTest 是个开关，不是比较函数**（写 `ZTest Equal` 会报错，不猜）</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>EBlendMode Blend = EBlendMode::Opaque;</td><td>`Blend` 键</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>ECullMode Cull = ECullMode::Back;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">bool</span> bZWrite = <span class="kw">true</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">bool</span> bZTest = <span class="kw">true</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>EBlendMode Blend = EBlendMode::Opaque;</td><td></td></tr>
 </tbody></table></div>
 </div>
 <div class="ent e-struct" id="Public__ShaderLibrary_h-6">
 <h3><span class="type">结构体</span> FShaderDesc</h3>
-<div class="sect"><div class="doc">
-<p>一个 `.shader` 的编译产物 —— 渲染侧（`MeshFeature`）需要的全部。**它是一个值**的是 `FShaderLibrary` 里那份的 `<span class="kw">const</span>` 指针，生命周期由本帧的 `Initialize`/`Shutdown` 决定（不是引用计数，也不是拷贝）。</p>
-</div></div>
 <div class="sect">
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-public">public</span></td><td>Name::FName Name;</td><td>文件名（`DefaultLit`），也是 `Get()` 的键</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>std::string SourcePath;</td><td>物理路径（诊断用）；内置 fallback 是 `&lt;builtin&gt;`</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>std::uint64_t SourceHash = 0;</td><td>源码**字节**的哈希（FNV-1a 64）—— 缓存键的一半高（内容没变就换键，所以「改了 shader 不失效」不可能发生）</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>std::uint32_t InjectedBlockVersion = 0;</td><td>引擎注入块的版本 —— 缓存键的另一半：注入内容一改就 +1，旧缓存自然失效。**为什么是显式常量而不是自动哈希**：它必须是「必须动手改」的，才不会被忘记</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>std::vector&lt;std::uint32_t&gt; VertexBytecode;</td><td>顶点阶段 SPIR-V words（直接喂 `vkCreateShaderModule`）</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>std::vector&lt;std::uint32_t&gt; FragmentBytecode;</td><td>片元阶段 SPIR-V words</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>std::string VertexEntry = <span class="st">"main"</span>;</td><td>`#pragma vertex` 指定的入口名 —— **SPIR-V 的入口同名**（`VkPipelineShaderStageCreateInfo::pName` 就是它）</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>std::string FragmentEntry = <span class="st">"main"</span>;</td><td>`#pragma fragment` 指定的入口名</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>FMaterialLayout Material;</td><td>`set2` 布局：CPU 侧怎么填参数，看它</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>FPassState Pass;</td><td>`Cull/ZWrite/ZTest/Blend` —— 组 pipeline 时读它</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">bool</span> bValid = <span class="kw">false</span>;</td><td><span class="kw">false</span> = 解析或编译失败：渲染侧**必须**改用 `GetFallback()`，不要拿半个描述去建 PSO（失败不静默是这一层的契约）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>Name::FName Name;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>std::string SourcePath;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>std::uint64_t SourceHash = 0;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>std::uint32_t InjectedBlockVersion = 0;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>std::vector&lt;std::uint32_t&gt; VertexBytecode;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>std::vector&lt;std::uint32_t&gt; FragmentBytecode;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>std::string VertexEntry = <span class="st">"main"</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>std::string FragmentEntry = <span class="st">"main"</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>FMaterialLayout Material;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>FPassState Pass;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">bool</span> bValid = <span class="kw">false</span>;</td><td></td></tr>
 </tbody></table></div>
 </div>
 <div class="ent e-struct" id="Public__ShaderLibrary_h-7">
 <h3><span class="type">结构体</span> FShaderDiagnostics</h3>
-<div class="sect"><div class="doc">
-<p>自检读数：扫描了几个文件、成功了几个、失败了几个、各自的内容哈希。**为什么要有它**：`ShaderLibrary` 的产物是「屏幕上的颜色」，一个坏 shader 的表现可能只是某个物体画不出来 —— 把读数显式发布出来（编辑器可查），「三个 shader 一个都没加载」才不会看起来像正常。</p>
-</div></div>
 <div class="sect">
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-public">public</span></td><td>std::uint32_t Scanned = 0;</td><td>`Content/Shaders` 里发现的 `.shader` 文件数</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>std::uint32_t Loaded = 0;</td><td>解析 + 编译全部成功的数量 —— **含内置 fallback**（所以 3 个文件全成功时这里是 4：`&lt;builtin&gt;` 也是「可用 shader」计数）</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>std::uint32_t Failed = 0;</td><td>失败数（每个坏文件各报一条自己的错）</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>std::uint32_t Reused = 0;</td><td>命中**内容哈希**缓存、没有重编的（同字节的两个 `.shader` 只编一次）</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>std::vector&lt;FEntry&gt; Entries;</td><td>逐文件的明细（名 / 路径 / 内容哈希 / 是否有效）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">struct</span> FEntry std::string Name; std::string Path; std::uint64_t SourceHash = 0; <span class="kw">bool</span> bValid = <span class="kw">false</span>;;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>std::uint32_t Scanned = 0;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>std::uint32_t Loaded = 0;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>std::uint32_t Failed = 0;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>std::uint32_t Reused = 0;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>std::vector&lt;FEntry&gt; Entries;</td><td></td></tr>
 </tbody></table></div>
 </div>
-<div class="ent e-struct" id="Public__ShaderLibrary_h-8">
-<h3><span class="type">结构体</span> FShaderDiagnostics::FEntry</h3>
-<div class="sect"><div class="doc">
-<p>明细里的一条。</p>
-</div></div>
+<div class="ent e-class" id="Public__ShaderLibrary_h-8">
+<h3><span class="type">类</span> FShaderLibrary</h3>
+</div>
+<div class="ent e-functions" id="Public__ShaderLibrary_h-9">
+<h3><span class="type">自由函数</span> </h3>
 <div class="sect">
-<h4>字段</h4>
-<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-public">public</span></td><td>std::string Name;</td><td>shader 名（文件名去扩展名；内置 fallback 是 `&lt;builtin&gt;`）</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>std::string Path;</td><td>物理路径（诊断用）</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>std::uint64_t SourceHash = 0;</td><td>内容哈希 —— 与日志里那条一致，方便对着查</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">bool</span> bValid = <span class="kw">false</span>;</td><td>该 shader 是否可用（等价于 `Get()` 是否给得出描述）</td></tr>
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td>FShaderLibrary* GetShaderLibrary();</td><td></td></tr>
 </tbody></table></div>
 </div>
-<div class="ent e-class" id="Public__ShaderLibrary_h-9">
-<h3><span class="type">类</span> FShaderLibrary <span class="base">: FFrameExtension, IPipeline&lt;IInit, IShutdown&gt;</span></h3>
-<div class="sect"><div class="doc">
-<p>`.shader` 文本库本体 —— **一个引擎侧帧**（只挂 `IInit`/`IShutdown`）。</p>
-<p>**安装位置很重要**：它挂的是引擎阶段，所以必须装进驱动这些阶段的收集者，即宿主的子节点（`ExampleEngine.cproject` 的 `Plugins` 数组），而不是 `Render.cplugin` 的 `Plugins` —— 后者是 `FRender` 的渲染阶段收集者，装进去会拿不到节点、`Initialize` 永不执行（`PrimitiveRegistry` 踩过这个坑）。`Render.cplugin` 只需要它的 `PrivateIncludes`，好让渲染侧能 include 这个头。</p>
-<p>**线程**：`Initialize` 阶段一次性写完（扫描 + 解析 + 注入 + 编译 + 缓存），之后只读 —— 渲染线程读 `Get()`/`GetDiagnostics()` 安全。</p>
-</div></div>
+<div class="ent e-class" id="Public__ShaderLibrary_h-10">
+<h3><span class="type">类</span> FShaderLibrary <span class="base">: : <span class="kw">public</span> FFrameExtension , <span class="kw">public</span> IPipeline&lt;IInit, IShutdown&gt;</span></h3>
 <div class="sect">
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-private">private</span></td><td>std::unordered_map&lt;Name::FName, FShaderDesc&gt; Shaders;</td><td>按名查询的表（`Get()` 走它）。**索引是 `FName` 而不是 `std::string`**：每帧的 `Get()` 不该做字符串哈希</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td>std::unordered_map&lt;FCacheKey, FShaderDesc, FCacheKeyHash&gt; Cache;</td><td>内容哈希 → 编译产物。**为什么与 `Shaders` 是两张表**：前者按「是谁」、后者按「内容是什么」—— 两个内容相同的 `.shader` 共用一次编译，但各自有自己的名字</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td>FShaderDesc Fallback;</td><td>内置 fallback 的描述（渲染侧在 shader 无效时的落点）</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td><span class="kw">bool</span> bHasFallback = <span class="kw">false</span>;</td><td>fallback 是否可用（连 `glslang` 都没有时它是 <span class="kw">false</span> ⇒ `GetFallback()` 给 `<span class="kw">nullptr</span>`，渲染侧应拒绝建 pass 而不是画出一个看不懂的东西）</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td>FShaderDiagnostics Diag;</td><td>自检读数（`GetDiagnostics()` 返回一份拷贝：读侧不需要持锁）</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>MAHO_DECLARE_FRAME(FShaderLibrary);</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">const</span> FShaderDesc* Get(Name::FName ShaderName) <span class="kw">const</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">const</span> FShaderDesc* GetFallback() <span class="kw">const</span>;</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">struct</span> FCacheKey std::uint64_t SourceHash = 0; std::uint32_t BlockVersion = 0; [[nodiscard]] <span class="kw">bool</span> <span class="kw">operator</span>==(<span class="kw">const</span> FCacheKey&amp; O) <span class="kw">const</span> = <span class="kw">default</span>;;</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">struct</span> FCacheKeyHash [[nodiscard]] std::size_t <span class="kw">operator</span>()(<span class="kw">const</span> FCacheKey&amp; K) <span class="kw">const</span> <span class="kw">noexcept</span> <span class="cm">// 两个独立的 64/32 位量：直接混一混，够用且不引入第三个哈希库。 return static_cast&lt;std::size_t&gt;(K.SourceHash ^ (static_cast&lt;std::uint64_t&gt;(K.BlockVersion) &lt;&lt; 32));;</span></td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>std::unordered_map&lt;Name::FName, FShaderDesc&gt; Shaders;</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>std::unordered_map&lt;FCacheKey, FShaderDesc, FCacheKeyHash&gt; Cache;</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>FShaderDesc Fallback;</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">bool</span> bHasFallback = <span class="kw">false</span>;</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>FShaderDiagnostics Diag;</td><td></td></tr>
 </tbody></table></div>
 <div class="sect">
 <h4>接口</h4>
 <table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-private">private</span></td><td>MAHO_DECLARE_FRAME(FShaderLibrary)</td><td>声明帧身份（稳定字面量名字 + `CreateFrame` 工厂）—— 宿主按名字把它装进安装树</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td>FShaderLibrary();</td><td>构造函数只声明**必须在前面跑完的三条依赖边**（`Paths@IInit` 才知道去哪扫、`FLog@IInit` 才能打日志、`FNamePool@IInit` 才构造得出 `FName`）—— 依赖方向由**消费者**声明，生产者不枚举消费者</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td>~FShaderLibrary() <span class="kw">override</span>;</td><td>析构只做默认清理 —— 「清空表」这件事在 `Shutdown` 里显式做，不靠析构顺序碰运气</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td>FShaderLibrary(<span class="kw">const</span> FShaderLibrary&amp;) = <span class="kw">delete</span>;</td><td>帧不可拷贝（实例身份 = 安装树里的那一个节点）</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> Initialize(FEngineBase&amp; Engine, FEngineContext&amp; Frame) <span class="kw">override</span></td><td>扫描 `/Engine/Shaders/*.shader` + 编译：先编内置 fallback（目录空 / 全坏时的落点），再逐个文件走完整条链，最后打一条汇总（`scanned / loaded / failed / reused`）。**glslang 的进程级初始化是引用计数的**，与 `FRender` 的编译服务器各自配对即可</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> Shutdown(FEngineBase&amp; Engine, FEngineContext&amp; Frame) <span class="kw">override</span></td><td>先撤销全局访问点（`GetShaderLibrary()` 立刻变 `<span class="kw">nullptr</span>`），再清表 —— 反过来的话，一个还在 `IInit` 里的读者会拿到半空的表</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> LoadOneFile(<span class="kw">const</span> std::string&amp; Name, <span class="kw">const</span> std::filesystem::path&amp; Path)</td><td>一个文件走完整条链：内容哈希 → 缓存命中则复用 → 否则解析/注入/编译/校验布局 → 出一条日志。**坏文件不缓存**：每次启动都应该各报一条自己的错</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> LoadBuiltinFallback()</td><td>内置 fallback（编在 C++ 里的最小 unlit）走**完全同一条链** —— 它不是特例路径，只是「没有文件时的那个 shader」</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> ScanShaderDirectory()</td><td>扫描 `/Engine/Shaders/*.shader` 并**按文件名排序**后逐个加载（稳定顺序 ⇒ 两台机器的日志才能直接对着看）</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td>[[nodiscard]] <span class="kw">bool</span> BuildShaderDesc(std::string_view Name, <span class="kw">const</span> std::string&amp; Source, <span class="kw">const</span> std::string&amp; SourcePath, FShaderDesc&amp; OutDesc)</td><td>源码 → 可用的 `FShaderDesc`：解析 → 注入 → 编译两个阶段 → **用 SPIR-V 反查材质块偏移做断言**。失败时自己打日志并返回 <span class="kw">false</span>（失败不静默是这一层的契约）</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">const</span> FShaderDesc* Get(Name::FName ShaderName) <span class="kw">const</span></td><td>按名取（名 = 文件名去掉 `.shader`）。名字不存在或那个 shader 无效 → `<span class="kw">nullptr</span>`，调用方回退 `GetFallback()`；**绝不返回「编译失败的半个描述」**</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">const</span> FShaderDesc* GetFallback() <span class="kw">const</span></td><td>内置 fallback：编在 C++ 里的最小 unlit，不依赖 `Content/Shaders` 里任何文件 —— 目录为空或某个 shader 坏了也不该黑屏到底。连它都编不过时返回 `<span class="kw">nullptr</span>`</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FShaderDiagnostics GetDiagnostics() <span class="kw">const</span></td><td>取一份自检读数拷贝（编辑器 / 控制台可查「到底加载了几个 shader」）</td></tr>
-</tbody></table></div>
-<div class="sect">
-<h4>嵌套</h4>
-<table><thead><tr><th>访问域</th><th>名称</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-private">private</span></td><td>FCacheKey</td><td>缓存键 = **源码字节哈希 + 注入块版本**。路径**不参与**键 —— 这正是修掉旧引擎「只哈希路径 ⇒ 改了 shader 不失效」那个坑的地方</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td>FCacheKeyHash</td><td>两个独立标量的混一混（够用且不引入第三个哈希库）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>FShaderLibrary();</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>~FShaderLibrary() <span class="kw">override</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>FShaderLibrary(<span class="kw">const</span> FShaderLibrary&amp;) = <span class="kw">delete</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>FShaderLibrary&amp; <span class="kw">operator</span>=(<span class="kw">const</span> FShaderLibrary&amp;) = <span class="kw">delete</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FShaderDiagnostics GetDiagnostics() <span class="kw">const</span>;</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> Initialize(FEngineBase&amp; Engine, FEngineContext&amp; Frame) <span class="kw">override</span>;</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> Shutdown(FEngineBase&amp; Engine, FEngineContext&amp; Frame) <span class="kw">override</span>;</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> LoadOneFile(<span class="kw">const</span> std::string&amp; Name, <span class="kw">const</span> std::filesystem::path&amp; Path);</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> LoadBuiltinFallback();</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> ScanShaderDirectory();</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>[[nodiscard]] <span class="kw">bool</span> BuildShaderDesc(std::string_view Name, <span class="kw">const</span> std::string&amp; Source, <span class="kw">const</span> std::string&amp; SourcePath, FShaderDesc&amp; OutDesc);</td><td></td></tr>
 </tbody></table></div>
 </div>
 </div>
 <div class="pane" id="pane-Public__ShaderLibraryApi_h">
 <div class="hdr">Public/ShaderLibraryApi.h</div>
-<h2 class="file-title">ShaderLibraryApi.h —— 模块导出标签</h2>
-<div class="card"><div class="doc">
-<p>本模块的 DLL 导出标签，独立成头 —— 只想拿 `GetShaderLibrary()` 的人不必引入整个 `ShaderLibrary.h`（也就不必看见 `FShaderDesc` 那些渲染侧类型）。</p>
-</div></div>
+<h2 class="file-title">ShaderLibraryApi.h</h2>
 <div class="card">
 <h3 class="card-title">包含的头文件</h3>
 
 <table>
-<thead><tr><th>头文件</th><th>功能</th></tr></thead>
+<thead><tr><th>头文件</th></tr></thead>
 <tbody>
-<tr><td>Core/Export.h</td><td>`MAHO_EXPORT` / `MAHO_IMPORT`（引擎核心提供）</td></tr>
+<tr><td>`&lt;Core/Export.h&gt;`</td></tr>
 </tbody></table>
-</div>
-<div class="ent e-macro" id="Public__ShaderLibraryApi_h-0">
-<h3><span class="type">宏</span> MAHO_SHADERLIBRARY_API <span class="base">: MAHO_EXPORT / MAHO_IMPORT（随构建开关切换）</span></h3>
-<div class="sect"><div class="doc">
-<p>编译本插件时构建系统定义 `MAHO_SHADERLIBRARY_MODULE_EXPORTS` ⇒ `MAHO_EXPORT`；消费方为 `MAHO_IMPORT`。</p>
-<p>**为什么必须有**：`FShaderLibrary` 与 `FShaderDesc` 都要跨 DLL 边界 —— 渲染侧拿到的是指针、且实例由本模块构造并销毁，虚表与删除析构符只能在本模块生成。少了这个标签，消费方会各自生成一份 vftable，卸载后 `<span class="kw">delete</span>` 静默崩（0xC0000005）而不是编译错。</p>
-</div></div>
 </div>
 </div></div>
 </div>

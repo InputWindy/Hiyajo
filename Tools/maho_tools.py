@@ -2531,27 +2531,22 @@ def fix_plugin(cplugin_path: Path) -> list[str]:
 		api.write_text(_plugin_api_header_text(name), encoding="utf-8", newline="\n")
 		messages.append(f"FIXED {api.relative_to(base)}")
 
-	# Docs —— 单一入口 <plugin>/Docs.html（内容源 <plugin>/Docs.py）。
-	# 旧的 <Name>Doc.md / <Name>API.html **占位文件已废弃**：文档不再是"造一个空文件占位"，
-	# 而是由 Tools/plugin_docs.py 扫描头文件结构渲染、内容在 Docs.py 里逐条声明。
-	docs_py = base / "Docs.py"
-	if not docs_py.is_file():
-		docs_py.write_text(
-			f"# {name} —— 文档内容（由 Tools/plugin_docs.py 执行；D 已注入，无需 import）\n"
-			f"#\n"
-			f"# 渲染：Tools\\maho_python.bat Tools\\plugin_docs.py --filter {name}\n"
-			f'D.Header("Public/{name}.h", Title="{name}.h", Desc="TODO：这个头是什么、为什么这样设计。")\n',
-			encoding="utf-8", newline="\n",
-		)
-		messages.append(f"FIXED {docs_py.relative_to(base)}")
+	# Docs —— 单一入口 <plugin>/Docs.html，来源是**头文件里的 `///` 注释**（`@file` / `@brief` …）。
+	# 手写的 <plugin>/Docs.py 已删除：这里直接转调 Tools/docs_scan.py（与 Source/Docs.html 同一套）。
+	import subprocess
+	import sys as _sys
+	scanner = Path(__file__).resolve().parent / "docs_scan.py"
 	try:
-		import docs_builder as _docs_builder
-		_docs_builder.Reset()
-		exec(compile(docs_py.read_text(encoding="utf-8"), str(docs_py), "exec"),
-		     {"__file__": str(docs_py), "__name__": "plugin_docs_content", "D": _docs_builder})
-		headers, _declared, members = _docs_builder.Build(Out=base / "Docs.html", Root=base)
-		messages.append(f"RENDERED Docs.html ({headers} headers, {members} members)")
-	except Exception as error:   # 渲染失败不该让双击报错 —— 内容坏了就只留树
+		proc = subprocess.run([_sys.executable, str(scanner), "--root", str(base),
+		                       "--out", str(base / "Docs.html"), "--quiet"],
+		                      capture_output=True, text=True, encoding="utf-8", errors="replace")
+		if proc.returncode == 0:
+			summary = (proc.stdout or "").strip().splitlines()[-1] if (proc.stdout or "").strip() else ""
+			messages.append(f"RENDERED Docs.html（{summary}）")
+		else:
+			messages.append(f"WARN Docs.html not rendered (exit {proc.returncode}: "
+			                f"{(proc.stderr or proc.stdout or '').strip()[:200]})")
+	except OSError as error:      # 渲染失败不该让双击报错
 		messages.append(f"WARN Docs.html not rendered ({type(error).__name__}: {error})")
 
 	return messages

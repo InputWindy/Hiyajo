@@ -79,7 +79,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div id="app">
   <div id="side">
     <h1>Maho 引擎源码</h1>
-    <div class="search" title="左侧扫描 Source/**/*.h：2 个头文件 · 已声明 1 个 · 0 个实体 / 0 个成员 ｜ 内容在 Tools/docs_content.py 里逐条声明">
+    <div class="search" title="左侧扫描 Plugins\GameEngine\RenderCore\RenderFeature\MeshFeature/**/*.h：2 个头文件 · 已声明 2 个 · 4 个实体 / 48 个成员 ｜ 内容来自头文件里的 `///` 注释（`Tools/docs_scan.py`）">
       <input id="q" type="search" placeholder="搜索头文件…  （如 Frame、Core、Entry）" autocomplete="off">
     </div>
     <div id="tree"><ul>
@@ -91,18 +91,135 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </li>
 </ul></div>
   </div>
-  <div id="main"><div class="pane" id="pane-Public__MeshFeature_h">
+  <div id="main"><div class="card">
+<h3 class="card-title">MeshFeature.cplugin —— 插件声明</h3>
+
+<table>
+<thead><tr><th>字段</th><th>值</th></tr></thead>
+<tbody>
+<tr><td>Name</td><td>MeshFeature</td></tr>
+<tr><td>Description</td><td>Actor-manager mesh pass: consumes the primitive+camera mirror table, caches geometry per mesh name, one draw pass per actor.</td></tr>
+<tr><td>Dependencies</td><td>Render, Scene, Log, PrimitiveRegistry, ShaderLibrary</td></tr>
+</tbody></table>
+</div><div class="pane" id="pane-Public__MeshFeature_h">
 <div class="hdr">Public/MeshFeature.h</div>
 <h2 class="file-title">MeshFeature.h</h2>
-<div class="card"><div class="doc">
-<p>TODO：这个头是什么、为什么这样设计。</p>
-</div></div>
-<div class="empty">（这个头还没有声明内容）</div>
+<div class="card">
+<h3 class="card-title">包含的头文件</h3>
+
+<table>
+<thead><tr><th>头文件</th></tr></thead>
+<tbody>
+<tr><td>`<span class="st">"MeshFeatureApi.h"</span>`</td></tr>
+<tr><td>`&lt;AssetTypes.h&gt;`</td></tr>
+<tr><td>`&lt;Engine/Frame.h&gt;`</td></tr>
+<tr><td>`&lt;Maho.h&gt;`</td></tr>
+<tr><td>`&lt;Name.h&gt;`</td></tr>
+<tr><td>`&lt;PrimitiveRegistry.h&gt;`</td></tr>
+<tr><td>`&lt;Render.h&gt;`</td></tr>
+<tr><td>`&lt;ShaderLibrary.h&gt;`</td></tr>
+<tr><td>`&lt;cstddef&gt;`</td></tr>
+<tr><td>`&lt;cstdint&gt;`</td></tr>
+<tr><td>`&lt;map&gt;`</td></tr>
+<tr><td>`&lt;memory&gt;`</td></tr>
+<tr><td>`&lt;string&gt;`</td></tr>
+<tr><td>`&lt;tuple&gt;`</td></tr>
+<tr><td>`&lt;vector&gt;`</td></tr>
+</tbody></table>
+</div>
+<div class="ent e-class" id="Public__MeshFeature_h-0">
+<h3><span class="type">类</span> FCubeMesh <span class="base">: : <span class="kw">public</span> Resource::FStaticMesh</span></h3>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td>FCubeMesh(std::string Path, std::vector&lt;<span class="kw">float</span>&gt; Positions, std::vector&lt;<span class="kw">float</span>&gt; Normals, std::vector&lt;<span class="kw">float</span>&gt; UVs, std::vector&lt;std::uint32_t&gt; Indices);</td><td></td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-struct" id="Public__MeshFeature_h-1">
+<h3><span class="type">结构体</span> FMeshVertex</h3>
+<div class="sect">
+<h4>字段</h4>
+<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">float</span> X = 0.f, Y = 0.f, Z = 0.f;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">float</span> NX = 0.f, NY = 0.f, NZ = 0.f;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">float</span> U = 0.f, V = 0.f;</td><td></td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-struct" id="Public__MeshFeature_h-2">
+<h3><span class="type">结构体</span> FMeshShader</h3>
+<div class="sect">
+<h4>字段</h4>
+<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">static</span> <span class="kw">const</span> <span class="kw">char</span>* GetVertexSource();</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">static</span> <span class="kw">const</span> <span class="kw">char</span>* GetFragmentSource();</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">static</span> <span class="kw">const</span> <span class="kw">char</span>* GetVertexEntryPoint();</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">static</span> <span class="kw">const</span> <span class="kw">char</span>* GetFragmentEntryPoint();</td><td></td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-class" id="Public__MeshFeature_h-3">
+<h3><span class="type">类</span> FMeshFeature <span class="base">: : <span class="kw">public</span> FFrameExtension, <span class="kw">public</span> IPipeline&lt;IInitViews, IRender, IPreUnInstall&gt;</span></h3>
+<div class="sect">
+<h4>字段</h4>
+<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-private">private</span></td><td>MAHO_DECLARE_FRAME_UNDER(FMeshFeature, FRender);</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">static</span> <span class="kw">constexpr</span> std::uint32_t kMaxMaterialSamplers = 4;</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">struct</span> FMeshBuffers FRDGBufferRef Vertices; FRDGBufferRef Indices; std::uint32_t IndexCount = 0;;</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">struct</span> FPipelineKey std::uint32_t ShaderId = 0; std::uint64_t ShaderHash = 0; <span class="cm">// SPIR-V content (two shaders with the same name can differ) ERHICullMode Cull = ERHICullMode::Back; bool bDepthWrite = false; bool bDepthTest = false; bool bBlend = false; ERHIFormat ColorFormat = ERHIFormat::Unknown; ERHIFormat DepthFormat = ERHIFormat::Unknown; [[nodiscard]] auto AsTuple() const return std::tie(ShaderId, ShaderHash, Cull, bDepthWrite, bDepthTest, bBlend, ColorFormat, DepthFormat); [[nodiscard]] bool operator&lt;(const FPipelineKey&amp; O) const return AsTuple() &lt; O.AsTuple();;</span></td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">struct</span> FShaderEntry <span class="kw">const</span> FShaderDesc* Description = <span class="kw">nullptr</span>; <span class="cm">// ShaderLibrary-owned; valid for the whole run FRHIShaderModule* Vertex = nullptr; FRHIShaderModule* Fragment = nullptr; std::string VertexEntry = "main"; std::string FragmentEntry = "main"; FRHIGraphicsPipelineDesc Pipeline;;</span></td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">struct</span> FMaterialFrame <span class="kw">const</span> FShaderEntry* Shader = <span class="kw">nullptr</span>; <span class="cm">// null =&gt; could not be resolved (reported) FRDGBufferRef ParamBuffer; std::vector&lt;std::byte&gt; Packed; // the CPU bytes the buffer is filled with (per frame) FRDGTextureRef Textures[kMaxMaterialSamplers]; FRHISampler* Samplers[kMaxMaterialSamplers] = ;;</span></td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">const</span> FMeshBuffers* EnsureMesh(FRender&amp; R, Name::FName MeshName);</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">const</span> FShaderEntry* ResolveShader(FRender&amp; R, Name::FName ShaderName, ERHIFormat ColorFormat, ERHIFormat DepthFormat);</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">struct</span> FViewConstants <span class="kw">float</span> ViewProj[16];;</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>std::map&lt;Name::FName, FMeshBuffers&gt; Meshes;</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>std::map&lt;std::uint32_t, FRenderPrimitive&gt; Actors;</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>std::map&lt;FPipelineKey, FShaderEntry&gt; Pipelines;</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>std::vector&lt;Name::FName&gt; UnresolvedShaders;</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>std::vector&lt;std::string&gt; ReportedMissingTextures;</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>std::unique_ptr&lt;FCubeMesh&gt; CubeMesh;</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>std::vector&lt;Name::FName&gt; UnresolvedMeshes;</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>FRDGTextureRef WhiteTexture;</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>FRDGBufferRef WhiteTextureStaging;</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>FRHISampler* WhiteSampler = <span class="kw">nullptr</span>;</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">bool</span> bWhiteTextureFailed = <span class="kw">false</span>;</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>std::vector&lt;FRDGBufferRef&gt; CameraConstantBuffers;</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>std::uint32_t CameraRingSlots = 0;</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>std::uint32_t FramesWithoutCamera = 0;</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">bool</span> bReportedNoCamera = <span class="kw">false</span>;</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">bool</span> bReportedDegenerateTarget = <span class="kw">false</span>;</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>std::uint32_t FramesSeen = 0;</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">bool</span> bReportedNoRegistry = <span class="kw">false</span>;</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>std::size_t ReportedPrimitives = static_cast&lt;std::size_t&gt;(-1);</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">bool</span> bReportedCamera = <span class="kw">false</span>;</td><td></td></tr>
+</tbody></table></div>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td>FMeshFeature();</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> InitViews(FRender&amp; R, FRenderContext&amp; Frame) <span class="kw">override</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Render(FRender&amp; R, FRenderContext&amp; Frame) <span class="kw">override</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> PreUnInstall(FRender&amp; R, FRenderContext&amp; Frame) <span class="kw">override</span>;</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> SyncActors(<span class="kw">const</span> std::vector&lt;FRenderPrimitive&gt;&amp; Snapshot);</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> ReportRead(std::size_t PrimitiveCount, <span class="kw">bool</span> bCamera, std::uint64_t Publishes);</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> PackMaterialParameters(<span class="kw">const</span> FShaderDesc&amp; Desc, <span class="kw">const</span> FRenderMaterial&amp; Material, <span class="kw">const</span> std::vector&lt;FRenderMaterialParam&gt;&amp; Params, std::vector&lt;std::byte&gt;&amp; Out) <span class="kw">const</span>;</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> ResolveMaterial(FRender&amp; R, <span class="kw">const</span> FRenderScene&amp; Scene, std::size_t MaterialIndex, ERHIFormat ColorFormat, ERHIFormat DepthFormat, FMaterialFrame&amp; Out);</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">bool</span> EnsureWhiteTexture(FRender&amp; R);</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> DrawWithMaterials(FRender&amp; R, <span class="kw">const</span> FRenderScene&amp; Scene, <span class="kw">const</span> FRenderTarget&amp; Target, std::uint32_t TargetW, std::uint32_t TargetH, <span class="kw">const</span> FViewConstants&amp; ViewConstants, <span class="kw">const</span> FRDGBufferRef&amp; ViewBuffer);</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> DrawWithBuiltinShader(FRender&amp; R, <span class="kw">const</span> FRenderScene&amp; Scene, <span class="kw">const</span> FRenderTarget&amp; Target, std::uint32_t TargetW, std::uint32_t TargetH, <span class="kw">const</span> FViewConstants&amp; ViewConstants, <span class="kw">const</span> FRDGBufferRef&amp; ViewBuffer);</td><td></td></tr>
+</tbody></table></div>
+</div>
 </div>
 <div class="pane" id="pane-Public__MeshFeatureApi_h">
 <div class="hdr">Public/MeshFeatureApi.h</div>
 <h2 class="file-title">MeshFeatureApi.h</h2>
-<div class="empty">（尚未声明内容 —— 在 Tools/docs_content.py 里加一条 Header(&quot;Public/MeshFeatureApi.h&quot;)，再逐类声明 Class / Interface / Field）</div>
+<div class="card">
+<h3 class="card-title">包含的头文件</h3>
+
+<table>
+<thead><tr><th>头文件</th></tr></thead>
+<tbody>
+<tr><td>`&lt;Core/Export.h&gt;`</td></tr>
+</tbody></table>
+</div>
 </div></div>
 </div>
 <script>

@@ -79,7 +79,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div id="app">
   <div id="side">
     <h1>Maho 引擎源码</h1>
-    <div class="search" title="左侧扫描 Source/**/*.h：2 个头文件 · 已声明 1 个 · 0 个实体 / 0 个成员 ｜ 内容在 Tools/docs_content.py 里逐条声明">
+    <div class="search" title="左侧扫描 Plugins\GameEngine\GameCore\SystemGroup\MeshRenderSystem/**/*.h：2 个头文件 · 已声明 2 个 · 11 个实体 / 63 个成员 ｜ 内容来自头文件里的 `///` 注释（`Tools/docs_scan.py`）">
       <input id="q" type="search" placeholder="搜索头文件…  （如 Frame、Core、Entry）" autocomplete="off">
     </div>
     <div id="tree"><ul>
@@ -91,18 +91,180 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </li>
 </ul></div>
   </div>
-  <div id="main"><div class="pane" id="pane-Public__MeshRenderSystem_h">
+  <div id="main"><div class="card">
+<h3 class="card-title">MeshRenderSystem.cplugin —— 插件声明</h3>
+
+<table>
+<thead><tr><th>字段</th><th>值</th></tr></thead>
+<tbody>
+<tr><td>Name</td><td>MeshRenderSystem</td></tr>
+<tr><td>Description</td><td>Game-side world system: components + Lua-scripted gameplay + camera entity, published as an immutable frame snapshot <span class="kw">for</span> the render side.</td></tr>
+<tr><td>Dependencies</td><td>GameWorld, PrimitiveRegistry, Name, Log, Script, Platform</td></tr>
+</tbody></table>
+</div><div class="pane" id="pane-Public__MeshRenderSystem_h">
 <div class="hdr">Public/MeshRenderSystem.h</div>
 <h2 class="file-title">MeshRenderSystem.h</h2>
-<div class="card"><div class="doc">
-<p>TODO：这个头是什么、为什么这样设计。</p>
-</div></div>
-<div class="empty">（这个头还没有声明内容）</div>
+<div class="card">
+<h3 class="card-title">包含的头文件</h3>
+
+<table>
+<thead><tr><th>头文件</th></tr></thead>
+<tbody>
+<tr><td>`<span class="st">"MeshRenderSystemApi.h"</span>`</td></tr>
+<tr><td>`&lt;GameWorld.h&gt;`</td></tr>
+<tr><td>`&lt;Name.h&gt;`</td></tr>
+<tr><td>`&lt;cstdint&gt;`</td></tr>
+<tr><td>`&lt;memory&gt;`</td></tr>
+<tr><td>`&lt;string&gt;`</td></tr>
+<tr><td>`&lt;unordered_map&gt;`</td></tr>
+<tr><td>`&lt;vector&gt;`</td></tr>
+</tbody></table>
+</div>
+<div class="ent e-class" id="Public__MeshRenderSystem_h-0">
+<h3><span class="type">类</span> state</h3>
+</div>
+<div class="ent e-class" id="Public__MeshRenderSystem_h-1">
+<h3><span class="type">类</span> FPrimitiveRegistry</h3>
+</div>
+<div class="ent e-functions" id="Public__MeshRenderSystem_h-2">
+<h3><span class="type">自由函数</span> </h3>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">inline</span> <span class="kw">constexpr</span> <span class="kw">const</span> <span class="kw">char</span>* kDefaultMaterialShader = <span class="st">"DefaultLit"</span>;</td><td></td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-struct" id="Public__MeshRenderSystem_h-3">
+<h3><span class="type">结构体</span> FMeshRenderComponent</h3>
+<div class="sect">
+<h4>字段</h4>
+<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td>Name::FName Mesh;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">bool</span> bVisible = <span class="kw">true</span>;</td><td></td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-struct" id="Public__MeshRenderSystem_h-4">
+<h3><span class="type">结构体</span> FMaterialParam</h3>
+<div class="sect">
+<h4>字段</h4>
+<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td>Name::FName Name;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">float</span> Value[4] =;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>Name::FName Texture;</td><td></td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-struct" id="Public__MeshRenderSystem_h-5">
+<h3><span class="type">结构体</span> FMaterialComponent</h3>
+<div class="sect">
+<h4>字段</h4>
+<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td>Name::FName Shader;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>std::vector&lt;FMaterialParam&gt; Params;</td><td></td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-struct" id="Public__MeshRenderSystem_h-6">
+<h3><span class="type">结构体</span> FCameraComponent</h3>
+<div class="sect">
+<h4>字段</h4>
+<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">float</span> FovY = 1.0471975512f;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">float</span> Near = 0.1f;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">float</span> Far = 100.0f;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">bool</span> bActive = <span class="kw">true</span>;</td><td></td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-struct" id="Public__MeshRenderSystem_h-7">
+<h3><span class="type">结构体</span> FInputComponent</h3>
+<div class="sect">
+<h4>字段</h4>
+<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">float</span> MoveX = 0.f;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">float</span> MoveZ = 0.f;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">float</span> LookX = 0.f;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">float</span> LookY = 0.f;</td><td></td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-struct" id="Public__MeshRenderSystem_h-8">
+<h3><span class="type">结构体</span> FScriptInstance</h3>
+</div>
+<div class="ent e-struct" id="Public__MeshRenderSystem_h-9">
+<h3><span class="type">结构体</span> FScriptComponent</h3>
+<div class="sect">
+<h4>字段</h4>
+<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td>std::shared_ptr&lt;FScriptInstance&gt; Script;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>std::uint32_t EntityId = 0;</td><td></td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-class" id="Public__MeshRenderSystem_h-10">
+<h3><span class="type">类</span> FMeshRenderSystem <span class="base">: : <span class="kw">public</span> FFrameExtension , <span class="kw">public</span> IPipeline&lt;IOnInstalled, IProcessInput, IUpdate, IPreUnInstall&gt;</span></h3>
+<div class="sect">
+<h4>字段</h4>
+<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-private">private</span></td><td>MAHO_DECLARE_FRAME_UNDER(FMeshRenderSystem, FGameWorld);</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">static</span> FMaterialParam* FindParam(FMaterialComponent&amp; Material, std::string_view ParamName);</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">static</span> FMaterialParam&amp; EnsureParam(FMaterialComponent&amp; Material, Name::FName ParamName);</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>FEntity CubeEntity;</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>FEntity Cube2Entity;</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>FEntity CameraEntity;</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>std::unordered_map&lt;std::uint32_t, FEntity&gt; LuaIdToEntity;</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>std::unordered_map&lt;std::uint32_t, std::uint32_t&gt; EntityToLuaId;</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>std::uint32_t NextLuaId = 1;</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">float</span> PrevMouseX = 0.f;</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">float</span> PrevMouseY = 0.f;</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">bool</span> bHasPrevMouse = <span class="kw">false</span>;</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>std::uint64_t PublishCount = 0;</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>std::size_t PublishedMaterials = 0;</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>std::size_t PublishedParams = 0;</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>std::uint64_t CameraPublishCount = 0;</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">bool</span> bWarnedNoMeshName = <span class="kw">false</span>;</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">bool</span> bWarnedNoCamera = <span class="kw">false</span>;</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">bool</span> bLuaBindingsInstalled = <span class="kw">false</span>;</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">bool</span> bWarnedNoLuaBindings = <span class="kw">false</span>;</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>std::uint64_t FramesWithoutLuaBindings = 0;</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>std::uint64_t FramesWithoutRegistry = 0;</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">bool</span> bReportedNoRegistry = <span class="kw">false</span>;</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>std::size_t ReportedScripts = static_cast&lt;std::size_t&gt;(-1);</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>std::size_t ReportedMeshEntities = static_cast&lt;std::size_t&gt;(-1);</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>std::size_t ReportedCameras = static_cast&lt;std::size_t&gt;(-1);</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>std::string ReportedScriptFiles;</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">bool</span> bReportedRegistry = <span class="kw">false</span>;</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">bool</span> bReportedCamera = <span class="kw">false</span>;</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">bool</span> bReportedBindings = <span class="kw">false</span>;</td><td></td></tr>
+</tbody></table></div>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> OnInstalled(FGameWorld&amp; World, FGameWorldContext&amp; Frame) <span class="kw">override</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> ProcessInput(FGameWorld&amp; World, FGameWorldContext&amp; Frame) <span class="kw">override</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Update(FGameWorld&amp; World, FGameWorldContext&amp; Frame) <span class="kw">override</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> PreUnInstall(FGameWorld&amp; World, FGameWorldContext&amp; Frame) <span class="kw">override</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">static</span> <span class="kw">void</span> LuaBind(sol::state&amp; Lua);</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> SeedDemoEntities(FGameWorld&amp; World);</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>std::uint32_t AssignLuaId(FEntity E);</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>[[nodiscard]] FEntity FindEntity(std::uint32_t LuaId) <span class="kw">const</span>;</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>[[nodiscard]] std::uint32_t FindLuaId(FEntity E) <span class="kw">const</span>;</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> AttachScript(FGameWorld&amp; World, FEntity E, <span class="kw">const</span> <span class="kw">char</span>* ScriptFile);</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> EnsureLuaBindings();</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> ReportState(FGameWorld&amp; World, Maho::FPrimitiveRegistry* Registry);</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> FillInput(FGameWorld&amp; World);</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> PublishScene(FGameWorld&amp; World);</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> PublishCamera(FGameWorld&amp; World);</td><td></td></tr>
+</tbody></table></div>
+</div>
 </div>
 <div class="pane" id="pane-Public__MeshRenderSystemApi_h">
 <div class="hdr">Public/MeshRenderSystemApi.h</div>
 <h2 class="file-title">MeshRenderSystemApi.h</h2>
-<div class="empty">（尚未声明内容 —— 在 Tools/docs_content.py 里加一条 Header(&quot;Public/MeshRenderSystemApi.h&quot;)，再逐类声明 Class / Interface / Field）</div>
+<div class="card">
+<h3 class="card-title">包含的头文件</h3>
+
+<table>
+<thead><tr><th>头文件</th></tr></thead>
+<tbody>
+<tr><td>`&lt;Core/Export.h&gt;`</td></tr>
+</tbody></table>
+</div>
 </div></div>
 </div>
 <script>

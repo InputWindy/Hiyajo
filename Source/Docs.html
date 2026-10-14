@@ -79,7 +79,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div id="app">
   <div id="side">
     <h1>Maho 引擎源码</h1>
-    <div class="search" title="左侧扫描 Source/**/*.h：25 个头文件 · 已声明 25 个 · 99 个实体 / 246 个成员 ｜ 内容在 Tools/docs_content.py 里逐条声明">
+    <div class="search" title="左侧扫描 Source/**/*.h：25 个头文件 · 已声明 25 个 · 99 个实体 / 246 个成员 ｜ 内容来自头文件里的 `///` 注释（`Tools/docs_scan.py`）">
       <input id="q" type="search" placeholder="搜索头文件…  （如 Frame、Core、Entry）" autocomplete="off">
     </div>
     <div id="tree"><ul>
@@ -125,6 +125,23 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
   <div id="main"><div class="pane" id="pane-Public__Core__Assembly_h">
 <div class="hdr">Public/Core/Assembly.h</div>
 <h2 class="file-title">Assembly.h</h2>
+<div class="card"><div class="doc">
+<p>Loading a module (DLL) and resolving symbols from it, plus the process-wide plugin manifest.</p>
+</div></div>
+<div class="card">
+<h3 class="card-title">包含的头文件</h3>
+
+<table>
+<thead><tr><th>头文件</th></tr></thead>
+<tbody>
+<tr><td>`&lt;Core/Export.h&gt;`</td></tr>
+<tr><td>`&lt;filesystem&gt;`</td></tr>
+<tr><td>`&lt;memory&gt;`</td></tr>
+<tr><td>`&lt;string&gt;`</td></tr>
+<tr><td>`&lt;string_view&gt;`</td></tr>
+<tr><td>`&lt;vector&gt;`</td></tr>
+</tbody></table>
+</div>
 <div class="ent e-functions" id="Public__Core__Assembly_h-0">
 <h3><span class="type">自由函数</span> </h3>
 <div class="sect">
@@ -170,6 +187,20 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div class="pane" id="pane-Public__Core__Delegate_h">
 <div class="hdr">Public/Core/Delegate.h</div>
 <h2 class="file-title">Delegate.h</h2>
+<div class="card">
+<h3 class="card-title">包含的头文件</h3>
+
+<table>
+<thead><tr><th>头文件</th></tr></thead>
+<tbody>
+<tr><td>`&lt;algorithm&gt;`</td></tr>
+<tr><td>`&lt;cstdint&gt;`</td></tr>
+<tr><td>`&lt;functional&gt;`</td></tr>
+<tr><td>`&lt;mutex&gt;`</td></tr>
+<tr><td>`&lt;utility&gt;`</td></tr>
+<tr><td>`&lt;vector&gt;`</td></tr>
+</tbody></table>
+</div>
 <div class="ent e-alias" id="Public__Core__Delegate_h-0">
 <h3><span class="type">别名</span> FSubscriptionID <span class="base">: FSubscriptionID</span></h3>
 </div>
@@ -182,6 +213,16 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div class="pane" id="pane-Public__Core__Fatal_h">
 <div class="hdr">Public/Core/Fatal.h</div>
 <h2 class="file-title">Fatal.h</h2>
+<div class="card">
+<h3 class="card-title">包含的头文件</h3>
+
+<table>
+<thead><tr><th>头文件</th></tr></thead>
+<tbody>
+<tr><td>`&lt;Core/Export.h&gt;`</td></tr>
+<tr><td>`&lt;cstdio&gt;`</td></tr>
+</tbody></table>
+</div>
 <div class="ent e-functions" id="Public__Core__Fatal_h-0">
 <h3><span class="type">自由函数</span> </h3>
 <div class="sect">
@@ -206,6 +247,28 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div class="pane" id="pane-Public__Core__FrameGraph_h">
 <div class="hdr">Public/Core/FrameGraph.h</div>
 <h2 class="file-title">FrameGraph.h</h2>
+<div class="card">
+<h3 class="card-title">包含的头文件</h3>
+
+<table>
+<thead><tr><th>头文件</th></tr></thead>
+<tbody>
+<tr><td>`&lt;Core/Export.h&gt;`</td></tr>
+<tr><td>`&lt;Core/ThreadedServer.h&gt;`</td></tr>
+<tr><td>`&lt;Core/ThreadPool.h&gt;`</td></tr>
+<tr><td>`&lt;Core/TypeList.h&gt;`</td></tr>
+<tr><td>`&lt;array&gt;`</td></tr>
+<tr><td>`&lt;cstdint&gt;`</td></tr>
+<tr><td>`&lt;functional&gt;`</td></tr>
+<tr><td>`&lt;memory&gt;`</td></tr>
+<tr><td>`&lt;span&gt;`</td></tr>
+<tr><td>`&lt;string&gt;`</td></tr>
+<tr><td>`&lt;string_view&gt;`</td></tr>
+<tr><td>`&lt;typeindex&gt;`</td></tr>
+<tr><td>`&lt;unordered_map&gt;`</td></tr>
+<tr><td>`&lt;vector&gt;`</td></tr>
+</tbody></table>
+</div>
 <div class="ent e-functions" id="Public__Core__FrameGraph_h-0">
 <h3><span class="type">自由函数</span> </h3>
 <div class="sect">
@@ -362,11 +425,35 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div class="pane" id="pane-Public__Core__Interface_h">
 <div class="hdr">Public/Core/Interface.h</div>
 <h2 class="file-title">Interface.h</h2>
-<div class="empty">（这个头还没有声明内容）</div>
+<div class="card">
+<h3 class="card-title">包含的头文件</h3>
+
+<table>
+<thead><tr><th>头文件</th></tr></thead>
+<tbody>
+<tr><td>`&lt;Core/Export.h&gt;`</td></tr>
+<tr><td>`&lt;Core/TypeList.h&gt;`</td></tr>
+<tr><td>`&lt;type_traits&gt;`</td></tr>
+</tbody></table>
+</div>
 </div>
 <div class="pane" id="pane-Public__Core__MetaData_h">
 <div class="hdr">Public/Core/MetaData.h</div>
 <h2 class="file-title">MetaData.h</h2>
+<div class="card">
+<h3 class="card-title">包含的头文件</h3>
+
+<table>
+<thead><tr><th>头文件</th></tr></thead>
+<tbody>
+<tr><td>`&lt;Core/Export.h&gt;`</td></tr>
+<tr><td>`&lt;cstddef&gt;`</td></tr>
+<tr><td>`&lt;memory&gt;`</td></tr>
+<tr><td>`&lt;string&gt;`</td></tr>
+<tr><td>`&lt;string_view&gt;`</td></tr>
+<tr><td>`&lt;vector&gt;`</td></tr>
+</tbody></table>
+</div>
 <div class="ent e-struct" id="Public__Core__MetaData_h-0">
 <h3><span class="type">结构体</span> FMetaDataEntry</h3>
 <div class="sect">
@@ -429,6 +516,21 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div class="pane" id="pane-Public__Core__Query_h">
 <div class="hdr">Public/Core/Query.h</div>
 <h2 class="file-title">Query.h</h2>
+<div class="card">
+<h3 class="card-title">包含的头文件</h3>
+
+<table>
+<thead><tr><th>头文件</th></tr></thead>
+<tbody>
+<tr><td>`&lt;Core/Fatal.h&gt;`</td></tr>
+<tr><td>`&lt;Core/MetaData.h&gt;`</td></tr>
+<tr><td>`&lt;Core/TypeList.h&gt;`</td></tr>
+<tr><td>`&lt;cstddef&gt;`</td></tr>
+<tr><td>`&lt;string_view&gt;`</td></tr>
+<tr><td>`&lt;type_traits&gt;`</td></tr>
+<tr><td>`&lt;vector&gt;`</td></tr>
+</tbody></table>
+</div>
 <div class="ent e-functions" id="Public__Core__Query_h-0">
 <h3><span class="type">自由函数</span> </h3>
 <div class="sect">
@@ -452,6 +554,17 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div class="pane" id="pane-Public__Core__ThreadedServer_h">
 <div class="hdr">Public/Core/ThreadedServer.h</div>
 <h2 class="file-title">ThreadedServer.h</h2>
+<div class="card">
+<h3 class="card-title">包含的头文件</h3>
+
+<table>
+<thead><tr><th>头文件</th></tr></thead>
+<tbody>
+<tr><td>`&lt;Core/Export.h&gt;`</td></tr>
+<tr><td>`&lt;functional&gt;`</td></tr>
+<tr><td>`&lt;memory&gt;`</td></tr>
+</tbody></table>
+</div>
 <div class="ent e-class" id="Public__Core__ThreadedServer_h-0">
 <h3><span class="type">类</span> FThreadedServer</h3>
 <div class="sect">
@@ -482,6 +595,18 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div class="pane" id="pane-Public__Core__ThreadPool_h">
 <div class="hdr">Public/Core/ThreadPool.h</div>
 <h2 class="file-title">ThreadPool.h</h2>
+<div class="card">
+<h3 class="card-title">包含的头文件</h3>
+
+<table>
+<thead><tr><th>头文件</th></tr></thead>
+<tbody>
+<tr><td>`&lt;Core/Export.h&gt;`</td></tr>
+<tr><td>`&lt;cstdint&gt;`</td></tr>
+<tr><td>`&lt;functional&gt;`</td></tr>
+<tr><td>`&lt;memory&gt;`</td></tr>
+</tbody></table>
+</div>
 <div class="ent e-class" id="Public__Core__ThreadPool_h-0">
 <h3><span class="type">类</span> FThreadPool</h3>
 <div class="sect">
@@ -519,6 +644,16 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div class="pane" id="pane-Public__Core__TypeList_h">
 <div class="hdr">Public/Core/TypeList.h</div>
 <h2 class="file-title">TypeList.h</h2>
+<div class="card">
+<h3 class="card-title">包含的头文件</h3>
+
+<table>
+<thead><tr><th>头文件</th></tr></thead>
+<tbody>
+<tr><td>`&lt;cstddef&gt;`</td></tr>
+<tr><td>`&lt;type_traits&gt;`</td></tr>
+</tbody></table>
+</div>
 <div class="ent e-alias" id="Public__Core__TypeList_h-0">
 <h3><span class="type">别名</span> TAppend_t <span class="base">: TAppend_t</span></h3>
 </div>
@@ -537,6 +672,29 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div class="pane" id="pane-Public__Engine__Engine_h">
 <div class="hdr">Public/Engine/Engine.h</div>
 <h2 class="file-title">Engine.h</h2>
+<div class="card">
+<h3 class="card-title">包含的头文件</h3>
+
+<table>
+<thead><tr><th>头文件</th></tr></thead>
+<tbody>
+<tr><td>`&lt;Core/Assembly.h&gt;`</td></tr>
+<tr><td>`&lt;Core/Interface.h&gt;`</td></tr>
+<tr><td>`&lt;Core/Query.h&gt;`</td></tr>
+<tr><td>`&lt;Engine/Frame.h&gt;`</td></tr>
+<tr><td>`&lt;Engine/FrameBuilder.h&gt;`</td></tr>
+<tr><td>`&lt;algorithm&gt;`</td></tr>
+<tr><td>`&lt;atomic&gt;`</td></tr>
+<tr><td>`&lt;map&gt;`</td></tr>
+<tr><td>`&lt;memory&gt;`</td></tr>
+<tr><td>`&lt;optional&gt;`</td></tr>
+<tr><td>`&lt;queue&gt;`</td></tr>
+<tr><td>`&lt;set&gt;`</td></tr>
+<tr><td>`&lt;string&gt;`</td></tr>
+<tr><td>`&lt;string_view&gt;`</td></tr>
+<tr><td>`&lt;vector&gt;`</td></tr>
+</tbody></table>
+</div>
 <div class="ent e-macro" id="Public__Engine__Engine_h-0">
 <h3><span class="type">宏</span> MAHO_DECLARE_ENGINE <span class="base">: <span class="kw">public</span>: \ <span class="kw">static</span> Maho::FEngineBase* CreateEngine() \ { \ <span class="kw">return</span> <span class="kw">new</span> EngineType(); \ } \ <span class="kw">static</span> std::string GetModulePath() \ { \ <span class="kw">return</span> Maho::ApplyModuleExtension(#EngineType); \ } \ <span class="kw">static</span> <span class="kw">constexpr</span> std::string_view StaticName() \ { \ <span class="kw">return</span> #EngineType; \ } \ std::string_view GetName() <span class="kw">const</span> \ { \ <span class="kw">return</span> StaticName(); \ }</span></h3>
 </div>
@@ -598,6 +756,28 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div class="pane" id="pane-Public__Engine__Frame_h">
 <div class="hdr">Public/Engine/Frame.h</div>
 <h2 class="file-title">Frame.h</h2>
+<div class="card">
+<h3 class="card-title">包含的头文件</h3>
+
+<table>
+<thead><tr><th>头文件</th></tr></thead>
+<tbody>
+<tr><td>`&lt;Core/Assembly.h&gt;`</td></tr>
+<tr><td>`&lt;Core/MetaData.h&gt;`</td></tr>
+<tr><td>`&lt;Core/FrameGraph.h&gt;`</td></tr>
+<tr><td>`&lt;Core/Interface.h&gt;`</td></tr>
+<tr><td>`&lt;Core/Query.h&gt;`</td></tr>
+<tr><td>`&lt;Engine/ResourceName.h&gt;`</td></tr>
+<tr><td>`&lt;Engine/StageMetadata.h&gt;`</td></tr>
+<tr><td>`&lt;Core/TypeList.h&gt;`</td></tr>
+<tr><td>`&lt;cstdint&gt;`</td></tr>
+<tr><td>`&lt;functional&gt;`</td></tr>
+<tr><td>`&lt;string&gt;`</td></tr>
+<tr><td>`&lt;string_view&gt;`</td></tr>
+<tr><td>`&lt;type_traits&gt;`</td></tr>
+<tr><td>`&lt;typeindex&gt;`</td></tr>
+</tbody></table>
+</div>
 <div class="ent e-functions" id="Public__Engine__Frame_h-0">
 <h3><span class="type">自由函数</span> </h3>
 <div class="sect">
@@ -745,6 +925,34 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div class="pane" id="pane-Public__Engine__FrameBuilder_h">
 <div class="hdr">Public/Engine/FrameBuilder.h</div>
 <h2 class="file-title">FrameBuilder.h</h2>
+<div class="card">
+<h3 class="card-title">包含的头文件</h3>
+
+<table>
+<thead><tr><th>头文件</th></tr></thead>
+<tbody>
+<tr><td>`&lt;Core/Assembly.h&gt;`</td></tr>
+<tr><td>`&lt;Core/Delegate.h&gt;`</td></tr>
+<tr><td>`&lt;Core/Fatal.h&gt;`</td></tr>
+<tr><td>`&lt;Core/MetaData.h&gt;`</td></tr>
+<tr><td>`&lt;Core/FrameGraph.h&gt;`</td></tr>
+<tr><td>`&lt;Engine/Frame.h&gt;`</td></tr>
+<tr><td>`&lt;Core/Assembly.h&gt;`</td></tr>
+<tr><td>`&lt;Core/Query.h&gt;`</td></tr>
+<tr><td>`&lt;algorithm&gt;`</td></tr>
+<tr><td>`&lt;atomic&gt;`</td></tr>
+<tr><td>`&lt;cstdint&gt;`</td></tr>
+<tr><td>`&lt;map&gt;`</td></tr>
+<tr><td>`&lt;memory&gt;`</td></tr>
+<tr><td>`&lt;queue&gt;`</td></tr>
+<tr><td>`&lt;set&gt;`</td></tr>
+<tr><td>`&lt;string&gt;`</td></tr>
+<tr><td>`&lt;string_view&gt;`</td></tr>
+<tr><td>`&lt;unordered_map&gt;`</td></tr>
+<tr><td>`&lt;utility&gt;`</td></tr>
+<tr><td>`&lt;vector&gt;`</td></tr>
+</tbody></table>
+</div>
 <div class="ent e-functions" id="Public__Engine__FrameBuilder_h-0">
 <h3><span class="type">自由函数</span> </h3>
 <div class="sect">
@@ -767,6 +975,16 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div class="pane" id="pane-Public__Engine__ResourceName_h">
 <div class="hdr">Public/Engine/ResourceName.h</div>
 <h2 class="file-title">ResourceName.h</h2>
+<div class="card">
+<h3 class="card-title">包含的头文件</h3>
+
+<table>
+<thead><tr><th>头文件</th></tr></thead>
+<tbody>
+<tr><td>`&lt;Core/Export.h&gt;`</td></tr>
+<tr><td>`&lt;string_view&gt;`</td></tr>
+</tbody></table>
+</div>
 <div class="ent e-functions" id="Public__Engine__ResourceName_h-0">
 <h3><span class="type">自由函数</span> </h3>
 <div class="sect">
@@ -823,6 +1041,15 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div class="pane" id="pane-Public__Engine__StageAccess_h">
 <div class="hdr">Public/Engine/StageAccess.h</div>
 <h2 class="file-title">StageAccess.h</h2>
+<div class="card">
+<h3 class="card-title">包含的头文件</h3>
+
+<table>
+<thead><tr><th>头文件</th></tr></thead>
+<tbody>
+<tr><td>`&lt;Engine/StageMetadata.h&gt;`</td></tr>
+</tbody></table>
+</div>
 <div class="ent e-macro" id="Public__Engine__StageAccess_h-0">
 <h3><span class="type">宏</span> Create <span class="base">: MAHO_ACCESS_CREATE(R)</span></h3>
 </div>
@@ -839,6 +1066,21 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div class="pane" id="pane-Public__Engine__StageMetadata_h">
 <div class="hdr">Public/Engine/StageMetadata.h</div>
 <h2 class="file-title">StageMetadata.h</h2>
+<div class="card">
+<h3 class="card-title">包含的头文件</h3>
+
+<table>
+<thead><tr><th>头文件</th></tr></thead>
+<tbody>
+<tr><td>`&lt;Core/Export.h&gt;`</td></tr>
+<tr><td>`&lt;Engine/ResourceName.h&gt;`</td></tr>
+<tr><td>`&lt;cstddef&gt;`</td></tr>
+<tr><td>`&lt;cstdint&gt;`</td></tr>
+<tr><td>`&lt;initializer_list&gt;`</td></tr>
+<tr><td>`&lt;string_view&gt;`</td></tr>
+<tr><td>`&lt;type_traits&gt;`</td></tr>
+</tbody></table>
+</div>
 <div class="ent e-enum" id="Public__Engine__StageMetadata_h-0">
 <h3><span class="type">枚举</span> EResourceAccess</h3>
 </div>
@@ -965,6 +1207,18 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div class="pane" id="pane-Public__EntryPoint_h">
 <div class="hdr">Public/EntryPoint.h</div>
 <h2 class="file-title">EntryPoint.h</h2>
+<div class="card">
+<h3 class="card-title">包含的头文件</h3>
+
+<table>
+<thead><tr><th>头文件</th></tr></thead>
+<tbody>
+<tr><td>`&lt;Core/Assembly.h&gt;`</td></tr>
+<tr><td>`&lt;Core/Fatal.h&gt;`</td></tr>
+<tr><td>`&lt;Engine/Engine.h&gt;`</td></tr>
+<tr><td>`&lt;exception&gt;`</td></tr>
+</tbody></table>
+</div>
 <div class="ent e-functions" id="Public__EntryPoint_h-0">
 <h3><span class="type">自由函数</span> </h3>
 <div class="sect">
@@ -977,6 +1231,16 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div class="pane" id="pane-Public__EntryPointAndroid_h">
 <div class="hdr">Public/EntryPointAndroid.h</div>
 <h2 class="file-title">EntryPointAndroid.h</h2>
+<div class="card">
+<h3 class="card-title">包含的头文件</h3>
+
+<table>
+<thead><tr><th>头文件</th></tr></thead>
+<tbody>
+<tr><td>`&lt;EntryPoint.h&gt;`</td></tr>
+<tr><td>`&lt;android_native_app_glue.h&gt;`</td></tr>
+</tbody></table>
+</div>
 <div class="ent e-functions" id="Public__EntryPointAndroid_h-0">
 <h3><span class="type">自由函数</span> </h3>
 <div class="sect">
@@ -989,6 +1253,15 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div class="pane" id="pane-Public__EntryPointIOS_h">
 <div class="hdr">Public/EntryPointIOS.h</div>
 <h2 class="file-title">EntryPointIOS.h</h2>
+<div class="card">
+<h3 class="card-title">包含的头文件</h3>
+
+<table>
+<thead><tr><th>头文件</th></tr></thead>
+<tbody>
+<tr><td>`&lt;EntryPoint.h&gt;`</td></tr>
+</tbody></table>
+</div>
 <div class="ent e-functions" id="Public__EntryPointIOS_h-0">
 <h3><span class="type">自由函数</span> </h3>
 <div class="sect">
@@ -1001,6 +1274,15 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div class="pane" id="pane-Public__EntryPointLinux_h">
 <div class="hdr">Public/EntryPointLinux.h</div>
 <h2 class="file-title">EntryPointLinux.h</h2>
+<div class="card">
+<h3 class="card-title">包含的头文件</h3>
+
+<table>
+<thead><tr><th>头文件</th></tr></thead>
+<tbody>
+<tr><td>`&lt;EntryPoint.h&gt;`</td></tr>
+</tbody></table>
+</div>
 <div class="ent e-functions" id="Public__EntryPointLinux_h-0">
 <h3><span class="type">自由函数</span> </h3>
 <div class="sect">
@@ -1013,6 +1295,16 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div class="pane" id="pane-Public__EntryPointWindows_h">
 <div class="hdr">Public/EntryPointWindows.h</div>
 <h2 class="file-title">EntryPointWindows.h</h2>
+<div class="card">
+<h3 class="card-title">包含的头文件</h3>
+
+<table>
+<thead><tr><th>头文件</th></tr></thead>
+<tbody>
+<tr><td>`&lt;EntryPoint.h&gt;`</td></tr>
+<tr><td>`&lt;Windows.h&gt;`</td></tr>
+</tbody></table>
+</div>
 <div class="ent e-functions" id="Public__EntryPointWindows_h-0">
 <h3><span class="type">自由函数</span> </h3>
 <div class="sect">
@@ -1026,6 +1318,15 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div class="pane" id="pane-Public__EntryPointXbox_h">
 <div class="hdr">Public/EntryPointXbox.h</div>
 <h2 class="file-title">EntryPointXbox.h</h2>
+<div class="card">
+<h3 class="card-title">包含的头文件</h3>
+
+<table>
+<thead><tr><th>头文件</th></tr></thead>
+<tbody>
+<tr><td>`&lt;EntryPoint.h&gt;`</td></tr>
+</tbody></table>
+</div>
 <div class="ent e-functions" id="Public__EntryPointXbox_h-0">
 <h3><span class="type">自由函数</span> </h3>
 <div class="sect">
@@ -1038,7 +1339,24 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div class="pane" id="pane-Public__Maho_h">
 <div class="hdr">Public/Maho.h</div>
 <h2 class="file-title">Maho.h</h2>
-<div class="empty">（这个头还没有声明内容）</div>
+<div class="card">
+<h3 class="card-title">包含的头文件</h3>
+
+<table>
+<thead><tr><th>头文件</th></tr></thead>
+<tbody>
+<tr><td>`&lt;Core/TypeList.h&gt;`</td></tr>
+<tr><td>`&lt;Core/Delegate.h&gt;`</td></tr>
+<tr><td>`&lt;Core/Singleton.h&gt;`</td></tr>
+<tr><td>`&lt;Core/Interface.h&gt;`</td></tr>
+<tr><td>`&lt;Core/FrameGraph.h&gt;`</td></tr>
+<tr><td>`&lt;Core/ThreadPool.h&gt;`</td></tr>
+<tr><td>`&lt;Core/ThreadedServer.h&gt;`</td></tr>
+<tr><td>`&lt;Core/Assembly.h&gt;`</td></tr>
+<tr><td>`&lt;Core/Fatal.h&gt;`</td></tr>
+<tr><td>`&lt;Engine/Engine.h&gt;`</td></tr>
+</tbody></table>
+</div>
 </div></div>
 </div>
 <script>

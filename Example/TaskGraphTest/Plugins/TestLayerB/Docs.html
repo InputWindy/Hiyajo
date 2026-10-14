@@ -79,7 +79,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div id="app">
   <div id="side">
     <h1>Maho 引擎源码</h1>
-    <div class="search" title="左侧扫描 Source/**/*.h：2 个头文件 · 已声明 0 个 · 0 个实体 / 0 个成员 ｜ 内容在 Tools/docs_content.py 里逐条声明">
+    <div class="search" title="左侧扫描 Example\TaskGraphTest\Plugins\TestLayerB/**/*.h：2 个头文件 · 已声明 2 个 · 1 个实体 / 5 个成员 ｜ 内容来自头文件里的 `///` 注释（`Tools/docs_scan.py`）">
       <input id="q" type="search" placeholder="搜索头文件…  （如 Frame、Core、Entry）" autocomplete="off">
     </div>
     <div id="tree"><ul>
@@ -91,15 +91,61 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </li>
 </ul></div>
   </div>
-  <div id="main"><div class="pane" id="pane-Public__TestLayerB_h">
+  <div id="main"><div class="card">
+<h3 class="card-title">TestLayerB.cplugin —— 插件声明</h3>
+
+<table>
+<thead><tr><th>字段</th><th>值</th></tr></thead>
+<tbody>
+<tr><td>Name</td><td>TestLayerB</td></tr>
+<tr><td>Description</td><td>test layer <span class="kw">for</span> the TaskGraph sandbox</td></tr>
+<tr><td>Dependencies</td><td>TaskGraphTest</td></tr>
+</tbody></table>
+</div><div class="pane" id="pane-Public__TestLayerB_h">
 <div class="hdr">Public/TestLayerB.h</div>
 <h2 class="file-title">TestLayerB.h</h2>
-<div class="empty">（尚未声明内容 —— 在 Tools/docs_content.py 里加一条 Header(&quot;Public/TestLayerB.h&quot;)，再逐类声明 Class / Interface / Field）</div>
+<div class="card">
+<h3 class="card-title">包含的头文件</h3>
+
+<table>
+<thead><tr><th>头文件</th></tr></thead>
+<tbody>
+<tr><td>`<span class="st">"TestLayerBApi.h"</span>`</td></tr>
+<tr><td>`&lt;Engine/Engine.h&gt;`</td></tr>
+<tr><td>`&lt;Engine/Frame.h&gt;`</td></tr>
+<tr><td>`&lt;Maho.h&gt;`</td></tr>
+<tr><td>`&lt;cstdint&gt;`</td></tr>
+</tbody></table>
+</div>
+<div class="ent e-class" id="Public__TestLayerB_h-0">
+<h3><span class="type">类</span> FTestLayerB <span class="base">: : <span class="kw">public</span> FFrameExtension, <span class="kw">public</span> IPipeline&lt;IInit, ITick, IShutdown&gt;</span></h3>
+<div class="sect">
+<h4>字段</h4>
+<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-private">private</span></td><td>MAHO_DECLARE_FRAME(FTestLayerB);</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>std::uint64_t TickCount = 0;</td><td></td></tr>
+</tbody></table></div>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Initialize(FEngineBase&amp;, FEngineContext&amp;) <span class="kw">override</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Tick(FEngineBase&amp;, FEngineContext&amp;) <span class="kw">override</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Shutdown(FEngineBase&amp;, FEngineContext&amp;) <span class="kw">override</span>;</td><td></td></tr>
+</tbody></table></div>
+</div>
 </div>
 <div class="pane" id="pane-Public__TestLayerBApi_h">
 <div class="hdr">Public/TestLayerBApi.h</div>
 <h2 class="file-title">TestLayerBApi.h</h2>
-<div class="empty">（尚未声明内容 —— 在 Tools/docs_content.py 里加一条 Header(&quot;Public/TestLayerBApi.h&quot;)，再逐类声明 Class / Interface / Field）</div>
+<div class="card">
+<h3 class="card-title">包含的头文件</h3>
+
+<table>
+<thead><tr><th>头文件</th></tr></thead>
+<tbody>
+<tr><td>`&lt;Core/Export.h&gt;`</td></tr>
+</tbody></table>
+</div>
 </div></div>
 </div>
 <script>
