@@ -1534,29 +1534,13 @@ def create_plugin(
 		"Intermediate/\nBinaries/\nSaved/\nPackaged/\n", encoding="utf-8", newline="\n",
 	)
 
-	# (无 AGENTS.md：插件的文档统一收敛到 <plugin>/Docs.html —— 由 Tools/plugin_docs.py
-	#  扫描该插件的头文件结构生成，内容在 <plugin>/Docs.py 里逐条声明。agent 的通用约束
-	#  只有根 AGENTS.md 一份，不再每个插件复制一份（副本必然与代码漂移）。)
+	# (无 AGENTS.md：插件的文档统一收敛到 <plugin>/Docs.html —— 由 Tools/plugin_docs.py 扫描该插件的
+	#  头文件、从 `///` 注释的 `@` 语义标签（`@file` / `@brief` / `@param` …）生成。
+	#  agent 的通用约束只有根 AGENTS.md 一份，不再每个插件复制一份 —— 副本必然与代码漂移。)
 
-	# Docs —— 单一入口 <plugin>/Docs.html：
-	#   <plugin>/Docs.py 是**内容源**（用 Tools/docs_builder.py 的原子接口逐条声明，不扫描源码），
-	#   Tools/plugin_docs.py 扫描本插件的头文件结构并渲染 <plugin>/Docs.html。
-	#   不再生成 <Name>.md / API.md：文档只有一个入口，且内容由人声明而不是猜注释。
-	(dst / "Docs.py").write_text(
-		f"# {plugin_name} —— 文档内容（由 Tools/plugin_docs.py 执行；D 已注入，无需 import）\n"
-		f"#\n"
-		f"# 渲染：Tools\\maho_python.bat Tools\\plugin_docs.py --filter {plugin_name}\n"
-		f"# 原子接口：D.Header / D.Class / D.Struct / D.Enum / D.Macro / D.Alias /\n"
-		f"#           D.Interface / D.Field / D.Nested / D.SetAccess / D.Card / D.Table / D.Row\n"
-		f"# 范式参考 Source/Docs.html 里 Public/Core/FrameBuilder.h 那一页。\n\n"
-		f'D.Header("Public/{plugin_name}.h", Title="{plugin_name}.h",\n'
-		f'         Desc="TODO：这个头是什么、为什么这样设计。")\n\n'
-		f'# D.Class("F{plugin_name}", Base="FFrameExtension + IPipeline<...>", Desc="…")\n'
-		f'# D.SetAccess("public")\n'
-		f'# D.Interface("void Initialize(FEngineBase&) override", "…")\n'
-		f'# D.Field("…", "…")\n',
-		encoding="utf-8", newline="\n",
-	)
+	# Docs —— 单一入口 <plugin>/Docs.html，**内容就是头文件里的注释**（`@file` / `@brief` …）：
+	#   不生成 <plugin>/Docs.py（手写内容源已废除），也不生成 <Name>.md / API.md。
+	#   渲染：Tools\maho_python.bat Tools\plugin_docs.py --filter {plugin_name}
 
 	# Public (declaration) + Private (impl) — UE-style, no intermediate Source/.
 	public = dst / "Public"

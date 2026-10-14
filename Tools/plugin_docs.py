@@ -5,7 +5,7 @@ plugin_docs.py —— 为每个插件生成 `<plugin>/Docs.html`（与 `.cplugin
 
 **与 Source/Docs.html 同一套来源**：直接调用 `Tools/docs_scan.py --root <plugin>` —— 扫描该插件的
 头文件、从 `///` 注释（`@file` / `@brief` / `@param` / `@return` / `@tparam`）提取实体与成员。
-所以插件文档也是"改注释 = 改文档"，不再需要每个插件一份手写的 `Docs.py`（已退役）。
+所以插件文档也是"改注释 = 改文档"，不再需要每个插件一份手写的 `Docs.py`（**已删除**）。
 
 用法：
   Tools\\maho_python.bat Tools\\plugin_docs.py                # Plugins/ 下所有 .cplugin
