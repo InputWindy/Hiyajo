@@ -79,7 +79,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div id="app">
   <div id="side">
     <h1>Maho 引擎源码</h1>
-    <div class="search" title="左侧扫描 Plugins\GameEngine\RenderCore\Render/**/*.h：8 个头文件 · 已声明 8 个 · 21 个实体 / 247 个成员 ｜ 内容来自头文件里的 `///` 注释（`Tools/docs_scan.py`）">
+    <div class="search" title="左侧扫描 Plugins\GameEngine\RenderCore\Render/**/*.h：8 个头文件 · 已声明 8 个 · 27 个实体 / 273 个成员 ｜ 内容来自头文件里的 `///` 注释（`Tools/docs_scan.py`）">
       <input id="q" type="search" placeholder="搜索头文件…  （如 Frame、Core、Entry）" autocomplete="off">
     </div>
     <div id="tree"><ul>
@@ -506,6 +506,9 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Tick(FEngineBase&amp; Engine, FEngineContext&amp; Frame) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> EndFrame(FEngineBase&amp; Engine, FEngineContext&amp; Frame) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> RequestExit(FEngineBase&amp; Engine, FEngineContext&amp; Frame) <span class="kw">override</span>;</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> AddPass( ERHICommandListType PassType, FRHIGraphicsPipelineDesc PipelineDesc, <span class="kw">const</span> FRenderPassDesc&amp; Pass, std::function&lt;<span class="kw">void</span>(FRHICommandList&amp;)&gt; PassFn, std::vector&lt;FRHIDescriptorSet*&gt;* OutDefaultSets = <span class="kw">nullptr</span>);</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>FShaderCompilerServer* GetShaderCompiler() <span class="kw">const</span>;</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>[[nodiscard]] <span class="kw">void</span>* AllocParameterBytes(std::size_t Size, std::size_t Align);</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> BeginResourcePool();</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> WaitShaderCompiles();</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>[[nodiscard]] FRHIPipelineLayout* GetOrCreatePipelineLayout(<span class="kw">const</span> FRHIPipelineLayoutDesc&amp; Desc);</td><td></td></tr>
@@ -688,6 +691,71 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td>`&lt;cstdint&gt;`</td></tr>
 <tr><td>`&lt;vector&gt;`</td></tr>
 </tbody></table>
+</div>
+<div class="ent e-functions" id="Public__ShaderParameterStruct_h-0">
+<h3><span class="type">自由函数</span> </h3>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">constexpr</span> std::uint32_t SHADER_PARAMETER_STRUCT_ALIGNMENT = 16;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">constexpr</span> std::uint32_t SHADER_PARAMETER_ARRAY_ELEMENT_ALIGNMENT = 16;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">constexpr</span> std::uint32_t SHADER_PARAMETER_POINTER_ALIGNMENT = <span class="kw">sizeof</span>(std::uint64_t);</td><td></td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-enum" id="Public__ShaderParameterStruct_h-1">
+<h3><span class="type">枚举</span> EShaderParameterType</h3>
+</div>
+<div class="ent e-struct" id="Public__ShaderParameterStruct_h-2">
+<h3><span class="type">结构体</span> FShaderParameterMember</h3>
+<div class="sect">
+<h4>字段</h4>
+<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">const</span> <span class="kw">char</span>* Name = <span class="kw">nullptr</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">const</span> <span class="kw">char</span>* ShaderType = <span class="kw">nullptr</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>std::uint32_t Offset = 0;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>std::uint32_t Size = 0;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>EShaderParameterType Type = EShaderParameterType::Invalid;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>ERHIDescriptorType DescriptorType = ERHIDescriptorType::Sampler;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>std::uint32_t Set = 0;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>std::uint32_t Binding = 0;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>ERHIShaderStage Stages = ERHIShaderStage::None;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">bool</span> bIsResource = <span class="kw">false</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>std::uint32_t SamplerOffset = 0;</td><td></td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-struct" id="Public__ShaderParameterStruct_h-3">
+<h3><span class="type">结构体</span> FShaderParameterStructMetadata</h3>
+<div class="sect">
+<h4>字段</h4>
+<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">const</span> <span class="kw">char</span>* StructTypeName = <span class="kw">nullptr</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>std::uint32_t Size = 0;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>std::vector&lt;FShaderParameterMember&gt; Members;</td><td></td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-struct" id="Public__ShaderParameterStruct_h-4">
+<h3><span class="type">结构体</span> TScalarResourceTypeInfo</h3>
+<div class="sect">
+<h4>字段</h4>
+<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">static</span> <span class="kw">constexpr</span> <span class="kw">bool</span> bIsStoredInConstantBuffer = <span class="kw">false</span>;</td><td></td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-struct" id="Public__ShaderParameterStruct_h-5">
+<h3><span class="type">结构体</span> FShaderParameterBuildResult</h3>
+<div class="sect">
+<h4>字段</h4>
+<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td>FPassParameter Layout;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>std::vector&lt;std::byte&gt; PushConstantData;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>ERHIShaderStage PushConstantStages = ERHIShaderStage::None;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">bool</span> bHasPushConstant = <span class="kw">false</span>;</td><td></td></tr>
+</tbody></table></div>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">template</span> &lt;<span class="kw">typename</span> TParameters&gt; FShaderParameterBuildResult ShaderParameterBuild(<span class="kw">const</span> TParameters&amp; Parameters);</td><td></td></tr>
+</tbody></table></div>
 </div>
 </div></div>
 </div>

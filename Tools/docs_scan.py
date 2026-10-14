@@ -52,6 +52,9 @@ MARKER_TOKENS = (
 	rb"\bMAHO_EXPORT\b",
 	rb"\bMAHO_IMPORT\b",
 	rb"\bMAHO_NODISCARD\b",
+	# 调用约定标记：它们夹在返回类型与函数名之间（`int WINAPI WinMain(...)`），展开成 `__stdcall`；
+	# 留着就是"三个标识符连排"，解析器只能报 ERROR。
+	rb"\b(WINAPI|APIENTRY|CALLBACK|WINBASEAPI)\b",
 )
 
 # 函数式宏调用：全大写标识符紧跟左括号。**宏标记一律当空气** —— Maho 与 UE 的宏都无法展开，而且这些
@@ -69,20 +72,139 @@ TAG_RE = re.compile(r"@(brief|file|param|return|returns|tparam|note|warning|see)
 # ── 解析 → 快照 ─────────────────────────────────────────────────────────────────
 
 
+def DefineRanges(Source: bytes) -> list[tuple[int, int, bool]]:
+	"""`#define` 指令覆盖的字节区间（含反斜杠续行），以及它是否**多行**。
+
+	两种处理，理由是两条不同的实测：
+	* **单行定义**：`#define MAHO_LOG_API MAHO_EXPORT` 里也有"标记"（`MAHO_EXPORT`），所以它同样要
+	  躲开剥离器 —— 但定义本身留着，它是一条可展示的宏。
+	* **多行定义**：宏体跨行（`MAHO_DECLARE_FRAME_UNDER` 的 `public:` / `{ return #FrameType; }`、
+	  `MAHO_QUERY_CASTER` 的模板体）语法树吃不下，会在宏体里报 ERROR。宏标记按既定口径当空气，
+	  宏体也**不是 API**（没人照它写代码，只是它的展开），所以整段抹成空格。
+
+	`#define NAME(...)` 与一次宏调用在文本上长得一样 —— 不先区分，剥离器会把名字和参数表掏空，
+	宏体就成了悬空代码（实测：`Export.h` / `Fatal.h` 两处 ERROR 全是这个原因）。"""
+	Ranges: list[tuple[int, int, bool]] = []
+	Pos = 0
+	while Pos < len(Source):
+		End = Source.find(b"\n", Pos)
+		End = len(Source) if End < 0 else End
+		Line = Source[Pos:End].lstrip()
+		if Line.startswith(b"#") and Line[1:].lstrip().startswith(b"define"):
+			Start = Pos
+			bMulti = False
+			while Source[Start:End].rstrip().endswith(b"\\") and End < len(Source):
+				bMulti = True
+				Pos = End + 1
+				End = Source.find(b"\n", Pos)
+				End = len(Source) if End < 0 else End
+			Ranges.append((Start, End, bMulti))
+		Pos = End + 1
+	return Ranges
+
+
+def ScanComments(Source: bytes) -> list[tuple[int, int]]:
+	"""注释覆盖的字节区间（`//` 到行尾、`/* … */`）。
+
+	**注释永不改动**，两个原因：① 抹空一个跨行的宏体时，宏体里的 `/*` 若被抹掉、而它的 `*/` 在外，
+	注释就破了（实测 `/*` 51→41 / `*/` 51→42，随后的整段代码都读不到）；② 注释里的标记词
+	（`MAHO_API`、`WINAPI`）被抹掉会**悄悄改掉文档文字**。"""
+	Ranges: list[tuple[int, int]] = []
+	Pos = 0
+	while Pos < len(Source):
+		Byte = Source[Pos]
+		if Byte in (0x22, 0x27):                       # 字面量里的 // 与 /* 不算注释
+			Quote = Byte
+			Pos += 1
+			while Pos < len(Source) and Source[Pos] != Quote:
+				Pos += 2 if Source[Pos] == 0x5C else 1
+		elif Byte == 0x2F and Pos + 1 < len(Source) and Source[Pos + 1] == 0x2F:
+			Found = Source.find(b"\n", Pos)
+			End = len(Source) if Found < 0 else Found
+			Ranges.append((Pos, End))
+			Pos = End
+		elif Byte == 0x2F and Pos + 1 < len(Source) and Source[Pos + 1] == 0x2A:
+			Found = Source.find(b"*/", Pos + 2)
+			End = len(Source) if Found < 0 else Found + 2
+			Ranges.append((Pos, End))
+			Pos = End
+		Pos += 1
+	return Ranges
+
+
+class FSpans:
+	"""一组字节区间：合并 + 二分，用来回答"这一段能不能被抹"。"""
+
+	def __init__(self, Ranges: list[tuple[int, int]]) -> None:
+		Merged: list[tuple[int, int]] = []
+		for Start, End in sorted(Ranges):
+			if Merged and Start <= Merged[-1][1]:
+				Merged[-1] = (Merged[-1][0], max(Merged[-1][1], End))
+			else:
+				Merged.append((Start, End))
+		self.Merged = Merged
+		self.Starts = [Start for Start, _ in Merged]
+
+	def Covers(self, Start: int, End: int) -> bool:
+		Index = bisect.bisect_right(self.Starts, Start) - 1
+		if Index >= 0 and self.Merged[Index][1] > Start:
+			return True
+		Index += 1
+		return Index < len(self.Merged) and self.Merged[Index][0] < End
+
+	def Gap(self, Start: int, End: int) -> list[tuple[int, int]]:
+		"""区间里**不在**保护区内的那几段（按序）。"""
+		Out: list[tuple[int, int]] = []
+		Pos = Start
+		for RStart, REnd in self.Merged:
+			if RStart >= End:
+				break
+			if REnd <= Pos:
+				continue
+			if RStart > Pos:
+				Out.append((Pos, min(RStart, End)))
+			Pos = max(Pos, REnd)
+		if Pos < End:
+			Out.append((Pos, End))
+		return Out
+
+
+def Blank(Buffer: bytearray, Start: int, End: int, Spans: FSpans) -> None:
+	"""抹成空格：**不动换行、不动保护区**（行号与注释都保持原样）。"""
+	for GapStart, GapEnd in Spans.Gap(Start, End):
+		for Index in range(GapStart, GapEnd):
+			if Buffer[Index] not in (0x0A, 0x0D):
+				Buffer[Index] = 0x20
+
 def StripMacroMarkers(Source: bytes) -> bytes:
 	"""把宏标记当空气：全大写的函数式宏调用**整体**（含配平括号）换成等长空格。
 
-	只替换成空格（不删除）是刻意的：行列号与源码一致，`--check` 报的行号可以直接跳回原文件。
-	配平时字符串/字符字面量与 `//` `/* */` 注释里的括号不参与计数 —— 否则
-	`DECLARE_*(X, AActor* /*Tracker*/)` 这种参数会把它带偏。
+	三条不变量（都是实测换来的）：
+	* **行列号不变**：抹成空格（而不是删除），且**换行永远不动** —— 否则后面所有行号整体位移，
+	  `--check` 报的行号就跳不回原文件了。
+	* **注释永不改动**：注释里的标记词（`MAHO_API` / `WINAPI`）被抹掉会悄悄改掉文档文字；而抹空一个
+	  跨行宏体时，宏体里的 `/*` 若被抹、它的 `*/` 在外，注释当场破掉（实测 `/*` 51→41 / `*/` 51→42）。
+	* **`#define` 不是调用**：`#define NAME(...)` 与一次宏调用文本同形，单行的躲开剥离（它是一条可展示
+	  的宏），多行的整段当空气（宏体不是 API，且其内部的 `public:` / `#FrameType` 语法树吃不下）。
 	"""
+	Defines = DefineRanges(Source)
+	Comments = FSpans(ScanComments(Source))
+	Protected = FSpans([(Start, End) for Start, End, _ in Defines]
+	                   + [(Start, End) for Start, End in Comments.Merged])
+
 	Out = bytearray(Source)
-	for Pattern in MARKER_TOKENS:                    # 不带括号的标记：直接换空格
+	# 抹空多行宏体：只避开**注释** —— 不能把"这个定义自己"也算保护区，否则它永远抹不掉。
+	for Start, End, bMulti in Defines:
+		if bMulti:
+			Blank(Out, Start, End, Comments)
+
+	for Pattern in MARKER_TOKENS:                   # 不带括号的标记：直接换空格
 		Compiled = re.compile(Pattern)
 		Match = Compiled.search(Out)
 		while Match is not None:
-			Out[Match.start():Match.end()] = b" " * (Match.end() - Match.start())
-			Match = Compiled.search(Out, Match.start())   # 注意：第二参是 pos，不是 flags
+			if not Protected.Covers(Match.start(), Match.end()):
+				Blank(Out, Match.start(), Match.end(), Protected)
+			Match = Compiled.search(Out, Match.end())     # 注意：第二参是 pos，不是 flags
 
 	Index = 0
 	while True:
@@ -115,7 +237,8 @@ def StripMacroMarkers(Source: bytes) -> bytes:
 			Pos += 1
 		if End is None:
 			return bytes(Out)                        # 括号没配平：留给解析器去报错，不猜
-		Out[Match.start():End] = b" " * (End - Match.start())
+		if not Protected.Covers(Match.start(), End):
+			Blank(Out, Match.start(), End, Protected)
 		Index = End
 
 
@@ -187,10 +310,14 @@ def Snapshot(Tree, Source: bytes) -> FSnap:
 
 
 def IsError(Node: FSnap) -> bool:
-	return Node.Type == "ERROR" or Node.Type == "MISSING"
+	return Node.Type == "ERROR"
 
 
 def FirstError(Node: FSnap) -> int:
+	"""第一个真正的 `ERROR` 节点所在行（不是 `MISSING`）。
+
+	区分开是必要的：`MISSING` 是解析器自己补出来的占位（常见：缺一个分号就补一个），树照常可用；
+	而 `ERROR` 才是"这里有一段读不成声明"，后者之后的部分才是真的丢。"""
 	Stack = [Node]
 	while Stack:
 		Current = Stack.pop()
