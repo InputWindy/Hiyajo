@@ -196,6 +196,14 @@ public:
 	 *  graph would make `Submit`'s per-slot admission wait on the very node that is submitting). */
 	FFrameGraph& GetGraph() { return EnsureGraph(); }
 
+	/** THE HOST's pool -- the one thread set the whole engine runs on: every collector lane lives on
+	 *  it, and every resident role (`FThreadedServer`, i.e. a module that owns a thread for an OS
+	 *  handle) asks for a PERSISTENT lane of it: `Server.UseSharedPool(Engine.GetPool())` right before
+	 *  that role starts. Exposed here because the pool belongs to the HOST (the outermost builder owns
+	 *  it -- see `FFrameBuilder::OwnedPool`) and a frame only ever holds an `FEngineBase&`.
+	 *  Lifetime is safe by construction: Features (the frames) die before the builder's pool does. */
+	[[nodiscard]] FThreadPool& GetPool() { return FFrameBuilder<FEngineBase>::GetPool(); }
+
 	/** True when a flag/key is present (whether or not it carries a value). */
 	[[nodiscard]] bool Has(std::string_view Key) const;
 

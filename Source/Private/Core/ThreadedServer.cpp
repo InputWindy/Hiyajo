@@ -1,13 +1,9 @@
 #include <Core/ThreadedServer.h>
 
 #include <Core/Fatal.h>
+#include <Core/ThreadPool.h>
 
 #include <atomic>
-#include <condition_variable>
-#include <deque>
-#include <mutex>
-#include <stdexcept>
-#include <thread>
 #include <utility>
 
 namespace Maho
@@ -29,20 +25,13 @@ const char* FThreadedServer::GetThreadName() const
 
 struct FThreadedServer::FImpl
 {
-	struct FQueuedTask
-	{
-		std::function<void()> Task;
-	};
-
-	void RunLoop();
-
-	std::thread Worker;
-	std::thread::id WorkerId;
-	std::deque<FQueuedTask> Queue;
-	mutable std::mutex Mutex;
-	std::condition_variable CondVar;
-	std::atomic<bool> bRunning{false};
-	bool bStopping = false;
+	// OwnedPool is the fallback -- a server nobody handed a pool to (a test, a standalone tool) still
+	// runs its lane here. Only ONE lane of it is ever used, and a persistent lane needs no workers, so
+	// this costs a thread and nothing else.
+	FThreadPool       OwnedPool;
+	FThreadPool*      Pool = &OwnedPool;
+	FThreadPool::FLane Lane = FThreadPool::InvalidLane;
+	std::atomic<bool> bRunning{ false };
 };
 
 FThreadedServer::FThreadedServer()
@@ -55,6 +44,16 @@ FThreadedServer::~FThreadedServer()
 	Shutdown();
 }
 
+void FThreadedServer::UseSharedPool(FThreadPool& InPool)
+{
+	if (Impl->bRunning.load(std::memory_order_acquire))
+	{
+		ReportError("FThreadedServer::UseSharedPool after Initialize: the lane is already running");
+		return;
+	}
+	Impl->Pool = &InPool;
+}
+
 bool FThreadedServer::Initialize()
 {
 	if (Impl->bRunning.load(std::memory_order_acquire))
@@ -65,9 +64,15 @@ bool FThreadedServer::Initialize()
 	{
 		return false;
 	}
-	Impl->bStopping = false;
+
+	// A PERSISTENT lane: this role's work must run on one fixed thread (see the header).
+	Impl->Lane = Impl->Pool->CreatePersistentLane(GetThreadName());
+	if (Impl->Lane == FThreadPool::InvalidLane)
+	{
+		OnShutdown();
+		return false;
+	}
 	Impl->bRunning.store(true, std::memory_order_release);
-	Impl->Worker = std::thread(&FImpl::RunLoop, Impl.get());
 	return true;
 }
 
@@ -77,15 +82,10 @@ void FThreadedServer::Shutdown()
 	{
 		return;
 	}
-	{
-		std::lock_guard Lock(Impl->Mutex);
-		Impl->bStopping = true;
-	}
-	Impl->CondVar.notify_all();
-	if (Impl->Worker.joinable())
-	{
-		Impl->Worker.join();
-	}
+
+	Impl->Pool->Flush(Impl->Lane);                    // the lane drains before its thread leaves
+	Impl->Pool->DestroyPersistentLane(Impl->Lane);
+	Impl->Lane = FThreadPool::InvalidLane;
 	Impl->bRunning.store(false, std::memory_order_release);
 	OnShutdown();
 }
@@ -97,80 +97,33 @@ bool FThreadedServer::IsRunning() const
 
 void FThreadedServer::Submit(std::function<void()> Task)
 {
+	if (!Impl->bRunning.load(std::memory_order_acquire))
 	{
-		std::lock_guard Lock(Impl->Mutex);
-		Impl->Queue.push_back(FImpl::FQueuedTask{ std::move(Task) });
+		// Loud, not silent: a task queued at a role that is not running would simply never run, and
+		// "nothing happens" is the hardest kind of bug to find (it used to be accepted and dropped).
+		ReportError("FThreadedServer::Submit: the role is not running (before Initialize or after "
+			"Shutdown); the task was dropped");
+		return;
 	}
-	Impl->CondVar.notify_one();
+	Impl->Pool->Submit(Impl->Lane, std::move(Task));
 }
 
 void FThreadedServer::Flush()
 {
-	if (!IsRunning())
+	if (!Impl->bRunning.load(std::memory_order_acquire))
 	{
 		return;
 	}
-
-	std::mutex BarrierMutex;
-	std::condition_variable BarrierCv;
-	bool bDone = false;
-	Submit([&]
-	{
-		std::lock_guard Lock(BarrierMutex);
-		bDone = true;
-		BarrierCv.notify_all();
-	});
-	std::unique_lock Lock(BarrierMutex);
-	BarrierCv.wait(Lock, [&] { return bDone; });
-}
-
-void FThreadedServer::FImpl::RunLoop()
-{
-	{
-		std::lock_guard Lock(Mutex);
-		WorkerId = std::this_thread::get_id();
-	}
-
-	while (true)
-	{
-		FQueuedTask Queued;
-		{
-			std::unique_lock Lock(Mutex);
-
-			CondVar.wait(Lock, [this] { return bStopping || !Queue.empty(); });
-
-			if (bStopping && Queue.empty())
-			{
-				break;
-			}
-			Queued = std::move(Queue.front());
-			Queue.pop_front();
-		}
-
-		try
-		{
-			Queued.Task();
-		}
-		catch (const std::exception& E)
-		{
-			ReportError(E.what());
-		}
-		catch (...)
-		{
-			ReportError("Unknown exception in threaded server");
-		}
-	}
-
-	{
-		std::lock_guard Lock(Mutex);
-		WorkerId = std::thread::id{};
-	}
+	Impl->Pool->Flush(Impl->Lane);
 }
 
 bool FThreadedServer::IsServerThread() const
 {
-	std::lock_guard Lock(Impl->Mutex);
-	return Impl->WorkerId != std::thread::id{} && Impl->WorkerId == std::this_thread::get_id();
+	if (!Impl->bRunning.load(std::memory_order_acquire))
+	{
+		return false;
+	}
+	return Impl->Pool->IsCurrentThread(Impl->Lane);
 }
 
 }

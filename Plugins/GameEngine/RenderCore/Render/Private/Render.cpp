@@ -217,7 +217,7 @@ void FRender::PreInitialize(FEngineBase&, FEngineContext&)
 	InstallChildrenOf(GetName());
 }
 
-void FRender::Initialize(FEngineBase&, FEngineContext&)
+void FRender::Initialize(FEngineBase& Engine, FEngineContext&)
 {
 	MAHO_TRACE_STAGE(IInit, "Render init", "create the RHI, the pool, the compiler and the mirror");
 	GRender = this;
@@ -240,7 +240,7 @@ void FRender::Initialize(FEngineBase&, FEngineContext&)
 	{
 		RHI = std::make_unique<FRHI>();
 		if (!RHI->Initialize(P->GetNativeWindow(), P->GetWindowWidth(), P->GetWindowHeight(),
-			ERHIBackend::Vulkan, FramesInFlight))
+			Engine.GetPool(), ERHIBackend::Vulkan, FramesInFlight))
 		{
 			MAHO_LOG_CORE_ERROR("FRender::Initialize: RHI initialization failed");
 			RHI.reset();
@@ -353,9 +353,9 @@ void FRender::Initialize(FEngineBase&, FEngineContext&)
 	MAHO_LOG_CORE_INFO("FRender: pipeline depth K={} (graph phases == device frame slots == pool buckets; input ring = K + {})",
 		FrameSlots, Platform::kCrossSequenceWindowSlack);
 
-	// Async shader compiler (dedicated compile thread).
+	// Async shader compiler (a resident lane of the HOST's pool).
 	ShaderCompiler = std::make_unique<FShaderCompilerServer>();
-	ShaderCompiler->Initialize();
+	ShaderCompiler->Initialize(Engine.GetPool());
 
 	// The render graph lives INSIDE the collector (FFrameBuilder::Execute<FRenderStages>(Graph, Frame),
 	// driven with the canonical frame number): Flush at frame start, Execute at frame end (see

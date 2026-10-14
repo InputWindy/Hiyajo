@@ -133,8 +133,8 @@ FOnTransferDone FResourceSystem::MakeTransferDone(std::string AssetPath)
 void FResourceSystem::Initialize(FEngineBase& Engine, FEngineContext& Frame)
 {
 	MAHO_TRACE_STAGE(IInit, "Resource init", "start the async resource IO thread");
-	(void)Engine;
-	FThreadedServer::Initialize();   // start the async load thread
+	UseSharedPool(Engine.GetPool());        // 宿主那个池：IO 线程 = 它上面的一条持久 lane
+	FThreadedServer::Initialize();          // start the async load thread
 	GResourceSystem = this;
 }
 
@@ -147,7 +147,7 @@ void FResourceSystem::Shutdown(FEngineBase&, FEngineContext&)
 {
 	MAHO_TRACE_STAGE(IShutdown, "Resource shutdown", "join the IO thread and report leftovers");
 	GResourceSystem = nullptr;
-	FThreadedServer::Shutdown();   // stop + join the IO thread
+	FThreadedServer::Shutdown();   // drain + release the IO lane (its thread exits)
 	{
 		std::lock_guard Lock(Impl->Mutex);
 

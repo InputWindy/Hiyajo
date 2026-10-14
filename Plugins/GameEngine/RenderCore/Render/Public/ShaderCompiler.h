@@ -2,6 +2,7 @@
 
 #include "RenderApi.h"
 #include <Core/ThreadedServer.h>
+#include <Core/ThreadPool.h>
 #include <RHI/RHIEnums.h>
 
 #include <cstdint>
@@ -58,7 +59,7 @@ public:
 	~FShaderCompilerServer() override;
 
 	/** Start the compile thread (idempotent). Returns false when glslang is missing. */
-	bool Initialize();
+	bool Initialize(FThreadPool& Pool);
 
 	/** Submit an async compile; OnDone receives the result on the calling thread. */
 	void CompileAsync(

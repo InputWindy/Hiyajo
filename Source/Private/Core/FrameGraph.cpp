@@ -355,6 +355,9 @@ FFrameGraph::FImpl::FImpl(FFrameGraph& InOwner, FThreadPool& InPool, FThreadPool
 FFrameGraph::FFrameGraph(FThreadPool& InPool, FThreadPool::FLane InLane)
 	: Impl(std::make_unique<FImpl>(*this, InPool, InLane))
 {
+	// The scheduler thread is this role's own lane OF THE SAME POOL it dispatches into: the graph is
+	// both a user of the worker set (nodes) and a resident role (one coordinator thread).
+	UseSharedPool(InPool);
 }
 
 FFrameGraph::~FFrameGraph()

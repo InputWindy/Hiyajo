@@ -56,8 +56,8 @@ FRHI::FRHI() = default;
 
 FRHI::~FRHI() = default;
 
-bool FRHI::Initialize(void* NativeWindowHandle, int Width, int Height, ERHIBackend Backend,
-	std::int32_t FramesInFlight)
+bool FRHI::Initialize(void* NativeWindowHandle, int Width, int Height, FThreadPool& Pool,
+	ERHIBackend Backend, std::int32_t FramesInFlight)
 {
 	if (!NativeWindowHandle)
 	{
@@ -95,7 +95,9 @@ bool FRHI::Initialize(void* NativeWindowHandle, int Width, int Height, ERHIBacke
 		return false;
 	}
 
-	// Start the render server thread.
+	// Start the render server lane on the HOST's pool (one dedicated thread serves it; see AGENTS
+	// "Thread Affinity": the present/acquire state lives on this thread).
+	UseSharedPool(Pool);
 	FThreadedServer::Initialize();
 
 	MAHO_LOG_CORE_INFO("FRHI RHI ready ({}x{})", Width, Height);

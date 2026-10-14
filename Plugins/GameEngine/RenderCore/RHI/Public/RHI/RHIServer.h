@@ -3,6 +3,7 @@
 #include "RHIAPI.h"
 #include <Core/Singleton.h>
 #include <Core/ThreadedServer.h>
+#include <Core/ThreadPool.h>
 #include <Maho.h>
 #include <RHI/RHICommandList.h>
 #include <RHI/RHIEnums.h>
@@ -263,7 +264,7 @@ public:
 	 *  compile-time bound; `<= 0` means "not injected" and the backend takes the process-wide value.
 	 *  A non-zero value that disagrees with the graph's is REPORTED, and the graph's wins: it is the
 	 *  ring the frame numbers are actually distributed over. */
-	bool Initialize(void* NativeWindowHandle, int Width, int Height,
+	bool Initialize(void* NativeWindowHandle, int Width, int Height, FThreadPool& Pool,
 		ERHIBackend Backend = ERHIBackend::Vulkan, std::int32_t FramesInFlight = 0);
 
 	/** How many frame-state SLOTS the live device holds -- the K it was initialized with. One slot

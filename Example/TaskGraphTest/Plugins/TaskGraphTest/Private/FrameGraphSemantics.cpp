@@ -928,6 +928,40 @@ int RunFrameGraphSemanticsTest()
 		std::chrono::steady_clock::now() - WaitStart).count();
 	Check("T8  Wait() returned, so the graph drained", WaitMs < 5000);
 
+	// T17: a PERSISTENT lane is served by its OWN dedicated thread -- shared workers never take from
+	// it, and every task on it runs on that one thread (this is the property thread affinity needs).
+	{
+		const FThreadPool::FLane Pinned = Pool.CreatePersistentLane("T17Pinned");
+		Check("T17 a persistent lane was created", Pinned != FThreadPool::InvalidLane);
+
+		std::atomic<std::thread::id> PinnedTid{};
+		std::atomic<int> OnPinned{ 0 };
+		std::atomic<bool> bSameThread{ true };
+		for (int I = 0; I < 4; ++I)
+		{
+			Pool.Submit(Pinned, [&Pool, Pinned, &PinnedTid, &OnPinned, &bSameThread]()
+				{
+					const std::thread::id Mine = std::this_thread::get_id();
+					std::thread::id Expected = PinnedTid.load();
+					if (Expected == std::thread::id{})
+					{
+						PinnedTid.store(Mine);
+						Expected = Mine;
+					}
+					if (Expected != Mine) { bSameThread.store(false); }
+					if (!Pool.IsCurrentThread(Pinned)) { bSameThread.store(false); }
+					OnPinned.fetch_add(1);
+				});
+		}
+		Pool.Flush(Pinned);
+		Check("T17 all four tasks ran", OnPinned.load() == 4);
+		Check("T17 every task ran on ONE dedicated thread, and it knows it is that thread",
+		      bSameThread.load());
+
+		Pool.DestroyPersistentLane(Pinned);
+		Check("T17 the lane is released (its thread is gone)", !Pool.IsCurrentThread(Pinned));
+	}
+
 	std::printf("[fg] RESULT failures=%d\n", GFailures);
 	std::fflush(stdout);
 

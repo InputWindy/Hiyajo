@@ -523,7 +523,7 @@ void FPlatform::PublishWindowState()
 	}
 }
 
-void FPlatform::Initialize(FEngineBase&, FEngineContext&)
+void FPlatform::Initialize(FEngineBase& Engine, FEngineContext&)
 {
 	MAHO_TRACE_STAGE(IInit, "Platform init", "start the platform thread and create the window");
 
@@ -564,10 +564,14 @@ void FPlatform::Initialize(FEngineBase&, FEngineContext&)
 	MAHO_CHECKF(!GPlatformInstalled.exchange(true),
 		"second FPlatform install: the canonical frame number must never be re-seeded");
 
-	// The platform's OWN thread starts FIRST, because the window is created on it -- and only there.
+	// The platform's OWN lane starts FIRST, because the window is created on it -- and only there.
 	// A Win32 window's message queue belongs to its creating thread (PeekMessage sees nothing else),
-	// so a window created on whichever pool worker happened to run this stage can never be pumped
-	// properly: the pump runs on a different worker nearly every frame and asks the wrong queue.
+	// so a window created on whichever pool worker happened to run this stage could never be pumped
+	// properly: the pump would run on a different worker nearly every frame and ask the wrong queue.
+	// The lane is therefore PERSISTENT -- one dedicated thread of the host's pool serves it and
+	// nothing else (see AGENTS "Thread Affinity"); FThreadPool::CreatePersistentLane is what makes
+	// "resident role" and "one thread set for the whole engine" the same thing.
+	UseSharedPool(Engine.GetPool());
 	if (!FThreadedServer::Initialize())
 	{
 		MAHO_LOG_CORE_ERROR("FPlatform: the platform thread failed to start");
@@ -618,7 +622,7 @@ void FPlatform::Shutdown(FEngineBase&, FEngineContext&)
 	MAHO_TRACE_STAGE(IShutdown, "Platform shutdown", "destroy the window and join the platform thread");
 	GPlatform = nullptr;
 	DestroyWindow();                 // marshals onto the platform thread
-	FThreadedServer::Shutdown();     // ... and only then stop + join that thread
+	FThreadedServer::Shutdown();     // ... and only then drain + release that lane (the thread exits)
 }
 
 bool FPlatform::CreateWindow(int Width, int Height, std::string_view Title)
