@@ -1,17 +1,20 @@
 #!/usr/bin/env python3
 # Run via Tools/maho_python.bat — engine Tools/python only.
 """
-docs_scan.py —— 从 C++ 注释生成 Source/Docs.html（**注释是唯一来源**）
+docs_scan.py —— 从 C++ 注释生成 Source/Docs.html（**`@` 语义标签是唯一来源**）
 
 实体（类/结构体/枚举/宏/别名/自由函数）、成员（接口/字段/嵌套）、访问域、签名与说明，
-全部来自源码里的 `///` 注释。所以：**改注释 = 改文档**。
+全部来自源码里的 `///` 注释 —— 而且**只取其中带 `@` 的语义标签**：没打标的 `///` 裸行是普通
+注释，照写但不进接口文档（所以"改注释 = 改文档"只对语义标签成立）。
 
 注释形式（Doxygen 风格子集）：
 
+    /// @file            ← 文件级：这个头文件的说明（块内再跟 @brief）
     /// @brief 一句话说明（可续行）
     /// @param  Name 参数说明
     /// @return 返回值说明
     /// @tparam T 模板参数说明
+    /// @note / @warning / @see 补充说明
 
 `///` 块必须是**紧贴**声明上方、期间没有空行的连续块；`//` 普通注释不参与。
 
@@ -158,9 +161,13 @@ def DocLines(Node: FSnap, Rows: list[str]) -> list[str]:
 	return Lines
 
 
-def ParseDoc(Lines: list[str]) -> tuple[str, list[tuple[str, str]]]:
-	"""`///` 块 → (散行, [(tag, text)])。续行并入上一条 tag；tag 之前的散行是第一段说明。"""
-	Brief = ""
+def ParseDoc(Lines: list[str]) -> list[tuple[str, str]]:
+	"""`///` 块 → [(tag, text)]，**只收带 `@` 的语义标签**。
+
+	文档内容是"注解决定了语义"的那部分：`@file` / `@brief` / `@param` / `@return` / `@tparam` /
+	`@note` / `@warning` / `@see`。**没打标的 `///` 裸行不收集**（注释照写，但它不进接口文档）；
+	标签的续行（含中间的空 `///`）并入上一条标签，所以多段 `@brief` 仍然是一句说明。
+	"""
 	Tags: list[tuple[str, str]] = []
 	Current: int | None = None
 	for Raw in Lines:
@@ -172,18 +179,16 @@ def ParseDoc(Lines: list[str]) -> tuple[str, list[tuple[str, str]]]:
 			Tags.append((Match.group(1).lower(), Match.group(2).strip()))
 			Current = len(Tags) - 1
 			continue
-		if Current is not None:
+		if Current is not None:                  # 续行 = 上一条标签的一部分
 			Tag, Text = Tags[Current]
 			Tags[Current] = (Tag, (Text + " " + Body).strip())
-		else:
-			Brief = (Brief + " " + Body).strip()
-	return Brief, Tags
+	return Tags
 
 
-def DescOf(Brief: str, Tags: list[tuple[str, str]]) -> list[str]:
-	"""说明行的渲染顺序：brief 在前，`@param`/`@tparam`/`@return` 依源码顺序在后。"""
+def DescOf(Tags: list[tuple[str, str]]) -> list[str]:
+	"""说明行的渲染顺序：`@brief` 在前，`@param`/`@tparam`/`@return` 依源码顺序在后。"""
 	Out: list[str] = []
-	Head = " ".join([Brief] + [Text for Tag, Text in Tags if Tag in ("brief", "file") and Text]).strip()
+	Head = " ".join(Text for Tag, Text in Tags if Tag in ("brief", "file") and Text).strip()
 	if Head:
 		Out.append(Head)
 	for Tag, Text in Tags:
@@ -312,8 +317,8 @@ class FScanner:
 			print(f"[docs_scan] {Rel}:{ErrorRow + 1} 解析有 ERROR —— 按已解析到的部分生成")
 
 		FileLines = FileDoc(Rows)
-		Brief, Tags = ParseDoc(FileLines)
-		D.Header(Rel, Desc=DescOf(Brief, Tags))
+		FileTags = ParseDoc(FileLines)
+		D.Header(Rel, Desc=DescOf(FileTags))
 		if not FileLines and not self.Options.quiet:
 			self.Report(Rel, Root, "缺 @file：这个头没有文件级说明（`/// @file` 块）")
 		self.DeclareIncludes(Rows)
@@ -350,7 +355,7 @@ class FScanner:
 			self.Declare(Kid, Source, Rows, Rel, Template)
 
 	def Declare(self, Node: FSnap, Source: bytes, Rows: list[str], Rel: str,
-	            Template: str = "", Doc: tuple[str, list] | None = None) -> None:
+	            Template: str = "", Doc: list[tuple[str, str]] | None = None) -> None:
 		if Node.Type in TEMPLATE_TYPES:
 			Inner = [C for C in Node.Kids if C.Type not in ("comment", "template_declaration")]
 			if not Inner:
@@ -361,8 +366,8 @@ class FScanner:
 		if Node.Type in ("comment", "preproc_include"):
 			return
 
-		Brief, Tags = Doc if Doc is not None else ParseDoc(DocLines(Node, Rows))
-		Desc = DescOf(Brief, Tags)
+		Tags = Doc if Doc is not None else ParseDoc(DocLines(Node, Rows))
+		Desc = DescOf(Tags)
 		Documented = bool(Desc)
 
 		if Node.Type in ("class_specifier", "struct_specifier", "union_specifier"):
@@ -429,7 +434,7 @@ class FScanner:
 			self.DeclareMember(Member, Source, Rows, Rel, Template)
 
 	def DeclareMember(self, Node: FSnap, Source: bytes, Rows: list[str], Rel: str,
-	                  Template: str = "", Doc: tuple[str, list] | None = None) -> None:
+	                  Template: str = "", Doc: list[tuple[str, str]] | None = None) -> None:
 		if Node.Type == "comment":
 			return
 		if Node.Type in TEMPLATE_TYPES:
@@ -441,8 +446,8 @@ class FScanner:
 			                   Doc if Doc is not None else ParseDoc(DocLines(Node, Rows)))
 			return
 
-		Brief, Tags = Doc if Doc is not None else ParseDoc(DocLines(Node, Rows))
-		Desc = DescOf(Brief, Tags)
+		Tags = Doc if Doc is not None else ParseDoc(DocLines(Node, Rows))
+		Desc = DescOf(Tags)
 		Documented = bool(Desc)
 
 		if Node.Type in ("class_specifier", "struct_specifier", "enum_specifier", "union_specifier"):
@@ -590,8 +595,9 @@ def RunIsolated(Root: Path, Options) -> int:
 			print(f"[docs_scan] {Rel}  {Stats['members']} 个成员", flush=True)
 
 	if Options.check:
-		for Line in Problems:
-			print(f"  {Line}")
+		if not Options.quiet:
+			for Line in Problems:
+				print(f"  {Line}")
 		print(f"[docs_scan] --check：{Stats['headers']} 个头 · {Stats['members']} 个成员"
 		      f"（{Stats['documented']} 有 @brief，{Stats['missing']} 缺）· {len(Problems)} 条问题")
 		if Failures:

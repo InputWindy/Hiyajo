@@ -172,7 +172,7 @@ Two traps this build system has, both of which cost a full evening once. They ar
 ## Docs
 
 - [Source/Docs.html](Source/Docs.html) - 引擎源码文档：左侧 Source 树（叶子 = `.h`），右侧逐类展示字段 / 接口签名 / 功能描述。**注释是唯一来源**：`Tools/docs_scan.py` 用 tree-sitter 解析头文件，把 `///` 注释块（`@file` / `@brief` / `@param` / `@return` / `@tparam`，Doxygen 子集）连同声明一起提取成实体与成员（`Tools/docs_builder.py` 只做渲染 + 原子接口）。所以：**改注释 = 改文档**；`Tools/docs_content.py` 与各插件的 `Docs.py` **已删除**（`Tools/plugin_docs.py` 现在也是转调扫描器，一插件一份；`Tools/maho_tools.py` 的"双击 .cplugin 修复"同理转调）。
-  - **文件级说明要显式 `@file`**：只有带 `/// @file`（块内可跟 `@brief` 续写）的头才有文件说明；普通 `//` 注释是代码注释，**不进文档**；`///` 块默认属于紧贴其下的那个声明。头里那张「包含的头文件」表由源码 `#include` 派生，不必手写；插件页顶部的 `.cplugin` 事实卡同理由文件派生。
+  - **只收 `@` 语义标签**：文档内容 = 注释里以 `@` 开头的显式语义（`@file` / `@brief` / `@param` / `@return` / `@tparam` / `@note` / `@warning` / `@see`）。没打标的 `///` 裸行是普通注释，照写但不进文档；标签的续行（含中间的空 `///`）算该标签的一部分。**文件级说明要显式 `@file`**（块内再跟 `@brief`）；`//` 注释一律不进文档；`///` 块默认属于紧贴其下的那个声明。头里那张「包含的头文件」表由源码 `#include` 派生，不必手写；插件页顶部的 `.cplugin` 事实卡同理由文件派生。
   - 生成：`Tools\maho_python.bat Tools\docs_scan.py`（`--filter 子串` / `--out 路径` / `--root 插件目录`）；插件批量：`... Tools\plugin_docs.py`。
   - **审注释（lint 门）**：`... Tools\docs_scan.py --check`（列缺 `@file` 的头、缺 `@brief` 的成员、`@param` 与形参数量不符、解析 ERROR；有问题退 1）；`... Tools\plugin_docs.py --check` 逐插件汇总。
   - 两个实现约束，都是实测换来的一手经验：**① 先快照**——单遍 `child(i)` 把整树变成纯 Python 结构，此后不再碰 Node API；**② 一个头一个子进程**——tree-sitter 的 Python 绑定在长命进程里、或"边遍历边查字段/注释"的用法下会偶发 `0xC0000005`；隔离后崩只丢一个头，并给出失败名单。行号由字节偏移自己算（绑定给的 `start_point` 同一次遍历里也会错值）。
