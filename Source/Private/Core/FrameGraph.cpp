@@ -30,6 +30,8 @@ const char* GetDependencyTypeName(EDependencyType Type) noexcept
 	case EDependencyType::Block:      return "Block";
 	case EDependencyType::StageChain: return "StageChain";
 	case EDependencyType::SelfEdge:   return "SelfEdge";
+	case EDependencyType::Lifetime:   return "Lifetime";
+	case EDependencyType::Shared:     return "Shared";
 	}
 	return "Unknown";
 }
@@ -115,6 +117,8 @@ namespace
 		case EDependencyType::Block:      return "declared BlockOn";
 		case EDependencyType::StageChain: return "the in-frame stage chain";
 		case EDependencyType::SelfEdge:   return "the cross-frame self edge";
+	case EDependencyType::Lifetime:   return "a resource's lifetime (create < use < destroy)";
+	case EDependencyType::Shared:     return "two stages on one mutable resource";
 		}
 		return "unknown";
 	}
@@ -273,7 +277,7 @@ struct FFrameGraph::FImpl
 	FImpl(FFrameGraph& InOwner, FThreadPool& InPool, FThreadPool::FLane InLane);
 
 	FNodeId GetOrCreateNodeId(const FTaskKey& Key);
-	void    ApplySubmit(std::vector<FTask> Tasks);
+	void    ApplySubmit(std::vector<FTask> Tasks, std::uint64_t Frame);
 	void    OnNodeCompleted(FNodeId Id);
 	void    Dispatch(FNodeId Id);
 	void    TryReap(FNodeId Id);
@@ -299,6 +303,10 @@ struct FFrameGraph::FImpl
 	 *  MAHO_GRAPH_EDGES so a declaration cannot go missing silently. */
 	std::uint64_t ClaimedEdges = 0;
 	std::uint64_t MissedEdges  = 0;
+
+	/** See FFrameGraph::SetDeriver: consulted after every merged batch, against the keys the graph
+	 *  holds then. Not owned. */
+	IDerivedEdgeSource* Deriver = nullptr;
 
 	void EnsureDepth();
 
@@ -374,6 +382,11 @@ void FFrameGraph::SetOwnerName(const char* InOwnerName)
 	Impl->OwnerName = InOwnerName;
 }
 
+void FFrameGraph::SetDeriver(IDerivedEdgeSource* InDeriver)
+{
+	Impl->Deriver = InDeriver;
+}
+
 void FFrameGraph::FImpl::EnsureDepth()
 {
 	if (Depth != 0)
@@ -423,9 +436,9 @@ bool FFrameGraph::FImpl::Submit(std::vector<FTask> Tasks, std::uint64_t Frame, s
 			std::memory_order_acq_rel);
 	}
 
-	Server.Submit([this, Batch = std::move(Tasks)]() mutable
+	Server.Submit([this, Batch = std::move(Tasks), Frame]() mutable
 	{
-		ApplySubmit(std::move(Batch));
+		ApplySubmit(std::move(Batch), Frame);
 	});
 	return true;
 }
@@ -574,7 +587,7 @@ void FFrameGraph::FImpl::WireNode(FTaskNode& Node, const FTask& Decl)
 	}
 }
 
-void FFrameGraph::FImpl::ApplySubmit(std::vector<FTask> Tasks)
+void FFrameGraph::FImpl::ApplySubmit(std::vector<FTask> Tasks, std::uint64_t Frame)
 {
 	std::vector<FNodeId> Ids;
 	Ids.reserve(Tasks.size());
@@ -639,6 +652,88 @@ void FFrameGraph::FImpl::ApplySubmit(std::vector<FTask> Tasks)
 		}
 	}
 
+	// DERIVED edges (design D5): the graph is the only layer that sees a whole round -- several
+	// batches, K phases -- so a resource-based edge can only be derived here. The semantic layer is
+	// asked for pairs (it knows resources; Core does not) and the graph decides whether a pair may
+	// become an edge: both nodes present, the dependent not yet dispatched, and no cycle closed.
+	std::size_t DerivedApplied = 0;
+	std::size_t DerivedConflicts = 0;
+	if (Deriver != nullptr)
+	{
+		std::vector<FTaskKey> LiveKeys;
+		LiveKeys.reserve(Nodes.size());
+		for (const FTaskNode& Node : Nodes)
+		{
+			LiveKeys.push_back(Node.Key);
+		}
+
+		std::vector<FDerivedEdge> Derived;
+		Deriver->DeriveEdges(LiveKeys, Frame, Derived);
+
+		// `DependsOn(From, To)` == "From already waits, transitively, for To": a cycle test. Events
+		// encode (node id, phase), so the node of an event is `Event / Depth`.
+		std::function<bool(FNodeId, FNodeId, std::vector<char>&)> Reaches =
+			[&](FNodeId Cursor, FNodeId Goal, std::vector<char>& Seen) -> bool
+			{
+				if (Cursor == Goal) { return true; }
+				if (Cursor >= Seen.size() || Seen[Cursor] != 0) { return false; }
+				Seen[Cursor] = 1;
+				for (FEvent Event : Nodes[Cursor].Dependencies)
+				{
+					const FNodeId Next = static_cast<FNodeId>(Event / static_cast<FEvent>(Depth));
+					if (Reaches(Next, Goal, Seen)) { return true; }
+				}
+				return false;
+			};
+
+		for (const FDerivedEdge& Edge : Derived)
+		{
+			const FNodeId From = ResolveTarget(Edge.From);
+			const FNodeId To = ResolveTarget(Edge.To);
+			if (From == InvalidNodeId || To == InvalidNodeId || From == To)
+			{
+				++MissedEdges;
+				continue;
+			}
+
+			FTaskNode& Dependent = Nodes[From];
+			if (Dependent.bDispatched.load(std::memory_order_acquire))
+			{
+				++MissedEdges;
+				continue;
+			}
+
+			const FEvent Event = EventOf(To, Nodes[To].Key.Phase, Depth);
+			if (std::find(Dependent.Dependencies.begin(), Dependent.Dependencies.end(), Event)
+				!= Dependent.Dependencies.end())
+			{
+				continue;   // already ordered (the reduction the declaration path gets for free)
+			}
+
+			std::vector<char> Seen(Nodes.size(), 0);
+			if (Reaches(To, From, Seen))
+			{
+				++DerivedConflicts;
+				std::fprintf(stderr, "[fgderive] CONFLICT would close a cycle: %.*s::%.*s depends on "
+					"%.*s::%.*s (%s)\n",
+					static_cast<int>(Edge.From.Name.size()), Edge.From.Name.data(),
+					static_cast<int>(Edge.From.Stage.size()), Edge.From.Stage.data(),
+					static_cast<int>(Edge.To.Name.size()), Edge.To.Name.data(),
+					static_cast<int>(Edge.To.Stage.size()), Edge.To.Stage.data(), Edge.Reason.c_str());
+				std::fflush(stderr);
+				continue;
+			}
+
+			Dependent.Dependencies.push_back(Event);
+			++DerivedApplied;
+			if (!EventStates[Event].load(std::memory_order_acquire))
+			{
+				Nodes[To].Successors.push_back(From);
+				++Dependent.UnmetCount;
+			}
+		}
+	}
+
 	for (FNodeId Id : Ids)
 	{
 		if (!Nodes[Id].bDispatched.load(std::memory_order_relaxed)
@@ -654,17 +749,18 @@ void FFrameGraph::FImpl::ApplySubmit(std::vector<FTask> Tasks)
 	// the startup rounds where the cross-frame self edges legitimately have no earlier node yet.
 	if (EdgesDumpEnabled())
 	{
-		char Key[128];
-		std::snprintf(Key, sizeof(Key), "%zu|%llu|%llu", Tasks.size(),
+		char Key[160];
+		std::snprintf(Key, sizeof(Key), "%zu|%llu|%llu|%zu|%zu", Tasks.size(),
 			static_cast<unsigned long long>(ClaimedEdges),
-			static_cast<unsigned long long>(MissedEdges));
+			static_cast<unsigned long long>(MissedEdges), DerivedApplied, DerivedConflicts);
 		if (FirstClaimOf(Key))
 		{
-			std::fprintf(stderr, "[fgclaim] graph=%s batch=%zu claimed=%llu missed=%llu\n",
+			std::fprintf(stderr, "[fgclaim] graph=%s batch=%zu claimed=%llu missed=%llu derived=%zu conflicts=%zu\n",
 				(OwnerName == nullptr || OwnerName[0] == 0) ? "?" : OwnerName,
 				Tasks.size(),
 				static_cast<unsigned long long>(ClaimedEdges),
-				static_cast<unsigned long long>(MissedEdges));
+				static_cast<unsigned long long>(MissedEdges),
+				DerivedApplied, DerivedConflicts);
 			std::fflush(stderr);
 		}
 	}
@@ -1297,7 +1393,8 @@ FFrameBridge::FResult FFrameBridge::Build(std::span<FFrameExtension* const> Fram
 								static_cast<int>(Dep.Target.Name.size()), Dep.Target.Name.data(),
 								static_cast<int>(Dep.Target.Stage.size()), Dep.Target.Stage.data(),
 								Dep.Target.Phase,
-								GetDependencyTypeName(Dep.Type), DependencyReason(Dep.Type));
+								GetDependencyTypeName(Dep.Type),
+							Dep.Reason.empty() ? DependencyReason(Dep.Type) : Dep.Reason.c_str());
 						}
 						for (const FDependency& Block : Task.Blocks)
 						{

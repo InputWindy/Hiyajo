@@ -78,6 +78,8 @@ enum class EDependencyType : std::uint8_t
 	Block,        // BlockOn: the target must run after the declaring stage
 	StageChain,   // the in-frame stage chain
 	SelfEdge,     // the per-stage cross-frame self edge
+	Lifetime,     // derived from a resource's EXISTENCE (create < use < destroy)
+	Shared,       // derived from two stages touching one mutable resource (Strict only)
 };
 
 [[nodiscard]] MAHO_API const char* GetDependencyTypeName(EDependencyType Type) noexcept;
@@ -86,6 +88,9 @@ struct FDependency
 {
 	FTaskKey        Target{};
 	EDependencyType Type = EDependencyType::Wait;
+	/** Why the edge exists, when the producer had something to say (a derived edge names its resource
+	 *  and the mode pair). Empty for a declared edge, whose reason is its type. */
+	std::string     Reason{};
 };
 
 struct FTask
@@ -94,6 +99,30 @@ struct FTask
 	std::vector<FDependency> Dependencies;
 	std::vector<FDependency> Blocks;
 	std::function<void()>    Closure;
+};
+
+/** One edge a DERIVER wants added at graph level: a pair of keys the graph already holds, plus where
+ *  the edge came from. Core neither invents nor interprets the reason -- it carries the sentence the
+ *  deriver wrote (a resource name and the modes that met on it, in the engine's case). */
+struct FDerivedEdge
+{
+	FTaskKey        From{};
+	FTaskKey        To{};
+	EDependencyType Type = EDependencyType::Wait;
+	std::string     Reason{};
+};
+
+/** The seam that lets semantics live where they are known: Core knows a round's NODES and nothing
+ *  about resources, so the GRAPH hands this the keys it currently holds -- every node of the window,
+ *  i.e. more than one batch -- and pushes back whatever edges come out. The aggregation (per resource,
+ *  over a whole round) is the deriver's business: neither side of a pair knows the other inside one
+ *  batch, and the edges that matter (a writer this round, a reader the next) live across them. */
+struct IDerivedEdgeSource
+{
+	virtual ~IDerivedEdgeSource() = default;
+
+	virtual void DeriveEdges(std::span<const FTaskKey> LiveKeys, std::uint64_t Frame,
+		std::vector<FDerivedEdge>& Out) = 0;
 };
 
 
@@ -331,6 +360,11 @@ public:
 	void Wait();
 
 	void SetOwnerName(const char* InOwnerName);
+
+	/** Install the edge deriver. Called once, before the graph drives anything (the deriver is consulted
+	 *  after every batch merges, against the nodes the graph then holds). The graph does NOT own it:
+	 *  the deriver outlives the graph, because it belongs to the semantics layer, not the scheduler. */
+	void SetDeriver(IDerivedEdgeSource* InDeriver);
 
 protected:
 	[[nodiscard]] const char* GetThreadName() const override;
