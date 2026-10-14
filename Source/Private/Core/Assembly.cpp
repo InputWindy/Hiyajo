@@ -129,7 +129,7 @@ FAssembly::~FAssembly() = default;
 
 bool FAssembly::Load(std::string_view Path)
 {
-	Unload();
+	Unload();                             // 先卸掉旧模块（返回值这里不关心）
 	const std::string Native = std::string(Path);
 #if defined(_WIN32)
 	Impl->Module.reset(static_cast<void*>(LoadLibraryA(Native.c_str())));
@@ -139,9 +139,11 @@ bool FAssembly::Load(std::string_view Path)
 	return IsLoaded();
 }
 
-void FAssembly::Unload()
+bool FAssembly::Unload()
 {
+	const bool bWasLoaded = Impl->Module != nullptr;
 	Impl->Module.reset();
+	return bWasLoaded;
 }
 
 bool FAssembly::IsLoaded() const
