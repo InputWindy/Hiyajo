@@ -1903,6 +1903,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td>`<span class="st">"RHIAPI.h"</span>`</td></tr>
 <tr><td>`&lt;Core/Singleton.h&gt;`</td></tr>
 <tr><td>`&lt;Core/ThreadedServer.h&gt;`</td></tr>
+<tr><td>`&lt;Core/ThreadPool.h&gt;`</td></tr>
 <tr><td>`&lt;Maho.h&gt;`</td></tr>
 <tr><td>`&lt;RHI/RHICommandList.h&gt;`</td></tr>
 <tr><td>`&lt;RHI/RHIEnums.h&gt;`</td></tr>
@@ -2001,7 +2002,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <h4>接口</h4>
 <table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> ~FRHI() <span class="kw">override</span>;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">bool</span> Initialize(<span class="kw">void</span>* NativeWindowHandle, <span class="kw">int</span> Width, <span class="kw">int</span> Height, ERHIBackend Backend = ERHIBackend::Vulkan, std::int32_t FramesInFlight = 0);</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">bool</span> Initialize(<span class="kw">void</span>* NativeWindowHandle, <span class="kw">int</span> Width, <span class="kw">int</span> Height, FThreadPool&amp; Pool, ERHIBackend Backend = ERHIBackend::Vulkan, std::int32_t FramesInFlight = 0);</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] std::uint32_t GetFrameSlotCount() <span class="kw">const</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> ShutdownRHI();</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FRHICommandList* CreateCommandList(ERHICommandListType Type) <span class="kw">override</span>;</td><td></td></tr>

@@ -635,6 +635,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tbody>
 <tr><td>`<span class="st">"RenderApi.h"</span>`</td></tr>
 <tr><td>`&lt;Core/ThreadedServer.h&gt;`</td></tr>
+<tr><td>`&lt;Core/ThreadPool.h&gt;`</td></tr>
 <tr><td>`&lt;RHI/RHIEnums.h&gt;`</td></tr>
 <tr><td>`&lt;cstdint&gt;`</td></tr>
 <tr><td>`&lt;functional&gt;`</td></tr>
@@ -677,7 +678,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
 <tr><td><span class="acc a-public">public</span></td><td>FShaderCompilerServer();</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>~FShaderCompilerServer() <span class="kw">override</span>;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">bool</span> Initialize();</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">bool</span> Initialize(FThreadPool&amp; Pool);</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> CompileAsync( <span class="kw">const</span> FShaderCompileDesc&amp; Desc, std::function&lt;<span class="kw">void</span>(<span class="kw">const</span> FShaderCompileResult&amp;)&gt; OnDone);</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> FlushCompiles();</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">static</span> FShaderCompileResult CompileStage( <span class="kw">const</span> FShaderCompileDesc&amp; Desc);</td><td></td></tr>

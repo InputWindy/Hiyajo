@@ -79,7 +79,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div id="app">
   <div id="side">
     <h1>Maho 引擎源码</h1>
-    <div class="search" title="左侧扫描 Source/**/*.h：25 个头文件 · 已声明 25 个 · 99 个实体 / 246 个成员 ｜ 内容来自头文件里的 `///` 注释（`Tools/docs_scan.py`）">
+    <div class="search" title="左侧扫描 Source/**/*.h：25 个头文件 · 已声明 25 个 · 100 个实体 / 249 个成员 ｜ 内容来自头文件里的 `///` 注释（`Tools/docs_scan.py`）">
       <input id="q" type="search" placeholder="搜索头文件…  （如 Frame、Core、Entry）" autocomplete="off">
     </div>
     <div id="tree"><ul>
@@ -582,6 +582,9 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table>
 </div>
 <div class="ent e-class" id="Public__Core__ThreadedServer_h-0">
+<h3><span class="type">类</span> FThreadPool</h3>
+</div>
+<div class="ent e-class" id="Public__Core__ThreadedServer_h-1">
 <h3><span class="type">类</span> FThreadedServer</h3>
 <div class="sect">
 <h4>字段</h4>
@@ -595,6 +598,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> ~FThreadedServer();</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>FThreadedServer(<span class="kw">const</span> FThreadedServer&amp;) = <span class="kw">delete</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>FThreadedServer&amp; <span class="kw">operator</span>=(<span class="kw">const</span> FThreadedServer&amp;) = <span class="kw">delete</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> UseSharedPool(FThreadPool&amp; InPool);</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">bool</span> Initialize();</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Shutdown();</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">bool</span> IsRunning() <span class="kw">const</span>;</td><td></td></tr>
@@ -644,10 +648,11 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td>~FThreadPool();</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>FThreadPool(<span class="kw">const</span> FThreadPool&amp;) = <span class="kw">delete</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>FThreadPool&amp; <span class="kw">operator</span>=(<span class="kw">const</span> FThreadPool&amp;) = <span class="kw">delete</span>;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Submit(std::function&lt;<span class="kw">void</span>()&gt; Task);</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Flush();</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FLane CreateLane();</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> DestroyLane(FLane Lane);</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FLane CreatePersistentLane(<span class="kw">const</span> <span class="kw">char</span>* ThreadName);</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> DestroyPersistentLane(FLane Lane);</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">bool</span> IsCurrentThread(FLane Lane) <span class="kw">const</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Submit(FLane Lane, std::function&lt;<span class="kw">void</span>()&gt; Task);</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Flush(FLane Lane);</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] std::uint32_t GetNumThreads() <span class="kw">const</span>;</td><td></td></tr>
@@ -757,6 +762,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> std::uint64_t NextFrameNumber();</td><td></td></tr>
 <tr><td><span class="acc a-protected">protected</span></td><td>FFrameGraph&amp; EnsureGraph();</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>FFrameGraph&amp; GetGraph();</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FThreadPool&amp; GetPool();</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">bool</span> Has(std::string_view Key) <span class="kw">const</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] std::string Get(std::string_view Key) <span class="kw">const</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">bool</span> GetBool(std::string_view Key) <span class="kw">const</span>;</td><td></td></tr>
