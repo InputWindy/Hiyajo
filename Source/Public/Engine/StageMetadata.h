@@ -71,8 +71,9 @@ enum class EResourceAccess : std::uint8_t
  *    Strict       -- two stages touch the SAME mutable thing with no other edge ordering them: only
  *                    here do Write -> Read and Write -> Write edges get derived.
  *
- *  THIS ROUND REGISTERS THE TRAIT ONLY (step 4 derives the edges): nothing reads it yet, and that is
- *  deliberate -- the trait's value has to be reviewable in the dump BEFORE it decides anything. */
+ *  The trait is READ by `Engine/DerivedEdges.h`: the deriver aggregates one round's accesses by
+ *  resource and emits the pairs these semantics imply (same round, across frames -- see that file for
+ *  why the scope stops there). A pair it cannot honour (a cycle) is reported, never silently dropped. */
 enum class EResourceOrdering : std::uint8_t
 {
 	LifetimeOnly,

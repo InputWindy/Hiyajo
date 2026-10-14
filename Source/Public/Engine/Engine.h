@@ -3,6 +3,7 @@
 #include <Core/Assembly.h>
 #include <Core/Interface.h>
 #include <Core/Query.h>
+#include <Engine/DerivedEdges.h>
 #include <Engine/Frame.h>
 #include <Engine/FrameBuilder.h>
 
@@ -183,6 +184,9 @@ protected:
 		{
 			bGraphReady = true;
 			Graph.emplace(GetPool(), GetPoolLane());
+			// The graph derives its edges from RESOURCE ACCESS (Engine/DerivedEdges.h): a stage's
+			// declared accesses plus each resource's ordering trait replace the hand-written pairs.
+			Graph->SetDeriver(&GetResourceEdgeDeriver());
 			Graph->Initialize();
 		}
 		return *Graph;

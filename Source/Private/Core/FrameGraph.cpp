@@ -729,6 +729,31 @@ void FFrameGraph::FImpl::ApplySubmit(std::vector<FTask> Tasks, std::uint64_t Fra
 
 			Dependent.Dependencies.push_back(Event);
 			++DerivedApplied;
+
+			// Every applied derived edge is named once (deduped like the claim line): without it a
+			// derived ordering is invisible, and "the graph hung somewhere" is all a reader would see.
+			if (EdgesDumpEnabled())
+			{
+				char EdgeKey[320];
+				std::snprintf(EdgeKey, sizeof(EdgeKey), "edge|%.*s::%.*s|%.*s::%.*s|%s|%s",
+					static_cast<int>(Edge.From.Name.size()), Edge.From.Name.data(),
+					static_cast<int>(Edge.From.Stage.size()), Edge.From.Stage.data(),
+					static_cast<int>(Edge.To.Name.size()), Edge.To.Name.data(),
+					static_cast<int>(Edge.To.Stage.size()), Edge.To.Stage.data(),
+					GetDependencyTypeName(Edge.Type), Edge.Reason.c_str());
+				if (FirstClaimOf(EdgeKey))
+				{
+					std::fprintf(stderr, "[fgderive] %.*s::%.*s@%d depends-on %.*s::%.*s@%d type=%s reason=%s\n",
+						static_cast<int>(Edge.From.Name.size()), Edge.From.Name.data(),
+						static_cast<int>(Edge.From.Stage.size()), Edge.From.Stage.data(),
+						Edge.From.Phase,
+						static_cast<int>(Edge.To.Name.size()), Edge.To.Name.data(),
+						static_cast<int>(Edge.To.Stage.size()), Edge.To.Stage.data(),
+						Edge.To.Phase,
+						GetDependencyTypeName(Edge.Type), Edge.Reason.c_str());
+					std::fflush(stderr);
+				}
+			}
 			if (!EventStates[Event].load(std::memory_order_acquire))
 			{
 				Nodes[To].Successors.push_back(From);
