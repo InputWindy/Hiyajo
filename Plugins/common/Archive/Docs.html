@@ -125,14 +125,6 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div class="sect">
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-public">public</span></td><td>FArchive&amp; <span class="kw">operator</span>&lt;&lt;(std::int32_t&amp; V);</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>FArchive&amp; <span class="kw">operator</span>&lt;&lt;(std::uint32_t&amp; V);</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>FArchive&amp; <span class="kw">operator</span>&lt;&lt;(std::int64_t&amp; V);</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>FArchive&amp; <span class="kw">operator</span>&lt;&lt;(std::uint64_t&amp; V);</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>FArchive&amp; <span class="kw">operator</span>&lt;&lt;(<span class="kw">float</span>&amp; V);</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>FArchive&amp; <span class="kw">operator</span>&lt;&lt;(<span class="kw">double</span>&amp; V);</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>FArchive&amp; <span class="kw">operator</span>&lt;&lt;(<span class="kw">bool</span>&amp; V);</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>FArchive&amp; <span class="kw">operator</span>&lt;&lt;(std::string&amp; V);</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>EArchiveMode Mode;</td><td></td></tr>
 </tbody></table></div>
 <div class="sect">
@@ -144,6 +136,14 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> Serialize(<span class="kw">void</span>* Data, std::size_t Size) = 0;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> Seek(std::size_t Pos) = 0;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> std::size_t Tell() <span class="kw">const</span> = 0;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>FArchive&amp; <span class="kw">operator</span>&lt;&lt;(std::int32_t&amp; V);</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>FArchive&amp; <span class="kw">operator</span>&lt;&lt;(std::uint32_t&amp; V);</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>FArchive&amp; <span class="kw">operator</span>&lt;&lt;(std::int64_t&amp; V);</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>FArchive&amp; <span class="kw">operator</span>&lt;&lt;(std::uint64_t&amp; V);</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>FArchive&amp; <span class="kw">operator</span>&lt;&lt;(<span class="kw">float</span>&amp; V);</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>FArchive&amp; <span class="kw">operator</span>&lt;&lt;(<span class="kw">double</span>&amp; V);</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>FArchive&amp; <span class="kw">operator</span>&lt;&lt;(<span class="kw">bool</span>&amp; V);</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>FArchive&amp; <span class="kw">operator</span>&lt;&lt;(std::string&amp; V);</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">template</span> &lt;<span class="kw">typename</span> T&gt; FArchive&amp; <span class="kw">operator</span>&lt;&lt;(T&amp; Value);</td><td></td></tr>
 <tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">explicit</span> FArchive(EArchiveMode InMode) : Mode(InMode);</td><td></td></tr>
 </tbody></table></div>
@@ -179,7 +179,6 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div class="sect">
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">const</span> std::vector&lt;std::uint8_t&gt;&amp; GetBytes() <span class="kw">const</span>;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>std::vector&lt;std::uint8_t&gt; Buffer;</td><td></td></tr>
 </tbody></table></div>
 <div class="sect">
@@ -189,6 +188,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Serialize(<span class="kw">void</span>* Data, std::size_t Size) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Seek(std::size_t Pos) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] std::size_t Tell() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">const</span> std::vector&lt;std::uint8_t&gt;&amp; GetBytes() <span class="kw">const</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] std::vector&lt;std::uint8_t&gt; TakeBytes();</td><td></td></tr>
 </tbody></table></div>
 </div>

@@ -129,8 +129,6 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
 <tr><td><span class="acc a-private">private</span></td><td>MAHO_DECLARE_FRAME_UNDER(FContentBrowser, FExampleEditor);</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">struct</span> FNode std::string Name; std::string VirtualPath; <span class="kw">bool</span> bDirectory = <span class="kw">false</span>; std::vector&lt;FNode&gt; Children;;</td><td></td></tr>
-<tr><td><span class="acc a-private">private</span></td><td>[[nodiscard]] <span class="kw">const</span> FNode* FindNode(std::string_view VirtualPath) <span class="kw">const</span>;</td><td></td></tr>
-<tr><td><span class="acc a-private">private</span></td><td>UI::FUIView* EnsureView(FExampleEditor&amp; Editor);</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>std::vector&lt;FNode&gt; Roots;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">bool</span> bScanned = <span class="kw">false</span>;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>std::string CurrentPath = <span class="st">"Game"</span>;</td><td></td></tr>
@@ -148,7 +146,9 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Shutdown(FExampleEditor&amp; Editor, FExampleEditorContext&amp; Frame) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> Rescan();</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">static</span> <span class="kw">void</span> ScanDirectory(<span class="kw">const</span> std::filesystem::path&amp; PhysicalDir, std::string VirtualPrefix, FNode&amp; Out);</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>[[nodiscard]] <span class="kw">const</span> FNode* FindNode(std::string_view VirtualPath) <span class="kw">const</span>;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>[[nodiscard]] std::string ToVirtualPath(<span class="kw">const</span> std::filesystem::path&amp; PhysicalPath) <span class="kw">const</span>;</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>UI::FUIView* EnsureView(FExampleEditor&amp; Editor);</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> DeclareTree(UI::FUIBuilder&amp; Parent, <span class="kw">const</span> FNode&amp; Node);</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> DeclareBreadcrumb(UI::FUIBuilder&amp; Row);</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> DeclareItems(UI::FUIBuilder&amp; Parent, <span class="kw">const</span> FNode&amp; Node, <span class="kw">int</span> Columns);</td><td></td></tr>

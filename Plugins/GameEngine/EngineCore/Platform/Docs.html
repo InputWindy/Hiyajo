@@ -209,7 +209,6 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
 <tr><td><span class="acc a-public">public</span></td><td>MAHO_DECLARE_FRAME(FPlatform);</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>TMulticastEvent&lt;<span class="kw">void</span>(std::uint64_t)&gt; OnInputPublished;</td><td></td></tr>
-<tr><td><span class="acc a-private">private</span></td><td>[[nodiscard]] <span class="kw">const</span> <span class="kw">char</span>* GetThreadName() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>std::atomic&lt;std::uint32_t&gt; CachedWidth 0;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>std::atomic&lt;std::uint32_t&gt; CachedHeight 0;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>std::atomic&lt;<span class="kw">bool</span>&gt; bCachedShouldClose <span class="kw">false</span>;</td><td></td></tr>
@@ -258,6 +257,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> PreShutdown(FEngineBase&amp; Engine, FEngineContext&amp; Frame) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>[[nodiscard]] <span class="kw">bool</span> OnInitialize() <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> OnShutdown() <span class="kw">override</span>;</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>[[nodiscard]] <span class="kw">const</span> <span class="kw">char</span>* GetThreadName() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> RunOnPlatformThread(<span class="kw">const</span> std::function&lt;<span class="kw">void</span>()&gt;&amp; Fn);</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> PublishWindowState();</td><td></td></tr>
 </tbody></table></div>

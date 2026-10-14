@@ -164,7 +164,6 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
 <tr><td><span class="acc a-public">public</span></td><td>MAHO_DECLARE_FRAME(FTextManager);</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">const</span> std::string* FindTranslation(std::string_view InNamespace, std::string_view InKey, std::string_view InCulture) <span class="kw">const</span>;</td><td></td></tr>
 <tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">mutable</span> std::mutex Mutex;</td><td></td></tr>
 <tr><td><span class="acc a-protected">protected</span></td><td>std::string CurrentCulture = <span class="st">"en-US"</span>;</td><td></td></tr>
 <tr><td><span class="acc a-protected">protected</span></td><td>std::unordered_map&lt;std::string, std::string&gt; Catalog;</td><td></td></tr>
@@ -176,6 +175,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> SetCulture(std::string InCulture);</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> AddTranslation(std::string_view InNamespace, std::string_view InKey, std::string_view InCulture, std::string Text);</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> LoadTranslationsFromJson(std::string_view JsonText);</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">const</span> std::string* FindTranslation(std::string_view InNamespace, std::string_view InKey, std::string_view InCulture) <span class="kw">const</span>;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> PreInitialize(FEngineBase&amp;, FEngineContext&amp;) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> Initialize(FEngineBase&amp; Engine, FEngineContext&amp; Frame) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> PostInitialize(FEngineBase&amp;, FEngineContext&amp;) <span class="kw">override</span>;</td><td></td></tr>

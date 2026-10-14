@@ -139,19 +139,6 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div class="sect">
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FRHICommandList* AcquireRenderList();</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FRHIPipelineLayout* GetOrCreatePipelineLayout(<span class="kw">const</span> FRHIPipelineLayoutDesc&amp; Desc);</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FRHIDescriptorSetLayout* GetOrCreateDescriptorSetLayout(<span class="kw">const</span> FRHIDescriptorSetLayoutDesc&amp; Desc);</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FRHIGraphicsPipeline* GetOrCreateGraphicsPipeline(<span class="kw">const</span> FRHIGraphicsPipelineDesc&amp; Desc);</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FRHIShaderModule* GetOrCreateShaderModule(<span class="kw">const</span> FRHIShaderModuleDesc&amp; Desc);</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FRHISampler* CreateSampler(<span class="kw">const</span> FRHISamplerDesc&amp; Desc);</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FRHIDescriptorSet* GetOrCreateDescriptorSet( FRHIDescriptorSetLayout* Layout, <span class="kw">const</span> FRHIDescriptorSetLayoutDesc&amp; LayoutDesc, <span class="kw">const</span> FRHIDescriptorWrite* Writes, std::uint32_t WriteCount);</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FRHIDescriptorSet* GetOrCreateMutableDescriptorSet( FRHIDescriptorSetLayout* Layout, <span class="kw">const</span> FRHIDescriptorSetLayoutDesc&amp; LayoutDesc, <span class="kw">const</span> FRHIDescriptorWrite* Writes, std::uint32_t WriteCount, <span class="kw">bool</span>&amp; bOutNeedsWrite);</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FRHITexture* GetTexture(<span class="kw">const</span> FRDGTextureRef&amp; Ref) <span class="kw">const</span>;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FRHITextureView* GetTextureView(<span class="kw">const</span> FRDGTextureRef&amp; Ref);</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">const</span> FRHITextureDesc&amp; GetTextureDesc(<span class="kw">const</span> FRDGTextureRef&amp; Ref) <span class="kw">const</span>;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FRHIBuffer* GetBuffer(<span class="kw">const</span> FRDGBufferRef&amp; Ref) <span class="kw">const</span>;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">void</span>* AllocateFrameTransient(std::size_t Size, std::size_t Align);</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">struct</span> FTextureEntry FRHITextureDesc Desc; FRHITexture* Native = <span class="kw">nullptr</span>; FRHITextureView* View = <span class="kw">nullptr</span>; ERDGResourceLifetime Lifetime = ERDGResourceLifetime::Persistent; std::uint32_t RefCount = 0; <span class="kw">bool</span> bActive = <span class="kw">false</span>; <span class="cm">/** Occupant generation: advanced every time a TRANSIENT slot is recycled at the frame * boundary. A handle carries the generation it was minted with, so a handle that outlives * its frame fails to resolve (Get*) instead of silently aliasing the next occupant. * Persistent slots never advance it (their handles are valid until the pool shuts down). */</span> std::uint32_t Generation = 0; <span class="cm">/** The frame (pool `FrameCounter`) this transient was last HANDED OUT in. A transient's native * may only be handed to another frame once the frame that used it has retired on the GPU, * which is what `FrameSlotCount` (the run-time K) expresses: the RHI's frame head * waits the fence of the frame K slots back, so "K frames old" IS "provably retired". With the * old unconditional per-frame recycle a transient reused at frame N could still be read by * frame N-1's queued command lists -- the same class of race as the camera ring's, and it only * stayed invisible because this frame's material parameter bytes happen to be constant. */</span> std::uint32_t LastUsedFrame = 0;;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">struct</span> FBufferEntry FRHIBufferDesc Desc; FRHIBuffer* Native = <span class="kw">nullptr</span>; ERDGResourceLifetime Lifetime = ERDGResourceLifetime::Persistent; std::uint32_t RefCount = 0; <span class="kw">bool</span> bActive = <span class="kw">false</span>; <span class="cm">/** See FTextureEntry::Generation. */</span> std::uint32_t Generation = 0; <span class="cm">/** See FTextureEntry::LastUsedFrame. */</span> std::uint32_t LastUsedFrame = 0;;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">struct</span> FPipelineLayoutEntry FRHIPipelineLayoutDesc Desc; FRHIPipelineLayout* Native = <span class="kw">nullptr</span>;;</td><td></td></tr>
@@ -195,10 +182,23 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td>FRDGBufferRef CreateBuffer(<span class="kw">const</span> FRHIBufferDesc&amp; Desc, ERDGResourceLifetime Lifetime);</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> ReleaseTexture(FRDGTextureRef&amp; Ref);</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> ReleaseBuffer(FRDGBufferRef&amp; Ref);</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FRHICommandList* AcquireRenderList();</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> RetireRenderLists(<span class="kw">const</span> std::vector&lt;FRHICommandList*&gt;&amp; Lists);</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FRHIPipelineLayout* GetOrCreatePipelineLayout(<span class="kw">const</span> FRHIPipelineLayoutDesc&amp; Desc);</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FRHIDescriptorSetLayout* GetOrCreateDescriptorSetLayout(<span class="kw">const</span> FRHIDescriptorSetLayoutDesc&amp; Desc);</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FRHIGraphicsPipeline* GetOrCreateGraphicsPipeline(<span class="kw">const</span> FRHIGraphicsPipelineDesc&amp; Desc);</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FRHIShaderModule* GetOrCreateShaderModule(<span class="kw">const</span> FRHIShaderModuleDesc&amp; Desc);</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FRHISampler* CreateSampler(<span class="kw">const</span> FRHISamplerDesc&amp; Desc);</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FRHIDescriptorSet* GetOrCreateDescriptorSet( FRHIDescriptorSetLayout* Layout, <span class="kw">const</span> FRHIDescriptorSetLayoutDesc&amp; LayoutDesc, <span class="kw">const</span> FRHIDescriptorWrite* Writes, std::uint32_t WriteCount);</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FRHIDescriptorSet* GetOrCreateMutableDescriptorSet( FRHIDescriptorSetLayout* Layout, <span class="kw">const</span> FRHIDescriptorSetLayoutDesc&amp; LayoutDesc, <span class="kw">const</span> FRHIDescriptorWrite* Writes, std::uint32_t WriteCount, <span class="kw">bool</span>&amp; bOutNeedsWrite);</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FRHITexture* GetTexture(<span class="kw">const</span> FRDGTextureRef&amp; Ref) <span class="kw">const</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FRHITextureView* GetTextureView(<span class="kw">const</span> FRDGTextureRef&amp; Ref);</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">const</span> FRHITextureDesc&amp; GetTextureDesc(<span class="kw">const</span> FRDGTextureRef&amp; Ref) <span class="kw">const</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FRHIBuffer* GetBuffer(<span class="kw">const</span> FRDGBufferRef&amp; Ref) <span class="kw">const</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> BeginFrame();</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Shutdown();</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">template</span> &lt;<span class="kw">typename</span> TParameters&gt; [[nodiscard]] TParameters* AllocParameters();</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">void</span>* AllocateFrameTransient(std::size_t Size, std::size_t Align);</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>[[nodiscard]] std::int32_t FindReusableTexture(<span class="kw">const</span> FRHITextureDesc&amp; Desc, ERDGResourceLifetime Lifetime) <span class="kw">const</span>;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>[[nodiscard]] std::int32_t FindReusableBuffer(<span class="kw">const</span> FRHIBufferDesc&amp; Desc, ERDGResourceLifetime Lifetime) <span class="kw">const</span>;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>[[nodiscard]] std::uint32_t AllocTextureSlot();</td><td></td></tr>
@@ -267,8 +267,6 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div class="sect">
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FRHITexture* GetRHI() <span class="kw">const</span>;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FRHITextureView* GetView() <span class="kw">const</span>;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>FRHIResourcePool* Pool = <span class="kw">nullptr</span>;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>std::uint32_t Id = ~0u;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>std::uint32_t Generation = 0;</td><td></td></tr>
@@ -279,6 +277,8 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td>FRDGTextureRef() = <span class="kw">default</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">bool</span> IsValid() <span class="kw">const</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Reset();</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FRHITexture* GetRHI() <span class="kw">const</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FRHITextureView* GetView() <span class="kw">const</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] ERHIFormat GetFormat() <span class="kw">const</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] std::uint32_t GetWidth() <span class="kw">const</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] std::uint32_t GetHeight() <span class="kw">const</span>;</td><td></td></tr>
@@ -290,7 +290,6 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div class="sect">
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FRHIBuffer* GetRHI() <span class="kw">const</span>;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>FRHIResourcePool* Pool = <span class="kw">nullptr</span>;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>std::uint32_t Id = ~0u;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>std::uint32_t Generation = 0;</td><td></td></tr>
@@ -301,6 +300,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td>FRDGBufferRef() = <span class="kw">default</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">bool</span> IsValid() <span class="kw">const</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Reset();</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FRHIBuffer* GetRHI() <span class="kw">const</span>;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>FRDGBufferRef(FRHIResourcePool* InPool, std::uint32_t InId, std::uint32_t InGeneration) : Pool(InPool) , Id(InId) , Generation(InGeneration);</td><td></td></tr>
 </tbody></table></div>
 </div>
@@ -458,20 +458,11 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">bool</span> bGraphReady = <span class="kw">false</span>;</td><td></td></tr>
 <tr><td><span class="acc a-protected">protected</span></td><td>std::unique_ptr&lt;FContext[]&gt; Slots;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>MAHO_DECLARE_FRAME(FRender);</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FRHIDescriptorSetLayout* GetOrCreateDescriptorSetLayout(<span class="kw">const</span> FRHIDescriptorSetLayoutDesc&amp; Desc);</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FRHISampler* CreateSampler(<span class="kw">const</span> FRHISamplerDesc&amp; Desc);</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FRHIDescriptorSet* GetOrCreateDescriptorSet( FRHIDescriptorSetLayout* Layout, <span class="kw">const</span> FRHIDescriptorSetLayoutDesc&amp; LayoutDesc, <span class="kw">const</span> FRHIDescriptorWrite* Writes, std::uint32_t WriteCount);</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FRHIShaderModule* GetOrCreateShaderModule(<span class="kw">const</span> FRHIShaderModuleDesc&amp; Desc);</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FRHIDescriptorSet* GetOrCreateMutableDescriptorSet( FRHIDescriptorSetLayout* Layout, <span class="kw">const</span> FRHIDescriptorSetLayoutDesc&amp; LayoutDesc, <span class="kw">const</span> FRHIDescriptorWrite* Writes, std::uint32_t WriteCount, <span class="kw">bool</span>&amp; bOutNeedsWrite);</td><td></td></tr>
-<tr><td><span class="acc a-private">private</span></td><td>[[nodiscard]] <span class="kw">void</span>* AllocParameterBytes(std::size_t Size, std::size_t Align);</td><td></td></tr>
-<tr><td><span class="acc a-private">private</span></td><td>[[nodiscard]] FRHIPipelineLayout* GetOrCreatePipelineLayout(<span class="kw">const</span> FRHIPipelineLayoutDesc&amp; Desc);</td><td></td></tr>
-<tr><td><span class="acc a-private">private</span></td><td>[[nodiscard]] FRHIGraphicsPipeline* GetOrCreateGraphicsPipeline(<span class="kw">const</span> FRHIGraphicsPipelineDesc&amp; Desc);</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>std::unique_ptr&lt;FRHI&gt; RHI;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>std::unique_ptr&lt;FShaderCompilerServer&gt; ShaderCompiler;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>std::unique_ptr&lt;FRHIResourcePool&gt; ResourcePool;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>std::mutex OffFramePassMutex;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>std::vector&lt;FRenderContext::FPendingPass&gt; OffFramePasses;</td><td></td></tr>
-<tr><td><span class="acc a-private">private</span></td><td>[[nodiscard]] FRHICommandList* RecordPass(<span class="kw">const</span> std::function&lt;<span class="kw">void</span>(FRHICommandList&amp;)&gt;&amp; PassFn);</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>std::atomic&lt;std::uint32_t&gt; FrameBatchesPosted 0;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>std::uint32_t TicksSeen = 0;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>std::unordered_map&lt;Name::FName, FRDGResourceRef&gt; GpuMirrors;</td><td></td></tr>
@@ -512,6 +503,11 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">template</span> &lt;<span class="kw">typename</span> TParameters&gt; <span class="kw">void</span> AddPass( ERHICommandListType PassType, FRHIGraphicsPipelineDesc PipelineDesc, <span class="kw">const</span> FRenderTarget&amp; Target, <span class="kw">const</span> TParameters* Parameters, std::function&lt;<span class="kw">void</span>(FRHICommandList&amp;)&gt; PassFn);</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">template</span> &lt;<span class="kw">typename</span> TParameters&gt; <span class="kw">void</span> AddPass( ERHICommandListType PassType, FRHIGraphicsPipelineDesc PipelineDesc, <span class="kw">const</span> FRenderTarget&amp; Target, <span class="kw">const</span> TParameters* Parameters, <span class="kw">const</span> FDrawList&amp; DrawList);</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">template</span> &lt;<span class="kw">typename</span> TParameters&gt; [[nodiscard]] TParameters* AllocParameters();</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FRHIDescriptorSetLayout* GetOrCreateDescriptorSetLayout(<span class="kw">const</span> FRHIDescriptorSetLayoutDesc&amp; Desc);</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FRHISampler* CreateSampler(<span class="kw">const</span> FRHISamplerDesc&amp; Desc);</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FRHIDescriptorSet* GetOrCreateDescriptorSet( FRHIDescriptorSetLayout* Layout, <span class="kw">const</span> FRHIDescriptorSetLayoutDesc&amp; LayoutDesc, <span class="kw">const</span> FRHIDescriptorWrite* Writes, std::uint32_t WriteCount);</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FRHIShaderModule* GetOrCreateShaderModule(<span class="kw">const</span> FRHIShaderModuleDesc&amp; Desc);</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FRHIDescriptorSet* GetOrCreateMutableDescriptorSet( FRHIDescriptorSetLayout* Layout, <span class="kw">const</span> FRHIDescriptorSetLayoutDesc&amp; LayoutDesc, <span class="kw">const</span> FRHIDescriptorWrite* Writes, std::uint32_t WriteCount, <span class="kw">bool</span>&amp; bOutNeedsWrite);</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">template</span> &lt;<span class="kw">typename</span> T&gt; [[nodiscard]] TShaderHandle&lt;T&gt; TryGetShader();</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> PreInitialize(FEngineBase&amp;, FEngineContext&amp;) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Initialize(FEngineBase&amp; Engine, FEngineContext&amp; Frame) <span class="kw">override</span>;</td><td></td></tr>
@@ -525,8 +521,12 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> RequestExit(FEngineBase&amp; Engine, FEngineContext&amp; Frame) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> AddPass( ERHICommandListType PassType, FRHIGraphicsPipelineDesc PipelineDesc, <span class="kw">const</span> FRenderPassDesc&amp; Pass, std::function&lt;<span class="kw">void</span>(FRHICommandList&amp;)&gt; PassFn, std::vector&lt;FRHIDescriptorSet*&gt;* OutDefaultSets = <span class="kw">nullptr</span>);</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>FShaderCompilerServer* GetShaderCompiler() <span class="kw">const</span>;</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>[[nodiscard]] <span class="kw">void</span>* AllocParameterBytes(std::size_t Size, std::size_t Align);</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> BeginResourcePool();</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> WaitShaderCompiles();</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>[[nodiscard]] FRHIPipelineLayout* GetOrCreatePipelineLayout(<span class="kw">const</span> FRHIPipelineLayoutDesc&amp; Desc);</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>[[nodiscard]] FRHIGraphicsPipeline* GetOrCreateGraphicsPipeline(<span class="kw">const</span> FRHIGraphicsPipelineDesc&amp; Desc);</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>[[nodiscard]] FRHICommandList* RecordPass(<span class="kw">const</span> std::function&lt;<span class="kw">void</span>(FRHICommandList&amp;)&gt;&amp; PassFn);</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> OnAssetMirrorImported(<span class="kw">const</span> Name::FName&amp; AssetName, Resource::FOnTransferDone Done);</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> OnAssetMirrorUnloaded(<span class="kw">const</span> Name::FName&amp; AssetName, Resource::FOnTransferDone Done);</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> OnAssetMirrorCreated(<span class="kw">const</span> Name::FName&amp; AssetName, <span class="kw">const</span> Resource::FResource&amp; Resource);</td><td></td></tr>
@@ -673,11 +673,6 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div class="ent e-class" id="Public__ShaderCompiler_h-3">
 <h3><span class="type">类</span> FShaderCompilerServer <span class="base">: : <span class="kw">public</span> FThreadedServer</span></h3>
 <div class="sect">
-<h4>字段</h4>
-<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-private">private</span></td><td>[[nodiscard]] <span class="kw">const</span> <span class="kw">char</span>* GetThreadName() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
-</tbody></table></div>
-<div class="sect">
 <h4>接口</h4>
 <table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
 <tr><td><span class="acc a-public">public</span></td><td>FShaderCompilerServer();</td><td></td></tr>
@@ -687,6 +682,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> FlushCompiles();</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">static</span> FShaderCompileResult CompileStage( <span class="kw">const</span> FShaderCompileDesc&amp; Desc);</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> ProcessCompileJob(<span class="kw">const</span> FShaderCompileDesc&amp; Desc, std::function&lt;<span class="kw">void</span>(<span class="kw">const</span> FShaderCompileResult&amp;)&gt; OnDone);</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>[[nodiscard]] <span class="kw">const</span> <span class="kw">char</span>* GetThreadName() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
 </tbody></table></div>
 </div>
 </div>

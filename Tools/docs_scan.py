@@ -261,6 +261,32 @@ def IsMacroCallSignature(Signature: str) -> bool:
 	return bool(MACRO_CALL_RE.match(Signature.strip()))
 
 
+def HasFunctionDeclarator(Node: FSnap) -> bool:
+	"""这个成员是不是"函数"：**要在声明符链里递归找** `function_declarator`。
+
+	只看直接子节点会漏掉被包了一层的形态 —— `void* GetProcAddress(...)` 的直接子节点是
+	`pointer_declarator`，`std::string& GetChildren(...)` 与 `operator=(...)` 是 `reference_declarator`，
+	它们里面才藏着 `function_declarator`（漏判的表现是"函数被列进字段表"）。"""
+	Stack = list(Node.Kids)
+	while Stack:
+		Current = Stack.pop()
+		if Current.Type in BODY_TYPES:          # 函数体/类体不是声明符，别进去
+			continue
+		if Current.Type == "function_declarator":
+			return True
+		Stack.extend(Current.Kids)
+	return False
+
+
+FORWARD_DECL_RE = re.compile(r"^(struct|class|union|enum)\s+\w+\s*;$")
+
+
+def IsForwardDeclaration(Signature: str) -> bool:
+	"""`struct FImpl;` 这类前向声明：它是**嵌套类型**，不是字段（字段表里出现它，读的人会以为
+	那是个数据成员）。"""
+	return bool(FORWARD_DECL_RE.match(Signature.strip()))
+
+
 def SignatureOf(Node: FSnap, Source: bytes) -> str:
 	"""声明的展示文本：去掉函数体、压掉换行；`= delete` / `= 0` 这类尾巴保留。"""
 	Body = Node.Find(*BODY_TYPES)
@@ -479,8 +505,11 @@ class FScanner:
 			D.Field(Signature, Desc=Desc)
 			self.Stats["members"] += 1
 			return
-		if any(C.Type in ("function_declarator", "function_definition") for C in Node.Kids) \
-			or Node.Type == "function_definition":
+		if IsForwardDeclaration(Signature):      # 前向声明是嵌套类型，不是字段
+			D.Nested(Signature.rstrip(";").split()[-1], Type=Signature.split()[0], Desc=Desc)
+			self.Stats["members"] += 1
+			return
+		if Node.Type == "function_definition" or HasFunctionDeclarator(Node):
 			D.Interface(Signature, Desc=Desc)
 		else:
 			D.Field(Signature, Desc=Desc)

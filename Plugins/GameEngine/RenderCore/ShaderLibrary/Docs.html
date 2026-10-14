@@ -197,6 +197,10 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td>std::vector&lt;FMaterialProperty&gt; Properties;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>std::uint32_t UniformSize = 0;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>std::uint32_t SamplerCount = 0;</td><td></td></tr>
+</tbody></table></div>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">const</span> FMaterialProperty* Find(std::string_view PropName) <span class="kw">const</span>;</td><td></td></tr>
 </tbody></table></div>
 </div>
@@ -265,8 +269,6 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
 <tr><td><span class="acc a-private">private</span></td><td>MAHO_DECLARE_FRAME(FShaderLibrary);</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">const</span> FShaderDesc* Get(Name::FName ShaderName) <span class="kw">const</span>;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">const</span> FShaderDesc* GetFallback() <span class="kw">const</span>;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">struct</span> FCacheKey std::uint64_t SourceHash = 0; std::uint32_t BlockVersion = 0; [[nodiscard]] <span class="kw">bool</span> <span class="kw">operator</span>==(<span class="kw">const</span> FCacheKey&amp; O) <span class="kw">const</span> = <span class="kw">default</span>;;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">struct</span> FCacheKeyHash [[nodiscard]] std::size_t <span class="kw">operator</span>()(<span class="kw">const</span> FCacheKey&amp; K) <span class="kw">const</span> <span class="kw">noexcept</span> <span class="cm">// 两个独立的 64/32 位量：直接混一混，够用且不引入第三个哈希库。 return static_cast&lt;std::size_t&gt;(K.SourceHash ^ (static_cast&lt;std::uint64_t&gt;(K.BlockVersion) &lt;&lt; 32));;</span></td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>std::unordered_map&lt;Name::FName, FShaderDesc&gt; Shaders;</td><td></td></tr>
@@ -282,6 +284,8 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td>~FShaderLibrary() <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>FShaderLibrary(<span class="kw">const</span> FShaderLibrary&amp;) = <span class="kw">delete</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>FShaderLibrary&amp; <span class="kw">operator</span>=(<span class="kw">const</span> FShaderLibrary&amp;) = <span class="kw">delete</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">const</span> FShaderDesc* Get(Name::FName ShaderName) <span class="kw">const</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">const</span> FShaderDesc* GetFallback() <span class="kw">const</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FShaderDiagnostics GetDiagnostics() <span class="kw">const</span>;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> Initialize(FEngineBase&amp; Engine, FEngineContext&amp; Frame) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> Shutdown(FEngineBase&amp; Engine, FEngineContext&amp; Frame) <span class="kw">override</span>;</td><td></td></tr>

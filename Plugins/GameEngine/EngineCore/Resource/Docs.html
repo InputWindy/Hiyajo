@@ -201,13 +201,6 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td>TMulticastEvent&lt;<span class="kw">void</span>(<span class="kw">const</span> Name::FName&amp;, FOnTransferDone)&gt; OnAssetUnloaded;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>TMulticastEvent&lt;<span class="kw">void</span>(<span class="kw">const</span> Name::FName&amp;, <span class="kw">const</span> FResource&amp;)&gt; OnAssetCreated;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>TMulticastEvent&lt;<span class="kw">void</span>(<span class="kw">const</span> Name::FName&amp;, <span class="kw">bool</span>)&gt; OnAssetExported;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">template</span> &lt;<span class="kw">typename</span> TResource&gt; TResource* CreateResource(std::string_view AssetPath, <span class="kw">typename</span> TResourceCreateDesc&lt;TResource&gt;::FConfig Config);</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">const</span> FResource* Find(std::string_view AssetPath) <span class="kw">const</span>;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FResource* FindMutable(std::string_view AssetPath);</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">const</span> FResource* TryLoad(std::string_view AssetPath);</td><td></td></tr>
-<tr><td><span class="acc a-private">private</span></td><td>[[nodiscard]] <span class="kw">const</span> <span class="kw">char</span>* GetThreadName() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
-<tr><td><span class="acc a-private">private</span></td><td><span class="kw">const</span> FResource* RegisterResource(std::string AssetPath, std::unique_ptr&lt;FResource&gt; Resource);</td><td></td></tr>
-<tr><td><span class="acc a-private">private</span></td><td><span class="kw">class</span> FImpl;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>std::unique_ptr&lt;FImpl&gt; Impl;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>FReadbackFn Readback;</td><td></td></tr>
 </tbody></table></div>
@@ -218,8 +211,13 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> SetReadback(FReadbackFn Fn);</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">template</span> &lt;<span class="kw">typename</span> TResource&gt; <span class="kw">bool</span> Import(<span class="kw">typename</span> TResourceImporter&lt;TResource&gt;::FConfig Config);</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">template</span> &lt;<span class="kw">typename</span> TResource&gt; <span class="kw">bool</span> Export(<span class="kw">typename</span> TResourceExporter&lt;TResource&gt;::FConfig Config, std::string_view AssetPath);</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">template</span> &lt;<span class="kw">typename</span> TResource&gt; TResource* CreateResource(std::string_view AssetPath, <span class="kw">typename</span> TResourceCreateDesc&lt;TResource&gt;::FConfig Config);</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">bool</span> DestroyResource(std::string_view AssetPath);</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">const</span> FResource* Find(std::string_view AssetPath) <span class="kw">const</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FResource* FindMutable(std::string_view AssetPath);</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">const</span> FResource* TryLoad(std::string_view AssetPath);</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> ForEachResource(<span class="kw">const</span> std::function&lt;<span class="kw">void</span>(<span class="kw">const</span> Name::FName&amp;, <span class="kw">const</span> FResource&amp;)&gt;&amp; Fn) <span class="kw">const</span>;</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>[[nodiscard]] <span class="kw">const</span> <span class="kw">char</span>* GetThreadName() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> PreInitialize(FEngineBase&amp;, FEngineContext&amp;) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> Initialize(FEngineBase&amp; Engine, FEngineContext&amp; Frame) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> PostInitialize(FEngineBase&amp;, FEngineContext&amp;) <span class="kw">override</span>;</td><td></td></tr>
@@ -234,6 +232,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">bool</span> EnqueueImport( std::string SourcePath, std::string AssetPath, std::function&lt;<span class="kw">void</span>(std::span&lt;<span class="kw">const</span> std::uint8_t&gt;)&gt; OnBulkReady);</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>std::vector&lt;std::uint8_t&gt; ReadAssetFile(std::string_view SourcePath);</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">bool</span> EnqueueExport( std::vector&lt;std::uint8_t&gt; Bytes, std::string DestinationPath, Name::FName AssetName);</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">const</span> FResource* RegisterResource(std::string AssetPath, std::unique_ptr&lt;FResource&gt; Resource);</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>FTransferHandle RequestLoad(std::string Path);</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> ProcessReadyIO();</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> LoadAssetBytes(std::shared_ptr&lt;FTransferState&gt; State, std::string Path);</td><td></td></tr>
@@ -244,6 +243,11 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">template</span> &lt;<span class="kw">typename</span> TResource&gt; <span class="kw">bool</span> FResourceSystem::Import(<span class="kw">typename</span> TResourceImporter&lt;TResource&gt;::FConfig Config);</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">template</span> &lt;<span class="kw">typename</span> TResource&gt; TResource* FResourceSystem::CreateResource(std::string_view AssetPath, <span class="kw">typename</span> TResourceCreateDesc&lt;TResource&gt;::FConfig Config);</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">template</span> &lt;<span class="kw">typename</span> TResource&gt; <span class="kw">bool</span> FResourceSystem::Export(<span class="kw">typename</span> TResourceExporter&lt;TResource&gt;::FConfig Config, std::string_view AssetPath);</td><td></td></tr>
+</tbody></table></div>
+<div class="sect">
+<h4>嵌套</h4>
+<table><thead><tr><th>访问域</th><th>名称</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-private">private</span></td><td>FImpl</td><td></td></tr>
 </tbody></table></div>
 </div>
 </div>

@@ -151,36 +151,6 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div class="ent e-class" id="Private__RHI_h-1">
 <h3><span class="type">类</span> IDynamicRHI</h3>
 <div class="sect">
-<h4>字段</h4>
-<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> IDynamicRHIMemoryAllocator* GetMemoryAllocator() = 0;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIQueue&amp; GetGraphicsQueue() = 0;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIQueue&amp; GetComputeQueue() = 0;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIQueue&amp; GetTransferQueue() = 0;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHICommandList* CreateCommandList(ERHICommandListType Type) = 0;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIFence* CreateFence(<span class="kw">bool</span> bSignaled) = 0;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHISemaphore* CreateGpuSemaphore() = 0;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIBuffer* CreateBuffer(<span class="kw">const</span> FRHIBufferDesc&amp; Desc) = 0;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHITexture* CreateTexture(<span class="kw">const</span> FRHITextureDesc&amp; Desc) = 0;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHISampler* CreateSampler(<span class="kw">const</span> FRHISamplerDesc&amp; Desc) = 0;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIShaderModule* CreateShaderModule(<span class="kw">const</span> FRHIShaderModuleDesc&amp; Desc) = 0;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIGraphicsPipeline* CreateGraphicsPipeline(<span class="kw">const</span> FRHIGraphicsPipelineDesc&amp; Desc) = 0;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIComputePipeline* CreateComputePipeline(<span class="kw">const</span> FRHIComputePipelineDesc&amp; Desc) = 0;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIStructuredBuffer* CreateStructuredBuffer(<span class="kw">const</span> FRHIStructuredBufferDesc&amp; Desc) = 0;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIBufferView* CreateBufferView(<span class="kw">const</span> FRHIBufferViewDesc&amp; Desc) = 0;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHITextureView* CreateTextureView(<span class="kw">const</span> FRHITextureViewDesc&amp; Desc) = 0;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIDescriptorSetLayout* CreateDescriptorSetLayout(<span class="kw">const</span> FRHIDescriptorSetLayoutDesc&amp; Desc) = 0;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIPipelineLayout* CreatePipelineLayout(<span class="kw">const</span> FRHIPipelineLayoutDesc&amp; Desc) = 0;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIDescriptorPool* CreateDescriptorPool(<span class="kw">const</span> FRHIDescriptorPoolDesc&amp; Desc) = 0;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIDescriptorSet* AllocateDescriptorSet(FRHIDescriptorPool* Pool, FRHIDescriptorSetLayout* Layout) = 0;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIRenderPass* CreateRenderPass(<span class="kw">const</span> FRHIRenderPassDesc&amp; Desc) = 0;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIFramebuffer* CreateFramebuffer(<span class="kw">const</span> FRHIFramebufferDesc&amp; Desc) = 0;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIQueryPool* CreateQueryPool(ERHIQueryType Type, std::uint32_t QueryCount) = 0;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIRayTracingPipeline* CreateRayTracingPipeline(<span class="kw">const</span> FRHIRayTracingPipelineDesc&amp; Desc) = 0;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIAccelerationStructure* CreateAccelerationStructure(<span class="kw">const</span> FRHIRayTracingGeometryDesc&amp; Desc) = 0;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIBuffer* CreateShaderBindingTable( FRHIRayTracingPipeline* Pipeline, <span class="kw">const</span> FRHISbtGroup* Groups, std::uint32_t GroupCount, std::uint32_t* OutRayGenOffset = <span class="kw">nullptr</span>, std::uint32_t* OutRayGenStride = <span class="kw">nullptr</span>, std::uint32_t* OutHitOffset = <span class="kw">nullptr</span>, std::uint32_t* OutHitStride = <span class="kw">nullptr</span>, std::uint32_t* OutMissOffset = <span class="kw">nullptr</span>, std::uint32_t* OutMissStride = <span class="kw">nullptr</span>) = 0;</td><td></td></tr>
-</tbody></table></div>
-<div class="sect">
 <h4>接口</h4>
 <table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> ~IDynamicRHI() = <span class="kw">default</span>;</td><td></td></tr>
@@ -197,51 +167,73 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> RequestBackbufferCapture(FBackbufferCaptureSink Sink) = 0;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> ERHIFormat GetSwapchainFormat() <span class="kw">const</span> = 0;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> <span class="kw">bool</span> IsInitialized() <span class="kw">const</span> = 0;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> IDynamicRHIMemoryAllocator* GetMemoryAllocator() = 0;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIQueue&amp; GetGraphicsQueue() = 0;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIQueue&amp; GetComputeQueue() = 0;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIQueue&amp; GetTransferQueue() = 0;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHICommandList* CreateCommandList(ERHICommandListType Type) = 0;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> DestroyCommandList(FRHICommandList* CmdList) = 0;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIFence* CreateFence(<span class="kw">bool</span> bSignaled) = 0;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> DestroyFence(FRHIFence* Fence) = 0;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> WaitForFence(FRHIFence* Fence, std::uint64_t TimeoutNs = (std::numeric_limits&lt;std::uint64_t&gt;::max)()) = 0;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> <span class="kw">bool</span> IsFenceSignaled(FRHIFence* Fence) = 0;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> ResetFence(FRHIFence* Fence) = 0;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHISemaphore* CreateGpuSemaphore() = 0;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> DestroyGpuSemaphore(FRHISemaphore* Semaphore) = 0;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIBuffer* CreateBuffer(<span class="kw">const</span> FRHIBufferDesc&amp; Desc) = 0;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> DestroyBuffer(FRHIBuffer* Buffer) = 0;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHITexture* CreateTexture(<span class="kw">const</span> FRHITextureDesc&amp; Desc) = 0;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> DestroyTexture(FRHITexture* Texture) = 0;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHISampler* CreateSampler(<span class="kw">const</span> FRHISamplerDesc&amp; Desc) = 0;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> DestroySampler(FRHISampler* Sampler) = 0;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIShaderModule* CreateShaderModule(<span class="kw">const</span> FRHIShaderModuleDesc&amp; Desc) = 0;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> DestroyShaderModule(FRHIShaderModule* Module) = 0;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIGraphicsPipeline* CreateGraphicsPipeline(<span class="kw">const</span> FRHIGraphicsPipelineDesc&amp; Desc) = 0;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> DestroyGraphicsPipeline(FRHIGraphicsPipeline* Pipeline) = 0;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIComputePipeline* CreateComputePipeline(<span class="kw">const</span> FRHIComputePipelineDesc&amp; Desc) = 0;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> DestroyComputePipeline(FRHIComputePipeline* Pipeline) = 0;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIStructuredBuffer* CreateStructuredBuffer(<span class="kw">const</span> FRHIStructuredBufferDesc&amp; Desc) = 0;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> DestroyStructuredBuffer(FRHIStructuredBuffer* Buffer) = 0;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIBufferView* CreateBufferView(<span class="kw">const</span> FRHIBufferViewDesc&amp; Desc) = 0;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> DestroyBufferView(FRHIBufferView* View) = 0;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHITextureView* CreateTextureView(<span class="kw">const</span> FRHITextureViewDesc&amp; Desc) = 0;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> DestroyTextureView(FRHITextureView* View) = 0;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIDescriptorSetLayout* CreateDescriptorSetLayout(<span class="kw">const</span> FRHIDescriptorSetLayoutDesc&amp; Desc) = 0;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> DestroyDescriptorSetLayout(FRHIDescriptorSetLayout* Layout) = 0;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIPipelineLayout* CreatePipelineLayout(<span class="kw">const</span> FRHIPipelineLayoutDesc&amp; Desc) = 0;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> DestroyPipelineLayout(FRHIPipelineLayout* Layout) = 0;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIDescriptorPool* CreateDescriptorPool(<span class="kw">const</span> FRHIDescriptorPoolDesc&amp; Desc) = 0;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> DestroyDescriptorPool(FRHIDescriptorPool* Pool) = 0;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIDescriptorSet* AllocateDescriptorSet(FRHIDescriptorPool* Pool, FRHIDescriptorSetLayout* Layout) = 0;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> FreeDescriptorSet(FRHIDescriptorPool* Pool, FRHIDescriptorSet* Set) = 0;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> UpdateDescriptorSets(<span class="kw">const</span> FRHIDescriptorWrite* Writes, std::uint32_t Count) = 0;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIRenderPass* CreateRenderPass(<span class="kw">const</span> FRHIRenderPassDesc&amp; Desc) = 0;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> DestroyRenderPass(FRHIRenderPass* Pass) = 0;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIFramebuffer* CreateFramebuffer(<span class="kw">const</span> FRHIFramebufferDesc&amp; Desc) = 0;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> DestroyFramebuffer(FRHIFramebuffer* Framebuffer) = 0;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> std::uint32_t GetFramebufferWidth() <span class="kw">const</span> = 0;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> std::uint32_t GetFramebufferHeight() <span class="kw">const</span> = 0;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> <span class="kw">bool</span> IsFormatSupported(ERHIFormat Format, ERHITextureUsage Usage) <span class="kw">const</span> = 0;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">bool</span> ReadbackTexture( FRHITexture* Src, <span class="kw">const</span> FRHITextureCopyRegion&amp; Region, <span class="kw">void</span>* Out, std::uint64_t OutSize, ERHIResourceState PreserveState = ERHIResourceState::ShaderResource) = 0;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIQueryPool* CreateQueryPool(ERHIQueryType Type, std::uint32_t QueryCount) = 0;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> DestroyQueryPool(FRHIQueryPool* Pool) = 0;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">bool</span> GetQueryPoolResults( FRHIQueryPool* Pool, std::uint32_t FirstQuery, std::uint32_t QueryCount, std::uint64_t* Results, std::size_t Stride, <span class="kw">bool</span> bWait = <span class="kw">true</span>) = 0;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIRayTracingPipeline* CreateRayTracingPipeline(<span class="kw">const</span> FRHIRayTracingPipelineDesc&amp; Desc) = 0;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> DestroyRayTracingPipeline(FRHIRayTracingPipeline* Pipeline) = 0;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIAccelerationStructure* CreateAccelerationStructure(<span class="kw">const</span> FRHIRayTracingGeometryDesc&amp; Desc) = 0;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> DestroyAccelerationStructure(FRHIAccelerationStructure* Accel) = 0;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">bool</span> GetAccelerationStructureBuildSizes( <span class="kw">const</span> FRHIRayTracingGeometryDesc&amp; Desc, std::uint64_t&amp; OutAccelSize, std::uint64_t&amp; OutScratchSize) = 0;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIBuffer* CreateShaderBindingTable( FRHIRayTracingPipeline* Pipeline, <span class="kw">const</span> FRHISbtGroup* Groups, std::uint32_t GroupCount, std::uint32_t* OutRayGenOffset = <span class="kw">nullptr</span>, std::uint32_t* OutRayGenStride = <span class="kw">nullptr</span>, std::uint32_t* OutHitOffset = <span class="kw">nullptr</span>, std::uint32_t* OutHitStride = <span class="kw">nullptr</span>, std::uint32_t* OutMissOffset = <span class="kw">nullptr</span>, std::uint32_t* OutMissStride = <span class="kw">nullptr</span>) = 0;</td><td></td></tr>
 <tr><td><span class="acc a-protected">protected</span></td><td>IDynamicRHI() = <span class="kw">default</span>;</td><td></td></tr>
 </tbody></table></div>
 </div>
 <div class="ent e-class" id="Private__RHI_h-2">
 <h3><span class="type">类</span> FRHIFactory</h3>
 <div class="sect">
-<h4>字段</h4>
-<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">static</span> IDynamicRHI* Create(ERHIBackend Backend);</td><td></td></tr>
-</tbody></table></div>
-<div class="sect">
 <h4>接口</h4>
 <table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
 <tr><td><span class="acc a-public">public</span></td><td>FRHIFactory() = <span class="kw">delete</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">static</span> IDynamicRHI* Create(ERHIBackend Backend);</td><td></td></tr>
 </tbody></table></div>
 </div>
 </div>
@@ -383,7 +375,6 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div class="sect">
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span>* Map(FRHIMemoryAllocation&amp; Alloc) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">struct</span> FDeferredBuffer VkBuffer Buffer = VK_NULL_HANDLE; VmaAllocation Allocation = <span class="kw">nullptr</span>;;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>std::uint32_t FrameSlotCount = 1;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>VmaAllocator Allocator = <span class="kw">nullptr</span>;</td><td></td></tr>
@@ -409,6 +400,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> FlushDeferredFrees();</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">static</span> VmaAllocationCreateInfo MakeAllocationInfo(ERHIMemoryUsage MemoryUsage);</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> Free(FRHIMemoryAllocation&amp; Alloc) <span class="kw">override</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span>* Map(FRHIMemoryAllocation&amp; Alloc) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> Unmap(FRHIMemoryAllocation&amp; Alloc) <span class="kw">override</span>;</td><td></td></tr>
 </tbody></table></div>
 </div>
@@ -833,32 +825,6 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div class="sect">
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> IDynamicRHIMemoryAllocator* GetMemoryAllocator() <span class="kw">override</span>;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIQueue&amp; GetGraphicsQueue() <span class="kw">override</span>;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIQueue&amp; GetComputeQueue() <span class="kw">override</span>;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIQueue&amp; GetTransferQueue() <span class="kw">override</span>;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHICommandList* CreateCommandList(ERHICommandListType Type) <span class="kw">override</span>;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIFence* CreateFence(<span class="kw">bool</span> bSignaled) <span class="kw">override</span>;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHISemaphore* CreateGpuSemaphore() <span class="kw">override</span>;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIBuffer* CreateBuffer(<span class="kw">const</span> FRHIBufferDesc&amp; Desc) <span class="kw">override</span>;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHITexture* CreateTexture(<span class="kw">const</span> FRHITextureDesc&amp; Desc) <span class="kw">override</span>;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHISampler* CreateSampler(<span class="kw">const</span> FRHISamplerDesc&amp; Desc) <span class="kw">override</span>;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIShaderModule* CreateShaderModule(<span class="kw">const</span> FRHIShaderModuleDesc&amp; Desc) <span class="kw">override</span>;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIGraphicsPipeline* CreateGraphicsPipeline(<span class="kw">const</span> FRHIGraphicsPipelineDesc&amp; Desc) <span class="kw">override</span>;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIComputePipeline* CreateComputePipeline(<span class="kw">const</span> FRHIComputePipelineDesc&amp; Desc) <span class="kw">override</span>;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIStructuredBuffer* CreateStructuredBuffer(<span class="kw">const</span> FRHIStructuredBufferDesc&amp; Desc) <span class="kw">override</span>;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIBufferView* CreateBufferView(<span class="kw">const</span> FRHIBufferViewDesc&amp; Desc) <span class="kw">override</span>;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHITextureView* CreateTextureView(<span class="kw">const</span> FRHITextureViewDesc&amp; Desc) <span class="kw">override</span>;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIDescriptorSetLayout* CreateDescriptorSetLayout(<span class="kw">const</span> FRHIDescriptorSetLayoutDesc&amp; Desc) <span class="kw">override</span>;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIPipelineLayout* CreatePipelineLayout(<span class="kw">const</span> FRHIPipelineLayoutDesc&amp; Desc) <span class="kw">override</span>;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIDescriptorPool* CreateDescriptorPool(<span class="kw">const</span> FRHIDescriptorPoolDesc&amp; Desc) <span class="kw">override</span>;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIDescriptorSet* AllocateDescriptorSet(FRHIDescriptorPool* Pool, FRHIDescriptorSetLayout* Layout) <span class="kw">override</span>;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIRenderPass* CreateRenderPass(<span class="kw">const</span> FRHIRenderPassDesc&amp; Desc) <span class="kw">override</span>;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIFramebuffer* CreateFramebuffer(<span class="kw">const</span> FRHIFramebufferDesc&amp; Desc) <span class="kw">override</span>;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIQueryPool* CreateQueryPool(ERHIQueryType Type, std::uint32_t QueryCount) <span class="kw">override</span>;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIRayTracingPipeline* CreateRayTracingPipeline(<span class="kw">const</span> FRHIRayTracingPipelineDesc&amp; Desc) <span class="kw">override</span>;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIAccelerationStructure* CreateAccelerationStructure(<span class="kw">const</span> FRHIRayTracingGeometryDesc&amp; Desc) <span class="kw">override</span>;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIBuffer* CreateShaderBindingTable( FRHIRayTracingPipeline* Pipeline, <span class="kw">const</span> FRHISbtGroup* Groups, std::uint32_t GroupCount, std::uint32_t* OutRayGenOffset, std::uint32_t* OutRayGenStride, std::uint32_t* OutHitOffset, std::uint32_t* OutHitStride, std::uint32_t* OutMissOffset, std::uint32_t* OutMissStride) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>std::uint32_t FrameSlots = 0;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>VkCommandBuffer CommandBuffer = VK_NULL_HANDLE;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>FRHICommandList* FrameCommandListRHI = <span class="kw">nullptr</span>;</td><td></td></tr>
@@ -957,35 +923,61 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> <span class="kw">bool</span> IsFormatSupported(ERHIFormat Format, ERHITextureUsage Usage) <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">bool</span> ReadbackTexture( FRHITexture* Src, <span class="kw">const</span> FRHITextureCopyRegion&amp; Region, <span class="kw">void</span>* Out, std::uint64_t OutSize, ERHIResourceState PreserveState) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> <span class="kw">bool</span> IsInitialized() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> IDynamicRHIMemoryAllocator* GetMemoryAllocator() <span class="kw">override</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIQueue&amp; GetGraphicsQueue() <span class="kw">override</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIQueue&amp; GetComputeQueue() <span class="kw">override</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIQueue&amp; GetTransferQueue() <span class="kw">override</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHICommandList* CreateCommandList(ERHICommandListType Type) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> DestroyCommandList(FRHICommandList* CmdList) <span class="kw">override</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIFence* CreateFence(<span class="kw">bool</span> bSignaled) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> DestroyFence(FRHIFence* Fence) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> WaitForFence(FRHIFence* Fence, std::uint64_t TimeoutNs) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> <span class="kw">bool</span> IsFenceSignaled(FRHIFence* Fence) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> ResetFence(FRHIFence* Fence) <span class="kw">override</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHISemaphore* CreateGpuSemaphore() <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> DestroyGpuSemaphore(FRHISemaphore* Semaphore) <span class="kw">override</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIBuffer* CreateBuffer(<span class="kw">const</span> FRHIBufferDesc&amp; Desc) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> DestroyBuffer(FRHIBuffer* Buffer) <span class="kw">override</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHITexture* CreateTexture(<span class="kw">const</span> FRHITextureDesc&amp; Desc) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> DestroyTexture(FRHITexture* Texture) <span class="kw">override</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHISampler* CreateSampler(<span class="kw">const</span> FRHISamplerDesc&amp; Desc) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> DestroySampler(FRHISampler* Sampler) <span class="kw">override</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIShaderModule* CreateShaderModule(<span class="kw">const</span> FRHIShaderModuleDesc&amp; Desc) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> DestroyShaderModule(FRHIShaderModule* Module) <span class="kw">override</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIGraphicsPipeline* CreateGraphicsPipeline(<span class="kw">const</span> FRHIGraphicsPipelineDesc&amp; Desc) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> DestroyGraphicsPipeline(FRHIGraphicsPipeline* Pipeline) <span class="kw">override</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIComputePipeline* CreateComputePipeline(<span class="kw">const</span> FRHIComputePipelineDesc&amp; Desc) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> DestroyComputePipeline(FRHIComputePipeline* Pipeline) <span class="kw">override</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIStructuredBuffer* CreateStructuredBuffer(<span class="kw">const</span> FRHIStructuredBufferDesc&amp; Desc) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> DestroyStructuredBuffer(FRHIStructuredBuffer* Buffer) <span class="kw">override</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIBufferView* CreateBufferView(<span class="kw">const</span> FRHIBufferViewDesc&amp; Desc) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> DestroyBufferView(FRHIBufferView* View) <span class="kw">override</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHITextureView* CreateTextureView(<span class="kw">const</span> FRHITextureViewDesc&amp; Desc) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> DestroyTextureView(FRHITextureView* View) <span class="kw">override</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIDescriptorSetLayout* CreateDescriptorSetLayout(<span class="kw">const</span> FRHIDescriptorSetLayoutDesc&amp; Desc) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> DestroyDescriptorSetLayout(FRHIDescriptorSetLayout* Layout) <span class="kw">override</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIPipelineLayout* CreatePipelineLayout(<span class="kw">const</span> FRHIPipelineLayoutDesc&amp; Desc) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> DestroyPipelineLayout(FRHIPipelineLayout* Layout) <span class="kw">override</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIDescriptorPool* CreateDescriptorPool(<span class="kw">const</span> FRHIDescriptorPoolDesc&amp; Desc) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> DestroyDescriptorPool(FRHIDescriptorPool* Pool) <span class="kw">override</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIDescriptorSet* AllocateDescriptorSet(FRHIDescriptorPool* Pool, FRHIDescriptorSetLayout* Layout) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> FreeDescriptorSet(FRHIDescriptorPool* Pool, FRHIDescriptorSet* Set) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> UpdateDescriptorSets(<span class="kw">const</span> FRHIDescriptorWrite* Writes, std::uint32_t Count) <span class="kw">override</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIRenderPass* CreateRenderPass(<span class="kw">const</span> FRHIRenderPassDesc&amp; Desc) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> DestroyRenderPass(FRHIRenderPass* Pass) <span class="kw">override</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIFramebuffer* CreateFramebuffer(<span class="kw">const</span> FRHIFramebufferDesc&amp; Desc) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> DestroyFramebuffer(FRHIFramebuffer* Framebuffer) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> std::uint32_t GetFramebufferWidth() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> std::uint32_t GetFramebufferHeight() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIQueryPool* CreateQueryPool(ERHIQueryType Type, std::uint32_t QueryCount) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> DestroyQueryPool(FRHIQueryPool* Pool) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">bool</span> GetQueryPoolResults( FRHIQueryPool* Pool, std::uint32_t FirstQuery, std::uint32_t QueryCount, std::uint64_t* Results, std::size_t Stride, <span class="kw">bool</span> bWait) <span class="kw">override</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIRayTracingPipeline* CreateRayTracingPipeline(<span class="kw">const</span> FRHIRayTracingPipelineDesc&amp; Desc) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> DestroyRayTracingPipeline(FRHIRayTracingPipeline* Pipeline) <span class="kw">override</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIAccelerationStructure* CreateAccelerationStructure(<span class="kw">const</span> FRHIRayTracingGeometryDesc&amp; Desc) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> DestroyAccelerationStructure(FRHIAccelerationStructure* Accel) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">bool</span> GetAccelerationStructureBuildSizes( <span class="kw">const</span> FRHIRayTracingGeometryDesc&amp; Desc, std::uint64_t&amp; OutAccelSize, std::uint64_t&amp; OutScratchSize) <span class="kw">override</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIBuffer* CreateShaderBindingTable( FRHIRayTracingPipeline* Pipeline, <span class="kw">const</span> FRHISbtGroup* Groups, std::uint32_t GroupCount, std::uint32_t* OutRayGenOffset, std::uint32_t* OutRayGenStride, std::uint32_t* OutHitOffset, std::uint32_t* OutHitStride, std::uint32_t* OutMissOffset, std::uint32_t* OutMissStride) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] VkInstance GetVkInstance() <span class="kw">const</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] VkPhysicalDevice GetVkPhysicalDevice() <span class="kw">const</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] VkDevice GetVkDevice() <span class="kw">const</span>;</td><td></td></tr>
@@ -1280,15 +1272,11 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div class="ent e-class" id="Public__RHI__RHIResources_h-2">
 <h3><span class="type">类</span> IDynamicRHIMemoryAllocator</h3>
 <div class="sect">
-<h4>字段</h4>
-<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span>* Map(FRHIMemoryAllocation&amp; Alloc) = 0;</td><td></td></tr>
-</tbody></table></div>
-<div class="sect">
 <h4>接口</h4>
 <table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> ~IDynamicRHIMemoryAllocator() = <span class="kw">default</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> Free(FRHIMemoryAllocation&amp; Alloc) = 0;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span>* Map(FRHIMemoryAllocation&amp; Alloc) = 0;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> Unmap(FRHIMemoryAllocation&amp; Alloc) = 0;</td><td></td></tr>
 </tbody></table></div>
 </div>
@@ -1297,7 +1285,6 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div class="sect">
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> <span class="kw">const</span> <span class="kw">char</span>* GetTypeName() <span class="kw">const</span> = 0;</td><td></td></tr>
 <tr><td><span class="acc a-protected">protected</span></td><td>std::string DebugName;</td><td></td></tr>
 <tr><td><span class="acc a-protected">protected</span></td><td>std::uint32_t RefCount = 1;</td><td></td></tr>
 </tbody></table></div>
@@ -1307,6 +1294,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> ~FRHIResource() = <span class="kw">default</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>FRHIResource(<span class="kw">const</span> FRHIResource&amp;) = <span class="kw">delete</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>FRHIResource&amp; <span class="kw">operator</span>=(<span class="kw">const</span> FRHIResource&amp;) = <span class="kw">delete</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> <span class="kw">const</span> <span class="kw">char</span>* GetTypeName() <span class="kw">const</span> = 0;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> ERHIResourceType GetType() <span class="kw">const</span> = 0;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">const</span> std::string&amp; GetDebugName() <span class="kw">const</span>;</td><td></td></tr>
 <tr><td><span class="acc a-protected">protected</span></td><td>FRHIResource() = <span class="kw">default</span>;</td><td></td></tr>
@@ -1331,15 +1319,11 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div class="ent e-class" id="Public__RHI__RHIResources_h-5">
 <h3><span class="type">类</span> FRHIBuffer <span class="base">: : <span class="kw">public</span> FRHIResource</span></h3>
 <div class="sect">
-<h4>字段</h4>
-<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> <span class="kw">const</span> FRHIBufferDesc&amp; GetDesc() <span class="kw">const</span> = 0;</td><td></td></tr>
-</tbody></table></div>
-<div class="sect">
 <h4>接口</h4>
 <table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">const</span> <span class="kw">char</span>* GetTypeName() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] ERHIResourceType GetType() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> <span class="kw">const</span> FRHIBufferDesc&amp; GetDesc() <span class="kw">const</span> = 0;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> std::uint64_t GetDeviceAddress() <span class="kw">const</span>;</td><td></td></tr>
 </tbody></table></div>
 </div>
@@ -1358,16 +1342,12 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div class="ent e-class" id="Public__RHI__RHIResources_h-7">
 <h3><span class="type">类</span> FRHIStructuredBuffer <span class="base">: : <span class="kw">public</span> FRHIResource</span></h3>
 <div class="sect">
-<h4>字段</h4>
-<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> <span class="kw">const</span> FRHIStructuredBufferDesc&amp; GetDesc() <span class="kw">const</span> = 0;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIBuffer* GetUnderlyingBuffer() = 0;</td><td></td></tr>
-</tbody></table></div>
-<div class="sect">
 <h4>接口</h4>
 <table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">const</span> <span class="kw">char</span>* GetTypeName() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] ERHIResourceType GetType() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> <span class="kw">const</span> FRHIStructuredBufferDesc&amp; GetDesc() <span class="kw">const</span> = 0;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIBuffer* GetUnderlyingBuffer() = 0;</td><td></td></tr>
 </tbody></table></div>
 </div>
 <div class="ent e-struct" id="Public__RHI__RHIResources_h-8">
@@ -1450,15 +1430,11 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div class="ent e-class" id="Public__RHI__RHIResources_h-14">
 <h3><span class="type">类</span> FRHITexture <span class="base">: : <span class="kw">public</span> FRHIResource</span></h3>
 <div class="sect">
-<h4>字段</h4>
-<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> <span class="kw">const</span> FRHITextureDesc&amp; GetDesc() <span class="kw">const</span> = 0;</td><td></td></tr>
-</tbody></table></div>
-<div class="sect">
 <h4>接口</h4>
 <table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">const</span> <span class="kw">char</span>* GetTypeName() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] ERHIResourceType GetType() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> <span class="kw">const</span> FRHITextureDesc&amp; GetDesc() <span class="kw">const</span> = 0;</td><td></td></tr>
 </tbody></table></div>
 </div>
 <div class="ent e-struct" id="Public__RHI__RHIResources_h-15">
@@ -1501,15 +1477,11 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div class="ent e-class" id="Public__RHI__RHIResources_h-18">
 <h3><span class="type">类</span> FRHISampler <span class="base">: : <span class="kw">public</span> FRHIResource</span></h3>
 <div class="sect">
-<h4>字段</h4>
-<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> <span class="kw">const</span> FRHISamplerDesc&amp; GetDesc() <span class="kw">const</span> = 0;</td><td></td></tr>
-</tbody></table></div>
-<div class="sect">
 <h4>接口</h4>
 <table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">const</span> <span class="kw">char</span>* GetTypeName() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] ERHIResourceType GetType() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> <span class="kw">const</span> FRHISamplerDesc&amp; GetDesc() <span class="kw">const</span> = 0;</td><td></td></tr>
 </tbody></table></div>
 </div>
 <div class="ent e-struct" id="Public__RHI__RHIResources_h-19">
@@ -1946,35 +1918,10 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div class="ent e-struct" id="Public__RHI__RHIServer_h-0">
 <h3><span class="type">结构体</span> IRHI</h3>
 <div class="sect">
-<h4>字段</h4>
-<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHICommandList* CreateCommandList(ERHICommandListType Type) = 0;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIFence* CreateFence(<span class="kw">bool</span> bSignaled) = 0;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHISemaphore* CreateGpuSemaphore() = 0;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIBuffer* CreateBuffer(<span class="kw">const</span> FRHIBufferDesc&amp; Desc) = 0;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHITexture* CreateTexture(<span class="kw">const</span> FRHITextureDesc&amp; Desc) = 0;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHISampler* CreateSampler(<span class="kw">const</span> FRHISamplerDesc&amp; Desc) = 0;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIShaderModule* CreateShaderModule(<span class="kw">const</span> FRHIShaderModuleDesc&amp; Desc) = 0;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIGraphicsPipeline* CreateGraphicsPipeline(<span class="kw">const</span> FRHIGraphicsPipelineDesc&amp; Desc) = 0;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIComputePipeline* CreateComputePipeline(<span class="kw">const</span> FRHIComputePipelineDesc&amp; Desc) = 0;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIStructuredBuffer* CreateStructuredBuffer(<span class="kw">const</span> FRHIStructuredBufferDesc&amp; Desc) = 0;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIBufferView* CreateBufferView(<span class="kw">const</span> FRHIBufferViewDesc&amp; Desc) = 0;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHITextureView* CreateTextureView(<span class="kw">const</span> FRHITextureViewDesc&amp; Desc) = 0;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIDescriptorSetLayout* CreateDescriptorSetLayout(<span class="kw">const</span> FRHIDescriptorSetLayoutDesc&amp; Desc) = 0;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIPipelineLayout* CreatePipelineLayout(<span class="kw">const</span> FRHIPipelineLayoutDesc&amp; Desc) = 0;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIDescriptorPool* CreateDescriptorPool(<span class="kw">const</span> FRHIDescriptorPoolDesc&amp; Desc) = 0;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIDescriptorSet* AllocateDescriptorSet(FRHIDescriptorPool* Pool, FRHIDescriptorSetLayout* Layout) = 0;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIRenderPass* CreateRenderPass(<span class="kw">const</span> FRHIRenderPassDesc&amp; Desc) = 0;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIFramebuffer* CreateFramebuffer(<span class="kw">const</span> FRHIFramebufferDesc&amp; Desc) = 0;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIQueryPool* CreateQueryPool(ERHIQueryType Type, std::uint32_t QueryCount) = 0;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIRayTracingPipeline* CreateRayTracingPipeline(<span class="kw">const</span> FRHIRayTracingPipelineDesc&amp; Desc) = 0;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIAccelerationStructure* CreateAccelerationStructure(<span class="kw">const</span> FRHIRayTracingGeometryDesc&amp; Desc) = 0;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIBuffer* CreateShaderBindingTable( FRHIRayTracingPipeline* Pipeline, <span class="kw">const</span> FRHISbtGroup* Groups, std::uint32_t GroupCount, std::uint32_t* OutRayGenOffset = <span class="kw">nullptr</span>, std::uint32_t* OutRayGenStride = <span class="kw">nullptr</span>, std::uint32_t* OutHitOffset = <span class="kw">nullptr</span>, std::uint32_t* OutHitStride = <span class="kw">nullptr</span>, std::uint32_t* OutMissOffset = <span class="kw">nullptr</span>, std::uint32_t* OutMissStride = <span class="kw">nullptr</span>) = 0;</td><td></td></tr>
-</tbody></table></div>
-<div class="sect">
 <h4>接口</h4>
 <table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> ~IRHI() = <span class="kw">default</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHICommandList* CreateCommandList(ERHICommandListType Type) = 0;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> DestroyCommandList(FRHICommandList* CmdList) = 0;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> Submit( FRHICommandList* CmdList, ERHICommandListType Type = ERHICommandListType::Graphics, FRHISemaphore* <span class="kw">const</span>* WaitSemaphores = <span class="kw">nullptr</span>, std::uint32_t WaitCount = 0, FRHISemaphore* <span class="kw">const</span>* SignalSemaphores = <span class="kw">nullptr</span>, std::uint32_t SignalCount = 0, FRHIFence* SignalFence = <span class="kw">nullptr</span>) = 0;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> BeginFrame() = 0;</td><td></td></tr>
@@ -1987,35 +1934,56 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> RequestBackbufferCapture(FBackbufferCaptureSink Sink) = 0;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> ERHIFormat GetSwapchainFormat() <span class="kw">const</span> = 0;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> <span class="kw">bool</span> IsInitialized() <span class="kw">const</span> = 0;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIFence* CreateFence(<span class="kw">bool</span> bSignaled) = 0;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> DestroyFence(FRHIFence* Fence) = 0;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> WaitForFence(FRHIFence* Fence, std::uint64_t TimeoutNs = (std::numeric_limits&lt;std::uint64_t&gt;::max)()) = 0;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> <span class="kw">bool</span> IsFenceSignaled(FRHIFence* Fence) = 0;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHISemaphore* CreateGpuSemaphore() = 0;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> DestroyGpuSemaphore(FRHISemaphore* Semaphore) = 0;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIBuffer* CreateBuffer(<span class="kw">const</span> FRHIBufferDesc&amp; Desc) = 0;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> DestroyBuffer(FRHIBuffer* Buffer) = 0;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHITexture* CreateTexture(<span class="kw">const</span> FRHITextureDesc&amp; Desc) = 0;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> DestroyTexture(FRHITexture* Texture) = 0;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHISampler* CreateSampler(<span class="kw">const</span> FRHISamplerDesc&amp; Desc) = 0;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> DestroySampler(FRHISampler* Sampler) = 0;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIShaderModule* CreateShaderModule(<span class="kw">const</span> FRHIShaderModuleDesc&amp; Desc) = 0;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> DestroyShaderModule(FRHIShaderModule* Module) = 0;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIGraphicsPipeline* CreateGraphicsPipeline(<span class="kw">const</span> FRHIGraphicsPipelineDesc&amp; Desc) = 0;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> DestroyGraphicsPipeline(FRHIGraphicsPipeline* Pipeline) = 0;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIComputePipeline* CreateComputePipeline(<span class="kw">const</span> FRHIComputePipelineDesc&amp; Desc) = 0;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> DestroyComputePipeline(FRHIComputePipeline* Pipeline) = 0;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIStructuredBuffer* CreateStructuredBuffer(<span class="kw">const</span> FRHIStructuredBufferDesc&amp; Desc) = 0;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> DestroyStructuredBuffer(FRHIStructuredBuffer* Buffer) = 0;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIBufferView* CreateBufferView(<span class="kw">const</span> FRHIBufferViewDesc&amp; Desc) = 0;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> DestroyBufferView(FRHIBufferView* View) = 0;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHITextureView* CreateTextureView(<span class="kw">const</span> FRHITextureViewDesc&amp; Desc) = 0;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> DestroyTextureView(FRHITextureView* View) = 0;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIDescriptorSetLayout* CreateDescriptorSetLayout(<span class="kw">const</span> FRHIDescriptorSetLayoutDesc&amp; Desc) = 0;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> DestroyDescriptorSetLayout(FRHIDescriptorSetLayout* Layout) = 0;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIPipelineLayout* CreatePipelineLayout(<span class="kw">const</span> FRHIPipelineLayoutDesc&amp; Desc) = 0;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> DestroyPipelineLayout(FRHIPipelineLayout* Layout) = 0;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIDescriptorPool* CreateDescriptorPool(<span class="kw">const</span> FRHIDescriptorPoolDesc&amp; Desc) = 0;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> DestroyDescriptorPool(FRHIDescriptorPool* Pool) = 0;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIDescriptorSet* AllocateDescriptorSet(FRHIDescriptorPool* Pool, FRHIDescriptorSetLayout* Layout) = 0;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> FreeDescriptorSet(FRHIDescriptorPool* Pool, FRHIDescriptorSet* Set) = 0;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> UpdateDescriptorSets(<span class="kw">const</span> FRHIDescriptorWrite* Writes, std::uint32_t Count) = 0;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIRenderPass* CreateRenderPass(<span class="kw">const</span> FRHIRenderPassDesc&amp; Desc) = 0;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> DestroyRenderPass(FRHIRenderPass* Pass) = 0;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIFramebuffer* CreateFramebuffer(<span class="kw">const</span> FRHIFramebufferDesc&amp; Desc) = 0;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> DestroyFramebuffer(FRHIFramebuffer* Framebuffer) = 0;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> std::uint32_t GetFramebufferWidth() <span class="kw">const</span> = 0;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> std::uint32_t GetFramebufferHeight() <span class="kw">const</span> = 0;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> <span class="kw">bool</span> IsFormatSupported(ERHIFormat Format, ERHITextureUsage Usage) <span class="kw">const</span> = 0;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">bool</span> ReadbackTexture( FRHITexture* Src, <span class="kw">const</span> FRHITextureCopyRegion&amp; Region, <span class="kw">void</span>* Out, std::uint64_t OutSize, ERHIResourceState PreserveState = ERHIResourceState::ShaderResource) = 0;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIQueryPool* CreateQueryPool(ERHIQueryType Type, std::uint32_t QueryCount) = 0;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> DestroyQueryPool(FRHIQueryPool* Pool) = 0;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">bool</span> GetQueryPoolResults( FRHIQueryPool* Pool, std::uint32_t FirstQuery, std::uint32_t QueryCount, std::uint64_t* Results, std::size_t Stride, <span class="kw">bool</span> bWait = <span class="kw">true</span>) = 0;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIRayTracingPipeline* CreateRayTracingPipeline(<span class="kw">const</span> FRHIRayTracingPipelineDesc&amp; Desc) = 0;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> DestroyRayTracingPipeline(FRHIRayTracingPipeline* Pipeline) = 0;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIAccelerationStructure* CreateAccelerationStructure(<span class="kw">const</span> FRHIRayTracingGeometryDesc&amp; Desc) = 0;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> DestroyAccelerationStructure(FRHIAccelerationStructure* Accel) = 0;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">bool</span> GetAccelerationStructureBuildSizes( <span class="kw">const</span> FRHIRayTracingGeometryDesc&amp; Desc, std::uint64_t&amp; OutAccelSize, std::uint64_t&amp; OutScratchSize) = 0;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHIBuffer* CreateShaderBindingTable( FRHIRayTracingPipeline* Pipeline, <span class="kw">const</span> FRHISbtGroup* Groups, std::uint32_t GroupCount, std::uint32_t* OutRayGenOffset = <span class="kw">nullptr</span>, std::uint32_t* OutRayGenStride = <span class="kw">nullptr</span>, std::uint32_t* OutHitOffset = <span class="kw">nullptr</span>, std::uint32_t* OutHitStride = <span class="kw">nullptr</span>, std::uint32_t* OutMissOffset = <span class="kw">nullptr</span>, std::uint32_t* OutMissStride = <span class="kw">nullptr</span>) = 0;</td><td></td></tr>
 </tbody></table></div>
 </div>
 <div class="ent e-class" id="Public__RHI__RHIServer_h-1">
@@ -2027,30 +1995,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
 <tr><td><span class="acc a-public">public</span></td><td>FRHI();</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FRHICommandList* CreateCommandList(ERHICommandListType Type) <span class="kw">override</span>;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FRHIFence* CreateFence(<span class="kw">bool</span> bSignaled) <span class="kw">override</span>;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FRHISemaphore* CreateGpuSemaphore() <span class="kw">override</span>;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FRHIBuffer* CreateBuffer(<span class="kw">const</span> FRHIBufferDesc&amp; Desc) <span class="kw">override</span>;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FRHITexture* CreateTexture(<span class="kw">const</span> FRHITextureDesc&amp; Desc) <span class="kw">override</span>;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FRHISampler* CreateSampler(<span class="kw">const</span> FRHISamplerDesc&amp; Desc) <span class="kw">override</span>;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FRHIShaderModule* CreateShaderModule(<span class="kw">const</span> FRHIShaderModuleDesc&amp; Desc) <span class="kw">override</span>;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FRHIGraphicsPipeline* CreateGraphicsPipeline(<span class="kw">const</span> FRHIGraphicsPipelineDesc&amp; Desc) <span class="kw">override</span>;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FRHIComputePipeline* CreateComputePipeline(<span class="kw">const</span> FRHIComputePipelineDesc&amp; Desc) <span class="kw">override</span>;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FRHIStructuredBuffer* CreateStructuredBuffer(<span class="kw">const</span> FRHIStructuredBufferDesc&amp; Desc) <span class="kw">override</span>;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FRHIBufferView* CreateBufferView(<span class="kw">const</span> FRHIBufferViewDesc&amp; Desc) <span class="kw">override</span>;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FRHITextureView* CreateTextureView(<span class="kw">const</span> FRHITextureViewDesc&amp; Desc) <span class="kw">override</span>;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FRHIDescriptorSetLayout* CreateDescriptorSetLayout(<span class="kw">const</span> FRHIDescriptorSetLayoutDesc&amp; Desc) <span class="kw">override</span>;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FRHIPipelineLayout* CreatePipelineLayout(<span class="kw">const</span> FRHIPipelineLayoutDesc&amp; Desc) <span class="kw">override</span>;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FRHIDescriptorPool* CreateDescriptorPool(<span class="kw">const</span> FRHIDescriptorPoolDesc&amp; Desc) <span class="kw">override</span>;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FRHIDescriptorSet* AllocateDescriptorSet(FRHIDescriptorPool* Pool, FRHIDescriptorSetLayout* Layout) <span class="kw">override</span>;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FRHIRenderPass* CreateRenderPass(<span class="kw">const</span> FRHIRenderPassDesc&amp; Desc) <span class="kw">override</span>;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FRHIFramebuffer* CreateFramebuffer(<span class="kw">const</span> FRHIFramebufferDesc&amp; Desc) <span class="kw">override</span>;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FRHIQueryPool* CreateQueryPool(ERHIQueryType Type, std::uint32_t QueryCount) <span class="kw">override</span>;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FRHIRayTracingPipeline* CreateRayTracingPipeline(<span class="kw">const</span> FRHIRayTracingPipelineDesc&amp; Desc) <span class="kw">override</span>;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FRHIAccelerationStructure* CreateAccelerationStructure(<span class="kw">const</span> FRHIRayTracingGeometryDesc&amp; Desc) <span class="kw">override</span>;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FRHIBuffer* CreateShaderBindingTable( FRHIRayTracingPipeline* Pipeline, <span class="kw">const</span> FRHISbtGroup* Groups, std::uint32_t GroupCount, std::uint32_t* OutRayGenOffset, std::uint32_t* OutRayGenStride, std::uint32_t* OutHitOffset, std::uint32_t* OutHitStride, std::uint32_t* OutMissOffset, std::uint32_t* OutMissStride) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>std::unique_ptr&lt;IDynamicRHI&gt; RHI;</td><td></td></tr>
-<tr><td><span class="acc a-private">private</span></td><td>[[nodiscard]] <span class="kw">const</span> <span class="kw">char</span>* GetThreadName() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
 </tbody></table></div>
 <div class="sect">
 <h4>接口</h4>
@@ -2059,6 +2004,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">bool</span> Initialize(<span class="kw">void</span>* NativeWindowHandle, <span class="kw">int</span> Width, <span class="kw">int</span> Height, ERHIBackend Backend = ERHIBackend::Vulkan, std::int32_t FramesInFlight = 0);</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] std::uint32_t GetFrameSlotCount() <span class="kw">const</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> ShutdownRHI();</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FRHICommandList* CreateCommandList(ERHICommandListType Type) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> DestroyCommandList(FRHICommandList* CmdList) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Submit( FRHICommandList* CmdList, ERHICommandListType Type = ERHICommandListType::Graphics, FRHISemaphore* <span class="kw">const</span>* WaitSemaphores = <span class="kw">nullptr</span>, std::uint32_t WaitCount = 0, FRHISemaphore* <span class="kw">const</span>* SignalSemaphores = <span class="kw">nullptr</span>, std::uint32_t SignalCount = 0, FRHIFence* SignalFence = <span class="kw">nullptr</span>) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> BeginFrame() <span class="kw">override</span>;</td><td></td></tr>
@@ -2071,35 +2017,57 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> RequestBackbufferCapture(FBackbufferCaptureSink Sink) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] ERHIFormat GetSwapchainFormat() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">bool</span> IsInitialized() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FRHIFence* CreateFence(<span class="kw">bool</span> bSignaled) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> DestroyFence(FRHIFence* Fence) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> WaitForFence(FRHIFence* Fence, std::uint64_t TimeoutNs) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">bool</span> IsFenceSignaled(FRHIFence* Fence) <span class="kw">override</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FRHISemaphore* CreateGpuSemaphore() <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> DestroyGpuSemaphore(FRHISemaphore* Semaphore) <span class="kw">override</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FRHIBuffer* CreateBuffer(<span class="kw">const</span> FRHIBufferDesc&amp; Desc) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> DestroyBuffer(FRHIBuffer* Buffer) <span class="kw">override</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FRHITexture* CreateTexture(<span class="kw">const</span> FRHITextureDesc&amp; Desc) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> DestroyTexture(FRHITexture* Texture) <span class="kw">override</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FRHISampler* CreateSampler(<span class="kw">const</span> FRHISamplerDesc&amp; Desc) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> DestroySampler(FRHISampler* Sampler) <span class="kw">override</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FRHIShaderModule* CreateShaderModule(<span class="kw">const</span> FRHIShaderModuleDesc&amp; Desc) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> DestroyShaderModule(FRHIShaderModule* Module) <span class="kw">override</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FRHIGraphicsPipeline* CreateGraphicsPipeline(<span class="kw">const</span> FRHIGraphicsPipelineDesc&amp; Desc) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> DestroyGraphicsPipeline(FRHIGraphicsPipeline* Pipeline) <span class="kw">override</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FRHIComputePipeline* CreateComputePipeline(<span class="kw">const</span> FRHIComputePipelineDesc&amp; Desc) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> DestroyComputePipeline(FRHIComputePipeline* Pipeline) <span class="kw">override</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FRHIStructuredBuffer* CreateStructuredBuffer(<span class="kw">const</span> FRHIStructuredBufferDesc&amp; Desc) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> DestroyStructuredBuffer(FRHIStructuredBuffer* Buffer) <span class="kw">override</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FRHIBufferView* CreateBufferView(<span class="kw">const</span> FRHIBufferViewDesc&amp; Desc) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> DestroyBufferView(FRHIBufferView* View) <span class="kw">override</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FRHITextureView* CreateTextureView(<span class="kw">const</span> FRHITextureViewDesc&amp; Desc) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> DestroyTextureView(FRHITextureView* View) <span class="kw">override</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FRHIDescriptorSetLayout* CreateDescriptorSetLayout(<span class="kw">const</span> FRHIDescriptorSetLayoutDesc&amp; Desc) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> DestroyDescriptorSetLayout(FRHIDescriptorSetLayout* Layout) <span class="kw">override</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FRHIPipelineLayout* CreatePipelineLayout(<span class="kw">const</span> FRHIPipelineLayoutDesc&amp; Desc) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> DestroyPipelineLayout(FRHIPipelineLayout* Layout) <span class="kw">override</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FRHIDescriptorPool* CreateDescriptorPool(<span class="kw">const</span> FRHIDescriptorPoolDesc&amp; Desc) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> DestroyDescriptorPool(FRHIDescriptorPool* Pool) <span class="kw">override</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FRHIDescriptorSet* AllocateDescriptorSet(FRHIDescriptorPool* Pool, FRHIDescriptorSetLayout* Layout) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> FreeDescriptorSet(FRHIDescriptorPool* Pool, FRHIDescriptorSet* Set) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> UpdateDescriptorSets(<span class="kw">const</span> FRHIDescriptorWrite* Writes, std::uint32_t Count) <span class="kw">override</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FRHIRenderPass* CreateRenderPass(<span class="kw">const</span> FRHIRenderPassDesc&amp; Desc) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> DestroyRenderPass(FRHIRenderPass* Pass) <span class="kw">override</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FRHIFramebuffer* CreateFramebuffer(<span class="kw">const</span> FRHIFramebufferDesc&amp; Desc) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> DestroyFramebuffer(FRHIFramebuffer* Framebuffer) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] std::uint32_t GetFramebufferWidth() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] std::uint32_t GetFramebufferHeight() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">bool</span> IsFormatSupported(ERHIFormat Format, ERHITextureUsage Usage) <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">bool</span> ReadbackTexture( FRHITexture* Src, <span class="kw">const</span> FRHITextureCopyRegion&amp; Region, <span class="kw">void</span>* Out, std::uint64_t OutSize, ERHIResourceState PreserveState) <span class="kw">override</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FRHIQueryPool* CreateQueryPool(ERHIQueryType Type, std::uint32_t QueryCount) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> DestroyQueryPool(FRHIQueryPool* Pool) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">bool</span> GetQueryPoolResults( FRHIQueryPool* Pool, std::uint32_t FirstQuery, std::uint32_t QueryCount, std::uint64_t* Results, std::size_t Stride, <span class="kw">bool</span> bWait) <span class="kw">override</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FRHIRayTracingPipeline* CreateRayTracingPipeline(<span class="kw">const</span> FRHIRayTracingPipelineDesc&amp; Desc) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> DestroyRayTracingPipeline(FRHIRayTracingPipeline* Pipeline) <span class="kw">override</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FRHIAccelerationStructure* CreateAccelerationStructure(<span class="kw">const</span> FRHIRayTracingGeometryDesc&amp; Desc) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> DestroyAccelerationStructure(FRHIAccelerationStructure* Accel) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">bool</span> GetAccelerationStructureBuildSizes( <span class="kw">const</span> FRHIRayTracingGeometryDesc&amp; Desc, std::uint64_t&amp; OutAccelSize, std::uint64_t&amp; OutScratchSize) <span class="kw">override</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FRHIBuffer* CreateShaderBindingTable( FRHIRayTracingPipeline* Pipeline, <span class="kw">const</span> FRHISbtGroup* Groups, std::uint32_t GroupCount, std::uint32_t* OutRayGenOffset, std::uint32_t* OutRayGenStride, std::uint32_t* OutHitOffset, std::uint32_t* OutHitStride, std::uint32_t* OutMissOffset, std::uint32_t* OutMissStride) <span class="kw">override</span>;</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>[[nodiscard]] <span class="kw">const</span> <span class="kw">char</span>* GetThreadName() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
 </tbody></table></div>
 </div>
 </div></div>

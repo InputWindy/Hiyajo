@@ -148,8 +148,8 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div class="ent e-struct" id="Public__MeshFeature_h-2">
 <h3><span class="type">结构体</span> FMeshShader</h3>
 <div class="sect">
-<h4>字段</h4>
-<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">static</span> <span class="kw">const</span> <span class="kw">char</span>* GetVertexSource();</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">static</span> <span class="kw">const</span> <span class="kw">char</span>* GetFragmentSource();</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">static</span> <span class="kw">const</span> <span class="kw">char</span>* GetVertexEntryPoint();</td><td></td></tr>
@@ -167,8 +167,6 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">struct</span> FPipelineKey std::uint32_t ShaderId = 0; std::uint64_t ShaderHash = 0; <span class="cm">// SPIR-V content (two shaders with the same name can differ) ERHICullMode Cull = ERHICullMode::Back; bool bDepthWrite = false; bool bDepthTest = false; bool bBlend = false; ERHIFormat ColorFormat = ERHIFormat::Unknown; ERHIFormat DepthFormat = ERHIFormat::Unknown; [[nodiscard]] auto AsTuple() const return std::tie(ShaderId, ShaderHash, Cull, bDepthWrite, bDepthTest, bBlend, ColorFormat, DepthFormat); [[nodiscard]] bool operator&lt;(const FPipelineKey&amp; O) const return AsTuple() &lt; O.AsTuple();;</span></td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">struct</span> FShaderEntry <span class="kw">const</span> FShaderDesc* Description = <span class="kw">nullptr</span>; <span class="cm">// ShaderLibrary-owned; valid for the whole run FRHIShaderModule* Vertex = nullptr; FRHIShaderModule* Fragment = nullptr; std::string VertexEntry = "main"; std::string FragmentEntry = "main"; FRHIGraphicsPipelineDesc Pipeline;;</span></td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">struct</span> FMaterialFrame <span class="kw">const</span> FShaderEntry* Shader = <span class="kw">nullptr</span>; <span class="cm">// null =&gt; could not be resolved (reported) FRDGBufferRef ParamBuffer; std::vector&lt;std::byte&gt; Packed; // the CPU bytes the buffer is filled with (per frame) FRDGTextureRef Textures[kMaxMaterialSamplers]; FRHISampler* Samplers[kMaxMaterialSamplers] = ;;</span></td><td></td></tr>
-<tr><td><span class="acc a-private">private</span></td><td><span class="kw">const</span> FMeshBuffers* EnsureMesh(FRender&amp; R, Name::FName MeshName);</td><td></td></tr>
-<tr><td><span class="acc a-private">private</span></td><td><span class="kw">const</span> FShaderEntry* ResolveShader(FRender&amp; R, Name::FName ShaderName, ERHIFormat ColorFormat, ERHIFormat DepthFormat);</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">struct</span> FViewConstants <span class="kw">float</span> ViewProj[16];;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>std::map&lt;Name::FName, FMeshBuffers&gt; Meshes;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>std::map&lt;std::uint32_t, FRenderPrimitive&gt; Actors;</td><td></td></tr>
@@ -198,8 +196,10 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> InitViews(FRender&amp; R, FRenderContext&amp; Frame) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Render(FRender&amp; R, FRenderContext&amp; Frame) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> PreUnInstall(FRender&amp; R, FRenderContext&amp; Frame) <span class="kw">override</span>;</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">const</span> FMeshBuffers* EnsureMesh(FRender&amp; R, Name::FName MeshName);</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> SyncActors(<span class="kw">const</span> std::vector&lt;FRenderPrimitive&gt;&amp; Snapshot);</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> ReportRead(std::size_t PrimitiveCount, <span class="kw">bool</span> bCamera, std::uint64_t Publishes);</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">const</span> FShaderEntry* ResolveShader(FRender&amp; R, Name::FName ShaderName, ERHIFormat ColorFormat, ERHIFormat DepthFormat);</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> PackMaterialParameters(<span class="kw">const</span> FShaderDesc&amp; Desc, <span class="kw">const</span> FRenderMaterial&amp; Material, <span class="kw">const</span> std::vector&lt;FRenderMaterialParam&gt;&amp; Params, std::vector&lt;std::byte&gt;&amp; Out) <span class="kw">const</span>;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> ResolveMaterial(FRender&amp; R, <span class="kw">const</span> FRenderScene&amp; Scene, std::size_t MaterialIndex, ERHIFormat ColorFormat, ERHIFormat DepthFormat, FMaterialFrame&amp; Out);</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">bool</span> EnsureWhiteTexture(FRender&amp; R);</td><td></td></tr>

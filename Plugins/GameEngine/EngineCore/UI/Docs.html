@@ -165,7 +165,6 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">bool</span> bDebugDraw = <span class="kw">false</span>;</td><td></td></tr>
-<tr><td><span class="acc a-private">private</span></td><td>[[nodiscard]] ImFont* FontOf(<span class="kw">const</span> FUIResolvedResource&amp; Font, <span class="kw">float</span> Size) <span class="kw">const</span>;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>ImGuiContext* Context = <span class="kw">nullptr</span>;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>FUIView* View = <span class="kw">nullptr</span>;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>FUIVector2 Origin;</td><td></td></tr>
@@ -229,6 +228,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-private">private</span></td><td>[[nodiscard]] ImVec2 ScreenMax(<span class="kw">const</span> FUIRect&amp; Local) <span class="kw">const</span>;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>[[nodiscard]] <span class="kw">static</span> ImU32 ToColor(<span class="kw">const</span> FUIColor&amp; C);</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>[[nodiscard]] <span class="kw">static</span> ImVec4 ToColor4(<span class="kw">const</span> FUIColor&amp; C);</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>[[nodiscard]] ImFont* FontOf(<span class="kw">const</span> FUIResolvedResource&amp; Font, <span class="kw">float</span> Size) <span class="kw">const</span>;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> PushControlStyle(<span class="kw">const</span> FUIResolvedStyle&amp; S);</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> PopControlStyle();</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> PushWindowStyle(<span class="kw">const</span> FUIResolvedStyle&amp; S);</td><td></td></tr>
@@ -389,24 +389,6 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div class="sect">
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-public">public</span></td><td>FUIBuilder* FindChild(FUIName InId) <span class="kw">const</span>;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>FUIBuilder&amp; <span class="kw">operator</span>[](FUIBlock InBlock);</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>FUIBuilder&amp; OnClick(FUIEventHandler H);</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>FUIBuilder&amp; OnValueChanged(FUIFloatEventHandler H);</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>FUIBuilder&amp; OnToggled(FUIBoolEventHandler H);</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>FUIBuilder&amp; OnTextChanged(FUITextEventHandler H);</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>FUIBuilder&amp; OnSubmitted(FUITextEventHandler H);</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>FUIBuilder&amp; OnSelectionChanged(FUIBoolEventHandler H);</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>FUIBuilder&amp; OnDragDropped(FUINameEventHandler H);</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>FUIBuilder&amp; OnPopupClosed(FUIEventHandler H);</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>FUIBuilder&amp; OnShortcut(FUIKeyChord Chord, FUIEventHandler H, EUIShortcutScope Scope = EUIShortcutScope::NodeActive);</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>FUIBuilder&amp; RequestScrollToBottom();</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>FUIBuilder&amp; SetScrollY(<span class="kw">float</span> InScrollY);</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>FUIBuilder&amp; RequestKeyboardFocus();</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>FUIBuilder&amp; SetDragSource(FUIName Payload);</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>FUIBuilder&amp; OnDropTarget(FUINameEventHandler H);</td><td></td></tr>
-<tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">virtual</span> <span class="kw">const</span> FUIStyle&amp; TypeDefaultStyle() <span class="kw">const</span> = 0;</td><td></td></tr>
-<tr><td><span class="acc a-private">private</span></td><td>FUIEvents&amp; EnsureEvents();</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>EUIViewType Type;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>FUIName Id;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>FUIBuilder* Parent = <span class="kw">nullptr</span>;</td><td></td></tr>
@@ -446,6 +428,8 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">template</span> &lt;<span class="kw">typename</span> T, <span class="kw">typename</span>... TArgs&gt; T&amp; AddItem(FUIName InId, TArgs&amp;&amp;... Args);</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> ResetChildren();</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">bool</span> RemoveItem(FUIName InId);</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>FUIBuilder* FindChild(FUIName InId) <span class="kw">const</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>FUIBuilder&amp; <span class="kw">operator</span>[](FUIBlock InBlock);</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>FUILayout&amp; Layout();</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">const</span> FUILayout&amp; GetLayout() <span class="kw">const</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>FUIStyle&amp; Style();</td><td></td></tr>
@@ -484,13 +468,27 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> UnbindDragDropped(FUIEventSubscription Id);</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> UnbindPopupClosed(FUIEventSubscription Id);</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> UnbindShortcut(FUIKeyChord Chord, FUIEventSubscription Id);</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>FUIBuilder&amp; OnClick(FUIEventHandler H);</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>FUIBuilder&amp; OnValueChanged(FUIFloatEventHandler H);</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>FUIBuilder&amp; OnToggled(FUIBoolEventHandler H);</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>FUIBuilder&amp; OnTextChanged(FUITextEventHandler H);</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>FUIBuilder&amp; OnSubmitted(FUITextEventHandler H);</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>FUIBuilder&amp; OnSelectionChanged(FUIBoolEventHandler H);</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>FUIBuilder&amp; OnDragDropped(FUINameEventHandler H);</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>FUIBuilder&amp; OnPopupClosed(FUIEventHandler H);</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>FUIBuilder&amp; OnShortcut(FUIKeyChord Chord, FUIEventHandler H, EUIShortcutScope Scope = EUIShortcutScope::NodeActive);</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> BroadcastEvent(<span class="kw">const</span> FUIEventRecord&amp; Record);</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FUIEventRecord MakeEvent(EUIEventType Type) <span class="kw">const</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>FUIBuilder&amp; RequestScrollToBottom();</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>FUIBuilder&amp; SetScrollY(<span class="kw">float</span> InScrollY);</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">float</span> GetScrollY() <span class="kw">const</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">float</span> GetScrollMaxY() <span class="kw">const</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">bool</span> ConsumeScrollRequest(<span class="kw">bool</span>&amp; bOutToBottom, <span class="kw">float</span>&amp; OutScrollY);</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>FUIBuilder&amp; RequestKeyboardFocus();</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">bool</span> ConsumeFocusRequest();</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>FUIBuilder&amp; SetDragSource(FUIName Payload);</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FUIName GetDragSource() <span class="kw">const</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>FUIBuilder&amp; OnDropTarget(FUINameEventHandler H);</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">bool</span> IsDropTarget() <span class="kw">const</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Translate(IUITranslator&amp; T, <span class="kw">const</span> FUIRect&amp; InRect);</td><td></td></tr>
 <tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">virtual</span> std::string_view TypeName() <span class="kw">const</span> = 0;</td><td></td></tr>
@@ -500,12 +498,14 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> PaintContent(IUITranslator&amp; T, <span class="kw">const</span> FUIResolvedStyle&amp; S);</td><td></td></tr>
 <tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> ArrangeChildren(IUITranslator&amp; T);</td><td></td></tr>
 <tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> PaintOverlay(IUITranslator&amp; T, <span class="kw">const</span> FUIResolvedStyle&amp; S);</td><td></td></tr>
+<tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">virtual</span> <span class="kw">const</span> FUIStyle&amp; TypeDefaultStyle() <span class="kw">const</span> = 0;</td><td></td></tr>
 <tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">virtual</span> <span class="kw">bool</span> IsOverlayLayer() <span class="kw">const</span>;</td><td></td></tr>
 <tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> SyncConfig(<span class="kw">const</span> FUIBuilder&amp; Declared);</td><td></td></tr>
 <tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">virtual</span> EUIInputFlags GetInputFlags() <span class="kw">const</span>;</td><td></td></tr>
 <tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">virtual</span> <span class="kw">bool</span> WantsKeyboardFocus() <span class="kw">const</span>;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> TranslateDragDrop(IUITranslator&amp; T);</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>std::uint32_t AllocateSerial();</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>FUIEvents&amp; EnsureEvents();</td><td></td></tr>
 </tbody></table></div>
 </div>
 <div class="ent e-struct" id="Public__FUIBuilder_h-4">
@@ -587,7 +587,6 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">static</span> <span class="kw">constexpr</span> EUIViewType ViewType = EUIViewType::Canvas;</td><td></td></tr>
-<tr><td><span class="acc a-protected">protected</span></td><td>[[nodiscard]] <span class="kw">const</span> FUIStyle&amp; TypeDefaultStyle() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
 </tbody></table></div>
 <div class="sect">
 <h4>接口</h4>
@@ -595,6 +594,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">explicit</span> FUICanvas(FUIName InId);</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>~FUICanvas() <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-protected">protected</span></td><td>[[nodiscard]] std::string_view TypeName() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
+<tr><td><span class="acc a-protected">protected</span></td><td>[[nodiscard]] <span class="kw">const</span> FUIStyle&amp; TypeDefaultStyle() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
 </tbody></table></div>
 </div>
 </div>
@@ -1320,7 +1320,6 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div class="sect">
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-public">public</span></td><td>FUIBuilder&amp; GetRoot() <span class="kw">const</span>;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>FUIView* View;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>std::unique_lock&lt;std::shared_mutex&gt; Lock;</td><td></td></tr>
 </tbody></table></div>
@@ -1331,6 +1330,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td>~FUIEditScope();</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>FUIEditScope(<span class="kw">const</span> FUIEditScope&amp;) = <span class="kw">delete</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>FUIEditScope&amp; <span class="kw">operator</span>=(<span class="kw">const</span> FUIEditScope&amp;) = <span class="kw">delete</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>FUIBuilder&amp; GetRoot() <span class="kw">const</span>;</td><td></td></tr>
 </tbody></table></div>
 </div>
 <div class="ent e-class" id="Public__UIView_h-6">
@@ -1338,10 +1338,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div class="sect">
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">const</span> FUIViewShell&amp; GetWindowShell() <span class="kw">const</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>TMulticastEvent&lt;<span class="kw">void</span>(FUIView&amp;)&gt; WindowClosed;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FUIBuilder* Find(FUIName InId) <span class="kw">const</span>;</td><td></td></tr>
-<tr><td><span class="acc a-private">private</span></td><td>FUIBuilder* FindPath(<span class="kw">const</span> std::vector&lt;FUIName&gt;&amp; Path) <span class="kw">const</span>;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>FUIName Id;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>EUIOwnership Ownership;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>std::unique_ptr&lt;FUICanvas&gt; RootNode;</td><td></td></tr>
@@ -1370,11 +1367,14 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> SetRenderScope(FUIName InScope);</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FUIName GetRenderScope() <span class="kw">const</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> SetWindowShell(<span class="kw">bool</span> bEnabled, std::string Title, FUIVector2 DefaultPos = , FUIVector2 DefaultSize = , EUIShellFlags Flags = EUIShellFlags::None);</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">const</span> FUIViewShell&amp; GetWindowShell() <span class="kw">const</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> SetShellFractions(FUIVector2 PosFraction, FUIVector2 SizeFraction);</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> RequestCloseWindow();</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> DrainEvents();</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> PushEvent(FUIEventRecord Record);</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FUIBuilder* Find(FUIName InId) <span class="kw">const</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] std::shared_mutex&amp; GetTreeMutex();</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>FUIBuilder* FindPath(<span class="kw">const</span> std::vector&lt;FUIName&gt;&amp; Path) <span class="kw">const</span>;</td><td></td></tr>
 </tbody></table></div>
 </div>
 </div>
@@ -1423,7 +1423,6 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
 <tr><td><span class="acc a-public">public</span></td><td>MAHO_DECLARE_FRAME(FUIViewRegistry);</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FUIView* FindView(FUIName Id) <span class="kw">const</span>;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">mutable</span> std::mutex Mutex;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>std::vector&lt;FUIView*&gt; Views;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>std::mutex PassMutex;</td><td></td></tr>
@@ -1451,6 +1450,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] std::vector&lt;FUIView*&gt; SnapshotViews() <span class="kw">const</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> BeginTranslationPass();</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> EndTranslationPass();</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FUIView* FindView(FUIName Id) <span class="kw">const</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FSubscriptionID BindResourceResolver(std::string_view Owner, FUIResourceResolver Resolver);</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> UnbindResourceResolver(FSubscriptionID Token);</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">bool</span> HasResourceResolver() <span class="kw">const</span>;</td><td></td></tr>
@@ -1499,7 +1499,6 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">static</span> <span class="kw">constexpr</span> EUIViewType ViewType = EUIViewType::Box;</td><td></td></tr>
-<tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">const</span> FUIStyle&amp; TypeDefaultStyle() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
 </tbody></table></div>
 <div class="sect">
 <h4>接口</h4>
@@ -1513,6 +1512,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td>FUIBox&amp; SetAlign(EUIAlign H, EUIAlign V);</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>FUIBox&amp; SetMargin(FMargin M);</td><td></td></tr>
 <tr><td><span class="acc a-protected">protected</span></td><td>std::string_view TypeName() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
+<tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">const</span> FUIStyle&amp; TypeDefaultStyle() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
 </tbody></table></div>
 </div>
 </div>
@@ -1535,7 +1535,6 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">static</span> <span class="kw">constexpr</span> EUIViewType ViewType = EUIViewType::Button;</td><td></td></tr>
-<tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">const</span> FUIStyle&amp; TypeDefaultStyle() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>std::string Label;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>FUIName Icon;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">bool</span> bIconOnly = <span class="kw">false</span>;</td><td></td></tr>
@@ -1558,6 +1557,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">void</span> PaintSelf(IUITranslator&amp; T, <span class="kw">const</span> FUIResolvedStyle&amp; S) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">void</span> PaintContent(IUITranslator&amp; T, <span class="kw">const</span> FUIResolvedStyle&amp; S) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-protected">protected</span></td><td>EUIInputFlags GetInputFlags() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
+<tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">const</span> FUIStyle&amp; TypeDefaultStyle() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">void</span> SyncConfig(<span class="kw">const</span> FUIBuilder&amp; Declared) <span class="kw">override</span>;</td><td></td></tr>
 </tbody></table></div>
 </div>
@@ -1581,7 +1581,6 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">static</span> <span class="kw">constexpr</span> EUIViewType ViewType = EUIViewType::Checkbox;</td><td></td></tr>
-<tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">const</span> FUIStyle&amp; TypeDefaultStyle() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>std::string Label;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>FUIName Icon;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">bool</span> bChecked = <span class="kw">false</span>;</td><td></td></tr>
@@ -1603,6 +1602,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">void</span> PaintSelf(IUITranslator&amp; T, <span class="kw">const</span> FUIResolvedStyle&amp; S) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">void</span> PaintContent(IUITranslator&amp; T, <span class="kw">const</span> FUIResolvedStyle&amp; S) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-protected">protected</span></td><td>EUIInputFlags GetInputFlags() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
+<tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">const</span> FUIStyle&amp; TypeDefaultStyle() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">void</span> SyncConfig(<span class="kw">const</span> FUIBuilder&amp; Declared) <span class="kw">override</span>;</td><td></td></tr>
 </tbody></table></div>
 </div>
@@ -1626,7 +1626,6 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">static</span> <span class="kw">constexpr</span> EUIViewType ViewType = EUIViewType::CollapsingHeader;</td><td></td></tr>
-<tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">const</span> FUIStyle&amp; TypeDefaultStyle() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>std::string Label;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>FUIName Icon;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">bool</span> bOpen = <span class="kw">false</span>;</td><td></td></tr>
@@ -1648,6 +1647,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-protected">protected</span></td><td>FUIVector2 MeasureContent(IUITranslator&amp; T, <span class="kw">const</span> FUIVector2&amp; Available) <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">void</span> PaintSelf(IUITranslator&amp; T, <span class="kw">const</span> FUIResolvedStyle&amp; S) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">void</span> ArrangeChildren(IUITranslator&amp; T) <span class="kw">override</span>;</td><td></td></tr>
+<tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">const</span> FUIStyle&amp; TypeDefaultStyle() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">void</span> SyncConfig(<span class="kw">const</span> FUIBuilder&amp; Declared) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>[[nodiscard]] <span class="kw">float</span> RowHeight() <span class="kw">const</span>;</td><td></td></tr>
 </tbody></table></div>
@@ -1672,8 +1672,6 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">static</span> <span class="kw">constexpr</span> EUIViewType ViewType = EUIViewType::ColorEdit;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>FUIColorEdit&amp; SetValue(<span class="kw">const</span> FUIColor&amp; InColor);</td><td></td></tr>
-<tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">const</span> FUIStyle&amp; TypeDefaultStyle() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>std::string Label;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">float</span> RGBA[4] = 1.f, 1.f, 1.f, 1.f;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">float</span> LabelWidth = 0.f;</td><td></td></tr>
@@ -1685,6 +1683,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">explicit</span> FUIColorEdit(FUIName InId);</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>~FUIColorEdit() <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>FUIColorEdit&amp; SetLabel(std::string_view InLabel);</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>FUIColorEdit&amp; SetValue(<span class="kw">const</span> FUIColor&amp; InColor);</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>FUIColorEdit&amp; SetLabelWidth(<span class="kw">float</span> W);</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FUIColor GetValue() <span class="kw">const</span>;</td><td></td></tr>
 <tr><td><span class="acc a-protected">protected</span></td><td>std::string_view TypeName() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
@@ -1692,6 +1691,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">void</span> PaintSelf(IUITranslator&amp; T, <span class="kw">const</span> FUIResolvedStyle&amp; S) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">void</span> PaintContent(IUITranslator&amp; T, <span class="kw">const</span> FUIResolvedStyle&amp; S) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-protected">protected</span></td><td>EUIInputFlags GetInputFlags() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
+<tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">const</span> FUIStyle&amp; TypeDefaultStyle() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">void</span> SyncConfig(<span class="kw">const</span> FUIBuilder&amp; Declared) <span class="kw">override</span>;</td><td></td></tr>
 </tbody></table></div>
 </div>
@@ -1715,10 +1715,6 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">static</span> <span class="kw">constexpr</span> EUIViewType ViewType = EUIViewType::DragFloat;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>FUIDragFloat&amp; SetComponents(<span class="kw">int</span> InComponents);</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>FUIDragFloat&amp; SetValue(<span class="kw">float</span> InValue);</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>FUIDragFloat&amp; SetValues(<span class="kw">const</span> <span class="kw">float</span>* InValues);</td><td></td></tr>
-<tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">const</span> FUIStyle&amp; TypeDefaultStyle() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>std::string Label;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>std::string Format = <span class="st">"%.3f"</span>;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">float</span> Values[4] = 0.f, 0.f, 0.f, 0.f;</td><td></td></tr>
@@ -1733,6 +1729,9 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">explicit</span> FUIDragFloat(FUIName InId);</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>~FUIDragFloat() <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>FUIDragFloat&amp; SetLabel(std::string_view InLabel);</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>FUIDragFloat&amp; SetComponents(<span class="kw">int</span> InComponents);</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>FUIDragFloat&amp; SetValue(<span class="kw">float</span> InValue);</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>FUIDragFloat&amp; SetValues(<span class="kw">const</span> <span class="kw">float</span>* InValues);</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>FUIDragFloat&amp; SetSpeed(<span class="kw">float</span> InSpeed);</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>FUIDragFloat&amp; SetFormat(std::string_view InFormat);</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>FUIDragFloat&amp; SetLabelWidth(<span class="kw">float</span> W);</td><td></td></tr>
@@ -1745,6 +1744,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">void</span> PaintSelf(IUITranslator&amp; T, <span class="kw">const</span> FUIResolvedStyle&amp; S) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">void</span> PaintContent(IUITranslator&amp; T, <span class="kw">const</span> FUIResolvedStyle&amp; S) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-protected">protected</span></td><td>EUIInputFlags GetInputFlags() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
+<tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">const</span> FUIStyle&amp; TypeDefaultStyle() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">void</span> SyncConfig(<span class="kw">const</span> FUIBuilder&amp; Declared) <span class="kw">override</span>;</td><td></td></tr>
 </tbody></table></div>
 </div>
@@ -1767,7 +1767,6 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">static</span> <span class="kw">constexpr</span> EUIViewType ViewType = EUIViewType::Grid;</td><td></td></tr>
-<tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">const</span> FUIStyle&amp; TypeDefaultStyle() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">int</span> Columns = 1;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">float</span> CellW = 0.f, CellH = 0.f;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">float</span> CellSpacing = 4.f;</td><td></td></tr>
@@ -1793,6 +1792,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">void</span> ArrangeChildren(IUITranslator&amp; T) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">void</span> PaintOverlay(IUITranslator&amp; T, <span class="kw">const</span> FUIResolvedStyle&amp; S) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-protected">protected</span></td><td>EUIInputFlags GetInputFlags() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
+<tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">const</span> FUIStyle&amp; TypeDefaultStyle() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
 </tbody></table></div>
 </div>
 </div>
@@ -1814,7 +1814,6 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">static</span> <span class="kw">constexpr</span> EUIViewType ViewType = EUIViewType::Image;</td><td></td></tr>
-<tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">const</span> FUIStyle&amp; TypeDefaultStyle() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>FUIName Texture;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>FUIName Tint;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>FUIColor TintColor 1.f, 1.f, 1.f, 1.f;</td><td></td></tr>
@@ -1836,6 +1835,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-protected">protected</span></td><td>std::string_view TypeName() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-protected">protected</span></td><td>FUIVector2 MeasureContent(IUITranslator&amp; T, <span class="kw">const</span> FUIVector2&amp; Available) <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">void</span> PaintContent(IUITranslator&amp; T, <span class="kw">const</span> FUIResolvedStyle&amp; S) <span class="kw">override</span>;</td><td></td></tr>
+<tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">const</span> FUIStyle&amp; TypeDefaultStyle() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">void</span> SyncConfig(<span class="kw">const</span> FUIBuilder&amp; Declared) <span class="kw">override</span>;</td><td></td></tr>
 </tbody></table></div>
 </div>
@@ -1859,7 +1859,6 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">static</span> <span class="kw">constexpr</span> EUIViewType ViewType = EUIViewType::InputText;</td><td></td></tr>
-<tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">const</span> FUIStyle&amp; TypeDefaultStyle() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>std::string Value;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>std::string Hint;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>std::size_t MaxLength = 0;</td><td></td></tr>
@@ -1884,6 +1883,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">void</span> PaintSelf(IUITranslator&amp; T, <span class="kw">const</span> FUIResolvedStyle&amp; S) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-protected">protected</span></td><td>EUIInputFlags GetInputFlags() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">bool</span> WantsKeyboardFocus() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
+<tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">const</span> FUIStyle&amp; TypeDefaultStyle() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">void</span> SyncConfig(<span class="kw">const</span> FUIBuilder&amp; Declared) <span class="kw">override</span>;</td><td></td></tr>
 </tbody></table></div>
 </div>
@@ -1910,8 +1910,6 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">static</span> <span class="kw">constexpr</span> EUIViewType ViewType = EUIViewType::Panel;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>FUIPanel&amp; SetAnchor(<span class="kw">float</span> InX, <span class="kw">float</span> InY, <span class="kw">float</span> InW, <span class="kw">float</span> InH);</td><td></td></tr>
-<tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">const</span> FUIStyle&amp; TypeDefaultStyle() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>std::string Title;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>FUIName CloseId;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>EUIPanelChrome Chrome = EUIPanelChrome::None;</td><td></td></tr>
@@ -1927,6 +1925,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">explicit</span> FUIPanel(FUIName InId);</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>~FUIPanel() <span class="kw">override</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>FUIPanel&amp; SetAnchor(<span class="kw">float</span> InX, <span class="kw">float</span> InY, <span class="kw">float</span> InW, <span class="kw">float</span> InH);</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>FUIPanel&amp; SetTitle(std::string_view InTitle);</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>FUIPanel&amp; SetClosable(<span class="kw">bool</span> bIn);</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>FUIPanel&amp; SetChrome(EUIPanelChrome C);</td><td></td></tr>
@@ -1941,6 +1940,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">void</span> PaintSelf(IUITranslator&amp; T, <span class="kw">const</span> FUIResolvedStyle&amp; S) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">void</span> ArrangeChildren(IUITranslator&amp; T) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-protected">protected</span></td><td>EUIInputFlags GetInputFlags() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
+<tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">const</span> FUIStyle&amp; TypeDefaultStyle() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">void</span> SyncConfig(<span class="kw">const</span> FUIBuilder&amp; Declared) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>[[nodiscard]] <span class="kw">float</span> UsedHeaderHeight() <span class="kw">const</span>;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>[[nodiscard]] FUIRect BodyRect() <span class="kw">const</span>;</td><td></td></tr>
@@ -1965,7 +1965,6 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">static</span> <span class="kw">constexpr</span> EUIViewType ViewType = EUIViewType::Popup;</td><td></td></tr>
-<tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">const</span> FUIStyle&amp; TypeDefaultStyle() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>FUIRect Anchor;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">bool</span> bOpen = <span class="kw">false</span>;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">bool</span> bModal = <span class="kw">false</span>;</td><td></td></tr>
@@ -1989,6 +1988,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-protected">protected</span></td><td>std::string_view TypeName() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-protected">protected</span></td><td>FUIVector2 MeasureContent(IUITranslator&amp; T, <span class="kw">const</span> FUIVector2&amp; Available) <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">void</span> PaintContent(IUITranslator&amp; T, <span class="kw">const</span> FUIResolvedStyle&amp; S) <span class="kw">override</span>;</td><td></td></tr>
+<tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">const</span> FUIStyle&amp; TypeDefaultStyle() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">void</span> SyncConfig(<span class="kw">const</span> FUIBuilder&amp; Declared) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">bool</span> IsOverlayLayer() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>[[nodiscard]] IUITranslator::FUIPopupAnchor ResolveAnchor() <span class="kw">const</span>;</td><td></td></tr>
@@ -2014,7 +2014,6 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">static</span> <span class="kw">constexpr</span> EUIViewType ViewType = EUIViewType::Selectable;</td><td></td></tr>
-<tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">const</span> FUIStyle&amp; TypeDefaultStyle() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>std::string Label;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>FUIName Icon;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">bool</span> bSpanAll = <span class="kw">false</span>;</td><td></td></tr>
@@ -2036,6 +2035,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">void</span> PaintSelf(IUITranslator&amp; T, <span class="kw">const</span> FUIResolvedStyle&amp; S) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">void</span> PaintContent(IUITranslator&amp; T, <span class="kw">const</span> FUIResolvedStyle&amp; S) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-protected">protected</span></td><td>EUIInputFlags GetInputFlags() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
+<tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">const</span> FUIStyle&amp; TypeDefaultStyle() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">void</span> SyncConfig(<span class="kw">const</span> FUIBuilder&amp; Declared) <span class="kw">override</span>;</td><td></td></tr>
 </tbody></table></div>
 </div>
@@ -2059,7 +2059,6 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">static</span> <span class="kw">constexpr</span> EUIViewType ViewType = EUIViewType::Separator;</td><td></td></tr>
-<tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">const</span> FUIStyle&amp; TypeDefaultStyle() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>std::optional&lt;FUIColor&gt; Color;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">float</span> Thickness = 1.f;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">bool</span> bVertical = <span class="kw">false</span>;</td><td></td></tr>
@@ -2076,6 +2075,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-protected">protected</span></td><td>std::string_view TypeName() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-protected">protected</span></td><td>FUIVector2 MeasureContent(IUITranslator&amp; T, <span class="kw">const</span> FUIVector2&amp; Available) <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">void</span> PaintSelf(IUITranslator&amp; T, <span class="kw">const</span> FUIResolvedStyle&amp; S) <span class="kw">override</span>;</td><td></td></tr>
+<tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">const</span> FUIStyle&amp; TypeDefaultStyle() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">void</span> SyncConfig(<span class="kw">const</span> FUIBuilder&amp; Declared) <span class="kw">override</span>;</td><td></td></tr>
 </tbody></table></div>
 </div>
@@ -2099,7 +2099,6 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">static</span> <span class="kw">constexpr</span> EUIViewType ViewType = EUIViewType::SliderFloat;</td><td></td></tr>
-<tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">const</span> FUIStyle&amp; TypeDefaultStyle() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>std::string Label;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>std::string Format = <span class="st">"%.3f"</span>;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">float</span> Value = 0.f;</td><td></td></tr>
@@ -2124,6 +2123,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">void</span> PaintSelf(IUITranslator&amp; T, <span class="kw">const</span> FUIResolvedStyle&amp; S) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">void</span> PaintContent(IUITranslator&amp; T, <span class="kw">const</span> FUIResolvedStyle&amp; S) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-protected">protected</span></td><td>EUIInputFlags GetInputFlags() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
+<tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">const</span> FUIStyle&amp; TypeDefaultStyle() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">void</span> SyncConfig(<span class="kw">const</span> FUIBuilder&amp; Declared) <span class="kw">override</span>;</td><td></td></tr>
 </tbody></table></div>
 </div>
@@ -2147,7 +2147,6 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">static</span> <span class="kw">constexpr</span> EUIViewType ViewType = EUIViewType::Text;</td><td></td></tr>
-<tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">const</span> FUIStyle&amp; TypeDefaultStyle() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>std::string Text;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>EUITextAlign Align = EUITextAlign::Left;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">bool</span> bWrap = <span class="kw">false</span>;</td><td></td></tr>
@@ -2166,6 +2165,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-protected">protected</span></td><td>std::string_view TypeName() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-protected">protected</span></td><td>FUIVector2 MeasureContent(IUITranslator&amp; T, <span class="kw">const</span> FUIVector2&amp; Available) <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">void</span> PaintContent(IUITranslator&amp; T, <span class="kw">const</span> FUIResolvedStyle&amp; S) <span class="kw">override</span>;</td><td></td></tr>
+<tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">const</span> FUIStyle&amp; TypeDefaultStyle() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">void</span> SyncConfig(<span class="kw">const</span> FUIBuilder&amp; Declared) <span class="kw">override</span>;</td><td></td></tr>
 </tbody></table></div>
 </div>
@@ -2189,7 +2189,6 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">static</span> <span class="kw">constexpr</span> EUIViewType ViewType = EUIViewType::Tooltip;</td><td></td></tr>
-<tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">const</span> FUIStyle&amp; TypeDefaultStyle() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>std::string Text;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">float</span> Delay = 0.f;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">bool</span> bFollowMouse = <span class="kw">true</span>;</td><td></td></tr>
@@ -2208,6 +2207,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-protected">protected</span></td><td>std::string_view TypeName() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-protected">protected</span></td><td>FUIVector2 MeasureContent(IUITranslator&amp; T, <span class="kw">const</span> FUIVector2&amp; Available) <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">void</span> PaintContent(IUITranslator&amp; T, <span class="kw">const</span> FUIResolvedStyle&amp; S) <span class="kw">override</span>;</td><td></td></tr>
+<tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">const</span> FUIStyle&amp; TypeDefaultStyle() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">void</span> SyncConfig(<span class="kw">const</span> FUIBuilder&amp; Declared) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">bool</span> IsOverlayLayer() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>[[nodiscard]] FUIVector2 MeasureTipContent(IUITranslator&amp; T) <span class="kw">const</span>;</td><td></td></tr>
@@ -2233,7 +2233,6 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">static</span> <span class="kw">constexpr</span> EUIViewType ViewType = EUIViewType::TreeNode;</td><td></td></tr>
-<tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">const</span> FUIStyle&amp; TypeDefaultStyle() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>std::string Label;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>FUIName Icon;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">bool</span> bOpen = <span class="kw">false</span>;</td><td></td></tr>
@@ -2255,6 +2254,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-protected">protected</span></td><td>FUIVector2 MeasureContent(IUITranslator&amp; T, <span class="kw">const</span> FUIVector2&amp; Available) <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">void</span> PaintSelf(IUITranslator&amp; T, <span class="kw">const</span> FUIResolvedStyle&amp; S) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">void</span> ArrangeChildren(IUITranslator&amp; T) <span class="kw">override</span>;</td><td></td></tr>
+<tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">const</span> FUIStyle&amp; TypeDefaultStyle() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">void</span> SyncConfig(<span class="kw">const</span> FUIBuilder&amp; Declared) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>[[nodiscard]] <span class="kw">float</span> RowHeight() <span class="kw">const</span>;</td><td></td></tr>
 </tbody></table></div>

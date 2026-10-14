@@ -134,24 +134,20 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div class="ent e-class" id="Public__Script_h-2">
 <h3><span class="type">类</span> IScriptLanguage</h3>
 <div class="sect">
-<h4>字段</h4>
-<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> <span class="kw">const</span> <span class="kw">char</span>* GetName() <span class="kw">const</span> = 0;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span>* LoadScriptRaw(<span class="kw">const</span> <span class="kw">char</span>* FilePath) = 0;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> <span class="kw">void</span>* GetState() = 0;</td><td></td></tr>
-</tbody></table></div>
-<div class="sect">
 <h4>接口</h4>
 <table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> ~IScriptLanguage() = <span class="kw">default</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> <span class="kw">const</span> <span class="kw">char</span>* GetName() <span class="kw">const</span> = 0;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">bool</span> Initialize(<span class="kw">int</span> Argc, <span class="kw">char</span>** Argv, <span class="kw">const</span> <span class="kw">char</span>* ScriptsDirectory) = 0;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> Shutdown() = 0;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> <span class="kw">bool</span> IsInitialized() <span class="kw">const</span> = 0;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">bool</span> DoFile(<span class="kw">const</span> <span class="kw">char</span>* FilePath) = 0;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span>* LoadScriptRaw(<span class="kw">const</span> <span class="kw">char</span>* FilePath) = 0;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">bool</span> CallGlobal(<span class="kw">const</span> <span class="kw">char</span>* FunctionName) = 0;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">bool</span> CallGlobal(<span class="kw">const</span> <span class="kw">char</span>* FunctionName, <span class="kw">float</span> Arg0) = 0;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">bool</span> CallHandle(<span class="kw">void</span>* Handle, <span class="kw">const</span> <span class="kw">char</span>* FunctionName) = 0;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">bool</span> CallHandle(<span class="kw">void</span>* Handle, <span class="kw">const</span> <span class="kw">char</span>* FunctionName, <span class="kw">float</span> Arg0) = 0;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> <span class="kw">void</span>* GetState() = 0;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> RegisterTypeBinder(FTypeBinder Binder) = 0;</td><td></td></tr>
 </tbody></table></div>
 <div class="sect">
@@ -166,9 +162,6 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
 <tr><td><span class="acc a-public">public</span></td><td>MAHO_DECLARE_FRAME(FScriptSystem);</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] IScriptLanguage* GetLanguage(<span class="kw">const</span> <span class="kw">char</span>* Name) <span class="kw">const</span>;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] IScriptLanguage* GetActive() <span class="kw">const</span>;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">void</span>* TryGetState();</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>std::vector&lt;std::unique_ptr&lt;IScriptLanguage&gt;&gt; Languages;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>IScriptLanguage* Active = <span class="kw">nullptr</span>;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>FOnLanguageReady OnLanguageReady;</td><td></td></tr>
@@ -178,6 +171,8 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
 <tr><td><span class="acc a-public">public</span></td><td>FScriptSystem();</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> RegisterLanguage(IScriptLanguage* Language);</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] IScriptLanguage* GetLanguage(<span class="kw">const</span> <span class="kw">char</span>* Name) <span class="kw">const</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] IScriptLanguage* GetActive() <span class="kw">const</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> RegisterTypeBinder(<span class="kw">const</span> <span class="kw">char</span>* LanguageName, IScriptLanguage::FTypeBinder Binder);</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FOnLanguageReady&amp; GetOnLanguageReady();</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">template</span> &lt;<span class="kw">typename</span> TSolObject&gt; [[nodiscard]] TSolObject LoadScript(<span class="kw">const</span> <span class="kw">char</span>* FilePath);</td><td></td></tr>
@@ -186,6 +181,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">bool</span> Call(<span class="kw">const</span> <span class="kw">char</span>* FunctionName);</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">bool</span> Call(<span class="kw">const</span> <span class="kw">char</span>* FunctionName, <span class="kw">float</span> Arg0);</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">bool</span> DoFile(<span class="kw">const</span> <span class="kw">char</span>* FilePath);</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">void</span>* TryGetState();</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> PreInitialize(FEngineBase&amp;, FEngineContext&amp;) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> Initialize(FEngineBase&amp; Engine, FEngineContext&amp; Frame) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> PostInitialize(FEngineBase&amp;, FEngineContext&amp;) <span class="kw">override</span>;</td><td></td></tr>
