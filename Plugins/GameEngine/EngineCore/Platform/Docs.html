@@ -79,7 +79,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div id="app">
   <div id="side">
     <h1>Maho 引擎源码</h1>
-    <div class="search" title="左侧扫描 Plugins\GameEngine\EngineCore\Platform/**/*.h：2 个头文件 · 已声明 2 个 · 10 个实体 / 76 个成员 ｜ 内容来自头文件里的 `///` 注释（`Tools/docs_scan.py`）">
+    <div class="search" title="左侧扫描 Plugins\GameEngine\EngineCore\Platform/**/*.h：2 个头文件 · 已声明 2 个 · 8 个实体 / 75 个成员 ｜ 内容来自头文件里的 `///` 注释（`Tools/docs_scan.py`）">
       <input id="q" type="search" placeholder="搜索头文件…  （如 Frame、Core、Entry）" autocomplete="off">
     </div>
     <div id="tree"><ul>
@@ -128,13 +128,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td>`&lt;vector&gt;`</td></tr>
 </tbody></table>
 </div>
-<div class="ent e-struct" id="Public__Platform_h-0">
-<h3><span class="type">结构体</span> GLFWwindow</h3>
-</div>
-<div class="ent e-class" id="Public__Platform_h-1">
-<h3><span class="type">类</span> FPlatform</h3>
-</div>
-<div class="ent e-functions" id="Public__Platform_h-2">
+<div class="ent e-functions" id="Public__Platform_h-0">
 <h3><span class="type">自由函数</span> </h3>
 <div class="sect">
 <h4>接口</h4>
@@ -143,13 +137,13 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td>std::uint64_t GetFrameIndex();</td><td></td></tr>
 </tbody></table></div>
 </div>
-<div class="ent e-alias" id="Public__Platform_h-3">
+<div class="ent e-alias" id="Public__Platform_h-1">
 <h3><span class="type">别名</span> FNativeSurface <span class="base">: FNativeSurface</span></h3>
 </div>
-<div class="ent e-enum" id="Public__Platform_h-4">
+<div class="ent e-enum" id="Public__Platform_h-2">
 <h3><span class="type">枚举</span> MInputEventType</h3>
 </div>
-<div class="ent e-struct" id="Public__Platform_h-5">
+<div class="ent e-struct" id="Public__Platform_h-3">
 <h3><span class="type">结构体</span> MInputEvent</h3>
 <div class="sect">
 <h4>字段</h4>
@@ -165,7 +159,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">bool</span> Bool = <span class="kw">false</span>;</td><td></td></tr>
 </tbody></table></div>
 </div>
-<div class="ent e-struct" id="Public__Platform_h-6">
+<div class="ent e-struct" id="Public__Platform_h-4">
 <h3><span class="type">结构体</span> MInputContext</h3>
 <div class="sect">
 <h4>字段</h4>
@@ -182,7 +176,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">bool</span> WindowFocused = <span class="kw">false</span>;</td><td></td></tr>
 </tbody></table></div>
 </div>
-<div class="ent e-struct" id="Public__Platform_h-7">
+<div class="ent e-struct" id="Public__Platform_h-5">
 <h3><span class="type">结构体</span> FInputFrame</h3>
 <div class="sect">
 <h4>字段</h4>
@@ -192,7 +186,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td>std::vector&lt;MInputEvent&gt; Events;</td><td></td></tr>
 </tbody></table></div>
 </div>
-<div class="ent e-class" id="Public__Platform_h-8">
+<div class="ent e-class" id="Public__Platform_h-6">
 <h3><span class="type">类</span> IPlatform</h3>
 <div class="sect">
 <h4>接口</h4>
@@ -202,12 +196,11 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">constexpr</span> std::uint32_t kCrossSequenceWindowSlack = 1;</td><td></td></tr>
 </tbody></table></div>
 </div>
-<div class="ent e-class" id="Public__Platform_h-9">
-<h3><span class="type">类</span> FPlatform <span class="base">: : <span class="kw">public</span> FFrameExtension , <span class="kw">public</span> FThreadedServer , <span class="kw">public</span> IPipeline&lt;IInit, IBeginFrame, IEndFrame, IExit, IPreShutdown, IShutdown&gt;</span></h3>
+<div class="ent e-class" id="Public__Platform_h-7">
+<h3><span class="type">类</span> FPlatform <span class="base">: <span class="kw">public</span> FFrameExtension , <span class="kw">public</span> FThreadedServer , <span class="kw">public</span> IPipeline&lt;IInit, IBeginFrame, IEndFrame, IExit, IPreShutdown, IShutdown&gt;</span></h3>
 <div class="sect">
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-public">public</span></td><td>MAHO_DECLARE_FRAME(FPlatform);</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>TMulticastEvent&lt;<span class="kw">void</span>(std::uint64_t)&gt; OnInputPublished;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>std::atomic&lt;std::uint32_t&gt; CachedWidth 0;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>std::atomic&lt;std::uint32_t&gt; CachedHeight 0;</td><td></td></tr>

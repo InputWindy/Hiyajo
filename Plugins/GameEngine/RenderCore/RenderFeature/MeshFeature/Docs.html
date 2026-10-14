@@ -79,7 +79,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div id="app">
   <div id="side">
     <h1>Maho 引擎源码</h1>
-    <div class="search" title="左侧扫描 Plugins\GameEngine\RenderCore\RenderFeature\MeshFeature/**/*.h：2 个头文件 · 已声明 2 个 · 4 个实体 / 48 个成员 ｜ 内容来自头文件里的 `///` 注释（`Tools/docs_scan.py`）">
+    <div class="search" title="左侧扫描 Plugins\GameEngine\RenderCore\RenderFeature\MeshFeature/**/*.h：2 个头文件 · 已声明 2 个 · 4 个实体 / 47 个成员 ｜ 内容来自头文件里的 `///` 注释（`Tools/docs_scan.py`）">
       <input id="q" type="search" placeholder="搜索头文件…  （如 Frame、Core、Entry）" autocomplete="off">
     </div>
     <div id="tree"><ul>
@@ -128,7 +128,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table>
 </div>
 <div class="ent e-class" id="Public__MeshFeature_h-0">
-<h3><span class="type">类</span> FCubeMesh <span class="base">: : <span class="kw">public</span> Resource::FStaticMesh</span></h3>
+<h3><span class="type">类</span> FCubeMesh <span class="base">: <span class="kw">public</span> Resource::FStaticMesh</span></h3>
 <div class="sect">
 <h4>接口</h4>
 <table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
@@ -157,11 +157,10 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table></div>
 </div>
 <div class="ent e-class" id="Public__MeshFeature_h-3">
-<h3><span class="type">类</span> FMeshFeature <span class="base">: : <span class="kw">public</span> FFrameExtension, <span class="kw">public</span> IPipeline&lt;IInitViews, IRender, IPreUnInstall&gt;</span></h3>
+<h3><span class="type">类</span> FMeshFeature <span class="base">: <span class="kw">public</span> FFrameExtension, <span class="kw">public</span> IPipeline&lt;IInitViews, IRender, IPreUnInstall&gt;</span></h3>
 <div class="sect">
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-private">private</span></td><td>MAHO_DECLARE_FRAME_UNDER(FMeshFeature, FRender);</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">static</span> <span class="kw">constexpr</span> std::uint32_t kMaxMaterialSamplers = 4;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">struct</span> FMeshBuffers FRDGBufferRef Vertices; FRDGBufferRef Indices; std::uint32_t IndexCount = 0;;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">struct</span> FPipelineKey std::uint32_t ShaderId = 0; std::uint64_t ShaderHash = 0; <span class="cm">// SPIR-V content (two shaders with the same name can differ) ERHICullMode Cull = ERHICullMode::Back; bool bDepthWrite = false; bool bDepthTest = false; bool bBlend = false; ERHIFormat ColorFormat = ERHIFormat::Unknown; ERHIFormat DepthFormat = ERHIFormat::Unknown; [[nodiscard]] auto AsTuple() const return std::tie(ShaderId, ShaderHash, Cull, bDepthWrite, bDepthTest, bBlend, ColorFormat, DepthFormat); [[nodiscard]] bool operator&lt;(const FPipelineKey&amp; O) const return AsTuple() &lt; O.AsTuple();;</span></td><td></td></tr>

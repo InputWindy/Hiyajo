@@ -79,7 +79,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div id="app">
   <div id="side">
     <h1>Maho 引擎源码</h1>
-    <div class="search" title="左侧扫描 Plugins\Common\Log/**/*.h：3 个头文件 · 已声明 3 个 · 9 个实体 / 31 个成员 ｜ 内容来自头文件里的 `///` 注释（`Tools/docs_scan.py`）">
+    <div class="search" title="左侧扫描 Plugins\Common\Log/**/*.h：3 个头文件 · 已声明 3 个 · 7 个实体 / 28 个成员 ｜ 内容来自头文件里的 `///` 注释（`Tools/docs_scan.py`）">
       <input id="q" type="search" placeholder="搜索头文件…  （如 Frame、Core、Entry）" autocomplete="off">
     </div>
     <div id="tree"><ul>
@@ -124,13 +124,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td>`&lt;string_view&gt;`</td></tr>
 </tbody></table>
 </div>
-<div class="ent e-class" id="Public__Log_h-0">
-<h3><span class="type">类</span> logger</h3>
-</div>
-<div class="ent e-class" id="Public__Log_h-1">
-<h3><span class="type">类</span> FLog</h3>
-</div>
-<div class="ent e-functions" id="Public__Log_h-2">
+<div class="ent e-functions" id="Public__Log_h-0">
 <h3><span class="type">自由函数</span> </h3>
 <div class="sect">
 <h4>接口</h4>
@@ -138,10 +132,10 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td>FLog* GetLog();</td><td></td></tr>
 </tbody></table></div>
 </div>
-<div class="ent e-enum" id="Public__Log_h-3">
+<div class="ent e-enum" id="Public__Log_h-1">
 <h3><span class="type">枚举</span> ELogLevel</h3>
 </div>
-<div class="ent e-struct" id="Public__Log_h-4">
+<div class="ent e-struct" id="Public__Log_h-2">
 <h3><span class="type">结构体</span> FLogMessage</h3>
 <div class="sect">
 <h4>字段</h4>
@@ -151,12 +145,11 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td>std::string Message;</td><td></td></tr>
 </tbody></table></div>
 </div>
-<div class="ent e-class" id="Public__Log_h-5">
-<h3><span class="type">类</span> FLog <span class="base">: : <span class="kw">public</span> FFrameExtension, <span class="kw">public</span> IPipeline&lt;IInit, ITick, IShutdown&gt;</span></h3>
+<div class="ent e-class" id="Public__Log_h-3">
+<h3><span class="type">类</span> FLog <span class="base">: <span class="kw">public</span> FFrameExtension, <span class="kw">public</span> IPipeline&lt;IInit, ITick, IShutdown&gt;</span></h3>
 <div class="sect">
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-public">public</span></td><td>MAHO_DECLARE_FRAME(FLog);</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>TMulticastEvent&lt;<span class="kw">void</span>(<span class="kw">const</span> FLogMessage&amp;)&gt; OnLog;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>std::shared_ptr&lt;spdlog::logger&gt; Logger;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">int</span> LastTraceRequest = -1;</td><td></td></tr>
@@ -231,16 +224,10 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table></div>
 </div>
 <div class="ent e-macro" id="Public__Trace_h-1">
-<h3><span class="type">宏</span> MAHO_TRACE_CONCAT_ <span class="base">: A##B</span></h3>
+<h3><span class="type">宏</span> A <span class="base">: ##B</span></h3>
 </div>
 <div class="ent e-macro" id="Public__Trace_h-2">
-<h3><span class="type">宏</span> MAHO_TRACE_CONCAT <span class="base">: MAHO_TRACE_CONCAT_(A, B)</span></h3>
-<div class="sect">
-<h4>接口</h4>
-<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">template</span> &lt;<span class="kw">typename</span>... S&gt; <span class="kw">inline</span> std::string_view StagePredecessorIn(TTypeList&lt;S...&gt;, std::string_view Stage);</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">template</span> &lt;<span class="kw">typename</span> TFrame&gt; <span class="kw">inline</span> std::string_view StagePredecessorOf(<span class="kw">const</span> TFrame*, std::string_view Stage);</td><td></td></tr>
-</tbody></table></div>
+<h3><span class="type">宏</span> namespace <span class="base">: Maho</span></h3>
 </div>
 </div></div>
 </div>

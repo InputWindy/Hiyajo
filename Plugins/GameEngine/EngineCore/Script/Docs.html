@@ -79,7 +79,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div id="app">
   <div id="side">
     <h1>Maho 引擎源码</h1>
-    <div class="search" title="左侧扫描 Plugins\GameEngine\EngineCore\Script/**/*.h：2 个头文件 · 已声明 2 个 · 13 个实体 / 39 个成员 ｜ 内容来自头文件里的 `///` 注释（`Tools/docs_scan.py`）">
+    <div class="search" title="左侧扫描 Plugins\GameEngine\EngineCore\Script/**/*.h：2 个头文件 · 已声明 2 个 · 11 个实体 / 38 个成员 ｜ 内容来自头文件里的 `///` 注释（`Tools/docs_scan.py`）">
       <input id="q" type="search" placeholder="搜索头文件…  （如 Frame、Core、Entry）" autocomplete="off">
     </div>
     <div id="tree"><ul>
@@ -120,10 +120,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td>`&lt;vector&gt;`</td></tr>
 </tbody></table>
 </div>
-<div class="ent e-class" id="Public__Script_h-0">
-<h3><span class="type">类</span> FScriptSystem</h3>
-</div>
-<div class="ent e-functions" id="Public__Script_h-1">
+<div class="ent e-functions" id="Public__Script_h-0">
 <h3><span class="type">自由函数</span> </h3>
 <div class="sect">
 <h4>接口</h4>
@@ -131,7 +128,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td>FScriptSystem* GetScriptSystem();</td><td></td></tr>
 </tbody></table></div>
 </div>
-<div class="ent e-class" id="Public__Script_h-2">
+<div class="ent e-class" id="Public__Script_h-1">
 <h3><span class="type">类</span> IScriptLanguage</h3>
 <div class="sect">
 <h4>接口</h4>
@@ -156,12 +153,11 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td>FTypeBinder</td><td></td></tr>
 </tbody></table></div>
 </div>
-<div class="ent e-class" id="Public__Script_h-3">
-<h3><span class="type">类</span> FScriptSystem <span class="base">: : <span class="kw">public</span> FFrameExtension, <span class="kw">public</span> IPipeline&lt;IPreInit, IInit, IPostInit, IPreShutdown, IShutdown, IPostShutdown&gt;</span></h3>
+<div class="ent e-class" id="Public__Script_h-2">
+<h3><span class="type">类</span> FScriptSystem <span class="base">: <span class="kw">public</span> FFrameExtension, <span class="kw">public</span> IPipeline&lt;IPreInit, IInit, IPostInit, IPreShutdown, IShutdown, IPostShutdown&gt;</span></h3>
 <div class="sect">
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-public">public</span></td><td>MAHO_DECLARE_FRAME(FScriptSystem);</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>std::vector&lt;std::unique_ptr&lt;IScriptLanguage&gt;&gt; Languages;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>IScriptLanguage* Active = <span class="kw">nullptr</span>;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>FOnLanguageReady OnLanguageReady;</td><td></td></tr>
@@ -195,32 +191,29 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td>FOnLanguageReady</td><td></td></tr>
 </tbody></table></div>
 </div>
+<div class="ent e-macro" id="Public__Script_h-3">
+<h3><span class="type">宏</span> Table <span class="base">: ).set_function(#Method, &amp;Class::Method)</span></h3>
+</div>
 <div class="ent e-macro" id="Public__Script_h-4">
-<h3><span class="type">宏</span> MAHO_LUA_METHOD <span class="base">: (Table).set_function(#Method, &amp;Class::Method)</span></h3>
+<h3><span class="type">宏</span> Table <span class="base">: ).set_function(Name, Fn)</span></h3>
 </div>
 <div class="ent e-macro" id="Public__Script_h-5">
-<h3><span class="type">宏</span> MAHO_LUA_FUNCTION <span class="base">: (Table).set_function(Name, Fn)</span></h3>
+<h3><span class="type">宏</span> Table <span class="base">: ).set_property(Name, Getter, __VA_ARGS__)</span></h3>
 </div>
 <div class="ent e-macro" id="Public__Script_h-6">
-<h3><span class="type">宏</span> MAHO_LUA_PROPERTY <span class="base">: (Table).set_property(Name, Getter, __VA_ARGS__)</span></h3>
+<h3><span class="type">宏</span> static <span class="base">: <span class="kw">void</span> LuaBind(sol::state&amp; _Lua) \ { \ sol::usertype&lt;Type&gt; _Meta = _Lua.new_usertype&lt;Type&gt;(#Type); \ (<span class="kw">void</span>)_Meta; \ {</span></h3>
 </div>
 <div class="ent e-macro" id="Public__Script_h-7">
-<h3><span class="type">宏</span> MAHO_LUA_BIND_BEGIN <span class="base">: <span class="kw">static</span> <span class="kw">void</span> LuaBind(sol::state&amp; _Lua) \ { \ sol::usertype&lt;Type&gt; _Meta = _Lua.new_usertype&lt;Type&gt;(#Type); \ (<span class="kw">void</span>)_Meta; \ {</span></h3>
+<h3><span class="type">宏</span> _Meta <span class="base">: [#Field] = &amp;Type::Field;</span></h3>
 </div>
 <div class="ent e-macro" id="Public__Script_h-8">
-<h3><span class="type">宏</span> MAHO_LUA_FIELD <span class="base">: _Meta[#Field] = &amp;Type::Field;</span></h3>
+<h3><span class="type">宏</span> _Meta <span class="base">: [Name] = sol::property(&amp;Type::Getter, &amp;Type::Setter);</span></h3>
 </div>
 <div class="ent e-macro" id="Public__Script_h-9">
-<h3><span class="type">宏</span> MAHO_LUA_PROPERTY_MEMBER <span class="base">: _Meta[Name] = sol::property(&amp;Type::Getter, &amp;Type::Setter);</span></h3>
+<h3><span class="type">宏</span> _Meta <span class="base">: [#Method] = &amp;Type::Method;</span></h3>
 </div>
 <div class="ent e-macro" id="Public__Script_h-10">
-<h3><span class="type">宏</span> MAHO_LUA_METHOD_FN <span class="base">: _Meta[#Method] = &amp;Type::Method;</span></h3>
-</div>
-<div class="ent e-macro" id="Public__Script_h-11">
-<h3><span class="type">宏</span> MAHO_LUA_BIND_END <span class="base">: } \ }</span></h3>
-</div>
-<div class="ent e-macro" id="Public__Script_h-12">
-<h3><span class="type">宏</span> MAHO_LUA_BIND_REGISTER <span class="base">: Maho::Script::GetScriptSystem()-&gt;RegisterTypeBinder(<span class="st">"Lua"</span>, [](<span class="kw">void</span>* _LuaState) \ { \ Type::LuaBind(*static_cast&lt;sol::state*&gt;(_LuaState)); \ })</span></h3>
+<h3><span class="type">宏</span> Maho <span class="base">: ::Script::GetScriptSystem()-&gt;RegisterTypeBinder(<span class="st">"Lua"</span>, [](<span class="kw">void</span>* _LuaState) \ { \ Type::LuaBind(*static_cast&lt;sol::state*&gt;(_LuaState)); \ })</span></h3>
 </div>
 </div>
 <div class="pane" id="pane-Public__ScriptApi_h">

@@ -79,7 +79,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div id="app">
   <div id="side">
     <h1>Maho 引擎源码</h1>
-    <div class="search" title="左侧扫描 Plugins\GameEngine\RenderCore\Render/**/*.h：8 个头文件 · 已声明 8 个 · 45 个实体 / 274 个成员 ｜ 内容来自头文件里的 `///` 注释（`Tools/docs_scan.py`）">
+    <div class="search" title="左侧扫描 Plugins\GameEngine\RenderCore\Render/**/*.h：8 个头文件 · 已声明 8 个 · 21 个实体 / 247 个成员 ｜ 内容来自头文件里的 `///` 注释（`Tools/docs_scan.py`）">
       <input id="q" type="search" placeholder="搜索头文件…  （如 Frame、Core、Entry）" autocomplete="off">
     </div>
     <div id="tree"><ul>
@@ -176,7 +176,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div class="sect">
 <h4>接口</h4>
 <table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">explicit</span> FRHIResourcePool(IRHI* InRHI, std::uint32_t InFrameSlots) : RHI(InRHI) , FrameSlotCount(InFrameSlots &gt; 0 ? InFrameSlots : 1) , DescriptorSetGraceFrames(InFrameSlots &gt; 0 ? InFrameSlots : 1) , RetiringRenderLists(<span class="kw">this</span>-&gt;FrameSlotCount) , CondemnedTextures(<span class="kw">this</span>-&gt;FrameSlotCount) , CondemnedBuffers(<span class="kw">this</span>-&gt;FrameSlotCount);</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">explicit</span> FRHIResourcePool(IRHI* InRHI, std::uint32_t InFrameSlots) : , FrameSlotCount(InFrameSlots &gt; 0 ? InFrameSlots : 1) , DescriptorSetGraceFrames(InFrameSlots &gt; 0 ? InFrameSlots : 1) , RetiringRenderLists(<span class="kw">this</span>-&gt;FrameSlotCount) , CondemnedTextures(<span class="kw">this</span>-&gt;FrameSlotCount) , CondemnedBuffers(<span class="kw">this</span>-&gt;FrameSlotCount);</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] std::uint32_t GetFrameSlotCount() <span class="kw">const</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>FRDGTextureRef CreateTexture(<span class="kw">const</span> FRHITextureDesc&amp; Desc, ERDGResourceLifetime Lifetime);</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>FRDGBufferRef CreateBuffer(<span class="kw">const</span> FRHIBufferDesc&amp; Desc, ERDGResourceLifetime Lifetime);</td><td></td></tr>
@@ -253,16 +253,10 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td>`&lt;vector&gt;`</td></tr>
 </tbody></table>
 </div>
-<div class="ent e-class" id="Public__RDG_h-0">
-<h3><span class="type">类</span> FRender</h3>
-</div>
-<div class="ent e-class" id="Public__RDG_h-1">
-<h3><span class="type">类</span> FRHIResourcePool</h3>
-</div>
-<div class="ent e-enum" id="Public__RDG_h-2">
+<div class="ent e-enum" id="Public__RDG_h-0">
 <h3><span class="type">枚举</span> ERDGResourceLifetime</h3>
 </div>
-<div class="ent e-class" id="Public__RDG_h-3">
+<div class="ent e-class" id="Public__RDG_h-1">
 <h3><span class="type">类</span> FRDGTextureRef</h3>
 <div class="sect">
 <h4>字段</h4>
@@ -285,7 +279,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-private">private</span></td><td>FRDGTextureRef(FRHIResourcePool* InPool, std::uint32_t InId, std::uint32_t InGeneration) : Pool(InPool) , Id(InId) , Generation(InGeneration);</td><td></td></tr>
 </tbody></table></div>
 </div>
-<div class="ent e-class" id="Public__RDG_h-4">
+<div class="ent e-class" id="Public__RDG_h-2">
 <h3><span class="type">类</span> FRDGBufferRef</h3>
 <div class="sect">
 <h4>字段</h4>
@@ -304,7 +298,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-private">private</span></td><td>FRDGBufferRef(FRHIResourcePool* InPool, std::uint32_t InId, std::uint32_t InGeneration) : Pool(InPool) , Id(InId) , Generation(InGeneration);</td><td></td></tr>
 </tbody></table></div>
 </div>
-<div class="ent e-struct" id="Public__RDG_h-5">
+<div class="ent e-struct" id="Public__RDG_h-3">
 <h3><span class="type">结构体</span> FRenderTarget</h3>
 <div class="sect">
 <h4>字段</h4>
@@ -323,10 +317,10 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">bool</span> IsValid() <span class="kw">const</span>;</td><td></td></tr>
 </tbody></table></div>
 </div>
-<div class="ent e-alias" id="Public__RDG_h-6">
+<div class="ent e-alias" id="Public__RDG_h-4">
 <h3><span class="type">别名</span> FRDGResourceRef <span class="base">: FRDGResourceRef</span></h3>
 </div>
-<div class="ent e-struct" id="Public__RDG_h-7">
+<div class="ent e-struct" id="Public__RDG_h-5">
 <h3><span class="type">结构体</span> FRDGBinding</h3>
 <div class="sect">
 <h4>字段</h4>
@@ -339,10 +333,10 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td>std::uint64_t Range = 0;</td><td></td></tr>
 </tbody></table></div>
 </div>
-<div class="ent e-enum" id="Public__RDG_h-8">
+<div class="ent e-enum" id="Public__RDG_h-6">
 <h3><span class="type">枚举</span> EDescriptorSetFrequency</h3>
 </div>
-<div class="ent e-struct" id="Public__RDG_h-9">
+<div class="ent e-struct" id="Public__RDG_h-7">
 <h3><span class="type">结构体</span> FRDGDescriptorSet</h3>
 <div class="sect">
 <h4>字段</h4>
@@ -358,7 +352,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td>std::int32_t AddSampler(FRHISampler* Sampler);</td><td></td></tr>
 </tbody></table></div>
 </div>
-<div class="ent e-struct" id="Public__RDG_h-10">
+<div class="ent e-struct" id="Public__RDG_h-8">
 <h3><span class="type">结构体</span> FPassParameter</h3>
 <div class="sect">
 <h4>字段</h4>
@@ -376,7 +370,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> AddPushConstants(<span class="kw">const</span> FRHIPushConstantRange&amp; R);</td><td></td></tr>
 </tbody></table></div>
 </div>
-<div class="ent e-struct" id="Public__RDG_h-11">
+<div class="ent e-struct" id="Public__RDG_h-9">
 <h3><span class="type">结构体</span> FRenderPassDesc</h3>
 <div class="sect">
 <h4>字段</h4>
@@ -422,13 +416,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td>`&lt;vector&gt;`</td></tr>
 </tbody></table>
 </div>
-<div class="ent e-class" id="Public__Render_h-0">
-<h3><span class="type">类</span> FRender</h3>
-</div>
-<div class="ent e-class" id="Public__Render_h-1">
-<h3><span class="type">类</span> FRHIResourcePool</h3>
-</div>
-<div class="ent e-struct" id="Public__Render_h-2">
+<div class="ent e-struct" id="Public__Render_h-0">
 <h3><span class="type">结构体</span> FRenderContext</h3>
 <div class="sect">
 <h4>字段</h4>
@@ -438,7 +426,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td>std::vector&lt;FPendingPass&gt; Passes;</td><td></td></tr>
 </tbody></table></div>
 </div>
-<div class="ent e-functions" id="Public__Render_h-3">
+<div class="ent e-functions" id="Public__Render_h-1">
 <h3><span class="type">自由函数</span> </h3>
 <div class="sect">
 <h4>接口</h4>
@@ -449,15 +437,14 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td>std::uint64_t GetRenderBatchFrame();</td><td></td></tr>
 </tbody></table></div>
 </div>
-<div class="ent e-class" id="Public__Render_h-4">
-<h3><span class="type">类</span> FRender <span class="base">: : <span class="kw">public</span> FFrameExtension, <span class="kw">public</span> IPipeline&lt;IPreInit, IInit, IPostInit, IBeginFrame, ITick, IEndFrame, IExit, IPreShutdown, IShutdown, IPostShutdown&gt; , <span class="kw">public</span> FFrameBuilder&lt;FRender&gt;</span></h3>
+<div class="ent e-class" id="Public__Render_h-2">
+<h3><span class="type">类</span> FRender <span class="base">: <span class="kw">public</span> FFrameExtension, <span class="kw">public</span> IPipeline&lt;IPreInit, IInit, IPostInit, IBeginFrame, ITick, IEndFrame, IExit, IPreShutdown, IShutdown, IPostShutdown&gt; , <span class="kw">public</span> FFrameBuilder&lt;FRender&gt;</span></h3>
 <div class="sect">
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
 <tr><td><span class="acc a-protected">protected</span></td><td>std::optional&lt;FFrameGraph&gt; Graph;</td><td></td></tr>
 <tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">bool</span> bGraphReady = <span class="kw">false</span>;</td><td></td></tr>
 <tr><td><span class="acc a-protected">protected</span></td><td>std::unique_ptr&lt;FContext[]&gt; Slots;</td><td></td></tr>
-<tr><td><span class="acc a-private">private</span></td><td>MAHO_DECLARE_FRAME(FRender);</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>std::unique_ptr&lt;FRHI&gt; RHI;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>std::unique_ptr&lt;FShaderCompilerServer&gt; ShaderCompiler;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>std::unique_ptr&lt;FRHIResourcePool&gt; ResourcePool;</td><td></td></tr>
@@ -519,9 +506,6 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Tick(FEngineBase&amp; Engine, FEngineContext&amp; Frame) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> EndFrame(FEngineBase&amp; Engine, FEngineContext&amp; Frame) <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> RequestExit(FEngineBase&amp; Engine, FEngineContext&amp; Frame) <span class="kw">override</span>;</td><td></td></tr>
-<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> AddPass( ERHICommandListType PassType, FRHIGraphicsPipelineDesc PipelineDesc, <span class="kw">const</span> FRenderPassDesc&amp; Pass, std::function&lt;<span class="kw">void</span>(FRHICommandList&amp;)&gt; PassFn, std::vector&lt;FRHIDescriptorSet*&gt;* OutDefaultSets = <span class="kw">nullptr</span>);</td><td></td></tr>
-<tr><td><span class="acc a-private">private</span></td><td>FShaderCompilerServer* GetShaderCompiler() <span class="kw">const</span>;</td><td></td></tr>
-<tr><td><span class="acc a-private">private</span></td><td>[[nodiscard]] <span class="kw">void</span>* AllocParameterBytes(std::size_t Size, std::size_t Align);</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> BeginResourcePool();</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> WaitShaderCompiles();</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>[[nodiscard]] FRHIPipelineLayout* GetOrCreatePipelineLayout(<span class="kw">const</span> FRHIPipelineLayoutDesc&amp; Desc);</td><td></td></tr>
@@ -672,7 +656,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table></div>
 </div>
 <div class="ent e-class" id="Public__ShaderCompiler_h-3">
-<h3><span class="type">类</span> FShaderCompilerServer <span class="base">: : <span class="kw">public</span> FThreadedServer</span></h3>
+<h3><span class="type">类</span> FShaderCompilerServer <span class="base">: <span class="kw">public</span> FThreadedServer</span></h3>
 <div class="sect">
 <h4>接口</h4>
 <table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
@@ -704,113 +688,6 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td>`&lt;cstdint&gt;`</td></tr>
 <tr><td>`&lt;vector&gt;`</td></tr>
 </tbody></table>
-</div>
-<div class="ent e-functions" id="Public__ShaderParameterStruct_h-0">
-<h3><span class="type">自由函数</span> </h3>
-<div class="sect">
-<h4>接口</h4>
-<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">constexpr</span> std::uint32_t SHADER_PARAMETER_STRUCT_ALIGNMENT = 16;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">constexpr</span> std::uint32_t SHADER_PARAMETER_ARRAY_ELEMENT_ALIGNMENT = 16;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">constexpr</span> std::uint32_t SHADER_PARAMETER_POINTER_ALIGNMENT = <span class="kw">sizeof</span>(std::uint64_t);</td><td></td></tr>
-</tbody></table></div>
-</div>
-<div class="ent e-enum" id="Public__ShaderParameterStruct_h-1">
-<h3><span class="type">枚举</span> EShaderParameterType</h3>
-</div>
-<div class="ent e-struct" id="Public__ShaderParameterStruct_h-2">
-<h3><span class="type">结构体</span> FShaderParameterMember</h3>
-<div class="sect">
-<h4>字段</h4>
-<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">const</span> <span class="kw">char</span>* Name = <span class="kw">nullptr</span>;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">const</span> <span class="kw">char</span>* ShaderType = <span class="kw">nullptr</span>;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>std::uint32_t Offset = 0;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>std::uint32_t Size = 0;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>EShaderParameterType Type = EShaderParameterType::Invalid;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>ERHIDescriptorType DescriptorType = ERHIDescriptorType::Sampler;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>std::uint32_t Set = 0;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>std::uint32_t Binding = 0;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>ERHIShaderStage Stages = ERHIShaderStage::None;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">bool</span> bIsResource = <span class="kw">false</span>;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>std::uint32_t SamplerOffset = 0;</td><td></td></tr>
-</tbody></table></div>
-</div>
-<div class="ent e-struct" id="Public__ShaderParameterStruct_h-3">
-<h3><span class="type">结构体</span> FShaderParameterStructMetadata</h3>
-<div class="sect">
-<h4>字段</h4>
-<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">const</span> <span class="kw">char</span>* StructTypeName = <span class="kw">nullptr</span>;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>std::uint32_t Size = 0;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>std::vector&lt;FShaderParameterMember&gt; Members;</td><td></td></tr>
-</tbody></table></div>
-</div>
-<div class="ent e-macro" id="Public__ShaderParameterStruct_h-4">
-<h3><span class="type">宏</span> INTERNAL_SHADER_PARAMETER_GET_STRUCT_METADATA <span class="base">: { \ <span class="kw">static</span> <span class="kw">const</span> FShaderParameterStructMetadata M{ \ #StructTypeName, \ <span class="kw">sizeof</span>(StructTypeName), \ StructTypeName::zzGetMembers() }; \ <span class="kw">return</span> M; \ }</span></h3>
-</div>
-<div class="ent e-macro" id="Public__ShaderParameterStruct_h-5">
-<h3><span class="type">宏</span> INTERNAL_SHADER_PARAMETER_STRUCT_BEGIN <span class="base">: <span class="kw">struct</span> <span class="kw">alignas</span>(SHADER_PARAMETER_STRUCT_ALIGNMENT) StructTypeName \ { \ <span class="kw">public</span>: \ DllStorage StructTypeName () {} \ <span class="kw">struct</span> FTypeInfo \ { \ <span class="kw">static</span> <span class="kw">constexpr</span> std::uint32_t GetSize() { <span class="kw">return</span> <span class="kw">sizeof</span>(StructTypeName); } \ <span class="kw">static</span> <span class="kw">const</span> FShaderParameterStructMetadata&amp; GetStructMetadata() \ INTERNAL_SHADER_PARAMETER_GET_STRUCT_METADATA(StructTypeName) \ }; \ <span class="kw">private</span>: \ typedef StructTypeName zzTThisStruct; \ <span class="kw">struct</span> zzFirstMemberId { <span class="kw">enum</span> { HasDeclaredResource = 0 }; }; \ typedef <span class="kw">void</span>* zzFuncPtr; \ typedef zzFuncPtr(*zzMemberFunc)(zzFirstMemberId, std::vector&lt;FShaderParameterMember&gt;*); \ <span class="kw">static</span> zzFuncPtr zzAppendMemberGetPrev(zzFirstMemberId, std::vector&lt;FShaderParameterMember&gt;*) \ { \ <span class="kw">return</span> <span class="kw">nullptr</span>; \ } \ typedef zzFirstMemberId</span></h3>
-</div>
-<div class="ent e-macro" id="Public__ShaderParameterStruct_h-6">
-<h3><span class="type">宏</span> INTERNAL_SHADER_PARAMETER_APPEND_MEMBER <span class="base">: <span class="kw">struct</span> zzNextMemberId##MemberName \ { \ <span class="kw">enum</span> { HasDeclaredResource = zzMemberId##MemberName::HasDeclaredResource || !TypeInfo::bIsStoredInConstantBuffer }; \ }; \ <span class="kw">static</span> zzFuncPtr zzAppendMemberGetPrev(zzNextMemberId##MemberName, std::vector&lt;FShaderParameterMember&gt;* Members) \ { \ static_assert((offsetof(zzTThisStruct, MemberName) &amp; (TypeInfo::Alignment - 1)) == 0, \ <span class="st">"Misaligned shader parameter struct member "</span> #MemberName <span class="st">"."</span>); \ Members-&gt;push_back(FShaderParameterMember{ \ #MemberName, \ ShaderType, \ offsetof(zzTThisStruct, MemberName), \ <span class="kw">sizeof</span>(TypeInfo::TAlignedType), \ Type, \ DescriptorType, \ Set, \ Binding, \ Stages, \ bIsResource, \ SamplerOffsetExpr }); \ zzFuncPtr(*PrevFunc)(zzMemberId##MemberName, std::vector&lt;FShaderParameterMember&gt;*); \ PrevFunc = zzAppendMemberGetPrev; \ <span class="kw">return</span> (zzFuncPtr)PrevFunc; \ } \ typedef zzNextMemberId##MemberName</span></h3>
-</div>
-<div class="ent e-macro" id="Public__ShaderParameterStruct_h-7">
-<h3><span class="type">宏</span> INTERNAL_SHADER_PARAMETER_CONST <span class="base">: zzMemberId##MemberName; \ <span class="kw">public</span>: \ <span class="kw">alignas</span>(TypeInfo::Alignment) TypeInfo::TAlignedType MemberName{}; \ static_assert(TypeInfo::BaseType != EShaderParameterType::Invalid, \ #MemberName <span class="st">" must be a supported shader parameter type."</span>); \ static_assert(TypeInfo::bIsStoredInConstantBuffer, \ #MemberName <span class="st">" must be a constant."</span>); \ <span class="kw">private</span>: \ INTERNAL_SHADER_PARAMETER_APPEND_MEMBER(MemberName, zzMemberId##MemberName, TypeInfo, \ TypeInfo::BaseType, ERHIDescriptorType::UniformBuffer, 0u, 0u, ERHIShaderStage::AllGraphics, <span class="st">""</span>, <span class="kw">false</span>, 0u)</span></h3>
-</div>
-<div class="ent e-macro" id="Public__ShaderParameterStruct_h-8">
-<h3><span class="type">宏</span> INTERNAL_SHADER_PARAMETER_CONST_ARRAY <span class="base">: zzMemberId##MemberName; \ <span class="kw">public</span>: \ <span class="kw">alignas</span>(TypeInfo::Alignment) TypeInfo::TAlignedType MemberName[NumElements]{}; \ static_assert(TypeInfo::BaseType != EShaderParameterType::Invalid, \ #MemberName <span class="st">" must be a supported shader parameter type."</span>); \ <span class="kw">private</span>: \ <span class="kw">struct</span> zzNextMemberId##MemberName \ { \ <span class="kw">enum</span> { HasDeclaredResource = zzMemberId##MemberName::HasDeclaredResource || !TypeInfo::bIsStoredInConstantBuffer }; \ }; \ <span class="kw">static</span> zzFuncPtr zzAppendMemberGetPrev(zzNextMemberId##MemberName, std::vector&lt;FShaderParameterMember&gt;* Members) \ { \ static_assert((offsetof(zzTThisStruct, MemberName) &amp; (TypeInfo::Alignment - 1)) == 0, \ <span class="st">"Misaligned shader parameter struct member "</span> #MemberName <span class="st">"."</span>); \ Members-&gt;push_back(FShaderParameterMember{ \ #MemberName, \ <span class="st">""</span>, \ offsetof(zzTThisStruct, MemberName), \ <span class="kw">sizeof</span>(TypeInfo::TAlignedType) * (NumElements), \ TypeInfo::BaseType, \ ERHIDescriptorType::UniformBuffer, \ 0u, \ 0u, \ ERHIShaderStage::AllGraphics, \ <span class="kw">false</span>, \ 0u }); \ zzFuncPtr(*PrevFunc)(zzMemberId##MemberName, std::vector&lt;FShaderParameterMember&gt;*); \ PrevFunc = zzAppendMemberGetPrev; \ <span class="kw">return</span> (zzFuncPtr)PrevFunc; \ } \ typedef zzNextMemberId##MemberName</span></h3>
-</div>
-<div class="ent e-macro" id="Public__ShaderParameterStruct_h-9">
-<h3><span class="type">宏</span> INTERNAL_SHADER_PARAMETER_RESOURCE <span class="base">: zzMemberId##MemberName; \ <span class="kw">public</span>: \ <span class="kw">alignas</span>(SHADER_PARAMETER_POINTER_ALIGNMENT) FieldType MemberName{}; \ <span class="kw">private</span>: \ <span class="kw">struct</span> zzNextMemberId##MemberName \ { \ <span class="kw">enum</span> { HasDeclaredResource = zzMemberId##MemberName::HasDeclaredResource || <span class="kw">true</span> }; \ }; \ <span class="kw">static</span> zzFuncPtr zzAppendMemberGetPrev(zzNextMemberId##MemberName, std::vector&lt;FShaderParameterMember&gt;* Members) \ { \ static_assert((offsetof(zzTThisStruct, MemberName) &amp; (SHADER_PARAMETER_POINTER_ALIGNMENT - 1)) == 0, \ <span class="st">"Misaligned shader parameter struct member "</span> #MemberName <span class="st">"."</span>); \ Members-&gt;push_back(FShaderParameterMember{ \ #MemberName, \ ShaderType, \ offsetof(zzTThisStruct, MemberName), \ <span class="kw">sizeof</span>(FieldType), \ Type, \ DescriptorType, \ Set, \ Binding, \ Stages, \ <span class="kw">true</span>, \ 0u }); \ zzFuncPtr(*PrevFunc)(zzMemberId##MemberName, std::vector&lt;FShaderParameterMember&gt;*); \ PrevFunc = zzAppendMemberGetPrev; \ <span class="kw">return</span> (zzFuncPtr)PrevFunc; \ } \ typedef zzNextMemberId##MemberName</span></h3>
-</div>
-<div class="ent e-macro" id="Public__ShaderParameterStruct_h-10">
-<h3><span class="type">宏</span> INTERNAL_SHADER_PARAMETER_TEXTURE_SAMPLER <span class="base">: zzMemberId##TextureMember; \ <span class="kw">public</span>: \ <span class="kw">alignas</span>(SHADER_PARAMETER_POINTER_ALIGNMENT) FRDGTextureRef TextureMember{}; \ <span class="kw">alignas</span>(SHADER_PARAMETER_POINTER_ALIGNMENT) FRHISampler* SamplerMember{}; \ <span class="kw">private</span>: \ <span class="kw">struct</span> zzNextMemberId##TextureMember \ { \ <span class="kw">enum</span> { HasDeclaredResource = zzMemberId##TextureMember::HasDeclaredResource || <span class="kw">true</span> }; \ }; \ <span class="kw">static</span> zzFuncPtr zzAppendMemberGetPrev(zzNextMemberId##TextureMember, std::vector&lt;FShaderParameterMember&gt;* Members) \ { \ Members-&gt;push_back(FShaderParameterMember{ \ #TextureMember, \ ShaderType, \ offsetof(zzTThisStruct, TextureMember), \ <span class="kw">sizeof</span>(FRDGTextureRef), \ EShaderParameterType::Texture, \ ERHIDescriptorType::CombinedImageSampler, \ Set, \ Binding, \ Stages, \ <span class="kw">true</span>, \ offsetof(zzTThisStruct, SamplerMember) }); \ zzFuncPtr(*PrevFunc)(zzMemberId##TextureMember, std::vector&lt;FShaderParameterMember&gt;*); \ PrevFunc = zzAppendMemberGetPrev; \ <span class="kw">return</span> (zzFuncPtr)PrevFunc; \ } \ typedef zzNextMemberId##TextureMember</span></h3>
-</div>
-<div class="ent e-macro" id="Public__ShaderParameterStruct_h-11">
-<h3><span class="type">宏</span> END_SHADER_PARAMETER_STRUCT <span class="base">: zzLastMemberId; \ <span class="kw">public</span>: \ <span class="kw">static</span> std::vector&lt;FShaderParameterMember&gt; zzGetMembers() \ { \ std::vector&lt;FShaderParameterMember&gt; Members; \ zzFuncPtr(*LastFunc)(zzLastMemberId, std::vector&lt;FShaderParameterMember&gt;*); \ LastFunc = zzAppendMemberGetPrev; \ zzFuncPtr Ptr = (zzFuncPtr)LastFunc; \ <span class="kw">do</span> \ { \ Ptr = reinterpret_cast&lt;zzMemberFunc&gt;(Ptr)(zzFirstMemberId(), &amp;Members); \ } <span class="kw">while</span> (Ptr); \ std::reverse(Members.begin(), Members.end()); \ <span class="kw">return</span> Members; \ } \ };</span></h3>
-</div>
-<div class="ent e-macro" id="Public__ShaderParameterStruct_h-12">
-<h3><span class="type">宏</span> BEGIN_SHADER_PARAMETER_STRUCT <span class="base">: INTERNAL_SHADER_PARAMETER_STRUCT_BEGIN(StructTypeName, )</span></h3>
-</div>
-<div class="ent e-macro" id="Public__ShaderParameterStruct_h-13">
-<h3><span class="type">宏</span> SHADER_PARAMETER <span class="base">: INTERNAL_SHADER_PARAMETER_CONST(TShaderParameterTypeInfo&lt;MemberType&gt;, MemberName)</span></h3>
-</div>
-<div class="ent e-macro" id="Public__ShaderParameterStruct_h-14">
-<h3><span class="type">宏</span> SHADER_PARAMETER_ARRAY <span class="base">: INTERNAL_SHADER_PARAMETER_CONST_ARRAY(TShaderParameterTypeInfo&lt;MemberType&gt;, MemberName, NumElements)</span></h3>
-</div>
-<div class="ent e-macro" id="Public__ShaderParameterStruct_h-15">
-<h3><span class="type">宏</span> SHADER_PARAMETER_TEXTURE <span class="base">: INTERNAL_SHADER_PARAMETER_RESOURCE(EShaderParameterType::Texture, FRDGTextureRef, #ShaderType, \ MemberName, Set, Binding, Stages, ERHIDescriptorType::SampledImage)</span></h3>
-</div>
-<div class="ent e-macro" id="Public__ShaderParameterStruct_h-16">
-<h3><span class="type">宏</span> SHADER_PARAMETER_BUFFER <span class="base">: INTERNAL_SHADER_PARAMETER_RESOURCE(EShaderParameterType::Buffer, FRDGBufferRef, #ShaderType, \ MemberName, Set, Binding, Stages, DescriptorType)</span></h3>
-</div>
-<div class="ent e-macro" id="Public__ShaderParameterStruct_h-17">
-<h3><span class="type">宏</span> SHADER_PARAMETER_TEXTURE_SAMPLER <span class="base">: INTERNAL_SHADER_PARAMETER_TEXTURE_SAMPLER(#ShaderType, TextureMember, SamplerMember, Set, Binding, Stages)</span></h3>
-</div>
-<div class="ent e-struct" id="Public__ShaderParameterStruct_h-18">
-<h3><span class="type">结构体</span> TScalarResourceTypeInfo</h3>
-<div class="sect">
-<h4>字段</h4>
-<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">static</span> <span class="kw">constexpr</span> <span class="kw">bool</span> bIsStoredInConstantBuffer = <span class="kw">false</span>;</td><td></td></tr>
-</tbody></table></div>
-</div>
-<div class="ent e-struct" id="Public__ShaderParameterStruct_h-19">
-<h3><span class="type">结构体</span> FShaderParameterBuildResult</h3>
-<div class="sect">
-<h4>字段</h4>
-<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-public">public</span></td><td>FPassParameter Layout;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>std::vector&lt;std::byte&gt; PushConstantData;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>ERHIShaderStage PushConstantStages = ERHIShaderStage::None;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">bool</span> bHasPushConstant = <span class="kw">false</span>;</td><td></td></tr>
-</tbody></table></div>
-<div class="sect">
-<h4>接口</h4>
-<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">template</span> &lt;<span class="kw">typename</span> TParameters&gt; FShaderParameterBuildResult ShaderParameterBuild(<span class="kw">const</span> TParameters&amp; Parameters);</td><td></td></tr>
-</tbody></table></div>
 </div>
 </div></div>
 </div>

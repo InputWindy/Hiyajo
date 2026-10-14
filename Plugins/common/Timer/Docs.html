@@ -79,7 +79,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div id="app">
   <div id="side">
     <h1>Maho 引擎源码</h1>
-    <div class="search" title="左侧扫描 Plugins\Common\Timer/**/*.h：2 个头文件 · 已声明 2 个 · 4 个实体 / 20 个成员 ｜ 内容来自头文件里的 `///` 注释（`Tools/docs_scan.py`）">
+    <div class="search" title="左侧扫描 Plugins\Common\Timer/**/*.h：2 个头文件 · 已声明 2 个 · 3 个实体 / 19 个成员 ｜ 内容来自头文件里的 `///` 注释（`Tools/docs_scan.py`）">
       <input id="q" type="search" placeholder="搜索头文件…  （如 Frame、Core、Entry）" autocomplete="off">
     </div>
     <div id="tree"><ul>
@@ -119,10 +119,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td>`&lt;string_view&gt;`</td></tr>
 </tbody></table>
 </div>
-<div class="ent e-class" id="Public__Timer_h-0">
-<h3><span class="type">类</span> FTimer</h3>
-</div>
-<div class="ent e-functions" id="Public__Timer_h-1">
+<div class="ent e-functions" id="Public__Timer_h-0">
 <h3><span class="type">自由函数</span> </h3>
 <div class="sect">
 <h4>接口</h4>
@@ -130,12 +127,11 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td>FTimer* GetTimer();</td><td></td></tr>
 </tbody></table></div>
 </div>
-<div class="ent e-class" id="Public__Timer_h-2">
-<h3><span class="type">类</span> FTimer <span class="base">: : <span class="kw">public</span> FFrameExtension, <span class="kw">public</span> IPipeline&lt;IPreInit, IInit, IPostInit, IPreShutdown, IShutdown, IPostShutdown&gt;</span></h3>
+<div class="ent e-class" id="Public__Timer_h-1">
+<h3><span class="type">类</span> FTimer <span class="base">: <span class="kw">public</span> FFrameExtension, <span class="kw">public</span> IPipeline&lt;IPreInit, IInit, IPostInit, IPreShutdown, IShutdown, IPostShutdown&gt;</span></h3>
 <div class="sect">
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-public">public</span></td><td>MAHO_DECLARE_FRAME(FTimer);</td><td></td></tr>
 <tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">struct</span> FNode std::string Name; <span class="kw">double</span> TotalSeconds = 0.0; <span class="kw">double</span> MaxSeconds = 0.0; std::uint32_t Count = 0; std::chrono::steady_clock::time_point Start; FNode* Parent = <span class="kw">nullptr</span>; std::map&lt;std::string, FNode&gt; Children;;</td><td></td></tr>
 <tr><td><span class="acc a-protected">protected</span></td><td>FNode Root <span class="st">"Root"</span>;</td><td></td></tr>
 <tr><td><span class="acc a-protected">protected</span></td><td>FNode* Current = &amp;Root;</td><td></td></tr>
@@ -156,7 +152,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-protected">protected</span></td><td>FTimer() = <span class="kw">default</span>;</td><td></td></tr>
 </tbody></table></div>
 </div>
-<div class="ent e-class" id="Public__Timer_h-3">
+<div class="ent e-class" id="Public__Timer_h-2">
 <h3><span class="type">类</span> FScopedTimer</h3>
 <div class="sect">
 <h4>接口</h4>

@@ -79,7 +79,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div id="app">
   <div id="side">
     <h1>Maho 引擎源码</h1>
-    <div class="search" title="左侧扫描 Plugins\GameEngine\RenderCore\RHI/**/*.h：10 个头文件 · 已声明 10 个 · 125 个实体 / 913 个成员 ｜ 内容来自头文件里的 `///` 注释（`Tools/docs_scan.py`）">
+    <div class="search" title="左侧扫描 Plugins\GameEngine\RenderCore\RHI/**/*.h：10 个头文件 · 已声明 10 个 · 119 个实体 / 910 个成员 ｜ 内容来自头文件里的 `///` 注释（`Tools/docs_scan.py`）">
       <input id="q" type="search" placeholder="搜索头文件…  （如 Frame、Core、Entry）" autocomplete="off">
     </div>
     <div id="tree"><ul>
@@ -252,10 +252,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table>
 </div>
 <div class="ent e-class" id="Private__VulkanCommandList_h-0">
-<h3><span class="type">类</span> FVulkanMemoryAllocator</h3>
-</div>
-<div class="ent e-class" id="Private__VulkanCommandList_h-1">
-<h3><span class="type">类</span> FVulkanQueue <span class="base">: : <span class="kw">public</span> FRHIQueue</span></h3>
+<h3><span class="type">类</span> FVulkanQueue <span class="base">: <span class="kw">public</span> FRHIQueue</span></h3>
 <div class="sect">
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
@@ -276,8 +273,8 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> Submit( FRHICommandList* <span class="kw">const</span>* CmdLists, std::uint32_t Count, FRHISemaphore* <span class="kw">const</span>* WaitSemaphores, std::uint32_t WaitCount, FRHISemaphore* <span class="kw">const</span>* SignalSemaphores, std::uint32_t SignalCount, FRHIFence* SignalFence) <span class="kw">override</span>;</td><td></td></tr>
 </tbody></table></div>
 </div>
-<div class="ent e-class" id="Private__VulkanCommandList_h-2">
-<h3><span class="type">类</span> FVulkanCommandList <span class="base">: : <span class="kw">public</span> FRHICommandList</span></h3>
+<div class="ent e-class" id="Private__VulkanCommandList_h-1">
+<h3><span class="type">类</span> FVulkanCommandList <span class="base">: <span class="kw">public</span> FRHICommandList</span></h3>
 <div class="sect">
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
@@ -295,7 +292,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div class="sect">
 <h4>接口</h4>
 <table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-public">public</span></td><td>FVulkanCommandList( ERHICommandListType InType, VkDevice InDevice, VkCommandPool InPool, VkCommandBuffer InBuffer, FVulkanMemoryAllocator* InAllocator, <span class="kw">const</span> FRTRuntime&amp; InRT) : Type(InType) , Device(InDevice) , Pool(InPool) , Buffer(InBuffer) , Allocator(InAllocator) , RT(InRT);</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>FVulkanCommandList( ERHICommandListType InType, VkDevice InDevice, VkCommandPool InPool, VkCommandBuffer InBuffer, FVulkanMemoryAllocator* InAllocator, <span class="kw">const</span> FRTRuntime&amp; InRT) : Type(InType) , Device(InDevice) , Pool(InPool) , Buffer(InBuffer) , Allocator(InAllocator) ,;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>~FVulkanCommandList() <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] ERHICommandListType GetType() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] VkCommandBuffer GetVkCommandBuffer() <span class="kw">const</span>;</td><td></td></tr>
@@ -371,7 +368,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <h3><span class="type">宏</span> VMA_DYNAMIC_VULKAN_FUNCTIONS <span class="base">: 1</span></h3>
 </div>
 <div class="ent e-class" id="Private__VulkanMemory_h-2">
-<h3><span class="type">类</span> FVulkanMemoryAllocator <span class="base">: : <span class="kw">public</span> IDynamicRHIMemoryAllocator</span></h3>
+<h3><span class="type">类</span> FVulkanMemoryAllocator <span class="base">: <span class="kw">public</span> IDynamicRHIMemoryAllocator</span></h3>
 <div class="sect">
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
@@ -447,7 +444,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table></div>
 </div>
 <div class="ent e-class" id="Private__VulkanResources_h-2">
-<h3><span class="type">类</span> FVulkanBuffer <span class="base">: : <span class="kw">public</span> FRHIBuffer</span></h3>
+<h3><span class="type">类</span> FVulkanBuffer <span class="base">: <span class="kw">public</span> FRHIBuffer</span></h3>
 <div class="sect">
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
@@ -469,7 +466,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table></div>
 </div>
 <div class="ent e-class" id="Private__VulkanResources_h-3">
-<h3><span class="type">类</span> FVulkanStructuredBuffer <span class="base">: : <span class="kw">public</span> FRHIStructuredBuffer</span></h3>
+<h3><span class="type">类</span> FVulkanStructuredBuffer <span class="base">: <span class="kw">public</span> FRHIStructuredBuffer</span></h3>
 <div class="sect">
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
@@ -487,7 +484,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table></div>
 </div>
 <div class="ent e-class" id="Private__VulkanResources_h-4">
-<h3><span class="type">类</span> FVulkanBufferView <span class="base">: : <span class="kw">public</span> FRHIBufferView</span></h3>
+<h3><span class="type">类</span> FVulkanBufferView <span class="base">: <span class="kw">public</span> FRHIBufferView</span></h3>
 <div class="sect">
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
@@ -503,7 +500,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table></div>
 </div>
 <div class="ent e-class" id="Private__VulkanResources_h-5">
-<h3><span class="type">类</span> FVulkanTexture <span class="base">: : <span class="kw">public</span> FRHITexture</span></h3>
+<h3><span class="type">类</span> FVulkanTexture <span class="base">: <span class="kw">public</span> FRHITexture</span></h3>
 <div class="sect">
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
@@ -527,7 +524,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table></div>
 </div>
 <div class="ent e-class" id="Private__VulkanResources_h-6">
-<h3><span class="type">类</span> FVulkanSampler <span class="base">: : <span class="kw">public</span> FRHISampler</span></h3>
+<h3><span class="type">类</span> FVulkanSampler <span class="base">: <span class="kw">public</span> FRHISampler</span></h3>
 <div class="sect">
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
@@ -545,7 +542,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table></div>
 </div>
 <div class="ent e-class" id="Private__VulkanResources_h-7">
-<h3><span class="type">类</span> FVulkanShaderModule <span class="base">: : <span class="kw">public</span> FRHIShaderModule</span></h3>
+<h3><span class="type">类</span> FVulkanShaderModule <span class="base">: <span class="kw">public</span> FRHIShaderModule</span></h3>
 <div class="sect">
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
@@ -561,7 +558,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table></div>
 </div>
 <div class="ent e-class" id="Private__VulkanResources_h-8">
-<h3><span class="type">类</span> FVulkanGraphicsPipeline <span class="base">: : <span class="kw">public</span> FRHIGraphicsPipeline</span></h3>
+<h3><span class="type">类</span> FVulkanGraphicsPipeline <span class="base">: <span class="kw">public</span> FRHIGraphicsPipeline</span></h3>
 <div class="sect">
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
@@ -579,7 +576,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table></div>
 </div>
 <div class="ent e-class" id="Private__VulkanResources_h-9">
-<h3><span class="type">类</span> FVulkanComputePipeline <span class="base">: : <span class="kw">public</span> FRHIComputePipeline</span></h3>
+<h3><span class="type">类</span> FVulkanComputePipeline <span class="base">: <span class="kw">public</span> FRHIComputePipeline</span></h3>
 <div class="sect">
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
@@ -597,7 +594,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table></div>
 </div>
 <div class="ent e-class" id="Private__VulkanResources_h-10">
-<h3><span class="type">类</span> FVulkanFence <span class="base">: : <span class="kw">public</span> FRHIFence</span></h3>
+<h3><span class="type">类</span> FVulkanFence <span class="base">: <span class="kw">public</span> FRHIFence</span></h3>
 <div class="sect">
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
@@ -613,7 +610,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table></div>
 </div>
 <div class="ent e-class" id="Private__VulkanResources_h-11">
-<h3><span class="type">类</span> FVulkanSemaphore <span class="base">: : <span class="kw">public</span> FRHISemaphore</span></h3>
+<h3><span class="type">类</span> FVulkanSemaphore <span class="base">: <span class="kw">public</span> FRHISemaphore</span></h3>
 <div class="sect">
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
@@ -629,7 +626,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table></div>
 </div>
 <div class="ent e-class" id="Private__VulkanResources_h-12">
-<h3><span class="type">类</span> FVulkanQueryPool <span class="base">: : <span class="kw">public</span> FRHIQueryPool</span></h3>
+<h3><span class="type">类</span> FVulkanQueryPool <span class="base">: <span class="kw">public</span> FRHIQueryPool</span></h3>
 <div class="sect">
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
@@ -645,7 +642,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table></div>
 </div>
 <div class="ent e-class" id="Private__VulkanResources_h-13">
-<h3><span class="type">类</span> FVulkanAccelerationStructure <span class="base">: : <span class="kw">public</span> FRHIAccelerationStructure</span></h3>
+<h3><span class="type">类</span> FVulkanAccelerationStructure <span class="base">: <span class="kw">public</span> FRHIAccelerationStructure</span></h3>
 <div class="sect">
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
@@ -667,7 +664,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table></div>
 </div>
 <div class="ent e-class" id="Private__VulkanResources_h-14">
-<h3><span class="type">类</span> FVulkanRayTracingPipeline <span class="base">: : <span class="kw">public</span> FRHIRayTracingPipeline</span></h3>
+<h3><span class="type">类</span> FVulkanRayTracingPipeline <span class="base">: <span class="kw">public</span> FRHIRayTracingPipeline</span></h3>
 <div class="sect">
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
@@ -685,7 +682,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table></div>
 </div>
 <div class="ent e-class" id="Private__VulkanResources_h-15">
-<h3><span class="type">类</span> FVulkanTextureView <span class="base">: : <span class="kw">public</span> FRHITextureView</span></h3>
+<h3><span class="type">类</span> FVulkanTextureView <span class="base">: <span class="kw">public</span> FRHITextureView</span></h3>
 <div class="sect">
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
@@ -703,7 +700,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table></div>
 </div>
 <div class="ent e-class" id="Private__VulkanResources_h-16">
-<h3><span class="type">类</span> FVulkanDescriptorSetLayout <span class="base">: : <span class="kw">public</span> FRHIDescriptorSetLayout</span></h3>
+<h3><span class="type">类</span> FVulkanDescriptorSetLayout <span class="base">: <span class="kw">public</span> FRHIDescriptorSetLayout</span></h3>
 <div class="sect">
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
@@ -719,7 +716,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table></div>
 </div>
 <div class="ent e-class" id="Private__VulkanResources_h-17">
-<h3><span class="type">类</span> FVulkanPipelineLayout <span class="base">: : <span class="kw">public</span> FRHIPipelineLayout</span></h3>
+<h3><span class="type">类</span> FVulkanPipelineLayout <span class="base">: <span class="kw">public</span> FRHIPipelineLayout</span></h3>
 <div class="sect">
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
@@ -735,7 +732,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table></div>
 </div>
 <div class="ent e-class" id="Private__VulkanResources_h-18">
-<h3><span class="type">类</span> FVulkanDescriptorPool <span class="base">: : <span class="kw">public</span> FRHIDescriptorPool</span></h3>
+<h3><span class="type">类</span> FVulkanDescriptorPool <span class="base">: <span class="kw">public</span> FRHIDescriptorPool</span></h3>
 <div class="sect">
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
@@ -751,7 +748,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table></div>
 </div>
 <div class="ent e-class" id="Private__VulkanResources_h-19">
-<h3><span class="type">类</span> FVulkanDescriptorSet <span class="base">: : <span class="kw">public</span> FRHIDescriptorSet</span></h3>
+<h3><span class="type">类</span> FVulkanDescriptorSet <span class="base">: <span class="kw">public</span> FRHIDescriptorSet</span></h3>
 <div class="sect">
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
@@ -765,7 +762,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table></div>
 </div>
 <div class="ent e-class" id="Private__VulkanResources_h-20">
-<h3><span class="type">类</span> FVulkanRenderPass <span class="base">: : <span class="kw">public</span> FRHIRenderPass</span></h3>
+<h3><span class="type">类</span> FVulkanRenderPass <span class="base">: <span class="kw">public</span> FRHIRenderPass</span></h3>
 <div class="sect">
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
@@ -782,7 +779,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table></div>
 </div>
 <div class="ent e-class" id="Private__VulkanResources_h-21">
-<h3><span class="type">类</span> FVulkanFramebuffer <span class="base">: : <span class="kw">public</span> FRHIFramebuffer</span></h3>
+<h3><span class="type">类</span> FVulkanFramebuffer <span class="base">: <span class="kw">public</span> FRHIFramebuffer</span></h3>
 <div class="sect">
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
@@ -793,7 +790,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div class="sect">
 <h4>接口</h4>
 <table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-public">public</span></td><td>FVulkanFramebuffer(VkDevice InDevice, VkFramebuffer InFB, <span class="kw">bool</span> bInOwnsHandle = <span class="kw">true</span>) : Device(InDevice) , FB(InFB) , bOwnsHandle(bInOwnsHandle);</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>FVulkanFramebuffer(VkDevice InDevice, VkFramebuffer InFB, <span class="kw">bool</span> bInOwnsHandle = <span class="kw">true</span>) : Device(InDevice) , , bOwnsHandle(bInOwnsHandle);</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>~FVulkanFramebuffer() <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] VkFramebuffer GetVkFramebuffer() <span class="kw">const</span>;</td><td></td></tr>
 </tbody></table></div>
@@ -821,7 +818,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table>
 </div>
 <div class="ent e-class" id="Private__VulkanRHI_h-0">
-<h3><span class="type">类</span> FVulkanRHI <span class="base">: : <span class="kw">public</span> IDynamicRHI</span></h3>
+<h3><span class="type">类</span> FVulkanRHI <span class="base">: <span class="kw">public</span> IDynamicRHI</span></h3>
 <div class="sect">
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
@@ -1048,10 +1045,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td>`&lt;cstdint&gt;`</td></tr>
 </tbody></table>
 </div>
-<div class="ent e-class" id="Public__RHI__RHICommandList_h-0">
-<h3><span class="type">类</span> FRHICommandList</h3>
-</div>
-<div class="ent e-struct" id="Public__RHI__RHICommandList_h-1">
+<div class="ent e-struct" id="Public__RHI__RHICommandList_h-0">
 <h3><span class="type">结构体</span> FRHITextureUsageRequest</h3>
 <div class="sect">
 <h4>字段</h4>
@@ -1061,7 +1055,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">bool</span> bRequiresContent = <span class="kw">false</span>;</td><td></td></tr>
 </tbody></table></div>
 </div>
-<div class="ent e-struct" id="Public__RHI__RHICommandList_h-2">
+<div class="ent e-struct" id="Public__RHI__RHICommandList_h-1">
 <h3><span class="type">结构体</span> FRHIRenderingAttachmentInfo</h3>
 <div class="sect">
 <h4>字段</h4>
@@ -1072,7 +1066,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">float</span> ClearColor[4] = 0.0f, 0.0f, 0.0f, 1.0f;</td><td></td></tr>
 </tbody></table></div>
 </div>
-<div class="ent e-class" id="Public__RHI__RHICommandList_h-3">
+<div class="ent e-class" id="Public__RHI__RHICommandList_h-2">
 <h3><span class="type">类</span> FRHIQueue</h3>
 <div class="sect">
 <h4>接口</h4>
@@ -1083,7 +1077,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> Submit( FRHICommandList* <span class="kw">const</span>* CmdLists, std::uint32_t Count, FRHISemaphore* <span class="kw">const</span>* WaitSemaphores, std::uint32_t WaitCount, FRHISemaphore* <span class="kw">const</span>* SignalSemaphores, std::uint32_t SignalCount, FRHIFence* SignalFence) = 0;</td><td></td></tr>
 </tbody></table></div>
 </div>
-<div class="ent e-class" id="Public__RHI__RHICommandList_h-4">
+<div class="ent e-class" id="Public__RHI__RHICommandList_h-3">
 <h3><span class="type">类</span> FRHICommandList</h3>
 <div class="sect">
 <h4>字段</h4>
@@ -1317,7 +1311,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table></div>
 </div>
 <div class="ent e-class" id="Public__RHI__RHIResources_h-5">
-<h3><span class="type">类</span> FRHIBuffer <span class="base">: : <span class="kw">public</span> FRHIResource</span></h3>
+<h3><span class="type">类</span> FRHIBuffer <span class="base">: <span class="kw">public</span> FRHIResource</span></h3>
 <div class="sect">
 <h4>接口</h4>
 <table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
@@ -1340,7 +1334,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table></div>
 </div>
 <div class="ent e-class" id="Public__RHI__RHIResources_h-7">
-<h3><span class="type">类</span> FRHIStructuredBuffer <span class="base">: : <span class="kw">public</span> FRHIResource</span></h3>
+<h3><span class="type">类</span> FRHIStructuredBuffer <span class="base">: <span class="kw">public</span> FRHIResource</span></h3>
 <div class="sect">
 <h4>接口</h4>
 <table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
@@ -1363,7 +1357,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table></div>
 </div>
 <div class="ent e-class" id="Public__RHI__RHIResources_h-9">
-<h3><span class="type">类</span> FRHIBufferView <span class="base">: : <span class="kw">public</span> FRHIResource</span></h3>
+<h3><span class="type">类</span> FRHIBufferView <span class="base">: <span class="kw">public</span> FRHIResource</span></h3>
 <div class="sect">
 <h4>接口</h4>
 <table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
@@ -1428,7 +1422,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table></div>
 </div>
 <div class="ent e-class" id="Public__RHI__RHIResources_h-14">
-<h3><span class="type">类</span> FRHITexture <span class="base">: : <span class="kw">public</span> FRHIResource</span></h3>
+<h3><span class="type">类</span> FRHITexture <span class="base">: <span class="kw">public</span> FRHIResource</span></h3>
 <div class="sect">
 <h4>接口</h4>
 <table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
@@ -1451,7 +1445,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table></div>
 </div>
 <div class="ent e-class" id="Public__RHI__RHIResources_h-16">
-<h3><span class="type">类</span> FRHITextureView <span class="base">: : <span class="kw">public</span> FRHIResource</span></h3>
+<h3><span class="type">类</span> FRHITextureView <span class="base">: <span class="kw">public</span> FRHIResource</span></h3>
 <div class="sect">
 <h4>接口</h4>
 <table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
@@ -1475,7 +1469,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table></div>
 </div>
 <div class="ent e-class" id="Public__RHI__RHIResources_h-18">
-<h3><span class="type">类</span> FRHISampler <span class="base">: : <span class="kw">public</span> FRHIResource</span></h3>
+<h3><span class="type">类</span> FRHISampler <span class="base">: <span class="kw">public</span> FRHIResource</span></h3>
 <div class="sect">
 <h4>接口</h4>
 <table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
@@ -1496,7 +1490,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table></div>
 </div>
 <div class="ent e-class" id="Public__RHI__RHIResources_h-20">
-<h3><span class="type">类</span> FRHIShaderModule <span class="base">: : <span class="kw">public</span> FRHIResource</span></h3>
+<h3><span class="type">类</span> FRHIShaderModule <span class="base">: <span class="kw">public</span> FRHIResource</span></h3>
 <div class="sect">
 <h4>接口</h4>
 <table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
@@ -1526,7 +1520,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table></div>
 </div>
 <div class="ent e-class" id="Public__RHI__RHIResources_h-23">
-<h3><span class="type">类</span> FRHIDescriptorSetLayout <span class="base">: : <span class="kw">public</span> FRHIResource</span></h3>
+<h3><span class="type">类</span> FRHIDescriptorSetLayout <span class="base">: <span class="kw">public</span> FRHIResource</span></h3>
 <div class="sect">
 <h4>接口</h4>
 <table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
@@ -1554,7 +1548,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table></div>
 </div>
 <div class="ent e-class" id="Public__RHI__RHIResources_h-26">
-<h3><span class="type">类</span> FRHIPipelineLayout <span class="base">: : <span class="kw">public</span> FRHIResource</span></h3>
+<h3><span class="type">类</span> FRHIPipelineLayout <span class="base">: <span class="kw">public</span> FRHIResource</span></h3>
 <div class="sect">
 <h4>接口</h4>
 <table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
@@ -1572,16 +1566,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td>std::uint32_t Offset = 0;</td><td></td></tr>
 </tbody></table></div>
 </div>
-<div class="ent e-class" id="Public__RHI__RHIResources_h-28">
-<h3><span class="type">类</span> FRHIRenderPass</h3>
-</div>
-<div class="ent e-class" id="Public__RHI__RHIResources_h-29">
-<h3><span class="type">类</span> FRHIFramebuffer</h3>
-</div>
-<div class="ent e-class" id="Public__RHI__RHIResources_h-30">
-<h3><span class="type">类</span> FRHITextureView</h3>
-</div>
-<div class="ent e-struct" id="Public__RHI__RHIResources_h-31">
+<div class="ent e-struct" id="Public__RHI__RHIResources_h-28">
 <h3><span class="type">结构体</span> FRHIAttachmentBlend</h3>
 <div class="sect">
 <h4>字段</h4>
@@ -1595,7 +1580,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td>ERHIBlendOp AlphaOp = ERHIBlendOp::Add;</td><td></td></tr>
 </tbody></table></div>
 </div>
-<div class="ent e-struct" id="Public__RHI__RHIResources_h-32">
+<div class="ent e-struct" id="Public__RHI__RHIResources_h-29">
 <h3><span class="type">结构体</span> FRHIGraphicsPipelineDesc</h3>
 <div class="sect">
 <h4>字段</h4>
@@ -1624,8 +1609,8 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td>std::uint64_t FragmentShaderHash = 0;</td><td></td></tr>
 </tbody></table></div>
 </div>
-<div class="ent e-class" id="Public__RHI__RHIResources_h-33">
-<h3><span class="type">类</span> FRHIGraphicsPipeline <span class="base">: : <span class="kw">public</span> FRHIResource</span></h3>
+<div class="ent e-class" id="Public__RHI__RHIResources_h-30">
+<h3><span class="type">类</span> FRHIGraphicsPipeline <span class="base">: <span class="kw">public</span> FRHIResource</span></h3>
 <div class="sect">
 <h4>接口</h4>
 <table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
@@ -1633,7 +1618,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] ERHIResourceType GetType() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
 </tbody></table></div>
 </div>
-<div class="ent e-struct" id="Public__RHI__RHIResources_h-34">
+<div class="ent e-struct" id="Public__RHI__RHIResources_h-31">
 <h3><span class="type">结构体</span> FRHIComputePipelineDesc</h3>
 <div class="sect">
 <h4>字段</h4>
@@ -1643,8 +1628,8 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td>FRHIPipelineLayout* Layout = <span class="kw">nullptr</span>;</td><td></td></tr>
 </tbody></table></div>
 </div>
-<div class="ent e-class" id="Public__RHI__RHIResources_h-35">
-<h3><span class="type">类</span> FRHIComputePipeline <span class="base">: : <span class="kw">public</span> FRHIResource</span></h3>
+<div class="ent e-class" id="Public__RHI__RHIResources_h-32">
+<h3><span class="type">类</span> FRHIComputePipeline <span class="base">: <span class="kw">public</span> FRHIResource</span></h3>
 <div class="sect">
 <h4>接口</h4>
 <table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
@@ -1652,7 +1637,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] ERHIResourceType GetType() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
 </tbody></table></div>
 </div>
-<div class="ent e-struct" id="Public__RHI__RHIResources_h-36">
+<div class="ent e-struct" id="Public__RHI__RHIResources_h-33">
 <h3><span class="type">结构体</span> FRHIRayTracingPipelineDesc</h3>
 <div class="sect">
 <h4>字段</h4>
@@ -1668,8 +1653,8 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td>std::uint32_t MaxRecursionDepth = 1;</td><td></td></tr>
 </tbody></table></div>
 </div>
-<div class="ent e-class" id="Public__RHI__RHIResources_h-37">
-<h3><span class="type">类</span> FRHIRayTracingPipeline <span class="base">: : <span class="kw">public</span> FRHIResource</span></h3>
+<div class="ent e-class" id="Public__RHI__RHIResources_h-34">
+<h3><span class="type">类</span> FRHIRayTracingPipeline <span class="base">: <span class="kw">public</span> FRHIResource</span></h3>
 <div class="sect">
 <h4>接口</h4>
 <table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
@@ -1677,7 +1662,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] ERHIResourceType GetType() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
 </tbody></table></div>
 </div>
-<div class="ent e-struct" id="Public__RHI__RHIResources_h-38">
+<div class="ent e-struct" id="Public__RHI__RHIResources_h-35">
 <h3><span class="type">结构体</span> FRHIDescriptorPoolSize</h3>
 <div class="sect">
 <h4>字段</h4>
@@ -1686,7 +1671,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td>std::uint32_t Count = 0;</td><td></td></tr>
 </tbody></table></div>
 </div>
-<div class="ent e-struct" id="Public__RHI__RHIResources_h-39">
+<div class="ent e-struct" id="Public__RHI__RHIResources_h-36">
 <h3><span class="type">结构体</span> FRHIDescriptorPoolDesc</h3>
 <div class="sect">
 <h4>字段</h4>
@@ -1696,8 +1681,35 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">bool</span> bUpdateAfterBind = <span class="kw">false</span>;</td><td></td></tr>
 </tbody></table></div>
 </div>
+<div class="ent e-class" id="Public__RHI__RHIResources_h-37">
+<h3><span class="type">类</span> FRHIDescriptorPool <span class="base">: <span class="kw">public</span> FRHIResource</span></h3>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">const</span> <span class="kw">char</span>* GetTypeName() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] ERHIResourceType GetType() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-class" id="Public__RHI__RHIResources_h-38">
+<h3><span class="type">类</span> FRHIDescriptorSet <span class="base">: <span class="kw">public</span> FRHIResource</span></h3>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">const</span> <span class="kw">char</span>* GetTypeName() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] ERHIResourceType GetType() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-class" id="Public__RHI__RHIResources_h-39">
+<h3><span class="type">类</span> FRHIFramebuffer <span class="base">: <span class="kw">public</span> FRHIResource</span></h3>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">const</span> <span class="kw">char</span>* GetTypeName() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] ERHIResourceType GetType() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
+</tbody></table></div>
+</div>
 <div class="ent e-class" id="Public__RHI__RHIResources_h-40">
-<h3><span class="type">类</span> FRHIDescriptorPool <span class="base">: : <span class="kw">public</span> FRHIResource</span></h3>
+<h3><span class="type">类</span> FRHIRenderPass <span class="base">: <span class="kw">public</span> FRHIResource</span></h3>
 <div class="sect">
 <h4>接口</h4>
 <table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
@@ -1705,34 +1717,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] ERHIResourceType GetType() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
 </tbody></table></div>
 </div>
-<div class="ent e-class" id="Public__RHI__RHIResources_h-41">
-<h3><span class="type">类</span> FRHIDescriptorSet <span class="base">: : <span class="kw">public</span> FRHIResource</span></h3>
-<div class="sect">
-<h4>接口</h4>
-<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">const</span> <span class="kw">char</span>* GetTypeName() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] ERHIResourceType GetType() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
-</tbody></table></div>
-</div>
-<div class="ent e-class" id="Public__RHI__RHIResources_h-42">
-<h3><span class="type">类</span> FRHIFramebuffer <span class="base">: : <span class="kw">public</span> FRHIResource</span></h3>
-<div class="sect">
-<h4>接口</h4>
-<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">const</span> <span class="kw">char</span>* GetTypeName() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] ERHIResourceType GetType() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
-</tbody></table></div>
-</div>
-<div class="ent e-class" id="Public__RHI__RHIResources_h-43">
-<h3><span class="type">类</span> FRHIRenderPass <span class="base">: : <span class="kw">public</span> FRHIResource</span></h3>
-<div class="sect">
-<h4>接口</h4>
-<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">const</span> <span class="kw">char</span>* GetTypeName() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] ERHIResourceType GetType() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
-</tbody></table></div>
-</div>
-<div class="ent e-struct" id="Public__RHI__RHIResources_h-44">
+<div class="ent e-struct" id="Public__RHI__RHIResources_h-41">
 <h3><span class="type">结构体</span> FRHIRenderPassAttachment</h3>
 <div class="sect">
 <h4>字段</h4>
@@ -1743,7 +1728,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td>ERHIStoreOp StoreOp = ERHIStoreOp::Store;</td><td></td></tr>
 </tbody></table></div>
 </div>
-<div class="ent e-struct" id="Public__RHI__RHIResources_h-45">
+<div class="ent e-struct" id="Public__RHI__RHIResources_h-42">
 <h3><span class="type">结构体</span> FRHIRenderPassDesc</h3>
 <div class="sect">
 <h4>字段</h4>
@@ -1753,7 +1738,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td>std::uint32_t SampleCount = 1;</td><td></td></tr>
 </tbody></table></div>
 </div>
-<div class="ent e-struct" id="Public__RHI__RHIResources_h-46">
+<div class="ent e-struct" id="Public__RHI__RHIResources_h-43">
 <h3><span class="type">结构体</span> FRHIFramebufferDesc</h3>
 <div class="sect">
 <h4>字段</h4>
@@ -1764,8 +1749,35 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td>std::uint32_t Height = 0;</td><td></td></tr>
 </tbody></table></div>
 </div>
+<div class="ent e-class" id="Public__RHI__RHIResources_h-44">
+<h3><span class="type">类</span> FRHICommandPool <span class="base">: <span class="kw">public</span> FRHIResource</span></h3>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">const</span> <span class="kw">char</span>* GetTypeName() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] ERHIResourceType GetType() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-class" id="Public__RHI__RHIResources_h-45">
+<h3><span class="type">类</span> FRHIFence <span class="base">: <span class="kw">public</span> FRHIResource</span></h3>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">const</span> <span class="kw">char</span>* GetTypeName() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] ERHIResourceType GetType() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-class" id="Public__RHI__RHIResources_h-46">
+<h3><span class="type">类</span> FRHISemaphore <span class="base">: <span class="kw">public</span> FRHIResource</span></h3>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">const</span> <span class="kw">char</span>* GetTypeName() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] ERHIResourceType GetType() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
+</tbody></table></div>
+</div>
 <div class="ent e-class" id="Public__RHI__RHIResources_h-47">
-<h3><span class="type">类</span> FRHICommandPool <span class="base">: : <span class="kw">public</span> FRHIResource</span></h3>
+<h3><span class="type">类</span> FRHIQueryPool <span class="base">: <span class="kw">public</span> FRHIResource</span></h3>
 <div class="sect">
 <h4>接口</h4>
 <table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
@@ -1773,37 +1785,10 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] ERHIResourceType GetType() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
 </tbody></table></div>
 </div>
-<div class="ent e-class" id="Public__RHI__RHIResources_h-48">
-<h3><span class="type">类</span> FRHIFence <span class="base">: : <span class="kw">public</span> FRHIResource</span></h3>
-<div class="sect">
-<h4>接口</h4>
-<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">const</span> <span class="kw">char</span>* GetTypeName() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] ERHIResourceType GetType() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
-</tbody></table></div>
-</div>
-<div class="ent e-class" id="Public__RHI__RHIResources_h-49">
-<h3><span class="type">类</span> FRHISemaphore <span class="base">: : <span class="kw">public</span> FRHIResource</span></h3>
-<div class="sect">
-<h4>接口</h4>
-<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">const</span> <span class="kw">char</span>* GetTypeName() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] ERHIResourceType GetType() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
-</tbody></table></div>
-</div>
-<div class="ent e-class" id="Public__RHI__RHIResources_h-50">
-<h3><span class="type">类</span> FRHIQueryPool <span class="base">: : <span class="kw">public</span> FRHIResource</span></h3>
-<div class="sect">
-<h4>接口</h4>
-<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">const</span> <span class="kw">char</span>* GetTypeName() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] ERHIResourceType GetType() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
-</tbody></table></div>
-</div>
-<div class="ent e-enum" id="Public__RHI__RHIResources_h-51">
+<div class="ent e-enum" id="Public__RHI__RHIResources_h-48">
 <h3><span class="type">枚举</span> ERHIRayTracingStructureType</h3>
 </div>
-<div class="ent e-struct" id="Public__RHI__RHIResources_h-52">
+<div class="ent e-struct" id="Public__RHI__RHIResources_h-49">
 <h3><span class="type">结构体</span> FRHIRayTracingGeometry</h3>
 <div class="sect">
 <h4>字段</h4>
@@ -1819,7 +1804,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">bool</span> bOpaque = <span class="kw">true</span>;</td><td></td></tr>
 </tbody></table></div>
 </div>
-<div class="ent e-struct" id="Public__RHI__RHIResources_h-53">
+<div class="ent e-struct" id="Public__RHI__RHIResources_h-50">
 <h3><span class="type">结构体</span> FRHIRayTracingGeometryDesc</h3>
 <div class="sect">
 <h4>字段</h4>
@@ -1829,7 +1814,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">bool</span> bAllowCompaction = <span class="kw">false</span>;</td><td></td></tr>
 </tbody></table></div>
 </div>
-<div class="ent e-struct" id="Public__RHI__RHIResources_h-54">
+<div class="ent e-struct" id="Public__RHI__RHIResources_h-51">
 <h3><span class="type">结构体</span> FRHIRayTracingInstance</h3>
 <div class="sect">
 <h4>字段</h4>
@@ -1841,8 +1826,8 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">float</span> Transform[12] = 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0;</td><td></td></tr>
 </tbody></table></div>
 </div>
-<div class="ent e-class" id="Public__RHI__RHIResources_h-55">
-<h3><span class="type">类</span> FRHIAccelerationStructure <span class="base">: : <span class="kw">public</span> FRHIResource</span></h3>
+<div class="ent e-class" id="Public__RHI__RHIResources_h-52">
+<h3><span class="type">类</span> FRHIAccelerationStructure <span class="base">: <span class="kw">public</span> FRHIResource</span></h3>
 <div class="sect">
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
@@ -1856,7 +1841,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">const</span> FRHIRayTracingGeometryDesc&amp; GetGeometryDesc() <span class="kw">const</span>;</td><td></td></tr>
 </tbody></table></div>
 </div>
-<div class="ent e-struct" id="Public__RHI__RHIResources_h-56">
+<div class="ent e-struct" id="Public__RHI__RHIResources_h-53">
 <h3><span class="type">结构体</span> FRHISbtRecord</h3>
 <div class="sect">
 <h4>字段</h4>
@@ -1865,7 +1850,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">const</span> <span class="kw">char</span>* EntryPoint = <span class="st">"main"</span>;</td><td></td></tr>
 </tbody></table></div>
 </div>
-<div class="ent e-struct" id="Public__RHI__RHIResources_h-57">
+<div class="ent e-struct" id="Public__RHI__RHIResources_h-54">
 <h3><span class="type">结构体</span> FRHISbtGroup</h3>
 <div class="sect">
 <h4>字段</h4>
@@ -1874,7 +1859,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td>std::vector&lt;FRHISbtRecord&gt; Records;</td><td></td></tr>
 </tbody></table></div>
 </div>
-<div class="ent e-struct" id="Public__RHI__RHIResources_h-58">
+<div class="ent e-struct" id="Public__RHI__RHIResources_h-55">
 <h3><span class="type">结构体</span> FRHIDescriptorWrite</h3>
 <div class="sect">
 <h4>字段</h4>
@@ -1921,7 +1906,6 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div class="sect">
 <h4>接口</h4>
 <table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> ~IRHI() = <span class="kw">default</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> FRHICommandList* CreateCommandList(ERHICommandListType Type) = 0;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> DestroyCommandList(FRHICommandList* CmdList) = 0;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> Submit( FRHICommandList* CmdList, ERHICommandListType Type = ERHICommandListType::Graphics, FRHISemaphore* <span class="kw">const</span>* WaitSemaphores = <span class="kw">nullptr</span>, std::uint32_t WaitCount = 0, FRHISemaphore* <span class="kw">const</span>* SignalSemaphores = <span class="kw">nullptr</span>, std::uint32_t SignalCount = 0, FRHIFence* SignalFence = <span class="kw">nullptr</span>) = 0;</td><td></td></tr>
@@ -1988,20 +1972,15 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table></div>
 </div>
 <div class="ent e-class" id="Public__RHI__RHIServer_h-1">
-<h3><span class="type">类</span> IDynamicRHI</h3>
-</div>
-<div class="ent e-class" id="Public__RHI__RHIServer_h-2">
-<h3><span class="type">类</span> FRHI <span class="base">: : <span class="kw">public</span> FThreadedServer , <span class="kw">public</span> IRHI</span></h3>
+<h3><span class="type">类</span> FRHI <span class="base">: <span class="kw">public</span> FThreadedServer , <span class="kw">public</span> IRHI</span></h3>
 <div class="sect">
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-public">public</span></td><td>FRHI();</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>std::unique_ptr&lt;IDynamicRHI&gt; RHI;</td><td></td></tr>
 </tbody></table></div>
 <div class="sect">
 <h4>接口</h4>
 <table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> ~FRHI() <span class="kw">override</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">bool</span> Initialize(<span class="kw">void</span>* NativeWindowHandle, <span class="kw">int</span> Width, <span class="kw">int</span> Height, FThreadPool&amp; Pool, ERHIBackend Backend = ERHIBackend::Vulkan, std::int32_t FramesInFlight = 0);</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] std::uint32_t GetFrameSlotCount() <span class="kw">const</span>;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> ShutdownRHI();</td><td></td></tr>

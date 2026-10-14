@@ -79,7 +79,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div id="app">
   <div id="side">
     <h1>Maho 引擎源码</h1>
-    <div class="search" title="左侧扫描 Plugins\GameEngine\EngineCore\UI/**/*.h：36 个头文件 · 已声明 36 个 · 94 个实体 / 874 个成员 ｜ 内容来自头文件里的 `///` 注释（`Tools/docs_scan.py`）">
+    <div class="search" title="左侧扫描 Plugins\GameEngine\EngineCore\UI/**/*.h：36 个头文件 · 已声明 36 个 · 86 个实体 / 873 个成员 ｜ 内容来自头文件里的 `///` 注释（`Tools/docs_scan.py`）">
       <input id="q" type="search" placeholder="搜索头文件…  （如 Frame、Core、Entry）" autocomplete="off">
     </div>
     <div id="tree"><ul>
@@ -160,7 +160,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table>
 </div>
 <div class="ent e-class" id="Private__UIImGuiTranslator_h-0">
-<h3><span class="type">类</span> FImGuiTranslator <span class="base">: : <span class="kw">public</span> IUITranslator</span></h3>
+<h3><span class="type">类</span> FImGuiTranslator <span class="base">: <span class="kw">public</span> IUITranslator</span></h3>
 <div class="sect">
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
@@ -358,13 +358,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td>`&lt;vector&gt;`</td></tr>
 </tbody></table>
 </div>
-<div class="ent e-class" id="Public__FUIBuilder_h-0">
-<h3><span class="type">类</span> IUITranslator</h3>
-</div>
-<div class="ent e-struct" id="Public__FUIBuilder_h-1">
-<h3><span class="type">结构体</span> FUIBlock</h3>
-</div>
-<div class="ent e-struct" id="Public__FUIBuilder_h-2">
+<div class="ent e-struct" id="Public__FUIBuilder_h-0">
 <h3><span class="type">结构体</span> FUIWidgetState</h3>
 <div class="sect">
 <h4>字段</h4>
@@ -384,7 +378,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">float</span> ScrollMaxY = 0.f;</td><td></td></tr>
 </tbody></table></div>
 </div>
-<div class="ent e-class" id="Public__FUIBuilder_h-3">
+<div class="ent e-class" id="Public__FUIBuilder_h-1">
 <h3><span class="type">类</span> FUIBuilder</h3>
 <div class="sect">
 <h4>字段</h4>
@@ -508,7 +502,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-private">private</span></td><td>FUIEvents&amp; EnsureEvents();</td><td></td></tr>
 </tbody></table></div>
 </div>
-<div class="ent e-struct" id="Public__FUIBuilder_h-4">
+<div class="ent e-struct" id="Public__FUIBuilder_h-2">
 <h3><span class="type">结构体</span> FUIBlock</h3>
 <div class="sect">
 <h4>字段</h4>
@@ -521,7 +515,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">template</span> &lt;<span class="kw">typename</span>... TKids&gt; FUIBlock(TKids&amp;&amp;... Kids);</td><td></td></tr>
 </tbody></table></div>
 </div>
-<div class="ent e-functions" id="Public__FUIBuilder_h-5">
+<div class="ent e-functions" id="Public__FUIBuilder_h-3">
 <h3><span class="type">自由函数</span> </h3>
 <div class="sect">
 <h4>接口</h4>
@@ -582,7 +576,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table>
 </div>
 <div class="ent e-class" id="Public__UICanvas_h-0">
-<h3><span class="type">类</span> FUICanvas <span class="base">: : <span class="kw">public</span> FUIBuilder</span></h3>
+<h3><span class="type">类</span> FUICanvas <span class="base">: <span class="kw">public</span> FUIBuilder</span></h3>
 <div class="sect">
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
@@ -660,13 +654,10 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">inline</span> <span class="kw">constexpr</span> <span class="kw">char</span> kUIPayloadType[] = <span class="st">"MahoUIName"</span>;</td><td></td></tr>
 </tbody></table></div>
 </div>
-<div class="ent e-class" id="Public__UIEvent_h-1">
-<h3><span class="type">类</span> FUIBuilder</h3>
-</div>
-<div class="ent e-enum" id="Public__UIEvent_h-2">
+<div class="ent e-enum" id="Public__UIEvent_h-1">
 <h3><span class="type">枚举</span> EUIEventType</h3>
 </div>
-<div class="ent e-enum" id="Public__UIEvent_h-3">
+<div class="ent e-enum" id="Public__UIEvent_h-2">
 <h3><span class="type">枚举</span> EUIModifiers</h3>
 <div class="sect">
 <h4>接口</h4>
@@ -675,7 +666,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">constexpr</span> <span class="kw">bool</span> HasModifier(EUIModifiers Set, EUIModifiers Flag);</td><td></td></tr>
 </tbody></table></div>
 </div>
-<div class="ent e-enum" id="Public__UIEvent_h-4">
+<div class="ent e-enum" id="Public__UIEvent_h-3">
 <h3><span class="type">枚举</span> EUIKey</h3>
 <div class="sect">
 <h4>接口</h4>
@@ -683,7 +674,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">constexpr</span> <span class="kw">const</span> <span class="kw">char</span>* EUIKeyName(EUIKey K);</td><td></td></tr>
 </tbody></table></div>
 </div>
-<div class="ent e-struct" id="Public__UIEvent_h-5">
+<div class="ent e-struct" id="Public__UIEvent_h-4">
 <h3><span class="type">结构体</span> FUIKeyChord</h3>
 <div class="sect">
 <h4>字段</h4>
@@ -700,10 +691,10 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] std::string ToString() <span class="kw">const</span>;</td><td></td></tr>
 </tbody></table></div>
 </div>
-<div class="ent e-enum" id="Public__UIEvent_h-6">
+<div class="ent e-enum" id="Public__UIEvent_h-5">
 <h3><span class="type">枚举</span> EUIShortcutScope</h3>
 </div>
-<div class="ent e-struct" id="Public__UIEvent_h-7">
+<div class="ent e-struct" id="Public__UIEvent_h-6">
 <h3><span class="type">结构体</span> FUIShortcutDecl</h3>
 <div class="sect">
 <h4>字段</h4>
@@ -712,7 +703,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td>EUIShortcutScope Scope = EUIShortcutScope::NodeActive;</td><td></td></tr>
 </tbody></table></div>
 </div>
-<div class="ent e-struct" id="Public__UIEvent_h-8">
+<div class="ent e-struct" id="Public__UIEvent_h-7">
 <h3><span class="type">结构体</span> FUIEventRecord</h3>
 <div class="sect">
 <h4>字段</h4>
@@ -727,22 +718,22 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td>std::string Text;</td><td></td></tr>
 </tbody></table></div>
 </div>
-<div class="ent e-alias" id="Public__UIEvent_h-9">
+<div class="ent e-alias" id="Public__UIEvent_h-8">
 <h3><span class="type">别名</span> FUIEventHandler <span class="base">: FUIEventHandler</span></h3>
 </div>
-<div class="ent e-alias" id="Public__UIEvent_h-10">
+<div class="ent e-alias" id="Public__UIEvent_h-9">
 <h3><span class="type">别名</span> FUIFloatEventHandler <span class="base">: FUIFloatEventHandler</span></h3>
 </div>
-<div class="ent e-alias" id="Public__UIEvent_h-11">
+<div class="ent e-alias" id="Public__UIEvent_h-10">
 <h3><span class="type">别名</span> FUIBoolEventHandler <span class="base">: FUIBoolEventHandler</span></h3>
 </div>
-<div class="ent e-alias" id="Public__UIEvent_h-12">
+<div class="ent e-alias" id="Public__UIEvent_h-11">
 <h3><span class="type">别名</span> FUITextEventHandler <span class="base">: FUITextEventHandler</span></h3>
 </div>
-<div class="ent e-alias" id="Public__UIEvent_h-13">
+<div class="ent e-alias" id="Public__UIEvent_h-12">
 <h3><span class="type">别名</span> FUINameEventHandler <span class="base">: FUINameEventHandler</span></h3>
 </div>
-<div class="ent e-struct" id="Public__UIEvent_h-14">
+<div class="ent e-struct" id="Public__UIEvent_h-13">
 <h3><span class="type">结构体</span> FUIShortcutGroup</h3>
 <div class="sect">
 <h4>字段</h4>
@@ -750,7 +741,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td>TMulticastEvent&lt;<span class="kw">void</span>(FUIBuilder&amp;)&gt; Handlers;</td><td></td></tr>
 </tbody></table></div>
 </div>
-<div class="ent e-struct" id="Public__UIEvent_h-15">
+<div class="ent e-struct" id="Public__UIEvent_h-14">
 <h3><span class="type">结构体</span> FUIEvents</h3>
 <div class="sect">
 <h4>字段</h4>
@@ -766,7 +757,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td>std::map&lt;std::string, std::unique_ptr&lt;FUIShortcutGroup&gt;&gt; Shortcuts;</td><td></td></tr>
 </tbody></table></div>
 </div>
-<div class="ent e-alias" id="Public__UIEvent_h-16">
+<div class="ent e-alias" id="Public__UIEvent_h-15">
 <h3><span class="type">别名</span> FUIEventSubscription <span class="base">: FUIEventSubscription</span></h3>
 </div>
 </div>
@@ -852,22 +843,16 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td>`&lt;string_view&gt;`</td></tr>
 </tbody></table>
 </div>
-<div class="ent e-class" id="Public__UIRender_h-0">
-<h3><span class="type">类</span> FUIView</h3>
-</div>
-<div class="ent e-class" id="Public__UIRender_h-1">
-<h3><span class="type">类</span> FUIBuilder</h3>
-</div>
-<div class="ent e-enum" id="Public__UIRender_h-2">
+<div class="ent e-enum" id="Public__UIRender_h-0">
 <h3><span class="type">枚举</span> EUITextAlign</h3>
 </div>
-<div class="ent e-enum" id="Public__UIRender_h-3">
+<div class="ent e-enum" id="Public__UIRender_h-1">
 <h3><span class="type">枚举</span> EUIScaleMode</h3>
 </div>
-<div class="ent e-enum" id="Public__UIRender_h-4">
+<div class="ent e-enum" id="Public__UIRender_h-2">
 <h3><span class="type">枚举</span> EUIInputFlags</h3>
 </div>
-<div class="ent e-functions" id="Public__UIRender_h-5">
+<div class="ent e-functions" id="Public__UIRender_h-3">
 <h3><span class="type">自由函数</span> </h3>
 <div class="sect">
 <h4>接口</h4>
@@ -877,7 +862,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">bool</span> HasFlag(EUIInputFlags V, EUIInputFlags F);</td><td></td></tr>
 </tbody></table></div>
 </div>
-<div class="ent e-class" id="Public__UIRender_h-6">
+<div class="ent e-class" id="Public__UIRender_h-4">
 <h3><span class="type">类</span> IUITranslator</h3>
 <div class="sect">
 <h4>字段</h4>
@@ -1282,16 +1267,13 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td>`&lt;vector&gt;`</td></tr>
 </tbody></table>
 </div>
-<div class="ent e-class" id="Public__UIView_h-0">
-<h3><span class="type">类</span> FUIView</h3>
-</div>
-<div class="ent e-enum" id="Public__UIView_h-1">
+<div class="ent e-enum" id="Public__UIView_h-0">
 <h3><span class="type">枚举</span> EUIOwnership</h3>
 </div>
-<div class="ent e-enum" id="Public__UIView_h-2">
+<div class="ent e-enum" id="Public__UIView_h-1">
 <h3><span class="type">枚举</span> EUIShellFlags</h3>
 </div>
-<div class="ent e-functions" id="Public__UIView_h-3">
+<div class="ent e-functions" id="Public__UIView_h-2">
 <h3><span class="type">自由函数</span> </h3>
 <div class="sect">
 <h4>接口</h4>
@@ -1301,7 +1283,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td><span class="kw">bool</span> HasFlag(EUIShellFlags Value, EUIShellFlags Flag);</td><td></td></tr>
 </tbody></table></div>
 </div>
-<div class="ent e-struct" id="Public__UIView_h-4">
+<div class="ent e-struct" id="Public__UIView_h-3">
 <h3><span class="type">结构体</span> FUIViewShell</h3>
 <div class="sect">
 <h4>字段</h4>
@@ -1315,7 +1297,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td>FUIVector2 SizeFraction;</td><td></td></tr>
 </tbody></table></div>
 </div>
-<div class="ent e-class" id="Public__UIView_h-5">
+<div class="ent e-class" id="Public__UIView_h-4">
 <h3><span class="type">类</span> FUIEditScope</h3>
 <div class="sect">
 <h4>字段</h4>
@@ -1333,7 +1315,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td>FUIBuilder&amp; GetRoot() <span class="kw">const</span>;</td><td></td></tr>
 </tbody></table></div>
 </div>
-<div class="ent e-class" id="Public__UIView_h-6">
+<div class="ent e-class" id="Public__UIView_h-5">
 <h3><span class="type">类</span> FUIView</h3>
 <div class="sect">
 <h4>字段</h4>
@@ -1403,13 +1385,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td>`&lt;vector&gt;`</td></tr>
 </tbody></table>
 </div>
-<div class="ent e-class" id="Public__UIViewRegistry_h-0">
-<h3><span class="type">类</span> FUIView</h3>
-</div>
-<div class="ent e-class" id="Public__UIViewRegistry_h-1">
-<h3><span class="type">类</span> FUIViewRegistry</h3>
-</div>
-<div class="ent e-functions" id="Public__UIViewRegistry_h-2">
+<div class="ent e-functions" id="Public__UIViewRegistry_h-0">
 <h3><span class="type">自由函数</span> </h3>
 <div class="sect">
 <h4>接口</h4>
@@ -1417,12 +1393,11 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td>FUIViewRegistry* GetUIViewRegistry();</td><td></td></tr>
 </tbody></table></div>
 </div>
-<div class="ent e-class" id="Public__UIViewRegistry_h-3">
-<h3><span class="type">类</span> FUIViewRegistry <span class="base">: : <span class="kw">public</span> FFrameExtension, <span class="kw">public</span> IPipeline&lt;IInit, IShutdown&gt;</span></h3>
+<div class="ent e-class" id="Public__UIViewRegistry_h-1">
+<h3><span class="type">类</span> FUIViewRegistry <span class="base">: <span class="kw">public</span> FFrameExtension, <span class="kw">public</span> IPipeline&lt;IInit, IShutdown&gt;</span></h3>
 <div class="sect">
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-public">public</span></td><td>MAHO_DECLARE_FRAME(FUIViewRegistry);</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">mutable</span> std::mutex Mutex;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>std::vector&lt;FUIView*&gt; Views;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>std::mutex PassMutex;</td><td></td></tr>
@@ -1464,7 +1439,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> WaitForPassesToDrain();</td><td></td></tr>
 </tbody></table></div>
 </div>
-<div class="ent e-class" id="Public__UIViewRegistry_h-4">
+<div class="ent e-class" id="Public__UIViewRegistry_h-2">
 <h3><span class="type">类</span> FScopedUITranslationPass</h3>
 <div class="sect">
 <h4>字段</h4>
@@ -1494,7 +1469,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table>
 </div>
 <div class="ent e-class" id="Public__Widgets__FUIBox_h-0">
-<h3><span class="type">类</span> FUIBox <span class="base">: : <span class="kw">public</span> FUIBuilder</span></h3>
+<h3><span class="type">类</span> FUIBox <span class="base">: <span class="kw">public</span> FUIBuilder</span></h3>
 <div class="sect">
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
@@ -1530,7 +1505,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table>
 </div>
 <div class="ent e-class" id="Public__Widgets__FUIButton_h-0">
-<h3><span class="type">类</span> FUIButton <span class="base">: : <span class="kw">public</span> FUIBuilder</span></h3>
+<h3><span class="type">类</span> FUIButton <span class="base">: <span class="kw">public</span> FUIBuilder</span></h3>
 <div class="sect">
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
@@ -1576,7 +1551,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table>
 </div>
 <div class="ent e-class" id="Public__Widgets__FUICheckbox_h-0">
-<h3><span class="type">类</span> FUICheckbox <span class="base">: : <span class="kw">public</span> FUIBuilder</span></h3>
+<h3><span class="type">类</span> FUICheckbox <span class="base">: <span class="kw">public</span> FUIBuilder</span></h3>
 <div class="sect">
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
@@ -1621,7 +1596,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table>
 </div>
 <div class="ent e-class" id="Public__Widgets__FUICollapsingHeader_h-0">
-<h3><span class="type">类</span> FUICollapsingHeader <span class="base">: : <span class="kw">public</span> FUIBuilder</span></h3>
+<h3><span class="type">类</span> FUICollapsingHeader <span class="base">: <span class="kw">public</span> FUIBuilder</span></h3>
 <div class="sect">
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
@@ -1667,7 +1642,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table>
 </div>
 <div class="ent e-class" id="Public__Widgets__FUIColorEdit_h-0">
-<h3><span class="type">类</span> FUIColorEdit <span class="base">: : <span class="kw">public</span> FUIBuilder</span></h3>
+<h3><span class="type">类</span> FUIColorEdit <span class="base">: <span class="kw">public</span> FUIBuilder</span></h3>
 <div class="sect">
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
@@ -1710,7 +1685,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table>
 </div>
 <div class="ent e-class" id="Public__Widgets__FUIDragFloat_h-0">
-<h3><span class="type">类</span> FUIDragFloat <span class="base">: : <span class="kw">public</span> FUIBuilder</span></h3>
+<h3><span class="type">类</span> FUIDragFloat <span class="base">: <span class="kw">public</span> FUIBuilder</span></h3>
 <div class="sect">
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
@@ -1762,7 +1737,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table>
 </div>
 <div class="ent e-class" id="Public__Widgets__FUIGrid_h-0">
-<h3><span class="type">类</span> FUIGrid <span class="base">: : <span class="kw">public</span> FUIBuilder</span></h3>
+<h3><span class="type">类</span> FUIGrid <span class="base">: <span class="kw">public</span> FUIBuilder</span></h3>
 <div class="sect">
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
@@ -1809,7 +1784,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table>
 </div>
 <div class="ent e-class" id="Public__Widgets__FUIImage_h-0">
-<h3><span class="type">类</span> FUIImage <span class="base">: : <span class="kw">public</span> FUIBuilder</span></h3>
+<h3><span class="type">类</span> FUIImage <span class="base">: <span class="kw">public</span> FUIBuilder</span></h3>
 <div class="sect">
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
@@ -1854,7 +1829,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table>
 </div>
 <div class="ent e-class" id="Public__Widgets__FUIInputText_h-0">
-<h3><span class="type">类</span> FUIInputText <span class="base">: : <span class="kw">public</span> FUIBuilder</span></h3>
+<h3><span class="type">类</span> FUIInputText <span class="base">: <span class="kw">public</span> FUIBuilder</span></h3>
 <div class="sect">
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
@@ -1905,7 +1880,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <h3><span class="type">枚举</span> EUIPanelChrome</h3>
 </div>
 <div class="ent e-class" id="Public__Widgets__FUIPanel_h-1">
-<h3><span class="type">类</span> FUIPanel <span class="base">: : <span class="kw">public</span> FUIBuilder</span></h3>
+<h3><span class="type">类</span> FUIPanel <span class="base">: <span class="kw">public</span> FUIBuilder</span></h3>
 <div class="sect">
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
@@ -1960,7 +1935,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table>
 </div>
 <div class="ent e-class" id="Public__Widgets__FUIPopup_h-0">
-<h3><span class="type">类</span> FUIPopup <span class="base">: : <span class="kw">public</span> FUIBuilder</span></h3>
+<h3><span class="type">类</span> FUIPopup <span class="base">: <span class="kw">public</span> FUIBuilder</span></h3>
 <div class="sect">
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
@@ -2009,7 +1984,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table>
 </div>
 <div class="ent e-class" id="Public__Widgets__FUISelectable_h-0">
-<h3><span class="type">类</span> FUISelectable <span class="base">: : <span class="kw">public</span> FUIBuilder</span></h3>
+<h3><span class="type">类</span> FUISelectable <span class="base">: <span class="kw">public</span> FUIBuilder</span></h3>
 <div class="sect">
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
@@ -2054,7 +2029,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table>
 </div>
 <div class="ent e-class" id="Public__Widgets__FUISeparator_h-0">
-<h3><span class="type">类</span> FUISeparator <span class="base">: : <span class="kw">public</span> FUIBuilder</span></h3>
+<h3><span class="type">类</span> FUISeparator <span class="base">: <span class="kw">public</span> FUIBuilder</span></h3>
 <div class="sect">
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
@@ -2094,7 +2069,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table>
 </div>
 <div class="ent e-class" id="Public__Widgets__FUISliderFloat_h-0">
-<h3><span class="type">类</span> FUISliderFloat <span class="base">: : <span class="kw">public</span> FUIBuilder</span></h3>
+<h3><span class="type">类</span> FUISliderFloat <span class="base">: <span class="kw">public</span> FUIBuilder</span></h3>
 <div class="sect">
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
@@ -2142,7 +2117,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table>
 </div>
 <div class="ent e-class" id="Public__Widgets__FUIText_h-0">
-<h3><span class="type">类</span> FUIText <span class="base">: : <span class="kw">public</span> FUIBuilder</span></h3>
+<h3><span class="type">类</span> FUIText <span class="base">: <span class="kw">public</span> FUIBuilder</span></h3>
 <div class="sect">
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
@@ -2184,7 +2159,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table>
 </div>
 <div class="ent e-class" id="Public__Widgets__FUITooltip_h-0">
-<h3><span class="type">类</span> FUITooltip <span class="base">: : <span class="kw">public</span> FUIBuilder</span></h3>
+<h3><span class="type">类</span> FUITooltip <span class="base">: <span class="kw">public</span> FUIBuilder</span></h3>
 <div class="sect">
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
@@ -2228,7 +2203,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </tbody></table>
 </div>
 <div class="ent e-class" id="Public__Widgets__FUITreeNode_h-0">
-<h3><span class="type">类</span> FUITreeNode <span class="base">: : <span class="kw">public</span> FUIBuilder</span></h3>
+<h3><span class="type">类</span> FUITreeNode <span class="base">: <span class="kw">public</span> FUIBuilder</span></h3>
 <div class="sect">
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>

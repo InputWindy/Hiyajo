@@ -46,13 +46,21 @@ import tree_sitter_cpp
 
 # 解析前抹掉的"噪声宏"：它们让 C++ 语法非法（`class MAHO_API FX` / `MAHO_LOG_API void F()`），而文档
 # 不需要看见它们。**等长替换成空格**，行列号与源码一致（--check 报的行号可直接跳转）。
-NOISE_MACROS = (
-	rb"\bMAHO_[A-Z0-9_]*_API\b",
-	rb"\bMAHO_API\b",
+# 不带括号的宏标记：按拼写认（导出标签是 `*_API`，其余几个是引擎自己的开关标记）。
+MARKER_TOKENS = (
+	rb"\b[A-Z][A-Z0-9_]*_API\b",
 	rb"\bMAHO_EXPORT\b",
 	rb"\bMAHO_IMPORT\b",
 	rb"\bMAHO_NODISCARD\b",
 )
+
+# 函数式宏调用：全大写标识符紧跟左括号。**宏标记一律当空气** —— Maho 与 UE 的宏都无法展开，而且这些
+# 拼写本来就不是合法 C++（`UENUM(BlueprintType)` 紧跟着 enum、`MAHO_DECLARE_FRAME(X);` 在类体里、
+# `UPROPERTY(... meta = (EditCondition = "X"))` 带嵌套括号、`DECLARE_*_DELEGATE(...)` 的参数是
+# "类型 + 块注释"），解析器会在它们那里生成 ERROR 节点，**紧跟其后的整个声明都读不到**。按形状认
+# （而不是逐个项目列拼写），所以 UE / Maho / 下一个工程都适用。
+MACRO_CALL_RE = re.compile(
+	rb"\b(?:[A-Z][A-Z0-9_]{1,}|DECLARE_[A-Za-z0-9_]*|GENERATED_[A-Za-z0-9_]*)\s*\(")
 
 DOC_PREFIX = "///"
 TAG_RE = re.compile(r"@(brief|file|param|return|returns|tparam|note|warning|see)\s*(.*)", re.I)
@@ -61,8 +69,58 @@ TAG_RE = re.compile(r"@(brief|file|param|return|returns|tparam|note|warning|see)
 # ── 解析 → 快照 ─────────────────────────────────────────────────────────────────
 
 
+def StripMacroMarkers(Source: bytes) -> bytes:
+	"""把宏标记当空气：全大写的函数式宏调用**整体**（含配平括号）换成等长空格。
+
+	只替换成空格（不删除）是刻意的：行列号与源码一致，`--check` 报的行号可以直接跳回原文件。
+	配平时字符串/字符字面量与 `//` `/* */` 注释里的括号不参与计数 —— 否则
+	`DECLARE_*(X, AActor* /*Tracker*/)` 这种参数会把它带偏。
+	"""
+	Out = bytearray(Source)
+	for Pattern in MARKER_TOKENS:                    # 不带括号的标记：直接换空格
+		Compiled = re.compile(Pattern)
+		Match = Compiled.search(Out)
+		while Match is not None:
+			Out[Match.start():Match.end()] = b" " * (Match.end() - Match.start())
+			Match = Compiled.search(Out, Match.start())   # 注意：第二参是 pos，不是 flags
+
+	Index = 0
+	while True:
+		Match = MACRO_CALL_RE.search(Out, Index)
+		if Match is None:
+			return bytes(Out)
+		Depth = 0
+		Pos = Match.end() - 1                        # 指向那个 '('
+		End: int | None = None
+		while Pos < len(Out):
+			Byte = Out[Pos]
+			if Byte in (0x22, 0x27):                 # " 或 '：跳过整个字面量
+				Quote = Byte
+				Pos += 1
+				while Pos < len(Out) and Out[Pos] != Quote:
+					Pos += 2 if Out[Pos] == 0x5C else 1
+			elif Byte == 0x2F and Pos + 1 < len(Out) and Out[Pos + 1] == 0x2A:
+				Found = Out.find(b"*/", Pos + 2)      # /* ... */
+				Pos = (len(Out) if Found < 0 else Found + 1)
+			elif Byte == 0x2F and Pos + 1 < len(Out) and Out[Pos + 1] == 0x2F:
+				Found = Out.find(b"\n", Pos)          # // ... 到行尾
+				Pos = (len(Out) - 1 if Found < 0 else Found)
+			elif Byte == 0x28:
+				Depth += 1
+			elif Byte == 0x29:
+				Depth -= 1
+				if Depth == 0:
+					End = Pos + 1
+					break
+			Pos += 1
+		if End is None:
+			return bytes(Out)                        # 括号没配平：留给解析器去报错，不猜
+		Out[Match.start():End] = b" " * (End - Match.start())
+		Index = End
+
+
 class FParser_:
-	"""解析器 + 噪声宏剥离。Parser/Language 保留在实例上，寿命长过每一个 Tree。"""
+	"""解析器 + 宏标记剥离。Parser/Language 保留在实例上，寿命长过每一个 Tree。"""
 
 	def __init__(self) -> None:
 		Lang = tree_sitter_cpp.language()
@@ -70,9 +128,7 @@ class FParser_:
 		self.Parser = Parser(self.Language)
 
 	def Parse(self, Source: bytes):
-		Stripped = Source
-		for Pattern in NOISE_MACROS:
-			Stripped = re.sub(Pattern, lambda M: b" " * (M.end() - M.start()), Stripped)
+		Stripped = StripMacroMarkers(Source)
 		return Stripped, self.Parser.parse(Stripped)
 
 
@@ -252,16 +308,15 @@ VALUE_TYPES = ("preproc_arg", "type_descriptor", "primitive_type", "sized_type_s
                "string_literal", "true", "false")
 
 
-MACRO_CALL_RE = re.compile(r"^[A-Z][A-Z0-9_]*\s*\(")
+SIGNATURE_MACRO_RE = re.compile(r"^[A-Z][A-Z0-9_]*\s*\(")
 
 
 def IsMacroCallSignature(Signature: str) -> bool:
-	"""`MAHO_DECLARE_FRAME(FLog);` 这类**纯宏调用行**：它是声明性的（"这个类在此声明自己"），
-	但不是一个可以有 `@brief` 的成员 —— 不参与缺注释统计，仍列进文档。
+	"""`MAHO_DECLARE_FRAME(FLog);` 这类**纯宏调用行**的兜底判据（签名形态：全大写标识符紧跟左括号）。
 
-	判据用**签名形态**（全大写标识符紧跟左括号），而不是语法节点：解析器会把它读成"声明了一个叫
-	`MAHO_DECLARE_FRAME` 的函数"，节点层面和真函数声明无法区分；宏的拼写却能一眼认出。"""
-	return bool(MACRO_CALL_RE.match(Signature.strip()))
+	正常情况下宏标记在解析前就被剥成空气了（见 StripMacroMarkers），所以走到这里的只剩"没被剥干净"的
+	形态（例如括号没配平）；它仍不该被要求写 `@brief`。"""
+	return bool(SIGNATURE_MACRO_RE.match(Signature.strip()))
 
 
 def HasFunctionDeclarator(Node: FSnap) -> bool:
@@ -342,8 +397,11 @@ class FScanner:
 		Rows = Source.decode("utf-8", "replace").split("\n")
 
 		ErrorRow = FirstError(Root)
-		if ErrorRow >= 0 and not self.Options.quiet:
-			print(f"[docs_scan] {Rel}:{ErrorRow + 1} 解析有 ERROR —— 按已解析到的部分生成")
+		if ErrorRow >= 0:
+			# 作为一条"问题"上报，而不是打印：隔离模式里子进程的 stdout 只取最后一行（JSON），
+			# 打印会静默丢掉 —— 解析 ERROR 必须是能进 --check 清单的东西。
+			self.Report(Rel, Root, f"解析有 ERROR（第 {ErrorRow + 1} 行起）—— 该处及之后的声明可能读不到")
+			self.Stats["parse_errors"] = self.Stats.get("parse_errors", 0) + 1
 
 		FileLines = FileDoc(Rows)
 		FileTags = ParseDoc(FileLines)
@@ -400,6 +458,8 @@ class FScanner:
 		Documented = bool(Desc)
 
 		if Node.Type in ("class_specifier", "struct_specifier", "union_specifier"):
+			if Node.Find("field_declaration_list") is None:
+				return                       # 顶层前向声明：没有 API 可展示（不是这个类型的家）
 			self.DeclareClass(Node, Source, Rows, Rel, Template, Desc)
 		elif Node.Type == "enum_specifier":
 			Name = Node.Find(*NAME_TYPES)
@@ -448,8 +508,9 @@ class FScanner:
 			return
 		Kind = D.Class if Node.Type == "class_specifier" else D.Struct
 		Base = Node.Find("base_class_clause")
-		Kind((Template + Name.Text(Source)).strip(),
-		     Base=Base.Text(Source) if Base is not None else "", Desc=Desc)
+		# 渲染层自己会补 ": " 前缀 —— 子句自己的冒号要去掉，否则出来是 ": : public X"。
+		BaseText = Base.Text(Source).lstrip(":").strip() if Base is not None else ""
+		Kind((Template + Name.Text(Source)).strip(), Base=BaseText, Desc=Desc)
 		self.Stats["entities"] += 1
 
 		Body = Node.Find("field_declaration_list")

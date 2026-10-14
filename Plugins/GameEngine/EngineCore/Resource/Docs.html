@@ -79,7 +79,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div id="app">
   <div id="side">
     <h1>Maho 引擎源码</h1>
-    <div class="search" title="左侧扫描 Plugins\GameEngine\EngineCore\Resource/**/*.h：2 个头文件 · 已声明 2 个 · 12 个实体 / 56 个成员 ｜ 内容来自头文件里的 `///` 注释（`Tools/docs_scan.py`）">
+    <div class="search" title="左侧扫描 Plugins\GameEngine\EngineCore\Resource/**/*.h：2 个头文件 · 已声明 2 个 · 7 个实体 / 55 个成员 ｜ 内容来自头文件里的 `///` 注释（`Tools/docs_scan.py`）">
       <input id="q" type="search" placeholder="搜索头文件…  （如 Frame、Core、Entry）" autocomplete="off">
     </div>
     <div id="tree"><ul>
@@ -126,28 +126,13 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td>`&lt;vector&gt;`</td></tr>
 </tbody></table>
 </div>
-<div class="ent e-class" id="Public__Resource_h-0">
-<h3><span class="type">类</span> FResource</h3>
-</div>
-<div class="ent e-class" id="Public__Resource_h-1">
-<h3><span class="type">类</span> FResourceSystem</h3>
-</div>
-<div class="ent e-struct" id="Public__Resource_h-2">
-<h3><span class="type">结构体</span> FTransferState</h3>
-</div>
-<div class="ent e-struct" id="Public__Resource_h-3">
-<h3><span class="type">结构体</span> FBulkData</h3>
-</div>
-<div class="ent e-class" id="Public__Resource_h-4">
-<h3><span class="type">类</span> FTransferHandle</h3>
-</div>
-<div class="ent e-alias" id="Public__Resource_h-5">
+<div class="ent e-alias" id="Public__Resource_h-0">
 <h3><span class="type">别名</span> FOnTransferDone <span class="base">: FOnTransferDone</span></h3>
 </div>
-<div class="ent e-alias" id="Public__Resource_h-6">
+<div class="ent e-alias" id="Public__Resource_h-1">
 <h3><span class="type">别名</span> FReadbackFn <span class="base">: FReadbackFn</span></h3>
 </div>
-<div class="ent e-functions" id="Public__Resource_h-7">
+<div class="ent e-functions" id="Public__Resource_h-2">
 <h3><span class="type">自由函数</span> </h3>
 <div class="sect">
 <h4>接口</h4>
@@ -155,7 +140,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td>FResourceSystem* GetResourceSystem();</td><td></td></tr>
 </tbody></table></div>
 </div>
-<div class="ent e-struct" id="Public__Resource_h-8">
+<div class="ent e-struct" id="Public__Resource_h-3">
 <h3><span class="type">结构体</span> FImportConfig</h3>
 <div class="sect">
 <h4>字段</h4>
@@ -163,7 +148,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td>std::string SourcePath;</td><td></td></tr>
 </tbody></table></div>
 </div>
-<div class="ent e-struct" id="Public__Resource_h-9">
+<div class="ent e-struct" id="Public__Resource_h-4">
 <h3><span class="type">结构体</span> FExportConfig</h3>
 <div class="sect">
 <h4>字段</h4>
@@ -171,7 +156,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td>std::string DestinationPath;</td><td></td></tr>
 </tbody></table></div>
 </div>
-<div class="ent e-class" id="Public__Resource_h-10">
+<div class="ent e-class" id="Public__Resource_h-5">
 <h3><span class="type">类</span> FResource</h3>
 <div class="sect">
 <h4>字段</h4>
@@ -191,12 +176,11 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> std::string_view GetTypeName() <span class="kw">const</span> <span class="kw">noexcept</span>;</td><td></td></tr>
 </tbody></table></div>
 </div>
-<div class="ent e-class" id="Public__Resource_h-11">
-<h3><span class="type">类</span> FResourceSystem <span class="base">: : <span class="kw">public</span> FFrameExtension, <span class="kw">public</span> IPipeline&lt;IPreInit, IInit, IPostInit, IBeginFrame, ITick, IEndFrame, IExit, IPreShutdown, IShutdown, IPostShutdown&gt; , <span class="kw">public</span> FThreadedServer</span></h3>
+<div class="ent e-class" id="Public__Resource_h-6">
+<h3><span class="type">类</span> FResourceSystem <span class="base">: <span class="kw">public</span> FFrameExtension, <span class="kw">public</span> IPipeline&lt;IPreInit, IInit, IPostInit, IBeginFrame, ITick, IEndFrame, IExit, IPreShutdown, IShutdown, IPostShutdown&gt; , <span class="kw">public</span> FThreadedServer</span></h3>
 <div class="sect">
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-public">public</span></td><td>MAHO_DECLARE_FRAME(FResourceSystem);</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>TMulticastEvent&lt;<span class="kw">void</span>(<span class="kw">const</span> Name::FName&amp;, FOnTransferDone)&gt; OnAssetImported;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>TMulticastEvent&lt;<span class="kw">void</span>(<span class="kw">const</span> Name::FName&amp;, FOnTransferDone)&gt; OnAssetUnloaded;</td><td></td></tr>
 <tr><td><span class="acc a-public">public</span></td><td>TMulticastEvent&lt;<span class="kw">void</span>(<span class="kw">const</span> Name::FName&amp;, <span class="kw">const</span> FResource&amp;)&gt; OnAssetCreated;</td><td></td></tr>

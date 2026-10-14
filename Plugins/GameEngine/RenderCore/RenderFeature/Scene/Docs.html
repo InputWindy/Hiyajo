@@ -79,7 +79,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div id="app">
   <div id="side">
     <h1>Maho 引擎源码</h1>
-    <div class="search" title="左侧扫描 Plugins\GameEngine\RenderCore\RenderFeature\Scene/**/*.h：2 个头文件 · 已声明 2 个 · 3 个实体 / 18 个成员 ｜ 内容来自头文件里的 `///` 注释（`Tools/docs_scan.py`）">
+    <div class="search" title="左侧扫描 Plugins\GameEngine\RenderCore\RenderFeature\Scene/**/*.h：2 个头文件 · 已声明 2 个 · 2 个实体 / 17 个成员 ｜ 内容来自头文件里的 `///` 注释（`Tools/docs_scan.py`）">
       <input id="q" type="search" placeholder="搜索头文件…  （如 Frame、Core、Entry）" autocomplete="off">
     </div>
     <div id="tree"><ul>
@@ -120,10 +120,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td>`&lt;cstdint&gt;`</td></tr>
 </tbody></table>
 </div>
-<div class="ent e-class" id="Public__Scene_h-0">
-<h3><span class="type">类</span> FScene</h3>
-</div>
-<div class="ent e-functions" id="Public__Scene_h-1">
+<div class="ent e-functions" id="Public__Scene_h-0">
 <h3><span class="type">自由函数</span> </h3>
 <div class="sect">
 <h4>接口</h4>
@@ -131,12 +128,11 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td><span class="acc a-public">public</span></td><td>FScene* GetScene();</td><td></td></tr>
 </tbody></table></div>
 </div>
-<div class="ent e-class" id="Public__Scene_h-2">
-<h3><span class="type">类</span> FScene <span class="base">: : <span class="kw">public</span> FFrameExtension, <span class="kw">public</span> IPipeline&lt;IBeginRender, IRender, IEndRender, IPresent, IPreUnInstall&gt;</span></h3>
+<div class="ent e-class" id="Public__Scene_h-1">
+<h3><span class="type">类</span> FScene <span class="base">: <span class="kw">public</span> FFrameExtension, <span class="kw">public</span> IPipeline&lt;IBeginRender, IRender, IEndRender, IPresent, IPreUnInstall&gt;</span></h3>
 <div class="sect">
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-private">private</span></td><td>MAHO_DECLARE_FRAME_UNDER(FScene, FRender);</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>FRDGTextureRef SceneColor;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>FRDGTextureRef SceneDepth;</td><td></td></tr>
 <tr><td><span class="acc a-private">private</span></td><td>FDrawList TriangleDrawList;</td><td></td></tr>
