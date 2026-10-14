@@ -171,4 +171,7 @@ Two traps this build system has, both of which cost a full evening once. They ar
 
 ## Docs
 
-- [Source/Docs.html](Source/Docs.html) - 引擎源码文档：左侧 Source 树（叶子 = `.h`），右侧逐类展示字段 / 接口签名 / 功能描述。**内容在 `Tools/docs_content.py` 里一条一条手工声明**（`Tools/docs_builder.py` 提供原子接口：`Header` / `Class` / `Interface` / `Field` / `Nested` …，**不扫描源码**）；渲染：`Tools\maho_python.bat Tools\docs_content.py`
+- [Source/Docs.html](Source/Docs.html) - 引擎源码文档：左侧 Source 树（叶子 = `.h`），右侧逐类展示字段 / 接口签名 / 功能描述。**注释是唯一来源**：`Tools/docs_scan.py` 用 tree-sitter 解析头文件，把 `///` 注释块（`@brief` / `@param` / `@return` / `@tparam`，Doxygen 子集）连同声明一起提取成实体与成员（`Tools/docs_builder.py` 只做渲染 + 原子接口 `Header` / `Class` / `Interface` / `Field` / `Nested` …）。所以：**改注释 = 改文档**，内容不再手填（旧的 `Tools/docs_content.py` 已退役）。
+  - 生成：`Tools\maho_python.bat Tools\docs_scan.py`（`--filter 子串` / `--out 路径`）；**审注释**：`... Tools\docs_scan.py --check`（列缺 `@brief` 的成员、`@param` 与形参数量不符、解析 ERROR；有问题退 1，可当 lint 门）。
+  - 两个实现约束，都是实测换来的一手经验：**① 先快照**——单遍 `child(i)` 把整树变成纯 Python 结构，此后不再碰 Node API；**② 一个头一个子进程**——tree-sitter 的 Python 绑定在长命进程里、或"边遍历边查字段/注释"的用法下会偶发 `0xC0000005`；隔离后崩只丢一个头，并给出失败名单。行号由字节偏移自己算（绑定给的 `start_point` 同一次遍历里也会错值）。
+  - 插件侧（`Plugins/**/Docs.html`）仍走 `Tools/plugin_docs.py` + 各插件 `Docs.py` 手写内容，尚未切到扫描器。

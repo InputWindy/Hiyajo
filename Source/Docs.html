@@ -79,27 +79,10 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div id="app">
   <div id="side">
     <h1>Maho 引擎源码</h1>
-    <div class="search" title="左侧扫描 Source/**/*.h：26 个头文件 · 已声明 22 个 · 35 个实体 / 200 个成员 ｜ 内容在 Tools/docs_content.py 里逐条声明">
+    <div class="search" title="左侧扫描 Source/**/*.h：25 个头文件 · 已声明 25 个 · 99 个实体 / 246 个成员 ｜ 内容在 Tools/docs_content.py 里逐条声明">
       <input id="q" type="search" placeholder="搜索头文件…  （如 Frame、Core、Entry）" autocomplete="off">
     </div>
     <div id="tree"><ul>
-<li class="dir"><span class="dir-label" data-dir="Plugins">Plugins</span>
-<ul>
-<li class="dir"><span class="dir-label" data-dir="Plugins/Common">Common</span>
-<ul>
-<li class="dir"><span class="dir-label" data-dir="Plugins/Common/Log">Log</span>
-<ul>
-<li class="dir"><span class="dir-label" data-dir="Plugins/Common/Log/Public">Public</span>
-<ul>
-<li class="file"><a href="#Plugins__Common__Log__Public__Trace_h" data-file="Plugins__Common__Log__Public__Trace_h">Trace.h</a></li>
-</ul>
-</li>
-</ul>
-</li>
-</ul>
-</li>
-</ul>
-</li>
 <li class="dir"><span class="dir-label" data-dir="Public">Public</span>
 <ul>
 <li class="dir"><span class="dir-label" data-dir="Public/Core">Core</span>
@@ -141,1305 +124,921 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
   </div>
   <div id="main"><div class="pane" id="pane-Public__Core__Assembly_h">
 <div class="hdr">Public/Core/Assembly.h</div>
-<h2 class="file-title">Assembly.h —— 动态库装载原语 + 插件清单</h2>
-<div class="card"><div class="doc">
-<p>只回答两个问题：**怎么把一个动态库装进来**，以及**怎么按符号名取函数**。它不知道模块里是什么 —— 不认插件、工厂；怎么解释一个已装载的模块完全由消费者决定（安装树 / 极薄的启动器 / 工程自己的加载器）。同一个类还有**静态的一半**：读插件清单转成 `节点 → 直接子节点` 的查找表，回答<span class="st">"这个节点该装谁"</span>。两者放在一起是因为它们回答的是同一个问题——模块从哪来。实现与平台分支都在 `Private/Core/Assembly.cpp`，所以这个头是**平台无关**的（不引入 `Windows.h` / `dlfcn.h`）。</p>
-<p>**所有权契约**：`FAssembly` 是模块句柄的唯一持有者（move-only）。只要还有从它构造出来的实例活着，宿主就必须让这个 `FAssembly` 也活着 —— vtable 与析构函数都在那个模块里，先卸载再用就是 use-after-free。</p>
-</div></div>
-<div class="card">
-<h3 class="card-title">包含的头文件</h3>
-
-<table>
-<thead><tr><th>头文件</th><th>功能</th></tr></thead>
-<tbody>
-<tr><td>Core/Export.h</td><td>`MAHO_API` 导出 / 导入宏 —— 这里的类型要跨 DLL（插件的 `GetModulePath()` 就直接调 `ApplyModuleExtension`）</td></tr>
-<tr><td>memory</td><td>`std::unique_ptr&lt;<span class="kw">void</span>, FModuleDeleter&gt;`：句柄的 RAII 持有</td></tr>
-<tr><td>string</td><td>路径与返回串</td></tr>
-<tr><td>string_view</td><td>入参：不拷贝调用方给的路径</td></tr>
-</tbody></table>
-</div>
-<div class="card">
-<h3 class="card-title">自由函数</h3>
-
-<table>
-<thead><tr><th>函数签名</th><th>说明</th></tr></thead>
-<tbody>
-<tr><td>std::string ApplyModuleExtension(std::string_view BaseName)</td><td>给模块基名补上宿主平台的动态库后缀：Windows `.dll` / Android、Linux `.so` / macOS `.dylib`；无动态库的运行时（iOS）原样透传。全仓因此不硬编码任何 `.dll` 字符串。**已导出**：每个插件由 `MAHO_DECLARE_FRAME` 生成的 `GetModulePath()` 都从自己的 DLL 调它。</td></tr>
-</tbody></table>
-</div>
-<div class="ent e-struct" id="Public__Core__Assembly_h-0">
-<h3><span class="type">结构体</span> FModuleDeleter</h3>
-<div class="sect"><div class="doc">
-<p>自定义删除器：模块句柄用 `FreeLibrary` / `dlclose` 释放，**不是** `<span class="kw">delete</span>`。`FAssembly` 用它以 RAII 持有句柄，宿主只需持有 `FAssembly` 值。</p>
-</div></div>
+<h2 class="file-title">Assembly.h</h2>
+<div class="ent e-functions" id="Public__Core__Assembly_h-0">
+<h3><span class="type">自由函数</span> </h3>
 <div class="sect">
 <h4>接口</h4>
 <table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> <span class="kw">operator</span>()(<span class="kw">void</span>* Handle) <span class="kw">const</span> <span class="kw">noexcept</span></td><td>释放句柄（空句柄直接返回）。**已导出**：谁销毁 `FAssembly`，这段代码就在谁的模块里跑。</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>std::string ApplyModuleExtension(std::string_view BaseName);</td><td>Applies the appropriate module extension based on the operating system.<br>`BaseName`：The base name of the module.<br>返回：The module name with the appropriate extension.</td></tr>
 </tbody></table></div>
 </div>
 <div class="ent e-class" id="Public__Core__Assembly_h-1">
 <h3><span class="type">类</span> FAssembly</h3>
 <div class="sect"><div class="doc">
-<p>一个已装载的代码单元：OS 模块句柄 + 符号查找。纯装载原语 —— 不认插件 / 清单 / 工厂，怎么解释这个模块完全由消费者决定。句柄唯一持有（move-only）：只要还有从它构造出来的实例活着，就必须让它也活着，否则先卸载再用就是 use-after-free。</p>
+<p>One loaded module: the OS handle, the symbol lookup on it, and the shared plugin manifest. The manifest is the `PluginManager.json` the path layer resolves: it is read ONCE per process by `LoadManifest()`, and it is what `GetChildren` answers from -- the plugin tree the engine installs frames along. A module is loaded by its own object and unloaded when that object goes away (`~FAssembly`), so an assembly must outlive every symbol taken out of it.</p>
 </div></div>
 <div class="sect">
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-private">private</span></td><td>std::unique_ptr&lt;<span class="kw">void</span>, FModuleDeleter&gt; Module</td><td>模块句柄的唯一持有者：析构即 `FreeLibrary` / `dlclose`。空 = 未装载。</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td><span class="kw">static</span> <span class="kw">bool</span> bManifestLoaded</td><td>清单是否已成功装载过</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td><span class="kw">static</span> std::string ManifestEngineRoot</td><td>引擎源码根（来自清单）</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td><span class="kw">static</span> std::map&lt;std::string, std::vector&lt;std::string&gt;&gt; ManifestChildren</td><td>节点 → 它的直接子节点</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>FAssembly&amp; <span class="kw">operator</span>=(FAssembly&amp;&amp;) <span class="kw">noexcept</span>;</td><td>Move-assigns: the module previously held is unloaded first.</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">void</span>* GetProcAddress(<span class="kw">const</span> <span class="kw">char</span>* Name) <span class="kw">const</span>;</td><td>Resolves one exported symbol on the loaded module.<br>`Name`：The symbol's name, as exported.<br>返回：The symbol's address, or <span class="kw">nullptr</span> when the module is unloaded or has no such <span class="kw">export</span>.</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">static</span> <span class="kw">const</span> std::vector&lt;std::string&gt;&amp; GetChildren(std::string_view LayerName);</td><td>Gets the layer's children in the plugin manifest -- the tree the engine installs along.<br>`LayerName`：The name of the layer.<br>返回：A reference to the vector of child node names (empty when the layer is unknown).</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">static</span> <span class="kw">const</span> std::string&amp; GetEngineRoot();</td><td>Gets the root directory of the engine.<br>返回：A reference to the engine root directory path.</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">struct</span> FImpl;</td><td>The module handle; hidden so &lt;windows.h&gt; stays out of <span class="kw">this</span> header.</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>std::unique_ptr&lt;FImpl&gt; Impl;</td><td>The hidden state of the loaded module (see FImpl).</td></tr>
 </tbody></table></div>
 <div class="sect">
 <h4>接口</h4>
 <table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">explicit</span> FAssembly(std::string_view Path)</td><td>从路径构造：立即 `Load()`；失败时对象处于未装载状态（`IsLoaded()` 为假）。</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>FAssembly(FAssembly&amp;&amp;) <span class="kw">noexcept</span> = <span class="kw">default</span></td><td>可移动（句柄转移）。拷贝被删除：`FAssembly(<span class="kw">const</span> FAssembly&amp;) = <span class="kw">delete</span>` / `<span class="kw">operator</span>=(<span class="kw">const</span> FAssembly&amp;) = <span class="kw">delete</span>`。</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">bool</span> Load(std::string_view Path)</td><td>装载模块（先 `Unload()` 掉旧句柄）；文件缺失或装载失败返回 `<span class="kw">false</span>`。</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Unload()</td><td>释放句柄；可重复调用。之后 `IsLoaded()` 为假、`GetProcAddress()` 返回 <span class="kw">nullptr</span>。</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">bool</span> IsLoaded() <span class="kw">const</span></td><td>是否持有有效的模块句柄。</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span>* GetProcAddress(<span class="kw">const</span> <span class="kw">char</span>* Name) <span class="kw">const</span></td><td>原始符号查找（`GetProcAddress` / `dlsym`）；未装载或符号不存在则返回 <span class="kw">nullptr</span>。</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">template</span> &lt;<span class="kw">typename</span> TFunction&gt; TFunction GetProcAs(<span class="kw">const</span> <span class="kw">char</span>* Name) <span class="kw">const</span></td><td>把原始符号转成**函数指针**类型再返回 —— 调用方写 `GetProcAs&lt;CreateFn&gt;(<span class="st">"CreateEngine"</span>)` 即可，无需自己 `reinterpret_cast`。</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">static</span> <span class="kw">bool</span> LoadManifest()</td><td>装载（或重载）**插件清单**（安装树）：先看可执行文件目录（POST_BUILD 摆好的那份）、再看它旁边未摆盘的开发位置、最后看当前工作目录。缺失 / 不可解析返回 `<span class="kw">false</span>` —— 由调用方走回退策略。**路径里没有一个字面量**：`MAHO_PLUGIN_MANIFEST` 与 `MAHO_PLUGIN_MANIFEST_FALLBACK` 由 `Tools/maho_tools.py` 连同<span class="st">"摆盘那一步"</span>一起注入（构建布局是生成器的事实，不是 Core 的）</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">static</span> <span class="kw">bool</span> IsManifestLoaded()</td><td>是否已经拿到可用的树</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">static</span> <span class="kw">const</span> std::vector&lt;std::string&gt;&amp; GetChildren(std::string_view LayerName)</td><td>某节点的**直接**子层类型，按清单顺序 —— 宿主与每个收集器共用的**唯一**查询，各自传自己的名字。没有子节点返回空（那是正常情况，不是错误）。清单是一棵「层类型」树：工程是根节点，每个节点的 children 就是它装进**自己的收集器**的那些模块</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">static</span> <span class="kw">const</span> std::string&amp; GetEngineRoot()</td><td>codegen 记下的引擎源码根（绝对路径，生成器用的 posix 形式）。缺失为空 ⇒ 调用方自行探测。**在 C++ 里它永远不是编译期常量**：清单是运行期数据</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">static</span> std::filesystem::path ExecutableDir()</td><td>可执行文件所在目录（各平台的规范查询），失败为空。所有运行期路径探测（清单查找、虚拟根）都共用它</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>FAssembly();</td><td>Constructs an assembly with no module loaded (`IsLoaded` is <span class="kw">false</span> until `Load`).</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">explicit</span> FAssembly(std::string_view Path);</td><td>Loads the module at `Path` (see `Load`; a failure leaves the object unloaded).<br>`Path`：The path to the module.</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>~FAssembly();</td><td>Unloads the module <span class="kw">if</span> one is loaded.</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>FAssembly(<span class="kw">const</span> FAssembly&amp;) = <span class="kw">delete</span>;</td><td>Not copyable: the object owns the loaded module's handle.</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>FAssembly&amp; <span class="kw">operator</span>=(<span class="kw">const</span> FAssembly&amp;) = <span class="kw">delete</span>;</td><td>Not copy-assignable: the object owns the loaded module's handle.</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>FAssembly(FAssembly&amp;&amp;) <span class="kw">noexcept</span>;</td><td>Moves the loaded module out of `Other` (which is left unloaded).</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">bool</span> Load(std::string_view Path);</td><td>Loads the module at `Path`, unloading whatever was loaded before.<br>`Path`：The path to the module (an extension-less name is completed, see `ApplyModuleExtension`).<br>返回：True <span class="kw">if</span> the module was loaded, <span class="kw">false</span> otherwise; the object is left unloaded on failure.</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">bool</span> Unload();</td><td>Unloads the module.<br>返回：True <span class="kw">if</span> a module was unloaded, <span class="kw">false</span> <span class="kw">if</span> there was nothing loaded.</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">bool</span> IsLoaded() <span class="kw">const</span>;</td><td>Checks whether a module is loaded.<br>返回：True <span class="kw">if</span> a module is loaded, <span class="kw">false</span> otherwise.</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">template</span> &lt;<span class="kw">typename</span> TFunction&gt; [[nodiscard]] TFunction GetProcAs(<span class="kw">const</span> <span class="kw">char</span>* Name) <span class="kw">const</span>;</td><td>Resolves one exported symbol and reinterprets it as a function pointer.<br>`TFunction`：The function-pointer type to reinterpret the address as.<br>`Name`：The symbol's name, as exported.<br>返回：The function pointer, or <span class="kw">nullptr</span> when the symbol is missing.</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">static</span> <span class="kw">bool</span> LoadManifest();</td><td>Reads the plugin manifest (`PluginManager.json`) into the process-wide cache.<br>返回：True <span class="kw">if</span> the manifest was read, <span class="kw">false</span> otherwise (then the plugin tree is empty and the engine installs nothing along it).</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">static</span> <span class="kw">bool</span> IsManifestLoaded();</td><td>Checks <span class="kw">if</span> the assembly manifest is loaded.<br>返回：True <span class="kw">if</span> the manifest is loaded, <span class="kw">false</span> otherwise.</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">static</span> std::filesystem::path ExecutableDir();</td><td>Gets the directory of the executable.<br>返回：The directory of the executable.</td></tr>
 </tbody></table></div>
 </div>
 </div>
 <div class="pane" id="pane-Public__Core__Delegate_h">
 <div class="hdr">Public/Core/Delegate.h</div>
-<h2 class="file-title">Delegate.h —— 多播事件积木</h2>
-<div class="card"><div class="doc">
-<p>类型无关的多播事件：绑一批处理器、广播一组值。**header-only、无状态、无 DLL 边界**，插件可以把它直接暴露成公共 API 的成员类型。</p>
-<p>**线程安全**：任意线程可 Bind / Unbind / Broadcast / RemoveAll；Broadcast 在锁内**快照**处理器集合，出锁后再调用 —— 所以处理器可以安全地再入（Bind / Unbind 自己）。</p>
-</div></div>
-<div class="card">
-<h3 class="card-title">包含的头文件</h3>
-
-<table>
-<thead><tr><th>头文件</th><th>功能</th></tr></thead>
-<tbody>
-<tr><td>algorithm</td><td>`std::remove_if`：按订阅号摘除处理器</td></tr>
-<tr><td>cstdint</td><td>`FSubscriptionID = uint64_t`</td></tr>
-<tr><td>functional</td><td>`std::function`：处理器的类型擦除</td></tr>
-<tr><td>mutex</td><td>`std::mutex`：保护处理器表（含 Broadcast 的快照时刻）</td></tr>
-<tr><td>utility</td><td>`std::move`</td></tr>
-<tr><td>vector</td><td>处理器表</td></tr>
-</tbody></table>
-</div>
+<h2 class="file-title">Delegate.h</h2>
 <div class="ent e-alias" id="Public__Core__Delegate_h-0">
-<h3><span class="type">别名</span> FSubscriptionID <span class="base">: uint64_t</span></h3>
-<div class="sect"><div class="doc">
-<p>不透明的订阅号：`Bind` 返回、`Unbind` 消费。**永不重用**，所以陈旧号的 Unbind 只会是无操作。</p>
-</div></div>
-</div>
-<div class="ent e-class" id="Public__Core__Delegate_h-1">
-<h3><span class="type">类</span> TMulticastEvent&lt;Signature&gt;</h3>
-<div class="sect"><div class="doc">
-<p>线程安全的多播事件（bind + broadcast）。任意线程可绑定 / 解绑 / 广播；Broadcast 锁内复制处理器集合、锁外调用，因此处理器可以安全再入本事件。</p>
-</div></div>
-<div class="sect">
-<h4>字段</h4>
-<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-private">private</span></td><td>std::vector&lt;FEntry&gt; Handlers</td><td>处理器表（订阅号 + 处理器）</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td>FSubscriptionID NextID = 1</td><td>下一个订阅号（单调递增，永不重用）</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td><span class="kw">mutable</span> std::mutex Mutex</td><td>保护处理器表；Broadcast 是 <span class="kw">const</span>，故为 <span class="kw">mutable</span></td></tr>
-</tbody></table></div>
-<div class="sect">
-<h4>接口</h4>
-<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-public">public</span></td><td>FSubscriptionID Bind(FHandler Handler)</td><td>注册一个处理器并返回订阅号。订阅号只摘除**它自己**这一个 —— 每个订阅者拥有自己的订阅，解绑一个永不影响其它。</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Unbind(FSubscriptionID ID)</td><td>摘除该订阅号对应的处理器。未知号（已解绑 / RemoveAll 之后的陈旧号）是无操作。</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Broadcast(Args... Values) <span class="kw">const</span></td><td>锁内快照、锁外调用：处理器可再入（Bind / Unbind / RemoveAll）而不会自锁。</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> RemoveAll()</td><td>清空全部处理器。</td></tr>
-</tbody></table></div>
+<h3><span class="type">别名</span> FSubscriptionID <span class="base">: FSubscriptionID</span></h3>
 </div>
 </div>
 <div class="pane" id="pane-Public__Core__Export_h">
 <div class="hdr">Public/Core/Export.h</div>
-<h2 class="file-title">Export.h —— DLL 导出 / 导入（模块边界）</h2>
-<div class="card"><div class="doc">
-<p>UE 风格的模块边界宏，覆盖五个平台：Windows / Xbox 走 `__declspec`，Linux / Android / iOS 走 visibility 属性。Xbox 基于 MSVC 但**不定义 `_WIN32`**，所以显式判断 `_MSC_VER`。</p>
-<p>未定义 `MAHO_BUILD_SHARED` 时（静态链接）三个宏都展开为空 —— 同一份头两种构建都可用。</p>
-<p>**规范**：实例可能比构造它的模块活得久、且由**另一个模块**销毁的类型，必须带上所属插件的 `MAHO_&lt;NAME&gt;_API` 标签。全 <span class="kw">inline</span> 的类没有 key function，vftable + deleting dtor 会**每个模块各生成一份**，`<span class="kw">delete</span>` 就可能经由已卸载镜像里的 vptr 分派（静默 0xC0000005）。</p>
-</div></div>
-<div class="card">
-<h3 class="card-title">宏</h3>
-
-<table>
-<thead><tr><th>宏</th><th>说明</th></tr></thead>
-<tbody>
-<tr><td>MAHO_EXPORT</td><td>`__declspec(dllexport)`（MSVC / MinGW）或 `__attribute__((visibility(<span class="st">"default"</span>)))`（GCC / Clang）</td></tr>
-<tr><td>MAHO_IMPORT</td><td>对应平台的导入侧声明</td></tr>
-<tr><td>MAHO_API</td><td>按 `MAHO_EXPORTS` 自动选 `MAHO_EXPORT` / `MAHO_IMPORT` —— **这是各处类型与函数上真正用的那一个**（由 codegen 为每个插件定义 `MAHO_&lt;NAME&gt;_MODULE_EXPORTS`）</td></tr>
-<tr><td>#pragma warning(disable : 4251)</td><td>MSVC：导出类里的 STL 成员（`unique_ptr` / `string` …）是安全的 —— 前提是 CRT 一致（`/MD`）</td></tr>
-</tbody></table>
-</div>
+<h2 class="file-title">Export.h</h2>
+<div class="empty">（这个头还没有声明内容）</div>
 </div>
 <div class="pane" id="pane-Public__Core__Fatal_h">
 <div class="hdr">Public/Core/Fatal.h</div>
-<h2 class="file-title">Fatal.h —— 致命 / 错误上报与断言</h2>
-<div class="card"><div class="doc">
-<p>把所有「出错」收成两条路：**致命**（写日志后 abort）与**非致命**（只上报，继续跑）。断言宏也在这里，分硬（假 ⇒ 崩）与软（假 ⇒ 只报一次）两种。</p>
-</div></div>
-<div class="card">
-<h3 class="card-title">包含的头文件</h3>
-
-<table>
-<thead><tr><th>头文件</th><th>功能</th></tr></thead>
-<tbody>
-<tr><td>Core/Export.h</td><td>`MAHO_API` —— 这三个函数是引擎 DLL 的导出符号，其它模块按导入引用</td></tr>
-<tr><td>cstdio</td><td>`std::snprintf`：`MAHO_CHECKF` 的格式化消息</td></tr>
-</tbody></table>
+<h2 class="file-title">Fatal.h</h2>
+<div class="ent e-functions" id="Public__Core__Fatal_h-0">
+<h3><span class="type">自由函数</span> </h3>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td>[[noreturn]] <span class="kw">void</span> ReportFatal(<span class="kw">const</span> <span class="kw">char</span>* Message);</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> ReportError(<span class="kw">const</span> <span class="kw">char</span>* Message);</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> ReportEnsureBreak(<span class="kw">const</span> <span class="kw">char</span>* Message);</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> InstallFatalHandlers();</td><td></td></tr>
+</tbody></table></div>
 </div>
-<div class="card">
-<h3 class="card-title">自由函数</h3>
-
-<table>
-<thead><tr><th>函数签名</th><th>说明</th></tr></thead>
-<tbody>
-<tr><td>[[noreturn]] <span class="kw">void</span> ReportFatal(<span class="kw">const</span> <span class="kw">char</span>* Message)</td><td>**致命**：写 stderr + `Saved/Logs/Fatal.log`，然后 abort。不返回、不尝试恢复 —— 走到这里说明状态已不可信。</td></tr>
-<tr><td><span class="kw">void</span> ReportError(<span class="kw">const</span> <span class="kw">char</span>* Message)</td><td>**非致命**：写 stderr + `Saved/Logs/Fatal.log`，然后返回。坏插件 / 单点失败用它隔离。</td></tr>
-<tr><td><span class="kw">void</span> InstallFatalHandlers()</td><td>进程入口（`Maho::Main`）第一件事调它，只装一次。装四类『把崩溃说出来』的钩子：`std::terminate`（C++ 异常 / <span class="kw">noexcept</span> 违背）、CRT 非法参数、`SIGABRT`、以及 SEH 过滤器 —— 后三类各打一段**原始栈**（模块偏移，配 `dumpbin /disasm` + 最近的公开符号即可定位，见 trace flush 崩溃的定位方式）。为什么必须自己接：CRT 的非法参数默认走 `__fastfail`，**SEH 与 terminate 都够不着**（症状就是『0xc0000409 in ucrtbase』什么都不说）</td></tr>
-</tbody></table>
+<div class="ent e-macro" id="Public__Core__Fatal_h-1">
+<h3><span class="type">宏</span> MAHO_VERIFY <span class="base">: <span class="kw">do</span> { \ <span class="kw">if</span> (!(Expr)) { \ ::Maho::ReportFatal(<span class="st">"MAHO_VERIFY failed: "</span> #Expr <span class="st">" at "</span> __FILE__); \ } \ } <span class="kw">while</span> (0)</span></h3>
 </div>
-<div class="card">
-<h3 class="card-title">宏</h3>
-
-<table>
-<thead><tr><th>宏</th><th>说明</th></tr></thead>
-<tbody>
-<tr><td>MAHO_CHECK(Expr)</td><td>**硬不变量**：假 ⇒ `ReportFatal`。Shipping 下表达式被编译掉（副作用不保留）</td></tr>
-<tr><td>MAHO_CHECKF(Expr, Fmt, ...)</td><td>同上，但消息经 `snprintf` 格式化（缓冲区 512）</td></tr>
-<tr><td>MAHO_VERIFY(Expr)</td><td>与 `MAHO_CHECK` 相同，但表达式**永远求值** —— 需要保留副作用时用它</td></tr>
-<tr><td>MAHO_ENSURE(Expr)</td><td>**软不变量**：假 ⇒ 只报一次（`<span class="kw">static</span>` 一次性标志），不崩。用于「不该发生但不致命」的场景（例如某服务还没初始化）</td></tr>
-<tr><td>MAHO_ENSURE_NOT_NULL(PtrExpr, Name)</td><td>软空指针守卫：为空则只报一次并跳过整块；表达式只求值一次</td></tr>
-<tr><td>MAHO_IF_NOT_NULL(PtrExpr, Name)</td><td>**静默**空指针守卫：表达式只求值一次，非空时执行后面的语句块；为空则**什么都不做**（不报告）。用于「还没起来是正常的」的可选服务，如 `GetLog()`。写法同 `<span class="kw">if</span>`：`MAHO_IF_NOT_NULL(::Maho::GetLog(), L) { L-&gt;Info(<span class="st">"…"</span>); }`（原先误放在 Export.h，它是控制流而非模块边界，故与软兄弟 `MAHO_ENSURE_NOT_NULL` 并列于此）</td></tr>
-</tbody></table>
+<div class="ent e-macro" id="Public__Core__Fatal_h-2">
+<h3><span class="type">宏</span> MAHO_ENSURE_NOT_NULL <span class="base">: MAHO_ENSURE((PtrExpr) != <span class="kw">nullptr</span>); \ <span class="kw">for</span> (<span class="kw">auto</span>* Name = (PtrExpr); Name != <span class="kw">nullptr</span>; Name = <span class="kw">nullptr</span>)</span></h3>
 </div>
-<div class="card">
-<h3 class="card-title">构建矩阵（无头文件：宏全由 codegen 注入）</h3>
-
-<table>
-<thead><tr><th>东西</th><th>说明</th></tr></thead>
-<tbody>
-<tr><td>两条轴（值形态）</td><td>`MAHO_BUILD_TYPE=Debug|Release|Shipping`、`MAHO_BUILD_TARGET=Runtime|Editor` —— 由 `Tools/maho_tools.py` 的 `_build_config_block` 按 `$&lt;CONFIG:...&gt;` 生成式注入（**一份生成工程覆盖三档**）。标识符而非字符串：要字符串的地方 stringize 一下即可，不需要一个 C++ 头去镜像 CMake 已经知道的事实</td></tr>
-<tr><td>分支用伴生宏</td><td>`MAHO_BUILD_DEBUG｜RELEASE｜SHIPPING`、`MAHO_EDITOR_BUILD`（`defined()` 形态）、行为 `MAHO_DO_CHECK` / `_ENSURE` / `_SLOW_CHECK` / `_CONTAINER_CHECKS`、能力 `MAHO_WITH_TRACE` / `_LOGGING` / `_CRASH_REPORT` / `_RHI_VALIDATION` / `_GLSLANG` / `_STATS` —— 同样全部由生成器派生，**没有兜底 `#ifndef`**：不走生成工程的译单元就是没配置过</td></tr>
-<tr><td>守卫（在同一目录的 .cpp）</td><td>`Source/Private/Core/Fatal.cpp` 是**唯一**放 `#error` 的地方：缺 `MAHO_BUILD_TYPE` / `MAHO_BUILD_TARGET`（生成器没配置过的目标）与 `Shipping × Editor` 都在那里失败。为什么不放头里：`#<span class="kw">if</span> MAHO_DO_CHECK` 遇到**未定义**宏读作 0 ⇒ 检查/日志/追踪**静默消失**，所以需要一个必然被编译的译单元把它变成构建错误</td></tr>
-<tr><td>非法格</td><td>Shipping × Editor：生成期就不放进配置列表（`CMAKE_CONFIGURATION_TYPES`），C++ 侧再兜一道 `#error`</td></tr>
-<tr><td>相关</td><td>`Log/Trace.h`（`MAHO_WITH_TRACE` 编掉追踪机制）、`Log/Log.h`（`MAHO_WITH_LOGGING` 编掉日志体）、`RHI/VulkanRHI.cpp`（`MAHO_WITH_RHI_VALIDATION`）、`ConsoleVariable`（`ECVarFlags::Shipping` 决定发行版保留哪些可调项）</td></tr>
-</tbody></table>
+<div class="ent e-macro" id="Public__Core__Fatal_h-3">
+<h3><span class="type">宏</span> MAHO_IF_NOT_NULL <span class="base">: <span class="kw">for</span> (<span class="kw">auto</span>* Name = (PtrExpr); Name != <span class="kw">nullptr</span>; Name = <span class="kw">nullptr</span>)</span></h3>
 </div>
 </div>
 <div class="pane" id="pane-Public__Core__FrameGraph_h">
 <div class="hdr">Public/Core/FrameGraph.h</div>
-<h2 class="file-title">FrameGraph.h —— 帧调度器 / 声明层 / 桥</h2>
-<div class="card"><div class="doc">
-<p>三件强绑定的东西放在同一个头里：**调度器** `FFrameGraph`、**声明层** `FFrameExtension`、把声明翻译成一批任务的**桥** `FFrameBridge`。</p>
-<p>**图的立场**：它自己不产出任何边，只物化交给它的东西；悬空依赖 ⇒ 边不存在（节点少一个依赖、可能提前就绪，不报告不计数）。**调度线程独占全部图状态** ⇒ 没有图锁，且该线程绝不阻塞（等待都发生在调用方）。</p>
-<p>两类**结构边**由桥产出（不是声明的）：帧内 stage 链 + 每 stage 的跨帧自边 —— 它们是「stage 序列」本身的语义，而只有桥知道序列。</p>
-</div></div>
-<div class="card">
-<h3 class="card-title">包含的头文件</h3>
-
-<table>
-<thead><tr><th>头文件</th><th>功能</th></tr></thead>
-<tbody>
-<tr><td>Core/ThreadedServer.h</td><td>`FFrameGraph` 继承它：调度器就是「一个持久线程 + FIFO 串行命令队列」</td></tr>
-<tr><td>Core/ThreadPool.h</td><td>节点体跑在池上（`Dispatch` 提交、完成通知回投调度线程）</td></tr>
-<tr><td>Core/TypeList.h</td><td>`StageIndicesOf` 把编译期 stage 序列摊成运行期数组</td></tr>
-<tr><td>array / vector</td><td>stage 索引数组；每相位一个在飞计数（`SlotInFlight` —— 深度 `K` 是运行期注入的值 ⇒ vector，不是 array）</td></tr>
-<tr><td>atomic / condition_variable / mutex</td><td>事件标志表、准入与提交栅栏的等待</td></tr>
-<tr><td>cstdint / deque / functional</td><td>帧号与相位；节点表与事件表（元素含 `std::atomic` ⇒ 不可移动 ⇒ 不能用 `vector`）；节点体（闭包）</td></tr>
-<tr><td>span / string / string_view</td><td>批次的输入视图；诊断与身份名</td></tr>
-<tr><td>typeindex / unordered_map</td><td>阶段类型索引；身份 → 节点下标的注册表</td></tr>
-</tbody></table>
-</div>
-<div class="card">
-<h3 class="card-title">宏 / 常量 / 别名</h3>
-
-<table>
-<thead><tr><th>签名</th><th>说明</th></tr></thead>
-<tbody>
-<tr><td>MAHO_FRAMES_IN_FLIGHT</td><td>环深度的**默认值**（3）—— 只给「进程里没有任何一层装过读取器」用（测试工程）。真正的深度 `K` 是运行期值，见下面两个函数</td></tr>
-<tr><td>SetFramesInFlightSource(fn) / GetFramesInFlight()</td><td>**流水深度的唯一口径**：口径是**配置**（CVar `r.FramesInFlight`，`Config/DefaultEngine.ini` 的 `[ConsoleVariables]`），而 Core 是纯脚手架、不许依赖 CVar 插件 ⇒ 交过来的不是数而是一个**读取器**（拥有该变量的那一层在 <span class="kw">static</span>-init 装一次）。`GetFramesInFlight()` 在**首次使用**时问一次并记住（`0` = 还没读过），此后进程内只读。**没有 setter 了**：从前是宿主 `SetFramesInFlight` 注入 + 第一个图构造封口，两个地方都在声称这个值；现在只有一个权威（CVar）和一个读取者（Core），运行期没有东西能让 K 动</td></tr>
-<tr><td>PhaseOfFrame(Frame) / PhaseOfShiftedFrame(Frame, Offset)</td><td>**唯一的环运算**：绝对帧号 → 相位（`Frame % K`），以及「相对偏移 `Offset` 帧之前的那一轮的相位」（在**有符号**域里算，否则起跑期 `Frame 0, Offset -1` 会下溢到无关槽）</td></tr>
-<tr><td>IsFrameInsideWindow(Offset)</td><td>目标是否还在活跃窗口内：`Offset &lt;= -K` 的帧**必然已完成**（它的槽不排空，这一轮根本提交不进去）⇒ 边视为已满足、不必发射</td></tr>
-<tr><td><span class="kw">constexpr</span> <span class="kw">bool</span> IsValidPhase(std::int32_t)</td><td>相位是否落在环内（`[0, K)`）</td></tr>
-<tr><td>Detail::EventOf(FNodeId Id, std::int32_t Phase, std::int32_t PhaseCount)</td><td>算完成事件的下标：`Id * K + Phase` —— 不分配、不回收，事件只是一把钥匙</td></tr>
-<tr><td>FEvent / FNodeId / InvalidEvent / InvalidNodeId</td><td>事件下标 / 节点下标（各带一个无效哨兵）。事件**不是对象**：没有锁、没有等待者列表</td></tr>
-<tr><td>StageIndicesOf(TTypeList&lt;...&gt;)</td><td>编译期 stage 序列 → `std::array&lt;type_index, N&gt;`（桥的输入）</td></tr>
-</tbody></table>
-</div>
-<div class="ent e-struct" id="Public__Core__FrameGraph_h-0">
-<h3><span class="type">结构体</span> FTaskKey</h3>
-<div class="sect"><div class="doc">
-<p>一个节点实例的**身份三元组**。依赖就是指向目标实例的身份 —— 没有 delta、没有弱依赖标志。</p>
-</div></div>
-<div class="sect">
-<h4>字段</h4>
-<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-public">public</span></td><td>std::string_view Name</td><td>稳定身份名（**必须指向静态存储**，即字符串字面量）</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>std::type_index Stage</td><td>阶段类型</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>std::int32_t Phase</td><td>相位 = 环索引（`Frame % K`），不是绝对帧号 —— 由 `Submit` 从帧号盖上</td></tr>
-</tbody></table></div>
+<h2 class="file-title">FrameGraph.h</h2>
+<div class="ent e-functions" id="Public__Core__FrameGraph_h-0">
+<h3><span class="type">自由函数</span> </h3>
 <div class="sect">
 <h4>接口</h4>
 <table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">bool</span> <span class="kw">operator</span>==(<span class="kw">const</span> FTaskKey&amp;) <span class="kw">const</span></td><td>精确比较（注册表用精确键，故无碰撞场景）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> SetFramesInFlightSource(std::int32_t (*InSource)()) <span class="kw">noexcept</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] std::int32_t GetFramesInFlight() <span class="kw">noexcept</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">inline</span> <span class="kw">bool</span> IsValidPhase(std::int32_t Phase) <span class="kw">noexcept</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">inline</span> std::int32_t PhaseOfFrame(std::uint64_t Frame) <span class="kw">noexcept</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">inline</span> std::int32_t PhaseOfShiftedFrame(std::uint64_t Frame, std::int32_t Offset) <span class="kw">noexcept</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">inline</span> <span class="kw">bool</span> IsFrameInsideWindow(std::int32_t Offset) <span class="kw">noexcept</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">const</span> <span class="kw">char</span>* GetCurrentGraphNode() <span class="kw">noexcept</span>;</td><td></td></tr>
 </tbody></table></div>
 </div>
 <div class="ent e-struct" id="Public__Core__FrameGraph_h-1">
-<h3><span class="type">结构体</span> FTaskKeyHash</h3>
-<div class="sect"><div class="doc">
-<p>`FTaskKey` 的哈希（`unordered_map` 注册表用）。</p>
-</div></div>
+<h3><span class="type">结构体</span> FTaskKey</h3>
+<div class="sect">
+<h4>字段</h4>
+<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td>std::string_view Name;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>std::string_view Stage;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>std::int32_t Phase = 0;</td><td></td></tr>
+</tbody></table></div>
 <div class="sect">
 <h4>接口</h4>
 <table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-public">public</span></td><td>std::size_t <span class="kw">operator</span>()(<span class="kw">const</span> FTaskKey&amp;) <span class="kw">const</span> <span class="kw">noexcept</span></td><td>混入 Name / Stage / Phase 三者</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">bool</span> <span class="kw">operator</span>==(<span class="kw">const</span> FTaskKey&amp; Other) <span class="kw">const</span>;</td><td></td></tr>
 </tbody></table></div>
 </div>
 <div class="ent e-struct" id="Public__Core__FrameGraph_h-2">
-<h3><span class="type">结构体</span> FDependency</h3>
-<div class="sect"><div class="doc">
-<p>一条依赖 / 阻塞：就是目标实例的身份。</p>
-</div></div>
+<h3><span class="type">结构体</span> FTaskKeyHash</h3>
 <div class="sect">
-<h4>字段</h4>
-<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-public">public</span></td><td>FTaskKey Target</td><td>指向的目标实例</td></tr>
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td>std::size_t <span class="kw">operator</span>()(<span class="kw">const</span> FTaskKey&amp; Key) <span class="kw">const</span> <span class="kw">noexcept</span>;</td><td></td></tr>
 </tbody></table></div>
 </div>
-<div class="ent e-struct" id="Public__Core__FrameGraph_h-3">
-<h3><span class="type">结构体</span> FTask</h3>
-<div class="sect"><div class="doc">
-<p>一条**声明**（每帧提交、可校验）：身份 + 依赖 + 执行体。</p>
-</div></div>
+<div class="ent e-enum" id="Public__Core__FrameGraph_h-3">
+<h3><span class="type">枚举</span> EDependencyType</h3>
 <div class="sect">
-<h4>字段</h4>
-<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-public">public</span></td><td>FTaskKey Key</td><td>本节点的身份</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>std::vector&lt;FDependency&gt; Dependencies</td><td>我等待谁（前向）</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>std::vector&lt;FDependency&gt; Blocks</td><td>谁被我阻塞（反向，允许单向声明）</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>std::function&lt;<span class="kw">void</span>()&gt; Closure</td><td>节点体。**拿不到图** —— 完成由调度器置位</td></tr>
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">const</span> <span class="kw">char</span>* GetDependencyTypeName(EDependencyType Type) <span class="kw">noexcept</span>;</td><td></td></tr>
 </tbody></table></div>
 </div>
 <div class="ent e-struct" id="Public__Core__FrameGraph_h-4">
-<h3><span class="type">结构体</span> FTaskNode</h3>
-<div class="sect"><div class="doc">
-<p>运行时节点：调度线程私有状态。</p>
-</div></div>
+<h3><span class="type">结构体</span> FDependency</h3>
 <div class="sect">
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-public">public</span></td><td>FTaskKey Key</td><td>身份</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>std::vector&lt;FEvent&gt; Dependencies</td><td>入边：等待的事件</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>std::uint32_t UnmetCount</td><td>其中还没置位的有几个</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>std::vector&lt;FNodeId&gt; Successors</td><td>反向表：谁在等我</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>FEvent CompletionEvent</td><td>我的完成事件</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>std::function&lt;<span class="kw">void</span>()&gt; Closure</td><td>节点体</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>std::atomic&lt;<span class="kw">bool</span>&gt; bDispatched</td><td>派发标志：区分「在飞」与「尚未派发 / 已回收」</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>FTaskKey Target;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>EDependencyType Type = EDependencyType::Wait;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>std::string Reason;</td><td></td></tr>
 </tbody></table></div>
 </div>
-<div class="ent e-class" id="Public__Core__FrameGraph_h-5">
+<div class="ent e-struct" id="Public__Core__FrameGraph_h-5">
+<h3><span class="type">结构体</span> FTask</h3>
+<div class="sect">
+<h4>字段</h4>
+<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td>FTaskKey Key;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>std::vector&lt;FDependency&gt; Dependencies;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>std::vector&lt;FDependency&gt; Blocks;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>std::function&lt;<span class="kw">void</span>()&gt; Closure;</td><td></td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-struct" id="Public__Core__FrameGraph_h-6">
+<h3><span class="type">结构体</span> FDerivedEdge</h3>
+<div class="sect">
+<h4>字段</h4>
+<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td>FTaskKey From;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>FTaskKey To;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>EDependencyType Type = EDependencyType::Wait;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>std::string Reason;</td><td></td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-struct" id="Public__Core__FrameGraph_h-7">
+<h3><span class="type">结构体</span> IDerivedEdgeSource</h3>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> ~IDerivedEdgeSource() = <span class="kw">default</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> DeriveEdges(std::span&lt;<span class="kw">const</span> FTaskKey&gt; LiveKeys, std::uint64_t Frame, std::vector&lt;FDerivedEdge&gt;&amp; Out) = 0;</td><td></td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-class" id="Public__Core__FrameGraph_h-8">
 <h3><span class="type">类</span> FFrameExtension</h3>
-<div class="sect"><div class="doc">
-<p>**声明层**：只闭合自己 —— 一个稳定名字 + 它声明的边。它不知道 stage 序列（那是引擎侧的事），也不管理依赖生命周期。</p>
-</div></div>
 <div class="sect">
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-public">public</span></td><td>FEdge{ TargetName, TargetStage, FrameOffset }</td><td>嵌套类型：一条边 = 目标的名字 + 阶段 + **相对帧偏移**（0 = 本帧，-1 = 上一帧，**任意 `&lt;= 0`** —— 含 `-K`「一整个窗口之前」，那已经必然完成；`&gt; 0` 被桥报错，等待只能向后）</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>Dependencies / Dependents</td><td>两张表（<span class="kw">private</span>；声明只经上面的 DSL/sugar）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> <span class="kw">void</span>* GetStageInstance(std::string_view Stage) <span class="kw">noexcept</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> <span class="kw">void</span>* QuerySubobject(<span class="kw">const</span> <span class="kw">void</span>* TargetTag) <span class="kw">noexcept</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> <span class="kw">void</span>* GetCollectorInterface() <span class="kw">noexcept</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">struct</span> FEdge std::string_view TargetName ; std::string_view TargetStage ; std::int32_t FrameOffset = 0; <span class="kw">bool</span> bReverse = <span class="kw">false</span>; <span class="cm">/** Which declaration produced this edge (see EDependencyType). The scope sugar below fills it * in; the two structural helpers in Engine/Frame.h pass StageChain / SelfEdge. */</span> EDependencyType Type = EDependencyType::Wait;;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">const</span> std::unordered_map&lt;std::string_view, std::vector&lt;FEdge&gt;&gt;&amp; GetDependencies() <span class="kw">const</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">const</span> std::vector&lt;std::pair&lt;std::string_view, FEdge&gt;&gt;&amp; GetDependents() <span class="kw">const</span>;</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">struct</span> FImpl;</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>std::unique_ptr&lt;FImpl&gt; Impl;</td><td></td></tr>
 </tbody></table></div>
 <div class="sect">
 <h4>接口</h4>
 <table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> std::string_view GetName() <span class="kw">const</span> = 0</td><td>稳定身份名。由 `MAHO_DECLARE_FRAME` 从类型名字符串化而来，是**编译期字面量**</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> AddDependency(std::type_index MyStage, FEdge Edge)</td><td>前向：我在 `MyStage` 等这条边指向的目标</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> AddDependent(std::type_index MyStage, FEdge Edge)</td><td>反向：我在 `MyStage` 阻塞它。**单向即够** —— 对方不必知道</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">const</span> std::unordered_map&lt;...&gt;&amp; GetDependencies() <span class="kw">const</span></td><td>逐 stage 的前向表（桥读）</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">const</span> std::vector&lt;...&gt;&amp; GetDependents() <span class="kw">const</span></td><td>反向声明表（桥读）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>FFrameExtension();</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> ~FFrameExtension();</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> std::string_view GetName() <span class="kw">const</span> = 0;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> std::string_view GetCollectorName() <span class="kw">const</span> <span class="kw">noexcept</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> <span class="kw">bool</span> ImplementsStage(std::string_view Stage) <span class="kw">const</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> AddDependency(std::string_view MyStage, FEdge Edge);</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> AddDependent(std::string_view MyStage, FEdge Edge);</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">template</span> &lt;<span class="kw">typename</span> TMyStage&gt; TBlockScope&lt;TMyStage&gt; MyStage();</td><td></td></tr>
 </tbody></table></div>
 </div>
-<div class="ent e-class" id="Public__Core__FrameGraph_h-6">
+<div class="ent e-class" id="Public__Core__FrameGraph_h-9">
 <h3><span class="type">类</span> FFrameBridge</h3>
-<div class="sect"><div class="doc">
-<p>**桥**：把「frame 集合 + stage 序列 + 帧号」建成一批 `FTask`。它只构建、不提交（提交是调用方的事），所以桥不涉及准入 / 占用。</p>
-</div></div>
 <div class="sect">
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-public">public</span></td><td>FDiagnostic{ Reason, Frame, Stage, Target, TargetStage, FrameOffset, bReverse }</td><td>嵌套：只报**写错**（名字不在帧集 / 阶段不在序列 / 目标未实现该阶段）；相位不同不报</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>FResult{ Tasks, Diagnostics }</td><td>嵌套：一批 `FTask` + 报告</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">struct</span> IDispatch <span class="kw">virtual</span> ~IDispatch() = <span class="kw">default</span>; [[nodiscard]] <span class="kw">virtual</span> <span class="kw">bool</span> Implements(<span class="kw">const</span> FFrameExtension&amp; Frame, std::string_view Stage) <span class="kw">const</span> = 0; [[nodiscard]] <span class="kw">virtual</span> std::function&lt;<span class="kw">void</span>()&gt; MakeClosure(FFrameExtension&amp; Frame, std::string_view Stage, std::uint64_t Round) = 0;;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">struct</span> FDiagnostic std::string_view Reason ; std::string_view Frame ; std::string_view Stage ; std::string_view Target ; std::string_view TargetStage ; std::int32_t FrameOffset = 0; <span class="kw">bool</span> bReverse = <span class="kw">false</span>;;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">struct</span> FResult std::vector&lt;FTask&gt; Tasks; std::vector&lt;FDiagnostic&gt; Diagnostics;;</td><td></td></tr>
 </tbody></table></div>
 <div class="sect">
 <h4>接口</h4>
 <table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">static</span> FResult Build(std::span&lt;FFrameExtension* <span class="kw">const</span>&gt; Frames, std::span&lt;<span class="kw">const</span> std::type_index&gt; Stages, std::uint64_t Frame, IDispatch&amp; Dispatch)</td><td>解析相对偏移 → 绝对身份（`Frame + Offset` 的相位；窗口外的目标**直接不发射边**）；为**实现的** stage 产节点（未实现不产）；产出两类结构边；报出写错的声明</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">static</span> std::int32_t PhaseOf(std::uint64_t Frame) <span class="kw">noexcept</span></td><td>绝对帧号 → 相位。只是 `PhaseOfFrame` 的转发 —— 桥的解析与 `Submit` 的盖章必须给同一个数</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>IDispatch::Implements(frame, stage)</td><td>策略：这个 frame 实现该 stage 吗</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>IDispatch::MakeClosure(frame, stage)</td><td>策略：把「调用该 frame 的该 stage」包成闭包</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">static</span> FResult Build(std::span&lt;FFrameExtension* <span class="kw">const</span>&gt; Frames, std::span&lt;<span class="kw">const</span> std::string_view&gt; Stages, std::uint64_t Frame, IDispatch&amp; Dispatch);</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">static</span> std::int32_t PhaseOf(std::uint64_t Frame) <span class="kw">noexcept</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">template</span> &lt;<span class="kw">typename</span>... TStages&gt; [[nodiscard]] std::array&lt;std::string_view, <span class="kw">sizeof</span>...(TStages)&gt; StageIndicesOf(TTypeList&lt;TStages...&gt;);</td><td></td></tr>
 </tbody></table></div>
 </div>
-<div class="ent e-class" id="Public__Core__FrameGraph_h-7">
-<h3><span class="type">类</span> FFrameGraph <span class="base">: FThreadedServer</span></h3>
-<div class="sect"><div class="doc">
-<p>**调度器**。全部图状态只被调度线程触碰，所以**没有图锁**；调度线程也**绝不阻塞** （准入与栅栏的等待都发生在调用方）。</p>
-</div></div>
+<div class="ent e-class" id="Public__Core__FrameGraph_h-10">
+<h3><span class="type">类</span> FFrameGraph <span class="base">: : <span class="kw">public</span> FThreadedServer</span></h3>
 <div class="sect">
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-private">private</span></td><td>std::deque&lt;FTaskNode&gt; Nodes</td><td>节点表，下标即 FNodeId</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td>std::unordered_map&lt;FTaskKey, FNodeId, FTaskKeyHash&gt; Registry</td><td>身份 → 节点下标（精确键）</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td>std::deque&lt;std::atomic_bool&gt; EventStates</td><td>事件标志表（用下标寻址，不分配不回收）</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td>std::int32_t Depth</td><td>**本图的 K**：首次使用时读一次（`EnsureDepth`），此后是常量。每一张按相位定尺的表都由它定尺（`SlotInFlight`、事件表的相位步长）。`0` = 还没读过 —— 不能是构造期的值，因为图是**驱动它的那个帧的成员**，构造早于插件（因而早于那个 CVar）加载</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td>std::vector&lt;std::atomic&lt;std::uint32_t&gt;&gt; SlotInFlight</td><td>每相位在飞计数：准入依据。按 `Depth` 在**首次使用时**定尺（K 是运行期值）；**空** = 还没读过 K，即没有任何相位在飞</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td>std::atomic&lt;std::uint32_t&gt; AwaitingCompletion</td><td>待完成节点数：提交栅栏的计数</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td>SlotCv / SlotMutex</td><td>等待 / 唤醒（只在提交方与完成通知之间配对）</td></tr>
+<tr><td><span class="acc a-protected">protected</span></td><td>[[nodiscard]] <span class="kw">const</span> <span class="kw">char</span>* GetThreadName() <span class="kw">const</span> <span class="kw">override</span>;</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">struct</span> FImpl;</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>std::unique_ptr&lt;FImpl&gt; Impl;</td><td></td></tr>
 </tbody></table></div>
 <div class="sect">
 <h4>接口</h4>
 <table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">bool</span> Submit(std::vector&lt;FTask&gt; Tasks, std::uint64_t Frame, std::string* OutReason = <span class="kw">nullptr</span>)</td><td>提交**第 `Frame` 轮**：① 相位在这里算（`PhaseOfFrame(Frame)` 盖到每个 task 的身份上 —— 调用方的词汇是轮次，槽是图的）② 校验（批内同一身份重复 / 相位越界 / 成环）③ **准入**（阻塞调用方，直到本轮占用的那个槽排空）④ 入队。准入既是环复用规则，也是「最多 K 轮在飞」这条事实本身 —— 所以没有 Retire、没有水位线</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Wait()</td><td>**提交栅栏**：阻塞到「我提交过的都完成」。待完成计数由调用方在入队**前**自增、调度线程完成时自减 —— 所以它不会漏掉自己的工作（等相位计数则会在派发空档漏掉）</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> EnsureDepth()</td><td>在**调用方线程**上（`Submit` 的最前面）解析 K，只有第一次做实：写 `Depth` 并按它给 `SlotInFlight` 定尺。放在 Submit 里是因为「批还没被碰过之前，环的所有相位表就已定尺」—— 调度线程此后读到的必是已发布的值，除这次交接外不需要别的同步</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">explicit</span> FFrameGraph(FThreadPool&amp; InPool, FThreadPool::FLane InLane = FThreadPool::DefaultLane);</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>~FFrameGraph() <span class="kw">override</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>FFrameGraph(<span class="kw">const</span> FFrameGraph&amp;) = <span class="kw">delete</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>FFrameGraph&amp; <span class="kw">operator</span>=(<span class="kw">const</span> FFrameGraph&amp;) = <span class="kw">delete</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">bool</span> Submit(std::vector&lt;FTask&gt; Tasks, std::uint64_t Frame, std::string* OutReason = <span class="kw">nullptr</span>);</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Wait();</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> SetOwnerName(<span class="kw">const</span> <span class="kw">char</span>* InOwnerName);</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> SetDeriver(IDerivedEdgeSource* InDeriver);</td><td></td></tr>
 </tbody></table></div>
 </div>
 </div>
 <div class="pane" id="pane-Public__Core__Interface_h">
 <div class="hdr">Public/Core/Interface.h</div>
-<h2 class="file-title">Interface.h —— 能力组合器 / 阶段管线组合器</h2>
-<div class="card"><div class="doc">
-<p>两个类型层面的组合器，都**不含任何行为**：`IPlugin` 把一组能力 trait 作为虚基类装进来（**无序**集合，供能力查询 / `dynamic_cast` 用）；`IPipeline` 声明一条**有序**阶段序列并暴露 `TStages`。stage → 方法调用的 `Invoke` 协议由具体调度上下文实现，Core 本身不预设任何阶段。</p>
-</div></div>
-<div class="card">
-<h3 class="card-title">包含的头文件</h3>
-
-<table>
-<thead><tr><th>头文件</th><th>功能</th></tr></thead>
-<tbody>
-<tr><td>Core/Export.h</td><td>`MAHO_API`：两者都是跨 DLL 使用的类型</td></tr>
-<tr><td>Core/TypeList.h</td><td>`IPipeline::TStages` 用 `TTypeList` 表示有序序列</td></tr>
-<tr><td>type_traits</td><td>`std::is_base_of_v` 等能力查询</td></tr>
-</tbody></table>
-</div>
-<div class="ent e-class" id="Public__Core__Interface_h-0">
-<h3><span class="type">类</span> IPlugin&lt;TCapabilities...&gt;</h3>
-<div class="sect"><div class="doc">
-<p>**能力组合器**：一组能力的无序集合，没有顺序语义 —— 只用于能力查询（`dynamic_cast`）与按能力分派。</p>
-</div></div>
-<div class="sect">
-<h4>接口</h4>
-<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> ~IPlugin() = <span class="kw">default</span></td><td>虚析构：跨 DLL 通过基类指针销毁是合法的</td></tr>
-</tbody></table></div>
-</div>
-<div class="ent e-class" id="Public__Core__Interface_h-1">
-<h3><span class="type">类</span> IPipeline&lt;TStageTypes...&gt;</h3>
-<div class="sect"><div class="doc">
-<p>**阶段管线组合器**：参数顺序就是该管线的节点顺序（例如 `IPipeline&lt;IInit, IMain, IShutdown&gt;` = Init → Main → Shutdown）。它只承载阶段列表，`Invoke` 协议由具体管线类实现。</p>
-</div></div>
-<div class="sect">
-<h4>字段</h4>
-<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">using</span> TStages = TTypeList&lt;TStageTypes...&gt;</td><td>有序阶段接口列表（<span class="kw">public</span>）：调度侧据此展开节点</td></tr>
-</tbody></table></div>
-<div class="sect">
-<h4>接口</h4>
-<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> ~IPipeline() = <span class="kw">default</span></td><td>虚析构</td></tr>
-</tbody></table></div>
-</div>
+<h2 class="file-title">Interface.h</h2>
+<div class="empty">（这个头还没有声明内容）</div>
 </div>
 <div class="pane" id="pane-Public__Core__MetaData_h">
 <div class="hdr">Public/Core/MetaData.h</div>
 <h2 class="file-title">MetaData.h</h2>
-<div class="empty">（尚未声明内容 —— 在 Tools/docs_content.py 里加一条 Header(&quot;Public/Core/MetaData.h&quot;)，再逐类声明 Class / Interface / Field）</div>
+<div class="ent e-struct" id="Public__Core__MetaData_h-0">
+<h3><span class="type">结构体</span> FMetaDataEntry</h3>
+<div class="sect">
+<h4>字段</h4>
+<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td>std::string Type;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>std::string Key;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>std::string Value;</td><td></td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-class" id="Public__Core__MetaData_h-1">
+<h3><span class="type">类</span> FMetaData</h3>
+<div class="sect">
+<h4>字段</h4>
+<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">const</span> FMetaDataEntry* Find(std::string_view Type, std::string_view Key) <span class="kw">const</span>;</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">struct</span> FImpl;</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>std::unique_ptr&lt;FImpl&gt; Impl;</td><td></td></tr>
+</tbody></table></div>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td>FMetaData();</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>~FMetaData();</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>FMetaData(<span class="kw">const</span> FMetaData&amp;) = <span class="kw">delete</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>FMetaData&amp; <span class="kw">operator</span>=(<span class="kw">const</span> FMetaData&amp;) = <span class="kw">delete</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Register(std::string_view Type, std::string_view Key, std::string_view Encoded);</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] std::size_t Count(std::string_view Type) <span class="kw">const</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] std::vector&lt;std::string&gt; Types() <span class="kw">const</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] std::vector&lt;FMetaDataEntry&gt; Snapshot(std::string_view Type) <span class="kw">const</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> DumpOnce() <span class="kw">const</span>;</td><td></td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-functions" id="Public__Core__MetaData_h-2">
+<h3><span class="type">自由函数</span> </h3>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FMetaData&amp; GetMetaData() <span class="kw">noexcept</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">inline</span> <span class="kw">constexpr</span> std::string_view KDeclaredType = <span class="st">"Type"</span>;</td><td></td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-struct" id="Public__Core__MetaData_h-3">
+<h3><span class="type">结构体</span> FTypeRegistrar</h3>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">explicit</span> FTypeRegistrar(std::string_view TypeName) <span class="kw">noexcept</span>;</td><td></td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-macro" id="Public__Core__MetaData_h-4">
+<h3><span class="type">宏</span> MAHO_DECLARE_TYPE <span class="base">: <span class="kw">template</span> &lt;&gt; \ <span class="kw">struct</span> TTypeName&lt;X&gt; \ { \ <span class="kw">static</span> <span class="kw">constexpr</span> std::string_view value = #X; \ <span class="kw">static</span> <span class="kw">inline</span> <span class="kw">const</span> ::Maho::Detail::FTypeRegistrar Registration{ value }; \ };</span></h3>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] std::string_view BareTypeName(std::string_view Qualified) <span class="kw">noexcept</span>;</td><td></td></tr>
+</tbody></table></div>
+</div>
 </div>
 <div class="pane" id="pane-Public__Core__Query_h">
 <div class="hdr">Public/Core/Query.h</div>
-<h2 class="file-title">Query.h —— 编译期类型筛选 + 运行期实例筛选</h2>
-<div class="card"><div class="doc">
-<p>两套筛选，都是纯查询、不改任何东西：</p>
-<p>**`TQuery&lt;TList&gt;`** —— 纯类型运算（不引用实例）：`Select`(OR) / `With`(AND) / `Not`(NOR) → `FResult`。用来在编译期把一串 stage 接口折成帧集类型。</p>
-<p>**`FQuery&lt;TBase&gt;` / `FQueryResult&lt;TBase&gt;`** —— 运行期按接口谓词筛实例（`dynamic_cast`），结果**可当 `vector` 用但不能直接 range-<span class="kw">for</span>**（先赋给 vector）。结果内部向量私有（外部注入不了裸指针），并记住来源集合做 Debug 活性审计：指针已不在来源里（帧已卸载）就丢弃并报错 —— 因为卸载是「先移出集合再释放模块」，对已卸载对象做 `dynamic_cast` 会解引用悬垂 vptr。</p>
-</div></div>
-<div class="card">
-<h3 class="card-title">包含的头文件</h3>
-
-<table>
-<thead><tr><th>头文件</th><th>功能</th></tr></thead>
-<tbody>
-<tr><td>Core/TypeList.h</td><td>`TQuery` 的全部类型运算基于 `TTypeList`</td></tr>
-<tr><td>algorithm / typeindex / vector</td><td>运行期筛选与结果容器</td></tr>
-</tbody></table>
-</div>
-<div class="ent e-struct" id="Public__Core__Query_h-0">
-<h3><span class="type">结构体</span> TQuery&lt;TList&gt;</h3>
-<div class="sect"><div class="doc">
-<p>**编译期**筛选：只操作类型列表，零运行期开销。</p>
-</div></div>
-<div class="sect">
-<h4>字段</h4>
-<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">using</span> FResult = ...</td><td>筛完的类型列表（交给上层做容器／遍历）</td></tr>
-</tbody></table></div>
+<h2 class="file-title">Query.h</h2>
+<div class="ent e-functions" id="Public__Core__Query_h-0">
+<h3><span class="type">自由函数</span> </h3>
 <div class="sect">
 <h4>接口</h4>
 <table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-public">public</span></td><td>Select&lt;...&gt;() / With&lt;...&gt;() / Not&lt;...&gt;()</td><td>按 OR / AND / NOR 过滤元素</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">template</span> &lt;<span class="kw">typename</span> TSelf, <span class="kw">typename</span>... TTargets&gt; [[nodiscard]] <span class="kw">inline</span> <span class="kw">void</span>* QueryDispatch(TSelf* Self, <span class="kw">const</span> <span class="kw">void</span>* TargetTag) <span class="kw">noexcept</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">template</span> &lt;<span class="kw">typename</span> TSelf, <span class="kw">typename</span>... TTargets&gt; [[nodiscard]] <span class="kw">inline</span> <span class="kw">void</span>* QueryDispatchStatic(TSelf* Self, <span class="kw">const</span> <span class="kw">void</span>* TargetTag) <span class="kw">noexcept</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">template</span> &lt;<span class="kw">typename</span> TSelf, <span class="kw">typename</span>... TTargets&gt; [[nodiscard]] <span class="kw">inline</span> <span class="kw">void</span>* QueryDispatchList(TSelf* Self, <span class="kw">const</span> <span class="kw">void</span>* TargetTag, TTypeList&lt;TTargets...&gt;) <span class="kw">noexcept</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">template</span> &lt;<span class="kw">typename</span> TBase, <span class="kw">typename</span> TTo&gt; [[nodiscard]] <span class="kw">inline</span> TTo* QueryCast(TBase* P) <span class="kw">noexcept</span>;</td><td></td></tr>
 </tbody></table></div>
 </div>
-<div class="ent e-class" id="Public__Core__Query_h-1">
-<h3><span class="type">类</span> FQuery&lt;TBase&gt;</h3>
-<div class="sect"><div class="doc">
-<p>**运行期**筛选的基类：派生类给出数据源（`GetQueryData()`），本类提供按接口谓词筛选与 Debug 活性审计。</p>
-</div></div>
-<div class="sect">
-<h4>字段</h4>
-<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-public">public</span></td><td>std::vector&lt;TBase*&gt; Source</td><td>来源集合（私有；审计时用来判断指针是否已失效）</td></tr>
-</tbody></table></div>
-<div class="sect">
-<h4>接口</h4>
-<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> std::vector&lt;TBase*&gt;&amp; GetQueryData()</td><td>数据源（收集器里就是 `Pipelines`）</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FQueryResult&lt;TBase&gt; Select&lt;...&gt;() <span class="kw">const</span></td><td>按 stage 接口筛：命中任一接口即入选（`dynamic_cast` 判定）</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FQueryResult&lt;TBase&gt; With&lt;...&gt;() / Not&lt;...&gt;() <span class="kw">const</span></td><td>AND / NOR 变体</td></tr>
-</tbody></table></div>
-</div>
-<div class="ent e-class" id="Public__Core__Query_h-2">
-<h3><span class="type">类</span> FQueryResult&lt;TBase&gt;</h3>
-<div class="sect"><div class="doc">
-<p>筛选结果：**隐式转换为 `std::vector&lt;TBase*&gt;`**（赋给 vector 即可用），但它本身**不能直接 `range-<span class="kw">for</span>`**（`begin/end` 找不到）—— 这一点是实测：在 `Engine.cpp` 上直接范围 <span class="kw">for</span> 会被编译器顶回来。结果内部向量私有，外部注入不了裸指针。</p>
-</div></div>
-<div class="sect">
-<h4>接口</h4>
-<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-public">public</span></td><td>std::vector&lt;TBase*&gt; Data</td><td>结果容器（<span class="kw">public</span>：只读使用；外部无法注入）</td></tr>
-</tbody></table></div>
+<div class="ent e-macro" id="Public__Core__Query_h-1">
+<h3><span class="type">宏</span> MAHO_QUERY_CASTER <span class="base">: [[nodiscard]] <span class="kw">void</span>* QuerySubobject(<span class="kw">const</span> <span class="kw">void</span>* TargetTag) <span class="kw">noexcept</span> <span class="kw">override</span> \ { \ <span class="kw">return</span> ::Maho::QueryDispatch&lt;Self, __VA_ARGS__&gt;(<span class="kw">this</span>, TargetTag); \ }</span></h3>
 </div>
 </div>
 <div class="pane" id="pane-Public__Core__Singleton_h">
 <div class="hdr">Public/Core/Singleton.h</div>
-<h2 class="file-title">Singleton.h —— CRTP 单例标识基类</h2>
-<div class="card"><div class="doc">
-<p>**纯身份 / 标志基类**：没有 <span class="kw">inline</span> Meyers 单例、不强制生命周期。派生类自己声明 `<span class="kw">static</span> T&amp; Get()` 并在**自己的 .cpp**（编进它所在那个 DLL）里定义 ⇒ 实例只存在于某个 DLL 的一个 TU 中 ⇒ **跨 DLL 进程唯一**（若把 `<span class="kw">inline</span> <span class="kw">static</span>` 局部变量写在头里，每个包含它的 DLL 都会各有一份）。</p>
-<p>`is_base_of_v&lt;TSingleton&lt;T&gt;, T&gt;` 仍能识别一个类是不是单例（查询遍历不变）。需要生命周期时用 `IPlugin&lt;IInit, IShutdown&gt;` 组合，而不是无条件继承。</p>
-</div></div>
-<div class="ent e-class" id="Public__Core__Singleton_h-0">
-<h3><span class="type">类</span> TSingleton&lt;T&gt;</h3>
-<div class="sect"><div class="doc">
-<p>CRTP 基类：把「我是单例」这件事做成一个类型标志。构造 / 析构 / 拷贝都是 <span class="kw">protected</span> 或删除的 —— 只有派生类能造实例。</p>
-</div></div>
-<div class="sect">
-<h4>接口</h4>
-<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-protected">protected</span></td><td>TSingleton() = <span class="kw">default</span></td><td><span class="kw">protected</span> 构造：外部无法直接创建</td></tr>
-<tr><td><span class="acc a-protected">protected</span></td><td>~TSingleton() = <span class="kw">default</span></td><td><span class="kw">protected</span> 析构：同上</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>TSingleton(<span class="kw">const</span> TSingleton&amp;) = <span class="kw">delete</span></td><td>不可拷贝（拷贝赋值同样删除）</td></tr>
-</tbody></table></div>
-</div>
+<h2 class="file-title">Singleton.h</h2>
+<div class="empty">（这个头还没有声明内容）</div>
 </div>
 <div class="pane" id="pane-Public__Core__ThreadedServer_h">
 <div class="hdr">Public/Core/ThreadedServer.h</div>
-<h2 class="file-title">ThreadedServer.h —— 常驻专用线程</h2>
-<div class="card"><div class="doc">
-<p>一个持久线程 + FIFO 串行任务队列。给**长期角色**用（渲染线程、IO 装载线程、调度器本身），不是瞬时并行任务（那种用 `FThreadPool`）。派生 + 覆写 `OnInitialize` / `OnShutdown` / `GetThreadName` 做角色专属设置。</p>
-<p>**实现全在 `Private/Core/ThreadedServer.cpp`，连虚函数也在那里** —— 这样这个类在 `Maho.dll` 里有一个 **key function**：vtable 与 deleting dtor 全进程只有一份，而不是每个模块一份 COMDAT（后者正是 `Core/Export.h` 警告的那种隐患）。</p>
-</div></div>
-<div class="card">
-<h3 class="card-title">包含的头文件</h3>
-
-<table>
-<thead><tr><th>头文件</th><th>功能</th></tr></thead>
-<tbody>
-<tr><td>Core/Export.h</td><td>`MAHO_API` —— 插件侧的角色类派生自它</td></tr>
-<tr><td>atomic</td><td>`bRunning`：跨线程读的运行标志</td></tr>
-<tr><td>condition_variable / mutex</td><td>队列等待与 `Flush` 屏障</td></tr>
-<tr><td>deque / functional</td><td>FIFO 任务队列与任务类型</td></tr>
-<tr><td>thread</td><td>那一个持久线程</td></tr>
-</tbody></table>
-</div>
+<h2 class="file-title">ThreadedServer.h</h2>
 <div class="ent e-class" id="Public__Core__ThreadedServer_h-0">
 <h3><span class="type">类</span> FThreadedServer</h3>
-<div class="sect"><div class="doc">
-<p>常驻专用 worker 的基类。不可拷贝、不可赋值。</p>
-</div></div>
 <div class="sect">
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-private">private</span></td><td>std::thread Worker</td><td>那一个持久线程</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td>std::deque&lt;FQueuedTask&gt; Queue</td><td>FIFO 串行队列；条目就只有那份工作（**埋点属于提交方的 body**）</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td>std::mutex Mutex / std::condition_variable CondVar</td><td>队列与屏障的同步</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td>std::atomic&lt;<span class="kw">bool</span>&gt; bRunning</td><td>是否已启动</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td><span class="kw">bool</span> bStopping = <span class="kw">false</span></td><td>停止标志（`Shutdown` 置位）</td></tr>
+<tr><td><span class="acc a-protected">protected</span></td><td>[[nodiscard]] <span class="kw">virtual</span> <span class="kw">const</span> <span class="kw">char</span>* GetThreadName() <span class="kw">const</span>;</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">struct</span> FImpl;</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>std::unique_ptr&lt;FImpl&gt; Impl;</td><td></td></tr>
 </tbody></table></div>
 <div class="sect">
 <h4>接口</h4>
 <table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-public">public</span></td><td>FThreadedServer() = <span class="kw">default</span></td><td>构造只初始化标志，**不起线程**</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> ~FThreadedServer()</td><td>析构调 `Shutdown()` —— 停止 + join，幂等</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">bool</span> Initialize()</td><td>启动专用线程，幂等；`OnInitialize()` 返回 <span class="kw">false</span> 则启动失败</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Shutdown()</td><td>停止 + join，幂等；join 后调 `OnShutdown()`</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">bool</span> IsRunning() <span class="kw">const</span></td><td>运行标志（任意线程可读）</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Submit(std::function&lt;<span class="kw">void</span>()&gt; Task)</td><td>入队即返；FIFO、**串行**执行。条目**只装工作本身** —— 服务器跑的是闭包、对埋点一无所知：角色要在 profile 里看见自己的活，就在它提交的那个 body 里自己开条（`Trace.h`），不是在提交处</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Flush()</td><td>屏障：阻塞到本次调用之前提交的任务全部完成（实现是入队一个普通任务、再等它跑完）。服务器**不开任何 trace 标签** —— 埋点属于提交方的 body</td></tr>
-<tr><td><span class="acc a-protected">protected</span></td><td>[[nodiscard]] <span class="kw">virtual</span> <span class="kw">bool</span> OnInitialize()</td><td>线程启动前调用；返回 <span class="kw">false</span> 中止启动</td></tr>
-<tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> OnShutdown()</td><td>线程 join 之后调用</td></tr>
-<tr><td><span class="acc a-protected">protected</span></td><td>[[nodiscard]] <span class="kw">virtual</span> <span class="kw">const</span> <span class="kw">char</span>* GetThreadName() <span class="kw">const</span></td><td>线程名（默认 ThreadedServer）</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> RunLoop()</td><td>线程主体：取任务 → 跑（异常隔离上报）→ 循环到停止且队列空。**等待本身不画条**，服务器也**不替任何人开条**：它跑的是闭包、对埋点一无所知</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>FThreadedServer();</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> ~FThreadedServer();</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>FThreadedServer(<span class="kw">const</span> FThreadedServer&amp;) = <span class="kw">delete</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>FThreadedServer&amp; <span class="kw">operator</span>=(<span class="kw">const</span> FThreadedServer&amp;) = <span class="kw">delete</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">bool</span> Initialize();</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Shutdown();</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">bool</span> IsRunning() <span class="kw">const</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Submit(std::function&lt;<span class="kw">void</span>()&gt; Task);</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Flush();</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">bool</span> IsServerThread() <span class="kw">const</span>;</td><td></td></tr>
+<tr><td><span class="acc a-protected">protected</span></td><td>[[nodiscard]] <span class="kw">virtual</span> <span class="kw">bool</span> OnInitialize();</td><td></td></tr>
+<tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> OnShutdown();</td><td></td></tr>
 </tbody></table></div>
 </div>
 </div>
 <div class="pane" id="pane-Public__Core__ThreadPool_h">
 <div class="hdr">Public/Core/ThreadPool.h</div>
-<h2 class="file-title">ThreadPool.h —— 固定规模线程池</h2>
-<div class="card"><div class="doc">
-<p>常驻 worker + FIFO 任务队列。`Submit` 入队即返（乱序在 worker 上跑），`Flush` 是**锁步屏障**：等真正「执行完」而不是「出队」。workers 首次 `Submit` 时**惰性启动**（只会增长，从不收缩）。任务是并发跑的，必须自身线程安全。</p>
-<p>**实现全在 `Private/Core/ThreadPool.cpp`**：池是每个装了收集器的插件里的**成员**（`FFrameBuilder::Pool`），所以类带 `MAHO_API` —— 跨 DLL 调用，而不是每个模块内联一份。</p>
-<p>**诊断开关**：默认构造的池读 `MAHO_PARALLELISM`（如 `=1`）覆盖线程数，用来复现串行执行、把并行失败与已知良好基线直接对比；显式指定宽度的池（如 RHI 的串行录制池）不受影响。</p>
-</div></div>
-<div class="card">
-<h3 class="card-title">包含的头文件</h3>
-
-<table>
-<thead><tr><th>头文件</th><th>功能</th></tr></thead>
-<tbody>
-<tr><td>Core/Export.h</td><td>`MAHO_API` —— 插件会跨 DLL 构造 / 调用它</td></tr>
-<tr><td>condition_variable / mutex</td><td>队列等待与「真正空闲」屏障</td></tr>
-<tr><td>cstdint</td><td>`std::uint32_t`（宽度与在飞计数）</td></tr>
-<tr><td>deque</td><td>FIFO 任务队列</td></tr>
-<tr><td>functional</td><td>`std::function&lt;<span class="kw">void</span>()&gt;` 任务</td></tr>
-<tr><td>thread / vector</td><td>worker 线程与其容器</td></tr>
-</tbody></table>
-</div>
+<h2 class="file-title">ThreadPool.h</h2>
 <div class="ent e-class" id="Public__Core__ThreadPool_h-0">
 <h3><span class="type">类</span> FThreadPool</h3>
-<div class="sect"><div class="doc">
-<p>任务执行原语：一组 worker 线程 + 若干 **lane**。lane 是一条独立的队列 + 完成计数，共用同一批 worker。`NumThreads = 0` 时取 `std::thread::hardware_concurrency()`（为 0 则退化为 1）。不可拷贝、不可赋值。</p>
-<p>**为什么有 lane：**引擎需要**每个收集器一条栅栏** —— 收集器的 `Wait()` 只能排空**它自己**提交的工作，不能等别的收集器（这正是「节点体可以阻塞在另一个图的静默点」成立的前提）。给每个收集器一个池能做到，但会把**线程数**乘以收集器份数（4 × 核数 = 24 核机器上 96 条线程，去跑约 2 个并发节点）。lane 把被混在一起的两件事拆开：worker 集共享，队列与计数按 lane 独立。</p>
-<p>它还顺手消掉一个共享必然带来的陷阱：栅栏不能被「自己的计数包含了自己的线程」调用 —— `Flush` 等的是归零，而调用者那颗任务要等 `Flush` 返回才结束。而帧的 stage body 是由**父**收集器的图派发的，所以收集器在 stage body 里排空**自己**的 lane 是一次**跨 lane** 排空，与从前「跨池」是同一件事。</p>
-</div></div>
 <div class="sect">
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-private">private</span></td><td>std::vector&lt;std::thread&gt; Workers</td><td>worker 线程（**共享给所有 lane**）</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td>std::array&lt;FLaneState, MaxLanes&gt; Lanes</td><td>lane 表；`FLaneState` = 队列 + `Pending` + `bInUse`</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td>FLane NextLaneToServe</td><td>轮转游标</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td>std::uint32_t FlushWaiters</td><td>当前阻塞在 `Flush` 的线程数（决定通知方式）</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td>std::mutex Mutex / std::condition_variable CondVar</td><td>一把锁管所有 lane 的队列、计数与唤醒簿记；临界区只有入队/出队，所以按 lane 分锁买不到什么，却会让「哪条 lane 有活」的扫描失去原子性</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td>std::uint32_t NumThreads</td><td>池宽</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td><span class="kw">bool</span> bStopping = <span class="kw">false</span></td><td>停止标志（析构时置位）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">static</span> <span class="kw">constexpr</span> FLane DefaultLane = 0;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">static</span> <span class="kw">constexpr</span> FLane InvalidLane = 0xFFFFFFFFu;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">static</span> <span class="kw">constexpr</span> std::uint32_t MaxLanes = 16;</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">struct</span> FImpl;</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>std::unique_ptr&lt;FImpl&gt; Impl;</td><td></td></tr>
 </tbody></table></div>
 <div class="sect">
 <h4>接口</h4>
 <table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">using</span> FLane = std::uint32_t</td><td>lane 句柄。`DefaultLane = 0` 是池自身那条；`MaxLanes = 16`</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">explicit</span> FThreadPool(std::uint32_t NumThreads = 0)</td><td>构造：**不立刻起线程**，只记宽度</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>~FThreadPool()</td><td>置停止标志、唤醒并 join 全部 worker</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Submit(std::function&lt;<span class="kw">void</span>()&gt; Task)</td><td>入队即返（默认 lane，**不带身份**：只会开出一个无名条，所以带身份一律走下面那个重载）；惰性把整个池拉起来（首次调用即补齐到宽度）</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Submit(FTaskTrace Trace, std::function&lt;<span class="kw">void</span>()&gt; Task)</td><td>默认 lane + 任务身份。**trace 条在任务 RUN 的地方开，不在提交处开**（见 `RunTracedTask`）：提交方不可能知道工作何时开始，而埋点写在调用点的版本正是会被忘掉的那个</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Flush()</td><td>默认 lane 上的屏障（见下）</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FLane CreateLane()</td><td>在同一批 worker 上开一条新 lane（自己的队列 + 计数）。池满（`MaxLanes`）时**上报并**返回 `DefaultLane` —— 调用者退化为共用默认栅栏，而不是拿到一条没人能推断的 lane</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> DestroyLane(FLane Lane)</td><td>归还 lane。**仍有工作时拒绝并上报**：把还在计数里的工作交还回去，等于把它的完成记到别人头上。lane 0 永不归还</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Submit(FLane Lane, FTaskTrace Trace, std::function&lt;<span class="kw">void</span>()&gt; Task)</td><td>按 lane 入队，并带上任务身份三元组 `{Group, Name, Stage}`（`Name` 同时就是 lane 的键 —— `FScopedTracePair` 按它哈希选行，所以任务必然落在提交方建立的那一行上）。**未知 lane 上报后回落到默认 lane** —— 工作永远不会被静默丢掉</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Flush(FLane Lane)</td><td>**真正空闲**屏障：等该 lane 队列空且计数归零（计数在任务**完成后**才减），并在等待期间容忍并发 `Submit`（嵌套图会从 worker 里再投任务）。调用者若**本身是该池的 worker**（即它正跑着这个池的任务），会**帮助排空它正在等的那条 lane** —— 否则一个 worker 全被阻塞在这里的池，队列没人能跑，计数永远回不到零。只排空**目标 lane**，所以既不改变语义也不会顺手碰别人的工作</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] std::uint32_t GetNumThreads() <span class="kw">const</span></td><td>池宽（`= 0` 构造时的解析结果）</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] std::uint32_t GetLanePending(FLane Lane) <span class="kw">const</span></td><td>诊断/测试：该 lane 未完成的任务数</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> EnsureThreads(std::uint32_t Required)</td><td>把池长到至少 Required（受宽度上限约束，从不收缩）</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> WorkerLoop()</td><td>worker 主体：等「任一条 lane 有活」→ 轮转取一条（不让忙的 lane 饿死安静的）→ 跑 → 减该 lane 的计数；任务抛出的异常被隔离上报</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td><span class="kw">bool</span> TakeAnyTaskLocked(FQueuedTask&amp; OutTask, FLane&amp; OutLane)</td><td>从游标开始轮转，取第一条非空 lane 的任务</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td><span class="kw">bool</span> AnyLaneHasWorkLocked() <span class="kw">const</span></td><td>worker 的唤醒条件（任一条 lane 队列非空）</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> RunTracedTask(<span class="kw">const</span> FTaskTrace&amp; Trace, <span class="kw">const</span> std::function&lt;<span class="kw">void</span>()&gt;&amp; Task)</td><td>**全引擎唯一的埋点位置**：在任务真正 RUN 的地方开一个 `FScopedTracePair(Group, Name, Stage)`，再交给 `RunTaskSafely`。放在任务边界而不是每个提交方的调用点，是因为这是每一份工作都必经的唯一地点 —— 时间轴因此不可能出现「只因为某个提交方忘了给自己埋点」而缺掉的条。scope 同时确定 lane，所以 stage body 里的手写埋点依旧落在它所属帧那一行。`Trace.Name` 为空则什么都不开（没有标签的条只会往默认 lane 上堆无名块）。提交方忘了带身份，条就消失了；带身份的任务走这里，worker 取到的和 `Flush` 帮助排空的都走这里</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> RunTaskSafely(<span class="kw">const</span> std::function&lt;<span class="kw">void</span>()&gt;&amp; Task)</td><td>跑一个任务并隔离异常，期间把本线程标记为**该池的 worker**（`thread_local`，保存/恢复）—— 这个标记正是 `Flush` 帮助排空的许可来源：不是本池 worker 的线程（游戏线程、关闭路径）必须留在队列之外，让节点体在那里跑恰恰是池存在的意义</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td><span class="kw">void</span> NotifyWorkAvailableLocked() / NotifyProgressLocked()</td><td>唤醒条件式通知：有 `Flush` 等待者时用 `notify_all`（等待者可能需要帮助排空），否则 `notify_one`，免得每次入队都惊群</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td><span class="kw">struct</span> FQueuedTask</td><td>队列条目 = `FTaskTrace Trace` + `std::function&lt;<span class="kw">void</span>()&gt; Task`（**身份跟着任务走**，所以无论谁把它取出来跑 —— worker 或帮助排空的 `Flush` —— 都能画出同一条）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">explicit</span> FThreadPool(std::uint32_t NumThreads = 0);</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>~FThreadPool();</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>FThreadPool(<span class="kw">const</span> FThreadPool&amp;) = <span class="kw">delete</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>FThreadPool&amp; <span class="kw">operator</span>=(<span class="kw">const</span> FThreadPool&amp;) = <span class="kw">delete</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Submit(std::function&lt;<span class="kw">void</span>()&gt; Task);</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Flush();</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FLane CreateLane();</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> DestroyLane(FLane Lane);</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Submit(FLane Lane, std::function&lt;<span class="kw">void</span>()&gt; Task);</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Flush(FLane Lane);</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] std::uint32_t GetNumThreads() <span class="kw">const</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] std::uint32_t GetLanePending(FLane Lane) <span class="kw">const</span>;</td><td></td></tr>
+</tbody></table></div>
+<div class="sect">
+<h4>嵌套</h4>
+<table><thead><tr><th>访问域</th><th>名称</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td>FLane</td><td></td></tr>
 </tbody></table></div>
 </div>
 </div>
 <div class="pane" id="pane-Public__Core__TypeList_h">
 <div class="hdr">Public/Core/TypeList.h</div>
-<h2 class="file-title">TypeList.h —— 编译期有序类型列表</h2>
-<div class="card"><div class="doc">
-<p>类型层面的「数组」：`TTypeList&lt;A, B&gt;` 与 `TTypeList&lt;B, A&gt;` 是**不同类型**（顺序即语义），但**不编码**遍历是串行还是并行 —— 那是调用方的选择。全套操作都是纯模板，零运行期开销、无状态。</p>
-</div></div>
-<div class="card">
-<h3 class="card-title">包含的头文件</h3>
-
-<table>
-<thead><tr><th>头文件</th><th>功能</th></tr></thead>
-<tbody>
-<tr><td>cstddef</td><td>`std::size_t`（`Count`）</td></tr>
-<tr><td>type_traits</td><td>`std::conditional_t` / `std::false_type` / `std::true_type`（并集与成员判断用）</td></tr>
-</tbody></table>
+<h2 class="file-title">TypeList.h</h2>
+<div class="ent e-alias" id="Public__Core__TypeList_h-0">
+<h3><span class="type">别名</span> TAppend_t <span class="base">: TAppend_t</span></h3>
 </div>
-<div class="ent e-struct" id="Public__Core__TypeList_h-0">
-<h3><span class="type">结构体</span> TTypeList&lt;TTypes...&gt;</h3>
-<div class="sect"><div class="doc">
-<p>编译期有序类型列表（「类型数组」）。顺序即语义。</p>
-</div></div>
+<div class="ent e-functions" id="Public__Core__TypeList_h-1">
+<h3><span class="type">自由函数</span> </h3>
 <div class="sect">
-<h4>字段</h4>
-<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">static</span> <span class="kw">constexpr</span> std::size_t Count = <span class="kw">sizeof</span>...(TTypes)</td><td>元素个数（编译期常量）</td></tr>
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">template</span> &lt;<span class="kw">typename</span> TList, <span class="kw">typename</span> T&gt; <span class="kw">inline</span> <span class="kw">constexpr</span> <span class="kw">bool</span> TContains_v = TContains&lt;TList, T&gt;::value;</td><td></td></tr>
 </tbody></table></div>
 </div>
-<div class="ent e-alias" id="Public__Core__TypeList_h-1">
-<h3><span class="type">别名</span> TCons&lt;T, TList&gt; <span class="base">: TTypeList&lt;T, Ts...&gt;</span></h3>
-<div class="sect"><div class="doc">
-<p>把头插到最前</p>
-</div></div>
-</div>
 <div class="ent e-alias" id="Public__Core__TypeList_h-2">
-<h3><span class="type">别名</span> TAppend&lt;TList, TValue&gt; / TAppend_t <span class="base">: TTypeList&lt;Ts..., TValue&gt;</span></h3>
-<div class="sect"><div class="doc">
-<p>把尾追加到最末</p>
-</div></div>
-</div>
-<div class="ent e-alias" id="Public__Core__TypeList_h-3">
-<h3><span class="type">别名</span> TContains&lt;TList, T&gt; / TContains_v <span class="base">: <span class="kw">bool</span></span></h3>
-<div class="sect"><div class="doc">
-<p>成员判断（编译期布尔）</p>
-</div></div>
-</div>
-<div class="ent e-alias" id="Public__Core__TypeList_h-4">
-<h3><span class="type">别名</span> TCatch&lt;TLists...&gt; <span class="base">: 拼接结果</span></h3>
-<div class="sect"><div class="doc">
-<p>把多个 `TTypeList` 按序拼成一个</p>
-</div></div>
-</div>
-<div class="ent e-alias" id="Public__Core__TypeList_h-5">
-<h3><span class="type">别名</span> TUnionList_t&lt;TListA, TListB&gt; <span class="base">: 保序去重的并集</span></h3>
-<div class="sect"><div class="doc">
-<p>折叠式并集：逐个追加、已在集合内则跳过</p>
-</div></div>
+<h3><span class="type">别名</span> TUnionList_t <span class="base">: TUnionList_t</span></h3>
 </div>
 </div>
 <div class="pane" id="pane-Public__Engine__Engine_h">
 <div class="hdr">Public/Engine/Engine.h</div>
-<h2 class="file-title">Engine.h —— 引擎层：10 个 stage 接口 + FEngineBase</h2>
-<div class="card"><div class="doc">
-<p>引擎侧对外的一页：**10 个 stage 能力接口**（一帧的生命周期）、宿主基类 `FEngineBase`、以及三个 stage 序列别名。本文件还给出每个引擎 stage 的 `Invoke&lt;Stage, FEngineBase&gt;` 全特化（`MAHO_DECLARE_STAGE_DISPATCH`）—— 「stage → 方法」的映射就落在这里。</p>
-</div></div>
-<div class="card">
-<h3 class="card-title">包含的头文件</h3>
-
-<table>
-<thead><tr><th>头文件</th><th>功能</th></tr></thead>
-<tbody>
-<tr><td>Core/Assembly.h</td><td>`ApplyModuleExtension`：`MAHO_DECLARE_ENGINE` 的 `GetModulePath()` 用</td></tr>
-<tr><td>Core/Interface.h</td><td>`IPipeline`：frame 挂载 stage 序列</td></tr>
-<tr><td>Core/Query.h</td><td>`FQuery` 的 `Select&lt;...&gt;()`：按 stage 接口筛帧集</td></tr>
-<tr><td>Engine/Frame.h</td><td>`FFrameExtension` / `Invoke` / `TFrameDispatch`</td></tr>
-<tr><td>Engine/FrameBuilder.h</td><td>`FFrameBuilder` —— 引擎宿主的基类</td></tr>
-<tr><td>algorithm / atomic / map / memory / queue / set / string / vector</td><td>宿主自身的状态与命令行存储</td></tr>
-</tbody></table>
+<h2 class="file-title">Engine.h</h2>
+<div class="ent e-macro" id="Public__Engine__Engine_h-0">
+<h3><span class="type">宏</span> MAHO_DECLARE_ENGINE <span class="base">: <span class="kw">public</span>: \ <span class="kw">static</span> Maho::FEngineBase* CreateEngine() \ { \ <span class="kw">return</span> <span class="kw">new</span> EngineType(); \ } \ <span class="kw">static</span> std::string GetModulePath() \ { \ <span class="kw">return</span> Maho::ApplyModuleExtension(#EngineType); \ } \ <span class="kw">static</span> <span class="kw">constexpr</span> std::string_view StaticName() \ { \ <span class="kw">return</span> #EngineType; \ } \ std::string_view GetName() <span class="kw">const</span> \ { \ <span class="kw">return</span> StaticName(); \ }</span></h3>
 </div>
-<div class="card">
-<h3 class="card-title">宏与别名</h3>
-
-<table>
-<thead><tr><th>签名</th><th>说明</th></tr></thead>
-<tbody>
-<tr><td>MAHO_DECLARE_ENGINE(EngineType)</td><td>引擎类里生成：`CreateEngine()` 工厂 / `GetModulePath()`（DLL 名 = 类型名 + 平台后缀）/ `StaticName()` / `GetName()`。入口 `EntryPoint` 就是按 `CreateEngine` 这个符号名找引擎的</td></tr>
-<tr><td>FInitStages = TTypeList&lt;IPreInit, IInit, IPostInit&gt;</td><td>一次性 **init** 批次的 stage 序列</td></tr>
-<tr><td>FTickStages = TTypeList&lt;IBeginFrame, ITick, IEndFrame, IExit&gt;</td><td>帧循环的 stage 序列</td></tr>
-<tr><td>FShutdownStages = TTypeList&lt;IPreShutdown, IShutdown, IPostShutdown&gt;</td><td>一次性 **shutdown** 批次的 stage 序列</td></tr>
-</tbody></table>
+<div class="ent e-class" id="Public__Engine__Engine_h-1">
+<h3><span class="type">类</span> FEngineBase</h3>
 </div>
-<div class="card">
-<h3 class="card-title">10 个 stage 能力接口</h3>
-
-<table>
-<thead><tr><th>接口</th><th>方法</th><th>何时跑</th></tr></thead>
-<tbody>
-<tr><td>IPreInit</td><td>PreInitialize(FEngineBase&amp;)</td><td>init 批：最早</td></tr>
-<tr><td>IInit</td><td>Initialize(FEngineBase&amp;)</td><td>init 批：主体</td></tr>
-<tr><td>IPostInit</td><td>PostInitialize(FEngineBase&amp;)</td><td>init 批：最晚</td></tr>
-<tr><td>IPreShutdown</td><td>PreShutdown(FEngineBase&amp;)</td><td>shutdown 批：最早</td></tr>
-<tr><td>IShutdown</td><td>Shutdown(FEngineBase&amp;)</td><td>shutdown 批：主体</td></tr>
-<tr><td>IPostShutdown</td><td>PostShutdown(FEngineBase&amp;)</td><td>shutdown 批：最晚</td></tr>
-<tr><td>IBeginFrame</td><td>BeginFrame(FEngineBase&amp;)</td><td>每帧：开帧（换缓冲 / 取输入前的准备）</td></tr>
-<tr><td>ITick</td><td>Tick(FEngineBase&amp;)</td><td>每帧：主体</td></tr>
-<tr><td>IEndFrame</td><td>EndFrame(FEngineBase&amp;)</td><td>每帧：收帧</td></tr>
-<tr><td>IExit</td><td>RequestExit(FEngineBase&amp;)</td><td>每帧：退出闸门（调 `RequestExit()` 即关闸）</td></tr>
-</tbody></table>
+<div class="ent e-struct" id="Public__Engine__Engine_h-2">
+<h3><span class="type">结构体</span> FEngineContext</h3>
 </div>
-<div class="ent e-class" id="Public__Engine__Engine_h-0">
-<h3><span class="type">类</span> FEngineBase <span class="base">: FFrameBuilder&lt;FEngineBase&gt;</span></h3>
-<div class="sect"><div class="doc">
-<p>宿主基类。继承 `FFrameBuilder&lt;FEngineBase&gt;`（收集器 + 帧循环），把生命周期拆成两个钩子 + 一个纯调度主循环：`PreMain`（安装 + 初始化）→ `Main`（`<span class="kw">while</span> (!ShouldExit())`：每帧先取一次帧号 `NextFrameNumber()`，再 `FlushPendingUpdates` + `Execute&lt;FTickStages&gt;(Frame)`，末尾 `Wait`）→ `PostMain`（关闸门 → 扫尾卸载 → 排干）。入口 `EntryPoint` 只认识这个锚，不认识具体引擎类型。</p>
-</div></div>
+<div class="ent e-alias" id="Public__Engine__Engine_h-3">
+<h3><span class="type">别名</span> FInitStages <span class="base">: FInitStages</span></h3>
+</div>
+<div class="ent e-alias" id="Public__Engine__Engine_h-4">
+<h3><span class="type">别名</span> FTickStages <span class="base">: FTickStages</span></h3>
+</div>
+<div class="ent e-alias" id="Public__Engine__Engine_h-5">
+<h3><span class="type">别名</span> FShutdownStages <span class="base">: FShutdownStages</span></h3>
+</div>
+<div class="ent e-class" id="Public__Engine__Engine_h-6">
+<h3><span class="type">类</span> FEngineBase <span class="base">: : <span class="kw">public</span> FFrameBuilder&lt;FEngineBase&gt;</span></h3>
 <div class="sect">
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-protected">protected</span></td><td>std::optional&lt;FFrameGraph&gt; Graph</td><td>图是宿主的**成员**（`FFrameGraph` 既不可拷贝也不可移动 —— 它是带常驻线程的 `FThreadedServer` ⇒ 只能原地构造一次，故用 `optional`）。成员早于基类析构 ⇒ 图比 builder 持有的池先停，「图与池都静下来了，然后才释放任何实例 / 模块」由此构造上成立；从前那个持有图的 `FFrameGraphHost` 基类已经删了</td></tr>
-<tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">bool</span> bGraphReady</td><td>`EnsureGraph` 是否已经建过并启动（两个驱动入口读它，而不是读 `Graph.has_value()` —— 让「到底用过没有」只有一个名字）</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td>std::map&lt;std::string, std::string&gt; Store</td><td>命令行解析结果的 KV 表</td></tr>
+<tr><td><span class="acc a-protected">protected</span></td><td>std::optional&lt;FFrameGraph&gt; Graph;</td><td></td></tr>
+<tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">bool</span> bGraphReady = <span class="kw">false</span>;</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>std::map&lt;std::string, std::string&gt; Store;</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>std::uint64_t LoopFrame = 0;</td><td></td></tr>
+<tr><td><span class="acc a-protected">protected</span></td><td>std::unique_ptr&lt;FContext[]&gt; Slots;</td><td></td></tr>
 </tbody></table></div>
 <div class="sect">
 <h4>接口</h4>
 <table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> ParseCommandLine(<span class="kw">int</span> Argc, <span class="kw">char</span>** Argv)</td><td>把 `-key` / `-key value` / `--key=value` 归一化后交给 CLI11 解析，结果进 KV 表</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> PreMain() = 0</td><td>纯虚：装载（`FAssembly::LoadManifest` → `InstallChildrenOf`）并驱动一次 init 批次</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">int</span> Main()</td><td>主循环：`EnsureGraph()`（幂等 —— 图是**宿主的成员**，首次用图之前建）→ `<span class="kw">while</span> (!ShouldExit()) { <span class="kw">const</span> Frame = NextFrameNumber(); FlushPendingUpdates&lt;Init,Shutdown&gt;(); Execute&lt;Tick&gt;(Frame); }` → 收尾的一对栅栏 `Graph-&gt;Wait()` + `DrainPool()`。返回退出码</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> std::uint64_t NextFrameNumber()</td><td>**这一轮的帧号**：`Main` 每帧只读**一次**，整帧（每条序列的 tick 批，以及宿主自己按帧发布的东西）都用同一个数 —— 读两次可能跨过帧边界，把一帧劈进两轮。默认是本循环自己的单调计数器（没有帧源的宿主，如测试工程）；有真实帧源的宿主覆写它（`FExampleEngine` 读 `Platform::GetFrameIndex()`，单写者是 `FPlatform::IBeginFrame`）。Core 不认识这个值，它只从 `Execute` / `Submit` 的参数进来</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> PostMain()</td><td>收摊：`EnsureGraph()`（幂等；覆盖「装完立刻收摊、从未 tick」的宿主 —— 下面的 sweeper 要驱动一次性批，那需要图）→ 关闸门 → 丢弃未生效装载 → `UninstallAll` → 循环 flush 到静 → 残留报出 → `Graph-&gt;Wait()` —— 最后这一下是**拥有者自己的栅栏**，也是「图与池都静下来了，然后才释放任何实例 / 模块」这句不变量的全部显式动作：图的停止与释放不需要任何调用（`~FFrameGraph` 自己停调度线程，而成员早于基类析构 ⇒ 那时池还活着）</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">bool</span> Has(std::string_view Key) <span class="kw">const</span></td><td>命令行里有这个键吗（带不带值都算）</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] std::string Get(std::string_view Key) <span class="kw">const</span></td><td>取键的值；不存在为空串</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">bool</span> GetBool(std::string_view Key) <span class="kw">const</span></td><td>按布尔解释（<span class="kw">true</span>/1/yes/on）</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">int</span> GetInt(std::string_view Key) <span class="kw">const</span></td><td>按整数解释；缺失 / 不可解析取 0 或回退值</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">const</span> std::map&lt;std::string, std::string&gt;&amp; GetAll() <span class="kw">const</span></td><td>全部 KV 对（只读）</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> RequestExit()</td><td>请求主循环在本帧边界退出（幂等；同时让 Install/Reload 开始拒绝）</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">bool</span> ShouldExit() <span class="kw">const</span> <span class="kw">noexcept</span></td><td>是否已请求退出 —— 宿主对收集器「关闭」状态的词汇（`IsClosing()`）</td></tr>
-<tr><td><span class="acc a-protected">protected</span></td><td>FFrameGraph&amp; EnsureGraph()</td><td>**这张图的持有者就是这个宿主**（不是某个基类、也不是 builder 里的隐藏 `unique_ptr`）：首次使用时建 —— `Graph.emplace(GetPool(), GetPoolLane())` + `Initialize()`，幂等。**图不经任何注入进入 builder**（`SetGraph` 已经删了）：builder 一个引用都不存，图由这个帧在**每次驱动调用**里当参数传下去。**懒建而不是构造期建**：`K` 是运行期值，口径是插件侧的**只读 CVar** `r.FramesInFlight`（Core 经 `GetFramesInFlight()` 问一次并记住，**没有 setter**），图在首次使用时就地解析它一次 —— 构造期建就会建在插件存在之前。`Main` / `PostMain` / `RequestExit` 三个驱动入口都先调它</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">static</span> <span class="kw">constexpr</span> std::string_view StaticName() <span class="kw">noexcept</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>FEngineBase();</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> ~FEngineBase();</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> ParseCommandLine(<span class="kw">int</span> Argc, <span class="kw">char</span>** Argv);</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> PreMain() = 0;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> PostMain();</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">int</span> Main();</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">virtual</span> std::uint64_t NextFrameNumber();</td><td></td></tr>
+<tr><td><span class="acc a-protected">protected</span></td><td>FFrameGraph&amp; EnsureGraph();</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>FFrameGraph&amp; GetGraph();</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">bool</span> Has(std::string_view Key) <span class="kw">const</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] std::string Get(std::string_view Key) <span class="kw">const</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">bool</span> GetBool(std::string_view Key) <span class="kw">const</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">int</span> GetInt(std::string_view Key) <span class="kw">const</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">const</span> std::map&lt;std::string, std::string&gt;&amp; GetAll() <span class="kw">const</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> RequestExit();</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">bool</span> ShouldExit() <span class="kw">const</span> <span class="kw">noexcept</span>;</td><td></td></tr>
+<tr><td><span class="acc a-protected">protected</span></td><td>FContext&amp; GetContext(<span class="kw">int</span> Slot) <span class="kw">override</span>;</td><td></td></tr>
+</tbody></table></div>
+<div class="sect">
+<h4>嵌套</h4>
+<table><thead><tr><th>访问域</th><th>名称</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td>FContext</td><td></td></tr>
 </tbody></table></div>
 </div>
 </div>
 <div class="pane" id="pane-Public__Engine__Frame_h">
 <div class="hdr">Public/Engine/Frame.h</div>
-<h2 class="file-title">Frame.h —— 引擎侧 stage 机器</h2>
-<div class="card"><div class="doc">
-<p>Core 的 `FFrameExtension` 是**声明层**（名字 + 它声明的边），它刻意不知道 stage 序列；这一页就是另一半：`MAHO_DECLARE_FRAME`（身份 + DLL 工厂）、`Invoke`（stage 分派协议）、以及 `TFrameDispatch`（**唯一**知道 stage 列表的地方）。</p>
-<p>于是「一个 frame」= `FFrameExtension` + `IPipeline&lt;...&gt;` 两个基类，二者无继承关系。</p>
-<p>frame 没实现的 stage **根本不产出节点**（桥先问 `TFrameDispatch::Implements`）—— 所以没有空节点、没有 no-op 要调度。</p>
-</div></div>
-<div class="card">
-<h3 class="card-title">包含的头文件</h3>
-
-<table>
-<thead><tr><th>头文件</th><th>功能</th></tr></thead>
-<tbody>
-<tr><td>Core/Assembly.h</td><td>`ApplyModuleExtension`：`CreateFrame` 的 `GetModulePath()` 用</td></tr>
-<tr><td>Core/FrameGraph.h</td><td>`FFrameExtension` / `FFrameBridge::IDispatch`</td></tr>
-<tr><td>Core/Interface.h</td><td>`IPipeline`（有序 stage 序列）</td></tr>
-<tr><td>Core/TypeList.h</td><td>`StageIndicesOf`：把 `TStages` 摊成运行期 `type_index` 数组</td></tr>
-<tr><td>functional / string / string_view / typeindex / type_traits</td><td>闭包、名字、阶段索引</td></tr>
-</tbody></table>
+<h2 class="file-title">Frame.h</h2>
+<div class="ent e-functions" id="Public__Engine__Frame_h-0">
+<h3><span class="type">自由函数</span> </h3>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">inline</span> <span class="kw">constexpr</span> std::string_view KFrameType = <span class="st">"Frame"</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">inline</span> <span class="kw">constexpr</span> std::string_view KStageType = <span class="st">"Stage"</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">inline</span> <span class="kw">constexpr</span> std::string_view KFrameInstalledType = <span class="st">"FrameInstalled"</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">inline</span> <span class="kw">void</span> DeclareFrameMeta(std::string_view Frame, std::string_view Collector);</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">inline</span> std::string_view FindDeclaredCollector(std::string_view Frame);</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">inline</span> <span class="kw">void</span> DeclareFrameInstalledMeta(std::string_view Frame, std::string_view Collector);</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">inline</span> std::string_view FindInstalledCollector(std::string_view Frame);</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">inline</span> <span class="kw">void</span> DeclareStageMeta(std::string_view Stage, std::string_view Method, std::string_view Context);</td><td></td></tr>
+</tbody></table></div>
 </div>
-<div class="card">
-<h3 class="card-title">宏 / 类型</h3>
-
-<table>
-<thead><tr><th>签名</th><th>说明</th></tr></thead>
-<tbody>
-<tr><td>MAHO_DECLARE_FRAME(FrameType)</td><td>frame 类里生成：`StaticName()`（`#FrameType` 字面量 ⇒ 静态存储 ⇒ `FTaskKey::Name` 安全）/ `GetName()` / `CreateFrame()`（DLL 工厂）/ `GetModulePath()`。名字同时决定 DLL 名 = 类型名 + 平台后缀</td></tr>
-<tr><td>MAHO_DECLARE_STAGE_DISPATCH(Context, Stage, Cast, Method)</td><td>生成 `Invoke&lt;Stage, Context&gt;` 全特化：`dynamic_cast&lt;Cast*&gt;(frame)` 成功才调用 `Method(Context)` —— 失败即静默跳过（未实现该 stage 是合法状态）</td></tr>
-<tr><td><span class="kw">template</span> &lt;TStage, TContext&gt; <span class="kw">void</span> Invoke(FFrameExtension*, TContext&amp;)</td><td>stage 分派协议：按 (stage, context) 对特化；`TFrameDispatch::MakeClosure` 就是把它包成闭包</td></tr>
-<tr><td><span class="kw">struct</span> FEmptyContext</td><td>不需要上下文的 stage 序列用的占位类型</td></tr>
-</tbody></table>
+<div class="ent e-struct" id="Public__Engine__Frame_h-1">
+<h3><span class="type">结构体</span> FFrameRegistrar</h3>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td>FFrameRegistrar(std::string_view Frame, std::string_view Collector) <span class="kw">noexcept</span>;</td><td></td></tr>
+</tbody></table></div>
 </div>
-<div class="ent e-class" id="Public__Engine__Frame_h-0">
-<h3><span class="type">类</span> TFrameDispatch&lt;TStages, TContext&gt; <span class="base">: FFrameBridge::IDispatch</span></h3>
-<div class="sect"><div class="doc">
-<p>桥的策略实现：**代码库里唯一知道 stage 列表的东西**。桥把它当不透明接口用 —— `Implements` 答「这个 frame 实现该 stage 吗」，`MakeClosure` 给出该 stage 的闭包。</p>
-<p>派发对象必须**活得比它产出的批次久**（闭包捕获了它和 frame 的引用）；宿主本来的栈寿命规则已经保证这一点（批次在当前栈帧退出前排空）。</p>
-</div></div>
+<div class="ent e-struct" id="Public__Engine__Frame_h-2">
+<h3><span class="type">结构体</span> FStageProtocolRegistrar</h3>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td>FStageProtocolRegistrar(std::string_view Stage, std::string_view Method, std::string_view Context) <span class="kw">noexcept</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">inline</span> <span class="kw">const</span> <span class="kw">void</span>* StageProtocolRow(std::string_view CollectorName, std::string_view StageName) <span class="kw">noexcept</span>;</td><td></td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-macro" id="Public__Engine__Frame_h-3">
+<h3><span class="type">宏</span> MAHO_DETAIL_JOIN_IMPL <span class="base">: A##B</span></h3>
+</div>
+<div class="ent e-macro" id="Public__Engine__Frame_h-4">
+<h3><span class="type">宏</span> MAHO_DETAIL_JOIN <span class="base">: MAHO_DETAIL_JOIN_IMPL(A, B)</span></h3>
+</div>
+<div class="ent e-macro" id="Public__Engine__Frame_h-5">
+<h3><span class="type">宏</span> MAHO_DECLARE_STAGE <span class="base">: <span class="kw">class</span> ExportTag Stage \ { \ <span class="kw">public</span>: \ <span class="kw">static</span> <span class="kw">constexpr</span> std::string_view StaticName() <span class="kw">noexcept</span> { <span class="kw">return</span> #Stage; } \ <span class="kw">static</span> <span class="kw">constexpr</span> std::string_view MethodName() <span class="kw">noexcept</span> { <span class="kw">return</span> #Method; } \ <span class="kw">using</span> TContextType = Context; \ <span class="kw">using</span> TSlotType = <span class="kw">typename</span> ::Maho::TCollectorContext&lt;Context&gt;::Type; \ <span class="kw">virtual</span> <span class="kw">void</span> Method(Context&amp;, TSlotType&amp;) = 0; \ <span class="kw">static</span> <span class="kw">void</span> InvokeStage(Stage&amp; Self, Context&amp; C, TSlotType&amp; S) { Self.Method(C, S); } \ <span class="kw">virtual</span> ~Stage() = <span class="kw">default</span>; \ }; \</span></h3>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td>[[maybe_unused]] <span class="kw">const</span> ::Maho::Detail::FStageProtocolRegistrar \ MAHO_DETAIL_JOIN(RegisterStageProtocol_, __COUNTER__) Stage::StaticName(), \ Stage::MethodName(), #Context;</td><td></td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-macro" id="Public__Engine__Frame_h-6">
+<h3><span class="type">宏</span> MAHO_DECLARE_STAGE_TAG <span class="base">: <span class="kw">class</span> X \ { \ <span class="kw">public</span>: \ <span class="kw">static</span> <span class="kw">constexpr</span> std::string_view StaticName() <span class="kw">noexcept</span> { <span class="kw">return</span> #X; } \ };</span></h3>
+</div>
+<div class="ent e-struct" id="Public__Engine__Frame_h-7">
+<h3><span class="type">结构体</span> FFrameCall</h3>
 <div class="sect">
 <h4>字段</h4>
 <table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-private">private</span></td><td>TContext&amp; Context</td><td>调度上下文（如 `FEngineBase&amp;` / `FRender&amp;`）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span>* Slot = <span class="kw">nullptr</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>std::uint64_t Frame = 0;</td><td></td></tr>
 </tbody></table></div>
 <div class="sect">
 <h4>接口</h4>
 <table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">explicit</span> TFrameDispatch(TContext&amp; InContext)</td><td>绑定调度上下文（引用，不拷贝）</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">bool</span> Implements(<span class="kw">const</span> FFrameExtension&amp;, std::type_index) <span class="kw">const</span> <span class="kw">override</span></td><td>沿 `TStages` 递归比对 `typeid`，命中则 `dynamic_cast` 判定是否真的实现</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] std::function&lt;<span class="kw">void</span>()&gt; MakeClosure(FFrameExtension&amp;, std::type_index) <span class="kw">override</span></td><td>命中的 stage ⇒ `[&amp;frame, <span class="kw">this</span>]{ Invoke&lt;Stage, TContext&gt;(&amp;frame, Context); }`</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">static</span> <span class="kw">constexpr</span> <span class="kw">auto</span> StageIndices() <span class="kw">noexcept</span></td><td>把 `TStages` 摊成 `std::array&lt;type_index, N&gt;` —— 直接喂给 `FFrameBridge::Build`</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td>ImplementsImpl / MakeClosureImpl</td><td>沿 `TTypeList` 的递归展开（模板，空表为终点）</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">bool</span> IsBound() <span class="kw">const</span> <span class="kw">noexcept</span>;</td><td></td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-class" id="Public__Engine__Frame_h-8">
+<h3><span class="type">类</span> FScopedFrameContext</h3>
+<div class="sect">
+<h4>字段</h4>
+<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-private">private</span></td><td>FFrameCall Previous;</td><td></td></tr>
+</tbody></table></div>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">explicit</span> FScopedFrameContext(FFrameCall InCall) <span class="kw">noexcept</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>~FScopedFrameContext();</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>FScopedFrameContext(<span class="kw">const</span> FScopedFrameContext&amp;) = <span class="kw">delete</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>FScopedFrameContext&amp; <span class="kw">operator</span>=(<span class="kw">const</span> FScopedFrameContext&amp;) = <span class="kw">delete</span>;</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">template</span> &lt;<span class="kw">typename</span>... TStages&gt; [[nodiscard]] <span class="kw">bool</span> ImplementsNamedStage(std::string_view Stage, TTypeList&lt;TStages...&gt;) <span class="kw">noexcept</span>;</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">template</span> &lt;<span class="kw">typename</span> TList, <span class="kw">typename</span> TStage&gt; [[nodiscard]] <span class="kw">constexpr</span> <span class="kw">bool</span> MountsStage() <span class="kw">noexcept</span>;</td><td></td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">template</span> &lt;<span class="kw">typename</span> TFrame, <span class="kw">typename</span>... TStages&gt; [[nodiscard]] <span class="kw">void</span>* SelectStageInstance(TFrame* Self, std::string_view Stage, TTypeList&lt;TStages...&gt;) <span class="kw">noexcept</span>;</td><td></td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-struct" id="Public__Engine__Frame_h-9">
+<h3><span class="type">结构体</span> FStageRegistrar</h3>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td>FStageRegistrar(std::string_view Frame, std::string_view Stage, std::string_view Method, std::initializer_list&lt;FResourceAccess&gt; Accesses);</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">template</span> &lt;<span class="kw">typename</span> TFrame, <span class="kw">typename</span> TPrev, <span class="kw">typename</span> TCur, <span class="kw">typename</span>... TRest&gt; <span class="kw">void</span> DeclareStageChain(FFrameExtension&amp; Self, TTypeList&lt;TPrev, TCur, TRest...&gt;);</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">template</span> &lt;<span class="kw">typename</span> TFrame&gt; <span class="kw">void</span> DeclareStageChain(FFrameExtension&amp;, TTypeList&lt;&gt;);</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">template</span> &lt;<span class="kw">typename</span> TFrame, <span class="kw">typename</span> TOnly&gt; <span class="kw">void</span> DeclareStageChain(FFrameExtension&amp;, TTypeList&lt;TOnly&gt;);</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">template</span> &lt;<span class="kw">typename</span> TFrame, <span class="kw">typename</span>... TStages&gt; <span class="kw">void</span> DeclareSelfEdges(FFrameExtension&amp; Self, TTypeList&lt;TStages...&gt;);</td><td></td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-macro" id="Public__Engine__Frame_h-10">
+<h3><span class="type">宏</span> MAHO_FRAME_STAGE_CHAIN <span class="base">: ::Maho::Detail::DeclareStageChain&lt;TFrame&gt;(*<span class="kw">this</span>, ::Maho::TFrameStageList&lt;TFrame&gt;::Type{})</span></h3>
+</div>
+<div class="ent e-macro" id="Public__Engine__Frame_h-11">
+<h3><span class="type">宏</span> MAHO_FRAME_SELF_EDGES <span class="base">: ::Maho::Detail::DeclareSelfEdges&lt;TFrame&gt;(*<span class="kw">this</span>, ::Maho::TFrameStageList&lt;TFrame&gt;::Type{})</span></h3>
+</div>
+<div class="ent e-macro" id="Public__Engine__Frame_h-12">
+<h3><span class="type">宏</span> MAHO_DECLARE_FRAME <span class="base">: <span class="kw">public</span>: \ <span class="kw">static</span> <span class="kw">constexpr</span> std::string_view StaticName() \ { \ <span class="kw">return</span> #FrameType; \ } \ std::string_view GetName() <span class="kw">const</span> <span class="kw">override</span> \ { \ <span class="kw">return</span> StaticName(); \ } \</span></h3>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td>std::string_view GetCollectorName() <span class="kw">const</span> <span class="kw">noexcept</span> <span class="kw">override</span> \;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">static</span> <span class="kw">const</span> ::Maho::Detail::FFrameRegistrar&amp; FrameDeclaration() \;</td><td></td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-alias" id="Public__Engine__Frame_h-13">
+<h3><span class="type">别名</span> TCollectorType <span class="base">: TCollectorType</span></h3>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">bool</span> ImplementsStage(std::string_view Stage) <span class="kw">const</span> <span class="kw">override</span> \;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span>* GetStageInstance(std::string_view Stage) <span class="kw">noexcept</span> <span class="kw">override</span> \;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">void</span>* QuerySubobject(<span class="kw">const</span> <span class="kw">void</span>* TargetTag) <span class="kw">noexcept</span> <span class="kw">override</span> \;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">static</span> <span class="kw">const</span> <span class="kw">char</span>* TraceGroupName() \;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">static</span> Maho::FFrameExtension* CreateFrame() \;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">static</span> std::string GetModulePath() \;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>TStructuralEdges StructuralEdges *<span class="kw">this</span>;</td><td></td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-macro" id="Public__Engine__Frame_h-14">
+<h3><span class="type">宏</span> MAHO_DECLARE_FRAME_UNDER <span class="base">: <span class="kw">public</span>: \ <span class="kw">static</span> <span class="kw">constexpr</span> std::string_view StaticName() \ { \ <span class="kw">return</span> #FrameType; \ } \ std::string_view GetName() <span class="kw">const</span> <span class="kw">override</span> \ { \ <span class="kw">return</span> StaticName(); \ } \</span></h3>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td>std::string_view GetCollectorName() <span class="kw">const</span> <span class="kw">noexcept</span> <span class="kw">override</span> \;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">static</span> <span class="kw">const</span> ::Maho::Detail::FFrameRegistrar&amp; FrameDeclaration() \;</td><td></td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-alias" id="Public__Engine__Frame_h-15">
+<h3><span class="type">别名</span> TCollectorType <span class="base">: TCollectorType</span></h3>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">bool</span> ImplementsStage(std::string_view Stage) <span class="kw">const</span> <span class="kw">override</span> \;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span>* GetStageInstance(std::string_view Stage) <span class="kw">noexcept</span> <span class="kw">override</span> \;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">void</span>* QuerySubobject(<span class="kw">const</span> <span class="kw">void</span>* TargetTag) <span class="kw">noexcept</span> <span class="kw">override</span> \;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">static</span> <span class="kw">const</span> <span class="kw">char</span>* TraceGroupName() \;</td><td></td></tr>
 </tbody></table></div>
 </div>
 </div>
 <div class="pane" id="pane-Public__Engine__FrameBuilder_h">
 <div class="hdr">Public/Engine/FrameBuilder.h</div>
-<h2 class="file-title">FrameBuilder.h —— 帧集合 + 帧循环（宿主词汇）</h2>
-<div class="card"><div class="doc">
-<p>宿主只认这一页的词汇：装 / 卸 / 重载帧集合、驱动帧循环、收摊排空。</p>
-<p>类本身**一个**（`FFrameBuilder&lt;TContext&gt;`），另有 `IFrameCollector` 接口（见下）—— 它的存在让装载方能在不知道 `TContext` 的情况下，把父收集器的任务池递给子收集器。</p>
-<p>类模板的成员天生都是模板，函数体无法 out-of-line（那需要显式实例化，而引擎模块不许 include 插件头、无法为插件上下文实例化）⇒ 只有**无状态**的辅助函数下沉进 `Private/Engine/FrameBuilder.cpp`（`Detail::ReportBridgeDiagnostics`、`IFrameCollector` 的虚析构）。</p>
-<p>**私有持有的两件**：`FFrameBridge`（桥）、`TFrameDispatch`（分派）—— 宿主全程看不见它们。**图也不在其中**（连引用都不是）：builder 不持图（`FFrameGraphHost` 那个「持有图并把它递下去」的基类已经没了），图是**驱动那条 stage 序列的那个帧的成员**，并且在每次驱动调用里**由该帧当 `FFrameGraph&amp;` 参数传进来**（从前那个一次写入的 `SetGraph` 已经删了）；于是「谁拥有图 / 谁栅栏它 / 谁释放它」是那个**帧**的属性，不再是某个基类的属性。</p>
-</div></div>
-<div class="card">
-<h3 class="card-title">包含的头文件</h3>
-
-<table>
-<thead><tr><th>头文件</th><th>功能</th></tr></thead>
-<tbody>
-<tr><td>Core/FrameGraph.h</td><td>`FFrameGraph` / `FFrameBridge` / `FFrameExtension`（私有实现类型）</td></tr>
-<tr><td>Core/Assembly.h</td><td>`FAssembly`：模块句柄与符号查找（装载时用）</td></tr>
-<tr><td>Core/Delegate.h</td><td>三个广播事件（`OnFramesChanged` / `OnFrameStatus` / `OnClosing`）</td></tr>
-<tr><td>Core/ThreadPool.h</td><td>`FThreadPool`：任务池；收集器**按 lane** 共享它（见 `OwnedPool` / `Pool` / `Lane`）</td></tr>
-<tr><td>Core/Fatal.h / Core/TypeList.h</td><td>上报路径；`StageIndicesOf`</td></tr>
-<tr><td>Engine/Frame.h</td><td>`TFrameDispatch`（驱动层用）</td></tr>
-<tr><td>Core/Query.h</td><td>`FQuery`：`GetQueryData()` 的数据源是 `Pipelines`</td></tr>
-<tr><td>algorithm / map / memory / set / string / string_view / typeindex / vector</td><td>集合状态与并行槽位向量</td></tr>
-</tbody></table>
-</div>
-<div class="card">
-<h3 class="card-title">12 个终态（EFrameStatus）</h3>
-
-<table>
-<thead><tr><th>状态</th><th>含义</th></tr></thead>
-<tbody>
-<tr><td>InstallQueued / Installed / InstallCancelled</td><td>已入队（下个安全点跑 Init）/ Init 跑完已激活 / 先收到卸载请求，装载被取消（模块已释放、从未初始化）</td></tr>
-<tr><td>InstallRefused / InstallCompileFailed</td><td>未接受（关闭中 / 加载失败 / 无工厂符号 / 工厂抛异常 / 重名）；init 批被**拒绝并释放**（实例 + 模块）</td></tr>
-<tr><td>UninstallQueued / Uninstalled / UninstallNotFound</td><td>已记录 / Shutdown 跑完且实例与模块已释放 / 查询没命中任何活动帧</td></tr>
-<tr><td>UninstallRefused / UninstallCompileFailed</td><td>仍被依赖（Detail 列出依赖者）/ shutdown 批被拒 ⇒ 这些帧**保持存活**（绝不跳过 teardown 就析构）</td></tr>
-<tr><td>ReloadQueued / ReloadRefused</td><td>卸载 + 重新装载已入队 / 被拒（无模块路径 / 仍被依赖 / 不存在）</td></tr>
-</tbody></table>
-</div>
-<div class="ent e-class" id="Public__Engine__FrameBuilder_h-0">
-<h3><span class="type">类</span> FFrameBuilderBase <span class="base">: FQuery&lt;FFrameExtension&gt;</span></h3>
-<div class="sect"><div class="doc">
-<p>**集合本身**：与 `TContext` 无关，实现在 `Private/Engine/FrameBuilder.cpp`（类带 `MAHO_API` —— 宿主是它的子类）。拥有全部状态，并实现「与调度上下文无关」的那部分逻辑。</p>
-</div></div>
-<div class="sect">
-<h4>字段</h4>
-<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-public">public</span></td><td>TMulticastEvent&lt;<span class="kw">void</span>()&gt; OnFramesChanged</td><td>活动帧集在安全点变化时广播</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>TMulticastEvent&lt;<span class="kw">void</span>(<span class="kw">const</span> FFrameStatusInfo&amp;)&gt; OnFrameStatus</td><td>**每个终态**都广播（12 态，无静默路径）</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>TMulticastEvent&lt;<span class="kw">void</span>()&gt; OnClosing</td><td>翻到「关闭」时广播一次（teardown 之前，帧都还活着）</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">enum</span> <span class="kw">class</span> EFrameStatus / <span class="kw">struct</span> FFrameStatusInfo / <span class="kw">struct</span> FFrameStats</td><td>嵌套类型（见上面的状态表）</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td>std::vector&lt;FFrameExtension*&gt; Pipelines</td><td>活动帧（不变量：**先移出这里再释放** ⇒ 在表里即活着）</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td>PendingAdded / PendingRemoveRequests / PendingReloads</td><td>待装载 / 待卸载 / 待重载</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td>std::map&lt;std::string, <span class="kw">int</span>&gt; ReverseDepCount</td><td>名字 → 被依赖次数（卸载拒绝的依据）</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td>Modules / ModulePaths / LayerNames</td><td>三条并行向量：DLL 句柄保活 / DLL 路径 / 装载时拷下的名字</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td>std::map&lt;std::string, std::size_t&gt; NameToSlot</td><td>名字 → 槽位（O(log n) 的唯一查表）</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td>std::vector&lt;std::unique_ptr&lt;FFrameExtension&gt;&gt; Features</td><td>实例所有权（析构顺序的关键一环）</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td>FThreadPool OwnedPool / FThreadPool* Pool / FThreadPool::FLane Lane</td><td>本收集器驱动节点的池，以及**属于它自己**的那条 lane。`OwnedPool` 是兜底（宿主、或没人递池的收集器有自己的 worker）；`UseSharedPool` 把 `Pool` 指向**父**收集器那个池并取一条 lane，于是嵌套收集器（宿主 → FRender → FExampleEditor）全落在最外层那个 worker 集上，同时各自保有独立栅栏。**这是 lane 存在的全部理由**：引擎需要的隔离是**每收集器**的，而它从前是用「每收集器一套线程」买的（4 × 核数条线程，去跑约 2 个并发节点）。<br>`Features` **刻意声明在 `Pool` 之后**：成员按声明逆序销毁，而收集器子实例正是在那里被销毁，它的析构要 flush 父收集器共享的池 —— 顺序写反就是收摊期的一次 use-after-free</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td>LoopFrames / LastSequenceRound / bLoopDirty / bLoopJustExpanded / LastLoopRejectReason</td><td>帧集缓存 + **每序列的单调地板**（`LastSequenceRound` 只是「这条序列已经驱动到哪一轮」，**不是帧源** —— 帧号由宿主给 `Execute`）+ 两个「只报一次」守卫</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td>std::atomic&lt;<span class="kw">bool</span>&gt; bClosing</td><td>关闭标志（阶段里可能从任意线程置位，故原子）</td></tr>
-<tr><td><span class="acc a-private">private</span></td><td><span class="kw">bool</span> bFlushing</td><td>flush 重入守卫（RAII 管理）</td></tr>
-</tbody></table></div>
+<h2 class="file-title">FrameBuilder.h</h2>
+<div class="ent e-functions" id="Public__Engine__FrameBuilder_h-0">
+<h3><span class="type">自由函数</span> </h3>
 <div class="sect">
 <h4>接口</h4>
 <table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> ~FFrameBuilderBase()</td><td>析构先 `DrainPool()`（**只**排本 lane 的池屏障），再用例析构：Features（跑插件析构）→ Pool（join worker）→ Modules（释放 DLL）。**图不在这里排空** —— 图是驱动序列的那个**帧的成员**，帧的析构在 builder 基类**之前**跑（成员早于基类），而 `~FFrameGraph` 自己就会停掉调度线程（那时它自己的节点表还活着）。所有者需要显式做的只剩**栅栏**（`Graph-&gt;Wait()`）：它把「图与池都静下来了，然后才释放任何实例 / 模块」写成调用方的一个动作，而不是藏在某个析构里。**Features 必须早于 Pool**：收集器子实例在这里被销毁，而它的析构要 flush —— 并归还自己那条 lane —— 父收集器共享的那个池，池必须还活着</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FFrameStats GetStats() <span class="kw">const</span></td><td>当前规模（工具 / 面板查询用，勿每帧轮询）</td></tr>
-<tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">void</span> DrainPool()</td><td>**本 lane 的池屏障**（一次转换栅栏的池那一半）。驱动点把它写成一对：`Graph.Wait()`（**调用方**传进来的那张图的提交栅栏 —— 调用方就是驱动这条序列的那个帧，图是它自己的成员）+ `DrainPool()`。**循环不每帧调**（帧要流水）</td></tr>
-<tr><td><span class="acc a-protected">protected</span></td><td>[[nodiscard]] std::size_t UninstallAll()</td><td>给每个活动帧发卸载请求（按名字；名字比模块活得久）</td></tr>
-<tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">void</span> ReleaseAll()</td><td>收摊最后手段：**不跑 teardown 阶段**硬释放，但仍保持「在 Pipelines 即活着」不变量</td></tr>
-<tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">void</span> DropPendingInstalls() / <span class="kw">void</span> CancelPendingReloads()</td><td>丢弃未生效的装载 / 重载</td></tr>
-<tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">void</span> CloseForLoads()</td><td>翻到关闭（幂等）：之后 Install / Reload 一律拒绝</td></tr>
-<tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">void</span> ReportDiagnostics(<span class="kw">const</span> std::vector&lt;FFrameBridge::FDiagnostic&gt;&amp;)</td><td>报出桥解不出的声明（**非致命**：悬空的边本来就该消失；这里只报「写错了」）</td></tr>
-<tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">void</span> RequestUninstall(FFrameExtension*) / <span class="kw">void</span> DeleteUnloaded(FFrameExtension*)</td><td>入卸载请求 / 释放实例 + 模块（连带清名字 / 路径 / 句柄槽）</td></tr>
-<tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">void</span> RebuildReverseDeps()</td><td>重建反向依赖计数（名字 → 被依赖次数），卸载的最小堆贪心用</td></tr>
-<tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">void</span> EmitStatus(EFrameStatus, Name, Path, Detail = {})</td><td>广播一个终态（负载里的字符串全是**拷贝**）</td></tr>
-<tr><td><span class="acc a-protected">protected</span></td><td>[[nodiscard]] std::string_view StoredName(<span class="kw">const</span> FFrameExtension*) <span class="kw">const</span></td><td>装载时拷下的名字 ⇒ **不调用对方模块**就能命名它（槽位向量比模块活得久）</td></tr>
-<tr><td><span class="acc a-protected">protected</span></td><td>[[nodiscard]] std::size_t SlotOf(<span class="kw">const</span> FFrameExtension*) <span class="kw">const</span></td><td>实例在并行槽位里的下标（`NPos` = 未知）</td></tr>
-<tr><td><span class="acc a-protected">protected</span></td><td>[[nodiscard]] <span class="kw">bool</span> HasLayerName(std::string_view) / <span class="kw">bool</span> IsOwned(<span class="kw">const</span> FFrameExtension*) <span class="kw">const</span></td><td>某名字是否活动 / 待装载（O(log n)）；该实例是否**仍归收集器所有**（唯一存活性判据 —— 卸载是「先移出 Pipelines 再释放」，所以外部拿到的指针可以查而不是盲解引用）</td></tr>
-<tr><td><span class="acc a-protected">protected</span></td><td>[[nodiscard]] std::string ModulePathOf(<span class="kw">const</span> FFrameExtension*) <span class="kw">const</span></td><td>装载它的 DLL 路径（同样不碰对方模块）</td></tr>
-<tr><td><span class="acc a-protected">protected</span></td><td>[[nodiscard]] <span class="kw">bool</span> HasPendingUpdates() <span class="kw">const</span> / <span class="kw">bool</span> IsClosing() <span class="kw">const</span> <span class="kw">noexcept</span></td><td>有没有待应用的变更 / 是否已关闸</td></tr>
-<tr><td><span class="acc a-protected">protected</span></td><td>[[nodiscard]] FThreadPool&amp; GetPool() / FThreadPool::FLane GetPoolLane() <span class="kw">const</span></td><td>节点体跑在哪个池、哪条 lane —— 图就是按这一对建的</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> ReportBridgeDiagnostics(<span class="kw">const</span> std::vector&lt;FFrameBridge::FDiagnostic&gt;&amp; Diagnostics);</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">template</span> &lt;<span class="kw">typename</span> TTag&gt; [[nodiscard]] <span class="kw">inline</span> <span class="kw">const</span> <span class="kw">void</span>* SeqToken() <span class="kw">noexcept</span>;</td><td></td></tr>
 </tbody></table></div>
 </div>
 <div class="ent e-class" id="Public__Engine__FrameBuilder_h-1">
 <h3><span class="type">类</span> IFrameCollector</h3>
-<div class="sect"><div class="doc">
-<p>**本身也是收集器**的帧（它通过自己的 `FFrameBuilder` 驱动一组子帧）—— 即使共用父收集器的池，它也需要**自己的 lane**。</p>
-<p>为什么是接口而不是基类：装载是泛型的。父收集器经 DLL 工厂建出子实例，全程只把它当 `FFrameExtension` 看；而收集器子实例必须在它第一次 `Execute` **之前**拿到共享池。向本接口的一次**旁转**（side cast，两者都是那个具体收集器的基类）就是这次交接，而且它是**唯一**需要知道「哪些帧是收集器」的地方。</p>
-<p>它把一条设计规则固化下来：收集器的 stage body 由**父**收集器的图派发，所以跑在**父**的 lane 上，而它的 `Wait()` 排空的是**自己**的 lane —— 于是「调用者那颗任务不在它等的计数里」是构造上成立的。那正是「从池任务内部调用栅栏」所必需的性质，也是从前「每收集器一个池」用重复线程买来的东西。</p>
-</div></div>
 <div class="sect">
 <h4>接口</h4>
 <table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> ~IFrameCollector()</td><td>**out-of-line 定义在 `Source/Private/Engine/FrameBuilder.cpp`**（与 `FThreadedServer` 的虚函数同理）：本接口是插件侧对象的基类，把首个 out-of-line 虚函数留在引擎自己的模块里就有了**key function** —— 一份 vtable / 一份 deleting dtor 在 Maho.dll，而不是每个模块一份 COMDAT 副本；这也让装载方的 `dynamic_cast` 在整个 DLL 边界上比对到**同一条 RTTI 记录**</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> UseSharedPool(FThreadPool&amp; InPool) = 0</td><td>把给定池当作本收集器的任务池，并在其中取一条**属于自己**的 lane。由装载它的父收集器调用；**绝不在第一次 `Execute` 之后调用**（持池引用的图还不存在，而这正是放在这个时机的原因）</td></tr>
-</tbody></table></div>
-</div>
-<div class="ent e-class" id="Public__Engine__FrameBuilder_h-2">
-<h3><span class="type">类</span> FFrameBuilder&lt;TContext&gt; <span class="base">: FFrameBuilderBase, IFrameCollector</span></h3>
-<div class="sect"><div class="doc">
-<p>**驱动层**：只保留真正需要 `TContext` 或 stage 列表的东西 —— 三个 stage 分派入口、LINQ 帧集展开、以及安装/重载/卸载入口。</p>
-</div></div>
-<div class="sect">
-<h4>接口</h4>
-<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">template</span> &lt;<span class="kw">typename</span> T&gt; <span class="kw">bool</span> Install()</td><td>按类型装载：`Install(T::GetModulePath())`</td></tr>
-<tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">bool</span> Install(std::string_view DllPath, <span class="kw">const</span> <span class="kw">char</span>* FactorySymbol = <span class="st">"CreateFrame"</span>)</td><td>按路径装载（下个安全点生效）：查符号 → 建实例 → 名字查重 → 入 pending。关闭中 / 重名一律拒绝并上报。**实例被接受之后、入 pending 之前**做一次 `dynamic_cast&lt;IFrameCollector*&gt;`：是收集器就 `UseSharedPool(*Pool)` —— 装载是泛型的，这是唯一需要问「你是不是也是收集器」的地方；两端都是本类，所以谁装收集器就把自己拿到的池继续往下递，最外层 builder 的 worker 一路用到最里</td></tr>
-<tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">void</span> UseSharedPool(FThreadPool&amp; InPool) <span class="kw">override</span></td><td>`IFrameCollector` 的实现：把 `Pool` 指向父收集器的池（`OwnedPool` 就此闲置 —— 池是惰性的，所以留着这个成员不会多起线程），并 `CreateLane()` 取一条自己的 lane</td></tr>
-<tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">void</span> Reload(std::string_view Name)</td><td>热重载：下个安全点卸旧（依赖安全）、随后装回同 DLL 新副本</td></tr>
-<tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">void</span> TryUninstall(std::string_view Query)</td><td>按**名字或 DLL 路径**匹配第一命中，命中即入卸载 pending</td></tr>
-<tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">template</span> &lt;TInitStages, TShutdownStages&gt; <span class="kw">void</span> FlushPendingUpdates(FFrameGraph&amp; Graph)</td><td>应用挂起变更（**函数内部就是安全点**）：先处理「装载被同窗口的卸载取消」→ init 批 → 卸载批。重入被拒；插件异常被捕获上报、pending 保持原样等下次重试。`Graph` 是**调用方自己的**那张图 —— 一次性批和帧循环共用它，安装期的节点才在循环里仍可寻址（节点身份 = 名字 + stage + 相位，活过一次批不影响）</td></tr>
-<tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">template</span> &lt;TLoopStages&gt; <span class="kw">void</span> Execute(FFrameGraph&amp; Graph, std::uint64_t Frame)</td><td>**跑第 `Frame` 轮**：按 `TLoopStages` 重查帧集（脏时）→ 建批（帧号即相位来源）→ 提交 → 记地板。**不排空** ⇒ 帧会流水（真正节流的是 `Submit` 的准入：轮次 `Frame` 占用的槽没排空就阻塞调用方）。两个参数都是**调用方给的**：`Frame` 来自宿主的帧源（本类不持有帧源，所以同一个渲染帧的多条序列落进同一个槽），`Graph` 是驱动这条序列的那个帧自己那张图 —— 每个驱动者传自己的，父子共用一张会让准入等在自己占的那个槽上</td></tr>
-<tr><td><span class="acc a-protected">protected</span></td><td>FlushPendingUpdatesImpl / FlushUnload&lt;TShutdownStages&gt;</td><td>上两者的实现（都带 `FFrameGraph&amp;` 参数）：建批（`TFrameDispatch` + `FFrameBridge::Build`）→ `Submit` → 排空 → 收割</td></tr>
-<tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">template</span> &lt;TStages&gt; <span class="kw">void</span> ExpandLoopFrames(FFrameGraph&amp; Graph, TTypeList&lt;TStages...&gt;)</td><td>LINQ：`Select&lt;TStages...&gt;()` 重查帧集（脏标志由集合侧自己置位，宿主没有缓存要失效）；重查**前**先拿调用方的图来一次 `Graph.Wait()`（帧集要换了，不能有东西在飞）</td></tr>
-<tr><td><span class="acc a-protected">protected</span></td><td>TContext&amp; GetContext()</td><td>把 `<span class="kw">this</span>` 取回 `TContext&amp;`（宿主就是上下文）</td></tr>
-<tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">template</span> &lt;TEvent, TArgs...&gt; <span class="kw">void</span> BroadcastIsolated(TEvent&amp;, <span class="kw">const</span> TArgs&amp;...)</td><td>隔离广播：订阅者抛异常只报错，不影响收集器状态与 teardown</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> ~IFrameCollector();</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> UseSharedPool(FThreadPool&amp; InPool) = 0;</td><td></td></tr>
 </tbody></table></div>
 </div>
 </div>
 <div class="pane" id="pane-Public__Engine__ResourceName_h">
 <div class="hdr">Public/Engine/ResourceName.h</div>
 <h2 class="file-title">ResourceName.h</h2>
-<div class="empty">（尚未声明内容 —— 在 Tools/docs_content.py 里加一条 Header(&quot;Public/Engine/ResourceName.h&quot;)，再逐类声明 Class / Interface / Field）</div>
+<div class="ent e-functions" id="Public__Engine__ResourceName_h-0">
+<h3><span class="type">自由函数</span> </h3>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">inline</span> <span class="kw">constexpr</span> std::string_view KResourceType = <span class="st">"Resource"</span>;</td><td></td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-struct" id="Public__Engine__ResourceName_h-1">
+<h3><span class="type">结构体</span> FResourceRegistrar</h3>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">explicit</span> FResourceRegistrar(std::string_view Resource) <span class="kw">noexcept</span>;</td><td></td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-macro" id="Public__Engine__ResourceName_h-2">
+<h3><span class="type">宏</span> MAHO_DECLARE_RESOURCE <span class="base">: <span class="kw">template</span> &lt;&gt; \ <span class="kw">struct</span> TResourceName&lt;X&gt; \ { \ <span class="kw">static</span> <span class="kw">constexpr</span> std::string_view value = #X; \ <span class="kw">static</span> <span class="kw">inline</span> <span class="kw">const</span> ::Maho::Detail::FResourceRegistrar Registration{ value }; \ };</span></h3>
+</div>
+<div class="ent e-class" id="Public__Engine__ResourceName_h-3">
+<h3><span class="type">类</span> FLog</h3>
+</div>
+<div class="ent e-class" id="Public__Engine__ResourceName_h-4">
+<h3><span class="type">类</span> FPrimitiveRegistry</h3>
+</div>
+<div class="ent e-struct" id="Public__Engine__ResourceName_h-5">
+<h3><span class="type">结构体</span> IRHI</h3>
+</div>
+<div class="ent e-class" id="Public__Engine__ResourceName_h-6">
+<h3><span class="type">类</span> FNamePool</h3>
+</div>
+<div class="ent e-class" id="Public__Engine__ResourceName_h-7">
+<h3><span class="type">类</span> FPlatform</h3>
+</div>
+<div class="ent e-class" id="Public__Engine__ResourceName_h-8">
+<h3><span class="type">类</span> FScriptSystem</h3>
+</div>
+<div class="ent e-class" id="Public__Engine__ResourceName_h-9">
+<h3><span class="type">类</span> FUIViewRegistry</h3>
+</div>
+<div class="ent e-class" id="Public__Engine__ResourceName_h-10">
+<h3><span class="type">类</span> FResourceSystem</h3>
+</div>
+<div class="ent e-class" id="Public__Engine__ResourceName_h-11">
+<h3><span class="type">类</span> FGameWorld</h3>
+</div>
+<div class="ent e-struct" id="Public__Engine__ResourceName_h-12">
+<h3><span class="type">结构体</span> FComponentPools</h3>
+</div>
+<div class="ent e-struct" id="Public__Engine__ResourceName_h-13">
+<h3><span class="type">结构体</span> FImGuiContext</h3>
+</div>
 </div>
 <div class="pane" id="pane-Public__Engine__StageAccess_h">
 <div class="hdr">Public/Engine/StageAccess.h</div>
 <h2 class="file-title">StageAccess.h</h2>
-<div class="empty">（尚未声明内容 —— 在 Tools/docs_content.py 里加一条 Header(&quot;Public/Engine/StageAccess.h&quot;)，再逐类声明 Class / Interface / Field）</div>
+<div class="ent e-macro" id="Public__Engine__StageAccess_h-0">
+<h3><span class="type">宏</span> Create <span class="base">: MAHO_ACCESS_CREATE(R)</span></h3>
+</div>
+<div class="ent e-macro" id="Public__Engine__StageAccess_h-1">
+<h3><span class="type">宏</span> Read <span class="base">: MAHO_ACCESS_READ(R)</span></h3>
+</div>
+<div class="ent e-macro" id="Public__Engine__StageAccess_h-2">
+<h3><span class="type">宏</span> Write <span class="base">: MAHO_ACCESS_WRITE(R)</span></h3>
+</div>
+<div class="ent e-macro" id="Public__Engine__StageAccess_h-3">
+<h3><span class="type">宏</span> Destroy <span class="base">: MAHO_ACCESS_DESTROY(R)</span></h3>
+</div>
 </div>
 <div class="pane" id="pane-Public__Engine__StageMetadata_h">
 <div class="hdr">Public/Engine/StageMetadata.h</div>
 <h2 class="file-title">StageMetadata.h</h2>
-<div class="empty">（尚未声明内容 —— 在 Tools/docs_content.py 里加一条 Header(&quot;Public/Engine/StageMetadata.h&quot;)，再逐类声明 Class / Interface / Field）</div>
+<div class="ent e-enum" id="Public__Engine__StageMetadata_h-0">
+<h3><span class="type">枚举</span> EResourceAccess</h3>
+</div>
+<div class="ent e-enum" id="Public__Engine__StageMetadata_h-1">
+<h3><span class="type">枚举</span> EResourceOrdering</h3>
+</div>
+<div class="ent e-functions" id="Public__Engine__StageMetadata_h-2">
+<h3><span class="type">自由函数</span> </h3>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">inline</span> <span class="kw">constexpr</span> std::string_view KResourceOrderingType = <span class="st">"ResourceOrdering"</span>;</td><td></td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-struct" id="Public__Engine__StageMetadata_h-3">
+<h3><span class="type">结构体</span> FResourceOrderingRegistrar</h3>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td>FResourceOrderingRegistrar(std::string_view Resource, std::string_view Ordering) <span class="kw">noexcept</span>;</td><td></td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-macro" id="Public__Engine__StageMetadata_h-4">
+<h3><span class="type">宏</span> MAHO_DECLARE_RESOURCE_ORDERING <span class="base">: <span class="kw">template</span> &lt;&gt; \ <span class="kw">struct</span> TResourceOrdering&lt;X&gt; \ { \ <span class="kw">static</span> <span class="kw">constexpr</span> EResourceOrdering Value = EResourceOrdering::Ordering; \ <span class="kw">static</span> <span class="kw">inline</span> <span class="kw">const</span> ::Maho::Detail::FResourceOrderingRegistrar Registration{ \ ::Maho::TResourceName&lt;X&gt;::value, #Ordering }; \ };</span></h3>
+</div>
+<div class="ent e-struct" id="Public__Engine__StageMetadata_h-5">
+<h3><span class="type">结构体</span> ICreate</h3>
+</div>
+<div class="ent e-struct" id="Public__Engine__StageMetadata_h-6">
+<h3><span class="type">结构体</span> IDestroy</h3>
+</div>
+<div class="ent e-struct" id="Public__Engine__StageMetadata_h-7">
+<h3><span class="type">结构体</span> IRead</h3>
+</div>
+<div class="ent e-struct" id="Public__Engine__StageMetadata_h-8">
+<h3><span class="type">结构体</span> IWrite</h3>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">template</span> &lt;<span class="kw">typename</span> T&gt; <span class="kw">inline</span> <span class="kw">constexpr</span> <span class="kw">bool</span> IsCompleteV = requires <span class="kw">sizeof</span>(T);;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">template</span> &lt;<span class="kw">typename</span> T, <span class="kw">typename</span> TCapability&gt; <span class="kw">inline</span> <span class="kw">constexpr</span> <span class="kw">bool</span> DeclaresCapabilityV = TDeclaresCapability&lt;T, TCapability&gt;::value;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">template</span> &lt;<span class="kw">typename</span> T&gt; <span class="kw">inline</span> <span class="kw">constexpr</span> <span class="kw">bool</span> DeclaresAnyCapabilityV = DeclaresCapabilityV&lt;T, ICreate&gt; || DeclaresCapabilityV&lt;T, IDestroy&gt; || DeclaresCapabilityV&lt;T, IRead&gt; || DeclaresCapabilityV&lt;T, IWrite&gt;;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">template</span> &lt;<span class="kw">typename</span> TResource, EResourceAccess TAccess&gt; [[nodiscard]] <span class="kw">constexpr</span> <span class="kw">bool</span> ResourceSupportsAccess() <span class="kw">noexcept</span>;</td><td></td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-enum" id="Public__Engine__StageMetadata_h-9">
+<h3><span class="type">枚举</span> EResourceCapability</h3>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">template</span> &lt;<span class="kw">typename</span> TResource&gt; <span class="kw">inline</span> <span class="kw">constexpr</span> std::uint8_t ResourceCapabilityMaskV = static_cast&lt;std::uint8_t&gt;((DeclaresCapabilityV&lt;TResource, ICreate&gt; ? 1u &lt;&lt; 0 : 0u) | (DeclaresCapabilityV&lt;TResource, IDestroy&gt; ? 1u &lt;&lt; 1 : 0u) | (DeclaresCapabilityV&lt;TResource, IRead&gt; ? 1u &lt;&lt; 2 : 0u) | (DeclaresCapabilityV&lt;TResource, IWrite&gt; ? 1u &lt;&lt; 3 : 0u));</td><td></td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-struct" id="Public__Engine__StageMetadata_h-10">
+<h3><span class="type">结构体</span> FResourceAccess</h3>
+<div class="sect">
+<h4>字段</h4>
+<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td>std::string_view Resource;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>EResourceAccess Access = EResourceAccess::Read;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>EResourceOrdering Ordering = EResourceOrdering::LifetimeOnly;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>std::uint8_t Capabilities = 0;</td><td></td></tr>
+</tbody></table></div>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">template</span> &lt;<span class="kw">typename</span> TResource, EResourceAccess TAccess&gt; [[nodiscard]] <span class="kw">constexpr</span> FResourceAccess MakeResourceAccess() <span class="kw">noexcept</span>;</td><td></td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-struct" id="Public__Engine__StageMetadata_h-11">
+<h3><span class="type">结构体</span> FStageAccessRow</h3>
+<div class="sect">
+<h4>字段</h4>
+<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td>std::string_view Frame;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>std::string_view Stage;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>std::string_view Method;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">bool</span> bInterfaceBinding = <span class="kw">false</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">const</span> FResourceAccess* Accesses = <span class="kw">nullptr</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>std::size_t AccessCount = 0;</td><td></td></tr>
+</tbody></table></div>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> RegisterStageAccess(std::string_view Frame, std::string_view Stage, std::string_view Method, std::initializer_list&lt;FResourceAccess&gt; Accesses);</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">const</span> FStageAccessRow* FindStageAccess(std::string_view Frame, std::string_view Stage) <span class="kw">noexcept</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>std::size_t StageAccessRowCount() <span class="kw">noexcept</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> DumpStageAccess();</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">const</span> <span class="kw">char</span>* ToString(EResourceAccess Access) <span class="kw">noexcept</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">const</span> <span class="kw">char</span>* ToString(EResourceOrdering Ordering) <span class="kw">noexcept</span>;</td><td></td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-macro" id="Public__Engine__StageMetadata_h-12">
+<h3><span class="type">宏</span> MAHO_ACCESS_CREATE <span class="base">: ::Maho::MakeResourceAccess&lt;R, ::Maho::EResourceAccess::Create&gt;()</span></h3>
+</div>
+<div class="ent e-macro" id="Public__Engine__StageMetadata_h-13">
+<h3><span class="type">宏</span> MAHO_ACCESS_READ <span class="base">: ::Maho::MakeResourceAccess&lt;R, ::Maho::EResourceAccess::Read&gt;()</span></h3>
+</div>
+<div class="ent e-macro" id="Public__Engine__StageMetadata_h-14">
+<h3><span class="type">宏</span> MAHO_ACCESS_WRITE <span class="base">: ::Maho::MakeResourceAccess&lt;R, ::Maho::EResourceAccess::Write&gt;()</span></h3>
+</div>
+<div class="ent e-macro" id="Public__Engine__StageMetadata_h-15">
+<h3><span class="type">宏</span> MAHO_ACCESS_DESTROY <span class="base">: ::Maho::MakeResourceAccess&lt;R, ::Maho::EResourceAccess::Destroy&gt;()</span></h3>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">template</span> &lt;<span class="kw">typename</span> TResource&gt; [[nodiscard]] <span class="kw">constexpr</span> TResource* BeginCreateWindow(TResource* In) <span class="kw">noexcept</span>;</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">template</span> &lt;<span class="kw">typename</span> TResource&gt; [[nodiscard]] <span class="kw">constexpr</span> TResource* BeginDestroyWindow(TResource* In) <span class="kw">noexcept</span>;</td><td></td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-macro" id="Public__Engine__StageMetadata_h-16">
+<h3><span class="type">宏</span> MAHO_READ <span class="base">: ::Maho::Detail::TReadWindow&lt;R&gt;::Type</span></h3>
+</div>
+<div class="ent e-macro" id="Public__Engine__StageMetadata_h-17">
+<h3><span class="type">宏</span> MAHO_WRITE <span class="base">: ::Maho::Detail::TWriteWindow&lt;R&gt;::Type</span></h3>
+</div>
+<div class="ent e-macro" id="Public__Engine__StageMetadata_h-18">
+<h3><span class="type">宏</span> MAHO_CREATE <span class="base">: (::Maho::Detail::BeginCreateWindow&lt;R&gt;(p))</span></h3>
+</div>
+<div class="ent e-macro" id="Public__Engine__StageMetadata_h-19">
+<h3><span class="type">宏</span> MAHO_DESTROY <span class="base">: (::Maho::Detail::BeginDestroyWindow&lt;R&gt;(p))</span></h3>
+</div>
 </div>
 <div class="pane" id="pane-Public__EntryPoint_h">
 <div class="hdr">Public/EntryPoint.h</div>
-<h2 class="file-title">EntryPoint.h —— 统一应用入口驱动</h2>
-<div class="card"><div class="doc">
-<p>入口只做一件事：把引擎 DLL 装起来、把匿名根实例跑完、再对称地拆掉。引擎没有任何工程 / 工具预设 —— 它就是一个自包含的 DLL，导出 `CreateEngine()` 返回 `FEngineBase*`。入口负责装载（`FAssembly` 按符号名查找）、驱动生命周期（`PreMain` → `Main` → `PostMain`）、最后 `<span class="kw">delete</span> App`（虚析构，经由 DLL 释放整个对象）。宿主因此永远不认识具体的引擎类型，只认识 `FEngineBase` 这个锚。</p>
-</div></div>
-<div class="card">
-<h3 class="card-title">包含的头文件</h3>
-
-<table>
-<thead><tr><th>头文件</th><th>功能</th></tr></thead>
-<tbody>
-<tr><td>Core/Assembly.h</td><td>`FAssembly` + `ApplyModuleExtension`：装载引擎 DLL、解析平台后缀</td></tr>
-<tr><td>Core/Fatal.h</td><td>`InstallFatalHandlers` / `ReportFatal`：进程级崩溃与致命错误兜底</td></tr>
-<tr><td>Engine/Engine.h</td><td>`FEngineBase` —— 入口认识的全部（生命周期钩子 + 主循环）</td></tr>
-<tr><td>exception</td><td>标准库异常基类：顶层 `<span class="kw">catch</span>` 用 `std::exception` 收口</td></tr>
-</tbody></table>
-</div>
-<div class="card">
-<h3 class="card-title">Main 函数</h3>
-
-<table>
-<thead><tr><th>函数签名</th><th>说明</th></tr></thead>
-<tbody>
-<tr><td><span class="kw">inline</span> <span class="kw">int</span> Main(<span class="kw">int</span> Argc, <span class="kw">char</span>** Argv)</td><td>入口主函数，五步：① `InstallFatalHandlers()`；② 取引擎 DLL 路径 —— 第一个命令行参数，否则 `ApplyModuleExtension(MAHO_ENGINE_NAME)`；③ `FAssembly` 装载 + `GetProcAs(<span class="st">"CreateEngine"</span>)` 建根实例（失败即 `ReportFatal`）；④ 按序驱动 `ParseCommandLine` → `PreMain` → `Main` → `PostMain`；⑤ `<span class="kw">delete</span> App`（虚析构经 DLL 释放整个对象）。任何逃出的异常落到顶层 `<span class="kw">catch</span>` ⇒ `ReportFatal`（写 stderr + Fatal.log 后 abort，不尝试恢复，因为此时状态已不可信）。返回引擎 `Main` 的返回值。</td></tr>
-</tbody></table>
+<h2 class="file-title">EntryPoint.h</h2>
+<div class="ent e-functions" id="Public__EntryPoint_h-0">
+<h3><span class="type">自由函数</span> </h3>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">inline</span> <span class="kw">int</span> Main(<span class="kw">int</span> Argc, <span class="kw">char</span>** Argv);</td><td></td></tr>
+</tbody></table></div>
 </div>
 </div>
 <div class="pane" id="pane-Public__EntryPointAndroid_h">
 <div class="hdr">Public/EntryPointAndroid.h</div>
-<h2 class="file-title">EntryPointAndroid.h —— Android 入口 shim</h2>
-<div class="card"><div class="doc">
-<p>只在一个 .cpp 里包含。`android_main` 运行在 NDK 的 glue 线程上，`Maho::Main` 就在那里阻塞，直到 app 结束。</p>
-</div></div>
-<div class="card">
-<h3 class="card-title">包含的头文件</h3>
-
-<table>
-<thead><tr><th>头文件</th><th>功能</th></tr></thead>
-<tbody>
-<tr><td>EntryPoint.h</td><td>统一入口驱动 `Maho::Main`</td></tr>
-<tr><td>android_native_app_glue.h</td><td>NDK glue：`android_app` 与 `android_main` 的宿主循环</td></tr>
-</tbody></table>
-</div>
-<div class="card">
-<h3 class="card-title">入口函数</h3>
-
-<table>
-<thead><tr><th>函数签名</th><th>说明</th></tr></thead>
-<tbody>
-<tr><td><span class="kw">void</span> android_main(<span class="kw">struct</span> android_app* App)</td><td>glue 线程上的入口。Android **没有 argv** ⇒ 造一个占位 `Argv` 调 `Maho::Main(1, Argv)`；该调用阻塞到 app 退出。返回类型是 `<span class="kw">void</span>`（不是 `<span class="kw">int</span>`），所以引擎的返回值在此被丢弃。</td></tr>
-</tbody></table>
+<h2 class="file-title">EntryPointAndroid.h</h2>
+<div class="ent e-functions" id="Public__EntryPointAndroid_h-0">
+<h3><span class="type">自由函数</span> </h3>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> android_main(<span class="kw">struct</span> android_app* App);</td><td></td></tr>
+</tbody></table></div>
 </div>
 </div>
 <div class="pane" id="pane-Public__EntryPointIOS_h">
 <div class="hdr">Public/EntryPointIOS.h</div>
-<h2 class="file-title">EntryPointIOS.h —— iOS 入口 shim</h2>
-<div class="card"><div class="doc">
-<p>只在一个 .cpp 里包含：一个 `main` 转调 `Maho::Main`。iOS 运行时没有动态库，`ApplyModuleExtension` 对基名原样透传（不加 `.dylib` 后缀）。</p>
-</div></div>
-<div class="card">
-<h3 class="card-title">包含的头文件</h3>
-
-<table>
-<thead><tr><th>头文件</th><th>功能</th></tr></thead>
-<tbody>
-<tr><td>EntryPoint.h</td><td>统一入口驱动 `Maho::Main`</td></tr>
-</tbody></table>
-</div>
-<div class="card">
-<h3 class="card-title">入口函数</h3>
-
-<table>
-<thead><tr><th>函数签名</th><th>说明</th></tr></thead>
-<tbody>
-<tr><td><span class="kw">int</span> main(<span class="kw">int</span> Argc, <span class="kw">char</span>** Argv)</td><td>`<span class="kw">return</span> Maho::Main(Argc, Argv)` —— 引擎返回值原样透传。</td></tr>
-</tbody></table>
+<h2 class="file-title">EntryPointIOS.h</h2>
+<div class="ent e-functions" id="Public__EntryPointIOS_h-0">
+<h3><span class="type">自由函数</span> </h3>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">int</span> main(<span class="kw">int</span> Argc, <span class="kw">char</span>** Argv);</td><td></td></tr>
+</tbody></table></div>
 </div>
 </div>
 <div class="pane" id="pane-Public__EntryPointLinux_h">
 <div class="hdr">Public/EntryPointLinux.h</div>
-<h2 class="file-title">EntryPointLinux.h —— Linux 入口 shim</h2>
-<div class="card"><div class="doc">
-<p>只在一个 .cpp 里包含：一个 `main` 转调 `Maho::Main`，无额外平台依赖。</p>
-</div></div>
-<div class="card">
-<h3 class="card-title">包含的头文件</h3>
-
-<table>
-<thead><tr><th>头文件</th><th>功能</th></tr></thead>
-<tbody>
-<tr><td>EntryPoint.h</td><td>统一入口驱动 `Maho::Main`</td></tr>
-</tbody></table>
-</div>
-<div class="card">
-<h3 class="card-title">入口函数</h3>
-
-<table>
-<thead><tr><th>函数签名</th><th>说明</th></tr></thead>
-<tbody>
-<tr><td><span class="kw">int</span> main(<span class="kw">int</span> Argc, <span class="kw">char</span>** Argv)</td><td>`<span class="kw">return</span> Maho::Main(Argc, Argv)` —— 引擎返回值原样透传。</td></tr>
-</tbody></table>
+<h2 class="file-title">EntryPointLinux.h</h2>
+<div class="ent e-functions" id="Public__EntryPointLinux_h-0">
+<h3><span class="type">自由函数</span> </h3>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">int</span> main(<span class="kw">int</span> Argc, <span class="kw">char</span>** Argv);</td><td></td></tr>
+</tbody></table></div>
 </div>
 </div>
 <div class="pane" id="pane-Public__EntryPointWindows_h">
 <div class="hdr">Public/EntryPointWindows.h</div>
-<h2 class="file-title">EntryPointWindows.h —— Windows 入口 shim</h2>
-<div class="card"><div class="doc">
-<p>只在一个 .cpp（极薄的 `Main.cpp`）里包含。同时给出 GUI 子系统的 `WinMain`（不弹控制台黑框）与控制台子系统的 `main`，两者都转调 `Maho::Main`。平台差异只到这一行为止 —— 往下的生命周期完全共用。</p>
-</div></div>
-<div class="card">
-<h3 class="card-title">包含的头文件</h3>
-
-<table>
-<thead><tr><th>头文件</th><th>功能</th></tr></thead>
-<tbody>
-<tr><td>EntryPoint.h</td><td>统一入口驱动 `Maho::Main`（本 shim 的全部逻辑都在那里）</td></tr>
-<tr><td>Windows.h</td><td>Win32：`WinMain` 签名 / `HINSTANCE` / `FreeConsole`（先定义 `NOMINMAX`，避免 min/max 宏污染 `std::min/max`）</td></tr>
-</tbody></table>
-</div>
-<div class="card">
-<h3 class="card-title">入口函数</h3>
-
-<table>
-<thead><tr><th>函数签名</th><th>说明</th></tr></thead>
-<tbody>
-<tr><td><span class="kw">int</span> WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, <span class="kw">int</span>)</td><td>GUI 子系统入口。先 `FreeConsole()` 摘掉继承来 / 调试器带进来的控制台（否则会闪出黑框），再 `<span class="kw">return</span> Maho::Main(__argc, __argv)`。</td></tr>
-<tr><td><span class="kw">int</span> main(<span class="kw">int</span> Argc, <span class="kw">char</span>** Argv)</td><td>控制台子系统入口：`<span class="kw">return</span> Maho::Main(Argc, Argv)`。</td></tr>
-</tbody></table>
+<h2 class="file-title">EntryPointWindows.h</h2>
+<div class="ent e-functions" id="Public__EntryPointWindows_h-0">
+<h3><span class="type">自由函数</span> </h3>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">int</span> WINAPI WinMain(HINSTANCE <span class="cm">/*Instance*/</span>, HINSTANCE <span class="cm">/*Prev*/</span>, LPSTR <span class="cm">/*CmdLine*/</span>, <span class="kw">int</span> <span class="cm">/*Show*/</span>);</td><td></td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">int</span> main(<span class="kw">int</span> Argc, <span class="kw">char</span>** Argv);</td><td></td></tr>
+</tbody></table></div>
 </div>
 </div>
 <div class="pane" id="pane-Public__EntryPointXbox_h">
 <div class="hdr">Public/EntryPointXbox.h</div>
-<h2 class="file-title">EntryPointXbox.h —— Xbox 入口 shim</h2>
-<div class="card"><div class="doc">
-<p>只在一个 .cpp 里包含：一个 `main` 转调 `Maho::Main`。</p>
-</div></div>
-<div class="card">
-<h3 class="card-title">包含的头文件</h3>
-
-<table>
-<thead><tr><th>头文件</th><th>功能</th></tr></thead>
-<tbody>
-<tr><td>EntryPoint.h</td><td>统一入口驱动 `Maho::Main`</td></tr>
-</tbody></table>
-</div>
-<div class="card">
-<h3 class="card-title">入口函数</h3>
-
-<table>
-<thead><tr><th>函数签名</th><th>说明</th></tr></thead>
-<tbody>
-<tr><td><span class="kw">int</span> main(<span class="kw">int</span> Argc, <span class="kw">char</span>** Argv)</td><td>`<span class="kw">return</span> Maho::Main(Argc, Argv)` —— 引擎返回值原样透传。</td></tr>
-</tbody></table>
+<h2 class="file-title">EntryPointXbox.h</h2>
+<div class="ent e-functions" id="Public__EntryPointXbox_h-0">
+<h3><span class="type">自由函数</span> </h3>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">int</span> main(<span class="kw">int</span> Argc, <span class="kw">char</span>** Argv);</td><td></td></tr>
+</tbody></table></div>
 </div>
 </div>
 <div class="pane" id="pane-Public__Maho_h">
 <div class="hdr">Public/Maho.h</div>
-<h2 class="file-title">Maho.h —— 引擎聚合头</h2>
-<div class="card"><div class="doc">
-<p>插件只需 `#include &lt;Maho.h&gt;`，就同时拿到 Core 基建与引擎帧系统。它是**唯一的聚合点**（原先的 Core.h 已折进来：一个聚合头只被另一个聚合头包含，就是纯间接）。下面这张表就是它带进来的东西。</p>
-</div></div>
-<div class="card">
-<h3 class="card-title">包含的模块</h3>
-
-<table>
-<thead><tr><th>头文件</th><th>功能</th></tr></thead>
-<tbody>
-<tr><td>Core/TypeList.h</td><td>编译期有序类型列表 `TTypeList` 及运算（拼接 / 成员判断 / 保序去重并集）</td></tr>
-<tr><td>Core/Delegate.h</td><td>多播事件 `TMulticastEvent`：bind / broadcast / unbind，线程安全，无 DLL 边界</td></tr>
-<tr><td>Core/Singleton.h</td><td>CRTP 单例标识基类 `TSingleton`：纯标记，不强制生命周期</td></tr>
-<tr><td>Core/Interface.h</td><td>能力组合器 `IPlugin` / 有序阶段序列 `IPipeline`</td></tr>
-<tr><td>Core/FrameGraph.h</td><td>帧调度器 `FFrameGraph` + 声明层 `FFrameExtension` + 桥 `FFrameBridge`</td></tr>
-<tr><td>Core/ThreadPool.h</td><td>固定规模线程池 `FThreadPool`：`Submit` 入队即返，`Flush` 锁步屏障</td></tr>
-<tr><td>Core/ThreadedServer.h</td><td>常驻专用线程基类 `FThreadedServer`：单线程 + FIFO 串行队列</td></tr>
-<tr><td>Core/Assembly.h</td><td>DLL 加载原语 `FAssembly` + `ApplyModuleExtension`（平台后缀）</td></tr>
-<tr><td>Core/Fatal.h</td><td>致命 / 错误上报路径 + `MAHO_CHECK` / `MAHO_VERIFY` / `MAHO_ENSURE` 断言宏</td></tr>
-<tr><td>Engine/Engine.h</td><td>引擎侧：10 个 stage 能力接口 + `FEngineBase` + 引擎 stage 序列别名</td></tr>
-</tbody></table>
-</div>
-</div>
-<div class="pane" id="pane-Plugins__Common__Log__Public__Trace_h">
-<div class="hdr">Plugins/Common/Log/Public/Trace.h</div>
-<h2 class="file-title">Trace.h —— CPU 作用域追踪（Log 插件）</h2>
-<div class="card"><div class="doc">
-<p>**不在 Core**：追踪的全部词汇都在 **Log 插件**里（实现是 `Private/Trace.cpp`）。Log 拥有进程的诊断（sink 与 `r.Trace` CVar），trace 文件只是它的一个 sink，所以引擎核心里**一个追踪符号都没有**；接口以 `MAHO_LOG_API` 导出，任何层 include 一下就能埋点。</p>
-<p>**三个宏，一条 bar**（三种形式写的是同一种行）：</p>
-<p>`[tr] ts=&lt;us&gt; dur=&lt;us&gt; lane=&lt;group&gt; worker=&lt;k&gt; owner=&lt;track&gt; stage=&lt;<span class="kw">short</span>&gt; name=&lt;label&gt; [func=&lt;fn&gt;] tip=&lt;text&gt;`</p>
-<p>`lane`（GROUP）是**架构分区**（Engine / FRender / RHIServer），在 Perfetto 里折叠成一个 PROCESS —— 左侧面板于是读起来就是架构；`owner` 是当时在跑的那个帧（常驻线程的 SCOPE 形式里就是它自己的角色名），是分区**里面的一行（TRACK）**。一行只能「嵌套或先后」，而引擎把一帧的 stage 按帧内链的顺序串起、每个 stage 又对上一帧的同一 stage 串行 ⇒ 同一行的条**天然嵌套**，从不重叠。</p>
-<p>`stage` 是机器键（开这根条的 stage 接口的短类型名），`name` 是人读的标签，`func` 是这根埋点住在哪个函数里，`tip` 是悬停说明 —— 手写的 SECTION 继承环境行，所以它永远落在所属帧那一行上。</p>
-<p>**起点带「嵌套深度 x 1us」的固定偏移**（`thread_local` 深度，进出各加减一）：trace 的分辨率是 1us，父条与它紧接着开的子条常常落在同一微秒，而时间线靠「严格递增」判层级 —— 不偏移就退化成导入报错。</p>
-<p>**依赖被画成箭头**：stage 知道它自己声明的边（`FFrameExtension::GetDependencies`），于是条关闭时写下「我的输入来自哪里」；读的人按 `(lane, owner, stage)` 绑定两端，把「这两根条离得很远」变成「这一根等了那一根」。</p>
-<p>`ts` 是**单调时钟**上距首次追踪的微秒数，跨线程可比。行是手写装配的（`FLine`：memcpy + 十进制循环 + 一次 `fwrite`），且**装不下的行被丢弃，绝不截断**：截短帧名会给同一个帧凭空多出一行，比丢一条还糟。</p>
-<p>**注意它不是什么**：不是完整事件流。每个 scope 两次读钟 + 一行缓冲，所以只该埋几十个真正要紧的作用域，而不是每个调用。环境开关都只读一次，于是关闭时整条路径就是一个可预测的分支。</p>
-</div></div>
-<div class="card">
-<h3 class="card-title">环境开关（各自只读一次）</h3>
-
-<table>
-<thead><tr><th>开关</th><th>说明</th></tr></thead>
-<tbody>
-<tr><td>MAHO_TRACE</td><td>**读的是值，不是「有没有设」**：未设 / 空 / `0` / `<span class="kw">false</span>` / `off` / `no`（大小写不敏感，两端空白忽略）= 关，其余值 = 开（`MAHO_TRACE=1` 是「从第一个事件就记录」）。
-为什么必须解析值：只测「有没有设」时，启动器为「这轮别记录」而设的 `MAHO_TRACE=0` 会把记录**打开**—— 这不是观感问题：记录中的每次发条都会进内存队列（见 `Trace.cpp` 的 `ProtoQueue`，只有退出时的 `TraceFlush` 才排空），实测 **10.2 KB/帧**，~1900 fps 跑 150 s 就是 **3.9 GB**，外加一个几 GB 的 `Profile_trace.txt`。同设施另外两个开关（`MAHO_TRACE_FORMAT` / `MAHO_TRACE_MIN_US`）本就解析值，`r.Trace` 的说明也写着「等同于 `MAHO_TRACE=1`」，所以这里的契约就是**值**。
-它只决定初值：运行期由 `r.Trace`（Log 插件的 CVar，默认值同样走这个解析）覆盖，随时可开可关、不必重启，且是**进程级**。关闭时 `FStageTrace` / `FScopeTrace` / `FSectionTrace` 的构造只剩几次指针拷贝加一个分支（一个 relaxed 原子读）</td></tr>
-<tr><td>MAHO_TRACE_FORMAT</td><td>**写哪几个文件**：`0` = 只要文本，`1` = 只要原生，`2` = 两个都写（**默认**）。只读一次；非法值回落到 2 —— 默认同时走两条路，于是两条路都被练习到</td></tr>
-<tr><td>MAHO_TRACE_MIN_US=&lt;n&gt;</td><td>**stage 条的时长门槛**（默认 0 = 全留）。stage 条是为**每一个**帧的**每一个** stage 生成的，所以它们才是让 trace 变贵的东西；手写 SECTION / SCOPE 是人对「什么重要」的判断，**永不被过滤**。
-代价说清楚：行是从事件派生出来的，所以一个帧若全部分条都低于门槛，它会**连行一起消失**（随后手写埋点落在数字 lane id 下），而被丢掉的条**把它的箭头一起带走**（箭头两端都得存在）；原生输出**没有门槛** —— BEGIN/END 必须成对，条短就只是短。
-实测（ExampleEngine，Debug，12s）：门槛 0 → 339501 条 / 23.3MB；门槛 200us → 157985 条 / 11.3MB，留下的正好是有分量的那些（`FUIFeature::IInitViews` / `IRenderUI` / `FRender::IEndFrame` …）。</td></tr>
-<tr><td>MAHO_TRACE_STAGES</td><td>帧图节点的 enter/exit 括注（见 `Source/Private/Core/FrameGraph.cpp`）。它只为一个失败模式存在：硬崩（0xC0000005）没有栈、也抛不出任何 C++ 能接的东西，于是「最后进入而没退出」的那个 stage 就是唯一能指出真凶的线索。**它属于追踪设施 ⇒ 也由 `MAHO_WITH_TRACE` 决定编不编**：Shipping 下连开关都不存在（实测同一个 `MAHO_TRACE_STAGES=1`，Debug 打 282 行 `[fg]`，Shipping 0 行），调用点保留但退化成读常量 + 空调用，优化器直接折掉</td></tr>
-</tbody></table>
-</div>
-<div class="card">
-<h3 class="card-title">两种输出（由 `MAHO_TRACE_FORMAT` 选）</h3>
-
-<table>
-<thead><tr><th>文件</th><th>说明</th></tr></thead>
-<tbody>
-<tr><td>Profile_trace.txt</td><td>**文本**：一根条一行、一根箭头一行，grep 得动，也是**崩溃场景的兜底** —— 进程崩掉时原生文件未必收得完整。`(ts, dur, lane, name)` 到 Chrome Trace Event Format 只差一次机械改写，所以 `Tools/trace_to_chrome.py` 仍能把它变成 chrome:<span class="cm">//tracing / Perfetto 直接加载的 JSON（它是**兜底路径**：旧文本 trace，或只吃 JSON 的工具）。`MAHO_TRACE_MIN_US` **只管这一路**</span></td></tr>
-<tr><td>Profile_trace.perfetto_trace</td><td>**原生**：Perfetto 自己的 protobuf，由插件**自己写**（`Private/Trace.cpp` 的 `FProtoWriter`：手搓 varint，字段号是从一个真的 `.perfetto_trace` 上读回来的）。一根 lane 一个 `track_descriptor`（一个 **PROCESS**：`uuid` / `name` / `process{pid, process_name}`），lane 里每个 owner 再一个（它里面的 **THREAD**：`uuid` / `name` / `parent_uuid` / `thread{pid, tid, thread_name}`；靠 pid 相等归到那个 process 之下）。一根条 = `TYPE_SLICE_BEGIN` + `TYPE_SLICE_END` 一对包 ⇒ **从不写时长**，所以条不可能重叠、也不需要收尾隔板。这就是**常规路径**：直接打开它，没有转换器，也没有「这个时间戳属于哪根条」的猜。
-**时间戳的单位是纳秒**（Perfetto 的 `TracePacket.timestamp` 本来就按 ns 读），而引擎的钟是**微秒**（`TraceNowMicros`）—— 换算只发生在**写包那一处**（`ts * kNanosPerMicro`），内部排序、门槛、文本路径全是微秒。填错的症状很隐蔽：所有相对关系都对，但每根条短 1000 倍、整根时间轴紧 1000 倍（实测：2.5ms 的 `Render tick` 显示成 2.548µs，而它的 Start time 2.316395ms 对应原始值 2316400）。
-除帧自己的分区之外，**每根 stage 条还会多写一条镜像：`lane = ThreadPool`、行 = 执行它的线程**（见下）</td></tr>
-</tbody></table>
-</div>
-<div class="card">
-<h3 class="card-title">`ThreadPool` 组 —— 每根 stage 条都还有一份「按线程」的镜像（只进原生）</h3>
-
-</div>
-<div class="card">
-<h3 class="card-title">箭头 —— 声明的依赖变成时间线上的 flow</h3>
-
-<table>
-<thead><tr><th>形式</th><th>说明</th></tr></thead>
-<tbody>
-<tr><td>[tr] flow ts=&lt;us&gt; lane=&lt;group&gt; owner=&lt;track&gt; stage=&lt;<span class="kw">short</span>&gt; from=&lt;目标帧&gt; fromStage=&lt;短 stage&gt; off=&lt;帧偏移&gt;</td><td>**文本形式**：`off` 是声明时的帧偏移（0 = 同帧，-1 = 上一帧）。每根条关闭时按该 stage 声明的边各写一行，帧内链的前驱也写一行（它不在 `GetDependencies()` 里，是编译期推出来的）</td></tr>
-<tr><td>flow_ids（字段 36） / terminating_flow_ids（字段 48）</td><td>**原生形式**：生产者的 **END** 包带上 `flow_ids`，消费者的 **BEGIN** 包带上 `terminating_flow_ids`（没有开着的 flow 时它被忽略 ⇒ 每条边每帧恰好一个箭头）。
-`id = FNV-1a(owner | stage)`，由**生产者的身份**定键，**两端各自独立算不出来** —— 一个帧只看得见**自己**的声明表（依赖方向由消费者声明，见 `Core/FrameGraph.h`），所以生产者根本不知道自己的消费者是谁、是哪一帧的实例。于是发射时**只入队结构化记录**（条的身份 + 它声明的边 + 帧偏移），`TraceFlush` 里由 trace 自己**join**：按 `(owner, stage, BEGIN/END)` 分组、组内按 ts 排序，**组内序号就是帧实例号**，`FrameOffset` 一加就落到那一帧的条上，两端写同一个 id。
-流经的**名字在发射时就拷进记录**（不存指针）：名字是模块里的静态数据，而 join 发生在跑完之后，那时那个模块未必还映射着（实测一次 45% 的待 join 行指向已读不到的内存，join 死在 `strlen` 上）。行 id 同样在发射时解析，理由一样</td></tr>
-<tr><td>原生画的是**换行的声明边**（含同帧、含反向）</td><td>`off = 0` 的跨 stage 依赖（例如渲染 tick 等平台的消息泵）同样是真实依赖，照画；`BlockOn` 那类**反向声明**画成「我的 END → 被放行者的 BEGIN」（声明方即生产者）。**两端在同一行的边不画**（同一 lane + 同一 owner）：那是条对自己那一行说话，画出来是个闭环、什么也没说 —— `WaitFor&lt;自己&gt;` 那种**自身链**只是它的退化情形。**也不画**帧内链那类**结构**边，以及本帧跨到自己的**自身**边 —— 它们不是声明出来的东西</td></tr>
-</tbody></table>
-</div>
-<div class="card">
-<h3 class="card-title">包含的头文件</h3>
-
-<table>
-<thead><tr><th>头文件</th><th>功能</th></tr></thead>
-<tbody>
-<tr><td>LogApi.h</td><td>`MAHO_LOG_API` —— 类与自由函数住在 Log 插件 DLL 里（行状态/深度是 `.cpp` 拥有的 `thread_local`，定义只能在那边）</td></tr>
-<tr><td>Core/FrameGraph.h</td><td>`FFrameExtension` / `FEdge`：箭头来自声明层</td></tr>
-<tr><td>Core/TypeList.h</td><td>`TTypeList` / `TFrameStageList`：帧内链的前驱是**编译期**推出来的</td></tr>
-<tr><td>cstddef / cstdint / string_view / type_traits / typeindex / typeinfo</td><td>名称切片、时间戳、`typeid` 比较 —— 不引第三方库</td></tr>
-</tbody></table>
-</div>
-<div class="card">
-<h3 class="card-title">编译期辅助 —— 帧内链的前驱</h3>
-
-<table>
-<thead><tr><th>名字</th><th>说明</th></tr></thead>
-<tbody>
-<tr><td>TFrameStageList&lt;TFrame&gt;</td><td>取出帧 `IPipeline&lt;TStages...&gt;` 里那份 stage 列表；没有列表的类型（宿主的生命周期 stage）得到空列表 —— 「没有前驱」，而不是编译不过</td></tr>
-<tr><td>StagePredecessorOf(Frame, Stage)</td><td>**编译期**算出调度器在 `Stage` 之前跑的那个 stage，`MAHO_TRACE_STAGE` 把它交给 `FStageTrace::PrevStage`。比较用的是 `type_info::<span class="kw">operator</span>==`（比**名字**不比地址：宏与帧的派发可能在不同模块，同一个类型每个模块各有一份 `type_info`）</td></tr>
-</tbody></table>
-</div>
-<div class="card">
-<h3 class="card-title">宏 —— 三种形状，同一条 bar</h3>
-
-<table>
-<thead><tr><th>宏</th><th>说明</th></tr></thead>
-<tbody>
-<tr><td>MAHO_TRACE_STAGE(StageType, Label, Tip)</td><td>**stage body 的第一条语句**（这根条就是帧图那个节点的条，必须盖住整个 body）。它**建立行**：lane = 帧**类型**的 `TraceGroupName()`、owner = 它的 `StaticName()`、stage = `typeid(StageType)` 的短名；关闭时写一根条，再按它声明的边写箭头。`<span class="kw">this</span>` 必须是帧（配合 `MAHO_DECLARE_FRAME` / `MAHO_DECLARE_FRAME_UNDER`，见 `Engine/Frame.h`）</td></tr>
-<tr><td>MAHO_TRACE_SECTION(Label, Tip)</td><td>**stage 里手写的段落**（stage 调用的任何 helper 里也行）。它**什么都不建立**：继承环境行，所以落在正在跑的那个帧上、嵌在那根 stage 条里面；另带 `func=__FUNCTION__`，于是悬停仍然说得清这段埋点住在哪。条名是手写标签 —— 同一个函数里的多个埋点因此各有各的名字，而不叫同一个 `__FUNCTION__`</td></tr>
-<tr><td>MAHO_TRACE_SCOPE(Group, Tip)</td><td>**自带一条 lane 的 scope**：常驻线程的任务体，或没有帧驱动的自由代码。`Group` 同时是 lane 与 owner（`FThreadedServer` 角色传 `GetThreadName()`），于是常驻线程在时间线上就是「一个概念、一行」；条名取自 `__FUNCTION__`（所以要埋进**具名函数**里，别埋进提交用的 lambda，否则条名会读成 `&lt;lambda_1&gt;::<span class="kw">operator</span>()`）。
-这份也进**原生**：`lane = owner = Group` ⇒ 每个常驻角色（`RHIServer` / `ShaderCompiler` / `ResourceServer` …）在自己的 process 下**只有一条泳道**；它**不带箭头**（scope 没有声明表），也**不镜像进 `ThreadPool` 组** —— 那一组是图节点的 worker，常驻线程不是池子</td></tr>
-<tr><td>MAHO_TRACE_CONCAT(A, B)</td><td>用 `__LINE__` 拼出唯一变量名 —— 于是同一个作用域里也能放多个埋点</td></tr>
-</tbody></table>
-</div>
-<div class="card">
-<h3 class="card-title">导出的接口（MAHO_LOG_API）</h3>
-
-<table>
-<thead><tr><th>签名</th><th>说明</th></tr></thead>
-<tbody>
-<tr><td><span class="kw">bool</span> TraceEnabled()</td><td>记录是否开启：热路径上的一个 relaxed 原子读（初值来自 `MAHO_TRACE`）</td></tr>
-<tr><td><span class="kw">void</span> TraceSetEnabled(<span class="kw">bool</span> bEnabled)</td><td>**运行期开关**，由 `r.Trace` 驱动（CVar 属于 ConsoleVariable 插件，而 Core 不能依赖它，所以 CVar 在插件侧、这里只留函数）。中途打开就从那一刻开始记录（文件在第一个事件时惰性创建），关掉就停 —— 开关是进程级的，不需要重启</td></tr>
-<tr><td>std::uint64_t TraceNowMicros()</td><td>距追踪原点（第一次被追踪的调用）的**单调**微秒数 —— 也就是 `ts`。原点先取再读钟：顺序反了会让第一个事件的 `ts` 下溢</td></tr>
-<tr><td>std::uint64_t TraceTaskFloorMicros()</td><td>`MAHO_TRACE_MIN_US` 的解析结果（只读一次）：stage 条的门槛</td></tr>
-<tr><td><span class="kw">void</span> TraceFlush()</td><td>**原生文件在这里才拼包写出**：各线程发射时只入队结构化记录，flush 时**先 join**（给每条声明的边配到另一端、定出 flow id）、再**按时间戳排序**写出（worker 并发发射，直写会让时间戳乱序，查看器把迟到的那几个当「DATA LOSSES」丢掉；丢一个 END，那根条会一直画到屏幕边缘；同 ts 时 BEGIN 在前，否则报 MISPLACED_END_EVENT）。描述符的时间戳是 0、在发射时直接写，所以它们始终在最前面。进程收尾时调用，也可以手工调来中途快照（快照会把队列切成两段：跨过切口的箭头缺一根，但**不会画错** —— 序号是窗口内相对算的）</td></tr>
-</tbody></table>
-</div>
-<div class="ent e-struct" id="Plugins__Common__Log__Public__Trace_h-0">
-<h3><span class="type">结构体</span> FStaticName</h3>
-<div class="sect"><div class="doc">
-<p>**静态字符串的一片** —— 事件里每个名字都是它（字面量、stage 的 `type_info::name()`、`__FUNCTION__`）。裁命名空间与缩短都是**切片**，从不拷贝：这条路一秒钟要跑几万次</p>
-</div></div>
-<div class="sect">
-<h4>字段</h4>
-<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">const</span> <span class="kw">char</span>* Data = <span class="st">""</span></td><td>指向**静态存储**，绝不拥有</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>std::size_t Size = 0</td><td>长度（所以不靠 `strlen`）</td></tr>
-</tbody></table></div>
-</div>
-<div class="ent e-class" id="Plugins__Common__Log__Public__Trace_h-1">
-<h3><span class="type">类</span> FStageTrace</h3>
-<div class="sect"><div class="doc">
-<p>`MAHO_TRACE_STAGE` 的 RAII scope —— **唯一知道 stage 身份**的那一种：它属于哪个 stage 接口、哪个帧。它**建立行**：stage body 里发出的一切（嵌套的 section、stage 调用的任何 helper）都归到这一行。关闭时写一根条，再按帧声明的边写箭头。定义在 `.cpp` 里（行/深度状态是 `.cpp` 拥有的 `thread_local`）；关闭追踪时构造只是拷几个指针，`Start` 保持 0、析构什么都不做</p>
-</div></div>
-<div class="sect">
-<h4>字段</h4>
-<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">const</span> FFrameExtension* Frame</td><td>开这根条的那个帧（`GetDependencies()` / `GetDependents()` 从这里取）</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">const</span> std::vector&lt;FFrameExtension::FEdge&gt;* Edges</td><td>**这个 stage** 声明的边；存指针而不是副本</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">const</span> std::type_info* PrevStage</td><td>调度器在这个 stage 之前跑的那个 stage = 帧内链的**结构边**，**编译期**从帧自己的 stage 列表推出来（`StagePredecessorOf`）—— 结构边不出现在 `GetDependencies()` 里，不推就没有这根箭头</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">const</span> <span class="kw">char</span>* PreviousGroup / PreviousTrack / FStaticName PreviousStage</td><td>被这根条替换掉的那一行，析构时还回去（一个 worker 接着跑下一个节点，环境行不能从这一帧的 stage 漏到下一帧的）</td></tr>
-</tbody></table></div>
-<div class="sect">
-<h4>接口</h4>
-<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-public">public</span></td><td>FStageTrace(<span class="kw">const</span> FFrameExtension* InFrame, <span class="kw">const</span> std::type_info&amp; InStage, <span class="kw">const</span> <span class="kw">char</span>* InGroup, <span class="kw">const</span> <span class="kw">char</span>* InTrack, <span class="kw">const</span> <span class="kw">char</span>* InLabel, <span class="kw">const</span> <span class="kw">char</span>* InTip, <span class="kw">const</span> std::type_info* InPrevStage)</td><td>构造：记起始时间戳（带嵌套深度偏移）、把当前 `lane/owner/stage` 三者存起来再换成自己的（lane = 帧类型的分区名，owner = 帧的静态名，stage = 短 stage 名），并**在同一时刻**把该 stage 声明的边**拷成入队的 key**（帧在构造里写完声明、整个 stage 调用期间不变；拷而不是存指针，因为名字所属的模块到 flush 时未必还在）</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>~FStageTrace()</td><td>`Start != 0` 才记录：写条 → 按声明的边写箭头（文本，各自一行）/ 把本 stage 的 BEGIN 记录入队（原生，带它**等待**的边）与 END 记录入队（原生，带它**挡住**的反向边）→ 把三个字段还原、深度减一。flow id 不在这一层定：它要等两端都在了才由 `TraceFlush` 的 join 定出来。时长以**偏移后的起点**为基准，故短于偏移量的 scope 记 0 而不是回绕</td></tr>
-</tbody></table></div>
-</div>
-<div class="ent e-class" id="Plugins__Common__Log__Public__Trace_h-2">
-<h3><span class="type">类</span> FScopeTrace</h3>
-<div class="sect"><div class="doc">
-<p>`MAHO_TRACE_SCOPE` 的 RAII scope —— **自带一条 lane**。给没有帧驱动的代码用：常驻 worker 的任务体，或还没有行的自由函数。`Group` 同时是 lane 与 owner（`FThreadedServer` 角色传 `GetThreadName()`），所以常驻线程在时间线上是「一个概念、一行」。它活着期间**建立**这一行（嵌套的 scope 也落在它上面），退出时还原</p>
-</div></div>
-<div class="sect">
-<h4>字段</h4>
-<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-public">public</span></td><td><span class="kw">const</span> <span class="kw">char</span>* Group / Tip / Func</td><td>行与条名；加上还原用的 Previous* 三件</td></tr>
-</tbody></table></div>
-<div class="sect">
-<h4>接口</h4>
-<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-public">public</span></td><td>FScopeTrace(<span class="kw">const</span> <span class="kw">char</span>* InGroup, <span class="kw">const</span> <span class="kw">char</span>* InTip, <span class="kw">const</span> <span class="kw">char</span>* InFunc)</td><td>构造：记住起始时间戳（同样带深度偏移）并把行切成 `Group`；`InTip` 可选，`InFunc` 由宏用 `__FUNCTION__` 给出</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>~FScopeTrace()</td><td>`Start != 0` 才记录：写一根 lane = owner = `Group`、名字取自函数的条（**手写埋点永不被门槛过滤**），还原上一行、深度减一</td></tr>
-</tbody></table></div>
-</div>
-<div class="ent e-class" id="Plugins__Common__Log__Public__Trace_h-3">
-<h3><span class="type">类</span> FSectionTrace</h3>
-<div class="sect"><div class="doc">
-<p>`MAHO_TRACE_SECTION` 的 RAII scope —— stage **里面**手写的一段。它**什么都不建立**：捕获包住它的 stage（或 scope）留下的那一行，于是落在同一个行上、嵌套在它的条里。`Func` 跟着进 `func=`：条是手写标签命名的，悬停仍然要说清这段埋点住在哪</p>
-</div></div>
-<div class="sect">
-<h4>接口</h4>
-<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
-<tr><td><span class="acc a-public">public</span></td><td>FSectionTrace(<span class="kw">const</span> <span class="kw">char</span>* InLabel, <span class="kw">const</span> <span class="kw">char</span>* InTip, <span class="kw">const</span> <span class="kw">char</span>* InFunc)</td><td>构造：把当前的 `Group/Track/Stage` **捕获进来**（即使中途有嵌套 scope 建立了新行，这根条也不会被记到别人头上），取起始时间戳并加深度</td></tr>
-<tr><td><span class="acc a-public">public</span></td><td>~FSectionTrace()</td><td>`Start != 0` 才记录：写一根条，名字是 `Label`、`func=` 是函数短名、stage 沿用捕获到的那个（**不还原任何行**，因为它没替换过），深度减一</td></tr>
-</tbody></table></div>
-</div>
+<h2 class="file-title">Maho.h</h2>
+<div class="empty">（这个头还没有声明内容）</div>
 </div></div>
 </div>
 <script>

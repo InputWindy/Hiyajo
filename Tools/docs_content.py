@@ -1,15 +1,12 @@
 #!/usr/bin/env python3
 # Run via Tools/maho_python.bat — engine Tools/python only.
 """
-docs_content.py —— 文档内容（**唯一的数据源**）
+docs_content.py —— 【已退役】旧的"手工声明内容"脚本
 
-每一条都是手工声明的一条原子内容：一个头、一个类、一个接口、一个字段……
-顺序就是渲染顺序。不扫描源码，不解析 C++（见 Tools/docs_builder.py 的原子接口）。
-
-渲染：
-  Tools\\maho_python.bat Tools\\docs_content.py                 # -> Source/Docs.html
-  Tools\\maho_python.bat Tools\\docs_content.py --out X.html
-"""
+现在的生成器是 `Tools/docs_scan.py`：它扫描头文件、从 `///` 注释（`@brief` / `@param` / `@return` /
+`@tparam`）提取实体与成员 —— **改注释 = 改文档**（`Tools/docs_builder.py` 仍是渲染层）。
+本文件仅作历史保留：它记录过那批人工撰写的说明文字，其中大部分还没搬进源码注释；
+搬完即可删除（`Source/Docs.html` 现在由 `docs_scan.py` 生成）。
 
 import argparse
 import sys

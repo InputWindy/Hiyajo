@@ -1,26 +1,30 @@
 #!/usr/bin/env python3
 # Run via Tools/maho_python.bat — engine Tools/python only.
 """
-docs_builder.py —— 文档构建器（声明式原子接口）
+docs_builder.py —— 文档渲染层（声明式原子接口）
 
-不扫描源码，不解析 C++。文档内容由人**一条一条声明**（见 Tools/docs_content.py），
-本模块只提供原子函数 + 渲染成单文件自包含的 Source/Docs.html。
+**本模块不解析 C++**：它只提供原子函数 + 把模型渲染成单文件自包含的 `Source/Docs.html`。
+是谁往这个模型里填内容有两条路：
+  * `Tools/docs_scan.py`（**现在**）—— 扫描头文件、从 `///` 注释提取实体与成员（注释是唯一来源）；
+  * `Tools/docs_content.py`（**已退役**）—— 过去由人一条一条手写声明。
 
 原子接口（都在当前上下文里追加）：
 
     Header("Public/Core/FrameGraph.h")   一个头文件 —— 左树里的叶子（路径决定树的嵌套）
     Class("FFrameGraph", Base="...")     一个类      （当前类随之切换）
     Struct / Enum / Macro / Alias        同类，不同 type
+    Functions("")                        当前头的自由函数集合（不属于任何类）
     Interface("bool Submit(...);")       当前类的一个接口（成员函数）
     Field("TaskKey Key")                 当前类的一个字段（数据成员）
     Nested("FEdge", Type="struct")       当前类里的嵌套类型
     SetAccess("private")                 之后 Interface/Field/Nested 的访问级别（默认 public）
 
+    Captured()                           已声明的头（只读）：扫描器在子进程建模型、主进程渲染时用
     Build()                              渲染到 Source/Docs.html，返回统计
 
 用法：
-  Tools\\maho_python.bat Tools\\docs_content.py            # 渲染 Source/Docs.html
-  Tools\\maho_python.bat Tools\\docs_content.py --out X.html
+  Tools\\maho_python.bat Tools\\docs_scan.py              # 扫描注释 → Source/Docs.html
+  Tools\\maho_python.bat Tools\\docs_scan.py --check      # 只审注释
 """
 
 from __future__ import annotations
@@ -86,6 +90,12 @@ def Reset() -> None:
 	_CURRENT_ACCESS = "public"
 
 
+def Captured() -> list[FHeader]:
+	"""已声明的头（**只读**）：给"扫描器在子进程里建模型、主进程渲染"这种拆分用 ——
+	模型是纯数据，可以跨越进程边界，而解析器不必和渲染同处一个进程。"""
+	return list(_HEADERS)
+
+
 def _lines(Text: Any) -> list[str]:
 	if Text is None:
 		return []
@@ -140,6 +150,11 @@ def Macro(Name: str, Body: str = "", Desc: Any = "") -> FEntity:
 
 def Alias(Name: str, Target: str = "", Desc: Any = "") -> FEntity:
 	return _entity("alias", Name, Target, Desc)
+
+
+def Functions(Name: str = "自由函数", Desc: Any = "") -> FEntity:
+	"""本头的自由函数集合（不属于任何类）：扫描器给它们一个家，而不是塞进某个类。"""
+	return _entity("functions", Name, "", Desc)
 
 
 def Card(Title: str, Desc: Any = "") -> FCard:
@@ -234,7 +249,7 @@ COMMENT_RE = re.compile(r"(//[^\n]*|/\*.*?\*/)", re.DOTALL)
 STRING_RE = re.compile(r"(\"(?:[^\"\\]|\\.)*\"|'(?:[^'\\]|\\.)*')")
 
 TYPE_LABELS = {"class": "类", "struct": "结构体", "enum": "枚举", "macro": "宏",
-               "alias": "别名", "function": "接口", "field": "字段"}
+               "alias": "别名", "function": "接口", "field": "字段", "functions": "自由函数"}
 
 
 def Highlight(Text: str) -> str:
