@@ -79,7 +79,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div id="app">
   <div id="side">
     <h1>Maho 引擎源码</h1>
-    <div class="search" title="左侧扫描 Source/**/*.h：25 个头文件 · 已声明 25 个 · 100 个实体 / 249 个成员 ｜ 内容来自头文件里的 `///` 注释（`Tools/docs_scan.py`）">
+    <div class="search" title="左侧扫描 Source/**/*.h：26 个头文件 · 已声明 26 个 · 102 个实体 / 251 个成员 ｜ 内容来自头文件里的 `///` 注释（`Tools/docs_scan.py`）">
       <input id="q" type="search" placeholder="搜索头文件…  （如 Frame、Core、Entry）" autocomplete="off">
     </div>
     <div id="tree"><ul>
@@ -103,6 +103,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 </li>
 <li class="dir"><span class="dir-label" data-dir="Public/Engine">Engine</span>
 <ul>
+<li class="file"><a href="#Public__Engine__DerivedEdges_h" data-file="Public__Engine__DerivedEdges_h">DerivedEdges.h</a></li>
 <li class="file"><a href="#Public__Engine__Engine_h" data-file="Public__Engine__Engine_h">Engine.h</a></li>
 <li class="file"><a href="#Public__Engine__Frame_h" data-file="Public__Engine__Frame_h">Frame.h</a></li>
 <li class="file"><a href="#Public__Engine__FrameBuilder_h" data-file="Public__Engine__FrameBuilder_h">FrameBuilder.h</a></li>
@@ -694,6 +695,42 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <h3><span class="type">别名</span> TUnionList_t <span class="base">: TUnionList_t</span></h3>
 </div>
 </div>
+<div class="pane" id="pane-Public__Engine__DerivedEdges_h">
+<div class="hdr">Public/Engine/DerivedEdges.h</div>
+<h2 class="file-title">DerivedEdges.h</h2>
+<div class="card"><div class="doc">
+<p>Deriving a frame graph's edges from RESOURCE ACCESS (`Engine/StageMetadata.h`), not from hand-written declarations. A stage declares what it touches (`MAHO_READ` / `MAHO_WRITE` / `MAHO_CREATE` / `MAHO_DESTROY`), and the resource it touches carries its own ordering semantics (`MAHO_DECLARE_RESOURCE_ORDERING`). This turns those two facts into the edges that were previously written by hand, one pair at a time, and discovered by crashing.</p>
+</div></div>
+<div class="card">
+<h3 class="card-title">包含的头文件</h3>
+
+<table>
+<thead><tr><th>头文件</th></tr></thead>
+<tbody>
+<tr><td>`&lt;Core/FrameGraph.h&gt;`</td></tr>
+</tbody></table>
+</div>
+<div class="ent e-class" id="Public__Engine__DerivedEdges_h-0">
+<h3><span class="type">类</span> FResourceEdgeDeriver <span class="base">: : <span class="kw">public</span> IDerivedEdgeSource</span></h3>
+<div class="sect"><div class="doc">
+<p>The engine<span class="st">'s edge deriver: aggregates one round'</span>s accesses BY RESOURCE and emits the pairs the resource's ordering semantics imply (see design D4/D5).</p>
+<p>Note: It emits only OLDER-round -&gt; <span class="kw">this</span>-round pairs, and never a same-round pair: inside one round every stage pair is already ordered by the frame's own stage chain, so a same-round edge would be redundant at best and a cycle at worst. `Snapshot` deliberately yields no Write -&gt; Read edge at all (nothing can tear, and the edge would serialise the K-deep pipeline).</p>
+</div></div>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> DeriveEdges(std::span&lt;<span class="kw">const</span> FTaskKey&gt; LiveKeys, std::uint64_t Frame, std::vector&lt;FDerivedEdge&gt;&amp; Out) <span class="kw">override</span>;</td><td></td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-functions" id="Public__Engine__DerivedEdges_h-1">
+<h3><span class="type">自由函数</span> </h3>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td>FResourceEdgeDeriver&amp; GetResourceEdgeDeriver();</td><td>The process-wide deriver the hosts install (`FFrameGraph::SetDeriver`).</td></tr>
+</tbody></table></div>
+</div>
+</div>
 <div class="pane" id="pane-Public__Engine__Engine_h">
 <div class="hdr">Public/Engine/Engine.h</div>
 <h2 class="file-title">Engine.h</h2>
@@ -706,6 +743,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <tr><td>`&lt;Core/Assembly.h&gt;`</td></tr>
 <tr><td>`&lt;Core/Interface.h&gt;`</td></tr>
 <tr><td>`&lt;Core/Query.h&gt;`</td></tr>
+<tr><td>`&lt;Engine/DerivedEdges.h&gt;`</td></tr>
 <tr><td>`&lt;Engine/Frame.h&gt;`</td></tr>
 <tr><td>`&lt;Engine/FrameBuilder.h&gt;`</td></tr>
 <tr><td>`&lt;algorithm&gt;`</td></tr>
