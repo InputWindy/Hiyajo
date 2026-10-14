@@ -79,10 +79,11 @@ class MAHO_API IFrameCollector
 public:
 	virtual ~IFrameCollector();
 
-	/** Take the given pool as this collector's task pool, plus a lane of its own within it.
+	/** Bind this collector's execution to the given pool, and take a lane of its own within it --
+	 *  from the consumer's side: hand the backend over to that pool instead of keeping one.
 	 *  Called by the installing parent; never after the collector's first Execute (the graph that
 	 *  holds the pool by reference does not exist yet, and that is the point of doing it here). */
-	virtual void UseSharedPool(FThreadPool& InPool) = 0;
+	virtual void BindPool(FThreadPool& InPool) = 0;
 };
 
 // ── FFrameBuilder: layer-collection management base ─────────────────────
@@ -131,9 +132,9 @@ public:
 		}
 	}
 
-	/** IFrameCollector: share the installing parent's task pool and take a lane of our own in it.
-	 *  Called from Install, i.e. before this collector exists as far as the graph is concerned. */
-	void UseSharedPool(FThreadPool& InPool) override
+	/** IFrameCollector: bind our execution to the installing parent's pool and take a lane of our own
+	 *  in it. Called from Install, i.e. before this collector exists as far as the graph is concerned. */
+	void BindPool(FThreadPool& InPool) override
 	{
 		// The parent's pool replaces ours entirely -- OwnedPool simply never gets workers (the
 		// pool is lazy), so nothing is doubled by having the member.
@@ -363,7 +364,7 @@ protected:
 		// must leave the caller with nothing to clean up.
 		if (auto* Child = static_cast<IFrameCollector*>(Layer->GetCollectorInterface()))
 		{
-			Child->UseSharedPool(*Pool);
+			Child->BindPool(*Pool);
 		}
 
 		PendingAdded.push_back(Layer.get());
@@ -1453,7 +1454,7 @@ private:
 	/** The pool this collector drives its nodes in, and the lane of it that is OURS.
 	 *
 	 *  OwnedPool is the fallback -- a host, or a collector nobody handed a pool to, gets workers
-	 *  of its own. UseSharedPool points Pool at a PARENT's instead and takes a lane, so nested
+	 *  of its own. BindPool hands our backend to a PARENT's instead and takes a lane of it, so nested
 	 *  collectors (host -> FRender -> FExampleEditor) all end up on the outermost builder's worker
 	 *  set while each keeps an isolated barrier. That is the whole point of lanes: the isolation
 	 *  the engine needs is per COLLECTOR, and it used to be bought with one thread set per

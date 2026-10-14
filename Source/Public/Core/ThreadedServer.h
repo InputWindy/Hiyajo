@@ -19,9 +19,10 @@ class FThreadPool;
 // gives it a dedicated thread that serves that lane and nothing else. What this class adds on top is
 // the role's lifecycle (OnInitialize/OnShutdown), its name for traces, and "am I on my own thread?"
 //
-// The pool is INJECTED: a server is a collector's sibling, so it wants the HOST's worker set, not one
-// of its own -- `UseSharedPool(Engine.GetPool())` before Initialize, exactly the shape
-// `FFrameBuilder::UseSharedPool` already has. Without it the server owns a pool (standalone use).
+// The pool is INJECTED -- from the consumer's side this is "hand my backend to that pool": a server is
+// a collector's sibling, so it binds to the HOST's worker set instead of keeping one of its own.
+// `BindPool(Engine.GetPool())` before Initialize, the same shape `FFrameBuilder::BindPool` already has.
+// Without it the server owns a pool (standalone use: a test, a tool).
 class MAHO_API FThreadedServer
 {
 public:
@@ -31,8 +32,9 @@ public:
 	FThreadedServer(const FThreadedServer&) = delete;
 	FThreadedServer& operator=(const FThreadedServer&) = delete;
 
-	/** Live on this pool's lane instead of one of our own. Must be called before Initialize. */
-	void UseSharedPool(FThreadPool& InPool);
+	/** Bind this role's execution to `InPool` -- the backend a server hands over instead of running a
+	 *  thread set of its own. Must be called before Initialize. */
+	void BindPool(FThreadPool& InPool);
 
 	/** Starts the resident lane (named `GetThreadName()`); then OnInitialize's work can be queued.
 	 *  Returns false when the lane could not be obtained (the pool is at lane capacity). */

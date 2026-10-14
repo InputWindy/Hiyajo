@@ -44,11 +44,11 @@ FThreadedServer::~FThreadedServer()
 	Shutdown();
 }
 
-void FThreadedServer::UseSharedPool(FThreadPool& InPool)
+void FThreadedServer::BindPool(FThreadPool& InPool)
 {
 	if (Impl->bRunning.load(std::memory_order_acquire))
 	{
-		ReportError("FThreadedServer::UseSharedPool after Initialize: the lane is already running");
+		ReportError("FThreadedServer::BindPool after Initialize: the lane is already running");
 		return;
 	}
 	Impl->Pool = &InPool;

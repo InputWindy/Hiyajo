@@ -571,7 +571,7 @@ void FPlatform::Initialize(FEngineBase& Engine, FEngineContext&)
 	// The lane is therefore PERSISTENT -- one dedicated thread of the host's pool serves it and
 	// nothing else (see AGENTS "Thread Affinity"); FThreadPool::CreatePersistentLane is what makes
 	// "resident role" and "one thread set for the whole engine" the same thing.
-	UseSharedPool(Engine.GetPool());
+	BindPool(Engine.GetPool());
 	if (!FThreadedServer::Initialize())
 	{
 		MAHO_LOG_CORE_ERROR("FPlatform: the platform thread failed to start");

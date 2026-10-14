@@ -166,7 +166,7 @@ bool FShaderCompilerServer::Initialize(FThreadPool& Pool)
 	glslang::InitializeProcess();
 	MAHO_LOG_CORE_INFO("FShaderCompilerServer: glslang initialized");
 #endif
-	UseSharedPool(Pool);                   // 编译线程 = 宿主池上的一条持久 lane
+	BindPool(Pool);                        // 编译线程 = 宿主池上的一条持久 lane
 	return FThreadedServer::Initialize();
 }
 

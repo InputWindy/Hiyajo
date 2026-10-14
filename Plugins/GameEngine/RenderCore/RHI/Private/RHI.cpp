@@ -97,7 +97,7 @@ bool FRHI::Initialize(void* NativeWindowHandle, int Width, int Height, FThreadPo
 
 	// Start the render server lane on the HOST's pool (one dedicated thread serves it; see AGENTS
 	// "Thread Affinity": the present/acquire state lives on this thread).
-	UseSharedPool(Pool);
+	BindPool(Pool);
 	FThreadedServer::Initialize();
 
 	MAHO_LOG_CORE_INFO("FRHI RHI ready ({}x{})", Width, Height);
