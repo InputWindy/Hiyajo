@@ -2,7 +2,6 @@
 
 #include "RHIAPI.h"
 #include <Core/Singleton.h>
-#include <Core/ThreadedServer.h>
 #include <Core/ThreadPool.h>
 #include <Maho.h>
 #include <RHI/RHICommandList.h>

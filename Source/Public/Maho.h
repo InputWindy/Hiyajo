@@ -11,7 +11,6 @@
 #include <Core/Interface.h>
 #include <Core/FrameGraph.h>
 #include <Core/ThreadPool.h>
-#include <Core/ThreadedServer.h>
 #include <Core/Assembly.h>
 #include <Core/Fatal.h>
 #include <Engine/Engine.h>

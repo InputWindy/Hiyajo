@@ -2,7 +2,6 @@
 
 
 #include <Core/Export.h>
-#include <Core/ThreadedServer.h>
 #include <Core/ThreadPool.h>
 #include <Core/TypeList.h>
 

@@ -18,7 +18,7 @@
 // The engine loop drives the lifecycle: Initialize() starts the IO thread,
 // Tick(FEngineBase&) is called every frame to apply ready transfers on the
 // game thread, Shutdown() stops the thread and clears the catalog.
-#include <Core/ThreadedServer.h>
+#include <Core/ThreadPool.h>
 #include <Maho.h>
 #include <Engine/Engine.h>
 
