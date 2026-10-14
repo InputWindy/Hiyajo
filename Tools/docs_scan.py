@@ -186,7 +186,10 @@ def ParseDoc(Lines: list[str]) -> list[tuple[str, str]]:
 
 
 def DescOf(Tags: list[tuple[str, str]]) -> list[str]:
-	"""说明行的渲染顺序：`@brief` 在前，`@param`/`@tparam`/`@return` 依源码顺序在后。"""
+	"""说明行的渲染顺序：`@brief` 在前，`@param`/`@tparam`/`@return` 依源码顺序在后。
+
+	标签一律渲染成**英文**（`Name: …` / `Returns: …` / `Note: …`）—— 注释本身可能是任何语言，
+	标签是结构，不该两处混排。"""
 	Out: list[str] = []
 	Head = " ".join(Text for Tag, Text in Tags if Tag in ("brief", "file") and Text).strip()
 	if Head:
@@ -196,15 +199,15 @@ def DescOf(Tags: list[tuple[str, str]]) -> list[str]:
 			continue
 		if Tag in ("param", "tparam"):
 			Name, _, Rest = Text.partition(" ")
-			Out.append(f"`{Name}`：{Rest.strip()}" if Rest.strip() else f"`{Name}`")
+			Out.append(f"`{Name}`: {Rest.strip()}" if Rest.strip() else f"`{Name}`")
 		elif Tag in ("return", "returns"):
-			Out.append(f"返回：{Text}")
+			Out.append(f"Returns: {Text}")
 		elif Tag == "note":
-			Out.append(f"注：{Text}")
+			Out.append(f"Note: {Text}")
 		elif Tag == "warning":
-			Out.append(f"警告：{Text}")
+			Out.append(f"Warning: {Text}")
 		elif Tag == "see":
-			Out.append(f"参见：{Text}")
+			Out.append(f"See: {Text}")
 		else:
 			Out.append(Text)
 	return Out
