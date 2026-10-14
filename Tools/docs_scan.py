@@ -331,7 +331,13 @@ def FirstError(Node: FSnap) -> int:
 
 
 def DocLines(Node: FSnap, Rows: list[str]) -> list[str]:
-	"""紧贴 Node 上方的 `///` 连续块（没有空行、且块内全是 `///`）。行表整头只拆一次。"""
+	"""紧贴 Node 上方的文档块，返回**归一成 `///` 形式**的行（没有则空）。行表整头只拆一次。
+
+	两种写法都收（Doxygen 的两种）：
+	* `///` 连续块（期间没有空行、块内全是 `///`）；
+	* 紧贴的 `/** … */` 块 —— 归一成 `///` 行后走同一条解析路径。引擎里已经写好的一批 `/** … */`
+	  注释因此立刻进文档，不必为了工具把它们改成 `///`（普通 `/* … */` 不是文档，不收）。
+	"""
 	Index = Node.Row - 1
 	Lines: list[str] = []
 	while 0 <= Index < len(Rows):
@@ -340,8 +346,32 @@ def DocLines(Node: FSnap, Rows: list[str]) -> list[str]:
 			break
 		Lines.append(Text)
 		Index -= 1
-	Lines.reverse()
-	return Lines
+	if Lines:
+		Lines.reverse()
+		return Lines
+
+	Index = Node.Row - 1
+	if Index < 0 or not Rows[Index].strip().endswith("*/"):
+		return []
+	Start = Index
+	while Start >= 0 and "/**" not in Rows[Start]:
+		if Rows[Start].strip().startswith("/*"):
+			return []                            # 普通块注释：不是文档
+		Start -= 1
+	if Start < 0:
+		return []
+	Out: list[str] = []
+	for Line in Rows[Start:Index + 1]:
+		Text = Line.strip()
+		for Prefix in ("/**", "/*", "*/"):
+			if Text.startswith(Prefix):
+				Text = Text[len(Prefix):].strip()
+			if Text.endswith(Prefix):
+				Text = Text[:-len(Prefix)].strip()
+		if Text.startswith("*"):
+			Text = Text[1:].strip()
+		Out.append(f"{DOC_PREFIX} {Text}".rstrip())
+	return Out
 
 
 def ParseDoc(Lines: list[str]) -> list[tuple[str, str]]:
@@ -421,7 +451,8 @@ def FileDoc(Rows: list[str]) -> list[str]:
 
 # ── 声明的形状（都在快照上判类型，不做字段查询）─────────────────────────────────
 
-NAME_TYPES = ("identifier", "type_identifier", "field_identifier", "qualified_identifier")
+NAME_TYPES = ("identifier", "type_identifier", "field_identifier", "qualified_identifier",
+              "template_type", "destructor_name", "operator_name")
 BODY_TYPES = ("field_declaration_list", "declaration_list", "compound_statement")
 DECLARATION_TYPES = ("class_specifier", "struct_specifier", "union_specifier", "enum_specifier",
                      "namespace_definition", "function_definition", "declaration", "field_declaration",
@@ -491,6 +522,66 @@ def TemplatePrefix(Node: FSnap, Source: bytes) -> str:
 # ── 扫描 ────────────────────────────────────────────────────────────────────────
 
 
+def InnerDeclOf(Node: FSnap):
+	"""`template <...>` 里真正被声明的东西：**最后一个"声明类"子节点**。
+
+	不能取"最后一个子节点"：模板声明的子节点里带着 `template` / `<` / `;` 这些**标点与关键字**，
+	`template <typename T> class X {...};` 的最后一个子节点就是那个 `;`（取它等于什么都没声明 ——
+	实测 `Delegate.h` 的 `TMulticastEvent` 因此整个类被跳过，检查报"0 个成员"）。"""
+	Inner = [C for C in Node.Kids if C.Type in DECLARATION_TYPES]
+	return Inner[-1] if Inner else None
+
+
+def Matches(Rel: str, Options) -> bool:
+	"""`--filter` 命中判断：逗号分隔可给多个子串（"只收这些头"是常态 —— 未封板的头不该进文档）。"""
+	Needles = [Part for Part in Options.filter.split(",") if Part]
+	return not Needles or any(Part in Rel for Part in Needles)
+
+
+class FMacroDef:
+	"""一条 `#define`，作为**可展示的宏实体**收集下来（`#define` 的宏体在解析前被抹成空气，
+	所以宏只能这样进文档：从源码扫出名字、参数表和 `///` 注释）。"""
+
+	__slots__ = ("Row", "Name", "Params", "Tags")
+
+	def __init__(self, Row: int, Name: str, Params: str, Tags: list[tuple[str, str]]) -> None:
+		self.Row = Row
+		self.Name = Name
+		self.Params = Params
+		self.Tags = Tags
+
+
+def CollectMacroDefs(Rows: list[str]) -> list[FMacroDef]:
+	"""扫出所有 `#define`（含多行定义），连同它们**紧贴上方**的 `///` 注释块。"""
+	Defines = []
+	Seen: set[str] = set()
+	Index = 0
+	while Index < len(Rows):
+		Line = Rows[Index].lstrip()
+		if not (Line.startswith("#") and Line[1:].lstrip().startswith("define")):
+			Index += 1
+			continue
+		Body = Line[1:].lstrip()[len("define"):].strip()
+		Match = re.match(r"([A-Za-z_]\w*)\s*(\(([^)]*)\))?", Body)
+		if Match is None:
+			Index += 1
+			continue
+		Name = Match.group(1)
+		# 同名只收第一次（`#if` 各分支里会重复定义同一个名字，收三遍只会让文档重复三行）。
+		if Name in Seen:
+			while Rows[Index].rstrip().endswith("\\") and Index + 1 < len(Rows):
+				Index += 1
+			Index += 1
+			continue
+		Seen.add(Name)
+		Tags = ParseDoc(DocLines(FSnap(Name, Index, 0, 0), Rows))
+		Defines.append(FMacroDef(Index, Name, Match.group(3) or "", Tags))
+		while Rows[Index].rstrip().endswith("\\") and Index + 1 < len(Rows):
+			Index += 1
+		Index += 1
+	return Defines
+
+
 class FScanner:
 	def __init__(self, Root: Path, Options) -> None:
 		self.Root = Root
@@ -498,10 +589,22 @@ class FScanner:
 		self.Parser = FParser_()
 		self.Stats = {"headers": 0, "entities": 0, "members": 0, "documented": 0, "missing": 0}
 		self.Problems: list[str] = []
+		self.PendingMacros: list[FMacroDef] = []
+		self.Rel = ""
 		self.bFunctionsOpen = False
 
 	def Report(self, Rel: str, Node: FSnap, Message: str) -> None:
 		self.Problems.append(f"{Rel}:{Node.Row + 1}: {Message}")
+
+	def FlushMacros(self, Row: int) -> None:
+		"""把 `Row` 之前（源码顺序）的宏实体先发出去 —— 宏在解析前就被抹成空气，只能这样进文档，
+		而且必须**按源码位置**穿插，否则 `///` 注释会挂到错误的实体上。"""
+		while self.PendingMacros and self.PendingMacros[0].Row < Row:
+			Macro = self.PendingMacros.pop(0)
+			D.Macro(Macro.Name, f"({Macro.Params})" if Macro.Params else "", DescOf(Macro.Tags))
+			self.Stats["entities"] += 1
+			if not any(Tag == "brief" and Text for Tag, Text in Macro.Tags):
+				self.Problems.append(f"{self.Rel}:{Macro.Row + 1}: 缺 @brief：{Macro.Name}")
 
 	def Headers(self) -> list[Path]:
 		Out = []
@@ -510,18 +613,22 @@ class FScanner:
 			       for Part in Path_.parts):
 				continue
 			Rel = Path_.relative_to(self.Root).as_posix()
-			if self.Options.filter and self.Options.filter not in Rel:
+			if not Matches(Rel, self.Options):
 				continue
 			Out.append(Path_)
 		return Out
 
 	def ScanHeader(self, Path_: Path) -> None:
 		Rel = Path_.relative_to(self.Root).as_posix()
+		self.Rel = Rel                              # 宏实体在 FlushMacros 里上报，需要它
 		if self.Options.verbose:
 			print(f"[docs_scan] 扫描 {Rel}", flush=True)
-		Source, Tree = self.Parser.Parse(Path_.read_bytes())
+		Raw = Path_.read_bytes()
+		# 行表取自**未剥离**的源码：宏定义的收集必须看得见 `#define` 原文（多行宏体在解析前已被抹成
+		# 空气），而注释与行号在两个版本里一致。
+		Rows = Raw.decode("utf-8", "replace").split("\n")
+		Source, Tree = self.Parser.Parse(Raw)
 		Root = Snapshot(Tree, Source)
-		Rows = Source.decode("utf-8", "replace").split("\n")
 
 		ErrorRow = FirstError(Root)
 		if ErrorRow >= 0:
@@ -538,7 +645,9 @@ class FScanner:
 		self.DeclareIncludes(Rows)
 		self.Stats["headers"] += 1
 		self.bFunctionsOpen = False          # 「自由函数」一个头只开一次（不是一个函数一个）
+		self.PendingMacros = CollectMacroDefs(Rows)
 		self.Walk(Root, Source, Rows, Rel)
+		self.FlushMacros(1 << 30)            # 文件末尾剩下的宏
 
 	def DeclareIncludes(self, Rows: list[str]) -> None:
 		"""「包含的头文件」卡片：**由源码派生**，不再手写。
@@ -570,11 +679,12 @@ class FScanner:
 
 	def Declare(self, Node: FSnap, Source: bytes, Rows: list[str], Rel: str,
 	            Template: str = "", Doc: list[tuple[str, str]] | None = None) -> None:
+		self.FlushMacros(Node.Row)
 		if Node.Type in TEMPLATE_TYPES:
-			Inner = [C for C in Node.Kids if C.Type not in ("comment", "template_declaration")]
-			if not Inner:
+			Inner = InnerDeclOf(Node)
+			if Inner is None:
 				return
-			self.Declare(Inner[-1], Source, Rows, Rel, TemplatePrefix(Node, Source),
+			self.Declare(Inner, Source, Rows, Rel, TemplatePrefix(Node, Source),
 			             Doc if Doc is not None else ParseDoc(DocLines(Node, Rows)))
 			return
 		if Node.Type in ("comment", "preproc_include"):
@@ -594,17 +704,13 @@ class FScanner:
 				return
 			D.Enum(Name.Text(Source), Base="", Desc=Desc)
 			self.Stats["entities"] += 1
-		elif Node.Type in ("preproc_def", "preproc_function_def"):
-			Name = Node.Find(*NAME_TYPES)
-			Value = Node.Find(*VALUE_TYPES)
-			D.Macro(Name.Text(Source) if Name is not None else "?",
-			        Value.Text(Source) if Value is not None else "", Desc=Desc)
-			self.Stats["entities"] += 1
 		elif Node.Type == "alias_declaration":
 			Name = Node.Find(*NAME_TYPES)
-			Value = Node.Find(*VALUE_TYPES)
+			# 取**最后一个**值形态的子节点：`using X = Y;` 的名字本身也是 `type_identifier`，
+			# 取第一个会得到"X : X"。
+			Values = Node.All(*VALUE_TYPES)
 			D.Alias(Name.Text(Source) if Name is not None else "?",
-			        Value.Text(Source) if Value is not None else "", Desc=Desc)
+			        Values[-1].Text(Source) if Values else "", Desc=Desc)
 			self.Stats["entities"] += 1
 		elif Node.Type == "type_definition":
 			D.Alias(SignatureOf(Node, Source), "", Desc=Desc)
@@ -648,17 +754,20 @@ class FScanner:
 			if Member.Type == "access_specifier":
 				D.SetAccess(Member.Text(Source).rstrip(":"))
 				continue
-			self.DeclareMember(Member, Source, Rows, Rel, Template)
+			# 成员**不**继承类的模板前缀：类的 `template <...>` 已经写在类名那行了，成员只在它自己
+			# 是成员模板时才带 `template <...>`（那是 DeclareMember 自己的事）。
+			self.DeclareMember(Member, Source, Rows, Rel, "")
 
 	def DeclareMember(self, Node: FSnap, Source: bytes, Rows: list[str], Rel: str,
 	                  Template: str = "", Doc: list[tuple[str, str]] | None = None) -> None:
+		self.FlushMacros(Node.Row)
 		if Node.Type == "comment":
 			return
 		if Node.Type in TEMPLATE_TYPES:
-			Inner = [C for C in Node.Kids if C.Type not in ("comment", "template_declaration")]
-			if not Inner:
+			Inner = InnerDeclOf(Node)
+			if Inner is None:
 				return
-			self.DeclareMember(Inner[-1], Source, Rows, Rel,
+			self.DeclareMember(Inner, Source, Rows, Rel,
 			                   Template + TemplatePrefix(Node, Source),
 			                   Doc if Doc is not None else ParseDoc(DocLines(Node, Rows)))
 			return
@@ -797,7 +906,7 @@ def RunIsolated(Root: Path, Options) -> int:
 	D.Reset()
 	for Path_ in Paths:
 		Rel = Path_.relative_to(Root).as_posix()
-		if Options.filter and Options.filter not in Rel:
+		if not Matches(Rel, Options):
 			continue
 		Proc = subprocess.run([sys.executable, Script, "--root", str(Root), "--one", Rel, "--json"],
 		                      capture_output=True, text=True, encoding="utf-8", errors="replace")

@@ -79,7 +79,7 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div id="app">
   <div id="side">
     <h1>Maho 引擎源码</h1>
-    <div class="search" title="左侧扫描 Source/**/*.h：25 个头文件 · 已声明 1 个 · 2 个实体 / 20 个成员 ｜ 内容来自头文件里的 `///` 注释（`Tools/docs_scan.py`）">
+    <div class="search" title="左侧扫描 Source/**/*.h：25 个头文件 · 已声明 8 个 · 45 个实体 / 132 个成员 ｜ 内容来自头文件里的 `///` 注释（`Tools/docs_scan.py`）">
       <input id="q" type="search" placeholder="搜索头文件…  （如 Frame、Core、Entry）" autocomplete="off">
     </div>
     <div id="tree"><ul>
@@ -191,17 +191,161 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div class="pane" id="pane-Public__Core__Delegate_h">
 <div class="hdr">Public/Core/Delegate.h</div>
 <h2 class="file-title">Delegate.h</h2>
-<div class="empty">（尚未声明内容 —— 在这个头文件里加 `/// @file` 块与 `///` 注释，再跑 Tools\maho_python.bat Tools\docs_scan.py）</div>
+<div class="card"><div class="doc">
+<p>Multicast events: `TMulticastEvent&lt;<span class="kw">void</span>(Args...)&gt;` -- bind / broadcast / unbind, thread-safe, usable across a DLL boundary. A subscriber gets an opaque `FSubscriptionID` back and unbinds with it, so a listener that dies before its publisher can always detach (<span class="kw">this</span> is what makes <span class="st">"a service broadcasts to plugins"</span> safe when a plugin is unloaded). `Broadcast` copies the handler list under the lock and then calls WITHOUT it: a handler may bind/unbind (or broadcast) re-entrantly, and holding the lock across the calls would deadlock on the first such handler. The event itself never crosses a DLL boundary as an interface: a publisher owns it and hands out subscription ids.</p>
+</div></div>
+<div class="card">
+<h3 class="card-title">包含的头文件</h3>
+
+<table>
+<thead><tr><th>头文件</th></tr></thead>
+<tbody>
+<tr><td>`&lt;algorithm&gt;`</td></tr>
+<tr><td>`&lt;cstdint&gt;`</td></tr>
+<tr><td>`&lt;functional&gt;`</td></tr>
+<tr><td>`&lt;mutex&gt;`</td></tr>
+<tr><td>`&lt;utility&gt;`</td></tr>
+<tr><td>`&lt;vector&gt;`</td></tr>
+</tbody></table>
+</div>
+<div class="ent e-alias" id="Public__Core__Delegate_h-0">
+<h3><span class="type">别名</span> FSubscriptionID <span class="base">: uint64_t</span></h3>
+<div class="sect"><div class="doc">
+<p>One subscriber's handle, returned by `Bind` and passed back to `Unbind`.</p>
+</div></div>
+</div>
+<div class="ent e-class" id="Public__Core__Delegate_h-1">
+<h3><span class="type">类</span> template &lt;typename... Args&gt; TMulticastEvent&lt;void(Args...)&gt;</h3>
+<div class="sect"><div class="doc">
+<p>A multicast event with signature `<span class="kw">void</span>(Args...)`.</p>
+<p>`Args`: What a broadcast passes to every handler.</p>
+</div></div>
+<div class="sect">
+<h4>字段</h4>
+<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">struct</span> FEntry <span class="cm">/// @brief The id `Bind` returned for this handler. FSubscriptionID ID; /// @brief The callable itself (an empty one is skipped by `Broadcast`). FHandler Handler;;</span></td><td>One bound handler, with the id it is known by.</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>std::vector&lt;FEntry&gt; Handlers;</td><td>The bound handlers, in bind order.</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>FSubscriptionID NextID = 1;</td><td>The next id to hand out (starts at 1: 0 is never a valid subscription).</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">mutable</span> std::mutex Mutex;</td><td>Guards `Handlers` and `NextID`. Mutable so a <span class="kw">const</span> `Broadcast` can take it.</td></tr>
+</tbody></table></div>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td>FSubscriptionID Bind(FHandler Handler);</td><td>Subscribes a handler.<br>`Handler`: The callable to invoke on every broadcast (an empty one is skipped).<br>Returns: The subscription id, to be passed back to `Unbind`.</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Unbind(FSubscriptionID ID);</td><td>Detaches a subscription. Idempotent: an unknown id is ignored.<br>`ID`: The id `Bind` returned.</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Broadcast(Args... Values) <span class="kw">const</span>;</td><td>Invokes every currently-bound handler, in bind order. The list is copied under the lock and the calls happen outside it, so a handler may bind, unbind or broadcast again -- and a handler bound DURING <span class="kw">this</span> broadcast does not receive it (it sees the next one). That is the contract callers rely on when they tear something down from a callback.<br>`Values`: What to pass to each handler.</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> RemoveAll();</td><td>Detaches every subscription (a publisher tearing down its own event).</td></tr>
+</tbody></table></div>
+<div class="sect">
+<h4>嵌套</h4>
+<table><thead><tr><th>访问域</th><th>名称</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td>FHandler</td><td>What a subscriber registers: any callable taking `Args...`.</td></tr>
+</tbody></table></div>
+</div>
 </div>
 <div class="pane" id="pane-Public__Core__Export_h">
 <div class="hdr">Public/Core/Export.h</div>
 <h2 class="file-title">Export.h</h2>
-<div class="empty">（尚未声明内容 —— 在这个头文件里加 `/// @file` 块与 `///` 注释，再跑 Tools\maho_python.bat Tools\docs_scan.py）</div>
+<div class="card"><div class="doc">
+<p>模块导出标签：`MAHO_EXPORT` / `MAHO_IMPORT` / `MAHO_API` 的三种形态。 各插件自己的标签（`MAHO_&lt;NAME&gt;_API`，由 codegen 生成）都以这里为基础：编译该模块的 DLL 时它是 `MAHO_EXPORT`，消费方是 `MAHO_IMPORT`。**只有函数跨 DLL 导出，数据符号不导**；`MAHO_API` 在 插件侧展开为空（插件自己的 `MAHO_&lt;NAME&gt;_API` 才是有效标签）。非 `MAHO_BUILD_SHARED`（静态链接） 时三者都为空，所以任何模块都可以无条件写它。</p>
+</div></div>
+<div class="ent e-macro" id="Public__Core__Export_h-0">
+<h3><span class="type">宏</span> MAHO_EXPORT</h3>
+<div class="sect"><div class="doc">
+<p>Windows 的导出标签（`__declspec(dllexport)`）。</p>
+</div></div>
+</div>
+<div class="ent e-macro" id="Public__Core__Export_h-1">
+<h3><span class="type">宏</span> MAHO_IMPORT</h3>
+<div class="sect"><div class="doc">
+<p>Windows 的导入标签（`__declspec(dllimport)`）：把<span class="st">"消费方自己生成一份虚表/删除析构符"</span> 变成编译错误，而不是留到运行时在 `<span class="kw">delete</span>` 里静默崩。</p>
+</div></div>
+</div>
+<div class="ent e-macro" id="Public__Core__Export_h-2">
+<h3><span class="type">宏</span> MAHO_API</h3>
+<div class="sect"><div class="doc">
+<p>本模块的 API 标签：编译本模块时 = 导出。</p>
+</div></div>
+</div>
 </div>
 <div class="pane" id="pane-Public__Core__Fatal_h">
 <div class="hdr">Public/Core/Fatal.h</div>
 <h2 class="file-title">Fatal.h</h2>
-<div class="empty">（尚未声明内容 —— 在这个头文件里加 `/// @file` 块与 `///` 注释，再跑 Tools\maho_python.bat Tools\docs_scan.py）</div>
+<div class="card"><div class="doc">
+<p>致命 / 错误上报路径与断言宏：`MAHO_CHECK` / `MAHO_VERIFY` / `MAHO_ENSURE` 及它们的格式化版本。 三档语义（按<span class="st">"该不该继续"</span>分，不是按严重程度分）： * `MAHO_CHECK` / `MAHO_CHECKF` —— **契约**被破坏就 `fatal`：这是一个 bug，继续跑只会把错误藏得更深。 * `MAHO_VERIFY` —— 永远生效（不受 `MAHO_DO_CHECK` 影响）：用于 `Shipping` 也要检查的不变量。 * `MAHO_ENSURE` / `MAHO_ENSURE_BREAK` —— **只报一次**、不中断：外部数据 / 环境导致的可疑情况。 `MAHO_CHECK` / `MAHO_CHECKF` / `MAHO_ENSURE*` 在关闭检查的构建（`Shipping`）里编译成 `((<span class="kw">void</span>)0)`： 所以它们**只能**放表达式（不能放有副作用的语句），参数在那种构建里不会被求值。 `MAHO_DO_CHECK` / `MAHO_DO_ENSURE` 由构建配置注入（见 AGENTS 的 Build Configuration）。</p>
+</div></div>
+<div class="card">
+<h3 class="card-title">包含的头文件</h3>
+
+<table>
+<thead><tr><th>头文件</th></tr></thead>
+<tbody>
+<tr><td>`&lt;Core/Export.h&gt;`</td></tr>
+<tr><td>`&lt;cstdio&gt;`</td></tr>
+</tbody></table>
+</div>
+<div class="ent e-functions" id="Public__Core__Fatal_h-0">
+<h3><span class="type">自由函数</span> </h3>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td>[[noreturn]] <span class="kw">void</span> ReportFatal(<span class="kw">const</span> <span class="kw">char</span>* Message);</td><td>报告一条致命错误并**中止**：打印到 stderr，写入日志，然后 `abort()`。<br>`Message`: 已格式化好的说明（调用方负责给出可定位的信息：哪个契约、哪里、什么值）。</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> ReportError(<span class="kw">const</span> <span class="kw">char</span>* Message);</td><td>报告一条错误但**继续执行**：用于<span class="st">"能重试 / 能降级"</span>的失败路径。<br>`Message`: 已格式化好的说明。</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> ReportEnsureBreak(<span class="kw">const</span> <span class="kw">char</span>* Message);</td><td>报告一条 `MAHO_ENSURE` 系列的失败并在调试器里中断（`Shipping` 下退化为普通错误上报）。<br>`Message`: 已格式化好的说明。</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> InstallFatalHandlers();</td><td>装上进程级兜底：未捕获异常 / 访问违例 / 信号都走日志而不是直接消失。</td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-macro" id="Public__Core__Fatal_h-1">
+<h3><span class="type">宏</span> MAHO_CHECK <span class="base">: (Expr)</span></h3>
+<div class="sect"><div class="doc">
+<p>契约检查：`Expr` 为假即 `ReportFatal`（带表达式原文与文件）。关检查的构建里为空操作。</p>
+<p>`Expr`: 要检查的表达式。</p>
+</div></div>
+</div>
+<div class="ent e-macro" id="Public__Core__Fatal_h-2">
+<h3><span class="type">宏</span> MAHO_CHECKF <span class="base">: (Expr, Fmt, ...)</span></h3>
+<div class="sect"><div class="doc">
+<p>契约检查 + 自定义消息（`std::snprintf` 格式）。</p>
+<p>`Expr`: 要检查的表达式。</p>
+<p>`Fmt`: `printf` 风格格式串。</p>
+</div></div>
+</div>
+<div class="ent e-macro" id="Public__Core__Fatal_h-3">
+<h3><span class="type">宏</span> MAHO_VERIFY <span class="base">: (Expr)</span></h3>
+<div class="sect"><div class="doc">
+<p>契约检查，**任何构建都生效**（不受 `MAHO_DO_CHECK` 影响）。</p>
+<p>`Expr`: 要检查的表达式。</p>
+</div></div>
+</div>
+<div class="ent e-macro" id="Public__Core__Fatal_h-4">
+<h3><span class="type">宏</span> MAHO_ENSURE <span class="base">: (Expr)</span></h3>
+<div class="sect"><div class="doc">
+<p>可疑情况检查：只报一次、不中断（适合外部输入 / 环境导致的问题）。</p>
+<p>`Expr`: 要检查的表达式。</p>
+</div></div>
+</div>
+<div class="ent e-macro" id="Public__Core__Fatal_h-5">
+<h3><span class="type">宏</span> MAHO_ENSURE_BREAK <span class="base">: (Expr, Fmt, ...)</span></h3>
+<div class="sect"><div class="doc">
+<p>可疑情况检查 + 自定义消息：只报一次、不中断，且**在调试器里断住**便于当场看清现场。</p>
+</div></div>
+</div>
+<div class="ent e-macro" id="Public__Core__Fatal_h-6">
+<h3><span class="type">宏</span> MAHO_ENSURE_NOT_NULL <span class="base">: (PtrExpr, Name)</span></h3>
+<div class="sect"><div class="doc">
+<p>取出一个指针并顺带 `MAHO_ENSURE` 它非空，然后进入一个<span class="st">"指针有效才走"</span>的块。</p>
+<p>`PtrExpr`: 指针表达式（会被求值一次）。</p>
+<p>`Name`: 块内可见的指针名字。</p>
+</div></div>
+</div>
+<div class="ent e-macro" id="Public__Core__Fatal_h-7">
+<h3><span class="type">宏</span> MAHO_IF_NOT_NULL <span class="base">: (PtrExpr, Name)</span></h3>
+<div class="sect"><div class="doc">
+<p>指针非空才进入的块（不检查、不报错：调用方已知它可能为空，只想跳过）。</p>
+<p>`PtrExpr`: 指针表达式（会被求值一次）。</p>
+<p>`Name`: 块内可见的指针名字。</p>
+</div></div>
+</div>
 </div>
 <div class="pane" id="pane-Public__Core__FrameGraph_h">
 <div class="hdr">Public/Core/FrameGraph.h</div>
@@ -216,12 +360,230 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div class="pane" id="pane-Public__Core__MetaData_h">
 <div class="hdr">Public/Core/MetaData.h</div>
 <h2 class="file-title">MetaData.h</h2>
-<div class="empty">（尚未声明内容 —— 在这个头文件里加 `/// @file` 块与 `///` 注释，再跑 Tools\maho_python.bat Tools\docs_scan.py）</div>
+<div class="card"><div class="doc">
+<p>The engine<span class="st">'s metadata store: every module files rows of `(Type, Key, Value)` here, and every module can look them up -- the engine'</span>s replacement <span class="kw">for</span> RTTI. The manager interprets NOTHING: `Type` and `Key` are strings the registering side chose, `Value` is bytes it encoded, and the store only answers <span class="st">"what did you file"</span>. A reader and a writer that agree on the encoding therefore share data across DLL boundaries without sharing a type -- which is how a declared TYPE gets an identity (`MAHO_DECLARE_TYPE`), a stage declares what it touches and a resource declares its ordering semantics.</p>
+</div></div>
+<div class="card">
+<h3 class="card-title">包含的头文件</h3>
+
+<table>
+<thead><tr><th>头文件</th></tr></thead>
+<tbody>
+<tr><td>`&lt;Core/Export.h&gt;`</td></tr>
+<tr><td>`&lt;Core/Singleton.h&gt;`</td></tr>
+<tr><td>`&lt;cstddef&gt;`</td></tr>
+<tr><td>`&lt;memory&gt;`</td></tr>
+<tr><td>`&lt;string&gt;`</td></tr>
+<tr><td>`&lt;string_view&gt;`</td></tr>
+<tr><td>`&lt;vector&gt;`</td></tr>
+</tbody></table>
+</div>
+<div class="ent e-struct" id="Public__Core__MetaData_h-0">
+<h3><span class="type">结构体</span> FMetaDataEntry</h3>
+<div class="sect"><div class="doc">
+<p>One stored row: the registering side's type name, its key, and its encoded value.</p>
+</div></div>
+<div class="sect">
+<h4>字段</h4>
+<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td>std::string Type;</td><td>Which axis the row belongs to (`Type = <span class="st">"Type"</span>` / `<span class="st">"Stage"</span>` / `<span class="st">"ResourceOrdering"</span>` ...).</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>std::string Key;</td><td>The row's identity within that type (a type name, a `(frame, stage)` pair, ...).</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>std::string Value;</td><td>The value, as the registrant encoded it. The store never looks inside.</td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-class" id="Public__Core__MetaData_h-1">
+<h3><span class="type">类</span> FMetaData <span class="base">: <span class="kw">public</span> TSingleton&lt;FMetaData&gt;</span></h3>
+<div class="sect"><div class="doc">
+<p>The store: idempotent registration, lookup by `(Type, Key)`, and a dump <span class="kw">for</span> humans. Registration happens at <span class="kw">static</span>-init time from every translation unit that carries a declaration, so it MUST be idempotent: the same row registered twice is silent, and the same key with DIFFERENT content is reported (two spellings of one identity is a bug, not a merge).</p>
+</div></div>
+<div class="sect">
+<h4>字段</h4>
+<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-private">private</span></td><td>std::unique_ptr&lt;FImpl&gt; Impl;</td><td>The hidden state (see FImpl).</td></tr>
+</tbody></table></div>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td>FMetaData(<span class="kw">const</span> FMetaData&amp;) = <span class="kw">delete</span>;</td><td>Not copyable: the store is one object per process, reached through `GetMetaData`.</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>FMetaData&amp; <span class="kw">operator</span>=(<span class="kw">const</span> FMetaData&amp;) = <span class="kw">delete</span>;</td><td>Not copy-assignable: the store is one object per process.</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Register(std::string_view Type, std::string_view Key, std::string_view Encoded);</td><td>Files a row. Idempotent <span class="kw">for</span> identical content; a conflicting registration is reported.<br>`Type`: The axis <span class="kw">this</span> row belongs to.<br>`Key`: The identity within that axis.<br>`Encoded`: The value, encoded by the registrant.</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">const</span> FMetaDataEntry* Find(std::string_view Type, std::string_view Key) <span class="kw">const</span>;</td><td>Finds one row.<br>`Type`: The axis to search.<br>`Key`: The identity to look <span class="kw">for</span>.<br>Returns: The row, or `<span class="kw">nullptr</span>`. The pointer is owned by the store and lives as <span class="kw">long</span> as the process (a deregistration does not free it) -- which is what makes a row's ADDRESS a usable identity token.</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] std::size_t Count(std::string_view Type) <span class="kw">const</span>;</td><td>How many rows a given type holds.<br>`Type`: The axis to count.<br>Returns: The row count.</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] std::vector&lt;std::string&gt; Types() <span class="kw">const</span>;</td><td>Every type name that has at least one row (<span class="kw">for</span> a dump or an editor).<br>Returns: The type names, sorted.</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] std::vector&lt;FMetaDataEntry&gt; Snapshot(std::string_view Type) <span class="kw">const</span>;</td><td>A copy of one type's rows (the caller owns it; the store keeps the originals).<br>`Type`: The axis to copy.<br>Returns: The rows under that type.</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> DumpOnce() <span class="kw">const</span>;</td><td>Prints the whole store to stderr ONCE, when the environment says so (`MAHO_METADATA`).</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>FMetaData();</td><td>Creates an empty store. Public because the accessor is a FREE function (a <span class="kw">friend</span> declaration of an exported function is what MSVC refuses: C2375, <span class="st">"different linkage"</span>); reach the store through `GetMetaData()` -- `TSingleton` marks the intent.</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>~FMetaData();</td><td>Destroys the store. Rows are NOT freed: a token handed out stays valid <span class="kw">for</span> the process.</td></tr>
+</tbody></table></div>
+<div class="sect">
+<h4>嵌套</h4>
+<table><thead><tr><th>访问域</th><th>名称</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-private">private</span></td><td>FImpl</td><td>The store's hidden state (rows, their lock).</td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-functions" id="Public__Core__MetaData_h-2">
+<h3><span class="type">自由函数</span> </h3>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FMetaData&amp; GetMetaData() <span class="kw">noexcept</span>;</td><td>The process-wide store (a `dllimport` symbol, so every module sees one instance).<br>Returns: The store.</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">inline</span> <span class="kw">constexpr</span> std::string_view KDeclaredType = <span class="st">"Type"</span>;</td><td>The TYPE <span class="kw">this</span> header<span class="st">'s own declared types are filed under. One row per DECLARED TYPE, whose address is that type'</span>s identity token (see `MAHO_DECLARE_TYPE`).</td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-struct" id="Public__Core__MetaData_h-3">
+<h3><span class="type">结构体</span> template &lt;typename T&gt; TTypeName</h3>
+<div class="sect">
+<h4>字段</h4>
+<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">static</span> <span class="kw">constexpr</span> std::string_view value;</td><td>The declared name, or empty when the type declared no identity.</td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-struct" id="Public__Core__MetaData_h-4">
+<h3><span class="type">结构体</span> FTypeRegistrar</h3>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">explicit</span> FTypeRegistrar(std::string_view TypeName) <span class="kw">noexcept</span>;</td><td>Files the declaration's row (idempotent: the same header expands once per TU).<br>`TypeName`: The declared name, as spelled at the declaration.</td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-macro" id="Public__Core__MetaData_h-5">
+<h3><span class="type">宏</span> MAHO_DECLARE_TYPE <span class="base">: (X)</span></h3>
+<div class="sect"><div class="doc">
+<p>Declares a type<span class="st">'s identity (a store row whose ADDRESS is the type'</span>s token).</p>
+<p>`X`: The type to declare (spelled unambiguously -- the name IS the key).</p>
+</div></div>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] std::string_view BareTypeName(std::string_view Qualified) <span class="kw">noexcept</span>;</td><td>Strips the qualification from a declared name (`GameWorld::FTransform` -&gt; `FTransform`). The name a declaration files is the most qualified spelling that was unambiguous; a UI or a log line wants the <span class="kw">short</span> one. Kept here so every reader strips it the SAME way.<br>`Qualified`: The declared (possibly qualified) name.<br>Returns: The name after the last `::` (the input itself when there is none).</td></tr>
+</tbody></table></div>
+</div>
 </div>
 <div class="pane" id="pane-Public__Core__Query_h">
 <div class="hdr">Public/Core/Query.h</div>
 <h2 class="file-title">Query.h</h2>
-<div class="empty">（尚未声明内容 —— 在这个头文件里加 `/// @file` 块与 `///` 注释，再跑 Tools\maho_python.bat Tools\docs_scan.py）</div>
+<div class="card"><div class="doc">
+<p>Querying one object <span class="kw">for</span> another CAPABILITY it also implements, without RTTI. This is the mechanism that replaces `dynamic_cast` in the engine: a DECLARED type's identity is the address of the row its `MAHO_DECLARE_TYPE` filed in the store, so <span class="st">"is this thing also an X?"</span> is a token compare plus one <span class="kw">virtual</span> call, and a type that declared nothing simply answers <span class="kw">nullptr</span>. A frame declares itself with `MAHO_QUERY_CASTER`; consumers ask through `QueryCast` or a `FQuery`/`FQueryResult` filter chain.</p>
+</div></div>
+<div class="card">
+<h3 class="card-title">包含的头文件</h3>
+
+<table>
+<thead><tr><th>头文件</th></tr></thead>
+<tbody>
+<tr><td>`&lt;Core/Fatal.h&gt;`</td></tr>
+<tr><td>`&lt;Core/MetaData.h&gt;`</td></tr>
+<tr><td>`&lt;Core/TypeList.h&gt;`</td></tr>
+<tr><td>`&lt;cstddef&gt;`</td></tr>
+<tr><td>`&lt;string_view&gt;`</td></tr>
+<tr><td>`&lt;type_traits&gt;`</td></tr>
+<tr><td>`&lt;vector&gt;`</td></tr>
+</tbody></table>
+</div>
+<div class="ent e-struct" id="Public__Core__Query_h-0">
+<h3><span class="type">结构体</span> template &lt;typename T, typename = void&gt; TQueryTag</h3>
+<div class="sect"><div class="doc">
+<p>The identity token of a type, <span class="kw">for</span> the query protocol: `<span class="kw">nullptr</span>` UNLESS the type declared itself (`MAHO_DECLARE_TYPE`), which is what makes <span class="st">"unknown type"</span> the safe <span class="kw">default</span>.</p>
+<p>`T`: The type to ask about.</p>
+</div></div>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">static</span> <span class="kw">const</span> <span class="kw">void</span>* Get() <span class="kw">noexcept</span>;</td><td>No declaration, no identity: the token is `<span class="kw">nullptr</span>` and every query <span class="kw">for</span> it fails closed.</td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-struct" id="Public__Core__Query_h-1">
+<h3><span class="type">结构体</span> template &lt;typename T&gt; TQueryTag&lt;T, std::enable_if_t&lt;!TTypeName&lt;T&gt;::value.empty()&gt;&gt;</h3>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">static</span> <span class="kw">const</span> <span class="kw">void</span>* Get() <span class="kw">noexcept</span>;</td><td>The row's address, resolved once per module (the `<span class="kw">static</span>` is the whole point).</td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-struct" id="Public__Core__Query_h-2">
+<h3><span class="type">结构体</span> template &lt;typename TFrom, typename TTo&gt; TQueryCast</h3>
+<div class="sect"><div class="doc">
+<p>The per-type CAST answer: specialised BY THE TYPE (or by its module) to say <span class="st">"a `TFrom` is also a `TTo`"</span>. The <span class="kw">default</span> is <span class="st">"no"</span>: an undeclared relationship answers `<span class="kw">nullptr</span>`.</p>
+<p>`TFrom`: The type asked from.</p>
+<p>`TTo`: The type asked <span class="kw">for</span>.</p>
+</div></div>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">static</span> TTo* Get(TFrom* P) <span class="kw">noexcept</span>;</td><td>No relationship declared: <span class="kw">this</span> object is not a `TTo`.<br>`P`: Ignored (the <span class="kw">default</span> answers without looking at the object).<br>Returns: Always `<span class="kw">nullptr</span>`.</td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-functions" id="Public__Core__Query_h-3">
+<h3><span class="type">自由函数</span> </h3>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">template</span> &lt;<span class="kw">typename</span> TSelf&gt; [[nodiscard]] <span class="kw">inline</span> <span class="kw">void</span>* QueryDispatch(TSelf*, <span class="kw">const</span> <span class="kw">void</span>*) <span class="kw">noexcept</span>;</td><td>The `QuerySubobject` body a querying frame uses: <span class="kw">return</span> the FIRST declared target whose token matches (a `<span class="kw">nullptr</span>` tag never matches). Written as a recursive overload pair rather than a fold expression with an assignment and a comma inside it: the semantics are identical (first match wins, nothing is evaluated after it), and <span class="kw">this</span> shape is what a plain C++ parser reads -- the fold cost us the rest of <span class="kw">this</span> file's API in the generated docs (Tools/docs_scan.py reports the parse error, it does not hide it).<br>`TSelf`: The frame's own type (the `TFrom` of each cast).<br>`Self`: The frame instance to cast from.<br>`TargetTag`: The token asked <span class="kw">for</span>.<br>Returns: The matching subobject, or `<span class="kw">nullptr</span>`.</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">template</span> &lt;<span class="kw">typename</span> TSelf, <span class="kw">typename</span> THead, <span class="kw">typename</span>... TRest&gt; [[nodiscard]] <span class="kw">inline</span> <span class="kw">void</span>* QueryDispatch(TSelf* Self, <span class="kw">const</span> <span class="kw">void</span>* TargetTag) <span class="kw">noexcept</span>;</td><td>One step of the walk: <span class="kw">this</span> head, <span class="kw">else</span> the rest.<br>`TSelf`: The frame's own type.<br>`THead`: The capability being tried now.<br>`TRest`: The capabilities left.<br>`Self`: The frame instance.<br>`TargetTag`: The token asked <span class="kw">for</span>.<br>Returns: The matching subobject, or `<span class="kw">nullptr</span>`.</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">template</span> &lt;<span class="kw">typename</span> TSelf&gt; [[nodiscard]] <span class="kw">inline</span> <span class="kw">void</span>* QueryDispatchStatic(TSelf*, <span class="kw">const</span> <span class="kw">void</span>*) <span class="kw">noexcept</span>;</td><td>Same walk, <span class="kw">for</span> targets the frame IS (a base subobject) rather than targets it hands out: the cast is a plain `static_cast`, so `MAHO_QUERY_CASTER` can name bare interfaces.<br>`TSelf`: The frame's own type.<br>`Self`: The frame instance.<br>`TargetTag`: The token asked <span class="kw">for</span>.<br>Returns: The matching subobject, or `<span class="kw">nullptr</span>`.</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">template</span> &lt;<span class="kw">typename</span> TSelf, <span class="kw">typename</span> THead, <span class="kw">typename</span>... TRest&gt; [[nodiscard]] <span class="kw">inline</span> <span class="kw">void</span>* QueryDispatchStatic(TSelf* Self, <span class="kw">const</span> <span class="kw">void</span>* TargetTag) <span class="kw">noexcept</span>;</td><td>One step of the <span class="kw">static</span> walk: <span class="kw">this</span> head, <span class="kw">else</span> the rest.<br>`TSelf`: The frame's own type.<br>`THead`: The interface being tried now.<br>`TRest`: The interfaces left.<br>`Self`: The frame instance.<br>`TargetTag`: The token asked <span class="kw">for</span>.<br>Returns: The matching subobject, or `<span class="kw">nullptr</span>`.</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">template</span> &lt;<span class="kw">typename</span> TSelf, <span class="kw">typename</span>... TTargets&gt; [[nodiscard]] <span class="kw">inline</span> <span class="kw">void</span>* QueryDispatchList(TSelf* Self, <span class="kw">const</span> <span class="kw">void</span>* TargetTag, TTypeList&lt;TTargets...&gt;) <span class="kw">noexcept</span>;</td><td>`QueryDispatchStatic` taking the target list AS A `TTypeList` value (what a frame's `TFrameStageList` / `TStages` hands over).<br>`TSelf`: The frame's own type.<br>`TTargets`: The interfaces in the list.<br>`Self`: The frame instance.<br>`TargetTag`: The token asked <span class="kw">for</span>.<br>`Unused`: The list, carried as a value so the types can be deduced.<br>Returns: The matching subobject, or `<span class="kw">nullptr</span>`.</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">template</span> &lt;<span class="kw">typename</span> TBase, <span class="kw">typename</span> TTo&gt; [[nodiscard]] <span class="kw">inline</span> TTo* QueryCast(TBase* P) <span class="kw">noexcept</span>;</td><td>Asks an object whether it is also a `TTo` -- the `dynamic_cast` replacement.<br>`TBase`: The type being asked from.<br>`TTo`: The type being asked <span class="kw">for</span>.<br>`P`: The object (`<span class="kw">nullptr</span>` is answered with `<span class="kw">nullptr</span>`, never dereferenced).<br>Returns: The `TTo` view, or `<span class="kw">nullptr</span>` when the object does not offer it.</td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-macro" id="Public__Core__Query_h-4">
+<h3><span class="type">宏</span> MAHO_QUERY_CASTER <span class="base">: (Self, ...)</span></h3>
+<div class="sect"><div class="doc">
+<p>Declares a frame's answer to the query protocol: `QuerySubobject` over the listed targets.</p>
+<p>`Self`: The frame type (`<span class="kw">this</span>`'s type).</p>
+<p>`...`: The capabilities <span class="kw">this</span> frame offers (interfaces it implements, or types it casts to).</p>
+</div></div>
+</div>
+<div class="ent e-class" id="Public__Core__Query_h-5">
+<h3><span class="type">类</span> template &lt;typename TBase&gt; FQueryResult</h3>
+<div class="sect"><div class="doc">
+<p>A filtered VIEW of a container's elements: the chain is built with `Select` / `With` / `Not` and materialised with `Cast`.</p>
+<p>`TBase`: The element type the source container holds.</p>
+</div></div>
+<div class="sect">
+<h4>字段</h4>
+<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-private">private</span></td><td>std::vector&lt;TBase*&gt; Data;</td><td>The elements <span class="kw">this</span> result currently holds (the chain narrows it step by step).</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>std::vector&lt;TBase*&gt;* Source = <span class="kw">nullptr</span>;</td><td>The container the elements came from: the liveness oracle `CheckStillLive` validates against (`<span class="kw">nullptr</span>` when there is nothing to validate against).</td></tr>
+</tbody></table></div>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td>FQueryResult() = <span class="kw">default</span>;</td><td>An empty result (no source to validate against).</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">explicit</span> FQueryResult(std::vector&lt;TBase*&gt;&amp; InSource) : Source(&amp;InSource);</td><td>A result over `InSource`, kept as the liveness oracle <span class="kw">for</span> the pointers it hands out.<br>`InSource`: The container the result's pointers came from (outlives <span class="kw">this</span> result).</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">operator</span> std::vector&lt;TBase*&gt;&amp;();</td><td>The raw result as a container, so a caller can use it where a `std::vector&lt;TBase*&gt;` is expected without writing `.GetData()`.<br>Returns: The result's elements (<span class="kw">mutable</span>).</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">operator</span> <span class="kw">const</span> std::vector&lt;TBase*&gt;&amp;() <span class="kw">const</span>;</td><td>Same, read-only.<br>Returns: The result's elements.</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] std::size_t Num() <span class="kw">const</span> <span class="kw">noexcept</span>;</td><td>How many elements the result holds.</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">bool</span> IsEmpty() <span class="kw">const</span> <span class="kw">noexcept</span>;</td><td>True when the result holds nothing.</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">const</span> std::vector&lt;TBase*&gt;&amp; GetData() <span class="kw">const</span> <span class="kw">noexcept</span>;</td><td>The raw pointers, <span class="kw">for</span> callers that want to iterate without materialising a typed vector.</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">template</span> &lt;<span class="kw">typename</span>... TFilter&gt; FQueryResult&lt;TBase&gt; Select() <span class="kw">const</span>;</td><td>Keeps the elements that offer AT LEAST ONE of the listed capabilities (OR).<br>`TFilter`: The capabilities to test <span class="kw">for</span>.<br>Returns: A <span class="kw">new</span> result (the receiver is unchanged).</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">template</span> &lt;<span class="kw">typename</span>... TFilter&gt; FQueryResult&lt;TBase&gt; With() <span class="kw">const</span>;</td><td>Keeps the elements that offer ALL of the listed capabilities (AND).<br>`TFilter`: The capabilities to require.<br>Returns: A <span class="kw">new</span> result (the receiver is unchanged).</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">template</span> &lt;<span class="kw">typename</span>... TFilter&gt; FQueryResult&lt;TBase&gt; Not() <span class="kw">const</span>;</td><td>Keeps the elements that offer NONE of the listed capabilities.<br>`TFilter`: The capabilities to exclude.<br>Returns: A <span class="kw">new</span> result (the receiver is unchanged).</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">template</span> &lt;<span class="kw">typename</span> T&gt; [[nodiscard]] std::vector&lt;T*&gt; Cast() <span class="kw">const</span>;</td><td>MATERIALISES the result as typed pointers -- the one step that can drop an entry (a pointer whose layer was unloaded since the chain was built is reported and skipped).<br>`T`: The type to hand back.<br>Returns: The elements that are also a `T`, in the source's order.</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>[[nodiscard]] <span class="kw">bool</span> CheckStillLive(TBase* Ptr) <span class="kw">const</span>;</td><td>Is <span class="kw">this</span> pointer still in the source container? (See the body: an unloaded layer leaves a dangling pointer behind, and handing it out is the one failure <span class="kw">this</span> guard prevents.)<br>`Ptr`: The pointer to check.<br>Returns: True when it may be used.</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">template</span> &lt;<span class="kw">typename</span> TPred&gt; FQueryResult&lt;TBase&gt; Filter(TPred Pred) <span class="kw">const</span>;</td><td>The shared body of `Select` / `With` / `Not`.<br>`TPred`: The predicate type (a lambda over an element pointer).<br>`Pred`: The predicate to keep elements with.<br>Returns: The filtered result.</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td><span class="kw">static</span> std::vector&lt;TBase*&gt;&amp; EmptySource();</td><td>The source a <span class="kw">default</span>-constructed result validates against (nothing to validate).<br>Returns: A shared empty container.</td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-class" id="Public__Core__Query_h-6">
+<h3><span class="type">类</span> template &lt;typename TBase&gt; FQuery</h3>
+<div class="sect"><div class="doc">
+<p>The ABSTRACT side of the same chain: a container that can hand out its element list (`GetQueryData`), so `Select` / `With` / `Not` / `Cast` read the same on it.</p>
+<p>`TBase`: The element type.</p>
+</div></div>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> ~FQuery() = <span class="kw">default</span>;</td><td>Polymorphic base: destroyed through a `FQuery&lt;TBase&gt;*`.</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> std::vector&lt;TBase*&gt;&amp; GetQueryData() = 0;</td><td>The elements, <span class="kw">mutable</span> (the owner's own list).<br>Returns: The container <span class="kw">this</span> query walks.</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> <span class="kw">const</span> std::vector&lt;TBase*&gt;&amp; GetQueryData() <span class="kw">const</span> = 0;</td><td>The elements, read-only.<br>Returns: The container <span class="kw">this</span> query walks.</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">template</span> &lt;<span class="kw">typename</span>... TFilter&gt; FQueryResult&lt;TBase&gt; Select() <span class="kw">const</span>;</td><td>See `FQueryResult::Select`.<br>`TFilter`: The capabilities to test <span class="kw">for</span>.<br>Returns: A <span class="kw">new</span> result (the receiver is unchanged).</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">template</span> &lt;<span class="kw">typename</span>... TFilter&gt; FQueryResult&lt;TBase&gt; With() <span class="kw">const</span>;</td><td>See `FQueryResult::With`.<br>`TFilter`: The capabilities to require.<br>Returns: A <span class="kw">new</span> result (the receiver is unchanged).</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">template</span> &lt;<span class="kw">typename</span>... TFilter&gt; FQueryResult&lt;TBase&gt; Not() <span class="kw">const</span>;</td><td>See `FQueryResult::Not`.<br>`TFilter`: The capabilities to exclude.<br>Returns: A <span class="kw">new</span> result (the receiver is unchanged).</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">template</span> &lt;<span class="kw">typename</span> T&gt; [[nodiscard]] std::vector&lt;T*&gt; Cast() <span class="kw">const</span>;</td><td>See `FQueryResult::Cast`.<br>`T`: The type to hand back.<br>Returns: The matching elements, in the source's order.</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>FQueryResult&lt;TBase&gt; AsResult() <span class="kw">const</span>;</td><td>This query as a result (the chain starts here).<br>Returns: A result over the same elements.</td></tr>
+</tbody></table></div>
+</div>
 </div>
 <div class="pane" id="pane-Public__Core__Singleton_h">
 <div class="hdr">Public/Core/Singleton.h</div>
@@ -231,12 +593,228 @@ code{background:#121a2a;padding:1px 5px;border-radius:3px;color:#9fe0a0;
 <div class="pane" id="pane-Public__Core__ThreadPool_h">
 <div class="hdr">Public/Core/ThreadPool.h</div>
 <h2 class="file-title">ThreadPool.h</h2>
-<div class="empty">（尚未声明内容 —— 在这个头文件里加 `/// @file` 块与 `///` 注释，再跑 Tools\maho_python.bat Tools\docs_scan.py）</div>
+<div class="card"><div class="doc">
+<p>The engine<span class="st">'s threading: one pool of workers (+ lanes), and the RESIDENT ROLE that lives on a lane of it. Two shapes of the same thread set, which is why they share a header: * `FThreadPool` -- N workers serving every SHARED lane. A lane is one owner'</span>s queue, so a barrier can drain exactly that owner<span class="st">'s work instead of the whole process'</span>s. * `FThreadedServer` -- a PERSISTENT lane: a dedicated thread of the same pool serves it and nothing <span class="kw">else</span>. That is what a module owning an OS handle needs (a Win32 message queue belongs to the thread that created it -- see AGENTS <span class="st">"Thread Affinity"</span>). The pool is the only place threads are created, named, or drained; a layer does not own a thread of its own any more.</p>
+</div></div>
+<div class="card">
+<h3 class="card-title">包含的头文件</h3>
+
+<table>
+<thead><tr><th>头文件</th></tr></thead>
+<tbody>
+<tr><td>`&lt;Core/Export.h&gt;`</td></tr>
+<tr><td>`&lt;cstdint&gt;`</td></tr>
+<tr><td>`&lt;functional&gt;`</td></tr>
+<tr><td>`&lt;memory&gt;`</td></tr>
+</tbody></table>
+</div>
+<div class="ent e-class" id="Public__Core__ThreadPool_h-0">
+<h3><span class="type">类</span> FThreadPool</h3>
+<div class="sect"><div class="doc">
+<p>A fixed set of worker threads serving named LANES, plus one optional thread per PERSISTENT lane. A lane is a queue an owner submits to and flushes; the pools of one process are usually just one (the host's), shared by every collector through `FFrameBuilder::BindPool`.</p>
+</div></div>
+<div class="sect">
+<h4>字段</h4>
+<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">static</span> <span class="kw">constexpr</span> FLane DefaultLane = 0;</td><td>The lane every pool starts with (it exists from construction and is never destroyed).</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">static</span> <span class="kw">constexpr</span> FLane InvalidLane = 0xFFFFFFFFu;</td><td>What `CreatePersistentLane` returns when the table is full.</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">static</span> <span class="kw">constexpr</span> std::uint32_t MaxLanes = 16;</td><td>How many lanes one pool can hold.</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>std::unique_ptr&lt;FImpl&gt; Impl;</td><td>The hidden state (see FImpl).</td></tr>
+</tbody></table></div>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">explicit</span> FThreadPool(std::uint32_t NumThreads = 0);</td><td>Creates the pool (threads are started lazily, on the first submission).<br>`NumThreads`: Worker count; 0 means <span class="st">"the machine's parallelism"</span>, overridable by the `MAHO_PARALLELISM` environment variable. Persistent lanes are NOT counted here.</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>~FThreadPool();</td><td>Stops every worker and every persistent lane (draining what they hold first).</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>FThreadPool(<span class="kw">const</span> FThreadPool&amp;) = <span class="kw">delete</span>;</td><td>Not copyable: the pool owns its threads and its lanes.</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>FThreadPool&amp; <span class="kw">operator</span>=(<span class="kw">const</span> FThreadPool&amp;) = <span class="kw">delete</span>;</td><td>Not copy-assignable: the pool owns its threads and its lanes.</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FLane CreateLane();</td><td>A lane is one OWNER<span class="st">'s queue -- one per layer that submits its own work (the engine host, a graph), so a barrier can drain exactly that owner'</span>s tasks. There is deliberately no lane-less spelling of Submit/Flush: <span class="st">"whose work is this?"</span> is the question the barrier exists to answer, and a <span class="kw">default</span> lane answers it <span class="kw">for</span> everyone but DefaultLane's owner.<br>Returns: A fresh lane (at capacity the caller is given `DefaultLane`, and it is reported).</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> DestroyLane(FLane Lane);</td><td>Releases a lane. Refused (and reported) <span class="kw">while</span> it still has work.<br>`Lane`: The lane to release (`DefaultLane` is ignored: it is never destroyed).</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] FLane CreatePersistentLane(<span class="kw">const</span> <span class="kw">char</span>* ThreadName);</td><td>Creates a lane with its OWN dedicated thread: that thread consumes ONLY <span class="kw">this</span> lane, and the shared workers never take from it. This is what THREAD AFFINITY needs -- a module that owns an OS handle (a Win32 window's message queue lives on the thread that created it) cannot have its work run by whichever worker happens to be free (see AGENTS <span class="st">"Thread Affinity"</span>). It is the pool-backed form of <span class="st">"this layer owns a resident thread"</span>, and it replaces the per-layer `std::thread` + queue `FThreadedServer` used to carry.<br>`ThreadName`: A label <span class="kw">for</span> traces and debuggers (not an OS thread name).<br>Returns: The lane, or `InvalidLane` when the table is full (the caller must then fail loudly -- falling back to a shared lane would silently <span class="kw">break</span> the affinity it was asked <span class="kw">for</span>).</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> DestroyPersistentLane(FLane Lane);</td><td>Releases a persistent lane: its thread drains what is queued and then exits.<br>`Lane`: The lane to release.</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">bool</span> IsCurrentThread(FLane Lane) <span class="kw">const</span>;</td><td>True when the CALLING thread is the one pinned to `Lane` (persistent lanes only). This replaces a server's <span class="kw">private</span> thread-id check: a module can ask <span class="st">"am I on my own thread?"</span> without owning one.<br>`Lane`: The lane to ask about.<br>Returns: True when the caller is that lane's thread.</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Submit(FLane Lane, std::function&lt;<span class="kw">void</span>()&gt; Task);</td><td>Enqueues onto a lane and returns immediately.<br>`Lane`: Where to queue (`DefaultLane` exists from construction).<br>`Task`: What to run; it runs on a worker, or on the lane's own thread when it is persistent.</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Flush(FLane Lane);</td><td>Quiescence barrier <span class="kw">for</span> ONE lane: blocks until that lane's queue is empty and nothing is running from it. Tolerates concurrent `Submit` -- a nested graph may add work <span class="kw">while</span> we wait. A caller already running INSIDE <span class="kw">this</span> pool may help drain the lane, so a barrier never deadlocks on work it could have done itself; a PERSISTENT lane is never helped (the whole point of pinning it is that only its own thread runs its work).<br>`Lane`: The lane to drain.</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] std::uint32_t GetNumThreads() <span class="kw">const</span>;</td><td>How many workers the pool runs (persistent lanes excluded).<br>Returns: The worker count.</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] std::uint32_t GetLanePending(FLane Lane) <span class="kw">const</span>;</td><td>How much work a lane still holds (queued + running).<br>`Lane`: The lane to ask about.<br>Returns: The pending count (0 <span class="kw">for</span> a lane that does not exist).</td></tr>
+</tbody></table></div>
+<div class="sect">
+<h4>嵌套</h4>
+<table><thead><tr><th>访问域</th><th>名称</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td>FLane</td><td>A lane<span class="st">'s handle: an index into the pool'</span>s lane table.</td></tr>
+<tr><td><span class="acc a-private">private</span></td><td>FImpl</td><td>The pool's hidden state (workers, lanes, the barrier bookkeeping).</td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-class" id="Public__Core__ThreadPool_h-1">
+<h3><span class="type">类</span> FThreadedServer</h3>
+<div class="sect"><div class="doc">
+<p>A resident role: its own lane (and thread) on a pool, with a lifecycle.</p>
+</div></div>
+<div class="sect">
+<h4>字段</h4>
+<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-private">private</span></td><td>std::unique_ptr&lt;FImpl&gt; Impl;</td><td>The hidden state (see FImpl).</td></tr>
+</tbody></table></div>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td>FThreadedServer();</td><td>Creates the role (no lane yet: `Initialize` starts it).</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">virtual</span> ~FThreadedServer();</td><td>Shuts the role down <span class="kw">if</span> it is still running.</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>FThreadedServer(<span class="kw">const</span> FThreadedServer&amp;) = <span class="kw">delete</span>;</td><td>Not copyable: a role owns a lane.</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>FThreadedServer&amp; <span class="kw">operator</span>=(<span class="kw">const</span> FThreadedServer&amp;) = <span class="kw">delete</span>;</td><td>Not copy-assignable: a role owns a lane.</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> BindPool(FThreadPool&amp; InPool);</td><td>Binds <span class="kw">this</span> role's execution to `InPool` -- the backend a server hands over instead of running a thread set of its own. Must be called before `Initialize`.<br>`InPool`: The pool whose lane <span class="kw">this</span> role will live on (usually `Engine.GetPool()`).</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">bool</span> Initialize();</td><td>Starts the resident lane (named `GetThreadName()`); then work can be queued.<br>Returns: False when the lane could not be obtained (the pool is at lane capacity), in which <span class="kw">case</span> the role is left stopped rather than silently sharing another owner's lane.</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Shutdown();</td><td>Drains the lane, releases it (its thread exits after the queue is empty), then `OnShutdown`.</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">bool</span> IsRunning() <span class="kw">const</span>;</td><td>True between a successful `Initialize` and `Shutdown`.<br>Returns: Whether the role is live.</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Submit(std::function&lt;<span class="kw">void</span>()&gt; Task);</td><td>Queues work <span class="kw">for</span> <span class="kw">this</span> role's thread. Refused (and REPORTED) unless `Initialize` has run: a task accepted by a stopped role would simply never run, which is the hardest bug to see.<br>`Task`: What to run on the role's thread.</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">void</span> Flush();</td><td>Blocks until the lane has drained -- the role's own quiescence point.</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>[[nodiscard]] <span class="kw">bool</span> IsServerThread() <span class="kw">const</span>;</td><td>True when the CALLING thread is <span class="kw">this</span> role's thread.<br>Returns: Whether the caller may touch the role's thread-affine state directly.</td></tr>
+<tr><td><span class="acc a-protected">protected</span></td><td>[[nodiscard]] <span class="kw">virtual</span> <span class="kw">bool</span> OnInitialize();</td><td>Runs on the CALLER's thread, before the lane starts. Returning <span class="kw">false</span> aborts `Initialize`.<br>Returns: Whether the role came up.</td></tr>
+<tr><td><span class="acc a-protected">protected</span></td><td><span class="kw">virtual</span> <span class="kw">void</span> OnShutdown();</td><td>Runs after the lane has drained and been released (on the caller's thread).</td></tr>
+<tr><td><span class="acc a-protected">protected</span></td><td>[[nodiscard]] <span class="kw">virtual</span> <span class="kw">const</span> <span class="kw">char</span>* GetThreadName() <span class="kw">const</span>;</td><td>The lane<span class="st">'s name: what a trace calls this role'</span>s row, and what the lane is registered as.<br>Returns: A literal that outlives the role.</td></tr>
+</tbody></table></div>
+<div class="sect">
+<h4>嵌套</h4>
+<table><thead><tr><th>访问域</th><th>名称</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-private">private</span></td><td>FImpl</td><td>The role's hidden state (the pool it bound to, its lane, whether it runs).</td></tr>
+</tbody></table></div>
+</div>
 </div>
 <div class="pane" id="pane-Public__Core__TypeList_h">
 <div class="hdr">Public/Core/TypeList.h</div>
 <h2 class="file-title">TypeList.h</h2>
-<div class="empty">（尚未声明内容 —— 在这个头文件里加 `/// @file` 块与 `///` 注释，再跑 Tools\maho_python.bat Tools\docs_scan.py）</div>
+<div class="card"><div class="doc">
+<p>Compile-time ordered type list (`TTypeList`) and its operations. The vocabulary the whole engine filters with: a stage sequence, a mounted-interface set and a query result are all <span class="st">"a list of types"</span>. Everything here is a value-less metafunction -- no storage, no runtime cost -- and `TUnionList_t` preserves order <span class="kw">while</span> dropping duplicates, which is what lets a frame's mounted stages be derived by merging lists instead of being declared twice.</p>
+</div></div>
+<div class="card">
+<h3 class="card-title">包含的头文件</h3>
+
+<table>
+<thead><tr><th>头文件</th></tr></thead>
+<tbody>
+<tr><td>`&lt;cstddef&gt;`</td></tr>
+<tr><td>`&lt;type_traits&gt;`</td></tr>
+</tbody></table>
+</div>
+<div class="ent e-struct" id="Public__Core__TypeList_h-0">
+<h3><span class="type">结构体</span> template &lt;typename... TTypes&gt; TTypeList</h3>
+<div class="sect"><div class="doc">
+<p>A list of TYPES, as a type: `TTypeList&lt;A, B, C&gt;`.</p>
+<p>`TTypes`: The types in the list, in order.</p>
+</div></div>
+<div class="sect">
+<h4>字段</h4>
+<table><thead><tr><th>访问域</th><th>字段</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">static</span> <span class="kw">constexpr</span> std::size_t Count = <span class="kw">sizeof</span>...(TTypes);</td><td>How many types the list holds.</td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-struct" id="Public__Core__TypeList_h-1">
+<h3><span class="type">结构体</span> template &lt;typename T, typename... Ts&gt; TCons&lt;T, TTypeList&lt;Ts...&gt;&gt;</h3>
+<div class="sect">
+<h4>嵌套</h4>
+<table><thead><tr><th>访问域</th><th>名称</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td>Type</td><td>The resulting list: `TTypeList&lt;T, Ts...&gt;`.</td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-struct" id="Public__Core__TypeList_h-2">
+<h3><span class="type">结构体</span> template &lt;typename... Ts, typename TValue&gt; TAppend&lt;TTypeList&lt;Ts...&gt;, TValue&gt;</h3>
+<div class="sect">
+<h4>嵌套</h4>
+<table><thead><tr><th>访问域</th><th>名称</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td>Type</td><td>The resulting list: `TTypeList&lt;Ts..., TValue&gt;`.</td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-alias" id="Public__Core__TypeList_h-3">
+<h3><span class="type">别名</span> TAppend_t <span class="base">: <span class="kw">typename</span> TAppend&lt;TList, TValue&gt;::Type</span></h3>
+<div class="sect"><div class="doc">
+<p>`TAppend` spelled as an alias <span class="kw">template</span> (the usual spelling).</p>
+<p>`TList`: The list to append to.</p>
+<p>`TValue`: The type to append.</p>
+</div></div>
+</div>
+<div class="ent e-struct" id="Public__Core__TypeList_h-4">
+<h3><span class="type">结构体</span> template &lt;typename TList, typename T&gt; TContains <span class="base">: std::false_type</span></h3>
+<div class="sect"><div class="doc">
+<p>Is `T` in the list? (the `_v` alias is what call sites read).</p>
+<p>`TList`: The list to search (a `TTypeList`).</p>
+<p>`T`: The type to look <span class="kw">for</span>.</p>
+</div></div>
+</div>
+<div class="ent e-struct" id="Public__Core__TypeList_h-5">
+<h3><span class="type">结构体</span> template &lt;typename T, typename... TRest&gt; TContains&lt;TTypeList&lt;T, TRest...&gt;, T&gt; <span class="base">: std::true_type</span></h3>
+</div>
+<div class="ent e-struct" id="Public__Core__TypeList_h-6">
+<h3><span class="type">结构体</span> template &lt;typename THead, typename... TRest, typename T&gt; TContains&lt;TTypeList&lt;THead, TRest...&gt;, T&gt; <span class="base">: TContains&lt;TTypeList&lt;TRest...&gt;, T&gt;</span></h3>
+</div>
+<div class="ent e-functions" id="Public__Core__TypeList_h-7">
+<h3><span class="type">自由函数</span> </h3>
+<div class="sect">
+<h4>接口</h4>
+<table><thead><tr><th>访问域</th><th>接口签名</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td><span class="kw">template</span> &lt;<span class="kw">typename</span> TList, <span class="kw">typename</span> T&gt; <span class="kw">inline</span> <span class="kw">constexpr</span> <span class="kw">bool</span> TContains_v = TContains&lt;TList, T&gt;::value;</td><td>`TContains` as a value: `<span class="kw">if</span> <span class="kw">constexpr</span> (TContains_v&lt;List, T&gt;)`.<br>`TList`: The list to search.<br>`T`: The type to look <span class="kw">for</span>.</td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-struct" id="Public__Core__TypeList_h-8">
+<h3><span class="type">结构体</span> template &lt;typename... T&gt; TCatch&lt;TTypeList&lt;T...&gt;&gt;</h3>
+<div class="sect">
+<h4>嵌套</h4>
+<table><thead><tr><th>访问域</th><th>名称</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td>Type</td><td>The concatenated list (one level: `TTypeList&lt;T...&gt;`).</td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-struct" id="Public__Core__TypeList_h-9">
+<h3><span class="type">结构体</span> template &lt;typename... T1, typename... T2, typename... TRest&gt; TCatch&lt;TTypeList&lt;T1...&gt;, TTypeList&lt;T2...&gt;, TRest...&gt;</h3>
+<div class="sect">
+<h4>嵌套</h4>
+<table><thead><tr><th>访问域</th><th>名称</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td>Type</td><td>The concatenated list: the first two joined, then folded with the rest.</td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-struct" id="Public__Core__TypeList_h-10">
+<h3><span class="type">结构体</span> template &lt;typename TAcc&gt; TFold&lt;TAcc, TTypeList&lt;&gt;&gt;</h3>
+<div class="sect">
+<h4>嵌套</h4>
+<table><thead><tr><th>访问域</th><th>名称</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td>Type</td><td>Nothing left to consume: the accumulator IS the result.</td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-struct" id="Public__Core__TypeList_h-11">
+<h3><span class="type">结构体</span> template &lt;typename TAcc, typename THead, typename... TRest&gt; TFold&lt;TAcc, TTypeList&lt;THead, TRest...&gt;&gt;</h3>
+<div class="sect">
+<h4>嵌套</h4>
+<table><thead><tr><th>访问域</th><th>名称</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td>FAcc</td><td>The accumulator after `THead` (appended only when it is <span class="kw">new</span>).</td></tr>
+<tr><td><span class="acc a-public">public</span></td><td>Type</td><td>Continue with the rest of the list.</td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-alias" id="Public__Core__TypeList_h-12">
+<h3><span class="type">别名</span> TUnionList_t <span class="base">: <span class="kw">typename</span> UnionDetail::TFold&lt; <span class="kw">typename</span> UnionDetail::TFold&lt;TTypeList&lt;&gt;, TListA&gt;::Type, TListB&gt;::Type</span></h3>
+<div class="sect"><div class="doc">
+<p>ORDER-PRESERVING UNION of two lists: first-seen order, duplicates dropped. This is the operation frames are assembled with -- a mount set is the <span class="kw">union</span> of what the frame and its declared parts bring, and the same interface arriving twice must not run twice.</p>
+<p>`TListA`: The first list (its order wins <span class="kw">for</span> shared elements).</p>
+<p>`TListB`: The second list.</p>
+</div></div>
+</div>
+<div class="ent e-struct" id="Public__Core__TypeList_h-13">
+<h3><span class="type">结构体</span> template &lt;typename TFrame, typename = void&gt; TFrameStageList</h3>
+<div class="sect"><div class="doc">
+<p>The stage list a frame MOUNTS, read off its `IPipeline&lt;TStages...&gt;` (`TFrame::TStages`). A frame that mounts no pipeline (or a type that is not a frame at all) resolves to an EMPTY list rather than failing to compile -- which is what makes the structural-edge declarations expand to nothing <span class="kw">for</span> a frame with no stages, instead of being a special <span class="kw">case</span> at every call site.</p>
+<p>`TFrame`: The frame type to ask.</p>
+</div></div>
+<div class="sect">
+<h4>嵌套</h4>
+<table><thead><tr><th>访问域</th><th>名称</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td>Type</td><td>No `TStages` on the type: an empty list.</td></tr>
+</tbody></table></div>
+</div>
+<div class="ent e-struct" id="Public__Core__TypeList_h-14">
+<h3><span class="type">结构体</span> template &lt;typename TFrame&gt; TFrameStageList&lt;TFrame, std::void_t&lt;typename TFrame::TStages&gt;&gt;</h3>
+<div class="sect">
+<h4>嵌套</h4>
+<table><thead><tr><th>访问域</th><th>名称</th><th>说明</th></tr></thead><tbody>
+<tr><td><span class="acc a-public">public</span></td><td>Type</td><td>The frame's mounted stages, in their declared order.</td></tr>
+</tbody></table></div>
+</div>
 </div>
 <div class="pane" id="pane-Public__Engine__DerivedEdges_h">
 <div class="hdr">Public/Engine/DerivedEdges.h</div>
