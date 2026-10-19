@@ -1,4 +1,4 @@
-#include <Core/FrameGraph.h>
+﻿#include <Core/FrameGraph.h>
 
 #include <Core/Fatal.h>
 
@@ -325,7 +325,9 @@ struct FFrameGraph::FImpl
 
 	void Wait();
 
-	FThreadedServer&   Server;
+	// 派生类引用，而不是 `FThreadedServer&`：protected 基类成员的访问规则要求"通过派生类对象"，
+	// 而这个引用就是拿它自己那条 lane 发消息用的（`PostToLane`）。
+	FFrameGraph&       Server;
 	FThreadPool&       Pool;
 	FThreadPool::FLane Lane;
 
@@ -439,7 +441,7 @@ bool FFrameGraph::FImpl::Submit(std::vector<FTask> Tasks, std::uint64_t Frame, s
 			std::memory_order_acq_rel);
 	}
 
-	Server.Submit([this, Batch = std::move(Tasks), Frame]() mutable
+	Server.PostToLane([this, Batch = std::move(Tasks), Frame]() mutable
 	{
 		ApplySubmit(std::move(Batch), Frame);
 	});
@@ -836,7 +838,7 @@ void FFrameGraph::FImpl::Dispatch(FNodeId Id)
 			TraceStage("exit ", Nodes[Id].Key);
 		}
 
-		Server.Submit([this, Id]() { OnNodeCompleted(Id); });
+		Server.PostToLane([this, Id]() { OnNodeCompleted(Id); });
 	});
 }
 
@@ -965,7 +967,7 @@ void FFrameGraph::FImpl::RequestOutstandingDump(const char* Why)
 			+ " -- the scheduler thread is gone, so the outstanding set cannot be read").c_str());
 		return;
 	}
-	Server.Submit([this, Reason = std::string(Why == nullptr ? "" : Why)]()
+	Server.PostToLane([this, Reason = std::string(Why == nullptr ? "" : Why)]()
 	{
 		DumpOutstanding(Reason.c_str());
 	});
@@ -980,7 +982,7 @@ void FFrameGraph::FImpl::ReportNodeFailure(FNodeId Id, const char* What)
 		return;
 	}
 
-	Server.Submit([this, Id, Message = std::string(What)]()
+	Server.PostToLane([this, Id, Message = std::string(What)]()
 	{
 		ReportNodeFailureOnScheduler(Id, Message);
 	});

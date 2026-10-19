@@ -79,9 +79,18 @@ template <typename TList, typename T>
 inline constexpr bool TContains_v = TContains<TList, T>::value;
 
 /// @brief Concatenates any number of lists (`TCatch<L1, L2, ...>::Type`): order preserved, no dedup.
+///        The ZERO-list case is the empty list -- which is what makes a declaration that names no access
+///        expressible without a variadic-macro trick (the build's preprocessor does not expand `__VA_OPT__`).
 /// @tparam TLists The lists to concatenate, in order.
 template <typename... TLists>
 struct TCatch;
+
+template <>
+struct TCatch<>
+{
+	/// @brief Nothing concatenated is the empty list.
+	using Type = TTypeList<>;
+};
 
 template <typename... T>
 struct TCatch<TTypeList<T...>>

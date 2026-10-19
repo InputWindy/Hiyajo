@@ -352,9 +352,13 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # POST_BUILD step can nest an msbuild run beside the outer one (see
 # Tools/build_subplugins.cmake), which otherwise puts two compilers on the same .pdb and
 # dies with C1041 -- and leaves half-built DLLs in Binaries/<Config>.
+# /GR-: RTTI OFF. The engine names types itself (`TypeSpelling`, `MAHO_DECLARE_TYPE`,
+# `QueryCast`), so `dynamic_cast`/`typeid` must not compile here -- the flag is what keeps
+# the design honest instead of a convention nobody checks.
 if(MSVC)
 	add_compile_options(/utf-8)
 	add_compile_options(/FS)
+	add_compile_options(/GR-)
 endif()
 
 # Enable VS solution folders (FOLDER property groups targets under virtual dirs).

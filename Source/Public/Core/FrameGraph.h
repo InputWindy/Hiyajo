@@ -2,7 +2,7 @@
 
 
 #include <Core/Export.h>
-#include <Core/ThreadPool.h>
+#include <Core/Task/ThreadPool.h>
 #include <Core/TypeList.h>
 
 #include <array>
@@ -12,7 +12,6 @@
 #include <span>
 #include <string>
 #include <string_view>
-#include <typeindex>
 #include <unordered_map>
 #include <vector>
 
@@ -369,9 +368,9 @@ protected:
 	[[nodiscard]] const char* GetThreadName() const override;
 
 private:
-	using FThreadedServer::Submit;
-
-	using FThreadedServer::Flush;
+	/** Post to this role's lane. The lane is the role's internals (`FThreadedServer::Submit` is
+	 *  protected), and `FImpl` -- which is where the graph's bookkeeping lives -- reaches it here. */
+	void PostToLane(std::function<void()> Task) { FThreadedServer::Submit(std::move(Task)); }
 
 	struct FImpl;
 	std::unique_ptr<FImpl> Impl;

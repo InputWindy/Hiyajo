@@ -40,6 +40,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 if(MSVC)
 	add_compile_options(/utf-8)
 	add_compile_options(/FS)
+	add_compile_options(/GR-)
 endif()
 
 # Enable VS solution folders (FOLDER property groups targets under virtual dirs).

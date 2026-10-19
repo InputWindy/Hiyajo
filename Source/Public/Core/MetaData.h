@@ -154,4 +154,80 @@ namespace Detail
 /// @return The name after the last `::` (the input itself when there is none).
 [[nodiscard]] MAHO_API std::string_view BareTypeName(std::string_view Qualified) noexcept;
 
+/// @brief The axis a type's SPELLING row is filed under (see `TypeToken`).
+inline constexpr std::string_view KTypeSpelling = "TypeSpelling";
+
+/// @brief The compiler's name for a type, as a literal -- usable for ANY type, unlike `TTypeName` (which only
+///        answers for a type that declared itself with `MAHO_DECLARE_TYPE`).
+///
+/// This is the RTTI-free way to name an arbitrary type: it is the SOURCE spelling the compiler saw, so every
+/// module that writes the same type writes the same string. It is a diagnostic-grade name (long, and spelled
+/// differently by different compilers) -- what it is FOR is being a stable key.
+///
+/// The raw macro text is NOT the answer: `__FUNCSIG__` names this very FUNCTION ("`class
+/// std::basic_string_view<...> __cdecl Maho::TypeSpelling<struct FMyType>(void) noexcept`"), so the argument is
+/// cut out of it here -- a name a dump prints, and still the same string in every module. The elaborated-type
+/// keyword the compiler puts in front of the outermost type is dropped with it.
+/// @tparam T The type to name.
+/// @return The spelling (a literal: never built, never freed).
+template <typename T>
+[[nodiscard]] constexpr std::string_view TypeSpelling() noexcept
+{
+#if defined(_MSC_VER)
+	constexpr std::string_view Raw = __FUNCSIG__;
+	constexpr std::string_view Open = "TypeSpelling<";
+	constexpr std::string_view Close = ">(void)";
+	constexpr std::size_t From = Raw.find(Open);
+	constexpr std::size_t To = Raw.rfind(Close);
+	if constexpr (From == std::string_view::npos || To == std::string_view::npos)
+	{
+		return Raw;
+	}
+	constexpr std::string_view Name = Raw.substr(From + Open.size(), To - From - Open.size());
+#else
+	constexpr std::string_view Raw = __PRETTY_FUNCTION__;
+	constexpr std::string_view Open = "T = ";
+	constexpr std::size_t From = Raw.find(Open);
+	constexpr std::size_t To = Raw.rfind(';');
+	if constexpr (From == std::string_view::npos || To == std::string_view::npos)
+	{
+		return Raw;
+	}
+	constexpr std::string_view Name = Raw.substr(From + Open.size(), To - From - Open.size());
+#endif
+
+	for (const std::string_view Keyword : { "struct ", "class ", "union ", "enum " })
+	{
+		if (Name.size() > Keyword.size()
+			&& Name.compare(0, Keyword.size(), Keyword) == 0)
+		{
+			return Name.substr(Keyword.size());
+		}
+	}
+	return Name;
+}
+
+/// @brief A type's IDENTITY TOKEN: the address of its own row in the store, keyed by its spelling.
+///
+/// The same mechanism as every other token here (`MAHO_DECLARE_TYPE`'s row, a declaration's row): the store
+/// is one object per process, so a row's address is one value per process. Because the row is keyed by the
+/// SPELLING, two modules that name the same type resolve to the SAME row -- so they agree on the token.
+/// (The address of an inline static member would not do: every DLL carries its own copy of it.)
+///
+/// It exists so that "which type" can be folded into a key without RTTI and without a string comparison at
+/// the point of use: the token is compared (and hashed) like any other pointer.
+/// @tparam T The type to identify.
+/// @return The token (never dereferenced, only compared and hashed).
+template <typename T>
+[[nodiscard]] const void* TypeToken() noexcept
+{
+	static const void* const Cached = []() -> const void*
+	{
+		constexpr std::string_view Name = TypeSpelling<T>();
+		GetMetaData().Register(KTypeSpelling, Name, "");
+		return static_cast<const void*>(GetMetaData().Find(KTypeSpelling, Name));
+	}();
+	return Cached;
+}
+
 }

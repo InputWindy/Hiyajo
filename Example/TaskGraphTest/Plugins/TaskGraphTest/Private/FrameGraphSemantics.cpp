@@ -6,7 +6,7 @@
 // FTaskGraph), which is precisely the thing this must NOT accidentally test.
 
 #include <Core/FrameGraph.h>
-#include <Core/ThreadPool.h>
+#include <Core/Task/ThreadPool.h>
 #include <Engine/Frame.h>   // MAHO_FRAME_STAGE_CHAIN / MAHO_FRAME_SELF_EDGES: the frames below declare
                             // their own structural edges (the bridge no longer invents them)
 

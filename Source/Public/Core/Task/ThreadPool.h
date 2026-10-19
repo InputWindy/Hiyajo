@@ -165,25 +165,35 @@ public:
 	bool Initialize();
 
 	/// @brief Drains the lane, releases it (its thread exits after the queue is empty), then `OnShutdown`.
-	void Shutdown();
+	///
+	/// Virtual because a role may need its own teardown ORDERING around the lane: a role whose work runs
+	/// elsewhere (a graph's node bodies run on the pool's work lane) has to wait for that work BEFORE the
+	/// lane goes away -- afterwards its notifications would have nowhere to arrive.
+	virtual void Shutdown();
 
 	/// @brief True between a successful `Initialize` and `Shutdown`.
 	/// @return Whether the role is live.
 	[[nodiscard]] bool IsRunning() const;
-
-	/// @brief Queues work for this role's thread. Refused (and REPORTED) unless `Initialize` has run:
-	///        a task accepted by a stopped role would simply never run, which is the hardest bug to see.
-	/// @param Task What to run on the role's thread.
-	void Submit(std::function<void()> Task);
-
-	/// @brief Blocks until the lane has drained -- the role's own quiescence point.
-	void Flush();
 
 	/// @brief True when the CALLING thread is this role's thread.
 	/// @return Whether the caller may touch the role's thread-affine state directly.
 	[[nodiscard]] bool IsServerThread() const;
 
 protected:
+	/// @brief Queues work for this role's thread. Refused (and REPORTED) unless `Initialize` has run:
+	///        a task accepted by a stopped role would simply never run, which is the hardest bug to see.
+	///
+	/// PROTECTED, not public: the lane is the role's internals. An outside caller must speak the ROLE's
+	/// verbs (`RunOnPlatformThread`, `Import`, `FTaskGraph::Submit(desc, predecessors)`), never post a raw
+	/// closure at it -- that would let any module inject work into another module's thread-affine state.
+	/// (It also keeps a derived role's own `Submit` overload from clashing with this one; one that shares
+	/// the name calls `FThreadedServer::Submit(...)` explicitly.)
+	/// @param Task What to run on the role's thread.
+	void Submit(std::function<void()> Task);
+
+	/// @brief Blocks until the lane has drained -- the role's own quiescence point.
+	void Flush();
+
 	/// @brief Runs on the CALLER's thread, before the lane starts. Returning false aborts `Initialize`.
 	/// @return Whether the role came up.
 	[[nodiscard]] virtual bool OnInitialize();

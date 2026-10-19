@@ -10,6 +10,9 @@ namespace Maho
 /** Semantics test for FFrameGraph; defined in FrameGraphSemantics.cpp. */
 int RunFrameGraphSemanticsTest();
 
+/** Test for the execution backend (Core/Task/TaskGraph.h); defined in TaskGraphBackend.cpp. */
+int RunTaskGraphBackendTest();
+
 /** TEMPORARY verification of the ConsoleVariable lazy-config / ReadOnly changes;
  *  defined in CVarConfigVerify.cpp. Driven by MAHO_TEST_CVAR. */
 int RunConsoleVariableConfigTest();
@@ -68,7 +71,10 @@ int FTaskGraphTest::Main()
 {
 	if (SchedulerTestMode())
 	{
-		return RunFrameGraphSemanticsTest();
+		// Both suites: the frame system's semantics (T*) and the execution backend under it (B*).
+		const int Semantics = RunFrameGraphSemanticsTest();
+		const int Backend = RunTaskGraphBackendTest();
+		return (Semantics == 0 && Backend == 0) ? 0 : 1;
 	}
 	if (CVarTestMode())
 	{
