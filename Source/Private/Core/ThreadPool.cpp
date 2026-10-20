@@ -40,6 +40,14 @@ struct FThreadPool::FImpl
 		std::thread             Pinned;
 		std::thread::id         PinnedId{};
 		const char*             Name = "";
+
+		/** This lane's OWN wake-up, for a persistent lane.
+		 *
+		 *  It must not share the workers' `CondVar`: a wake-up posted for a SHARED lane is a single
+		 *  `notify_one`, and a pinned thread waiting there would consume it, find nothing it may take, and go
+		 *  back to sleep -- leaving the shared lane's work queued with every worker asleep. That was a real
+		 *  intermittent stall (a fresh graph's first node never starting until something else notified). */
+		std::condition_variable Wake;
 	};
 
 	void EnsureThreads(const FThreadPool* Owner, std::uint32_t Required);
@@ -63,6 +71,9 @@ void NotifyWorkAvailableLocked(FLane Lane);
 	void NotifyProgressLocked();
 
 	std::vector<std::thread> Workers;
+
+	/// @brief How many shared workers are inside a task body right now (diagnostics: "are they all busy?").
+	std::atomic<std::uint32_t> BusyWorkers{ 0 };
 
 	mutable std::mutex      Mutex;
 	std::condition_variable CondVar;
@@ -132,6 +143,7 @@ FThreadPool::~FThreadPool()
 			if (Lane.bPersistent)
 			{
 				Lane.bStopping = true;      // 持久线程会先把它队列里的活干完再退出
+				Lane.Wake.notify_all();     // 每条 pinned 线程只等自己的 Wake（见 NotifyWorkAvailableLocked）
 			}
 		}
 	}
@@ -206,6 +218,11 @@ std::uint32_t FThreadPool::GetNumThreads() const
 	return Impl->NumThreads;
 }
 
+std::uint32_t FThreadPool::GetBusyWorkers() const
+{
+	return Impl->BusyWorkers.load();
+}
+
 
 FThreadPool::FLane FThreadPool::CreatePersistentLane(const char* ThreadName)
 {
@@ -250,7 +267,7 @@ void FThreadPool::DestroyPersistentLane(FLane Lane)
 			return;
 		}
 		State.bStopping = true;
-		Impl->CondVar.notify_all();
+		State.Wake.notify_all();                   // its OWN thread waits there (see FLaneState::Wake)
 		Pinned = std::move(State.Pinned);          // join 必须在锁外
 	}
 	if (Pinned.joinable())
@@ -291,7 +308,7 @@ void FThreadPool::FImpl::PinnedLoop(const FThreadPool* Owner, FLane Lane)
 		FQueuedTask Queued;
 		{
 			std::unique_lock Lock(Mutex);
-			CondVar.wait(Lock, [this, Lane]
+			Lanes[Lane].Wake.wait(Lock, [this, Lane]
 				{
 					return Lanes[Lane].bStopping || !Lanes[Lane].Queue.empty();
 				});
@@ -419,7 +436,9 @@ void FThreadPool::FImpl::WorkerLoop(const FThreadPool* Owner)
 			}
 		}
 
+		BusyWorkers.fetch_add(1);
 		RunTaskSafely(Owner, Queued.Task);
+		BusyWorkers.fetch_sub(1);
 
 		{
 			std::lock_guard Lock(Mutex);
@@ -468,7 +487,16 @@ bool FThreadPool::FImpl::TakeAnyTaskLocked(FQueuedTask& OutTask, FLane& OutLane)
 
 void FThreadPool::FImpl::NotifyWorkAvailableLocked(FLane Lane)
 {
-	if (Lanes[Lane].bPersistent || FlushWaiters > 0)
+	// A persistent lane has exactly ONE possible server: its own thread. Wake it on its OWN condition variable,
+	// never on the pool's -- the reverse mistake is just as bad (a pinned thread consuming the wake-up meant for
+	// a shared lane leaves the work queued with every worker asleep), and separating them removes both.
+	if (Lanes[Lane].bPersistent)
+	{
+		Lanes[Lane].Wake.notify_one();
+		return;
+	}
+
+	if (FlushWaiters > 0)
 	{
 		CondVar.notify_all();
 		return;

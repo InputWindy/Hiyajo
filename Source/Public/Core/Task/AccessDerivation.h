@@ -154,6 +154,11 @@ struct TRegionName
 
 /// @brief Declares a type as a REGION (a piece of memory work items may be ordered against). At namespace
 ///        scope, once per region; write the type's qualified name, so the dump is unambiguous.
+///
+/// INTERNAL, and the exception rather than the rule: a piece of memory that some object OWNS is a
+/// `MAHO_PROPERTY` (which declares its region itself, so nothing is named by hand). This is only for memory no
+/// object owns -- a scratch buffer, an arena, a resource handle -- where the region is a bare ordering identity
+/// with no storage and no handle. Application code does not call it.
 /// @param TRegion The region type (a tag type is enough; a nested type splits a bigger thing).
 #define MAHO_DECLARE_REGION(TRegion)                                                                     \
 	template <>                                                                                          \
@@ -371,10 +376,12 @@ template <typename TRegion>
 concept CValuedRegion = requires { typename TRegion::FValue; };
 
 /// @brief A property: one piece of memory whose storage is PRIVATE, so it can only be read or written through
-///        `Get`/`Set` -- and those two carry the MODE with them (`Get` hands out `const`, `Set` a reference).
+///        `Get`/`Edit` -- and those two ARE the two modes (`Get` hands out `const`, `Edit` a mutable reference).
 ///
 /// This is the C#-style property the access layer wanted: "no naked access" is not a convention here, it is the
 /// only thing the type allows, so a body that touches this memory cannot silently skip the access vocabulary.
+/// The names are the MODES on purpose: there is no "setter" that takes a value (that would be an assignment
+/// dressed as a write), there is `Edit()` -- lending the reference out -- and `Get()`, lending it read-only.
 ///
 /// A property belongs to its OWNER: `Instance()` is its address, which is what a per-owner ordering needs (two
 /// entities' `Position` are two pieces of memory, and the ledger keys them apart -- see `FMemoryAccess`).
@@ -391,21 +398,43 @@ public:
 	/// @brief The value it stores -- taken from the region, never spelled twice.
 	using FValue = typename TRegion::FValue;
 
-	/// @brief Reads it: hands out a `const` reference, so a "read" access cannot write through it.
-	/// @return The stored value, const.
-	[[nodiscard]] const FValue& Get() const noexcept
+	/// @brief The MODE-SELECTED access -- the one place an access is made, and the shape a marker macro wraps.
+	///
+	/// `Access<Read>()` hands out `const`, `Access<Write>()` a mutable reference: the mode is a TEMPLATE
+	/// ARGUMENT, so "this line reads" / "this line writes" is visible in the source (and to a scanner) instead
+	/// of being inferred from a function name. The `Write` overload does not exist on a `const` object at all,
+	/// so `const FLight& L; L.Position.Access<Write>()` is a compile error -- which is what makes the marker
+	/// trustworthy.
+	///
+	/// `Get`/`Edit` are the everyday spellings; they delegate here, so the observation happens in ONE place.
+	/// @tparam TMode What this access does (`Read` or `Write`).
+	/// @return The stored value, `const` for a read and mutable for a write.
+	template <EMemoryAccess TMode>
+		requires (TMode == EMemoryAccess::Read)
+	[[nodiscard]] const FValue& Access() const noexcept
 	{
-		ObserveAccess<TRegion>(this, EMemoryAccess::Read);
+		ObserveAccess<TRegion>(this, TMode);
 		return Value;
 	}
 
-	/// @brief Writes it: hands out a mutable reference (this IS the "write" access).
-	/// @return The stored value.
-	[[nodiscard]] FValue& Set() noexcept
+	/// @brief `Access<Write>`: the mutable form (absent on a `const` object).
+	/// @tparam TMode `Write`.
+	/// @return The stored value, mutable.
+	template <EMemoryAccess TMode>
+		requires (TMode == EMemoryAccess::Write)
+	[[nodiscard]] FValue& Access() noexcept
 	{
-		ObserveAccess<TRegion>(this, EMemoryAccess::Write);
+		ObserveAccess<TRegion>(this, TMode);
 		return Value;
 	}
+
+	/// @brief READS it: hands out a `const` reference, so a "read" access cannot write through it.
+	/// @return The stored value, const.
+	[[nodiscard]] const FValue& Get() const noexcept { return Access<EMemoryAccess::Read>(); }
+
+	/// @brief WRITES it: hands out a mutable reference (this IS the "write" access).
+	/// @return The stored value, mutable -- `Value.Edit() = x` and `Value.Edit() += d` both work.
+	[[nodiscard]] FValue& Edit() noexcept { return Access<EMemoryAccess::Write>(); }
 
 	/// @brief This property's instance identity (its own address; stable for the owner's lifetime).
 	/// @return The instance token.
@@ -417,7 +446,7 @@ private:
 };
 
 /// @brief Declares one ACCESS-CONTROLLED field: the metadata for it (a nested region tag derived from the
-///        field's NAME, carrying the value type) plus the property itself (storage private, `Get`/`Set` only).
+///        field's NAME, carrying the value type) plus the property itself (storage private, `Get`/`Edit` only).
 ///
 /// A property is the ONLY per-instance memory a declaration can name. A plain member is not monitored at all:
 /// it carries no region, so it cannot be declared, cannot be observed, and does not take part in read/write
@@ -435,8 +464,10 @@ private:
 ///     // And another piece of such memory can be mounted with the same metadata at run time:
 ///     TMemoryBinding<FEntity::PositionRegion> View(SomeOtherInt);
 ///
-/// Write it in a section whose visibility the access declarations can see (a public member, in practice), and
-/// terminate it with `;` like any member declaration.
+/// Write it in a section whose visibility the access declarations can see: **`public`**, in practice. That is
+/// not a style rule -- a generated declaration names the memory as `decltype(Owner::Member)::FRegion`, and
+/// `decltype` is subject to access control even though it is unevaluated, so a private property cannot be
+/// declared from outside the class.
 /// @param Type The value type (it becomes the region's `FValue`).
 /// @param Name The member's name (its region tag is `Name##Region`).
 #define MAHO_PROPERTY(Type, Name)                                                                         \
@@ -450,14 +481,14 @@ private:
 /// @brief Declares a GLOBAL property (namespace scope): one piece of memory with metadata of its own -- the
 ///        counterpart of `MAHO_PROPERTY` (which does the same for a member).
 ///
-/// The storage is a `TProperty`, so there is no naked access: everything goes through `Get()`/`Set()`, which is
+/// The storage is a `TProperty`, so there is no naked access: everything goes through `Get()`/`Edit()`, which is
 /// also where an access is observed for the honesty check. The region tag inherits `FRegionTag`, so it is
 /// per-instance -- and for a global there is exactly one instance, which is what a global is.
 ///
 ///     MAHO_GLOBAL_PROPERTY(GCounter, int);                       // -> GCounterRegion + `GCounter`
 ///     MAHO_DECLARE_ACCESSES(FTick_Execute, MAHO_MEMORY_ACCESS_WRITE(GCounter));   // the memory, not the tag
 ///
-///     GCounter.Set() += 1;                                        // the only way in
+///     GCounter.Edit() += 1;                                        // the only way in
 /// @param Name The property's name (its region tag is `Name##Region`).
 /// @param Type What is stored (it becomes the region's `FValue`).
 #define MAHO_GLOBAL_PROPERTY(Name, Type)                                                                 \
@@ -471,13 +502,17 @@ private:
 /// @brief A MEMORY BINDING: one piece of declared METADATA, mounted on ONE concrete piece of memory -- the
 ///        memory-side counterpart of `TTaskBinding` (a declaration bound to an instance).
 ///
+/// INTERNAL: application code reaches memory through `MAHO_PROPERTY` (which owns its storage, so there is
+/// nothing to mount). This is for the other case -- a region declared with `MAHO_DECLARE_REGION` describing
+/// memory that lives somewhere else (a ring's slot, an arena, a resource handle).
+///
 /// It is the vtable idea, one level down: the metadata is declared once (a region type, carrying its identity and
 /// the value type it stores), and at run time it is MOUNTED on a particular memory -- a ring's slot is literally
 /// "this metadata, on `Slices[i]`". The ledger then keys that access as `(region, &Slices[i])`, which is what
 /// makes two slots independent without any extra concept.
 ///
 /// The check the user wants lives in the constructor: it accepts only `TRegion::FValue`, so metadata can never be
-/// mounted on memory of another type. The mode comes from the method (`Get` is const, `Set` is mutable).
+/// mounted on memory of another type. The mode comes from the method (`Get` is const, `Edit` is mutable).
 /// @tparam TRegion The region METADATA (must declare what it stores).
 template <typename TRegion>
 	requires (CRegion<TRegion> && CValuedRegion<TRegion>)
@@ -494,21 +529,35 @@ public:
 	{
 	}
 
-	/// @brief Reads it (a `const` reference: this access cannot write).
-	/// @return The memory, const.
-	[[nodiscard]] const FValue& Get() const noexcept
+	/// @brief The MODE-SELECTED access on the mounted memory (see `TProperty::Access`).
+	/// @tparam TMode What this access does (`Read` or `Write`).
+	/// @return The memory, `const` for a read and mutable for a write.
+	template <EMemoryAccess TMode>
+		requires (TMode == EMemoryAccess::Read)
+	[[nodiscard]] const FValue& Access() const noexcept
 	{
-		ObserveAccess<TRegion>(&Value, EMemoryAccess::Read);
+		ObserveAccess<TRegion>(&Value, TMode);
 		return Value;
 	}
 
-	/// @brief Writes it.
-	/// @return The memory.
-	[[nodiscard]] FValue& Set() noexcept
+	/// @brief `Access<Write>`: the mutable form (absent on a `const` binding view).
+	/// @tparam TMode `Write`.
+	/// @return The memory, mutable.
+	template <EMemoryAccess TMode>
+		requires (TMode == EMemoryAccess::Write)
+	[[nodiscard]] FValue& Access() noexcept
 	{
-		ObserveAccess<TRegion>(&Value, EMemoryAccess::Write);
+		ObserveAccess<TRegion>(&Value, TMode);
 		return Value;
 	}
+
+	/// @brief Reads it (a `const` reference: this access cannot write).
+	/// @return The memory, const.
+	[[nodiscard]] const FValue& Get() const noexcept { return Access<EMemoryAccess::Read>(); }
+
+	/// @brief WRITES it (a mutable reference: this IS the write access).
+	/// @return The memory.
+	[[nodiscard]] FValue& Edit() noexcept { return Access<EMemoryAccess::Write>(); }
 
 	/// @brief The instance token of this binding: the piece of memory itself.
 	/// @return The token.
@@ -577,9 +626,29 @@ concept CHasDeclaredAccesses = requires { typename TDecl::List; };
 /// @param Name The memory (see `MAHO_MEMORY_ACCESS_READ` to the region rule).
 #define MAHO_MEMORY_ACCESS_WRITE(Name) MAHO_MEMORY_ACCESS(Name##Region, ::Maho::Core::EMemoryAccess::Write)
 
+/// @brief Marks a READ at the USE site: `MAHO_READ(Position)` is `Position.Access<Read>()`.
+///
+/// The two markers exist so "this line reads / writes" is SPELLED, not inferred from a function name: the
+/// operand is an ordinary expression (a property, or a mounted `TMemoryBinding`), the mode is the template
+/// argument, and the access is observed in exactly one place (`Access`). A `const` operand simply will not
+/// accept `MAHO_WRITE` -- the marker cannot lie about an object it cannot write.
+///
+/// (They are also what a source scanner looks for: a marker plus its enclosing class names the region, so an
+/// access declaration can be generated from the code that uses it -- see design D18.)
+/// @param Memory The property / mounted memory being read.
+#define MAHO_READ(Memory) ((Memory).Access<::Maho::Core::EMemoryAccess::Read>())
+
+/// @brief Marks a WRITE at the USE site: `MAHO_WRITE(Position)` is `Position.Access<Write>()`.
+/// @param Memory The property / mounted memory being written.
+#define MAHO_WRITE(Memory) ((Memory).Access<::Maho::Core::EMemoryAccess::Write>())
+
 /// @brief Pulls ANOTHER declaration's accesses into this one: a type-list splice, so it is transitive, free,
 ///        and a label that was never declared does not compile.
-/// @param TDecl The declaration to include.
+///
+/// It takes a DECLARATION (`MAHO_DECLARE_ACCESSES`), and also a BINDING (`MAHO_DECLARE_TASK_BINDING`): a binding
+/// exposes its `List`, so `MAHO_ACCESS_INCLUDE(FLightSwarm)` reads as "this node touches everything that node
+/// touches" -- the ordinary case for an implementation that runs another one.
+/// @param TDecl The declaration (or binding) to include.
 #define MAHO_ACCESS_INCLUDE(TDecl) typename TDecl::List
 
 /// @brief The empty declaration (the way to say "this work touches nothing").

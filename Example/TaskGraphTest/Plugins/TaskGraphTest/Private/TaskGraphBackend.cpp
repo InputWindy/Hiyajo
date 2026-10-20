@@ -8,6 +8,7 @@
 #include <Core/Task/Task.h>
 #include <Core/Task/TaskBuilder.h>
 #include <Core/Task/TaskDispatch.h>
+#include <DemoLayer.h>           // the APPLICATION layer this file drives (task + class + binding, no tests)
 #include <Core/Task/TaskGraph.h>
 #include <Core/Task/ThreadPool.h>
 
@@ -115,7 +116,7 @@ namespace TaskGraphTest
 	MAHO_DECLARE_ACCESSES(B17_Tick_Execute, MAHO_MEMORY_ACCESS_WRITE(FB16Buffer));
 }
 
-// B24: a PROPERTY (storage private, Get/Set only) and its declaration. Its region is the nested tag the macro
+// B24: a PROPERTY (storage private, Get/Edit only) and its declaration. Its region is the nested tag the macro
 // generates (`NameRegion : FRegionTag`), so there is no name to write by hand -- and the declaration below
 // names that tag, which is exactly what the accessors report.
 // A global piece of memory, declared as a BINDING of its own: a region (per-instance, marked) + a property, so
@@ -162,78 +163,6 @@ MAHO_DECLARE_TASK_BINDING(FIntTickNode, TaskGraphTest::FIntTickOwner, Tick, (int
 	MAHO_MEMORY_ACCESS_WRITE(TaskGraphTest::FB16Buffer));
 MAHO_DECLARE_TASK_BINDING(FOtherTickNode, TaskGraphTest::FOtherTickOwner, Tick, (int&),
 	MAHO_MEMORY_ACCESS_WRITE(TaskGraphTest::FB16Buffer));
-
-// ═══════════════════════════════════════════════════════════════════════════════════════════════════════
-// B30: THE SHAPE A MAHO DEVELOPER WRITES -- application code, end to end:
-//
-//   (1) DECLARE THE INTERFACE      one line per call shape; the type `ISwarm` IS the contract
-//   (2) IMPLEMENT IT ON A CLASS    `: ISwarm` = "I can run this", `override` = the compiler checking it
-//   (3) DECLARE WHAT IT TOUCHES    the BINDING: this implementation, this shape, these pieces of memory
-//   (4) RUN IT                     record into a buffer, submit it at a frame -- no key, no edge, no thread
-//
-// Note what is ABSENT: no `MAHO_DECLARE_REGION` (the memory is a property, which carries its own region), and
-// no declaration for `Drag` at all (a plain member is not monitored). `MAHO_DECLARE_REGION` is only for
-// memory that no object owns (a raw buffer, an arena, a resource handle).
-// ═══════════════════════════════════════════════════════════════════════════════════════════════════════
-
-// (1) the interface for the method `Swarm`: `I` + the method, one pure virtual per declared shape.
-// Declared at global scope only because this repo's engine already owns `Maho::ITick`-style stage names;
-// a layer's own tasks normally live in the layer's namespace (the binding must sit in `Maho` or global).
-MAHO_BEGIN_DECLARE_TASK(Swarm)
-	MAHO_DECLARE_TASK_METHOD_OVERRIDE(Swarm, (float));
-	MAHO_DECLARE_TASK_METHOD_OVERRIDE(Swarm, (float, int));
-MAHO_END_DECLARE_TASK(Swarm)
-
-namespace DemoLayer
-{
-	/** (2) A class that implements the task. Inheriting is the statement; `override` per shape is what makes
-	 *  a missing one an abstract class rather than a node that quietly does nothing.
-	 *
-	 *  Its memory is PROPERTIES: the value is private, `Get()`/`Set()` are the only way in (and the only way
-	 *  an access can be OBSERVED), and each property already carries the metadata a binding names -- which is
-	 *  why nothing below declares a region. */
-	struct FLight : ISwarm
-	{
-		MAHO_PROPERTY(float, Position);
-		MAHO_PROPERTY(float, Velocity);
-
-		/** A PLAIN member -- and, by the project's convention, NOT monitored: only a property carries a region,
-		 *  so a plain member is invisible to ordering (no declaration can name it). State that must be ordered
-		 *  against is a property; everything else is private business of the object. */
-		float Drag = 1.0f;
-
-		int Steps = 0;
-
-		void Swarm(float Dt) override
-		{
-			Position.Set() += Velocity.Get() * Dt * Drag;
-			++Steps;
-		}
-
-		/** The second declared shape: implementing it is part of inheriting the interface, whether or not any
-		 *  binding runs it. */
-		void Swarm(float Dt, int Times) override
-		{
-			for (int Index = 0; Index < Times; ++Index)
-			{
-				Swarm(Dt);
-			}
-		}
-	};
-}
-
-// (3) the BINDING: what THIS implementation touches on THAT shape -- write the writes, read the reads.
-// It also NAMES the node kind (`FLightSwarm`), so the recorder has nothing else to spell.
-// (A second owner of the same signature may touch completely different memory; it would declare its own.)
-//
-// Only PROPERTIES appear here, which is the convention this project runs on: a property is a region (its tag
-// is what its Get()/Set() report), so it can be declared, observed and ordered; a plain member like `Drag`
-// has no region at all and is therefore outside the conflict model -- if it must be ordered against, make it
-// a property. (`MAHO_DECLARE_REGION` remains for memory no object owns.)
-MAHO_DECLARE_TASK_BINDING(FLightSwarm, DemoLayer::FLight, Swarm, (float),
-	MAHO_MEMORY_ACCESS_WRITE(DemoLayer::FLight::Position),
-	MAHO_MEMORY_ACCESS_READ(DemoLayer::FLight::Velocity));
-
 
 namespace
 {
@@ -951,6 +880,17 @@ int RunTaskGraphBackendTest()
 			{
 				std::this_thread::sleep_for(std::chrono::milliseconds(1));
 			}
+			if (!bSlowEntered.load())
+			{
+				// DIAGNOSTIC (B15 flake): is the body queued and nobody took it (pool side), or did it never
+				// reach the lane (graph side)? `busy` says whether the workers are asleep or stuck in bodies.
+				std::printf("[b15] slow node never entered; pending=%u busy=%u/%u lanes=[%u %u %u %u]\n",
+					Pool.GetLanePending(FThreadPool::DefaultLane), Pool.GetBusyWorkers(),
+					Pool.GetNumThreads(),
+					Pool.GetLanePending(0), Pool.GetLanePending(1), Pool.GetLanePending(2),
+					Pool.GetLanePending(3));
+				std::fflush(stdout);
+			}
 			Check("B15 the other graph's first node started", bSlowEntered.load());
 
 			std::atomic<int> RanInFirst{ 0 };
@@ -1234,8 +1174,7 @@ int RunTaskGraphBackendTest()
 
 			// The ACCESS declaration belongs to the BINDING (owner + task + shape), not to the shape: what memory
 			// a call touches is the implementation's business. Here it is the one the test declared above.
-			using FTickRow = Core::TBindingAccess<TaskGraphTest::FIntTickOwner, ITick,
-				ITick::FMethod<void(int&)>>;
+			using FTickRow = FIntTickNode::FAccesses;
 			std::size_t DeclaredForBinding = 0;
 			ForEachDeclaredAccess<FTickRow>(
 				[&](std::string_view Name, Core::EMemoryAccess Mode)
@@ -1273,7 +1212,7 @@ int RunTaskGraphBackendTest()
 		{
 			using FOwner = TaskGraphTest::FIntTickOwner;
 
-			using FBinding = TTaskBinding<FOwner, ITick, ITick::FMethod<void(int&)>>;                  // this task, on this owner TYPE
+			using FBinding = FIntTickNode;                              // the DECLARED binding (has accesses)
 			using FIntShape = ITick::FMethod<void(int&)>;                    // one of its shapes
 
 			// A shape's identity is a specialization of the TASK's own member template, so "is this one of my
@@ -1317,10 +1256,10 @@ int RunTaskGraphBackendTest()
 		{
 			using FOwner = TaskGraphTest::FIntTickOwner;
 
-			using FBinding = TTaskBinding<FOwner, ITick, ITick::FMethod<void(int&)>>;
+			using FBinding = FIntTickNode;
 			using FIntShape = ITick::FMethod<void(int&)>;
 
-			using FIntTick = MAHO_TASK_BINDING(FOwner, Tick, (int&));   // the layer's binding: one node kind
+			using FIntTick = FIntTickNode;   // the layer's binding: one node type
 
 			FOwner Owner;
 			int Delta = 16;
@@ -1337,9 +1276,10 @@ int RunTaskGraphBackendTest()
 			const std::uint64_t Frame = 1;
 			(void)Clock.Advance(Frame);
 			Round.Begin();
-			const FTaskKey FirstStable = Round.Add<FBinding>(Owner, Delta);
-			const FTaskKey SecondStable = FBinding::StableKeyOf(FInstanceId{}, 1);
-			Round.Add<FBinding>(SecondStable, Owner, Delta);   // the caller's stable key, verbatim
+			Round.Record<FBinding>();                                // one node
+			Round.Record<FBinding>();                                // a second of the same type (own key)
+			const FTaskKey FirstStable = FBinding::StableKeyOf({}, 0);
+			const FTaskKey SecondStable = FBinding::StableKeyOf({}, 1);
 			Round.WaitFor(LayerEdge);                                // recorded AFTER the nodes: still round-wide
 			Round.WaitBefore(Gate);                                  // never submitted: skipped, not waited for
 			Check("B19 recording is pure: nothing ran, and the ledger was not touched",
@@ -1349,6 +1289,9 @@ int RunTaskGraphBackendTest()
 			// what computes keys, derives edges and puts the nodes in.
 			Check("B19 ending the recording closes it without submitting",
 				Round.End() == 2 && Owner.Ran == 0 && Ledger.Count() == 0);
+			Round.UnbindAll();
+			Round.Bind<FBinding>(Owner, Delta);
+			Round.Bind<FBinding>(Owner, Delta);
 			Check("B19 submitting puts every recorded node in", Clock.Submit(Round) == 2);
 			Graph.Wait();
 			Check("B19 the submit fed the ledger and the nodes ran",
@@ -1382,14 +1325,17 @@ int RunTaskGraphBackendTest()
 				int      Delta = 3;
 				int      Sim = 5;
 
-				// ... the members, in the order the shell chooses; the edges among them are DERIVED.
+				// ... the members, in the order the shell chooses; the edges among them are DERIVED. The shell
+				// is ALSO the one that supplies each node's instance and contexts at submit -- it is the layer.
 				void Run(FTaskBuffer& Round, FTaskDispatcher& Clock)
 				{
 					Round.Begin();
-					(void)Round.Add<TTaskBinding<FOwner, ITick, ITick::FMethod<void(int&)>>>(World, Delta);
-					(void)Round.Add<TTaskBinding<FOtherOwner, ITick, ITick::FMethod<void(int&)>>>(
-						Editor, Delta);
+					Round.Record<FIntTickNode>();
+					Round.Record<FOtherTickNode>();
 					(void)Round.End();
+					Round.UnbindAll();
+					Round.Bind<FIntTickNode>(World, Delta);
+					Round.Bind<FOtherTickNode>(Editor, Delta);
 					(void)Clock.Submit(Round);
 				}
 			};
@@ -1448,18 +1394,24 @@ int RunTaskGraphBackendTest()
 			(void)ClockA.Advance(HostFrame);
 			(void)ClockB.Advance(HostFrame);
 
-			using FBinding = TTaskBinding<FOwner, ITick, ITick::FMethod<void(int&)>>;
+			using FBinding = FIntTickNode;
 			using FIntShape = ITick::FMethod<void(int&)>;
 
 			RoundA.Begin();
-			const FTaskKey KeyInA = RoundA.Add<FBinding>(Owner, Delta);
+			RoundA.Record<FBinding>();
+			const FTaskKey KeyInA = FBinding::StableKeyOf();
 			(void)RoundA.End();
+			RoundA.UnbindAll();
+			RoundA.Bind<FBinding>(Owner, Delta);
 			(void)ClockA.Submit(RoundA);
 
 			RoundB.Begin();
-			const FTaskKey KeyInB = RoundB.Add<FBinding>(Owner, Delta);
+			RoundB.Record<FBinding>();
+			const FTaskKey KeyInB = FBinding::StableKeyOf();
 			(void)RoundB.End();
-			(void)ClockB.Submit(RoundB);                      // same shape/owner/frame ⇒ the SAME key, on purpose
+			RoundB.UnbindAll();
+			RoundB.Bind<FBinding>(Owner, Delta);
+			(void)ClockB.Submit(RoundB);   // same shape/owner/frame ⇒ SAME key
 			Graph.Wait();
 			OtherGraph.Wait();
 
@@ -1475,7 +1427,7 @@ int RunTaskGraphBackendTest()
 		// the ORDER they are appended in is the order the derivation sees.
 		{
 			using FChunkOwner = TaskGraphTest::FIntTickOwner;
-			using FBinding = TTaskBinding<FChunkOwner, ITick, ITick::FMethod<void(int&)>>;
+			using FBinding = FIntTickNode;
 			using FIntShape = ITick::FMethod<void(int&)>;
 
 			FChunkOwner A;
@@ -1489,11 +1441,11 @@ int RunTaskGraphBackendTest()
 			FTaskBuffer ChunkB;
 			FTaskBuffer ChunkC;
 
-			// Three instances of ONE owner type: they must carry distinct instance identities, or all three
-			// nodes would be handed the same key (which the graph refuses -- see `FInstanceId`).
-			std::thread ThreadA([&] { ChunkA.Begin(); (void)ChunkA.Add<FBinding>(FBinding::StableKeyOf(FInstanceId{ 1 }), A, DeltaA); (void)ChunkA.End(); });
-			std::thread ThreadB([&] { ChunkB.Begin(); (void)ChunkB.Add<FBinding>(FBinding::StableKeyOf(FInstanceId{ 2 }), B, DeltaB); (void)ChunkB.End(); });
-			std::thread ThreadC([&] { ChunkC.Begin(); (void)ChunkC.Add<FBinding>(FBinding::StableKeyOf(FInstanceId{ 3 }), C, DeltaC); (void)ChunkC.End(); });
+			// Three instances of ONE owner type: the key of each node is its OCCURRENCE, and the instance it runs
+			// on comes with the supply -- neither is an address, so three parallel recordings cannot collide.
+			std::thread ThreadA([&] { ChunkA.Begin(); ChunkA.Record<FBinding>(); (void)ChunkA.End(); });
+			std::thread ThreadB([&] { ChunkB.Begin(); ChunkB.Record<FBinding>(); (void)ChunkB.End(); });
+			std::thread ThreadC([&] { ChunkC.Begin(); ChunkC.Record<FBinding>(); (void)ChunkC.End(); });
 			ThreadA.join();
 			ThreadB.join();
 			ThreadC.join();
@@ -1510,6 +1462,10 @@ int RunTaskGraphBackendTest()
 			Primary.Append(std::move(ChunkB));
 			Primary.Append(std::move(ChunkC));
 			Check("B22 the primary holds every chunk's nodes", Primary.End() == 3);
+			Primary.UnbindAll();
+			Primary.Bind<FBinding>(A, DeltaA);
+			Primary.Bind<FBinding>(B, DeltaB);
+			Primary.Bind<FBinding>(C, DeltaC);
 			Check("B22 ... and submits them in one call", Clock.Submit(Primary) == 3);
 			Graph.Wait();
 			Check("B22 the primary's submit ran all three chunks on their own owners",
@@ -1529,7 +1485,7 @@ int RunTaskGraphBackendTest()
 
 			// The mode is the reference qualification: Get cannot write, Set can.
 			static_assert(std::is_same_v<decltype(std::declval<FEntity&>().Position.Get()), const int&>);
-			static_assert(std::is_same_v<decltype(std::declval<FEntity&>().Position.Set()), int&>);
+			static_assert(std::is_same_v<decltype(std::declval<FEntity&>().Position.Edit()), int&>);
 
 			// The identity is the tag: same value type, different names, different regions.
 			using FPositionRegion = FEntity::PositionRegion;
@@ -1546,8 +1502,8 @@ int RunTaskGraphBackendTest()
 				A.Position.Instance() != B.Position.Instance());
 
 			// A namespace-scope memory binding is the same thing for global memory: a region of its own plus a
-			// property, so it is nameable on the declaration side and unreachable except through Get/Set.
-			B29_Counter.Set() = 5;
+			// property, so it is nameable on the declaration side and unreachable except through Get/Edit.
+			B29_Counter.Edit() = 5;
 			Check("B29 a declared memory binding is a property with a region of its own",
 				B29_Counter.Get() == 5
 					&& Core::RegionName<B29_CounterRegion>() != std::string_view{}
@@ -1561,7 +1517,7 @@ int RunTaskGraphBackendTest()
 
 				// (the declaration lives at namespace scope, below -- a local struct cannot be the tag)
 				B24_PropertyHolder Holder;
-				Holder.Position.Set() = 3;
+				Holder.Position.Edit() = 3;
 				const FDerivationResult Derived = Ledger.Record<B24_PropertyWrite>(KeyOf("B24.Later"), 1);
 				Check("B24 a declared property region derives an edge", Derived.Predecessors.size() == 1);
 			}
@@ -1571,8 +1527,7 @@ int RunTaskGraphBackendTest()
 		// frame would be meaningless (dropped work / keys nobody retires), and a frame that does not advance
 		// would reuse keys. All three are REFUSED (and stop a debugger); Shipping keeps only the refusal.
 		{
-			using FBindingRow = TTaskBinding<TaskGraphTest::FIntTickOwner, ITick,
-				ITick::FMethod<void(int&)>>;
+			using FBindingRow = FIntTickNode;
 			TaskGraphTest::FIntTickOwner Owner;
 			int Delta = 1;
 
@@ -1580,7 +1535,7 @@ int RunTaskGraphBackendTest()
 			FTaskSystem System(GuardPool);
 			FTaskBuffer Buffer;
 			Buffer.Begin();
-			(void)Buffer.Add<FBindingRow>(Owner, Delta);
+			Buffer.Record<FBindingRow>();
 			(void)Buffer.End();
 
 			Check("B25 a submission before Initialize is refused",
@@ -1593,6 +1548,8 @@ int RunTaskGraphBackendTest()
 				Opened == 5 && System.Advance(4) == 5 && System.Slot() == 5 % 1);
 
 			// ... and with a frame open it goes in, as usual.
+			Buffer.UnbindAll();
+			Buffer.Bind<FBindingRow>(Owner, Delta);
 			Check("B25 with a frame open the same buffer submits", System.Submit(Buffer) == 1);
 			System.Wait();
 			Check("B25 ... and ran", Owner.Ran == Delta);
@@ -1609,7 +1566,7 @@ int RunTaskGraphBackendTest()
 			int Storage = 7;
 			Core::TMemoryBinding<B24_PropertyHolder::PositionRegion> Binding(Storage);
 			static_assert(std::is_same_v<decltype(Binding.Get()), const int&>);   // the type came from the metadata
-			Binding.Set() = 9;
+			Binding.Edit() = 9;
 			Check("B27 a memory binding is a view of external memory",
 				Binding.Get() == 9 && Binding.Instance() == &Storage);
 
@@ -1664,7 +1621,7 @@ int RunTaskGraphBackendTest()
 		// advanced frame ANNOUNCED to whoever keeps per-slot data, and per-slot recordings checked at submit.
 		{
 			using FOwner = TaskGraphTest::FIntTickOwner;
-			using FBinding = TTaskBinding<FOwner, ITick, ITick::FMethod<void(int&)>>;
+			using FBinding = FIntTickNode;
 			using FIntShape = ITick::FMethod<void(int&)>;
 
 			FOwner Owner;
@@ -1700,8 +1657,10 @@ int RunTaskGraphBackendTest()
 			FTaskBuffer CachedForSlot1;
 			CachedForSlot1.RecordedFor(1);
 			CachedForSlot1.Begin();
-			(void)CachedForSlot1.Add<FBinding>(Owner, Delta);
+			CachedForSlot1.Record<FBinding>();
 			(void)CachedForSlot1.End();
+			CachedForSlot1.UnbindAll();
+			CachedForSlot1.Bind<FBinding>(Owner, Delta);
 			Check("B23 a recording made for another slot is refused",
 				System.Submit(CachedForSlot1) == 0 && Owner.Ran == 0 && System.Remembered() == 0);
 
@@ -1722,7 +1681,7 @@ int RunTaskGraphBackendTest()
 		// Nothing new is shown here on purpose: this is what a developer's code looks like when it works.
 		{
 			Maho::DemoLayer::FLight Light;
-			Light.Velocity.Set() = 3.0f;                  // a property: private value, Get()/Set() only
+			Light.Velocity.Edit() = 3.0f;                  // a property: private value, Get()/Edit() only
 			float Dt = 0.5f;
 
 			FThreadPool Pool(2);
@@ -1733,12 +1692,14 @@ int RunTaskGraphBackendTest()
 			// (4) record once...
 			FTaskBuffer Frame;
 			Frame.Begin();
-			(void)Frame.Add<FLightSwarm>(Light, Dt);
+			Frame.Record<DemoLayer::FLightSwarm>();
 			Frame.End();
 			Check("B30 one Add is one node; the buffer names no key and derives no edge",
 				Frame.NodeCount() == 1);
 
 			(void)System.Advance(1);
+			Frame.UnbindAll();
+			Frame.Bind<DemoLayer::FLightSwarm>(Light, Dt);
 			Check("B30 the recording submits at the open frame", System.Submit(Frame) == 1);
 			System.Wait();
 			Check("B30 the node ran the CLASS's own method (Position = Velocity * Dt)",
@@ -1753,6 +1714,311 @@ int RunTaskGraphBackendTest()
 			Check("B30 ... and the class ran twice, once per frame's node",
 				Light.Position.Get() == 3.0f && Light.Steps == 2);
 		}
+
+		// B31: a TEMPLATE recording -- STRUCTURE only (which types, in which order). The instances and the
+		// contexts are not in it at all: they arrive with `Submit`, so the same recording runs on any objects,
+		// in any frame, and no address (owner OR context) is ever baked into it.
+		{
+			Maho::DemoLayer::FLight Lights[2];
+			Lights[0].Velocity.Edit() = 2.0f;
+			Lights[1].Velocity.Edit() = 6.0f;
+			float Dt = 0.5f;
+
+			FThreadPool Pool(2);
+			FTaskSystem System(Pool);
+			System.Initialize();
+
+			FTaskBuffer Template;
+			Template.Begin();
+			Template.Record<DemoLayer::FLightSwarm>();
+			Template.Record<DemoLayer::FLightSwarm>();      // a second node of the SAME type
+			Template.End();
+			Check("B31 a template record holds types and order, nothing else",
+				Template.NodeCount() == 2);
+
+			// No supply: there are no instances to run on, so the submit is REFUSED rather than guessed.
+			(void)System.Advance(1);
+			Check("B31 a template recording with no supply is refused (and runs nothing)",
+				System.Submit(Template) == 0 && Lights[0].Steps == 0 && Lights[1].Steps == 0);
+
+			// One supply PER RECORDED NODE, in recorded order -- the pairing is visible at the call site.
+			Template.UnbindAll();
+			Template.Bind<DemoLayer::FLightSwarm>(Lights[0], Dt);
+			Template.Bind<DemoLayer::FLightSwarm>(Lights[1], Dt);
+			Check("B31 the supplies line up with the recording, one per node",
+				System.Submit(Template) == 2);
+			System.Wait();
+			Check("B31 both nodes ran, each on its own instance",
+				Lights[0].Position.Get() == 1.0f && Lights[1].Position.Get() == 3.0f);
+
+			// The SAME recording, next frame, a DIFFERENT supply (one entry): the SECOND node has no supply, so
+			// it is refused -- and the first one still runs.
+			(void)System.Advance(2);
+			Template.UnbindAll();
+			Template.Bind<DemoLayer::FLightSwarm>(Lights[0], Dt);
+			Check("B31 the same recording runs on another instance", System.Submit(Template) == 1);
+			System.Wait();
+			Check("B31 ... and only the supplied instance moved",
+				Lights[0].Position.Get() == 2.0f && Lights[1].Position.Get() == 3.0f
+					&& Lights[0].Steps == 2 && Lights[1].Steps == 1);
+		}
+
+		// B32: a BATCH -- many nodes of ONE type, the count decided at RUNTIME. The recording is a loop (so the
+		// structure can follow the data), and the supply is one span matched by TYPE (not by position).
+		{
+			constexpr int Count = 3;
+			Maho::DemoLayer::FLight Lights[Count];
+			for (int Index = 0; Index < Count; ++Index)
+			{
+				Lights[Index].Velocity.Edit() = static_cast<float>(Index + 1);
+			}
+			float Dt = 0.5f;
+
+			FThreadPool Pool(2);
+			FTaskSystem System(Pool);
+			System.Initialize();
+
+			FTaskBuffer Batch;
+			Batch.Begin();
+			Batch.Record<DemoLayer::FLightSwarm>(Count);   // the count is the DATA's, not the source's
+			Batch.End();
+
+			(void)System.Advance(1);
+			Batch.UnbindAll();
+			Batch.Bind<DemoLayer::FLightSwarm>(std::span{ Lights }, Dt);
+			Check("B32 a runtime-sized recording is supplied by ONE batch", System.Submit(Batch) == Count);
+			System.Wait();
+			Check("B32 every instance ran exactly once, in recorded order",
+				Lights[0].Position.Get() == 0.5f && Lights[1].Position.Get() == 1.0f
+					&& Lights[2].Position.Get() == 1.5f
+					&& Lights[0].Steps == 1 && Lights[1].Steps == 1 && Lights[2].Steps == 1);
+		}
+
+		// B33: a recording of DIFFERENT types (and of one task's two shapes), each supplied with its own
+		// arguments -- the ordinary way a layer's frame is assembled.
+		{
+			Maho::DemoLayer::FLight Fast;
+			Maho::DemoLayer::FLight Slow;
+			Fast.Velocity.Edit() = 2.0f;
+			Slow.Velocity.Edit() = 4.0f;
+			float Dt = 0.5f;
+			int Times = 3;                                  // contexts are taken BY REFERENCE: name them
+
+			FThreadPool Pool(2);
+			FTaskSystem System(Pool);
+			System.Initialize();
+
+			FTaskBuffer Frame;
+			Frame.Begin();
+			Frame.Record<DemoLayer::FLightSwarm>();        // Swarm(float)        -> Fast
+			Frame.Record<DemoLayer::FLightSwarmTimes>();   // Swarm(float, int)   -> Slow, 3 steps
+			Frame.Record<DemoLayer::FLightSwarm>();        // Swarm(float)        -> Slow, 1 step
+			Frame.End();
+
+			(void)System.Advance(1);
+			Frame.UnbindAll();
+			Frame.Bind<DemoLayer::FLightSwarm>(Fast, Dt);
+			Frame.Bind<DemoLayer::FLightSwarmTimes>(Slow, Dt, Times);
+			Frame.Bind<DemoLayer::FLightSwarm>(Slow, Dt);
+			Check("B33 a recording of different node types is supplied in the same order",
+				System.Submit(Frame) == 3);
+			System.Wait();
+
+			// Fast: 2 * 0.5 = 1.  Slow: 3 steps of 4 * 0.5 = 6, then one more step = 8 (the ledger ordered the
+			// two writers of Slow.Position against each other, whichever thread they landed on).
+			Check("B33 each node ran its own shape on its own instance, in the recorded order",
+				Fast.Position.Get() == 1.0f && Slow.Position.Get() == 8.0f
+					&& Fast.Steps == 1 && Slow.Steps == 4);
+		}
+
+		// B34: a recording whose node count comes from DATA -- recorded in a loop, bound one supply at a time
+		// (`BindOne`): the runtime-length form of `Bind`.
+		{
+			constexpr int Count = 4;
+			Maho::DemoLayer::FLight Lights[Count];
+			for (int Index = 0; Index < Count; ++Index)
+			{
+				Lights[Index].Velocity.Edit() = static_cast<float>(Index + 1);
+			}
+			float Dt = 0.5f;
+
+			FThreadPool Pool(2);
+			FTaskSystem System(Pool);
+			System.Initialize();
+
+			// The layer decides the shape of its work from the data: "every other light takes 3 steps".
+			FTaskBuffer Dynamic;
+			Dynamic.Begin();
+			Dynamic.UnbindAll();
+			for (int Index = 0; Index < Count; ++Index)
+			{
+				if (Index % 2 == 0)
+				{
+					Dynamic.Record<DemoLayer::FLightSwarm>();
+				}
+				else
+				{
+					Dynamic.Record<DemoLayer::FLightSwarmTimes>();
+				}
+			}
+			Dynamic.End();
+
+			int Times = 3;
+			for (int Index = 0; Index < Count; ++Index)
+			{
+				if (Index % 2 == 0)
+				{
+					Dynamic.Bind<DemoLayer::FLightSwarm>(Lights[Index], Dt);
+				}
+				else
+				{
+					Dynamic.Bind<DemoLayer::FLightSwarmTimes>(Lights[Index], Dt, Times);
+				}
+			}
+
+			(void)System.Advance(1);
+			Check("B34 a data-shaped recording binds one supply per node at runtime",
+				System.Submit(Dynamic) == Count);
+			System.Wait();
+
+			// Even nodes: one step (v * 0.5). Odd nodes: three steps (v * 0.5 * 3).
+			Check("B34 every node ran with the supply bound in ITS iteration",
+				Lights[0].Position.Get() == 0.5f && Lights[1].Position.Get() == 3.0f
+					&& Lights[2].Position.Get() == 1.5f && Lights[3].Position.Get() == 6.0f);
+		}
+
+		// B35: the ORDER RULES -- `Bind` does not wait for `Advance` (it only writes the recording's supplies),
+		// and it does not have to be repeated every frame (the supplies stay, `Submit` resets its own cursors).
+		{
+			Maho::DemoLayer::FLight Light;
+			Light.Velocity.Edit() = 2.0f;
+			float Dt = 0.5f;
+
+			FThreadPool Pool(2);
+			FTaskSystem System(Pool);
+			System.Initialize();
+
+			FTaskBuffer Frame;
+			Frame.Begin();
+			Frame.Record<DemoLayer::FLightSwarm>();
+			Frame.End();
+			Frame.Bind<DemoLayer::FLightSwarm>(Light, Dt);   // BEFORE any frame was opened
+
+			(void)System.Advance(1);
+			Check("B35 binding before a frame is open is fine (no order rule)", System.Submit(Frame) == 1);
+			System.Wait();
+
+			// ... and the SAME binding serves the next frames: nothing is re-bound, nothing is re-recorded.
+			(void)System.Advance(2);
+			Check("B35 a one-time binding serves the next frame", System.Submit(Frame) == 1);
+			System.Wait();
+			Check("B35 ... and it ran again on the same instance",
+				Light.Position.Get() == 2.0f && Light.Steps == 2);
+		}
+
+		// B36: the frame counter JUMPS (1 -> 3 -> 5). Retirement is keyed by FRAME NUMBER, so `Advance(5)` ends
+		// frame 3 (the one that is K back), not "the K-th call back" -- with a call-counted ring the skipped
+		// frame would still be in flight while the ledger aged its accessors out.
+		{
+			Maho::DemoLayer::FLight Light;
+			float Dt = 0.1f;
+
+			FThreadPool Pool(2);
+			FTaskSystem System(Pool, 2);              // K = 2
+			System.Initialize();
+
+			std::uint64_t Slot = 0;
+			std::uint64_t Retired = 0;
+			const FSubscriptionID Sub = System.OnAdvance.Bind(
+				[&](std::uint64_t, std::uint64_t InSlot, std::uint64_t InRetired)
+				{
+					Slot = InSlot;
+					Retired = InRetired;
+				});
+
+			FTaskBuffer Frame;
+			Frame.Begin();
+			Frame.Record<DemoLayer::FLightSwarm>();
+			Frame.End();
+			Frame.Bind<DemoLayer::FLightSwarm>(Light, Dt);
+
+			(void)System.Advance(1);
+			(void)System.Submit(Frame);
+			System.Wait();
+			(void)System.Advance(3);                  // frame 2 was never simulated
+			(void)System.Submit(Frame);
+			System.Wait();
+			(void)System.Advance(5);                  // K = 2 ⇒ frames <= 3 are ended
+			Check("B36 a jumping counter retires by FRAME, not by call count", Retired == 3);
+			Check("B36 ... and the slot still comes from the frame number", Slot == 5 % 2);
+
+			System.Wait();
+			System.OnAdvance.Unbind(Sub);
+		}
+
+		// B37: the MODE-SELECTED access (`Access<Mode>()` / the `MAHO_READ`/`MAHO_WRITE` markers). The mode is
+		// a template argument, and a const object does not even OFFER the write overload -- which is what makes
+		// the marker trustworthy (a scanner, and a reviewer, can see the mode, and it cannot lie on a const).
+		{
+			static_assert(requires(Maho::DemoLayer::FLight& L) { MAHO_WRITE(L.Position); });
+			static_assert(requires(Maho::DemoLayer::FLight& L) { MAHO_READ(L.Velocity); });
+			static_assert(requires(const Maho::DemoLayer::FLight& L) { MAHO_READ(L.Velocity); });
+
+			// The negative is spelled through a member pointer: "a const property cannot be asked for the
+			// mutable access" (MSVC diagnoses the raw call inside `requires` as a hard error, not SFINAE).
+			using FLightVelocity = ::Maho::Core::TProperty<Maho::DemoLayer::FLight::VelocityRegion>;
+			using FWriteAccess = float& (FLightVelocity::*)() noexcept;
+			static_assert(!std::is_invocable_v<FWriteAccess, const FLightVelocity&>);
+
+			Maho::DemoLayer::FLight Light;
+			MAHO_WRITE(Light.Velocity) = 4.0f;
+			const Maho::DemoLayer::FLight& ConstLight = Light;
+			Check("B37 the marker is a read on a const object and a write on a mutable one",
+				MAHO_READ(ConstLight.Velocity) == 4.0f);
+
+			// The named pair delegates to the same place: same value, same single observation site.
+			MAHO_WRITE(Light.Position) = MAHO_READ(Light.Velocity) * 0.5f;
+			Check("B37 Get/Edit and the markers are the same access", Light.Position.Get() == 2.0f);
+		}
+
+		// B38: the declaration a SCANNER can write (design D18): `decltype(Owner::Member)::FRegion` names exactly
+		// the region `Owner::MemberRegion` does -- so a generated declaration and a hand-written one cannot
+		// drift, and the generator needs no naming rule and no namespace.
+		{
+			static_assert(std::is_same_v<decltype(Maho::DemoLayer::FLight::Position)::FRegion,
+				Maho::DemoLayer::FLight::PositionRegion>);
+
+			std::size_t Rows = 0;
+			bool bWrotePosition = false;
+			bool bReadVelocity = false;
+			ForEachDeclaredAccess<Maho::DemoLayer::FLightSwarmScanned>(
+				[&](std::string_view Name, Core::EMemoryAccess Mode)
+				{
+					++Rows;
+					if (Mode == Core::EMemoryAccess::Write)
+					{
+						bWrotePosition = Name == "Maho::DemoLayer::FLight::PositionRegion";
+					}
+					if (Mode == Core::EMemoryAccess::Read)
+					{
+						bReadVelocity = Name == "Maho::DemoLayer::FLight::VelocityRegion";
+					}
+				});
+			Check("B38 the generated form names the same two regions as the binding",
+				Rows == 2 && bWrotePosition && bReadVelocity);
+
+			// B38b: `MAHO_ACCESS_INCLUDE(FLightSwarm)` -- a BINDING included like a declaration (it exposes its
+			// `List`). `FLightSwarmTimes` therefore touches exactly the same memory, and its own row name is
+			// still its own (`owner|method|(float, int)`).
+			std::size_t Inherited = 0;
+			ForEachDeclaredAccess<Maho::DemoLayer::FLightSwarmTimes>(
+				[&](std::string_view, Core::EMemoryAccess) { ++Inherited; });
+			Check("B38b a binding can be INCLUDED: the accesses are inherited, the name is its own",
+				Inherited == 2
+					&& Maho::DemoLayer::FLightSwarmTimes::TagName
+						== std::string_view("FLight|Swarm|(float, int)"));
+		}
+
 	}
 
 	std::printf("[tg] RESULT failures=%d\n", GBackendFailures);

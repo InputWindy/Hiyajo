@@ -114,6 +114,11 @@ public:
 	/// @return The pending count (0 for a lane that does not exist).
 	[[nodiscard]] std::uint32_t GetLanePending(FLane Lane) const;
 
+	/// @brief How many shared workers are inside a task body right now (diagnostics only: it answers "are they
+	///        all busy, or all asleep?" when a lane's work is not being taken).
+	/// @return The busy worker count.
+	[[nodiscard]] std::uint32_t GetBusyWorkers() const;
+
 private:
 	/// @brief The pool's hidden state (workers, lanes, the barrier bookkeeping).
 	struct FImpl;

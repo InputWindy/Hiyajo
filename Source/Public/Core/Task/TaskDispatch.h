@@ -45,12 +45,18 @@
 #include <Core/Task/TaskGraph.h>
 #include <Core/Task/ThreadPool.h>
 
+#include <array>
 #include <cstdint>
+#include <cstring>
+#include <deque>
 #include <functional>
 #include <iterator>
 #include <span>
+#include <string>
 #include <string_view>
+#include <tuple>
 #include <type_traits>
+#include <utility>
 #include <vector>
 
 namespace Maho
@@ -155,36 +161,45 @@ inline constexpr std::string_view KTaskBindingRow = "TaskBinding";
 ///     MAHO_DECLARE_TASK_BINDING(FWorldTick, FWorld, Tick, (FEntity&, int&),
 ///         MAHO_MEMORY_ACCESS_WRITE(FEntity::Position),       // the memory; the macro appends `Region`
 ///         MAHO_MEMORY_ACCESS_READ(FEntity::Scale));
-///     // -> using FWorldTick = TTaskBinding<FWorld, ITick, ITick::FMethod<void(FEntity&, int&)>>;
-///     //    + the TBindingAccess specialization that declares the two accesses
+///     // -> using FWorldTick = TTaskBinding<FWorld, ITick, ITick::FMethod<void(FEntity&, int&)>, FWorldTickAccesses>;
+///     //    + the nested FWorldTickAccesses type that carries the two accesses
+///
+/// Write it anywhere a namespace-scope declaration may go -- next to the implementation it describes, in the
+/// OWNER's namespace, is the natural place: the access declaration is a nested TYPE carried as a template
+/// argument, so nothing has to be specialized in `Maho::Core` (which would confine it to `Maho`/global).
 ///
 /// The fragments cannot be split across several calls: the declaration IS one type list, and a list cannot be
 /// grown by separate macro invocations.
-/// @param Name The node kind's name (what a recorder names; see `MAHO_TASK_BINDING` for the type-level form).
-/// @param Owner The owner type (must be a namespace-scope type: the specialization is written there, and it
-///        must INHERIT the task -- a task is an interface, and a binding is an implementation of it).
+/// @param Name The node type's name (what a recorder names; see `MAHO_TASK_BINDING` for the type-level form).
+/// @param Owner The owner type: a namespace-scope type that must INHERIT the task (a task is an interface, and a
+///        binding is an implementation of it).
 /// @param Method The method (its task is derived: `Tick` -> `ITick`).
 /// @param Signature The shape's parameter list, in parentheses.
 /// @param ... Its access fragments (`MAHO_MEMORY_ACCESS_READ/WRITE`/`INCLUDE`/`NONE`).
 #define MAHO_DECLARE_TASK_BINDING(Name, Owner, Method, Signature, ...)                                   \
-	/** @brief The node KIND this declaration names (what a recorder records). */                        \
-	using Name = MAHO_TASK_BINDING(Owner, Method, Signature);                                            \
+	/** @brief What this implementation touches on this shape -- a TYPE, so the binding can carry it. */   \
+	struct Name##Accesses                                                                                \
+	{                                                                                                    \
+		/** @brief The memory (composed by the compiler). */                                             \
+		using List = ::Maho::TCatch<__VA_ARGS__>::Type;                                                  \
+                                                                                                         \
+		/** @brief Whether a declaration was written (the ledger refuses a binding without one). */       \
+		static constexpr bool bDeclared = true;                                                          \
+                                                                                                         \
+		/** @brief The readable name (`owner|method|signature`): rows and dumps are keyed by it. */       \
+		inline static const std::string_view TagName = #Owner "|" #Method "|" #Signature;                \
+                                                                                                         \
+		/** @brief Files the diagnostic rows, once, at load time. */                                     \
+		inline static const bool bFiled = ::Maho::Core::RegisterDeclaredAccesses(TagName, List{});        \
+	};                                                                                                   \
                                                                                                          \
 	static_assert(std::is_base_of_v<MAHO_TASK_NAME(Method), Owner>,                                      \
 		"MAHO_DECLARE_TASK_BINDING: the owner must IMPLEMENT the task's interface (inherit from it)");   \
-	template <>                                                                                          \
-	struct ::Maho::Core::TBindingAccess<Owner, MAHO_TASK_NAME(Method),                                   \
-		typename MAHO_TASK_NAME(Method)::template FMethod<void (MAHO_TASK_UNPAREN(Signature))>>          \
-	{                                                                                                    \
-		/** @brief The memory this implementation touches (composed by the compiler). */                  \
-		using List = typename ::Maho::TCatch<__VA_ARGS__>::Type;                                         \
                                                                                                          \
-		/** @brief The declaration's readable name (what its metadata rows are keyed by). */              \
-		inline static const std::string TagName = std::string(#Owner "|" #Method "|" #Signature);        \
-                                                                                                         \
-		/** @brief Files the diagnostic rows, once, when this type is instantiated. */                    \
-		inline static const bool bFiled = ::Maho::Core::RegisterDeclaredAccesses(TagName, List{});        \
-	}
+	/** @brief The node TYPE this declaration names (what a recorder records). */                        \
+	using Name = ::Maho::Core::TTaskBinding<Owner, MAHO_TASK_NAME(Method),                               \
+		typename MAHO_TASK_NAME(Method)::template FMethod<void (MAHO_TASK_UNPAREN(Signature))>,           \
+		Name##Accesses>
 
 /// @brief Folds one more value into a key (FNV-1a -- the same mixer a caller keying by a name would use).
 /// @param Key The key being built (updated in place).
@@ -222,11 +237,22 @@ inline void MixKey(FTaskKey& Key, std::uint64_t Value) noexcept
 /// Why the binding and not the shape: what memory a node touches belongs to the IMPLEMENTATION, and one shape
 /// (say `void(int&)`) may be implemented by many owners that touch completely different memory. Keying on the
 /// triple makes each implementation declare its own, and keeps a typo a compile error.
-/// @tparam TOwner The owner type.
-/// @tparam TTaskType The task declaration.
-/// @tparam TShape The task's shape (a specialization of its `FMethod`).
-template <typename TOwner, typename TTaskType, typename TShape>
-struct TBindingAccess;
+/// @brief The access declaration a binding type carries, when nobody declared one.
+///
+/// Deliberately inert: an empty list, and `bDeclared` false. A binding that never DERIVES (it only names a key
+/// or builds a node) is still usable; anything that needs the memory accesses says so at the place that needs
+/// it (`TTaskBinding::Derive`), which is where the diagnostic belongs.
+struct FNoBindingAccesses
+{
+	/// @brief No accesses.
+	using List = ::Maho::TTypeList<>;
+
+	/// @brief Whether a declaration was written (no).
+	static constexpr bool bDeclared = false;
+
+	/// @brief What a dump prints for it.
+	inline static const std::string_view TagName = "<undeclared binding>";
+};
 
 /// @brief The binding: ONE node kind -- a task, ONE of its shapes, and the OWNER TYPE that runs it.
 ///
@@ -238,11 +264,15 @@ struct TBindingAccess;
 /// the shape the owner already committed to by inheriting.
 ///
 /// It is a NAME, not an object: no state, nothing performed, never constructed. Write it as an alias (or with
-/// `MAHO_TASK_BINDING`), and let `MAHO_DECLARE_TASK_BINDING` file its row.
+/// `MAHO_TASK_BINDING`), and let `MAHO_DECLARE_TASK_BINDING` supply its access declaration.
 /// @tparam TOwner The owner type whose method the shape is called on.
 /// @tparam TTaskType The task declaration.
 /// @tparam TShape One of that task's declared shapes.
-template <typename TOwner, typename TTaskType, typename TShape>
+/// @tparam TAccesses The ACCESS DECLARATION this binding carries (what `MAHO_DECLARE_TASK_BINDING` defines next
+///         to the implementation: `List`, `bDeclared`, `TagName`, `bFiled`). It is a template PARAMETER rather
+///         than a specialization looked up from here, because that is what lets the declaration live in the
+///         owner's own namespace -- an explicit specialization of a `Maho::Core` template may not (MSVC C2888).
+template <typename TOwner, typename TTaskType, typename TShape, typename TAccesses = FNoBindingAccesses>
 	requires (CTask<TTaskType> && CTaskShape<TTaskType, TShape> && std::is_base_of_v<TTaskType, TOwner>)
 class TTaskBinding
 {
@@ -256,10 +286,33 @@ public:
 	/// @brief The shape it runs (a node kind's signature).
 	using FShape = TShape;
 
+	/// @brief The ACCESS DECLARATION it carries (`List` / `TagName` / `bDeclared`) -- what a dump reads.
+	using FAccesses = TAccesses;
+
+	/// @brief Its access LIST, exposed so a binding can be INCLUDED like a declaration:
+	///        `MAHO_ACCESS_INCLUDE(FLightSwarm)` means "this node touches what that node touches".
+	using List = typename TAccesses::List;
+
+	/// @brief The declaration's readable name (see `FAccesses`).
+	inline static const std::string_view TagName = TAccesses::TagName;
+
+	/// @brief Whether the accesses were actually declared (see `FNoBindingAccesses`).
+	static constexpr bool bDeclared = TAccesses::bDeclared;
+
 	/// @brief Folds one more value into a key (see `MixKey`; kept here so a policy reads as one expression).
 	/// @param Key The key being built (updated in place).
 	/// @param Value The value to fold in.
 	static void Mix(FTaskKey& Key, std::uint64_t Value) noexcept { MixKey(Key, Value); }
+
+	/// @brief The TYPE token: the metadata row of this `(owner, task, shape)` -- what a template record names.
+	///
+	/// It is the first term of `StableKeyOf` too, so "which type" and "which key" cannot drift apart; and it is a
+	/// process-unique row address, so a recording made in one module names the same type in another.
+	/// @return The token (never dereferenced, only compared).
+	[[nodiscard]] static const void* TypeToken() noexcept
+	{
+		return ::Maho::TypeToken<TTaskBinding<TOwner, TTaskType, TShape, TAccesses>>();
+	}
 
 	/// @brief The STABLE half of a node's key: everything that does NOT change from frame to frame.
 	///
@@ -268,7 +321,7 @@ public:
 	/// names two different nodes with one recording.
 	///
 	/// Its first term is the BINDING's own token -- the row of `(owner, task, shape)` -- so the owner TYPE is
-	/// inside it already (one task serves any number of owners, and two of them are two node kinds), and a
+	/// inside it already (one task serves any number of owners, and two of them are two node types), and a
 	/// binding nobody declared has no token at all: it cannot even be named.
 	/// @param Id The instance identity (default: the only instance of this owner type).
 	/// @param Sub A discriminator for a second node of the same shape, instance and frame.
@@ -276,8 +329,7 @@ public:
 	[[nodiscard]] static FTaskKey StableKeyOf(FInstanceId Id = {}, std::uint64_t Sub = 0) noexcept
 	{
 		FTaskKey Key = 0xcbf29ce484222325ull;
-		Mix(Key, reinterpret_cast<std::uintptr_t>(
-			DeclarationToken<TBindingAccess<TOwner, TTaskType, TShape>>()));
+		Mix(Key, reinterpret_cast<std::uintptr_t>(TypeToken()));
 		Mix(Key, Id.Value);
 		Mix(Key, Sub);
 		return Key;
@@ -319,7 +371,10 @@ public:
 	[[nodiscard]] static FDerivationResult Derive(FMemoryAccessLedger& Ledger, FTaskKey Key,
 		std::uint64_t Frame, const void* Instance)
 	{
-		return Ledger.Record<TBindingAccess<TOwner, TTaskType, TShape>>(Key, Frame, Instance);
+		static_assert(TAccesses::bDeclared,
+			"MAHO_DECLARE_TASK_BINDING: this binding has no access declaration -- write it next to the "
+			"implementation it describes (it is what the ledger derives the edges from)");
+		return Ledger.Record<TAccesses>(Key, Frame, Instance);
 	}
 
 	/// @brief Builds the node: the closure the graph runs, under this key, on this owner, through this shape.
@@ -339,7 +394,7 @@ public:
 		Out.Key = Key;
 #if MAHO_DO_CHECK
 		// The BINDING's row name (`owner|method|signature`): what a dump or a stall report calls this node.
-		Out.DebugKey = TBindingAccess<TOwner, TTaskType, TShape>::TagName;
+		Out.DebugKey = TAccesses::TagName;
 #endif
 		// By reference, both: the contexts belong to the caller (see the file comment). A pack capture, so a
 		// shape of any arity forwards to the same static call the task declares.
@@ -349,9 +404,9 @@ public:
 		Out.Body = [&Owner, &Args...]()
 		{
 			::Maho::Core::FAccessObservation Scope;
-			DeclareAll(Scope, typename TBindingAccess<TOwner, TTaskType, TShape>::List{});
+			DeclareAll(Scope, typename TAccesses::List{});
 			TTaskType::Run(Owner, Args...);
-			Scope.Report(TBindingAccess<TOwner, TTaskType, TShape>::TagName);
+			Scope.Report(TAccesses::TagName);
 		};
 #else
 		Out.Body = [&Owner, &Args...]() { TTaskType::Run(Owner, Args...); };
@@ -380,6 +435,245 @@ private:
 /// @brief The recorder a dispatcher submits (declared here, defined below: the dispatcher's `Submit` takes one,
 ///        and the buffer's own documentation points back at that submit).
 class FTaskBuffer;
+
+/// @brief The context POINTERS of a shape (`void(float)` -> `std::tuple<float*>`): what a supply carries, so a
+///        context is never copied and never captured by a recording.
+/// @tparam TSignature The shape's signature.
+template <typename TSignature>
+struct TContextPointers;
+
+/// @brief The one case there is: a signature of N parameters.
+/// @tparam TArgs The shape's parameters.
+template <typename... TArgs>
+struct TContextPointers<void(TArgs...)>
+{
+	/// @brief The context pointers, in the shape's order.
+	using FType = std::tuple<std::remove_reference_t<TArgs>*...>;
+};
+
+/// @brief ONE node's instance and contexts, supplied at SUBMIT -- in the recording's ORDER.
+///
+///     // recording (structure only: which types, in which order)
+///     Buffer.Begin();
+///     Buffer.Record<FLightSwarm>();
+///     Buffer.Record<FWorldSwarm>();
+///     Buffer.Record<FLightSwarm>();
+///     Buffer.End();
+///
+///     // every frame: one entry per recorded node, IN THE SAME ORDER
+///     System.Submit(Buffer,
+///         TTaskArgs<FLightSwarm>{ Lights[0], Dt },
+///         TTaskArgs<FWorldSwarm>{ World, Dt },
+///         TTaskArgs<FLightSwarm>{ Lights[1], Dt });
+///
+/// This is the other half of a template record: the recording names the TYPES, this names what each of them
+/// runs on. The calls line up one-for-one, so the pairing is visible at the call site (and each node carries
+/// its OWN contexts -- a per-light delta time is no different from a shared one).
+/// @tparam TBinding The node type (task + owner type + shape).
+template <typename TBinding>
+class TTaskArgs
+{
+public:
+	/// @brief The owner type (what an instance is).
+	using FOwner = typename TBinding::FOwner;
+
+	/// @brief The context pointers the shape takes (a type, so `std::apply` can rebuild the call).
+	using FContexts = typename TContextPointers<typename TBinding::FShape::FSignature>::FType;
+
+	/// @brief One node's instance and contexts.
+	/// @tparam TArgs The contexts (must be exactly the shape's parameters).
+	/// @param Owner The instance.
+	/// @param Args The contexts (kept by ADDRESS: they must outlive the `Submit` call).
+	template <typename... TArgs>
+		requires std::is_same_v<std::tuple<TArgs*...>, FContexts>
+	explicit TTaskArgs(FOwner& Owner, TArgs&... Args)
+		: Instance(&Owner)
+		, Contexts(&Args...)
+	{
+	}
+
+	/// @brief The type this supply is for (what the matching recorded node must be).
+	/// @return The token.
+	[[nodiscard]] static const void* Type() noexcept { return TBinding::TypeToken(); }
+
+	/// @brief Whether this supply covers MANY nodes of one type (a batch) rather than the next node in order.
+	static constexpr bool bBatch = false;
+
+	/// @brief How many nodes it can supply (one: it is the next node in recorded order).
+	/// @return 1.
+	[[nodiscard]] std::size_t Capacity() const noexcept { return 1; }
+
+	/// @brief Builds this node (and reports which instance it runs on).
+	/// @param Occurrence Unused: an aligned supply is the next node, whoever it is.
+	/// @param OutInstance Filled with the instance token (what per-instance regions key on).
+	/// @return The node.
+	[[nodiscard]] FTaskDesc Apply(std::size_t Occurrence, const void*& OutInstance) const
+	{
+		(void)Occurrence;
+		OutInstance = Instance;
+		FTaskDesc Out;
+		std::apply([&](auto*... Context)
+			{
+				Out = TBinding::Node(INDEX_NONE, *Instance, *Context...);
+			}, Contexts);
+		return Out;
+	}
+
+private:
+	/// @brief The instance this node runs on.
+	FOwner* Instance = nullptr;
+
+	/// @brief This node's contexts.
+	FContexts Contexts;
+};
+
+/// @brief MANY nodes of ONE type: a run of instances plus the contexts they share -- the OTHER way to supply a
+///        template record, for a count only the DATA knows (200 lights).
+///
+///     Buffer.Begin();
+///     for (int Index = 0; Index < Count; ++Index) { Buffer.Record<FLightSwarm>(); }   // structure: N nodes
+///     Buffer.End();
+///
+///     System.Submit(Buffer, TTaskBatch<FLightSwarm>{ std::span{ Lights, Count }, Dt });
+///
+/// It is matched by TYPE (and consumed by occurrence), not by position, so it is the right supply when a type's
+/// node count varies from frame to frame; `TTaskArgs` is the right one when the pairing should read at the call
+/// site. Both may appear in one `Submit`: a batch takes every node of its type, the aligned entries take the
+/// rest, in recorded order.
+/// @tparam TBinding The node type (task + owner type + shape).
+template <typename TBinding>
+class TTaskBatch
+{
+public:
+	/// @brief The owner type (what the instances are).
+	using FOwner = typename TBinding::FOwner;
+
+	/// @brief The context pointers the shape takes.
+	using FContexts = typename TContextPointers<typename TBinding::FShape::FSignature>::FType;
+
+	/// @brief The batch: one node per owner, all sharing the contexts.
+	/// @tparam TArgs The contexts (must be exactly the shape's parameters).
+	/// @param InOwners The instances, in recorded order (must outlive the `Submit` call).
+	/// @param Args The contexts (kept by ADDRESS: they must outlive the `Submit` call).
+	template <typename... TArgs>
+		requires std::is_same_v<std::tuple<TArgs*...>, FContexts>
+	explicit TTaskBatch(std::span<FOwner> InOwners, TArgs&... Args)
+		: Owners(InOwners)
+		, Contexts(&Args...)
+	{
+	}
+
+	/// @brief The batch for ONE instance (shorthand for the count-of-one case).
+	/// @tparam TArgs The contexts (must be exactly the shape's parameters).
+	/// @param Owner The instance.
+	/// @param Args The contexts (kept by ADDRESS: they must outlive the `Submit` call).
+	template <typename... TArgs>
+		requires std::is_same_v<std::tuple<TArgs*...>, FContexts>
+	explicit TTaskBatch(FOwner& Owner, TArgs&... Args)
+		: Owners(&Owner, 1)
+		, Contexts(&Args...)
+	{
+	}
+
+	/// @brief The type this supply is for.
+	/// @return The token.
+	[[nodiscard]] static const void* Type() noexcept { return TBinding::TypeToken(); }
+
+	/// @brief Whether this supply covers MANY nodes of one type (yes: that is the point of a batch).
+	static constexpr bool bBatch = true;
+
+	/// @brief How many nodes it can supply (one per owner).
+	/// @return The owner count.
+	[[nodiscard]] std::size_t Capacity() const noexcept { return Owners.size(); }
+
+	/// @brief Builds the n-th node of this type.
+	/// @param Occurrence Which node of this type, in recorded order.
+	/// @param OutInstance Filled with the instance token (what per-instance regions key on).
+	/// @return The node; an empty `Body` when the batch has run out of owners.
+	[[nodiscard]] FTaskDesc Apply(std::size_t Occurrence, const void*& OutInstance) const
+	{
+		if (Occurrence >= Owners.size())
+		{
+			return FTaskDesc{};
+		}
+		FOwner& Owner = Owners[Occurrence];
+		OutInstance = &Owner;
+		FTaskDesc Out;
+		std::apply([&](auto*... Context)
+			{
+				Out = TBinding::Node(INDEX_NONE, Owner, *Context...);
+			}, Contexts);
+		return Out;
+	}
+
+private:
+	/// @brief The instances, in recorded order.
+	std::span<FOwner> Owners;
+
+	/// @brief The contexts they share.
+	FContexts Contexts;
+};
+
+/// @brief One supply, erased for `FTaskBuffer::Bind` and `FTaskDispatcher::Submit`.
+struct FTaskSupply
+{
+	/// @brief `Type()` of the supply.
+	const void* Type = nullptr;
+
+	/// @brief The supply itself (it points into the recording's own storage).
+	const void* Args = nullptr;
+
+	/// @brief Whether it covers many nodes of its type (a batch) or the next node in recorded order.
+	bool bBatch = false;
+
+	/// @brief How many nodes it can supply.
+	std::size_t Capacity = 1;
+
+	/// @brief Builds the node it describes.
+	FTaskDesc (*Apply)(const void* Args, std::size_t Occurrence, const void*& Instance) = nullptr;
+};
+
+/// @brief Applies an erased supply (`MakeSupply`'s function pointer).
+/// @tparam TEntry The supply type.
+/// @param Args The supply (cast back to what it is).
+/// @param Occurrence Which node of its type (ignored by an aligned supply).
+/// @param Instance Filled with the instance token.
+/// @return The node.
+template <typename TEntry>
+[[nodiscard]] FTaskDesc ApplySupply(const void* Args, std::size_t Occurrence, const void*& Instance)
+{
+	return static_cast<const TEntry*>(Args)->Apply(Occurrence, Instance);
+}
+
+/// @brief Erases one supply (the one place its type is known).
+/// @tparam TEntry The supply type.
+/// @param Entry The supply.
+/// @return Its record.
+template <typename TEntry>
+[[nodiscard]] FTaskSupply MakeSupply(const TEntry& Entry)
+{
+	return FTaskSupply{ TEntry::Type(), &Entry, TEntry::bBatch, Entry.Capacity(), &ApplySupply<TEntry> };
+}
+
+/// @brief One supply, erased and STORED IN THE RECORDING (see `FTaskBuffer::Bind`).
+///
+/// The entry itself (`TTaskArgs`/`TTaskBatch`) is small and trivially copyable -- a pointer plus its context
+/// pointers -- so it is copied into `Bytes` and `Supply.Args` points at that copy. Storing the DATA (not a
+/// closure) is what lets `Submit` take no arguments at all: the recording knows what it runs on.
+struct FStoredSupply
+{
+	/// @brief The largest supply entry a recording accepts (checked where it is stored).
+	static constexpr std::size_t kInlineBytes = 64;
+
+	/// @brief The entry, byte for byte (`Supply.Args` points here).
+	std::array<std::byte, kInlineBytes> Bytes{};
+
+	/// @brief The erased view of it (built once, at `Bind`).
+	FTaskSupply Supply{};
+
+	/// @brief How many nodes of it this submit has already taken.
+	std::size_t Used = 0;
+};
 
 /// @brief The DISPATCHER: it owns the frame the application is in, the ledger's generation, and the retirement
 ///        of the frames that are still in flight -- and it is what submits a recorded buffer.
@@ -450,7 +744,7 @@ public:
 	FTaskDispatcher(FTaskGraph& Graph, FMemoryAccessLedger& Ledger, std::size_t FramesInFlight = 1) noexcept
 		: Graph(Graph)
 		, Ledger(Ledger)
-		, Recent(FramesInFlight == 0 ? 1 : FramesInFlight)
+		, FramesInFlight(FramesInFlight == 0 ? 1 : FramesInFlight)
 	{
 	}
 
@@ -467,7 +761,7 @@ public:
 	/// @return The slot (0 .. FramesInFlight-1).
 	[[nodiscard]] std::uint64_t Slot() const noexcept
 	{
-		return CurrentFrame % static_cast<std::uint64_t>(Recent.size());
+		return CurrentFrame % static_cast<std::uint64_t>(FramesInFlight);
 	}
 
 	/// @brief Fences: blocks until everything this layer submitted is quiet.
@@ -476,13 +770,18 @@ public:
 	/// rather than exposed as a graph, see the class comment.
 	void Wait() { Graph.Wait(); }
 
-	/// @brief Ends the frame that is `FramesInFlight` back, then opens the one the HOST says is current.
+	/// @brief Ends every frame that is `FramesInFlight` or more back, then opens the one the HOST says is current.
 	///
 	/// The frame number is PASSED IN, never invented here: it is the application's frame counter (the one a
 	/// frame loop owns and every layer reads), and it has to be -- a key names a node across graphs, so two
 	/// layers that incremented their own counters would name the same node differently and the edge between
 	/// them could not be written at all. What this clock owns is only what is per-layer: the ledger's
 	/// generation and the retirement of ITS OWN graph's keys.
+	///
+	/// Retirement is keyed by FRAME NUMBER, not by call count: the host may step the counter by more than one
+	/// (a paused stretch, a fixed-timestep loop that runs several steps per call), and what the ledger needs is
+	/// still "everything of frame `F - K` is complete" -- waiting `K` CALLS back would leave a skipped frame in
+	/// flight while its accessors were aged out, which is a lost edge, not a slow one.
 	/// @param Frame The application's frame number, absolute and monotonic (a slot is not a frame).
 	/// @return The frame that is now open (the one passed in).
 	/// @note Reported when the frame does not advance: a repeated or decreasing frame would reuse keys.
@@ -493,34 +792,44 @@ public:
 			ReportError("FTaskDispatcher::Advance: the frame did not advance -- its keys would be reused");
 		}
 
-		TrackedSlot = (TrackedSlot + 1) % Recent.size();
-
-		// Wait for the frame that is K back -- and that wait IS the ledger's time model: once it returns,
-		// everything of that frame is complete, which is exactly what lets the ledger age entries out by frame
-		// instead of being told to forget them.
-		const std::uint64_t Width = static_cast<std::uint64_t>(Recent.size());
-		std::vector<FTaskKey>& Keys = Recent[TrackedSlot];
-		RetiredFrameNumber = Frame > Width ? Frame - Width : 0;
-		if (!Keys.empty())
+		// Wait for every frame that is now K or more back -- and those waits ARE the ledger's time model: once
+		// they return, everything of those frames is complete, which is exactly what lets the ledger age entries
+		// out by frame instead of being told to forget them.
+		const std::uint64_t Width = static_cast<std::uint64_t>(FramesInFlight);
+		const std::uint64_t Oldest = Frame > Width ? Frame - Width : 0;
+		RetiredFrameNumber = 0;
+		while (!Pending.empty() && Pending.front().Frame <= Oldest)
 		{
-			Graph.Wait(Keys);
-			Keys.clear();
+			FPendingFrame Retiring = std::move(Pending.front());
+			Pending.pop_front();
+			if (!Retiring.Keys.empty())
+			{
+				Graph.Wait(Retiring.Keys);
+			}
+			RetiredFrameNumber = Retiring.Frame;
 		}
 
 		CurrentFrame = Frame;
 		return CurrentFrame;
 	}
 
-	/// @brief The frame whose nodes the last `Advance` waited for (0 when the ring was not full yet).
+	/// @brief The frame whose nodes the last `Advance` waited for (0 when nothing was retired).
 	///
-	/// This is what a per-slot cache needs: the slot that just came free is the one that frame occupied.
+	/// This is what a per-slot cache needs: the frame whose nodes just completed is the one whose slot came free.
 	/// @return The retired frame (0 when nothing was retired).
 	[[nodiscard]] std::uint64_t RetiredFrame() const noexcept { return RetiredFrameNumber; }
 
 	/// @brief Tracks one key of the frame being submitted, so `Advance` can retire it later.
 	///        `Submit` calls this (it is the one that knows what went in).
 	/// @param Key A key this frame submitted.
-	void Track(FTaskKey Key) { Recent[TrackedSlot].push_back(Key); }
+	void Track(FTaskKey Key)
+	{
+		if (Pending.empty() || Pending.back().Frame != CurrentFrame)
+		{
+			Pending.push_back(FPendingFrame{ CurrentFrame, {} });
+		}
+		Pending.back().Keys.push_back(Key);
+	}
 
 	/// @brief SUBMITS a recorded buffer at the frame that is open now -- Vulkan's `vkQueueSubmit`.
 	///
@@ -529,10 +838,12 @@ public:
 	/// touched). The description is COPIED, so the buffer survives and can be submitted again at a later frame
 	/// -- which is what makes a recording cacheable across frames.
 	///
-	/// The keys go to this dispatcher as the frame's own, so `Advance` retires them; the order of the recorded
-	/// nodes is the order the derivation sees (see `FTaskBuffer`).
-	/// @param Buffer The recording to submit (it must be closed, and non-empty).
-	/// @return How many nodes went in (0 when the buffer is empty).
+	/// A TEMPLATE node (one recorded with `Record`, which names only its TYPE) runs on whatever `Bind` gave the
+	/// recording: the instances and the contexts are never stored here -- nothing about a frame is -- so the same
+	/// recording runs on other instances, at other frames. The keys go to this dispatcher as the frame's own, so
+	/// `Advance` retires them; the order of the recorded nodes is the order the derivation sees.
+	/// @param Buffer The recording to submit (it must be closed, non-empty, and BOUND).
+	/// @return How many nodes went in (0 when the buffer is empty, or a node had no supply).
 	/// @note The buffer is not consumed: submitting it twice in ONE frame names the same nodes twice, which the
 	///       graph refuses -- a cached buffer is for the NEXT frame.
 	std::size_t Submit(FTaskBuffer& Buffer);
@@ -544,11 +855,21 @@ private:
 	/// @brief The layer's ledger.
 	FMemoryAccessLedger& Ledger;
 
-	/// @brief One list of keys per frame that may be in flight (reused: a frame allocates nothing).
-	std::vector<std::vector<FTaskKey>> Recent;
+	/// @brief One frame's keys, in submission order: what `Advance` waits on when the frame falls K behind.
+	struct FPendingFrame
+	{
+		/// @brief The frame these keys belong to.
+		std::uint64_t Frame = 0;
 
-	/// @brief The slot the frame being submitted tracks into (also the slot the next `Advance` retires).
-	std::size_t TrackedSlot = 0;
+		/// @brief The keys it submitted.
+		std::vector<FTaskKey> Keys;
+	};
+
+	/// @brief The frames still in flight, OLDEST first (a frame leaves when it is K back).
+	std::deque<FPendingFrame> Pending;
+
+	/// @brief How many frames may overlap: the window `Advance` retires against.
+	std::size_t FramesInFlight = 1;
 
 	/// @brief The frame whose nodes the last `Advance` waited for (0 when the ring was not full yet).
 	std::uint64_t RetiredFrameNumber = 0;
@@ -613,6 +934,8 @@ public:
 				"nodes never ran");
 		}
 		Records.clear();
+		Occurrences.clear();
+		Supplies.clear();
 		Shared.clear();
 		Gates.clear();
 		Merged.clear();
@@ -620,37 +943,95 @@ public:
 		bOpen = true;
 	}
 
-	/// @brief Records one node: its stable identity, how to derive its edges, and what to run.
+	/// @brief Records `Count` nodes of a type and NOTHING ELSE -- TEMPLATE records.
 	///
-	/// The key is NOT computed here (the frame is not known yet); the edges are NOT derived here (the ledger
-	/// must not be touched while recording). Both happen in `Submit`.
-	/// @tparam TDispatch The binding: task + owner type.
-	/// @tparam TShape One of that task's declared shapes.
-	/// @tparam TArgs The contexts of this run (must match the shape).
-	/// @param Owner The owner instance the closure will run on.
-	/// @param Args The contexts of this run.
-	/// @return The node's STABLE key -- fold a frame into it (`FrameKey`) to name the node of that frame.
-	template <typename TBinding, typename... TArgs>
-		requires CTaskRunnable<typename TBinding::FTask, typename TBinding::FOwner, TArgs...>
-	FTaskKey Add(typename TBinding::FOwner& Owner, TArgs&... Args)
+	/// A recording is STRUCTURE: which node types run, and in what order. Everything that belongs to a frame --
+	/// the owner instance and the contexts (a delta time, a world, a slot's data) -- is supplied at `Submit`
+	/// (see `TTaskArgs`), so one recording runs on any instances, in any frame, and no instance address or
+	/// context address is ever stored in it.
+	///
+	/// `Count > 1` is the shape a PARALLEL FOR takes (a run of one type, one node per instance; `TTaskBatch`
+	/// supplies them). The nodes of one type are told apart in the key by their OCCURRENCE (the `Sub` term), so
+	/// nothing has to be named by hand.
+	/// @tparam TBinding The binding (task + owner type + shape): the node TYPE.
+	/// @param Count How many nodes of it to record (1 -- the default -- is the ordinary single node).
+	template <typename TBinding>
+	void Record(std::size_t Count = 1)
 	{
-		const FTaskKey StableKey = TBinding::StableKeyOf();
-		Record(StableKey, &DeriveThunk<TBinding>, TBinding::Node(INDEX_NONE, Owner, Args...), &Owner);
-		return StableKey;
+		for (std::size_t Index = 0; Index < Count; ++Index)
+		{
+			if (!Guard())
+			{
+				return;
+			}
+			std::size_t& Occurrence = OccurrenceOf(TBinding::TypeToken());
+			FRecord Node;
+			Node.StableKey = TBinding::StableKeyOf({}, Occurrence++);
+			Node.Type = TBinding::TypeToken();
+			Node.Derive = &DeriveThunk<TBinding>;
+			Node.ReKey = &ReKeyThunk<TBinding>;
+			Records.push_back(std::move(Node));
+		}
 	}
 
-	/// @brief Records one node under a STABLE key the CALLER computed (its own key policy, still frame-free).
-	/// @tparam TBinding The binding (task + owner type + shape).
-	/// @tparam TArgs The contexts of this run (must match the shape).
-	/// @param StableKey The stable half of the node's key (see `TTaskBinding::StableKeyOf`).
-	/// @param Owner The owner instance the closure will run on.
-	/// @param Args The contexts of this run.
+	/// @brief BINDS the recording to what it runs on: one supply per recorded node, in recorded order (or a batch
+	///        for a whole type).
+	///
+	/// APPENDS: the entries given here are added to what the recording already has, so the runtime-length form is
+	/// a loop of one-entry calls, and the compile-time form is one call with a pack. `UnbindAll` clears them (and
+	/// `Begin` does too), so a recording rebuilt every frame needs nothing extra.
+	///
+	/// WHEN: independent of `Advance` (this touches the recording, never a frame), and it does NOT have to be
+	/// repeated every frame -- a one-time binding serves every later `Submit` (`Submit` resets its own cursors).
+	/// The one requirement is that the bound OBJECTS outlive the submits, and that what they hold at execution is
+	/// what should run: bind once when the contexts are stable members, re-bind when they are this frame's values.
+	///
+	/// The supplies are COPIED INTO the recording -- an entry is a pointer plus its context pointers -- so a
+	/// temporary `TTaskArgs{...}` is fine; what must outlive the submit is the objects it points at.
+	///
+	/// This is why `Submit` takes no arguments: a recording is "what runs", this is "on what".
+	/// @tparam TEntries The `TTaskArgs` / `TTaskBatch` entries, in recorded order.
+	/// @param Entries The supplies.
+	template <typename... TEntries>
+	void Bind(TEntries&&... Entries)
+	{
+		(StoreSupply(Entries), ...);
+	}
+
+	/// @brief Drops every supply: what a loop that binds at runtime starts with, and what a re-bind needs.
+	void UnbindAll() { Supplies.clear(); }
+
+	/// @brief Binds ONE node of a type, spelled without the entry type: `Bind<FLightSwarm>(Light, Dt)`.
+	///
+	/// This is the form application code uses -- the node type is the only template argument, and the contexts
+	/// are whatever that shape takes. `TTaskArgs` is what it builds underneath (and what a caller uses directly
+	/// only when it wants to hold the entry).
+	/// @tparam TBinding The node type (a binding declared with `MAHO_DECLARE_TASK_BINDING`).
+	/// @tparam TArgs The contexts of this node (must match the shape).
+	/// @param Owner The instance it runs on.
+	/// @param Args The contexts.
 	template <typename TBinding, typename... TArgs>
 		requires CTaskRunnable<typename TBinding::FTask, typename TBinding::FOwner, TArgs...>
-	void Add(FTaskKey StableKey, typename TBinding::FOwner& Owner, TArgs&... Args)
+	void Bind(typename TBinding::FOwner& Owner, TArgs&... Args)
 	{
-		Record(StableKey, &DeriveThunk<TBinding>, TBinding::Node(INDEX_NONE, Owner, Args...), &Owner);
+		StoreSupply(TTaskArgs<TBinding>{ Owner, Args... });
 	}
+
+	/// @brief Binds a RUN of one type -- the parallel-for form: `Bind<FLightSwarm>(std::span{ Lights }, Dt)`.
+	/// @tparam TBinding The node type.
+	/// @tparam TArgs The contexts shared by the run (must match the shape).
+	/// @param Owners The instances, in recorded order.
+	/// @param Args The contexts.
+	template <typename TBinding, typename... TArgs>
+		requires CTaskRunnable<typename TBinding::FTask, typename TBinding::FOwner, TArgs...>
+	void Bind(std::span<typename TBinding::FOwner> Owners, TArgs&... Args)
+	{
+		StoreSupply(TTaskBatch<TBinding>{ Owners, Args... });
+	}
+
+	/// @brief How many supplies the recording is bound to (diagnostics, and a submit with none is REFUSED).
+	/// @return The supply count.
+	[[nodiscard]] std::size_t SupplyCount() const noexcept { return Supplies.size(); }
 
 	/// @brief Records a SHARED edge: every node of this frame waits for that key.
 	///
@@ -686,6 +1067,9 @@ public:
 		Records.insert(Records.end(),
 			std::make_move_iterator(Other.Records.begin()), std::make_move_iterator(Other.Records.end()));
 		Other.Records.clear();
+		// What a later `Record` must not collide with: the types this recording now holds, its own and the
+		// appended ones (their keys already carry their own occurrences).
+		ReindexOccurrences();
 	}
 
 	/// @brief How many nodes this recording holds.
@@ -725,20 +1109,21 @@ private:
 	/// @brief The dispatcher reads a recording through here (it is the one that submits it).
 	friend class FTaskDispatcher;
 
-	/// @brief One recorded node: its stable identity, how to derive its edges, and what to run.
+	/// @brief One recorded node: its type, its stable identity, and how to derive its edges.
 	struct FRecord
 	{
-		/// @brief The node (closure and diagnostic name); its `Key` is filled at submit.
-		FTaskDesc Desc;
-
 		/// @brief The frame-free half of its key.
 		FTaskKey StableKey = INDEX_NONE;
 
-		/// @brief The owner INSTANCE it runs on: the instance token its per-instance regions take.
-		const void* Instance = nullptr;
+		/// @brief Its TYPE (`TTaskBinding::TypeToken`): what `Submit` matches a supply against.
+		const void* Type = nullptr;
 
 		/// @brief How to derive its edges -- the shape, erased into a call (the ledger is touched only here).
 		FDerivationResult (*Derive)(FMemoryAccessLedger& Ledger, FTaskKey Key, std::uint64_t Frame, const void* Instance) = nullptr;
+
+		/// @brief How to recompute its stable key for another occurrence (`Append` renumbers, so two recordings
+		///        merged into one cannot share a key).
+		FTaskKey (*ReKey)(std::uint64_t Sub) = nullptr;
 	};
 
 	/// @brief The derivation thunk a record carries (one per BINDING -- the shape is inside the binding).
@@ -752,6 +1137,15 @@ private:
 		return TBinding::Derive(Ledger, Key, Frame, Instance);
 	}
 
+	/// @brief The re-key thunk a record carries (one per BINDING): its stable key for a given occurrence.
+	/// @param Sub The occurrence within the recording.
+	/// @return The stable half.
+	template <typename TBinding>
+	static FTaskKey ReKeyThunk(std::uint64_t Sub)
+	{
+		return TBinding::StableKeyOf({}, Sub);
+	}
+
 	/// @brief Reports (once per call) a recording attempt outside an open frame, and says whether to go on.
 	/// @return Whether a recording is open.
 	bool Guard() const
@@ -763,23 +1157,63 @@ private:
 		return bOpen;
 	}
 
-	/// @brief Files one recorded node.
-	/// @param StableKey The frame-free half of its key.
-	/// @param Derive How to derive its edges.
-	/// @param Desc The node (its key is filled at submit).
-	/// @param Instance The owner instance it runs on (what its per-instance regions key on).
-	void Record(FTaskKey StableKey, FDerivationResult (*Derive)(FMemoryAccessLedger&, FTaskKey, std::uint64_t, const void*),
-		FTaskDesc Desc, const void* Instance)
+	/// @brief Stores one supply entry by VALUE (see `Bind`).
+	/// @tparam TEntry The entry type (`TTaskArgs` / `TTaskBatch`).
+	/// @param Entry The entry.
+	template <typename TEntry>
+	void StoreSupply(const TEntry& Entry)
 	{
-		if (!Guard())
+		static_assert(std::is_trivially_destructible_v<TEntry>,
+			"a supply entry must be trivially destructible: the recording stores it in place");
+		static_assert(sizeof(TEntry) <= FStoredSupply::kInlineBytes,
+			"a supply entry is larger than the recording's inline storage");
+		FStoredSupply Slot;
+		::new (static_cast<void*>(Slot.Bytes.data())) TEntry(Entry);   // the entry's own copy constructor
+		Supplies.push_back(std::move(Slot));
+		// The view points at the RECORDING's copy, not at the local slot (a deque keeps element addresses).
+		FStoredSupply& Stored = Supplies.back();
+		Stored.Supply = MakeSupply(*reinterpret_cast<const TEntry*>(Stored.Bytes.data()));
+	}
+
+	/// @brief The supplies this recording is bound to (see `Bind`).
+	std::deque<FStoredSupply> Supplies;
+
+	/// @brief How many nodes of each TYPE this recording holds so far -- what numbers a record's key
+	///        (`Sub`), so recording one type twice records two distinguishable nodes.
+	/// @param Type The type token.
+	/// @return Its occurrence count (and the slot that count is stored in).
+	std::size_t& OccurrenceOf(const void* Type)
+	{
+		for (auto& Entry : Occurrences)
 		{
-			return;
+			if (Entry.first == Type)
+			{
+				return Entry.second;
+			}
 		}
-		Records.push_back(FRecord{ std::move(Desc), StableKey, Instance, Derive });
+		Occurrences.emplace_back(Type, 0);
+		return Occurrences.back().second;
+	}
+
+	/// @brief Re-derives the per-type counters from what the recording now holds (after `Append`): what a later
+	///        `Record` must not collide with.
+	void ReindexOccurrences()
+	{
+		Occurrences.clear();
+		for (FRecord& Node : Records)
+		{
+			// A record that came from another recording keeps its TYPE but gets THIS recording's occurrence:
+			// two appended chunks of one type must not share a key.
+			Node.StableKey = Node.ReKey(OccurrenceOf(Node.Type));
+			++OccurrenceOf(Node.Type);
+		}
 	}
 
 	/// @brief The recording (reused storage: a recording allocates nothing once it has grown).
 	std::vector<FRecord> Records;
+
+	/// @brief The per-type occurrence counters of the OPEN recording (see `OccurrenceOf`).
+	std::vector<std::pair<const void*, std::size_t>> Occurrences;
 
 	/// @brief The edges EVERY node of this frame waits for (full keys: they name past frames).
 	std::vector<FTaskKey> Shared;
@@ -818,24 +1252,91 @@ inline std::size_t FTaskDispatcher::Submit(FTaskBuffer& Buffer)
 		Graph.Wait(Buffer.Gates);
 	}
 
+	// The supplies came with `Bind`: they live in the recording, so this call takes no arguments. `Used` is
+	// reset here, so the same recording can be submitted again later (a cached recording, a per-frame one).
+	for (FStoredSupply& Slot : Buffer.Supplies)
+	{
+		Slot.Used = 0;
+	}
+	std::size_t NextAligned = 0;
+
+	std::size_t Submitted = 0;
 	for (const FTaskBuffer::FRecord& Node : Buffer.Records)
 	{
+		// EVERY node takes its instance and its contexts from a supply. A BATCH of its type takes it first (that
+		// is what a batch declares: "every node of this type is mine"); otherwise the next ALIGNED supply is
+		// used, and it has to be the type this node is.
+		FTaskDesc Desc;
+		const void* Instance = nullptr;
+
+		FStoredSupply* Chosen = nullptr;
+		for (FStoredSupply& Slot : Buffer.Supplies)
+		{
+			if (Slot.Supply.bBatch && Slot.Supply.Type == Node.Type && Slot.Used < Slot.Supply.Capacity)
+			{
+				Chosen = &Slot;
+				break;
+			}
+		}
+		if (Chosen == nullptr)
+		{
+			// The next supply that is not a batch and not used yet.
+			while (NextAligned < Buffer.Supplies.size()
+				&& (Buffer.Supplies[NextAligned].Supply.bBatch || Buffer.Supplies[NextAligned].Used > 0))
+			{
+				++NextAligned;
+			}
+			if (NextAligned == Buffer.Supplies.size())
+			{
+				ReportError("FTaskDispatcher::Submit: the recording has more nodes than supplies -- Bind one "
+					"TTaskArgs per recorded node (in order) or a TTaskBatch for its type");
+				continue;
+			}
+			Chosen = &Buffer.Supplies[NextAligned++];
+			if (Chosen->Supply.Type != Node.Type)
+			{
+				ReportError("FTaskDispatcher::Submit: the next supply is for another node type -- supplies "
+					"must follow the recording's order");
+				continue;
+			}
+		}
+
+		Desc = Chosen->Supply.Apply(Chosen->Supply.Args, Chosen->Used++, Instance);
+		if (!Desc.Body)
+		{
+			ReportError("FTaskDispatcher::Submit: a batch ran out of instances -- it must supply one per "
+				"recorded node of its type");
+			continue;
+		}
+
 		// The frame is injected HERE, and nowhere earlier: that is why a recording has no frame in it and can
 		// be cached across frames.
 		const FTaskKey Key = FrameKey(Node.StableKey, CurrentFrame);
 
 		Buffer.Merged.assign(Buffer.Shared.begin(), Buffer.Shared.end());   // reuses capacity
-		const FDerivationResult Edges = Node.Derive(Ledger, Key, CurrentFrame, Node.Instance);
+		const FDerivationResult Edges = Node.Derive(Ledger, Key, CurrentFrame, Instance);
 		Buffer.Merged.insert(Buffer.Merged.end(), Edges.Predecessors.begin(), Edges.Predecessors.end());
 
-		FTaskDesc Desc = Node.Desc;                       // a COPY: the recording stays re-submittable
 		Desc.Key = Key;
 		Track(Key);
 		Graph.Submit(std::move(Desc), Buffer.Merged);
+		++Submitted;
+	}
+
+	// Nothing is silently ignored: an aligned supply that was never used means the recording has fewer nodes
+	// than the caller thought.
+	for (FStoredSupply& Slot : Buffer.Supplies)
+	{
+		if (!Slot.Supply.bBatch && Slot.Used == 0)
+		{
+			ReportError("FTaskDispatcher::Submit: an aligned supply was not used -- the recording has fewer "
+				"nodes than supplies (a batch takes every node of its type)");
+			break;
+		}
 	}
 
 	++Buffer.Submits;
-	return Buffer.Records.size();
+	return Submitted;
 }
 
 /// @brief ONE-STOP execution environment for a layer: it owns the graph, the ledger and the dispatcher, and it
@@ -925,6 +1426,7 @@ public:
 	///
 	/// Refuses a buffer recorded for ANOTHER slot (see `FTaskBuffer::RecordedFor`): that is the one mistake
 	/// per-slot caching makes, and this is the only place that can see it.
+	/// @tparam (the supplies belong to the recording -- see `FTaskBuffer::Bind`)
 	/// @param Buffer The recording to submit.
 	/// @return How many nodes went in (0 when it was refused or empty).
 	std::size_t Submit(FTaskBuffer& Buffer)
